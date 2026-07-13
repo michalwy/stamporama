@@ -37,16 +37,34 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 - This is currently a solo project. When the user asks for a commit, commit directly to `main` by default after appropriate local verification.
 - When pushing to `main`, try `git push origin main` first. If rejected, fetch remote, rebase local commits onto `origin/main`, rerun verification, and push again.
 - Create a feature branch and pull request only when the user explicitly asks for a PR.
+- Use a separate git worktree only when the user explicitly asks for one. Do not create worktrees based on an agent's own risk assessment.
+- Do not push broken or unverified work unless the user explicitly asks to checkpoint it.
 - Use Conventional Commits: `feat: add catalog search`, `fix: collection slug collision`, `docs: update agent guidance`.
 - Include a GitHub issue reference in every commit message when an issue exists for the work.
+- When a commit title alone would omit useful context, include an extended commit message body with concise details about motivation, scope, or notable tradeoffs.
+
+## Backlog Review
+
+When asked to review the backlog and propose next steps:
+
+- Always start with `gh issue list --state open --limit 100` to get the full picture. Never rely on recently closed issues or git log alone — new issues can appear at any time.
+- Always check `gh release list` fresh to know the current version. Never assume it from memory or a prior git log in the same session.
+- Present results in two sections:
+  - **Najbliższe** (2–3 next sessions): three-column table with columns `Sesja`, `Temat` (short theme label), `Opis` (issue links + description, `<br>`-separated when multiple), and `Dlaczego?` (one sentence rationale). No separate Issues column — embed issue links in Opis.
+  - **Dalsze** (beyond that): table with columns `Track`, `Opis`, `Dlaczego?` — high-level track descriptions only, no per-session breakdown.
+- Before proposing session order for near-term issues, check the "Depends on" section of each issue body (`gh issue view <n> --json body`). Never schedule an issue before its open dependencies are closed.
+- Do not ask the user which direction to pursue — just present the plan and let them redirect.
+- Proactively suggest when it is a good time to cut a release: after a coherent batch of shippable commits has accumulated since the last tag. Only suggest — do not cut the release yourself; that is handled by a separate agent.
 
 ## Release Versioning
 
-- Never assume the last released version from memory — always check GitHub directly.
-- When asked to cut a new version, review changes since the previous tag, then decide patch vs minor (`feat:` → minor, `fix:`/`chore:` only → patch).
-- Never bump the major version unless the user explicitly asks.
-- After tagging, always create a GitHub Release (`gh release create vX.Y.Z --title vX.Y.Z --generate-notes`).
-- Write a proper human-readable release description grouping changes into sections.
+- Never assume the last released version from memory or from local git tags cached mentally — always run `gh release list` fresh, since a release agent can tag a new version mid-session outside this agent's awareness.
+- When asked to cut a new version, first review the changes merged since the previous released tag, then decide patch vs minor based on that review (`feat:` commits → minor, `fix:`/`chore:` only → patch).
+- Never bump the major version unless the user explicitly asks for a major bump.
+- After tagging and pushing a new version, always create a GitHub Release for that tag (`gh release create vX.Y.Z --title vX.Y.Z --generate-notes`) automatically, without waiting to be asked.
+- If, after reviewing the changes since the previous tag, a new release does not seem warranted (e.g. no user-facing or shippable changes), do not skip or proceed silently — ask the user for confirmation before deciding either way.
+- Always write a proper, human-readable release description instead of relying on bare `--generate-notes` output. Group changes into sections (e.g. Highlights/Fixes/Other), summarize each commit/PR in plain English with its reference number, and keep the auto-generated "Full Changelog" compare link at the end.
+- In backlog-review sessions, only suggest a release — do not prepare, tag, push, or create it yourself. Release preparation is handled by a separate dedicated agent.
 
 ## Multi-Step Implementation Plans
 
