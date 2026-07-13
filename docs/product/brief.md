@@ -38,7 +38,7 @@ A collection item links a stamp to a collector's holding: condition, quantity, a
 
 ## Deployment
 
-Self-hosted via Docker Compose, same model as OhmSweetOhm.
+Self-hosted via Docker Compose.
 
 ## Open Questions
 

@@ -9,7 +9,7 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 - Purpose: a self-hosted web app for stamp collectors
 - Target platform: desktop browsers only; do not design, implement, or test mobile-specific behavior
 - Application language: English first, additional languages later
-- Core concept: **collection** — the top-level organizing unit, analogous to a workspace in OhmSweetOhm
+- Core concept: **collection** — the top-level organizing unit that scopes all stamp data for a user
 
 ## Working Rules
 
