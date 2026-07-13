@@ -52,12 +52,38 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 
 When a task spans more than one logical area or cannot be safely completed in a single session, write an implementation plan before starting. Store it under `.claude/plans/`. Plans must follow these rules:
 
-- Steps are always executed in order.
-- Begin with a `## Progress` section with a checkbox list.
-- Mark a step `[~]` at the start, `[x]` immediately after finishing — before ending the session.
-- Each step must be atomic and independently verifiable.
-- Each step must state a **Done when** criterion.
-- Later steps must not assume context from earlier sessions — all necessary detail must be in the plan file.
+- Steps are always executed in order. Step N is only started once step N-1 is complete, but each step may be done in a separate session.
+- Begin with a `## Progress` section containing a checkbox list of numbered steps.
+- Mark a step `[~]` (in progress) at the start of that step, and `[x]` (done) immediately after finishing it — before ending the session. Never batch status updates.
+- Each step must be atomic: completable in one session and independently verifiable (e.g. `pnpm typecheck` passes after that step alone).
+- Each step must state a **Done when** criterion so a future agent knows exactly when it can mark the step complete.
+- Later steps should not assume context from earlier sessions — all necessary detail must be in the plan file itself.
+- When picking up work in a new session, read the plan file first, find the first unchecked step, mark it `[~]`, execute it, mark it `[x]`, then proceed to the next step without pausing — unless the user has explicitly asked to stop after each step.
+
+Example progress block:
+```
+## Progress
+- [x] Step 1 — Create shared component
+- [~] Step 2 — Refactor existing component to use it
+- [ ] Step 3 — Update page files
+```
+
+## Agent Collaboration
+
+Use specialized roles only when the task benefits from them. Small, localized documentation, copy, styling, or bug-fix tasks can be handled by one careful agent.
+
+Use specialized roles for larger or riskier changes that cross domain, data, authorization, or user-flow boundaries:
+
+- Architect for architectural decisions, ADRs, schema boundaries, and major patterns.
+- Designer for meaningful UI flows, dialogs, tables, and interaction design.
+- Developer for scoped implementation once behavior is clear.
+- Tester/Reviewer for browser flows, regressions, and verification.
+
+Prefer involving Architect before changing Prisma schema, permissions, collection scoping, authentication, routing conventions, or ADR-documented patterns.
+
+Prefer involving Tester/Reviewer after changing forms, dynamic tables, dialogs, collection routing, authentication, permissions, or migrations.
+
+Do not use multiple roles to invent product behavior. Product decisions still require clarification.
 
 ## Technical Direction
 
@@ -67,34 +93,49 @@ When a task spans more than one logical area or cannot be safely completed in a 
 - Collection URLs use `/c/[collectionSlug]/...`; slug resolution must authorize by internal `collectionId`.
 - Use Better Auth for authentication; do not introduce development current-user shortcuts.
 - Use Prisma with PostgreSQL for persistence.
-- Use TanStack Query for client-side data fetching in collection screens.
-- Use TanStack Table for rich list views.
+- Keep Next.js, React, and TypeScript as the frontend direction unless a future ADR documents a specific reason to migrate.
+- Use the SPA-like collection interaction model: keep Next.js App Router as the route/auth shell, but prefer client-side queries and mutations for rich collection lists, dialogs, inline editing, and repeated list actions once those screens need responsive behavior.
+- Large collection lists are expected to grow beyond client-side full loading. Prefer cursor-backed endless scrolling/infinite loading for stamps and future large lists, and implement shared list primitives instead of custom endless-scroll behavior per screen.
+- Add browser interactivity with focused client components; do not make the whole app client-rendered by default.
+- Prefer established React ecosystem libraries for complex tables, dialogs, forms, validation, and accessible UI primitives when those needs become concrete.
+- Use TanStack Query for client-side data fetching in collection screens. Use TanStack Table for rich list views. When adding or upgrading these libraries, verify the latest stable npm versions and do not pin older versions without a documented compatibility reason.
 - Treat database schema changes as product decisions, not incidental implementation details.
 - Treat new domain resources as collection-scoped by default. Add `collectionId` and scope server-side queries/mutations to the current collection unless an explicit product decision says the resource is global.
 - Keep authorization checks in server-side application/domain code, not UI components.
 - Keep domain logic out of UI components as the app grows.
 - Prefer explicit module boundaries under `src/`.
 - Keep Docker Compose suitable for local use and development, not as the only deployment path.
-- Use `docker compose up` as the normal local-use stack.
-- Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` for development with hot reload.
-- A self-hosted deployment path exists for real servers: CI publishes a multi-arch image to `ghcr.io/michalwy/stamporama` only for release tags (`v*`). `docker-compose.prod.yml` runs the prebuilt image with config in a git-ignored `.env`.
-- Keep dependencies reasonably current.
+- Treat `docker compose up` as the user's normal local-use stack: it should run the built app with `next start` against the persistent development database, without creating a seeded development user.
+- Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` for containerized development with hot reload.
+- A self-hosted deployment path exists for real servers (e.g. Raspberry Pi): CI's `publish-image` job pushes a multi-arch image to `ghcr.io/michalwy/stamporama` **only for release tags (`v*`)** — not on every `main` commit. `docker-compose.prod.yml` runs that prebuilt image against an operator-provided external database with all config in a git-ignored `.env` (template `.env.prod.example`), and `scripts/install.sh` is the curl-able installer. Deployment management commands run as bare `docker compose ...` from the install dir, reading the file list from the `COMPOSE_FILE` key in `.env`. Optional auto-update uses Watchtower under the `autoupdate` compose profile. The release version is baked into the image via the `STAMPORAMA_VERSION` build arg and shown in the app through `getAppVersion()` in `src/lib/version.ts`. Keep these in sync when changing runtime env vars, migrations-on-start behavior, or the Dockerfile `runner` target.
+- Keep dependencies reasonably current; avoid leaving generated scaffolds pinned to old major versions without a documented compatibility reason.
 
 ## UI Direction
 
-- Desktop-only application. Do not add mobile layouts or responsive mobile breakpoints.
-- Use modal dialogs for list actions (add, edit, delete).
-- Prefer in-place editing on lists where practical.
-- Build list screens on shared primitives for loading state, empty state, filters, table layout, and pagination.
-- Use semantic color tokens defined in `src/app/globals.css` for UI intent.
+- Desktop-only application. Do not add mobile layouts, responsive mobile breakpoints, mobile navigation patterns, or mobile-specific fallbacks unless a future product decision explicitly reverses this.
+- Use modal dialogs for list actions such as adding, editing, and similar focused workflows.
+- Build modal dialogs with the shared `src/app/dialog-shell.tsx` primitives. Do not duplicate dialog header, close button, viewport constraint, or default-tab height behavior in feature components; extend the shared shell first when a dialog needs a new common capability.
+- Treat tabs inside dialogs as visual grouping only. A dialog must have one logical save action that persists values from all tabs and then closes the dialog when the save succeeds.
+- For all current and future dialogs, let the dialog height be determined by the primary/default tab content. The dialog may be constrained by the viewport; if content would exceed the viewport, only the dialog body should scroll while the header and footer remain fixed. Switching tabs must not change the dialog height.
+- Prefer in-place editing on lists for fields where inline edits are practical and clear.
+- Build list screens on shared base components/primitives for common behavior such as loading state, empty state, filters, table layout, and endless scrolling. Extend the shared primitives first when multiple lists need the same capability.
+- For rich collection screens, reserve URL state for navigation, filters, sorting, pagination, selected records, and deep-linkable UI. Do not put ephemeral success feedback in URL parameters; use local toast feedback instead.
+- Use the semantic color tokens defined in `src/app/globals.css` for UI intent such as accent, success, error, warning, and primary actions instead of hard-coding black action buttons.
 
 ## Testing Direction
 
-- Use `pnpm lint` for ESLint verification before finishing any task that touches source files.
+- Use `pnpm lint` for ESLint verification. Run it before finishing any task that touches source files. Fix all errors; warnings may be left as-is.
 - Use `pnpm typecheck` for TypeScript verification.
-- Unit tests live in `tests/unit/`, use `node:test`, no Prisma or server infrastructure.
-- Integration tests live in `tests/integration/`, use a real database from `docker-compose.e2e.yml`.
-- Never run `prisma migrate dev` or `prisma migrate reset` directly against the development database. Use `pnpm exec prisma migrate dev --create-only --name <name>` to generate migration SQL only.
+- Use `pnpm test:unit` for unit tests (`tsx --test tests/unit/**/*.test.ts`). Unit tests must not import Prisma or any server infrastructure — pure logic only.
+- Use `pnpm test:integration` for server-side integration tests that require a real database. Integration tests live in `tests/integration/`, use `node:test` (not `@playwright/test`), and run against the isolated e2e PostgreSQL service in `docker-compose.e2e.yml`. A `tests/integration/tsconfig.json` with a `server-only` shim is required — do not remove it. `pnpm test:integration` starts the DB container, applies pending migrations, and runs the tests. It does NOT reset or re-seed the database; use `pnpm e2e:db:reset` separately if a clean slate is needed.
+- E2E (browser-level) testing is not yet set up. Do not add e2e test files until the infrastructure is in place.
+- Keep integration tests pointed at the isolated PostgreSQL service in `docker-compose.e2e.yml`, not the normal development database.
+- Add or update integration test coverage when changing collection mutations, concurrency-sensitive logic, or other server-side domain rules.
+- Before finishing any task that changes server-side mutations or domain logic, run `pnpm test:integration` and confirm all tests pass.
+- Never run `prisma migrate dev`, `prisma migrate reset`, or `prisma db push` directly — these touch the user's development database. When a schema change is needed, generate only the migration SQL file with `pnpm exec prisma migrate dev --create-only --name <name>`. Exception: `pnpm e2e:db:reset` runs `prisma migrate reset` against the isolated e2e database and is always safe to invoke.
+- The user tests the app through Docker Compose. Do not leave manually started dev servers running for handoff.
+- If an agent starts a manual local dev server for verification, it must stop that server before finishing the turn.
+- When starting a local Next.js dev server manually for browser verification, use webpack mode: `pnpm exec next dev --webpack -p 3002`. Avoid Turbopack for local verification — it has produced unstable dev-server failures in similar projects.
 
 ## Before Implementing Features
 
