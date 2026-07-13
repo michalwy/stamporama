@@ -50,21 +50,18 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 
 ## Multi-Step Implementation Plans
 
-When a task spans more than one logical area or cannot be safely completed in a single session, write an implementation plan before starting. Store it under `.claude/plans/`. Plans must follow these rules:
+When a task spans more than one logical area, write an implementation plan before starting. Store it under `.claude/plans/`. A plan is executed fully within a single session.
 
-- Steps are always executed in order. Step N is only started once step N-1 is complete, but each step may be done in a separate session.
 - Begin with a `## Progress` section containing a checkbox list of numbered steps.
-- Mark a step `[~]` (in progress) at the start of that step, and `[x]` (done) immediately after finishing it — before ending the session. Never batch status updates.
-- Each step must be atomic: completable in one session and independently verifiable (e.g. `pnpm typecheck` passes after that step alone).
-- Each step must state a **Done when** criterion so a future agent knows exactly when it can mark the step complete.
-- Later steps should not assume context from earlier sessions — all necessary detail must be in the plan file itself.
-- When picking up work in a new session, read the plan file first, find the first unchecked step, mark it `[~]`, execute it, mark it `[x]`, then proceed to the next step without pausing — unless the user has explicitly asked to stop after each step.
+- Steps are executed in order. Mark each step `[x]` immediately after completing it — never batch updates.
+- Each step must be atomic and independently verifiable (e.g. `pnpm typecheck` passes after that step alone).
+- Each step must state a **Done when** criterion.
 
 Example progress block:
 ```
 ## Progress
 - [x] Step 1 — Create shared component
-- [~] Step 2 — Refactor existing component to use it
+- [ ] Step 2 — Refactor existing component to use it
 - [ ] Step 3 — Update page files
 ```
 
