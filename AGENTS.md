@@ -54,7 +54,6 @@ When a task spans more than one logical area, write an implementation plan befor
 
 - Begin with a `## Progress` section containing a checkbox list of numbered steps.
 - Steps are executed in order. Mark each step `[x]` immediately after completing it — never batch updates.
-- Each step must be atomic and independently verifiable (e.g. `pnpm typecheck` passes after that step alone).
 - Each step must state a **Done when** criterion.
 
 Example progress block:
