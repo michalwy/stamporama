@@ -127,7 +127,7 @@ jobs:
         run: pnpm exec prisma migrate deploy
 
       - name: Run integration tests
-        run: node --test tests/integration/**/*.test.ts
+        run: pnpm exec tsx --tsconfig tests/integration/tsconfig.json --test tests/integration/**/*.test.ts
 
   publish-image:
     name: Publish container image
