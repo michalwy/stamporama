@@ -368,7 +368,23 @@ $db_hint" "$(dflt DATABASE_URL "")"
 
   # --- Launch --------------------------------------------------------------
   info "Pulling images..."
-  compose pull
+  if ! compose pull 2>/dev/tty; then
+    local tag
+    tag="$(get_env TAG)"
+    [ -n "$tag" ] || tag="latest"
+    die "Could not pull ghcr.io/michalwy/stamporama:${tag}.
+
+This usually means no Docker image has been published yet.
+Images are built and pushed automatically when a release tag (v*) is pushed to GitHub.
+
+If this is a fresh install before the first release, you can:
+  1. Wait for a release to be tagged, then re-run this installer.
+  2. Build the image locally and push it to GHCR yourself.
+
+If a release does exist and you still see this error, the GitHub package
+may be set to private. Make it public at:
+  https://github.com/michalwy/stamporama/pkgs/container/stamporama"
+  fi
   info "Starting stack..."
   compose up -d
 
