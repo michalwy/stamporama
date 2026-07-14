@@ -1,0 +1,20 @@
+# Self-hosted production overlay — uses the prebuilt image from GHCR.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# See .env.prod.example for required environment variables.
+services:
+  db:
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/michalwy/stamporama:${TAG:-latest}
+    build: !reset null
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600 --cleanup
+    restart: unless-stopped
+    profiles:
+      - autoupdate

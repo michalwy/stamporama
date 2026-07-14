@@ -9,8 +9,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
-    "test:integration": "echo 'Integration test infrastructure not yet configured' && exit 1",
-    "e2e:db:reset": "echo 'e2e database infrastructure not yet configured' && exit 1"
+    "test:integration": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test node --test tests/integration/**/*.test.ts",
+    "e2e:db:reset": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate reset --force --skip-seed"
   },
   "dependencies": {
     "next": "16.2.10",

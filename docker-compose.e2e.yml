@@ -1,0 +1,18 @@
+# Isolated PostgreSQL for integration tests.
+# Started automatically by pnpm test:integration; do not use this database for development.
+services:
+  e2e-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: stamporama_test
+      POSTGRES_USER: stamporama
+      POSTGRES_PASSWORD: stamporama
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stamporama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
