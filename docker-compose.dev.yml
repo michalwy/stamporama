@@ -4,13 +4,17 @@ services:
   app:
     build:
       context: .
-      target: deps
-    command: sh -c "pnpm exec prisma migrate deploy && pnpm dev"
+      target: dev
+    command: sh -c "pnpm install && pnpm exec prisma migrate deploy && pnpm dev"
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: development
     volumes:
       - .:/app
-      - /app/node_modules
-      - /app/.next
+      - pnpm-store:/root/.local/share/pnpm/store
+      - node-modules:/app/node_modules
+
+volumes:
+  pnpm-store:
+  node-modules:

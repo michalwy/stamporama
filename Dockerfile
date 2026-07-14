@@ -11,6 +11,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# Minimal dev stage — no install; pnpm runs at container startup via docker-compose.dev.yml
+FROM base AS dev
+WORKDIR /app
+
 # Build the application
 FROM base AS builder
 WORKDIR /app
