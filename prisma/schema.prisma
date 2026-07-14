@@ -31,9 +31,45 @@ model Collection {
 
   owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   collectionAreas CollectionArea[]
+  catalogVendors  CatalogVendor[]
 
   @@unique([ownerId, slug])
   @@map("collection")
+}
+
+model CatalogVendor {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  abbreviation String
+
+  collection    Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogNames  CatalogName[]
+
+  @@map("catalog_vendor")
+}
+
+model CatalogName {
+  id           String  @id @default(cuid())
+  vendorId     String
+  name         String
+  currency     String
+  abbreviation String?
+
+  vendor          CatalogVendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  catalogEditions CatalogEdition[]
+
+  @@map("catalog_name")
+}
+
+model CatalogEdition {
+  id            String @id @default(cuid())
+  catalogNameId String
+  year          Int
+
+  catalogName CatalogName @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+
+  @@map("catalog_edition")
 }
 
 model CollectionArea {
