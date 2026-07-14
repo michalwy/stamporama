@@ -8,13 +8,15 @@ services:
   app:
     image: ghcr.io/michalwy/stamporama:${TAG:-latest}
     build: !reset null
+    ports:
+      - "${STAMPORAMA_HTTP_PORT:-3000}:3000"
     restart: unless-stopped
 
   watchtower:
     image: containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 3600 --cleanup
+    command: --interval ${STAMPORAMA_UPDATE_INTERVAL:-3600} --cleanup
     restart: unless-stopped
     profiles:
       - autoupdate
