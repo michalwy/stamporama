@@ -29,10 +29,39 @@ model Collection {
   ownerId   String
   createdAt DateTime @default(now())
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  collectionAreas CollectionArea[]
 
   @@unique([ownerId, slug])
   @@map("collection")
+}
+
+model CollectionArea {
+  id           String   @id @default(cuid())
+  collectionId String
+  name         String
+  parentId     String?
+  description  String?
+  catalogId    String?
+  createdAt    DateTime @default(now())
+
+  collection       Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  parent           CollectionArea?      @relation("CollectionAreaChildren", fields: [parentId], references: [id])
+  children         CollectionArea[]     @relation("CollectionAreaChildren")
+  stampAreaLinks   StampCollectionArea[]
+
+  @@map("collection_area")
+}
+
+model StampCollectionArea {
+  stampId           String
+  collectionAreaId  String
+  isPrimary         Boolean @default(false)
+
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+
+  @@id([stampId, collectionAreaId])
+  @@map("stamp_collection_area")
 }
 
 model Session {
