@@ -86,6 +86,39 @@ Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` d
 
 **Client singleton:** `src/lib/db.ts` — exports `prisma`, a `PrismaClient` instance initialized with the `PrismaPg` adapter. Uses `globalThis` caching to avoid exhausting connections during Next.js hot-reload.
 
+## Domain Model
+
+### Collection
+
+The `Collection` model is the top-level organizing unit. All stamp data belongs to a collection. A user can own multiple collections; each collection belongs to exactly one user.
+
+**Prisma model** (`prisma/schema.prisma`):
+
+```prisma
+model Collection {
+  id        String   @id @default(cuid())
+  slug      String
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, slug])
+  @@map("collection")
+}
+```
+
+**Key design decisions:**
+- `@@unique([ownerId, slug])` enforces slug uniqueness per user at the database level and serves as the index for fast slug lookups.
+- Slugs are auto-generated from the collection name (lowercase, hyphens); collisions within a user's collections get a numeric suffix (`-2`, `-3`, …).
+- Authorization uses `getCollectionBySlug(ownerId, slug)` — a lookup by the compound unique key. A slug that belongs to a different user returns `null`, producing a 404 rather than a 403 to avoid leaking slug existence.
+
+**Domain layer:** `src/lib/collections.ts` — `createCollection`, `getCollectionsByOwner`, `getCollectionBySlug`. Imports `"server-only"` to prevent accidental bundling into client code. Pure slug utilities live separately in `src/lib/slug.ts` (no `"server-only"`, unit-testable).
+
+**Collection routes:** `/c/[collectionSlug]/` — the layout validates the slug and authorizes the session user as owner before rendering.
+
+**Dialog primitive:** All modal dialogs use the shared shell at `src/app/dialog-shell.tsx`. It provides: backdrop, header with close button, scrollable body, optional fixed footer.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:

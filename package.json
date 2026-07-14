@@ -13,7 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
-    "test:integration": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate deploy && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test node --test tests/integration/**/*.test.ts",
+    "test:integration": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate deploy && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test tsx --tsconfig tests/integration/tsconfig.json --test tests/integration/**/*.test.ts",
     "e2e:db:reset": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate reset --force --skip-seed"
   },
   "dependencies": {
@@ -23,7 +23,8 @@
     "next": "16.2.10",
     "pg": "8.22.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.2",
