@@ -227,7 +227,7 @@ download() {
 compose() {
   local files
   files="$(get_env COMPOSE_FILE)"
-  [ -n "$files" ] || files="docker-compose.yml:docker-compose.prod.yml"
+  [ -n "$files" ] || files="docker-compose.prod.yml"
   COMPOSE_FILE="$files" docker compose "$@"
 }
 
@@ -254,10 +254,10 @@ main() {
   info "Using $(pwd)"
 
   # --- Fetch deployment files ---------------------------------------------
-  info "Downloading docker-compose.yml"
-  download "${RAW_BASE}/docker-compose.yml" "docker-compose.yml"
   info "Downloading docker-compose.prod.yml"
   download "${RAW_BASE}/docker-compose.prod.yml" "docker-compose.prod.yml"
+  info "Downloading docker-compose.network.yml"
+  download "${RAW_BASE}/docker-compose.network.yml" "docker-compose.network.yml"
 
   local is_reconfigure=0
   if [ -f .env ]; then
@@ -276,15 +276,47 @@ main() {
     [ -n "$existing" ] && printf '%s' "$existing" || printf '%s' "${2:-}"
   }
 
-  set_env COMPOSE_FILE "docker-compose.yml:docker-compose.prod.yml"
-
   # --- Interview -----------------------------------------------------------
-  local auth_url http_port postgres_password secret secret_mode update_mode interval update_default existing_secret
+  local database_url auth_url http_port secret secret_mode update_mode interval
+  local db_mode db_default update_default existing_secret net_name db_hint
 
+  db_default="port"
   update_default="off"
   if [ "$is_reconfigure" -eq 1 ]; then
+    case "$(get_env COMPOSE_FILE)" in *"docker-compose.network.yml"*) db_default="network" ;; esac
     case "$(get_env COMPOSE_PROFILES)" in *autoupdate*) update_default="on" ;; esac
   fi
+
+  ui_menu db_mode "$db_default" "How does the app reach your PostgreSQL database?" \
+    port    "Published host port (or host.docker.internal)" \
+    network "Shared Docker network — no exposed DB port"
+
+  if [ "$db_mode" = "network" ]; then
+    ui_prompt net_name \
+      "Name of the shared Docker network your PostgreSQL container is attached to" \
+      "$(dflt STAMPORAMA_DB_NETWORK stamporama)"
+    [ -n "$net_name" ] || net_name="stamporama"
+    set_env STAMPORAMA_DB_NETWORK "$net_name"
+    set_env COMPOSE_FILE "docker-compose.prod.yml:docker-compose.network.yml"
+    if ! docker network inspect "$net_name" >/dev/null 2>&1; then
+      if ui_confirm "The Docker network '$net_name' does not exist yet. Create it now? You will still need to attach your PostgreSQL container to it."; then
+        docker network create "$net_name" >/dev/null
+        info "Created network '$net_name'. Attach Postgres: docker network connect $net_name <postgres-container>"
+      else
+        warn "Create it and attach PostgreSQL before starting: docker network create $net_name"
+      fi
+    fi
+    db_hint="Use your PostgreSQL container name as the host and its internal port (5432), e.g. postgresql://user:pass@my-postgres:5432/stamporama"
+  else
+    set_env COMPOSE_FILE "docker-compose.prod.yml"
+    db_hint="If PostgreSQL runs on this host outside Docker, use host.docker.internal as the host."
+  fi
+
+  ui_prompt database_url "External DATABASE_URL
+
+$db_hint" "$(dflt DATABASE_URL "")"
+  [ -n "$database_url" ] || die "DATABASE_URL is required."
+  set_env DATABASE_URL "$database_url"
 
   ui_prompt auth_url \
     "Public URL where this deployment will be reachable (BETTER_AUTH_URL)" \
@@ -294,28 +326,15 @@ main() {
   ui_prompt http_port "Host port to expose the app on" "$(dflt STAMPORAMA_HTTP_PORT 3000)"
   set_env STAMPORAMA_HTTP_PORT "$http_port"
 
-  local pg_default
-  pg_default="$(dflt POSTGRES_PASSWORD "")"
-  if [ -z "$pg_default" ]; then
-    pg_default="$(gen_secret)"
-    info "Generated a PostgreSQL password."
-  fi
-  ui_password postgres_password "PostgreSQL password (leave blank to keep/use generated value)"
-  if [ -z "$postgres_password" ]; then
-    postgres_password="$pg_default"
-  fi
-  set_env POSTGRES_PASSWORD "$postgres_password"
-  set_env DATABASE_URL "postgresql://stamporama:${postgres_password}@db:5432/stamporama"
-
   existing_secret="$(dflt BETTER_AUTH_SECRET "")"
   if [ -n "$existing_secret" ]; then
     ui_menu secret_mode keep "Authentication secret (BETTER_AUTH_SECRET)" \
-      keep "Keep the current secret" \
-      auto "Generate a new strong secret" \
+      keep   "Keep the current secret" \
+      auto   "Generate a new strong secret" \
       manual "Enter my own"
   else
     ui_menu secret_mode auto "Authentication secret (BETTER_AUTH_SECRET)" \
-      auto "Auto-generate a strong secret (recommended)" \
+      auto   "Auto-generate a strong secret (recommended)" \
       manual "Enter my own"
   fi
   case "$secret_mode" in
@@ -338,7 +357,7 @@ main() {
     on  "Enabled — Watchtower watches for new release images"
   if [ "$update_mode" = "on" ]; then
     set_env COMPOSE_PROFILES "autoupdate"
-    ui_prompt interval "Update check interval in seconds" "$(dflt OSO_UPDATE_INTERVAL 3600)"
+    ui_prompt interval "Update check interval in seconds" "$(dflt STAMPORAMA_UPDATE_INTERVAL 3600)"
     [ -n "$interval" ] || interval="3600"
     set_env STAMPORAMA_UPDATE_INTERVAL "$interval"
     info "Auto-update enabled."

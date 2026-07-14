@@ -1,0 +1,25 @@
+# Optional overlay — attach the app to a pre-existing external Docker network so
+# it can reach a PostgreSQL container that is NOT published to the host.
+#
+# Enable it by adding this file to COMPOSE_FILE in .env, for example:
+#
+#   COMPOSE_FILE=docker-compose.prod.yml:docker-compose.network.yml
+#
+# The install script (scripts/install.sh) sets this up for you when you choose
+# the shared-network option. Requirements when this overlay is active:
+#   - The external network named by STAMPORAMA_DB_NETWORK (default "stamporama")
+#     must already exist, and your PostgreSQL container must be attached to it.
+#   - DATABASE_URL must use that PostgreSQL container's name as the host and the
+#     internal port (usually 5432), e.g.:
+#     postgresql://user:pass@my-postgres:5432/stamporama
+
+services:
+  app:
+    networks:
+      - default
+      - db
+
+networks:
+  db:
+    external: true
+    name: ${STAMPORAMA_DB_NETWORK:-stamporama}

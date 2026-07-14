@@ -2,19 +2,19 @@
 
 ## Deployment Model
 
-Stamporama is deployed as a Docker Compose stack. Three compose files cover different use cases:
+Stamporama uses separate Docker Compose files for local development and self-hosted production.
 
 | File | Purpose | Command |
 |---|---|---|
-| `docker-compose.yml` | Base: app + PostgreSQL, built locally | `docker compose up` |
+| `docker-compose.yml` | Local dev: app + bundled PostgreSQL, built locally | `docker compose up` |
 | `docker-compose.dev.yml` | Hot-reload overlay, source mounted | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` |
-| `docker-compose.prod.yml` | Self-hosted overlay, prebuilt GHCR image | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` |
+| `docker-compose.prod.yml` | Self-hosted production: prebuilt GHCR image, external DB | `docker compose -f docker-compose.prod.yml up -d` |
+| `docker-compose.network.yml` | Optional overlay: connect app to a shared Docker network for DB access | combined with `docker-compose.prod.yml` via `COMPOSE_FILE` |
+| `docker-compose.e2e.yml` | Isolated PostgreSQL on port 5433 for integration tests | started by `pnpm test:integration` |
 
-The `COMPOSE_FILE` variable in `.env` sets the default file list so operators can run bare `docker compose` commands without specifying `-f` flags.
+The `COMPOSE_FILE` variable in `.env` sets the active file list so operators can run bare `docker compose` commands without specifying `-f` flags.
 
-A fourth file, `docker-compose.e2e.yml`, runs an isolated PostgreSQL instance on port 5433 for integration tests only.
-
-## Services
+## Local development services
 
 ```
 ┌─────────────────────────────────┐
@@ -29,12 +29,23 @@ A fourth file, `docker-compose.e2e.yml`, runs an isolated PostgreSQL instance on
 └─────────────────────────────────┘
 ```
 
-Optional in production:
+## Production services
+
+Production does not run a database container. The operator provides an external PostgreSQL via `DATABASE_URL`.
 
 ```
 ┌─────────────────────────────────┐
-│  watchtower  (autoupdate profile│
-│  polls GHCR hourly, restarts app│
+│  app  (Next.js, port 3000)      │
+│  ghcr.io/michalwy/stamporama    │
+└──────────────┬──────────────────┘
+               │ DATABASE_URL (external)
+               ▼
+         [operator's PostgreSQL]
+
+Optional (autoupdate profile):
+┌─────────────────────────────────┐
+│  watchtower                     │
+│  polls GHCR, restarts on update │
 └─────────────────────────────────┘
 ```
 
