@@ -9,12 +9,18 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
-    "test:integration": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test node --test tests/integration/**/*.test.ts",
+    "test:integration": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate deploy && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test node --test tests/integration/**/*.test.ts",
     "e2e:db:reset": "docker compose -f docker-compose.e2e.yml up -d --wait && DATABASE_URL=postgresql://stamporama:stamporama@localhost:5433/stamporama_test pnpm exec prisma migrate reset --force --skip-seed"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
     "next": "16.2.10",
+    "pg": "8.22.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -23,9 +29,11 @@
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "dotenv": "17.4.2",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.10",
     "postcss": "8.5.19",
+    "prisma": "7.8.0",
     "tailwindcss": "4.3.2",
     "tsx": "4.22.5",
     "typescript": "6.0.3"

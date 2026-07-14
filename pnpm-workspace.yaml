@@ -4,11 +4,15 @@ packages:
 confirmModulesPurge: false
 
 allowBuilds:
+  '@prisma/engines': true
   esbuild: true
+  prisma: true
   sharp: true
   unrs-resolver: true
 
 onlyBuiltDependencies:
+  - '@prisma/engines'
   - esbuild
+  - prisma
   - sharp
   - unrs-resolver
