@@ -29,9 +29,8 @@ This project is intentionally vibe-coded. Future agents must preserve product in
 - Preserve existing user changes. Do not rewrite unrelated files.
 - Use GitHub Issues as the shared backlog for explicitly requested but unfinished work. Before starting related work, check whether an issue already exists; if not, create one. When an item is completed, close the corresponding issue by including a closing keyword in the commit message (e.g. `Closes #5`). Only use `gh issue close` directly when no commit is being made.
 - Do not close a GitHub Issue until the implementation is committed and pushed (or intentionally handed off unpushed at explicit user request).
-- Use Conventional Commits format for issue titles: `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`, etc.
-- When creating or updating backlog issues, always assign appropriate labels during the same task. At minimum, apply `backlog` plus one type label (`enhancement`, `bug`, `question`), and add priority labels when known.
 - Use Conventional Commits format for issue titles, matching the commit type that will close the issue: `feat: add catalog search`, `fix: collection slug collision`, `docs: update agent guidance`, `question: define catalog hierarchy`.
+- When creating or updating backlog issues, always assign appropriate labels during the same task. At minimum, apply `backlog` plus one type label (`enhancement`, `bug`, `question`), and add priority labels when known.
 - Do not maintain a local `TODO.md` backlog file. Keep backlog items only in GitHub Issues.
 - If GitHub connector/integration cannot create or update issues, use `gh` CLI as the required fallback.
 - All GitHub content must be in English: issue titles, issue comments, PR titles, PR descriptions, and commit messages.
