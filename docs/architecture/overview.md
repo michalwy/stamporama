@@ -75,9 +75,10 @@ Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` d
 | Context | Command | Notes |
 |---|---|---|
 | Local development | `pnpm prisma:migrate` | Applies + generates new migration against local dev DB |
+| Docker Compose (any stack) | `prisma migrate deploy` | Runs automatically on container start before `pnpm start`/`pnpm dev` |
 | Integration tests | `pnpm exec prisma migrate deploy` | Applied automatically by `pnpm test:integration` |
 | CI (integration job) | `pnpm exec prisma migrate deploy` | Runs against a fresh service-container DB |
-| Production | Run `pnpm exec prisma migrate deploy` before restarting the container | Operator responsibility |
+| Production | Handled automatically on container start | `docker-compose.prod.yml` runs migrate deploy before `pnpm start` |
 
 **Schema:** `prisma/schema.prisma` — PostgreSQL datasource, client output at `src/generated/prisma`.
 
@@ -95,13 +96,29 @@ The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull requ
 
 The **publish-image** job triggers only on `v*` tags and requires all three jobs to pass. It pushes a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/michalwy/stamporama`.
 
+## Authentication
+
+Stamporama uses [Better Auth](https://better-auth.com/) with the email/password provider.
+
+**Server instance:** `src/lib/auth.ts` — initializes Better Auth with the Prisma adapter (sharing the `prisma` singleton from `src/lib/db.ts`) and the email/password provider.
+
+**Client instance:** `src/lib/auth-client.ts` — `createAuthClient()` for use in client components. Defaults to the same origin (`/api/auth/*`); no explicit `baseURL` required.
+
+**API handler:** `src/app/api/auth/[...all]/route.ts` — catches all Better Auth API requests (`GET` + `POST`) via `toNextJsHandler(auth)`.
+
+**Middleware:** `src/middleware.ts` — protects `/c/*` (collection routes) and `/collections` (collection picker). Runs on the Next.js Edge runtime; calls `/api/auth/get-session` via native `fetch` to avoid importing Node.js-only modules in Edge context. Unauthenticated requests are redirected to `/sign-in`.
+
+**Prisma schema:** Better Auth manages four tables — `user`, `session`, `account`, `verification` — added in migration `20260714190000_add_better_auth_schema`.
+
+**Session check in Server Components:** call `auth.api.getSession({ headers: await headers() })` directly (Node.js runtime, safe outside middleware).
+
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL connection string |
-| `BETTER_AUTH_SECRET` | yes | Random secret for auth session signing |
-| `BETTER_AUTH_URL` | yes | Public base URL of the app |
+| `BETTER_AUTH_SECRET` | yes | Random secret for auth session signing (generate with `openssl rand -base64 32`) |
+| `BETTER_AUTH_URL` | yes | Public base URL of the app (e.g. `http://localhost:3000`) |
 | `POSTGRES_PASSWORD` | yes (db) | Password for the `stamporama` database user |
 | `TAG` | prod only | Image tag to pull (default: `latest`) |
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |

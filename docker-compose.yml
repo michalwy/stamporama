@@ -26,6 +26,7 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
+    command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
     depends_on:
       db:
         condition: service_healthy

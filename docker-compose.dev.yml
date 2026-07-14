@@ -5,7 +5,7 @@ services:
     build:
       context: .
       target: deps
-    command: pnpm dev
+    command: sh -c "pnpm exec prisma migrate deploy && pnpm dev"
     ports:
       - "3000:3000"
     environment:

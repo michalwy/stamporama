@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,14 +18,15 @@ export default function SignInPage() {
     setError(null);
     setPending(true);
 
-    const { error: signInError } = await authClient.signIn.email({
+    const { error: signUpError } = await authClient.signUp.email({
+      name,
       email,
       password,
       callbackURL: "/collections",
     });
 
-    if (signInError) {
-      setError(signInError.message ?? "Sign-in failed. Please try again.");
+    if (signUpError) {
+      setError(signUpError.message ?? "Registration failed. Please try again.");
       setPending(false);
     } else {
       router.push("/collections");
@@ -60,7 +62,7 @@ export default function SignInPage() {
             color: "var(--color-text-primary)",
           }}
         >
-          Sign in
+          Create account
         </h1>
 
         {error && (
@@ -81,6 +83,28 @@ export default function SignInPage() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+            <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+              Name
+            </span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoComplete="name"
+              style={{
+                padding: "0.5rem 0.75rem",
+                border: "1px solid var(--color-border)",
+                borderRadius: "0.375rem",
+                fontSize: "1rem",
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+                outline: "none",
+              }}
+            />
+          </label>
+
           <label style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
             <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
               Email
@@ -112,7 +136,8 @@ export default function SignInPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
+              autoComplete="new-password"
+              minLength={8}
               style={{
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
@@ -140,7 +165,7 @@ export default function SignInPage() {
               cursor: pending ? "not-allowed" : "pointer",
             }}
           >
-            {pending ? "Signing in…" : "Sign in"}
+            {pending ? "Creating account…" : "Create account"}
           </button>
         </form>
 
@@ -152,12 +177,12 @@ export default function SignInPage() {
             color: "var(--color-text-muted)",
           }}
         >
-          {"Don't have an account? "}
+          Already have an account?{" "}
           <Link
-            href="/sign-up"
+            href="/sign-in"
             style={{ color: "var(--color-accent)", textDecoration: "none", fontWeight: 500 }}
           >
-            Sign up
+            Sign in
           </Link>
         </p>
       </div>

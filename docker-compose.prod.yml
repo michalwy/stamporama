@@ -11,6 +11,7 @@
 services:
   app:
     image: ghcr.io/michalwy/stamporama:${TAG:-latest}
+    command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
     env_file:
       - .env
     ports:
