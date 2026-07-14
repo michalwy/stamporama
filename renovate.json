@@ -1,0 +1,80 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":pinVersions"],
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {
+      "description": "Framework: Next.js, React, React DOM — always bump together",
+      "groupName": "Next.js / React framework",
+      "matchPackageNames": [
+        "next",
+        "react",
+        "react-dom",
+        "eslint-config-next",
+        "@types/react",
+        "@types/react-dom"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Prisma: client, adapter, and CLI must stay in sync",
+      "groupName": "Prisma",
+      "matchPackageNames": [
+        "prisma",
+        "@prisma/client",
+        "@prisma/adapter-pg"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Auth: better-auth requires manual review",
+      "groupName": "Auth",
+      "matchPackageNames": ["better-auth"],
+      "automerge": false
+    },
+    {
+      "description": "TanStack: query and table together",
+      "groupName": "TanStack",
+      "matchPackageNames": [
+        "@tanstack/react-query",
+        "@tanstack/react-table"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Dev tooling: patch and minor automerge when CI passes",
+      "groupName": "Dev tooling",
+      "matchPackageNames": [
+        "typescript",
+        "eslint",
+        "tailwindcss",
+        "@tailwindcss/postcss",
+        "postcss",
+        "tsx",
+        "@types/node"
+      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Dev tooling: major bumps require manual review",
+      "groupName": "Dev tooling (major)",
+      "matchPackageNames": [
+        "typescript",
+        "eslint",
+        "tailwindcss",
+        "@tailwindcss/postcss",
+        "postcss",
+        "tsx",
+        "@types/node"
+      ],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    }
+  ]
+}

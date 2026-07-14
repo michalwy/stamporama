@@ -1,0 +1,32 @@
+{
+  "name": "stamporama",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:unit": "tsx --test tests/unit/**/*.test.ts",
+    "test:integration": "echo 'Integration test infrastructure not yet configured' && exit 1",
+    "e2e:db:reset": "echo 'e2e database infrastructure not yet configured' && exit 1"
+  },
+  "dependencies": {
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.2",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.10",
+    "postcss": "8.5.19",
+    "tailwindcss": "4.3.2",
+    "tsx": "4.22.5",
+    "typescript": "6.0.3"
+  }
+}

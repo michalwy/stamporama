@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  /* Semantic color tokens */
+  --color-accent: #0f766e;
+  --color-accent-hover: #115e59;
+  --color-accent-soft: #ccfbf1;
+  --color-accent-border: #5eead4;
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-success-border: #86efac;
+  --color-error: #b91c1c;
+  --color-error-soft: #fee2e2;
+  --color-error-border: #fecaca;
+  --color-warning: #a16207;
+  --color-warning-soft: #fef3c7;
+  --color-warning-border: #fde68a;
+  --color-action-primary: var(--color-accent);
+  --color-action-primary-hover: var(--color-accent-hover);
+  /* Surface tokens */
+  --color-bg-page: #f5f7fb;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f8fafc;
+  --color-bg-muted: #f1f5f9;
+  --color-bg-strong: #e2e8f0;
+  /* Text tokens */
+  --color-text-primary: #020617;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748b;
+  --color-text-placeholder: #94a3b8;
+  /* Border tokens */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-border-hover: #94a3b8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg-page);
+}
