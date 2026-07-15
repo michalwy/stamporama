@@ -27,9 +27,11 @@ export async function createCollectionAction(
     };
   }
 
+  const seedDemo = formData.get("seedDemoData") === "on";
+
   let slug: string;
   try {
-    const collection = await createCollection(session.user.id, name);
+    const collection = await createCollection(session.user.id, name, { seedDemo });
     slug = collection.slug;
   } catch {
     return {

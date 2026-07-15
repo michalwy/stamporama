@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
+import { seedDemoData } from "./demo";
 
 export async function generateUniqueSlug(
   ownerId: string,
@@ -28,16 +29,23 @@ export interface CreateCollectionResult {
 
 export async function createCollection(
   ownerId: string,
-  name: string
+  name: string,
+  options?: { seedDemo?: boolean }
 ): Promise<CreateCollectionResult> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Collection name is required.");
 
   const slug = await generateUniqueSlug(ownerId, trimmed);
 
-  return prisma.collection.create({
-    data: { ownerId, name: trimmed, slug },
-    select: { id: true, slug: true, name: true },
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.collection.create({
+      data: { ownerId, name: trimmed, slug },
+      select: { id: true, slug: true, name: true },
+    });
+    if (options?.seedDemo) {
+      await seedDemoData(created.id, tx as never);
+    }
+    return created;
   });
 }
 

@@ -5,6 +5,7 @@ import {
   getCollectionsByOwner,
   getCollectionBySlug,
 } from "../../src/lib/collections";
+import { wipeDemoData } from "../../src/lib/demo/index";
 import { prisma } from "../../src/lib/db";
 
 // Creates a minimal user row for test isolation.
@@ -158,5 +159,32 @@ describe("getCollectionBySlug", () => {
     } finally {
       await prisma.user.delete({ where: { id: other.id } });
     }
+  });
+});
+
+describe("createCollection — seedDemo option", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    userId = (await createTestUser(`sd-${Date.now()}`)).id;
+    const c = await createCollection(userId, "Demo Collection", { seedDemo: true });
+    collectionId = c.id;
+  });
+
+  after(async () => {
+    await prisma.$transaction((tx) => wipeDemoData(collectionId, tx as never));
+    await prisma.collection.delete({ where: { id: collectionId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("seeds at least one catalog vendor", async () => {
+    const vendors = await prisma.catalogVendor.findMany({ where: { collectionId } });
+    assert.ok(vendors.length >= 1);
+  });
+
+  it("seeds at least one collection area", async () => {
+    const areas = await prisma.collectionArea.findMany({ where: { collectionId } });
+    assert.ok(areas.length >= 1);
   });
 });

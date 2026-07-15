@@ -82,6 +82,13 @@ export function CreateCollectionForm() {
           />
         </label>
 
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+          <input type="checkbox" name="seedDemoData" defaultChecked={false} />
+          <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+            Start with sample data
+          </span>
+        </label>
+
         <button
           type="submit"
           disabled={isPending}
