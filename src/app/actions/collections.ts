@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { createCollection } from "@/lib/collections";
+import { createCollection, resetCollectionToDemo } from "@/lib/collections";
 
 export type CreateCollectionState =
   | { status: "idle" }
@@ -41,4 +41,23 @@ export async function createCollectionAction(
   }
 
   redirect(`/c/${slug}`);
+}
+
+export type ResetToDemoState =
+  | { status: "idle" }
+  | { status: "success" }
+  | { status: "error"; message: string };
+
+export async function resetToDemoDataAction(
+  collectionId: string
+): Promise<ResetToDemoState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+
+  try {
+    await resetCollectionToDemo(session.user.id, collectionId);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Reset failed. Please try again." };
+  }
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
-import { seedDemoData } from "./demo";
+import { seedDemoData, wipeDemoData } from "./demo";
 
 export async function generateUniqueSlug(
   ownerId: string,
@@ -46,6 +46,22 @@ export async function createCollection(
       await seedDemoData(created.id, tx as never);
     }
     return created;
+  });
+}
+
+export async function resetCollectionToDemo(
+  ownerId: string,
+  collectionId: string
+): Promise<void> {
+  const owned = await prisma.collection.findUnique({
+    where: { id: collectionId, ownerId },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Collection not found or access denied.");
+
+  await prisma.$transaction(async (tx) => {
+    await wipeDemoData(collectionId, tx as never);
+    await seedDemoData(collectionId, tx as never);
   });
 }
 
