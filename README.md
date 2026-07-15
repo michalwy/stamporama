@@ -18,7 +18,7 @@ Stamporama helps you manage your stamp collection, track trades and purchases, h
 Install Docker, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/latest/scripts/install.sh | bash
 ```
 
 The installer downloads the compose files, walks you through environment configuration, and starts the stack. Stamporama will be available on port 3000.
@@ -28,8 +28,8 @@ To manage the running stack:
 ```sh
 cd ~/stamporama
 docker compose ps
-docker compose pull && docker compose up -d   # update to latest release
-docker compose down                            # stop
+curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/latest/scripts/update.sh | bash   # update to latest release
+docker compose down                                                                                   # stop
 ```
 
 Optional auto-update via [Watchtower](https://containrrr.dev/watchtower/):

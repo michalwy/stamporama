@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REPO="michalwy/stamporama"
-BRANCH="main"
+BRANCH="latest"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 ENV_EXAMPLE=".env.prod.example"
 APP_TITLE="Stamporama installer"
