@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { DialogShell } from "@/app/dialog-shell";
+import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
   type ResetToDemoState,
@@ -132,79 +132,29 @@ export function SettingsPanel({ collectionId, collectionName }: SettingsPanelPro
       </section>
 
       {dialogOpen && (
-        <DialogShell
-          title="Reset to demo data?"
-          onClose={closeDialog}
-          footer={
-            <>
-              <button
-                type="button"
-                onClick={closeDialog}
-                disabled={isPending}
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "transparent",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  color: "var(--color-text-secondary)",
-                  cursor: isPending ? "not-allowed" : "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={isPending}
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: isPending
-                    ? "var(--color-border-strong)"
-                    : "var(--color-error)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  cursor: isPending ? "not-allowed" : "pointer",
-                }}
-              >
-                {isPending ? "Resetting…" : "Reset"}
-              </button>
-            </>
-          }
-        >
-          <p
-            style={{
-              margin: "0 0 1rem",
-              fontSize: "0.9375rem",
-              color: "var(--color-text-primary)",
-              lineHeight: 1.6,
-            }}
-          >
-            This will permanently delete all current data in{" "}
-            <strong>{collectionName}</strong> and replace it with the demo
-            dataset. This cannot be undone.
-          </p>
-
-          {actionState.status === "error" && (
+        <DialogShell title="Reset to demo data?" onClose={closeDialog}>
+          <DialogBody>
             <p
-              role="alert"
               style={{
                 margin: 0,
-                padding: "0.75rem 1rem",
-                background: "var(--color-error-soft)",
-                border: "1px solid var(--color-error-border)",
-                borderRadius: "0.5rem",
-                color: "var(--color-error)",
-                fontSize: "0.875rem",
+                fontSize: "0.9375rem",
+                color: "var(--color-text-primary)",
+                lineHeight: 1.6,
               }}
             >
-              {actionState.message}
+              This will permanently delete all current data in{" "}
+              <strong>{collectionName}</strong> and replace it with the demo
+              dataset. This cannot be undone.
             </p>
-          )}
+          </DialogBody>
+          <DialogActions
+            actionLabel={isPending ? "Resetting…" : "Reset"}
+            variant="destructive"
+            onCancel={closeDialog}
+            onAction={handleReset}
+            disabled={isPending}
+            error={actionState.status === "error" ? actionState.message : undefined}
+          />
         </DialogShell>
       )}
     </>
