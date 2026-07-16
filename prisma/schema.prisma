@@ -32,6 +32,8 @@ model Collection {
   owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   collectionAreas CollectionArea[]
   catalogVendors  CatalogVendor[]
+  stamps          Stamp[]
+  series          Series[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -56,8 +58,12 @@ model CatalogName {
   currency     String
   abbreviation String?
 
-  vendor          CatalogVendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  catalogEditions CatalogEdition[]
+  vendor                 CatalogVendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  catalogEditions        CatalogEdition[]
+  stampCatalogNumbers    StampCatalogNumber[]
+  collectionAreaCatalogs CollectionAreaCatalog[]
+  series                 Series[]
+  primaryForAreas        CollectionArea[]        @relation("CollectionAreaPrimaryCatalog")
 
   @@map("catalog_name")
 }
@@ -73,31 +79,105 @@ model CatalogEdition {
 }
 
 model CollectionArea {
-  id           String   @id @default(cuid())
-  collectionId String
-  name         String
-  parentId     String?
-  description  String?
-  catalogId    String?
-  createdAt    DateTime @default(now())
+  id                   String   @id @default(cuid())
+  collectionId         String
+  name                 String
+  parentId             String?
+  description          String?
+  catalogId            String?
+  primaryCatalogNameId String?
+  createdAt            DateTime @default(now())
 
-  collection       Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  parent           CollectionArea?      @relation("CollectionAreaChildren", fields: [parentId], references: [id])
-  children         CollectionArea[]     @relation("CollectionAreaChildren")
-  stampAreaLinks   StampCollectionArea[]
+  collection             Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  parent                 CollectionArea?       @relation("CollectionAreaChildren", fields: [parentId], references: [id])
+  children               CollectionArea[]      @relation("CollectionAreaChildren")
+  stampAreaLinks         StampCollectionArea[]
+  primaryCatalogName     CatalogName?          @relation("CollectionAreaPrimaryCatalog", fields: [primaryCatalogNameId], references: [id])
+  collectionAreaCatalogs CollectionAreaCatalog[]
 
   @@map("collection_area")
 }
 
 model StampCollectionArea {
-  stampId           String
-  collectionAreaId  String
-  isPrimary         Boolean @default(false)
+  stampId          String
+  collectionAreaId String
+  isPrimary        Boolean @default(false)
 
+  stamp          Stamp          @relation(fields: [stampId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
 
   @@id([stampId, collectionAreaId])
   @@map("stamp_collection_area")
+}
+
+model Stamp {
+  id           String   @id @default(cuid())
+  collectionId String
+  parentId     String?
+  name         String?
+  issuedYear   Int?
+  createdAt    DateTime @default(now())
+
+  collection        Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  parent            Stamp?                @relation("StampVariants", fields: [parentId], references: [id])
+  variants          Stamp[]               @relation("StampVariants")
+  stampAreaLinks    StampCollectionArea[]
+  catalogNumbers    StampCatalogNumber[]
+  seriesMemberships SeriesMember[]        @relation("SeriesMemberStamp")
+  requiredInSeries  SeriesMember[]        @relation("SeriesMemberRequiredVariant")
+
+  @@map("stamp")
+}
+
+model StampCatalogNumber {
+  stampId       String
+  catalogNameId String
+  number        String
+
+  stamp       Stamp       @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  catalogName CatalogName @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+
+  @@id([stampId, catalogNameId])
+  @@map("stamp_catalog_number")
+}
+
+model CollectionAreaCatalog {
+  collectionAreaId String
+  catalogNameId    String
+
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  catalogName    CatalogName    @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+
+  @@id([collectionAreaId, catalogNameId])
+  @@map("collection_area_catalog")
+}
+
+model Series {
+  id            String   @id @default(cuid())
+  collectionId  String
+  catalogNameId String
+  name          String?
+  isAutoCreated Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  collection  Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogName CatalogName    @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+  members     SeriesMember[]
+
+  @@map("series")
+}
+
+model SeriesMember {
+  seriesId          String
+  stampId           String
+  requiredVariantId String?
+
+  series          Series  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  stamp           Stamp   @relation("SeriesMemberStamp", fields: [stampId], references: [id], onDelete: Cascade)
+  requiredVariant Stamp?  @relation("SeriesMemberRequiredVariant", fields: [requiredVariantId], references: [id])
+
+  @@id([seriesId, stampId])
+  @@map("series_member")
 }
 
 model Session {

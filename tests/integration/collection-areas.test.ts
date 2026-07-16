@@ -96,7 +96,7 @@ describe("StampCollectionArea persistence", () => {
   let userId: string;
   let collectionId: string;
   let areaId: string;
-  const stampId = `stamp-test-${Date.now()}`;
+  let sharedStampId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -108,6 +108,8 @@ describe("StampCollectionArea persistence", () => {
       data: { collectionId, name: "Test Area" },
     });
     areaId = area.id;
+    const stamp = await prisma.stamp.create({ data: { collectionId } });
+    sharedStampId = stamp.id;
   });
 
   after(async () => {
@@ -119,28 +121,28 @@ describe("StampCollectionArea persistence", () => {
 
   it("creates a stamp-area link with isPrimary false by default", async () => {
     const link = await prisma.stampCollectionArea.create({
-      data: { stampId, collectionAreaId: areaId },
+      data: { stampId: sharedStampId, collectionAreaId: areaId },
     });
-    assert.equal(link.stampId, stampId);
+    assert.equal(link.stampId, sharedStampId);
     assert.equal(link.collectionAreaId, areaId);
     assert.equal(link.isPrimary, false);
   });
 
   it("creates a stamp-area link with isPrimary true", async () => {
-    const sid = `stamp-primary-${Date.now()}`;
+    const stamp = await prisma.stamp.create({ data: { collectionId } });
     const link = await prisma.stampCollectionArea.create({
-      data: { stampId: sid, collectionAreaId: areaId, isPrimary: true },
+      data: { stampId: stamp.id, collectionAreaId: areaId, isPrimary: true },
     });
     assert.equal(link.isPrimary, true);
   });
 
   it("enforces composite primary key uniqueness", async () => {
-    const sid = `stamp-dup-${Date.now()}`;
+    const stamp = await prisma.stamp.create({ data: { collectionId } });
     await prisma.stampCollectionArea.create({
-      data: { stampId: sid, collectionAreaId: areaId },
+      data: { stampId: stamp.id, collectionAreaId: areaId },
     });
     await assert.rejects(
-      () => prisma.stampCollectionArea.create({ data: { stampId: sid, collectionAreaId: areaId } }),
+      () => prisma.stampCollectionArea.create({ data: { stampId: stamp.id, collectionAreaId: areaId } }),
     );
   });
 
@@ -149,9 +151,9 @@ describe("StampCollectionArea persistence", () => {
     const tmpArea = await prisma.collectionArea.create({
       data: { collectionId, name: `TmpArea-${ts}` },
     });
-    const sid = `stamp-cascade-${ts}`;
+    const stamp = await prisma.stamp.create({ data: { collectionId } });
     await prisma.stampCollectionArea.create({
-      data: { stampId: sid, collectionAreaId: tmpArea.id },
+      data: { stampId: stamp.id, collectionAreaId: tmpArea.id },
     });
 
     await prisma.collectionArea.delete({ where: { id: tmpArea.id } });
