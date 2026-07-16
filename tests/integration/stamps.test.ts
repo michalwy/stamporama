@@ -1,0 +1,360 @@
+import { describe, it, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { prisma } from "../../src/lib/db";
+import {
+  createStamp,
+  createVariant,
+  updateStamp,
+  deleteStamp,
+  getStamp,
+  listStamps,
+  upsertStampCatalogNumber,
+  deleteStampCatalogNumber,
+} from "../../src/lib/stamps";
+
+async function createTestUser(suffix: string) {
+  return prisma.user.create({
+    data: {
+      id: `test-user-stamps-${suffix}`,
+      name: `Test User ${suffix}`,
+      email: `test-stamps-${suffix}@example.com`,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+}
+
+async function createTestCollection(ownerId: string, suffix: string) {
+  return prisma.collection.create({
+    data: { slug: `col-stamps-${suffix}`, name: `Collection ${suffix}`, ownerId },
+  });
+}
+
+describe("createStamp", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`cs-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `cs-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("creates a base stamp with correct collectionId", async () => {
+    const stamp = await createStamp(userId, collectionId, { name: "My Stamp", issuedYear: 1960 });
+    assert.equal(stamp.collectionId, collectionId);
+    assert.equal(stamp.parentId, null);
+    assert.equal(stamp.name, "My Stamp");
+    assert.equal(stamp.issuedYear, 1960);
+    const persisted = await prisma.stamp.findUnique({ where: { id: stamp.id } });
+    assert.ok(persisted);
+  });
+
+  it("creates a base stamp without optional fields", async () => {
+    const stamp = await createStamp(userId, collectionId, {});
+    assert.equal(stamp.collectionId, collectionId);
+    assert.equal(stamp.name, null);
+    assert.equal(stamp.issuedYear, null);
+  });
+
+  it("throws when collection is not owned by user", async () => {
+    await assert.rejects(
+      () => createStamp("wrong-user", collectionId, { name: "X" }),
+      /access denied/i
+    );
+  });
+});
+
+describe("createVariant", () => {
+  let userId: string;
+  let collectionId: string;
+  let baseStampId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`cv-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `cv-${ts}`)).id;
+    const base = await prisma.stamp.create({ data: { collectionId, name: "Base" } });
+    baseStampId = base.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("creates a variant linked to parent, sharing collectionId", async () => {
+    const variant = await createVariant(userId, baseStampId, { name: "Variant A" });
+    assert.equal(variant.parentId, baseStampId);
+    assert.equal(variant.collectionId, collectionId);
+    assert.equal(variant.name, "Variant A");
+  });
+
+  it("throws when caller does not own the parent's collection", async () => {
+    await assert.rejects(
+      () => createVariant("wrong-user", baseStampId, { name: "X" }),
+      /access denied/i
+    );
+  });
+});
+
+describe("updateStamp", () => {
+  let userId: string;
+  let collectionId: string;
+  let stampId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`us-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `us-${ts}`)).id;
+    const stamp = await prisma.stamp.create({
+      data: { collectionId, name: "Old Name", issuedYear: 1950 },
+    });
+    stampId = stamp.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("updates name and issuedYear", async () => {
+    await updateStamp(userId, stampId, { name: "New Name", issuedYear: 1975 });
+    const updated = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
+    assert.equal(updated.name, "New Name");
+    assert.equal(updated.issuedYear, 1975);
+  });
+
+  it("clears fields when null is passed", async () => {
+    await updateStamp(userId, stampId, { name: null, issuedYear: null });
+    const updated = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
+    assert.equal(updated.name, null);
+    assert.equal(updated.issuedYear, null);
+  });
+
+  it("throws when caller does not own the stamp's collection", async () => {
+    await assert.rejects(
+      () => updateStamp("wrong-user", stampId, { name: "X" }),
+      /access denied/i
+    );
+  });
+});
+
+describe("deleteStamp", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`ds-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `ds-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("deletes a base stamp; variants are cascade-removed", async () => {
+    const base = await prisma.stamp.create({ data: { collectionId, name: "Base" } });
+    const variant = await prisma.stamp.create({
+      data: { collectionId, parentId: base.id, name: "Variant" },
+    });
+
+    await deleteStamp(userId, base.id);
+
+    const foundBase = await prisma.stamp.findUnique({ where: { id: base.id } });
+    assert.equal(foundBase, null);
+    const foundVariant = await prisma.stamp.findUnique({ where: { id: variant.id } });
+    assert.equal(foundVariant, null);
+  });
+
+  it("throws when caller does not own the stamp's collection", async () => {
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Protected" } });
+    await assert.rejects(
+      () => deleteStamp("wrong-user", stamp.id),
+      /access denied/i
+    );
+  });
+});
+
+describe("getStamp", () => {
+  let userId: string;
+  let collectionId: string;
+  let baseStampId: string;
+  let variantId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`gs-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `gs-${ts}`)).id;
+    const base = await prisma.stamp.create({ data: { collectionId, name: "Base" } });
+    baseStampId = base.id;
+    const v = await prisma.stamp.create({
+      data: { collectionId, parentId: baseStampId, name: "Variant" },
+    });
+    variantId = v.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("returns stamp with its variant children", async () => {
+    const stamp = await getStamp(userId, baseStampId);
+    assert.equal(stamp.id, baseStampId);
+    assert.equal(stamp.variants.length, 1);
+    assert.equal(stamp.variants[0].id, variantId);
+  });
+
+  it("throws when caller does not own the stamp's collection", async () => {
+    await assert.rejects(
+      () => getStamp("wrong-user", baseStampId),
+      /access denied/i
+    );
+  });
+});
+
+describe("listStamps", () => {
+  let userId: string;
+  let collectionId: string;
+  let otherCollectionId: string;
+  let areaId: string;
+  let stampInAreaId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`ls-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `ls-${ts}`)).id;
+    otherCollectionId = (await createTestCollection(userId, `ls-other-${ts}`)).id;
+
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: "Germany" },
+    });
+    areaId = area.id;
+
+    const stampInArea = await prisma.stamp.create({ data: { collectionId, name: "In Area" } });
+    stampInAreaId = stampInArea.id;
+    await prisma.stampCollectionArea.create({
+      data: { stampId: stampInAreaId, collectionAreaId: areaId },
+    });
+
+    await prisma.stamp.create({ data: { collectionId, name: "No Area" } });
+
+    // variant — should NOT appear in list results
+    await prisma.stamp.create({
+      data: { collectionId, parentId: stampInAreaId, name: "Variant" },
+    });
+
+    // stamp in a different collection
+    await prisma.stamp.create({ data: { collectionId: otherCollectionId, name: "Other" } });
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("returns only base stamps for the collection", async () => {
+    const stamps = await listStamps(userId, collectionId);
+    assert.ok(stamps.length >= 2);
+    assert.ok(stamps.every((s) => s.collectionId === collectionId));
+    assert.ok(stamps.every((s) => s.parentId === null));
+  });
+
+  it("does not return stamps from another collection", async () => {
+    const stamps = await listStamps(userId, collectionId);
+    assert.ok(stamps.every((s) => s.collectionId !== otherCollectionId));
+  });
+
+  it("filters by collectionAreaId when provided", async () => {
+    const stamps = await listStamps(userId, collectionId, { collectionAreaId: areaId });
+    assert.equal(stamps.length, 1);
+    assert.equal(stamps[0].id, stampInAreaId);
+  });
+
+  it("throws when caller does not own the collection", async () => {
+    await assert.rejects(
+      () => listStamps("wrong-user", collectionId),
+      /access denied/i
+    );
+  });
+});
+
+describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
+  let userId: string;
+  let collectionId: string;
+  let stampId: string;
+  let catalogNameId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`scn-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `scn-${ts}`)).id;
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Test" } });
+    stampId = stamp.id;
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const cn = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Grundkatalog", currency: "EUR" },
+    });
+    catalogNameId = cn.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("upsert creates a catalog number entry", async () => {
+    await upsertStampCatalogNumber(userId, stampId, catalogNameId, "1a");
+    const entry = await prisma.stampCatalogNumber.findUnique({
+      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+    });
+    assert.ok(entry);
+    assert.equal(entry.number, "1a");
+  });
+
+  it("second upsert updates the number in place", async () => {
+    await upsertStampCatalogNumber(userId, stampId, catalogNameId, "1b");
+    const entry = await prisma.stampCatalogNumber.findUnique({
+      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+    });
+    assert.ok(entry);
+    assert.equal(entry.number, "1b");
+    const all = await prisma.stampCatalogNumber.findMany({ where: { stampId, catalogNameId } });
+    assert.equal(all.length, 1);
+  });
+
+  it("upsert throws when caller does not own the stamp's collection", async () => {
+    await assert.rejects(
+      () => upsertStampCatalogNumber("wrong-user", stampId, catalogNameId, "2a"),
+      /access denied/i
+    );
+  });
+
+  it("delete removes the catalog number entry", async () => {
+    await deleteStampCatalogNumber(userId, stampId, catalogNameId);
+    const entry = await prisma.stampCatalogNumber.findUnique({
+      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+    });
+    assert.equal(entry, null);
+  });
+
+  it("delete throws when caller does not own the stamp's collection", async () => {
+    // re-create an entry first
+    await prisma.stampCatalogNumber.create({ data: { stampId, catalogNameId, number: "99" } });
+    await assert.rejects(
+      () => deleteStampCatalogNumber("wrong-user", stampId, catalogNameId),
+      /access denied/i
+    );
+  });
+});
