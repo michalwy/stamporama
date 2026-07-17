@@ -111,7 +111,7 @@ describe("Stamp tree and catalog numbers", () => {
   });
 });
 
-describe("Series and SeriesMember", () => {
+describe("Issue and IssueMember", () => {
   let userId: string;
   let collectionId: string;
   let vendorId: string;
@@ -119,14 +119,13 @@ describe("Series and SeriesMember", () => {
   let s1Id: string;
   let s2Id: string;
   let s3Id: string;
-  let v3Id: string;
-  let seriesId: string;
+  let issueId: string;
 
   before(async () => {
     const ts = Date.now();
-    const u = await createTestUser(`series-${ts}`);
+    const u = await createTestUser(`issue-${ts}`);
     userId = u.id;
-    const c = await createTestCollection(userId, `series-${ts}`);
+    const c = await createTestCollection(userId, `issue-${ts}`);
     collectionId = c.id;
 
     const vendor = await prisma.catalogVendor.create({
@@ -145,66 +144,64 @@ describe("Series and SeriesMember", () => {
     s2Id = s2.id;
     const s3 = await prisma.stamp.create({ data: { collectionId, name: "Stamp 3" } });
     s3Id = s3.id;
-    const v3 = await prisma.stamp.create({ data: { collectionId, parentId: s3Id, name: "Stamp 3 Variant" } });
-    v3Id = v3.id;
 
-    const series = await prisma.series.create({
-      data: { collectionId, catalogNameId, name: "Test Series", isAutoCreated: false },
+    const issue = await prisma.issue.create({
+      data: { collectionId, catalogNameId, name: "Test Issue", isAutoCreated: false },
     });
-    seriesId = series.id;
+    issueId = issue.id;
 
-    await prisma.seriesMember.createMany({
+    await prisma.issueMember.createMany({
       data: [
-        { seriesId, stampId: s1Id },
-        { seriesId, stampId: s2Id },
-        { seriesId, stampId: s3Id, requiredVariantId: v3Id },
+        { issueId, stampId: s1Id },
+        { issueId, stampId: s2Id },
+        { issueId, stampId: s3Id, requiredForCompleteness: true },
       ],
     });
   });
 
   after(async () => {
-    await prisma.seriesMember.deleteMany({ where: { seriesId } });
-    await prisma.series.deleteMany({ where: { collectionId } });
+    await prisma.issueMember.deleteMany({ where: { issueId } });
+    await prisma.issue.deleteMany({ where: { collectionId } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
     await prisma.catalogVendor.delete({ where: { id: vendorId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("series has three members", async () => {
-    const members = await prisma.seriesMember.findMany({ where: { seriesId } });
+  it("issue has three members", async () => {
+    const members = await prisma.issueMember.findMany({ where: { issueId } });
     assert.equal(members.length, 3);
   });
 
-  it("s3 member has requiredVariantId set", async () => {
-    const member = await prisma.seriesMember.findUnique({
-      where: { seriesId_stampId: { seriesId, stampId: s3Id } },
+  it("s3 member has requiredForCompleteness true", async () => {
+    const member = await prisma.issueMember.findUnique({
+      where: { issueId_stampId: { issueId, stampId: s3Id } },
     });
     assert.ok(member);
-    assert.equal(member.requiredVariantId, v3Id);
+    assert.equal(member.requiredForCompleteness, true);
   });
 
-  it("s1 member has no requiredVariantId", async () => {
-    const member = await prisma.seriesMember.findUnique({
-      where: { seriesId_stampId: { seriesId, stampId: s1Id } },
+  it("s1 member has requiredForCompleteness false", async () => {
+    const member = await prisma.issueMember.findUnique({
+      where: { issueId_stampId: { issueId, stampId: s1Id } },
     });
     assert.ok(member);
-    assert.equal(member.requiredVariantId, null);
+    assert.equal(member.requiredForCompleteness, false);
   });
 
   it("isAutoCreated defaults to false", async () => {
-    const series = await prisma.series.findUnique({ where: { id: seriesId } });
-    assert.ok(series);
-    assert.equal(series.isAutoCreated, false);
+    const issue = await prisma.issue.findUnique({ where: { id: issueId } });
+    assert.ok(issue);
+    assert.equal(issue.isAutoCreated, false);
   });
 
   it("isAutoCreated roundtrip with true", async () => {
-    const autoSeries = await prisma.series.create({
+    const autoIssue = await prisma.issue.create({
       data: { collectionId, catalogNameId, isAutoCreated: true },
     });
-    const fetched = await prisma.series.findUnique({ where: { id: autoSeries.id } });
+    const fetched = await prisma.issue.findUnique({ where: { id: autoIssue.id } });
     assert.ok(fetched);
     assert.equal(fetched.isAutoCreated, true);
-    await prisma.series.delete({ where: { id: autoSeries.id } });
+    await prisma.issue.delete({ where: { id: autoIssue.id } });
   });
 });

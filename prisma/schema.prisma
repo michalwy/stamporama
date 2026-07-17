@@ -33,7 +33,7 @@ model Collection {
   collectionAreas CollectionArea[]
   catalogVendors  CatalogVendor[]
   stamps          Stamp[]
-  series          Series[]
+  issues          Issue[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -63,7 +63,7 @@ model CatalogName {
   stampCatalogNumbers    StampCatalogNumber[]
   collectionAreaCatalogs CollectionAreaCatalog[]
   primaryForAreas        CollectionArea[]        @relation("CollectionAreaPrimaryCatalog")
-  series                 Series[]
+  issues                 Issue[]
 
   @@map("catalog_name")
 }
@@ -123,8 +123,7 @@ model Stamp {
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
   catalogNumbers    StampCatalogNumber[]
-  seriesMemberships SeriesMember[]        @relation("SeriesMemberStamp")
-  requiredInSeries  SeriesMember[]        @relation("SeriesMemberRequiredVariant")
+  issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
 
   @@map("stamp")
 }
@@ -153,7 +152,7 @@ model CollectionAreaCatalog {
   @@map("collection_area_catalog")
 }
 
-model Series {
+model Issue {
   id            String   @id @default(cuid())
   collectionId  String
   catalogNameId String
@@ -161,24 +160,23 @@ model Series {
   isAutoCreated Boolean  @default(false)
   createdAt     DateTime @default(now())
 
-  collection  Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  catalogName CatalogName    @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
-  members     SeriesMember[]
+  collection  Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogName CatalogName   @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+  members     IssueMember[]
 
-  @@map("series")
+  @@map("issue")
 }
 
-model SeriesMember {
-  seriesId          String
-  stampId           String
-  requiredVariantId String?
+model IssueMember {
+  issueId                 String
+  stampId                 String
+  requiredForCompleteness Boolean @default(false)
 
-  series          Series  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  stamp           Stamp   @relation("SeriesMemberStamp", fields: [stampId], references: [id], onDelete: Cascade)
-  requiredVariant Stamp?  @relation("SeriesMemberRequiredVariant", fields: [requiredVariantId], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  stamp Stamp @relation("IssueMemberStamp", fields: [stampId], references: [id], onDelete: Cascade)
 
-  @@id([seriesId, stampId])
-  @@map("series_member")
+  @@id([issueId, stampId])
+  @@map("issue_member")
 }
 
 model Session {
