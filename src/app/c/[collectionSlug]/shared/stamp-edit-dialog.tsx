@@ -6,7 +6,6 @@ import {
   DialogActions,
   LabelWithError,
 } from "@/app/dialog-shell";
-import type { StampListItem } from "@/lib/stamps";
 import type { AreaCatalogEntry } from "@/lib/areas";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -29,9 +28,16 @@ const FORM_STYLE: React.CSSProperties = {
   overflow: "hidden",
 };
 
-interface StampDialogProps {
-  collectionId: string;
-  stamp: StampListItem;
+export interface StampEditData {
+  name: string | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  issuedYear: number | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+}
+
+interface StampEditDialogProps {
+  stamp: StampEditData;
   areaVendors: AreaCatalogEntry[];
   isPending: boolean;
   error?: string;
@@ -39,14 +45,14 @@ interface StampDialogProps {
   onSubmit: (formData: FormData) => void;
 }
 
-export function StampDialog({
+export function StampEditDialog({
   stamp,
   areaVendors,
   isPending,
   error,
   onClose,
   onSubmit,
-}: StampDialogProps) {
+}: StampEditDialogProps) {
   const vendors = Array.from(
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );

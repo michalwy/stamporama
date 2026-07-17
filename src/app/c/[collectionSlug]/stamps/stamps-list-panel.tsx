@@ -12,7 +12,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useStampsInfinite, useInvalidateStamps } from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
-import { StampDialog } from "./stamp-dialog";
+import { StampEditDialog } from "@/app/c/[collectionSlug]/shared/stamp-edit-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 
 type DialogState =
@@ -243,8 +243,7 @@ export function StampsListPanel({
 
       {/* ── Edit dialog ── */}
       {dialog.kind === "edit-stamp" && (
-        <StampDialog
-          collectionId={collectionId}
+        <StampEditDialog
           stamp={dialog.stamp}
           areaVendors={
             dialog.stamp.areaId

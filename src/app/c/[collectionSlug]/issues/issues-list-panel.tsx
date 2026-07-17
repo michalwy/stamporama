@@ -19,11 +19,12 @@ import {
   moveStampNodeAction,
   type IssueActionState,
 } from "@/app/actions/issues";
-import type { IssueListItem, IssueCatalogNumberData } from "@/lib/issues";
+import type { IssueListItem, IssueCatalogNumberData, StampNodeData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { AddStampDialog } from "./add-stamp-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
+import { StampEditDialog } from "@/app/c/[collectionSlug]/shared/stamp-edit-dialog";
 import { useIssuesInfinite, useInvalidateIssues } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
@@ -344,6 +345,7 @@ type DialogState =
       parentStampId?: string;
       parentCatalogNumbers?: { catalogVendorId: string; number: string }[];
     }
+  | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-stamp"; issueId: string; stampId: string }
   | { kind: "remove-stamp"; issueId: string; stampId: string }
   | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
@@ -501,6 +503,8 @@ export function IssuesListPanel({
         parentCatalogNumbers,
       }),
     onRemoveStamp: handleRemoveStamp,
+    onEditStamp: (issueId, stamp) =>
+      openDialog({ kind: "edit-stamp", issueId, stamp }),
     onDeleteStamp: (issueId, stampId, stampName) =>
       openDialog({ kind: "delete-stamp", issueId, stampId, stampName }),
     onMoveStamp: (issueId, stampId) =>
@@ -774,6 +778,41 @@ export function IssuesListPanel({
           }}
         />
       )}
+
+      {dialog.kind === "edit-stamp" &&
+        (() => {
+          const { issueId, stamp } = dialog;
+          const issue = allIssues.find((i) => i.id === issueId);
+          if (!issue) return null;
+          const areaVendors = effectiveVendorsForArea(
+            areas,
+            issue.collectionAreaId
+          );
+          return (
+            <StampEditDialog
+              stamp={stamp}
+              areaVendors={areaVendors}
+              isPending={isPending}
+              error={error}
+              onClose={closeDialog}
+              onSubmit={(fd) => {
+                startTransition(async () => {
+                  const { updateStampWithCatalogAction } = await import(
+                    "@/app/actions/stamps"
+                  );
+                  const result = await updateStampWithCatalogAction(
+                    stamp.stampId,
+                    fd
+                  );
+                  if (result.status === "success")
+                    handleStampSuccess(issueId);
+                  else if (result.status === "error")
+                    setActionState(result);
+                });
+              }}
+            />
+          );
+        })()}
 
       {dialog.kind === "add-stamp" &&
         dialog.issueId &&

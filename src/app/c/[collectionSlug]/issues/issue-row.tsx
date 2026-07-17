@@ -45,6 +45,7 @@ interface StampTreeNodeProps {
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
+  onEdit: (stampId: string) => void;
   onAddChild: (parentStampId: string) => void;
   onRemove: (stampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
@@ -57,6 +58,7 @@ function StampTreeNode({
   primaryVendorId,
   vendorMap,
   isLast,
+  onEdit,
   onAddChild,
   onRemove,
   onDelete,
@@ -165,6 +167,13 @@ function StampTreeNode({
           </button>
           <button
             type="button"
+            onClick={() => onEdit(node.stampId)}
+            style={rowBtnStyle}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
             onClick={() => onRemove(node.stampId)}
             style={rowBtnDangerStyle}
           >
@@ -218,6 +227,7 @@ function StampTreeNode({
             primaryVendorId={primaryVendorId}
             vendorMap={vendorMap}
             isLast={isLast && i === children.length - 1}
+            onEdit={onEdit}
             onAddChild={onAddChild}
             onRemove={onRemove}
             onDelete={onDelete}
@@ -238,6 +248,7 @@ export interface IssueRowCallbacks {
     parentStampId?: string,
     parentCatalogNumbers?: { catalogVendorId: string; number: string }[]
   ) => void;
+  onEditStamp: (issueId: string, stamp: StampNodeData) => void;
   onRemoveStamp: (issueId: string, stampId: string) => void;
   onDeleteStamp: (issueId: string, stampId: string, stampName: string) => void;
   onMoveStamp: (issueId: string, stampId: string) => void;
@@ -513,6 +524,12 @@ export function IssueRow({
                 primaryVendorId={primaryVendorId}
                 vendorMap={vendorMap}
                 isLast={i === stampTree.length - 1}
+                onEdit={(stampId) => {
+                  const stampNode = members?.find(
+                    (m) => m.stampId === stampId
+                  );
+                  if (stampNode) callbacks.onEditStamp(issue.id, stampNode);
+                }}
                 onAddChild={(parentStampId) => {
                   const parentNode = members?.find(
                     (m) => m.stampId === parentStampId
