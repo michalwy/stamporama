@@ -292,7 +292,7 @@ describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
   let userId: string;
   let collectionId: string;
   let stampId: string;
-  let catalogNameId: string;
+  let vendorId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -303,10 +303,7 @@ describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
     const vendor = await prisma.catalogVendor.create({
       data: { collectionId, name: "Michel", abbreviation: "Mi" },
     });
-    const cn = await prisma.catalogName.create({
-      data: { vendorId: vendor.id, name: "Grundkatalog", currency: "EUR" },
-    });
-    catalogNameId = cn.id;
+    vendorId = vendor.id;
   });
 
   after(async () => {
@@ -315,45 +312,45 @@ describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
   });
 
   it("upsert creates a catalog number entry", async () => {
-    await upsertStampCatalogNumber(userId, stampId, catalogNameId, "1a");
+    await upsertStampCatalogNumber(userId, stampId, vendorId, "1a");
     const entry = await prisma.stampCatalogNumber.findUnique({
-      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+      where: { stampId_catalogVendorId: { stampId, catalogVendorId: vendorId } },
     });
     assert.ok(entry);
     assert.equal(entry.number, "1a");
   });
 
   it("second upsert updates the number in place", async () => {
-    await upsertStampCatalogNumber(userId, stampId, catalogNameId, "1b");
+    await upsertStampCatalogNumber(userId, stampId, vendorId, "1b");
     const entry = await prisma.stampCatalogNumber.findUnique({
-      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+      where: { stampId_catalogVendorId: { stampId, catalogVendorId: vendorId } },
     });
     assert.ok(entry);
     assert.equal(entry.number, "1b");
-    const all = await prisma.stampCatalogNumber.findMany({ where: { stampId, catalogNameId } });
+    const all = await prisma.stampCatalogNumber.findMany({ where: { stampId, catalogVendorId: vendorId } });
     assert.equal(all.length, 1);
   });
 
   it("upsert throws when caller does not own the stamp's collection", async () => {
     await assert.rejects(
-      () => upsertStampCatalogNumber("wrong-user", stampId, catalogNameId, "2a"),
+      () => upsertStampCatalogNumber("wrong-user", stampId, vendorId, "2a"),
       /access denied/i
     );
   });
 
   it("delete removes the catalog number entry", async () => {
-    await deleteStampCatalogNumber(userId, stampId, catalogNameId);
+    await deleteStampCatalogNumber(userId, stampId, vendorId);
     const entry = await prisma.stampCatalogNumber.findUnique({
-      where: { stampId_catalogNameId: { stampId, catalogNameId } },
+      where: { stampId_catalogVendorId: { stampId, catalogVendorId: vendorId } },
     });
     assert.equal(entry, null);
   });
 
   it("delete throws when caller does not own the stamp's collection", async () => {
     // re-create an entry first
-    await prisma.stampCatalogNumber.create({ data: { stampId, catalogNameId, number: "99" } });
+    await prisma.stampCatalogNumber.create({ data: { stampId, catalogVendorId: vendorId, number: "99" } });
     await assert.rejects(
-      () => deleteStampCatalogNumber("wrong-user", stampId, catalogNameId),
+      () => deleteStampCatalogNumber("wrong-user", stampId, vendorId),
       /access denied/i
     );
   });

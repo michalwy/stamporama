@@ -28,9 +28,8 @@ async function createTestCollection(ownerId: string, suffix: string) {
 describe("Stamp tree and catalog numbers", () => {
   let userId: string;
   let collectionId: string;
-  let vendorId: string;
-  let cn1Id: string;
-  let cn2Id: string;
+  let vendor1Id: string;
+  let vendor2Id: string;
   let baseStampId: string;
   let v1Id: string;
   let v2Id: string;
@@ -42,20 +41,15 @@ describe("Stamp tree and catalog numbers", () => {
     const c = await createTestCollection(userId, `stamp-tree-${ts}`);
     collectionId = c.id;
 
-    const vendor = await prisma.catalogVendor.create({
+    const vendor1 = await prisma.catalogVendor.create({
       data: { collectionId, name: "Michel", abbreviation: "Mi" },
     });
-    vendorId = vendor.id;
+    vendor1Id = vendor1.id;
 
-    const cn1 = await prisma.catalogName.create({
-      data: { vendorId, name: "Grundkatalog", currency: "EUR" },
+    const vendor2 = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Scott", abbreviation: "Sc" },
     });
-    cn1Id = cn1.id;
-
-    const cn2 = await prisma.catalogName.create({
-      data: { vendorId, name: "Spezialkatalog", currency: "EUR" },
-    });
-    cn2Id = cn2.id;
+    vendor2Id = vendor2.id;
 
     const base = await prisma.stamp.create({ data: { collectionId, name: "Base stamp" } });
     baseStampId = base.id;
@@ -68,10 +62,10 @@ describe("Stamp tree and catalog numbers", () => {
 
     await prisma.stampCatalogNumber.createMany({
       data: [
-        { stampId: v1Id, catalogNameId: cn1Id, number: "1a" },
-        { stampId: v1Id, catalogNameId: cn2Id, number: "1aS" },
-        { stampId: v2Id, catalogNameId: cn1Id, number: "1b" },
-        { stampId: v2Id, catalogNameId: cn2Id, number: "1bS" },
+        { stampId: v1Id, catalogVendorId: vendor1Id, number: "1a" },
+        { stampId: v1Id, catalogVendorId: vendor2Id, number: "1aS" },
+        { stampId: v2Id, catalogVendorId: vendor1Id, number: "1b" },
+        { stampId: v2Id, catalogVendorId: vendor2Id, number: "1bS" },
       ],
     });
   });
@@ -79,7 +73,7 @@ describe("Stamp tree and catalog numbers", () => {
   after(async () => {
     await prisma.stampCatalogNumber.deleteMany({ where: { stamp: { collectionId } } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
-    await prisma.catalogVendor.delete({ where: { id: vendorId } });
+    await prisma.catalogVendor.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
@@ -89,22 +83,22 @@ describe("Stamp tree and catalog numbers", () => {
     assert.equal(variants.length, 2);
   });
 
-  it("variant has catalog numbers in both catalogs", async () => {
+  it("variant has catalog numbers for both vendors", async () => {
     const numbers = await prisma.stampCatalogNumber.findMany({ where: { stampId: v1Id } });
     assert.equal(numbers.length, 2);
   });
 
   it("lookup by composite key returns correct number", async () => {
     const num = await prisma.stampCatalogNumber.findUnique({
-      where: { stampId_catalogNameId: { stampId: v1Id, catalogNameId: cn1Id } },
+      where: { stampId_catalogVendorId: { stampId: v1Id, catalogVendorId: vendor1Id } },
     });
     assert.ok(num);
     assert.equal(num.number, "1a");
   });
 
-  it("variant lookup by catalogNameId", async () => {
+  it("variant lookup by catalogVendorId", async () => {
     const num = await prisma.stampCatalogNumber.findUnique({
-      where: { stampId_catalogNameId: { stampId: v2Id, catalogNameId: cn2Id } },
+      where: { stampId_catalogVendorId: { stampId: v2Id, catalogVendorId: vendor2Id } },
     });
     assert.ok(num);
     assert.equal(num.number, "1bS");

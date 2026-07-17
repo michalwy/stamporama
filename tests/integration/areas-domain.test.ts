@@ -305,14 +305,17 @@ describe("syncAreaCatalogEntries", () => {
     const ts = Date.now();
     userId = (await createTestUser(`sace-${ts}`)).id;
     collectionId = (await createTestCollection(userId, `sace-${ts}`)).id;
-    const vendor = await prisma.catalogVendor.create({
+    const vendor1 = await prisma.catalogVendor.create({
       data: { collectionId, name: "Michel", abbreviation: "Mi" },
     });
+    const vendor2 = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Scott", abbreviation: "Sc" },
+    });
     const cn1 = await prisma.catalogName.create({
-      data: { vendorId: vendor.id, name: "Deutschland", currency: "EUR" },
+      data: { vendorId: vendor1.id, name: "Deutschland", currency: "EUR" },
     });
     const cn2 = await prisma.catalogName.create({
-      data: { vendorId: vendor.id, name: "Klassik", currency: "EUR" },
+      data: { vendorId: vendor2.id, name: "USA", currency: "USD" },
     });
     catalogNameId = cn1.id;
     catalogName2Id = cn2.id;

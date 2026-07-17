@@ -45,8 +45,10 @@ model CatalogVendor {
   name         String
   abbreviation String
 
-  collection    Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  catalogNames  CatalogName[]
+  collection            Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogNames          CatalogName[]
+  stampCatalogNumbers   StampCatalogNumber[]
+  collectionAreaVendors CollectionAreaVendor[]
 
   @@map("catalog_vendor")
 }
@@ -60,7 +62,6 @@ model CatalogName {
 
   vendor                 CatalogVendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   catalogEditions        CatalogEdition[]
-  stampCatalogNumbers    StampCatalogNumber[]
   collectionAreaCatalogs CollectionAreaCatalog[]
   primaryForAreas        CollectionArea[]        @relation("CollectionAreaPrimaryCatalog")
   issues                 Issue[]
@@ -88,12 +89,13 @@ model CollectionArea {
   primaryCatalogNameId String?
   createdAt            DateTime @default(now())
 
-  collection             Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  parent                 CollectionArea?       @relation("CollectionAreaChildren", fields: [parentId], references: [id])
-  children               CollectionArea[]      @relation("CollectionAreaChildren")
+  collection             Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  parent                 CollectionArea?        @relation("CollectionAreaChildren", fields: [parentId], references: [id])
+  children               CollectionArea[]       @relation("CollectionAreaChildren")
   stampAreaLinks         StampCollectionArea[]
-  primaryCatalogName     CatalogName?          @relation("CollectionAreaPrimaryCatalog", fields: [primaryCatalogNameId], references: [id])
+  primaryCatalogName     CatalogName?           @relation("CollectionAreaPrimaryCatalog", fields: [primaryCatalogNameId], references: [id])
   collectionAreaCatalogs CollectionAreaCatalog[]
+  collectionAreaVendors  CollectionAreaVendor[]
 
   @@map("collection_area")
 }
@@ -129,27 +131,38 @@ model Stamp {
 }
 
 model StampCatalogNumber {
-  stampId       String
-  catalogNameId String
-  number        String
+  stampId         String
+  catalogVendorId String
+  number          String
 
-  stamp       Stamp       @relation(fields: [stampId], references: [id], onDelete: Cascade)
-  catalogName CatalogName @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+  stamp         Stamp         @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
 
-  @@id([stampId, catalogNameId])
+  @@id([stampId, catalogVendorId])
   @@map("stamp_catalog_number")
 }
 
 model CollectionAreaCatalog {
   collectionAreaId String
   catalogNameId    String
-  prefix           String?
 
   collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   catalogName    CatalogName    @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
 
   @@id([collectionAreaId, catalogNameId])
   @@map("collection_area_catalog")
+}
+
+model CollectionAreaVendor {
+  collectionAreaId String
+  catalogVendorId  String
+  areaPrefix       String?
+
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  catalogVendor  CatalogVendor  @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
+
+  @@id([collectionAreaId, catalogVendorId])
+  @@map("collection_area_vendor")
 }
 
 model Issue {

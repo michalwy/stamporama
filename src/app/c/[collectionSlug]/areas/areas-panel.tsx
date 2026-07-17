@@ -65,10 +65,10 @@ function buildFlatTree(areas: CollectionAreaData[]): TreeNode[] {
       current = current.parentId ? byId.get(current.parentId) : undefined;
       d++;
     }
-    // Apply from root down so own entries override
+    // Apply from root down so own entries override; dedup by vendor so child vendor prefix wins
     for (const a of ancestors.reverse()) {
       for (const e of a.catalogEntries) {
-        result.set(e.catalogNameId, e);
+        result.set(e.catalogVendorId, e);
       }
     }
     return Array.from(result.values());

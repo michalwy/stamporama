@@ -25,6 +25,7 @@ async function resolveAreaCollection(areaId: string): Promise<string> {
 
 export interface AreaCatalogEntry {
   catalogNameId: string;
+  catalogVendorId: string;
   vendorName: string;
   catalogName: string;
   vendorAbbreviation: string;
@@ -64,14 +65,17 @@ export async function getCollectionAreas(
         ],
         select: {
           catalogNameId: true,
-          prefix: true,
           catalogName: {
             select: {
               name: true,
+              vendorId: true,
               vendor: { select: { name: true, abbreviation: true } },
             },
           },
         },
+      },
+      collectionAreaVendors: {
+        select: { catalogVendorId: true, areaPrefix: true },
       },
     },
   });
@@ -83,13 +87,19 @@ export async function getCollectionAreas(
     primaryCatalogNameId: a.primaryCatalogNameId,
     stampCount: a._count.stampAreaLinks,
     childCount: a._count.children,
-    catalogEntries: a.collectionAreaCatalogs.map((c) => ({
-      catalogNameId: c.catalogNameId,
-      vendorName: c.catalogName.vendor.name,
-      catalogName: c.catalogName.name,
-      vendorAbbreviation: c.catalogName.vendor.abbreviation,
-      prefix: c.prefix,
-    })),
+    catalogEntries: (() => {
+      const vendorPrefixMap = new Map(
+        a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
+      );
+      return a.collectionAreaCatalogs.map((c) => ({
+        catalogNameId: c.catalogNameId,
+        catalogVendorId: c.catalogName.vendorId,
+        vendorName: c.catalogName.vendor.name,
+        catalogName: c.catalogName.name,
+        vendorAbbreviation: c.catalogName.vendor.abbreviation,
+        prefix: vendorPrefixMap.get(c.catalogName.vendorId) ?? null,
+      }));
+    })(),
   }));
 }
 
@@ -208,26 +218,44 @@ export async function syncAreaCatalogEntries(
   const collectionId = await resolveAreaCollection(areaId);
   await assertCollectionOwner(ownerId, collectionId);
 
+  const vendorPrefixes: Map<string, string | null> = new Map();
+
   if (entries.length > 0) {
     const ids = entries.map((e) => e.catalogNameId);
     const valid = await prisma.catalogName.findMany({
       where: { id: { in: ids }, vendor: { collectionId } },
-      select: { id: true },
+      select: { id: true, vendorId: true },
     });
     const validIds = new Set(valid.map((v) => v.id));
     const invalid = ids.find((id) => !validIds.has(id));
     if (invalid) {
       throw new Error("Catalog name not found in this collection.");
     }
+
+    // Derive vendor-level prefixes: non-null prefix wins; last entry for a vendor wins otherwise
+    const vendorIdMap = new Map(valid.map((v) => [v.id, v.vendorId]));
+    for (const e of entries) {
+      const vendorId = vendorIdMap.get(e.catalogNameId)!;
+      if (!vendorPrefixes.has(vendorId) || e.prefix !== null) {
+        vendorPrefixes.set(vendorId, e.prefix);
+      }
+    }
   }
 
   await prisma.$transaction([
     prisma.collectionAreaCatalog.deleteMany({ where: { collectionAreaId: areaId } }),
+    prisma.collectionAreaVendor.deleteMany({ where: { collectionAreaId: areaId } }),
     prisma.collectionAreaCatalog.createMany({
       data: entries.map((e) => ({
         collectionAreaId: areaId,
         catalogNameId: e.catalogNameId,
-        prefix: e.prefix,
+      })),
+    }),
+    prisma.collectionAreaVendor.createMany({
+      data: Array.from(vendorPrefixes.entries()).map(([catalogVendorId, areaPrefix]) => ({
+        collectionAreaId: areaId,
+        catalogVendorId,
+        areaPrefix,
       })),
     }),
   ]);

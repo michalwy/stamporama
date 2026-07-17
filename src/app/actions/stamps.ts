@@ -93,14 +93,14 @@ export async function deleteStampAction(stampId: string): Promise<StampActionSta
 
 export async function upsertStampCatalogNumberAction(
   stampId: string,
-  catalogNameId: string,
+  catalogVendorId: string,
   formData: FormData
 ): Promise<StampActionState> {
   const session = await getSession();
   const number = ((formData.get("number") as string | null) ?? "").trim();
   if (!number) return { status: "error", message: "Catalog number is required." };
   try {
-    await upsertStampCatalogNumber(session.user.id, stampId, catalogNameId, number);
+    await upsertStampCatalogNumber(session.user.id, stampId, catalogVendorId, number);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save catalog number. Please try again." };
@@ -109,11 +109,11 @@ export async function upsertStampCatalogNumberAction(
 
 export async function deleteStampCatalogNumberAction(
   stampId: string,
-  catalogNameId: string
+  catalogVendorId: string
 ): Promise<StampActionState> {
   const session = await getSession();
   try {
-    await deleteStampCatalogNumber(session.user.id, stampId, catalogNameId);
+    await deleteStampCatalogNumber(session.user.id, stampId, catalogVendorId);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete catalog number. Please try again." };

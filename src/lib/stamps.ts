@@ -24,7 +24,7 @@ async function resolveStampCollection(stampId: string): Promise<string> {
 }
 
 export interface StampCatalogNumberData {
-  catalogNameId: string;
+  catalogVendorId: string;
   number: string;
 }
 
@@ -50,7 +50,7 @@ const VARIANT_SELECT = {
   issuedYear: true,
   createdAt: true,
   catalogNumbers: {
-    select: { catalogNameId: true, number: true },
+    select: { catalogVendorId: true, number: true },
   },
 } as const;
 
@@ -160,14 +160,14 @@ export async function listStamps(
 export async function upsertStampCatalogNumber(
   ownerId: string,
   stampId: string,
-  catalogNameId: string,
+  catalogVendorId: string,
   number: string
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.stampCatalogNumber.upsert({
-    where: { stampId_catalogNameId: { stampId, catalogNameId } },
-    create: { stampId, catalogNameId, number },
+    where: { stampId_catalogVendorId: { stampId, catalogVendorId } },
+    create: { stampId, catalogVendorId, number },
     update: { number },
   });
 }
@@ -175,11 +175,11 @@ export async function upsertStampCatalogNumber(
 export async function deleteStampCatalogNumber(
   ownerId: string,
   stampId: string,
-  catalogNameId: string
+  catalogVendorId: string
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.stampCatalogNumber.delete({
-    where: { stampId_catalogNameId: { stampId, catalogNameId } },
+    where: { stampId_catalogVendorId: { stampId, catalogVendorId } },
   });
 }
