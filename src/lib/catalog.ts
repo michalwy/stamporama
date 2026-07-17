@@ -43,6 +43,14 @@ async function resolveEditionCollection(editionId: string): Promise<string> {
   return edition.catalogName.vendor.collectionId;
 }
 
+export interface CatalogNameFlat {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  vendorName: string;
+  vendorAbbreviation: string;
+}
+
 export interface CatalogEditionData {
   id: string;
   year: number;
@@ -61,6 +69,30 @@ export interface CatalogVendorData {
   name: string;
   abbreviation: string;
   catalogNames: CatalogNameData[];
+}
+
+export async function getCatalogNames(
+  ownerId: string,
+  collectionId: string
+): Promise<CatalogNameFlat[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const names = await prisma.catalogName.findMany({
+    where: { vendor: { collectionId } },
+    orderBy: [{ vendor: { name: "asc" } }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      vendor: { select: { name: true, abbreviation: true } },
+    },
+  });
+  return names.map((n) => ({
+    id: n.id,
+    name: n.name,
+    abbreviation: n.abbreviation,
+    vendorName: n.vendor.name,
+    vendorAbbreviation: n.vendor.abbreviation,
+  }));
 }
 
 export async function getCatalogTree(

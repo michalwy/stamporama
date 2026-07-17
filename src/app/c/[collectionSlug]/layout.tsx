@@ -78,6 +78,7 @@ export default async function CollectionLayout({
           {[
             { label: "Overview", href: `/c/${collectionSlug}` },
             { label: "Catalog", href: `/c/${collectionSlug}/catalog` },
+            { label: "Areas", href: `/c/${collectionSlug}/areas` },
             { label: "Items", href: `/c/${collectionSlug}/items` },
             { label: "Settings", href: `/c/${collectionSlug}/settings` },
           ].map(({ label, href }) => (
