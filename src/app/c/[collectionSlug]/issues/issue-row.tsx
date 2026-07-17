@@ -1,99 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { formatIssuedDate, formatIssueCatalogNumber } from "@/app/stamp-display";
 import { useIssueMembers } from "./use-issues-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
-
-// ── Styles ──────────────────────────────────────────────────────────────────
-
-const rowBtnStyle: React.CSSProperties = {
-  padding: "0.25rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  cursor: "pointer",
-  background: "transparent",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
-const rowBtnDangerStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-error)",
-  borderColor: "var(--color-error-border)",
-};
-
-const addBtnStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-text-muted)",
-};
-
-const ISSUE_PRIMARY_CHIP: React.CSSProperties = {
-  fontFamily: "monospace",
-  fontSize: "0.8125rem",
-  fontWeight: 700,
-  color: "var(--color-accent)",
-  border: "1.5px solid var(--color-accent)",
-  borderRadius: "0.3rem",
-  padding: "0.1rem 0.45rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
-const ISSUE_SECONDARY_CHIP: React.CSSProperties = {
-  fontFamily: "monospace",
-  fontSize: "0.75rem",
-  color: "var(--color-text-muted)",
-  background: "var(--color-bg-page)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  padding: "0.1rem 0.4rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
-const STAMP_PRIMARY_CHIP: React.CSSProperties = {
-  fontFamily: "monospace",
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  color: "var(--color-accent)",
-  border: "1px solid var(--color-accent)",
-  borderRadius: "0.25rem",
-  padding: "0.05rem 0.35rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-  opacity: 0.85,
-};
-
-const STAMP_SECONDARY_CHIP: React.CSSProperties = {
-  fontFamily: "monospace",
-  fontSize: "0.6875rem",
-  color: "var(--color-text-muted)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.25rem",
-  padding: "0.05rem 0.3rem",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
-const STAMP_MUTED_PRIMARY_CHIP: React.CSSProperties = {
-  ...STAMP_PRIMARY_CHIP,
-  color: "var(--color-text-muted)",
-  borderColor: "var(--color-border)",
-  opacity: 0.7,
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatStampCN(number: string, v?: AreaCatalogEntry): string {
-  if (!v) return number;
-  return v.prefix
-    ? `${v.vendorAbbreviation}·${v.prefix} ${number}`
-    : `${v.vendorAbbreviation} ${number}`;
-}
+import {
+  rowBtnStyle,
+  rowBtnDangerStyle,
+  addBtnStyle,
+  ISSUE_PRIMARY_CHIP,
+  ISSUE_SECONDARY_CHIP,
+  STAMP_PRIMARY_CHIP,
+  STAMP_SECONDARY_CHIP,
+  STAMP_MUTED_PRIMARY_CHIP,
+  formatStampCN,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -589,49 +511,4 @@ export function IssueRow({
   );
 }
 
-// ── InfiniteScrollSentinel ──────────────────────────────────────────────────
-
-export function InfiniteScrollSentinel({
-  onLoadMore,
-  hasMore,
-  isLoading,
-}: {
-  onLoadMore: () => void;
-  hasMore: boolean;
-  isLoading: boolean;
-}) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore || isLoading) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          onLoadMore();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore, isLoading, onLoadMore]);
-
-  return (
-    <>
-      <div ref={sentinelRef} style={{ height: 1 }} />
-      {isLoading && (
-        <div
-          style={{
-            padding: "1rem",
-            textAlign: "center",
-            color: "var(--color-text-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          Loading more...
-        </div>
-      )}
-    </>
-  );
-}
+export { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";

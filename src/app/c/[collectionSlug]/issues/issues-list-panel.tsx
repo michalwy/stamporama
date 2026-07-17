@@ -24,6 +24,8 @@ import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { AddStampDialog } from "./add-stamp-dialog";
 import { useIssuesInfinite, useInvalidateIssues } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
+import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { effectiveVendorsForArea, effectivePrimaryVendorId, flattenAreaTree } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -46,208 +48,6 @@ const FORM_STYLE: React.CSSProperties = {
   minHeight: 0,
   overflow: "hidden",
 };
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function getDescendantIds(
-  areas: CollectionAreaData[],
-  areaId: string
-): Set<string> {
-  const result = new Set<string>();
-  const queue = [areaId];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    for (const a of areas) {
-      if (a.parentId === id) {
-        result.add(a.id);
-        queue.push(a.id);
-      }
-    }
-  }
-  return result;
-}
-
-function effectiveVendorsForArea(
-  areas: CollectionAreaData[],
-  areaId: string
-): AreaCatalogEntry[] {
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  const result = new Map<string, AreaCatalogEntry>();
-  const ancestors: CollectionAreaData[] = [];
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    ancestors.push(current);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  for (const a of ancestors.reverse()) {
-    for (const e of a.catalogEntries) {
-      result.set(e.catalogVendorId, e);
-    }
-  }
-  return Array.from(result.values());
-}
-
-function effectivePrimaryVendorId(
-  areas: CollectionAreaData[],
-  areaId: string
-): string | null {
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    if (current.primaryCatalogNameId) {
-      const entry = effectiveVendorsForArea(areas, areaId).find(
-        (e) => e.catalogNameId === current!.primaryCatalogNameId
-      );
-      return entry?.catalogVendorId ?? null;
-    }
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return null;
-}
-
-// ── Area filter sidebar ─────────────────────────────────────────────────────
-
-interface AreaTreeItem {
-  area: CollectionAreaData;
-  depth: number;
-}
-
-function flattenAreaTree(areas: CollectionAreaData[]): AreaTreeItem[] {
-  function collect(
-    parentId: string | null,
-    depth: number
-  ): AreaTreeItem[] {
-    const nodes: AreaTreeItem[] = [];
-    for (const a of areas.filter((x) => x.parentId === parentId)) {
-      nodes.push({ area: a, depth });
-      nodes.push(...collect(a.id, depth + 1));
-    }
-    return nodes;
-  }
-  return collect(null, 0);
-}
-
-function AreaFilterSidebar({
-  areas,
-  filterAreaId,
-  onNavigate,
-}: {
-  areas: CollectionAreaData[];
-  filterAreaId: string | null;
-  collectionSlug: string;
-  onNavigate: (areaId: string | null) => void;
-}) {
-  const flatTree = useMemo(() => flattenAreaTree(areas), [areas]);
-
-  const activeIds = useMemo(() => {
-    if (!filterAreaId) return null;
-    const desc = getDescendantIds(areas, filterAreaId);
-    desc.add(filterAreaId);
-    return desc;
-  }, [areas, filterAreaId]);
-
-  return (
-    <aside
-      style={{
-        width: "14rem",
-        flexShrink: 0,
-        borderRight: "1px solid var(--color-border)",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div
-        style={{
-          padding: "0.75rem 1rem",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            color: "var(--color-text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
-          Filter by area
-        </span>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <button
-          type="button"
-          onClick={() => onNavigate(null)}
-          style={{
-            display: "block",
-            width: "100%",
-            textAlign: "left",
-            padding: "0.5rem 1rem",
-            background: !filterAreaId ? "var(--color-bg-subtle)" : "transparent",
-            border: "none",
-            borderBottom: "1px solid var(--color-border)",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            fontWeight: !filterAreaId ? 600 : 400,
-            color: !filterAreaId
-              ? "var(--color-text-primary)"
-              : "var(--color-text-secondary)",
-          }}
-        >
-          All areas
-        </button>
-
-        {flatTree.map(({ area, depth }) => {
-          const isSelected = filterAreaId === area.id;
-          const isInScope = activeIds ? activeIds.has(area.id) : false;
-
-          return (
-            <button
-              key={area.id}
-              type="button"
-              onClick={() => onNavigate(isSelected ? null : area.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "0.4rem 1rem",
-                paddingLeft: `${1 + depth * 0.875}rem`,
-                background: isSelected ? "var(--color-bg-subtle)" : "transparent",
-                border: "none",
-                borderBottom: "1px solid var(--color-border)",
-                cursor: "pointer",
-                fontSize: "0.8125rem",
-                fontWeight: isSelected ? 600 : 400,
-                color: isSelected
-                  ? "var(--color-accent)"
-                  : isInScope
-                    ? "var(--color-text-primary)"
-                    : "var(--color-text-secondary)",
-              }}
-            >
-              {depth > 0 && (
-                <span
-                  style={{
-                    color: "var(--color-text-muted)",
-                    marginRight: "0.25rem",
-                  }}
-                >
-                  {"·".repeat(depth)}
-                </span>
-              )}
-              {area.name}
-            </button>
-          );
-        })}
-      </div>
-    </aside>
-  );
-}
 
 // ── IssueForm ───────────────────────────────────────────────────────────────
 
@@ -663,7 +463,6 @@ export function IssuesListPanel({
       <AreaFilterSidebar
         areas={areas}
         filterAreaId={filterAreaId}
-        collectionSlug={collectionSlug}
         onNavigate={handleNavigateFilter}
       />
 

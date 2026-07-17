@@ -166,6 +166,165 @@ export async function listStamps(
   });
 }
 
+// ── Paginated queries (used by API routes) ─────────────────────────────────
+
+export interface StampIssueMembership {
+  issueId: string;
+  issueName: string | null;
+  issueYear: number | null;
+  requiredForCompleteness: boolean;
+}
+
+export interface StampListItem {
+  id: string;
+  collectionId: string;
+  parentId: string | null;
+  name: string | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  issuedYear: number | null;
+  createdAt: string;
+  catalogNumbers: StampCatalogNumberData[];
+  areaId: string | null;
+  issues: StampIssueMembership[];
+}
+
+export interface PaginatedStampsResult {
+  items: StampListItem[];
+  nextCursor: string | null;
+}
+
+const STAMP_LIST_SELECT = {
+  id: true,
+  collectionId: true,
+  parentId: true,
+  name: true,
+  issuedDay: true,
+  issuedMonth: true,
+  issuedYear: true,
+  createdAt: true,
+  catalogNumbers: { select: { catalogVendorId: true, number: true } },
+  stampAreaLinks: {
+    select: { collectionAreaId: true, isPrimary: true },
+  },
+  issueMemberships: {
+    select: {
+      issueId: true,
+      requiredForCompleteness: true,
+      issue: { select: { name: true, year: true } },
+    },
+  },
+} as const;
+
+function toStampListItem(stamp: {
+  id: string;
+  collectionId: string;
+  parentId: string | null;
+  name: string | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  issuedYear: number | null;
+  createdAt: Date;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
+  issueMemberships: {
+    issueId: string;
+    requiredForCompleteness: boolean;
+    issue: { name: string | null; year: number | null };
+  }[];
+}): StampListItem {
+  const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
+  const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
+  return {
+    id: stamp.id,
+    collectionId: stamp.collectionId,
+    parentId: stamp.parentId,
+    name: stamp.name,
+    issuedDay: stamp.issuedDay,
+    issuedMonth: stamp.issuedMonth,
+    issuedYear: stamp.issuedYear,
+    createdAt: stamp.createdAt.toISOString(),
+    catalogNumbers: stamp.catalogNumbers,
+    areaId,
+    issues: stamp.issueMemberships.map((m) => ({
+      issueId: m.issueId,
+      issueName: m.issue.name,
+      issueYear: m.issue.year,
+      requiredForCompleteness: m.requiredForCompleteness,
+    })),
+  };
+}
+
+export async function listStampsPaginated(
+  ownerId: string,
+  collectionId: string,
+  opts: {
+    areaIds?: string[];
+    cursor?: string;
+    pageSize?: number;
+  }
+): Promise<PaginatedStampsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = opts.pageSize ?? 50;
+  const stamps = await prisma.stamp.findMany({
+    where: {
+      collectionId,
+      ...(opts.areaIds && opts.areaIds.length > 0
+        ? { stampAreaLinks: { some: { collectionAreaId: { in: opts.areaIds } } } }
+        : {}),
+    },
+    orderBy: [{ createdAt: "asc" }],
+    select: STAMP_LIST_SELECT,
+    take: pageSize + 1,
+    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = stamps.length > pageSize;
+  const items = (hasMore ? stamps.slice(0, pageSize) : stamps).map(toStampListItem);
+  const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+  return { items, nextCursor };
+}
+
+// ── Mutations ──────────────────────────────────────────────────────────────
+
+export async function updateStampWithCatalog(
+  ownerId: string,
+  stampId: string,
+  data: {
+    name?: string | null;
+    issuedDay?: number | null;
+    issuedMonth?: number | null;
+    issuedYear?: number | null;
+    catalogNumbers: { catalogVendorId: string; number: string }[];
+  }
+): Promise<void> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.$transaction(async (tx) => {
+    await tx.stamp.update({
+      where: { id: stampId },
+      data: {
+        name: data.name ?? null,
+        issuedDay: data.issuedDay ?? null,
+        issuedMonth: data.issuedMonth ?? null,
+        issuedYear: data.issuedYear ?? null,
+      },
+    });
+    await tx.stampCatalogNumber.deleteMany({ where: { stampId } });
+    if (data.catalogNumbers.length > 0) {
+      await tx.stampCatalogNumber.createMany({
+        data: data.catalogNumbers.map((cn) => ({
+          stampId,
+          catalogVendorId: cn.catalogVendorId,
+          number: cn.number,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  });
+}
+
 export async function upsertStampCatalogNumber(
   ownerId: string,
   stampId: string,

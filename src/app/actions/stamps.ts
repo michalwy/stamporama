@@ -7,6 +7,7 @@ import {
   createStamp,
   createVariant,
   updateStamp,
+  updateStampWithCatalog,
   deleteStamp,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
@@ -105,6 +106,39 @@ export async function updateStampAction(
   }
   try {
     await updateStamp(session.user.id, stampId, { name, issuedDay, issuedMonth, issuedYear });
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to update stamp. Please try again." };
+  }
+}
+
+export async function updateStampWithCatalogAction(
+  stampId: string,
+  formData: FormData
+): Promise<StampActionState> {
+  const session = await getSession();
+  const nameRaw = ((formData.get("name") as string | null) ?? "").trim();
+  const name = nameRaw || null;
+  const { issuedDay, issuedMonth, issuedYear, error } = parseIssuedDate(formData);
+  if (error) return { status: "error", message: error };
+
+  const catalogNumbers: { catalogVendorId: string; number: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("catalogNumber_")) {
+      const catalogVendorId = key.slice("catalogNumber_".length);
+      const num = (value as string).trim();
+      if (num) catalogNumbers.push({ catalogVendorId, number: num });
+    }
+  }
+
+  try {
+    await updateStampWithCatalog(session.user.id, stampId, {
+      name,
+      issuedDay: issuedDay ?? null,
+      issuedMonth: issuedMonth ?? null,
+      issuedYear: issuedYear ?? null,
+      catalogNumbers,
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update stamp. Please try again." };

@@ -1,0 +1,207 @@
+"use client";
+
+import { formatIssuedDate } from "@/app/stamp-display";
+import type { StampListItem } from "@/lib/stamps";
+import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import {
+  rowBtnStyle,
+  rowBtnDangerStyle,
+  STAMP_PRIMARY_CHIP,
+  STAMP_SECONDARY_CHIP,
+  STAMP_MUTED_PRIMARY_CHIP,
+  formatStampCN,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
+
+function buildAreaPath(areas: CollectionAreaData[], areaId: string | null): string | null {
+  if (!areaId) return null;
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const path: string[] = [];
+  let current = byId.get(areaId);
+  let depth = 0;
+  while (current && depth < 50) {
+    path.unshift(current.name);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return path.length > 0 ? path.join(" › ") : null;
+}
+
+interface StampRowProps {
+  stamp: StampListItem;
+  areas: CollectionAreaData[];
+  primaryVendorId: string | null;
+  vendorMap: Map<string, AreaCatalogEntry>;
+  isLast: boolean;
+  onEdit: (stamp: StampListItem) => void;
+  onDelete: (stamp: StampListItem) => void;
+}
+
+export function StampRow({
+  stamp,
+  areas,
+  primaryVendorId,
+  vendorMap,
+  isLast,
+  onEdit,
+  onDelete,
+}: StampRowProps) {
+  const dateStr = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
+  const areaPath = buildAreaPath(areas, stamp.areaId);
+
+  const primaryCN = primaryVendorId
+    ? (stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
+    : null;
+  const secondaryCNs = stamp.catalogNumbers.filter(
+    (cn) => cn.catalogVendorId !== primaryVendorId
+  );
+
+  const firstIssue = stamp.issues[0] ?? null;
+  const isRequired = stamp.issues.some((m) => m.requiredForCompleteness);
+
+  return (
+    <div
+      style={{
+        borderBottom: isLast ? undefined : "1px solid var(--color-border)",
+      }}
+    >
+      <div
+        style={{
+          padding: "0.75rem 1.25rem",
+          background: "var(--color-bg-elevated)",
+        }}
+      >
+        {/* Line 1: name + actions (only if name exists) */}
+        {stamp.name && (
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            <span
+              style={{
+                flex: 1,
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {stamp.name}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => onEdit(stamp)}
+              style={rowBtnStyle}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(stamp)}
+              style={rowBtnDangerStyle}
+            >
+              Delete
+            </button>
+          </div>
+        )}
+
+        {/* Line 2: area path, date, issue */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginTop: stamp.name ? "0.2rem" : undefined,
+          }}
+        >
+          {areaPath && (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--color-text-muted)",
+                background: "var(--color-bg-page)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "0.25rem",
+                padding: "0.1rem 0.4rem",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: "20rem",
+                flexShrink: 0,
+              }}
+            >
+              {areaPath}
+            </span>
+          )}
+
+          {(dateStr || firstIssue) && (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--color-text-muted)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              {dateStr}
+              {dateStr && firstIssue && ", "}
+              {firstIssue && (
+                <>
+                  {firstIssue.issueName ?? "(unnamed issue)"}
+                  {firstIssue.issueYear ? ` (${firstIssue.issueYear})` : ""}
+                  {stamp.issues.length > 1 && ` +${stamp.issues.length - 1}`}
+                </>
+              )}
+            </span>
+          )}
+
+          {!stamp.name && <span style={{ flex: 1 }} />}
+
+          {!stamp.name && (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(stamp)}
+                style={rowBtnStyle}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(stamp)}
+                style={rowBtnDangerStyle}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Line 3: catalog numbers */}
+        {(primaryCN || secondaryCNs.length > 0) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+            marginTop: "0.4rem",
+            flexWrap: "wrap",
+          }}
+        >
+          {primaryCN && (
+            <span style={isRequired ? STAMP_PRIMARY_CHIP : STAMP_MUTED_PRIMARY_CHIP}>
+              {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
+            </span>
+          )}
+          {secondaryCNs.map((cn) => (
+            <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
+              {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
+            </span>
+          ))}
+        </div>
+        )}
+      </div>
+    </div>
+  );
+}
