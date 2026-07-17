@@ -10,6 +10,9 @@ import {
   listStamps,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
+  upsertStampCatalogPrice,
+  deleteStampCatalogPrice,
+  findStaleCatalogPrices,
 } from "../../src/lib/stamps";
 
 async function createTestUser(suffix: string) {
@@ -351,6 +354,131 @@ describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
     await prisma.stampCatalogNumber.create({ data: { stampId, catalogVendorId: vendorId, number: "99" } });
     await assert.rejects(
       () => deleteStampCatalogNumber("wrong-user", stampId, vendorId),
+      /access denied/i
+    );
+  });
+});
+
+describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPrices", () => {
+  let userId: string;
+  let collectionId: string;
+  let stampId: string;
+  let editionId2023: string;
+  let editionId2024: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-stamps-scp-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User scp-${ts}`,
+        email: `test-stamps-scp-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const col = await prisma.collection.create({
+      data: { slug: `col-stamps-scp-${ts}`, name: `Collection scp-${ts}`, ownerId: userId },
+    });
+    collectionId = col.id;
+
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Catalog Price Test" } });
+    stampId = stamp.id;
+
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Michel Katalog", currency: "EUR" },
+    });
+    const ed2023 = await prisma.catalogEdition.create({
+      data: { catalogNameId: catalogName.id, year: 2023 },
+    });
+    editionId2023 = ed2023.id;
+    const ed2024 = await prisma.catalogEdition.create({
+      data: { catalogNameId: catalogName.id, year: 2024 },
+    });
+    editionId2024 = ed2024.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("upsert creates a catalog price entry", async () => {
+    await upsertStampCatalogPrice(userId, stampId, editionId2023, "12.50", "EUR");
+    const entry = await prisma.stampCatalogPrice.findUnique({
+      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
+    });
+    assert.ok(entry);
+    assert.equal(entry.currency, "EUR");
+    assert.equal(Number(entry.price), 12.5);
+  });
+
+  it("second upsert updates price in place", async () => {
+    await upsertStampCatalogPrice(userId, stampId, editionId2023, "15.00", "EUR");
+    const entry = await prisma.stampCatalogPrice.findUnique({
+      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
+    });
+    assert.ok(entry);
+    assert.equal(Number(entry.price), 15);
+    const all = await prisma.stampCatalogPrice.findMany({ where: { stampId } });
+    assert.equal(all.length, 1);
+  });
+
+  it("upsert throws when caller does not own the stamp's collection", async () => {
+    await assert.rejects(
+      () => upsertStampCatalogPrice("wrong-user", stampId, editionId2023, "1.00", "EUR"),
+      /access denied/i
+    );
+  });
+
+  it("findStaleCatalogPrices returns price linked to non-latest edition", async () => {
+    // price is on 2023 edition; 2024 exists → stale
+    const stale = await findStaleCatalogPrices(userId, collectionId);
+    assert.equal(stale.length, 1);
+    assert.equal(stale[0].stampId, stampId);
+    assert.equal(stale[0].catalogEditionId, editionId2023);
+    assert.equal(stale[0].latestEditionId, editionId2024);
+    assert.equal(stale[0].latestEditionYear, 2024);
+    assert.equal(stale[0].editionYear, 2023);
+  });
+
+  it("findStaleCatalogPrices returns empty when price is on the latest edition", async () => {
+    // add price for 2024 edition (the latest)
+    await upsertStampCatalogPrice(userId, stampId, editionId2024, "20.00", "EUR");
+    // remove the stale 2023 price
+    await prisma.stampCatalogPrice.delete({
+      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
+    });
+    const stale = await findStaleCatalogPrices(userId, collectionId);
+    assert.equal(stale.length, 0);
+  });
+
+  it("delete removes the catalog price entry", async () => {
+    await deleteStampCatalogPrice(userId, stampId, editionId2024);
+    const entry = await prisma.stampCatalogPrice.findUnique({
+      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2024 } },
+    });
+    assert.equal(entry, null);
+  });
+
+  it("delete throws when caller does not own the stamp's collection", async () => {
+    await prisma.stampCatalogPrice.create({
+      data: { stampId, catalogEditionId: editionId2023, price: "5.00", currency: "EUR" },
+    });
+    await assert.rejects(
+      () => deleteStampCatalogPrice("wrong-user", stampId, editionId2023),
+      /access denied/i
+    );
+  });
+
+  it("findStaleCatalogPrices throws when caller does not own the collection", async () => {
+    await assert.rejects(
+      () => findStaleCatalogPrices("wrong-user", collectionId),
       /access denied/i
     );
   });

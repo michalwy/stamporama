@@ -10,6 +10,8 @@ import {
   deleteStamp,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
+  upsertStampCatalogPrice,
+  deleteStampCatalogPrice,
 } from "@/lib/stamps";
 
 export type StampActionState =
@@ -117,5 +119,37 @@ export async function deleteStampCatalogNumberAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete catalog number. Please try again." };
+  }
+}
+
+export async function upsertStampCatalogPriceAction(
+  stampId: string,
+  catalogEditionId: string,
+  formData: FormData
+): Promise<StampActionState> {
+  const session = await getSession();
+  const priceRaw = ((formData.get("price") as string | null) ?? "").trim();
+  const currency = ((formData.get("currency") as string | null) ?? "").trim();
+  if (!priceRaw) return { status: "error", message: "Price is required." };
+  if (!currency) return { status: "error", message: "Currency is required." };
+  if (isNaN(Number(priceRaw))) return { status: "error", message: "Price must be a valid number." };
+  try {
+    await upsertStampCatalogPrice(session.user.id, stampId, catalogEditionId, priceRaw, currency);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to save catalog price. Please try again." };
+  }
+}
+
+export async function deleteStampCatalogPriceAction(
+  stampId: string,
+  catalogEditionId: string
+): Promise<StampActionState> {
+  const session = await getSession();
+  try {
+    await deleteStampCatalogPrice(session.user.id, stampId, catalogEditionId);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to delete catalog price. Please try again." };
   }
 }

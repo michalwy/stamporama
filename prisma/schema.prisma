@@ -74,7 +74,8 @@ model CatalogEdition {
   catalogNameId String
   year          Int
 
-  catalogName CatalogName @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+  catalogName        CatalogName          @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
+  stampCatalogPrices StampCatalogPrice[]
 
   @@map("catalog_edition")
 }
@@ -125,6 +126,7 @@ model Stamp {
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
   catalogNumbers    StampCatalogNumber[]
+  catalogPrices     StampCatalogPrice[]
   issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
 
   @@map("stamp")
@@ -140,6 +142,19 @@ model StampCatalogNumber {
 
   @@id([stampId, catalogVendorId])
   @@map("stamp_catalog_number")
+}
+
+model StampCatalogPrice {
+  stampId          String
+  catalogEditionId String
+  price            Decimal
+  currency         String
+
+  stamp          Stamp          @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  catalogEdition CatalogEdition @relation(fields: [catalogEditionId], references: [id], onDelete: Cascade)
+
+  @@id([stampId, catalogEditionId])
+  @@map("stamp_catalog_price")
 }
 
 model CollectionAreaCatalog {

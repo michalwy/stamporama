@@ -1,4 +1,5 @@
 import "server-only";
+import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 
 async function assertCollectionOwner(
@@ -182,4 +183,99 @@ export async function deleteStampCatalogNumber(
   await prisma.stampCatalogNumber.delete({
     where: { stampId_catalogVendorId: { stampId, catalogVendorId } },
   });
+}
+
+export interface StampCatalogPriceData {
+  catalogEditionId: string;
+  price: Decimal;
+  currency: string;
+}
+
+export async function upsertStampCatalogPrice(
+  ownerId: string,
+  stampId: string,
+  catalogEditionId: string,
+  price: string,
+  currency: string
+): Promise<void> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.stampCatalogPrice.upsert({
+    where: { stampId_catalogEditionId: { stampId, catalogEditionId } },
+    create: { stampId, catalogEditionId, price, currency },
+    update: { price, currency },
+  });
+}
+
+export async function deleteStampCatalogPrice(
+  ownerId: string,
+  stampId: string,
+  catalogEditionId: string
+): Promise<void> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.stampCatalogPrice.delete({
+    where: { stampId_catalogEditionId: { stampId, catalogEditionId } },
+  });
+}
+
+export interface StaleCatalogPrice {
+  stampId: string;
+  catalogEditionId: string;
+  price: Decimal;
+  currency: string;
+  editionYear: number;
+  catalogNameId: string;
+  latestEditionId: string;
+  latestEditionYear: number;
+}
+
+export async function findStaleCatalogPrices(
+  ownerId: string,
+  collectionId: string
+): Promise<StaleCatalogPrice[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const prices = await prisma.stampCatalogPrice.findMany({
+    where: { stamp: { collectionId } },
+    select: {
+      stampId: true,
+      catalogEditionId: true,
+      price: true,
+      currency: true,
+      catalogEdition: {
+        select: {
+          year: true,
+          catalogNameId: true,
+          catalogName: {
+            select: {
+              catalogEditions: {
+                select: { id: true, year: true },
+                orderBy: { year: "desc" },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const stale: StaleCatalogPrice[] = [];
+  for (const p of prices) {
+    const latest = p.catalogEdition.catalogName.catalogEditions[0];
+    if (latest && latest.year > p.catalogEdition.year) {
+      stale.push({
+        stampId: p.stampId,
+        catalogEditionId: p.catalogEditionId,
+        price: p.price,
+        currency: p.currency,
+        editionYear: p.catalogEdition.year,
+        catalogNameId: p.catalogEdition.catalogNameId,
+        latestEditionId: latest.id,
+        latestEditionYear: latest.year,
+      });
+    }
+  }
+  return stale;
 }
