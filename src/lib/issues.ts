@@ -369,7 +369,100 @@ export async function deleteIssue(
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.issue.delete({ where: { id: issueId } });
+
+  await prisma.$transaction(async (tx) => {
+    const members = await tx.issueMember.findMany({
+      where: { issueId },
+      select: { stampId: true },
+    });
+
+    if (members.length > 0) {
+      const stampIds = members.map((m) => m.stampId);
+      const shared = await tx.issueMember.groupBy({
+        by: ["stampId"],
+        where: { stampId: { in: stampIds }, issueId: { not: issueId } },
+      });
+      const sharedIds = new Set(shared.map((s) => s.stampId));
+      const exclusiveIds = stampIds.filter((id) => !sharedIds.has(id));
+
+      if (exclusiveIds.length > 0) {
+        await deleteStampsDepthFirst(tx, exclusiveIds);
+      }
+    }
+
+    await tx.issue.delete({ where: { id: issueId } });
+  });
+}
+
+async function deleteStampsDepthFirst(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  stampIds: string[]
+): Promise<void> {
+  const idSet = new Set(stampIds);
+  const stamps = await tx.stamp.findMany({
+    where: { id: { in: stampIds } },
+    select: { id: true, parentId: true },
+  });
+
+  const childMap = new Map<string | null, string[]>();
+  for (const s of stamps) {
+    const parentKey = s.parentId && idSet.has(s.parentId) ? s.parentId : null;
+    const list = childMap.get(parentKey) ?? [];
+    list.push(s.id);
+    childMap.set(parentKey, list);
+  }
+
+  const order: string[] = [];
+  function visit(id: string) {
+    for (const child of childMap.get(id) ?? []) visit(child);
+    order.push(id);
+  }
+  for (const root of childMap.get(null) ?? []) visit(root);
+  for (const id of stampIds) {
+    if (!order.includes(id)) order.push(id);
+  }
+
+  for (const id of order) {
+    await tx.stamp.delete({ where: { id } });
+  }
+}
+
+export interface IssueDeletionPreview {
+  totalMembers: number;
+  exclusiveCount: number;
+  sharedCount: number;
+}
+
+export async function previewIssueDeletion(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<IssueDeletionPreview> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const members = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: { stampId: true },
+  });
+
+  if (members.length === 0) {
+    return { totalMembers: 0, exclusiveCount: 0, sharedCount: 0 };
+  }
+
+  const stampIds = members.map((m) => m.stampId);
+  const shared = await prisma.issueMember.groupBy({
+    by: ["stampId"],
+    where: { stampId: { in: stampIds }, issueId: { not: issueId } },
+  });
+  const sharedCount = shared.length;
+
+  return {
+    totalMembers: members.length,
+    exclusiveCount: members.length - sharedCount,
+    sharedCount,
+  };
 }
 
 export interface AddStampData {

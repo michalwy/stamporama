@@ -9,6 +9,7 @@ import {
   updateStamp,
   updateStampWithCatalog,
   deleteStamp,
+  getStampChildCount,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
   upsertStampCatalogPrice,
@@ -145,13 +146,28 @@ export async function updateStampWithCatalogAction(
   }
 }
 
-export async function deleteStampAction(stampId: string): Promise<StampActionState> {
+export async function deleteStampAction(
+  stampId: string,
+  mode: "cascade" | "reparent" = "cascade"
+): Promise<StampActionState> {
   const session = await getSession();
   try {
-    await deleteStamp(session.user.id, stampId);
+    await deleteStamp(session.user.id, stampId, mode);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete stamp. Please try again." };
+  }
+}
+
+export async function getStampChildCountAction(
+  stampId: string
+): Promise<{ count: number } | { error: string }> {
+  const session = await getSession();
+  try {
+    const count = await getStampChildCount(session.user.id, stampId);
+    return { count };
+  } catch {
+    return { error: "Failed to check stamp children." };
   }
 }
 

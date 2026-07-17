@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { StampListItem } from "@/lib/stamps";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
@@ -14,6 +13,7 @@ import {
 import { useStampsInfinite, useInvalidateStamps } from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
 import { StampDialog } from "./stamp-dialog";
+import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 
 type DialogState =
   | { kind: "none" }
@@ -265,28 +265,20 @@ export function StampsListPanel({
       )}
 
       {dialog.kind === "delete-stamp" && (
-        <ConfirmDialog
-          title="Delete stamp"
-          message={
-            <>
-              Delete stamp{" "}
-              <strong>{dialog.stamp.name ?? "(unnamed)"}</strong>?
-              This will remove it from all issues. This cannot be undone.
-            </>
-          }
-          actionLabel="Delete"
-          pendingLabel="Deleting…"
+        <DeleteStampDialog
+          stampId={dialog.stamp.id}
+          stampName={dialog.stamp.name ?? "(unnamed)"}
+          isPending={isPending}
+          error={actionError}
           onClose={closeDialog}
-          onConfirm={() => {
+          onConfirm={(mode) => {
             startTransition(async () => {
               const { deleteStampAction } = await import("@/app/actions/stamps");
-              const result = await deleteStampAction(dialog.stamp.id);
+              const result = await deleteStampAction(dialog.stamp.id, mode);
               if (result.status === "success") handleSuccess();
               else if (result.status === "error") setActionError(result.message);
             });
           }}
-          isPending={isPending}
-          error={actionError}
         />
       )}
     </div>

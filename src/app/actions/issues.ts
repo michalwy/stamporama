@@ -7,11 +7,13 @@ import {
   createIssue,
   updateIssue,
   deleteIssue,
+  previewIssueDeletion,
   addStampToIssue,
   toggleIssueMemberRequired,
   removeStampFromIssue,
   moveStampNode,
 } from "@/lib/issues";
+import type { IssueDeletionPreview } from "@/lib/issues";
 
 export type IssueActionState =
   | { status: "idle" }
@@ -92,6 +94,18 @@ export async function deleteIssueAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete issue. Please try again." };
+  }
+}
+
+export async function previewIssueDeletionAction(
+  collectionId: string,
+  issueId: string
+): Promise<IssueDeletionPreview | { error: string }> {
+  const session = await getSession();
+  try {
+    return await previewIssueDeletion(session.user.id, collectionId, issueId);
+  } catch {
+    return { error: "Failed to check issue stamps." };
   }
 }
 

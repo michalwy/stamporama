@@ -46,6 +46,7 @@ interface StampTreeNodeProps {
   vendorMap: Map<string, AreaCatalogEntry>;
   onAddChild: (parentStampId: string) => void;
   onRemove: (stampId: string) => void;
+  onDelete: (stampId: string, stampName: string) => void;
   onMove: (stampId: string) => void;
 }
 
@@ -56,6 +57,7 @@ function StampTreeNode({
   vendorMap,
   onAddChild,
   onRemove,
+  onDelete,
   onMove,
 }: StampTreeNodeProps) {
   const [collapsed, setCollapsed] = useState(true);
@@ -160,6 +162,13 @@ function StampTreeNode({
           >
             Remove
           </button>
+          <button
+            type="button"
+            onClick={() => onDelete(node.stampId, node.name ?? "(unnamed)")}
+            style={rowBtnDangerStyle}
+          >
+            Delete
+          </button>
         </div>
 
         {(primaryCN || secondaryCNs.length > 0) && (
@@ -202,6 +211,7 @@ function StampTreeNode({
             vendorMap={vendorMap}
             onAddChild={onAddChild}
             onRemove={onRemove}
+            onDelete={onDelete}
             onMove={onMove}
           />
         ))}
@@ -220,6 +230,7 @@ export interface IssueRowCallbacks {
     parentCatalogNumbers?: { catalogVendorId: string; number: string }[]
   ) => void;
   onRemoveStamp: (issueId: string, stampId: string) => void;
+  onDeleteStamp: (issueId: string, stampId: string, stampName: string) => void;
   onMoveStamp: (issueId: string, stampId: string) => void;
 }
 
@@ -498,6 +509,9 @@ export function IssueRow({
                 }}
                 onRemove={(stampId) =>
                   callbacks.onRemoveStamp(issue.id, stampId)
+                }
+                onDelete={(stampId, stampName) =>
+                  callbacks.onDeleteStamp(issue.id, stampId, stampName)
                 }
                 onMove={(stampId) =>
                   callbacks.onMoveStamp(issue.id, stampId)

@@ -8,6 +8,7 @@ import {
   deleteStamp,
   getStamp,
   listStamps,
+  getStampChildCount,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
   upsertStampCatalogPrice,
@@ -481,5 +482,83 @@ describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPr
       () => findStaleCatalogPrices("wrong-user", collectionId),
       /access denied/i
     );
+  });
+});
+
+describe("deleteStamp reparent mode", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`dsr-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `dsr-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("reparents children to grandparent when deleting a mid-level node", async () => {
+    const grandparent = await prisma.stamp.create({ data: { collectionId, name: "Grandparent" } });
+    const parent = await prisma.stamp.create({ data: { collectionId, parentId: grandparent.id, name: "Parent" } });
+    const child1 = await prisma.stamp.create({ data: { collectionId, parentId: parent.id, name: "Child 1" } });
+    const child2 = await prisma.stamp.create({ data: { collectionId, parentId: parent.id, name: "Child 2" } });
+
+    await deleteStamp(userId, parent.id, "reparent");
+
+    assert.equal(await prisma.stamp.findUnique({ where: { id: parent.id } }), null);
+    const c1 = await prisma.stamp.findUniqueOrThrow({ where: { id: child1.id } });
+    const c2 = await prisma.stamp.findUniqueOrThrow({ where: { id: child2.id } });
+    assert.equal(c1.parentId, grandparent.id);
+    assert.equal(c2.parentId, grandparent.id);
+  });
+
+  it("reparents children to root when deleting a root node", async () => {
+    const root = await prisma.stamp.create({ data: { collectionId, name: "Root" } });
+    const child = await prisma.stamp.create({ data: { collectionId, parentId: root.id, name: "Child" } });
+
+    await deleteStamp(userId, root.id, "reparent");
+
+    assert.equal(await prisma.stamp.findUnique({ where: { id: root.id } }), null);
+    const c = await prisma.stamp.findUniqueOrThrow({ where: { id: child.id } });
+    assert.equal(c.parentId, null);
+  });
+
+  it("works the same as cascade for a leaf node", async () => {
+    const leaf = await prisma.stamp.create({ data: { collectionId, name: "Leaf" } });
+
+    await deleteStamp(userId, leaf.id, "reparent");
+
+    assert.equal(await prisma.stamp.findUnique({ where: { id: leaf.id } }), null);
+  });
+});
+
+describe("getStampChildCount", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`gcc-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `gcc-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("returns 0 for a leaf stamp", async () => {
+    const leaf = await prisma.stamp.create({ data: { collectionId, name: "Leaf" } });
+    assert.equal(await getStampChildCount(userId, leaf.id), 0);
+  });
+
+  it("returns the number of direct children", async () => {
+    const parent = await prisma.stamp.create({ data: { collectionId, name: "Parent" } });
+    await prisma.stamp.create({ data: { collectionId, parentId: parent.id, name: "C1" } });
+    await prisma.stamp.create({ data: { collectionId, parentId: parent.id, name: "C2" } });
+    assert.equal(await getStampChildCount(userId, parent.id), 2);
   });
 });

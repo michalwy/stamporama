@@ -114,24 +114,54 @@ export async function updateStamp(
   await prisma.stamp.update({ where: { id: stampId }, data });
 }
 
-async function deleteStampTree(stampId: string): Promise<void> {
-  const children = await prisma.stamp.findMany({
+async function deleteStampTreeTx(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  stampId: string
+): Promise<void> {
+  const children = await tx.stamp.findMany({
     where: { parentId: stampId },
     select: { id: true },
   });
   for (const child of children) {
-    await deleteStampTree(child.id);
+    await deleteStampTreeTx(tx, child.id);
   }
-  await prisma.stamp.delete({ where: { id: stampId } });
+  await tx.stamp.delete({ where: { id: stampId } });
 }
 
 export async function deleteStamp(
   ownerId: string,
-  stampId: string
+  stampId: string,
+  mode: "cascade" | "reparent" = "cascade"
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
-  await deleteStampTree(stampId);
+
+  if (mode === "reparent") {
+    await prisma.$transaction(async (tx) => {
+      const stamp = await tx.stamp.findUniqueOrThrow({
+        where: { id: stampId },
+        select: { parentId: true },
+      });
+      await tx.stamp.updateMany({
+        where: { parentId: stampId },
+        data: { parentId: stamp.parentId },
+      });
+      await tx.stamp.delete({ where: { id: stampId } });
+    });
+  } else {
+    await prisma.$transaction(async (tx) => {
+      await deleteStampTreeTx(tx, stampId);
+    });
+  }
+}
+
+export async function getStampChildCount(
+  ownerId: string,
+  stampId: string
+): Promise<number> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.stamp.count({ where: { parentId: stampId } });
 }
 
 export async function getStamp(

@@ -22,6 +22,8 @@ import {
 import type { IssueListItem, IssueCatalogNumberData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { AddStampDialog } from "./add-stamp-dialog";
+import { DeleteIssueDialog } from "./delete-issue-dialog";
+import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { useIssuesInfinite, useInvalidateIssues } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
@@ -295,7 +297,8 @@ type DialogState =
       parentCatalogNumbers?: { catalogVendorId: string; number: string }[];
     }
   | { kind: "move-stamp"; issueId: string; stampId: string }
-  | { kind: "remove-stamp"; issueId: string; stampId: string };
+  | { kind: "remove-stamp"; issueId: string; stampId: string }
+  | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
 
 interface IssuesListPanelProps {
   collectionId: string;
@@ -445,6 +448,8 @@ export function IssuesListPanel({
         parentCatalogNumbers,
       }),
     onRemoveStamp: handleRemoveStamp,
+    onDeleteStamp: (issueId, stampId, stampName) =>
+      openDialog({ kind: "delete-stamp", issueId, stampId, stampName }),
     onMoveStamp: (issueId, stampId) =>
       openDialog({ kind: "move-stamp", issueId, stampId }),
   };
@@ -655,48 +660,26 @@ export function IssuesListPanel({
           );
         })()}
 
-      {dialog.kind === "delete-issue" &&
-        (() => {
-          const { issue } = dialog;
-          return (
-            <ConfirmDialog
-              title="Delete issue"
-              message={
-                <>
-                  Delete issue{" "}
-                  <strong>{issue.name ?? "(unnamed)"}</strong>?
-                  {issue.memberCount > 0 && (
-                    <>
-                      {" "}
-                      This will also remove all{" "}
-                      <strong>
-                        {issue.memberCount} stamp member
-                        {issue.memberCount !== 1 ? "s" : ""}
-                      </strong>{" "}
-                      from this issue.
-                    </>
-                  )}{" "}
-                  This cannot be undone.
-                </>
-              }
-              actionLabel="Delete"
-              pendingLabel="Deleting…"
-              onClose={closeDialog}
-              onConfirm={() => {
-                startTransition(async () => {
-                  const result = await deleteIssueAction(
-                    collectionId,
-                    issue.id
-                  );
-                  setActionState(result);
-                  if (result.status === "success") handleSuccess();
-                });
-              }}
-              isPending={isPending}
-              error={error}
-            />
-          );
-        })()}
+      {dialog.kind === "delete-issue" && (
+        <DeleteIssueDialog
+          collectionId={collectionId}
+          issueId={dialog.issue.id}
+          issueName={dialog.issue.name ?? "(unnamed)"}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onConfirm={() => {
+            startTransition(async () => {
+              const result = await deleteIssueAction(
+                collectionId,
+                dialog.issue.id
+              );
+              setActionState(result);
+              if (result.status === "success") handleSuccess();
+            });
+          }}
+        />
+      )}
 
       {dialog.kind === "remove-stamp" && (
         <ConfirmDialog
@@ -717,6 +700,24 @@ export function IssuesListPanel({
           }}
           isPending={isPending}
           error={error}
+        />
+      )}
+
+      {dialog.kind === "delete-stamp" && (
+        <DeleteStampDialog
+          stampId={dialog.stampId}
+          stampName={dialog.stampName}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onConfirm={(mode) => {
+            startTransition(async () => {
+              const { deleteStampAction } = await import("@/app/actions/stamps");
+              const result = await deleteStampAction(dialog.stampId, mode);
+              if (result.status === "success") handleStampSuccess(dialog.issueId);
+              else if (result.status === "error") setActionState(result);
+            });
+          }}
         />
       )}
 
