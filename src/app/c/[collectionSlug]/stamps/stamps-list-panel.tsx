@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import type { StampListItem } from "@/lib/stamps";
+import type { StampListItem, StampSortBy } from "@/lib/stamps";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
+import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { useStampsInfinite, useInvalidateStamps } from "./use-stamps-query";
+import { useStampsInfinite, useInvalidateStamps, type StampListFilters } from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
 import { StampEditDialog } from "@/app/c/[collectionSlug]/shared/stamp-edit-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
@@ -28,6 +31,13 @@ interface StampsListPanelProps {
   filterAreaIds: string[] | undefined;
 }
 
+const STAMP_SORT_OPTIONS: SortOption[] = [
+  { value: "issueDate", label: "Issue date" },
+  { value: "catalogNumber", label: "Catalog number" },
+  { value: "name", label: "Stamp name" },
+  { value: "issueName", label: "Issue name" },
+];
+
 export function StampsListPanel({
   collectionId,
   collectionSlug,
@@ -36,10 +46,64 @@ export function StampsListPanel({
   filterAreaIds,
 }: StampsListPanelProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateStamps();
+
+  const search = searchParams.get("search") ?? "";
+  const { sortBy, sortDir, persistSort } = usePersistedSort<StampSortBy>(
+    "stamps", "issueDate", "asc",
+    searchParams.get("sortBy"),
+    searchParams.get("sortDir"),
+    ["issueDate", "catalogNumber", "name", "issueName"]
+  );
+  const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
+  const catalogNumber = searchParams.get("catalogNumber") ?? "";
+  const issueId = searchParams.get("issueId") ?? "";
+
+  const filters: StampListFilters = useMemo(
+    () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
+      catalogVendorId: catalogVendorId || undefined,
+      catalogNumber: catalogNumber || undefined,
+      issueId: issueId || undefined,
+      sortBy,
+      sortDir,
+    }),
+    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, sortBy, sortDir]
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      }
+      const qs = params.toString();
+      router.push(`/c/${collectionSlug}/stamps${qs ? `?${qs}` : ""}`);
+    },
+    [router, collectionSlug, searchParams]
+  );
+
+  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
+    const seen = new Map<string, CatalogVendorOption>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            name: entry.vendorName,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [areas]);
 
   const {
     data,
@@ -47,16 +111,11 @@ export function StampsListPanel({
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
-  } = useStampsInfinite(collectionId, filterAreaIds);
+  } = useStampsInfinite(collectionId, filters);
 
   const allStamps = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
     [data]
-  );
-
-  const areaById = useMemo(
-    () => new Map(areas.map((a) => [a.id, a])),
-    [areas]
   );
 
   const primaryVendorByArea = useMemo(() => {
@@ -78,11 +137,11 @@ export function StampsListPanel({
   }, [areas]);
 
   function handleNavigateFilter(areaId: string | null) {
-    if (areaId) {
-      router.push(`/c/${collectionSlug}/stamps?areaId=${areaId}`);
-    } else {
-      router.push(`/c/${collectionSlug}/stamps`);
-    }
+    const params = new URLSearchParams(searchParams.toString());
+    if (areaId) params.set("areaId", areaId);
+    else params.delete("areaId");
+    const qs = params.toString();
+    router.push(`/c/${collectionSlug}/stamps${qs ? `?${qs}` : ""}`);
   }
 
   function closeDialog() {
@@ -97,6 +156,8 @@ export function StampsListPanel({
     setActionError(undefined);
     invalidateList(collectionId);
   }
+
+  const hasActiveFilters = !!(search || catalogNumber || issueId);
 
   return (
     <div
@@ -124,62 +185,27 @@ export function StampsListPanel({
         }}
       >
         {/* Toolbar */}
-        <div
-          style={{
-            display: "flex",
-            gap: "0.75rem",
-            padding: "0.875rem 1.25rem",
-            borderBottom: "1px solid var(--color-border)",
-            background: "var(--color-bg-elevated)",
-          }}
+        <ListToolbar
+          search={search}
+          onSearchChange={(v) => updateParams({ search: v })}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={(sb, sd) => { persistSort(sb as StampSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}
+          sortOptions={STAMP_SORT_OPTIONS}
+          catalogVendors={catalogVendors}
+          catalogVendorId={catalogVendorId}
+          catalogNumber={catalogNumber}
+          onCatalogSearchChange={(vid, num) =>
+            updateParams({ catalogVendorId: vid, catalogNumber: num })
+          }
         >
-          <span
-            style={{
-              fontSize: "0.875rem",
-              color: "var(--color-text-muted)",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            All stamps
-          </span>
-          {filterAreaId && areaById.has(filterAreaId) && (
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Filtered by:
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {areaById.get(filterAreaId)!.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleNavigateFilter(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.8125rem",
-                  padding: "0 0.125rem",
-                }}
-                title="Clear filter"
-              >
-                ✕
-              </button>
-            </span>
-          )}
-        </div>
+          <IssueFilterAutocomplete
+            collectionId={collectionId}
+            areaIds={filterAreaIds}
+            selectedIssueId={issueId}
+            onSelect={(id) => updateParams({ issueId: id })}
+          />
+        </ListToolbar>
 
         {/* Stamps list */}
         {isLoading && (
@@ -202,9 +228,11 @@ export function StampsListPanel({
               fontSize: "0.9375rem",
             }}
           >
-            {filterAreaId
-              ? "No stamps in this area."
-              : "No stamps yet. Add stamps through the Issues page."}
+            {hasActiveFilters
+              ? "No stamps match your search."
+              : filterAreaId
+                ? "No stamps in this area."
+                : "No stamps yet. Add stamps through the Issues page."}
           </div>
         )}
 

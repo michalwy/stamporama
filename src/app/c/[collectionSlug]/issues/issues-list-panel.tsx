@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   DialogShell,
   DialogBody,
@@ -17,15 +17,17 @@ import {
   moveStampNodeAction,
   type IssueActionState,
 } from "@/app/actions/issues";
-import type { IssueListItem, IssueCatalogNumberData, StampNodeData } from "@/lib/issues";
+import type { IssueListItem, IssueCatalogNumberData, IssueSortBy, StampNodeData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { AddStampDialog } from "./add-stamp-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { StampEditDialog } from "@/app/c/[collectionSlug]/shared/stamp-edit-dialog";
-import { useIssuesInfinite, useInvalidateIssues } from "./use-issues-query";
+import { useIssuesInfinite, useInvalidateIssues, type IssueListFilters } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { effectiveVendorsForArea, effectivePrimaryVendorId, flattenAreaTree } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -403,6 +405,12 @@ interface IssuesListPanelProps {
   filterAreaIds: string[] | undefined;
 }
 
+const ISSUE_SORT_OPTIONS: SortOption[] = [
+  { value: "year", label: "Year" },
+  { value: "name", label: "Name" },
+  { value: "catalogNumber", label: "Catalog number" },
+];
+
 export function IssuesListPanel({
   collectionId,
   collectionSlug,
@@ -411,6 +419,7 @@ export function IssuesListPanel({
   filterAreaIds,
 }: IssuesListPanelProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<IssueActionState>({
     status: "idle",
@@ -419,13 +428,64 @@ export function IssuesListPanel({
   const [autoExpandIssueId, setAutoExpandIssueId] = useState<string | null>(null);
   const { invalidateList, invalidateMembers } = useInvalidateIssues();
 
+  const search = searchParams.get("search") ?? "";
+  const { sortBy, sortDir, persistSort } = usePersistedSort<IssueSortBy>(
+    "issues", "year", "asc",
+    searchParams.get("sortBy"),
+    searchParams.get("sortDir"),
+    ["year", "name", "catalogNumber"]
+  );
+  const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
+  const catalogNumber = searchParams.get("catalogNumber") ?? "";
+
+  const filters: IssueListFilters = useMemo(
+    () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
+      catalogVendorId: catalogVendorId || undefined,
+      catalogNumber: catalogNumber || undefined,
+      sortBy,
+      sortDir,
+    }),
+    [filterAreaIds, search, catalogVendorId, catalogNumber, sortBy, sortDir]
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      }
+      const qs = params.toString();
+      router.push(`/c/${collectionSlug}/issues${qs ? `?${qs}` : ""}`);
+    },
+    [router, collectionSlug, searchParams]
+  );
+
+  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
+    const seen = new Map<string, CatalogVendorOption>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            name: entry.vendorName,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [areas]);
+
   const {
     data,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
-  } = useIssuesInfinite(collectionId, filterAreaIds);
+  } = useIssuesInfinite(collectionId, filters);
 
   const allIssues = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -512,11 +572,11 @@ export function IssuesListPanel({
   }
 
   function handleNavigateFilter(areaId: string | null) {
-    if (areaId) {
-      router.push(`/c/${collectionSlug}/issues?areaId=${areaId}`);
-    } else {
-      router.push(`/c/${collectionSlug}/issues`);
-    }
+    const params = new URLSearchParams(searchParams.toString());
+    if (areaId) params.set("areaId", areaId);
+    else params.delete("areaId");
+    const qs = params.toString();
+    router.push(`/c/${collectionSlug}/issues${qs ? `?${qs}` : ""}`);
   }
 
   function handleCreateIssueSubmit(areaId: string, fd: FormData) {
@@ -577,68 +637,38 @@ export function IssuesListPanel({
         }}
       >
         {/* Toolbar */}
-        <div
-          style={{
-            display: "flex",
-            gap: "0.75rem",
-            padding: "0.875rem 1.25rem",
-            borderBottom: "1px solid var(--color-border)",
-            background: "var(--color-bg-elevated)",
-          }}
+        <ListToolbar
+          search={search}
+          onSearchChange={(v) => updateParams({ search: v })}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={(sb, sd) => { persistSort(sb as IssueSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}
+          sortOptions={ISSUE_SORT_OPTIONS}
+          catalogVendors={catalogVendors}
+          catalogVendorId={catalogVendorId}
+          catalogNumber={catalogNumber}
+          onCatalogSearchChange={(vid, num) =>
+            updateParams({ catalogVendorId: vid, catalogNumber: num })
+          }
         >
           <button
             type="button"
             onClick={() => openDialog({ kind: "create-issue" })}
             style={{
-              padding: "0.4rem 0.875rem",
+              padding: "0.375rem 0.875rem",
               background: "var(--color-action-primary)",
               color: "#fff",
               border: "none",
               borderRadius: "0.375rem",
-              fontSize: "0.875rem",
+              fontSize: "0.8125rem",
               fontWeight: 500,
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
             + Add issue
           </button>
-          {filterAreaId && areaById.has(filterAreaId) && (
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Filtered by:
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {areaById.get(filterAreaId)!.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleNavigateFilter(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.8125rem",
-                  padding: "0 0.125rem",
-                }}
-                title="Clear filter"
-              >
-                ✕
-              </button>
-            </span>
-          )}
-        </div>
+        </ListToolbar>
 
         {/* Issues list */}
         {isLoading && (
@@ -661,9 +691,11 @@ export function IssuesListPanel({
               fontSize: "0.9375rem",
             }}
           >
-            {filterAreaId
-              ? "No issues in this area."
-              : "No issues yet. Add one to get started."}
+            {search || catalogNumber
+              ? "No issues match your search."
+              : filterAreaId
+                ? "No issues in this area."
+                : "No issues yet. Add one to get started."}
           </div>
         )}
 

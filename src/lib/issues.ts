@@ -174,6 +174,8 @@ export async function listAllIssues(
 
 // ── Paginated queries (used by API routes) ─────────────────────────────────
 
+export type IssueSortBy = "year" | "name" | "catalogNumber";
+
 export interface IssueListItem {
   id: string;
   collectionId: string;
@@ -229,40 +231,145 @@ function toIssueListItem(issue: {
   };
 }
 
+function parseNumericCatalog(val: string | null | undefined): number {
+  if (!val) return Number.MAX_SAFE_INTEGER;
+  const n = parseInt(val, 10);
+  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+}
+
+export interface IssueListFilterOpts {
+  areaIds?: string[];
+  offset?: number;
+  pageSize?: number;
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  sortBy?: IssueSortBy;
+  sortDir?: "asc" | "desc";
+}
+
 export async function listIssuesPaginated(
   ownerId: string,
   collectionId: string,
-  opts: {
-    areaIds?: string[];
-    cursor?: string;
-    pageSize?: number;
-  }
+  opts: IssueListFilterOpts
 ): Promise<PaginatedIssuesResult> {
   await assertCollectionOwner(ownerId, collectionId);
   const pageSize = opts.pageSize ?? 50;
+  const offset = opts.offset ?? 0;
+  const dir = opts.sortDir ?? "asc";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+
+  if (opts.areaIds && opts.areaIds.length > 0) {
+    conditions.push({ collectionAreaId: { in: opts.areaIds } });
+  }
+
+  if (opts.search) {
+    const s = opts.search;
+    conditions.push({
+      OR: [
+        { name: { contains: s, mode: "insensitive" } },
+        { members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } },
+        { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
+        { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } },
+      ],
+    });
+  }
+
+  if (opts.catalogVendorId && opts.catalogNumber) {
+    conditions.push({
+      OR: [
+        { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, firstNumber: opts.catalogNumber } } },
+        { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, lastNumber: opts.catalogNumber } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, number: opts.catalogNumber } } } } } },
+      ],
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {
+    collectionId,
+    ...(conditions.length === 1 ? conditions[0] : conditions.length > 1 ? { AND: conditions } : {}),
+  };
+
+  if (opts.sortBy === "catalogNumber") {
+    const allIds = await prisma.issue.findMany({
+      where,
+      select: {
+        id: true,
+        catalogNumbers: { select: { firstNumber: true } },
+      },
+    });
+    allIds.sort((a, b) => {
+      const aNum = parseNumericCatalog(a.catalogNumbers[0]?.firstNumber);
+      const bNum = parseNumericCatalog(b.catalogNumbers[0]?.firstNumber);
+      const cmp = aNum - bNum;
+      return dir === "desc" ? -cmp : cmp;
+    });
+    const pageIds = allIds.slice(offset, offset + pageSize + 1).map((r) => r.id);
+    const hasMore = pageIds.length > pageSize;
+    const finalIds = hasMore ? pageIds.slice(0, pageSize) : pageIds;
+
+    const issues = await prisma.issue.findMany({
+      where: { id: { in: finalIds } },
+      select: ISSUE_LIST_SELECT,
+    });
+    const idOrder = new Map(finalIds.map((id, i) => [id, i]));
+    issues.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+    const items = issues.map(toIssueListItem);
+    const nextCursor = hasMore ? String(offset + pageSize) : null;
+    return { items, nextCursor };
+  }
+
+  const orderBy =
+    opts.sortBy === "name"
+      ? [{ name: dir }, { id: "asc" as const }]
+      : opts.sortBy === "year"
+        ? [{ year: dir }, { name: "asc" as const }, { id: "asc" as const }]
+        : [{ year: dir }, { name: "asc" as const }, { createdAt: "asc" as const }];
+
   const issues = await prisma.issue.findMany({
-    where: {
-      collectionId,
-      ...(opts.areaIds && opts.areaIds.length > 0
-        ? { collectionAreaId: { in: opts.areaIds } }
-        : {}),
-    },
-    orderBy: [
-      { collectionAreaId: "asc" },
-      { year: "asc" },
-      { name: "asc" },
-      { createdAt: "asc" },
-    ],
+    where,
+    orderBy,
     select: ISSUE_LIST_SELECT,
     take: pageSize + 1,
-    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    skip: offset,
   });
 
   const hasMore = issues.length > pageSize;
   const items = (hasMore ? issues.slice(0, pageSize) : issues).map(toIssueListItem);
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const nextCursor = hasMore ? String(offset + pageSize) : null;
 
   return { items, nextCursor };
+}
+
+export interface IssueSearchItem {
+  id: string;
+  name: string | null;
+  year: number | null;
+}
+
+export async function searchIssues(
+  ownerId: string,
+  collectionId: string,
+  query: string,
+  areaIds?: string[]
+): Promise<IssueSearchItem[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const issues = await prisma.issue.findMany({
+    where: {
+      collectionId,
+      ...(areaIds && areaIds.length > 0 ? { collectionAreaId: { in: areaIds } } : {}),
+      name: { contains: query, mode: "insensitive" },
+    },
+    select: { id: true, name: true, year: true },
+    orderBy: [{ name: "asc" }, { year: "asc" }],
+    take: 20,
+  });
+  return issues;
 }
 
 export async function listIssueMembers(

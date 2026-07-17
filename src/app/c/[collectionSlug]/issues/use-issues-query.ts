@@ -5,32 +5,46 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { IssueListItem, StampNodeData } from "@/lib/issues";
+import type { IssueListItem, IssueSortBy, StampNodeData } from "@/lib/issues";
 
 interface IssuesPage {
   items: IssueListItem[];
   nextCursor: string | null;
 }
 
+export interface IssueListFilters {
+  areaIds?: string[];
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  sortBy?: IssueSortBy;
+  sortDir?: "asc" | "desc";
+}
+
 export const issueKeys = {
   all: (collectionId: string) => ["issues", collectionId] as const,
-  list: (collectionId: string, areaIds?: string[]) =>
-    ["issues", collectionId, "list", areaIds ?? "all"] as const,
+  list: (collectionId: string, filters: IssueListFilters) =>
+    ["issues", collectionId, "list", filters] as const,
   members: (collectionId: string, issueId: string) =>
     ["issues", collectionId, "members", issueId] as const,
 };
 
 export function useIssuesInfinite(
   collectionId: string,
-  areaIds?: string[]
+  filters: IssueListFilters
 ) {
   return useInfiniteQuery<IssuesPage>({
-    queryKey: issueKeys.list(collectionId, areaIds),
+    queryKey: issueKeys.list(collectionId, filters),
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
-      if (pageParam) params.set("cursor", pageParam as string);
-      if (areaIds && areaIds.length > 0)
-        params.set("areaIds", areaIds.join(","));
+      if (pageParam) params.set("offset", pageParam as string);
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.sortBy) params.set("sortBy", filters.sortBy);
+      if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
         `/api/collections/${collectionId}/issues?${params.toString()}`
       );

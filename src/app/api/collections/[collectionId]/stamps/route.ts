@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { listStampsPaginated } from "@/lib/stamps";
+import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
+
+const VALID_SORT_BY = new Set<StampSortBy>(["issueDate", "catalogNumber", "name", "issueName"]);
+const VALID_SORT_DIR = new Set(["asc", "desc"]);
 
 export async function GET(
   request: NextRequest,
@@ -13,15 +16,30 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const searchParams = request.nextUrl.searchParams;
-  const cursor = searchParams.get("cursor") ?? undefined;
-  const areaIdsParam = searchParams.get("areaIds");
+  const sp = request.nextUrl.searchParams;
+  const offsetParam = sp.get("offset");
+  const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+  const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
+  const search = sp.get("search") || undefined;
+  const catalogVendorId = sp.get("catalogVendorId") || undefined;
+  const catalogNumber = sp.get("catalogNumber") || undefined;
+  const issueId = sp.get("issueId") || undefined;
+  const sortByParam = sp.get("sortBy") as StampSortBy | null;
+  const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
+  const sortDirParam = sp.get("sortDir");
+  const sortDir = sortDirParam && VALID_SORT_DIR.has(sortDirParam) ? (sortDirParam as "asc" | "desc") : undefined;
 
   try {
     const result = await listStampsPaginated(session.user.id, collectionId, {
-      cursor,
+      offset,
       areaIds,
+      search,
+      catalogVendorId,
+      catalogNumber,
+      issueId,
+      sortBy,
+      sortDir,
       pageSize: 50,
     });
     return NextResponse.json(result);

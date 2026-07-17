@@ -285,33 +285,130 @@ function toStampListItem(stamp: {
   };
 }
 
+export type StampSortBy = "issueDate" | "catalogNumber" | "name" | "issueName";
+
+export interface StampListFilterOpts {
+  areaIds?: string[];
+  offset?: number;
+  pageSize?: number;
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  issueId?: string;
+  sortBy?: StampSortBy;
+  sortDir?: "asc" | "desc";
+}
+
+function parseNumericCatalog(val: string | null | undefined): number {
+  if (!val) return Number.MAX_SAFE_INTEGER;
+  const n = parseInt(val, 10);
+  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+}
+
 export async function listStampsPaginated(
   ownerId: string,
   collectionId: string,
-  opts: {
-    areaIds?: string[];
-    cursor?: string;
-    pageSize?: number;
-  }
+  opts: StampListFilterOpts
 ): Promise<PaginatedStampsResult> {
   await assertCollectionOwner(ownerId, collectionId);
   const pageSize = opts.pageSize ?? 50;
+  const offset = opts.offset ?? 0;
+  const dir = opts.sortDir ?? "asc";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+
+  if (opts.areaIds && opts.areaIds.length > 0) {
+    conditions.push({ stampAreaLinks: { some: { collectionAreaId: { in: opts.areaIds } } } });
+  }
+
+  if (opts.issueId) {
+    conditions.push({ issueMemberships: { some: { issueId: opts.issueId } } });
+  }
+
+  if (opts.search) {
+    const s = opts.search;
+    conditions.push({
+      OR: [
+        { name: { contains: s, mode: "insensitive" } },
+        { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
+        { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (opts.catalogVendorId && opts.catalogNumber) {
+    conditions.push({
+      catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, number: opts.catalogNumber } },
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {
+    collectionId,
+    ...(conditions.length === 1 ? conditions[0] : conditions.length > 1 ? { AND: conditions } : {}),
+  };
+
+  if (opts.sortBy === "catalogNumber" || opts.sortBy === "issueName") {
+    const selectForSort =
+      opts.sortBy === "catalogNumber"
+        ? { id: true, catalogNumbers: { select: { number: true } } }
+        : { id: true, issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 } };
+
+    const allIds = await prisma.stamp.findMany({
+      where,
+      select: selectForSort as { id: true },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    allIds.sort((a: any, b: any) => {
+      let cmp: number;
+      if (opts.sortBy === "catalogNumber") {
+        const aNum = parseNumericCatalog(a.catalogNumbers?.[0]?.number);
+        const bNum = parseNumericCatalog(b.catalogNumbers?.[0]?.number);
+        cmp = aNum - bNum;
+      } else {
+        const aName: string = a.issueMemberships?.[0]?.issue?.name ?? "";
+        const bName: string = b.issueMemberships?.[0]?.issue?.name ?? "";
+        cmp = aName.localeCompare(bName);
+      }
+      return dir === "desc" ? -cmp : cmp;
+    });
+
+    const pageIds = allIds.slice(offset, offset + pageSize + 1).map((r) => r.id);
+    const hasMore = pageIds.length > pageSize;
+    const finalIds = hasMore ? pageIds.slice(0, pageSize) : pageIds;
+
+    const stamps = await prisma.stamp.findMany({
+      where: { id: { in: finalIds } },
+      select: STAMP_LIST_SELECT,
+    });
+    const idOrder = new Map(finalIds.map((id, i) => [id, i]));
+    stamps.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+    const items = stamps.map(toStampListItem);
+    const nextCursor = hasMore ? String(offset + pageSize) : null;
+    return { items, nextCursor };
+  }
+
+  const orderBy =
+    opts.sortBy === "name"
+      ? [{ name: dir }, { id: "asc" as const }]
+      : opts.sortBy === "issueDate"
+        ? [{ issuedYear: dir }, { issuedMonth: dir }, { issuedDay: dir }, { id: "asc" as const }]
+        : [{ createdAt: dir }];
+
   const stamps = await prisma.stamp.findMany({
-    where: {
-      collectionId,
-      ...(opts.areaIds && opts.areaIds.length > 0
-        ? { stampAreaLinks: { some: { collectionAreaId: { in: opts.areaIds } } } }
-        : {}),
-    },
-    orderBy: [{ createdAt: "asc" }],
+    where,
+    orderBy,
     select: STAMP_LIST_SELECT,
     take: pageSize + 1,
-    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    skip: offset,
   });
 
   const hasMore = stamps.length > pageSize;
   const items = (hasMore ? stamps.slice(0, pageSize) : stamps).map(toStampListItem);
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const nextCursor = hasMore ? String(offset + pageSize) : null;
 
   return { items, nextCursor };
 }
