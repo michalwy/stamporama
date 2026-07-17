@@ -102,10 +102,9 @@ function VendorForm({ defaultName, defaultAbbreviation, isPending }: {
   );
 }
 
-function CatalogNameForm({ defaultName, defaultCurrency, defaultAbbreviation, isPending }: {
+function CatalogNameForm({ defaultName, defaultCurrency, isPending }: {
   defaultName?: string;
   defaultCurrency?: string;
-  defaultAbbreviation?: string | null;
   isPending: boolean;
 }) {
   return (
@@ -122,7 +121,7 @@ function CatalogNameForm({ defaultName, defaultCurrency, defaultAbbreviation, is
           style={INPUT_STYLE}
         />
       </div>
-      <div style={{ marginBottom: "1rem" }}>
+      <div>
         <LabelWithError htmlFor="f-name-currency">Currency</LabelWithError>
         <select
           id="f-name-currency"
@@ -135,18 +134,6 @@ function CatalogNameForm({ defaultName, defaultCurrency, defaultAbbreviation, is
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
-      </div>
-      <div>
-        <LabelWithError htmlFor="f-name-abbr">Abbreviation override (optional)</LabelWithError>
-        <input
-          id="f-name-abbr"
-          name="abbreviation"
-          type="text"
-          defaultValue={defaultAbbreviation ?? ""}
-          disabled={isPending}
-          placeholder="Leave blank to use vendor abbreviation"
-          style={{ ...INPUT_STYLE, maxWidth: "12rem" }}
-        />
       </div>
     </>
   );
@@ -284,9 +271,6 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
                   {name.name}
                 </span>
                 <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>{name.currency}</span>
-                <span style={abbrBadgeStyle} title="Effective abbreviation">
-                  {name.abbreviation ?? vendor.abbreviation}
-                </span>
                 <button type="button" onClick={() => openDialog({ kind: "edit-name", vendor, name })} style={rowBtnStyle}>Edit</button>
                 <button type="button" onClick={() => openDialog({ kind: "delete-name", name })} style={rowBtnDangerStyle}>Delete</button>
               </div>
@@ -401,7 +385,6 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
               <CatalogNameForm
                 defaultName={dialog.name.name}
                 defaultCurrency={dialog.name.currency}
-                defaultAbbreviation={dialog.name.abbreviation}
                 isPending={isPending}
               />
             </DialogBody>

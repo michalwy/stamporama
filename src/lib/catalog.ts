@@ -46,7 +46,6 @@ async function resolveEditionCollection(editionId: string): Promise<string> {
 export interface CatalogNameFlat {
   id: string;
   name: string;
-  abbreviation: string | null;
   vendorName: string;
   vendorAbbreviation: string;
 }
@@ -60,7 +59,6 @@ export interface CatalogNameData {
   id: string;
   name: string;
   currency: string;
-  abbreviation: string | null;
   catalogEditions: CatalogEditionData[];
 }
 
@@ -82,14 +80,12 @@ export async function getCatalogNames(
     select: {
       id: true,
       name: true,
-      abbreviation: true,
       vendor: { select: { name: true, abbreviation: true } },
     },
   });
   return names.map((n) => ({
     id: n.id,
     name: n.name,
-    abbreviation: n.abbreviation,
     vendorName: n.vendor.name,
     vendorAbbreviation: n.vendor.abbreviation,
   }));
@@ -113,7 +109,6 @@ export async function getCatalogTree(
           id: true,
           name: true,
           currency: true,
-          abbreviation: true,
           catalogEditions: {
             orderBy: { year: "asc" },
             select: { id: true, year: true },
@@ -155,25 +150,25 @@ export async function deleteCatalogVendor(
 export async function createCatalogName(
   ownerId: string,
   vendorId: string,
-  data: { name: string; currency: string; abbreviation?: string }
+  data: { name: string; currency: string }
 ): Promise<void> {
   const collectionId = await resolveVendorCollection(vendorId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.catalogName.create({
-    data: { vendorId, name: data.name, currency: data.currency, abbreviation: data.abbreviation || null },
+    data: { vendorId, name: data.name, currency: data.currency },
   });
 }
 
 export async function updateCatalogName(
   ownerId: string,
   nameId: string,
-  data: { name: string; currency: string; abbreviation?: string }
+  data: { name: string; currency: string }
 ): Promise<void> {
   const collectionId = await resolveNameCollection(nameId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.catalogName.update({
     where: { id: nameId },
-    data: { name: data.name, currency: data.currency, abbreviation: data.abbreviation || null },
+    data: { name: data.name, currency: data.currency },
   });
 }
 

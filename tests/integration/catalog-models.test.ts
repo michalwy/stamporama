@@ -84,21 +84,13 @@ describe("CatalogName persistence", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("creates a catalog name with currency and no abbreviation", async () => {
+  it("creates a catalog name with name and currency", async () => {
     const cn = await prisma.catalogName.create({
       data: { vendorId, name: "Michel Deutschland", currency: "EUR" },
     });
     assert.equal(cn.name, "Michel Deutschland");
     assert.equal(cn.currency, "EUR");
-    assert.equal(cn.abbreviation, null);
     assert.equal(cn.vendorId, vendorId);
-  });
-
-  it("stores an optional abbreviation override", async () => {
-    const cn = await prisma.catalogName.create({
-      data: { vendorId, name: "Michel Spezial", currency: "EUR", abbreviation: "MiSp" },
-    });
-    assert.equal(cn.abbreviation, "MiSp");
   });
 
   it("cascades delete when vendor is deleted", async () => {

@@ -54,11 +54,10 @@ model CatalogVendor {
 }
 
 model CatalogName {
-  id           String  @id @default(cuid())
-  vendorId     String
-  name         String
-  currency     String
-  abbreviation String?
+  id       String @id @default(cuid())
+  vendorId String
+  name     String
+  currency String
 
   vendor                 CatalogVendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   catalogEditions        CatalogEdition[]

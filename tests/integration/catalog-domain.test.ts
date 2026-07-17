@@ -70,7 +70,6 @@ describe("getCatalogTree", () => {
     const cn = tree[0].catalogNames[0];
     assert.equal(cn.name, "Michel Deutschland");
     assert.equal(cn.currency, "EUR");
-    assert.equal(cn.abbreviation, null);
     assert.equal(cn.catalogEditions.length, 2);
     assert.deepEqual(
       cn.catalogEditions.map((e) => e.year),
@@ -217,20 +216,12 @@ describe("createCatalogName", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("creates a catalog name with no abbreviation override", async () => {
+  it("creates a catalog name with name and currency", async () => {
     await createCatalogName(userId, vendorId, { name: "Michel Deutschland", currency: "EUR" });
     const names = await prisma.catalogName.findMany({ where: { vendorId } });
     assert.equal(names.length, 1);
     assert.equal(names[0].name, "Michel Deutschland");
     assert.equal(names[0].currency, "EUR");
-    assert.equal(names[0].abbreviation, null);
-  });
-
-  it("creates a catalog name with abbreviation override", async () => {
-    await createCatalogName(userId, vendorId, { name: "Michel Spezial", currency: "EUR", abbreviation: "MiSp" });
-    const names = await prisma.catalogName.findMany({ where: { vendorId, name: "Michel Spezial" } });
-    assert.equal(names.length, 1);
-    assert.equal(names[0].abbreviation, "MiSp");
   });
 
   it("throws when vendor does not belong to user", async () => {
@@ -311,12 +302,11 @@ describe("updateCatalogName", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("updates name, currency, and abbreviation", async () => {
-    await updateCatalogName(userId, nameId, { name: "Michel BRD", currency: "DEM", abbreviation: "MiBRD" });
+  it("updates name and currency", async () => {
+    await updateCatalogName(userId, nameId, { name: "Michel BRD", currency: "DEM" });
     const cn = await prisma.catalogName.findUniqueOrThrow({ where: { id: nameId } });
     assert.equal(cn.name, "Michel BRD");
     assert.equal(cn.currency, "DEM");
-    assert.equal(cn.abbreviation, "MiBRD");
   });
 
   it("throws when name does not belong to user", async () => {

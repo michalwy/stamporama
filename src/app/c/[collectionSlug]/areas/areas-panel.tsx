@@ -584,7 +584,7 @@ export function AreasPanel({
                     title={isPrimaryInherited ? "Primary catalog (inherited)" : "Primary catalog"}
                   >
                     {(() => {
-                      const abbr = primaryCatalog.abbreviation ?? primaryCatalog.vendorAbbreviation;
+                      const abbr = primaryCatalog.vendorAbbreviation;
                       return primaryPrefix ? `${abbr}·${primaryPrefix}` : abbr;
                     })()}
                   </span>
@@ -595,9 +595,7 @@ export function AreasPanel({
                   <span style={{ display: "flex", gap: "0.25rem" }}>
                     {otherPrefixEntries.map((entry) => {
                       const cn = catalogById.get(entry.catalogNameId);
-                      const abbr = cn
-                        ? (cn.abbreviation ?? cn.vendorAbbreviation)
-                        : entry.vendorName;
+                      const abbr = cn ? cn.vendorAbbreviation : entry.vendorName;
                       const isInherited = !area.catalogEntries.some(
                         (e) => e.catalogNameId === entry.catalogNameId
                       );

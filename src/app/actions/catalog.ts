@@ -81,11 +81,10 @@ export async function createCatalogNameAction(
   const session = await getSession();
   const name = ((formData.get("name") as string | null) ?? "").trim();
   const currency = ((formData.get("currency") as string | null) ?? "").trim();
-  const abbreviation = ((formData.get("abbreviation") as string | null) ?? "").trim();
   if (!name) return { status: "error", message: "Name is required." };
   if (!currency) return { status: "error", message: "Currency is required." };
   try {
-    await createCatalogName(session.user.id, vendorId, { name, currency, abbreviation: abbreviation || undefined });
+    await createCatalogName(session.user.id, vendorId, { name, currency });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create catalog name. Please try again." };
@@ -99,11 +98,10 @@ export async function updateCatalogNameAction(
   const session = await getSession();
   const name = ((formData.get("name") as string | null) ?? "").trim();
   const currency = ((formData.get("currency") as string | null) ?? "").trim();
-  const abbreviation = ((formData.get("abbreviation") as string | null) ?? "").trim();
   if (!name) return { status: "error", message: "Name is required." };
   if (!currency) return { status: "error", message: "Currency is required." };
   try {
-    await updateCatalogName(session.user.id, nameId, { name, currency, abbreviation: abbreviation || undefined });
+    await updateCatalogName(session.user.id, nameId, { name, currency });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update catalog name. Please try again." };
