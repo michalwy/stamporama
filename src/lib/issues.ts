@@ -172,6 +172,116 @@ export async function listAllIssues(
   return issues.map(toIssueData);
 }
 
+// ── Paginated queries (used by API routes) ─────────────────────────────────
+
+export interface IssueListItem {
+  id: string;
+  collectionId: string;
+  collectionAreaId: string;
+  name: string | null;
+  year: number | null;
+  isAutoCreated: boolean;
+  createdAt: string;
+  catalogNumbers: IssueCatalogNumberData[];
+  memberCount: number;
+  requiredCount: number;
+}
+
+export interface PaginatedIssuesResult {
+  items: IssueListItem[];
+  nextCursor: string | null;
+}
+
+const ISSUE_LIST_SELECT = {
+  id: true,
+  collectionId: true,
+  collectionAreaId: true,
+  name: true,
+  year: true,
+  isAutoCreated: true,
+  createdAt: true,
+  catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+  members: { select: { requiredForCompleteness: true } },
+} as const;
+
+function toIssueListItem(issue: {
+  id: string;
+  collectionId: string;
+  collectionAreaId: string;
+  name: string | null;
+  year: number | null;
+  isAutoCreated: boolean;
+  createdAt: Date;
+  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
+  members: { requiredForCompleteness: boolean }[];
+}): IssueListItem {
+  return {
+    id: issue.id,
+    collectionId: issue.collectionId,
+    collectionAreaId: issue.collectionAreaId,
+    name: issue.name,
+    year: issue.year,
+    isAutoCreated: issue.isAutoCreated,
+    createdAt: issue.createdAt.toISOString(),
+    catalogNumbers: issue.catalogNumbers,
+    memberCount: issue.members.length,
+    requiredCount: issue.members.filter((m) => m.requiredForCompleteness).length,
+  };
+}
+
+export async function listIssuesPaginated(
+  ownerId: string,
+  collectionId: string,
+  opts: {
+    areaIds?: string[];
+    cursor?: string;
+    pageSize?: number;
+  }
+): Promise<PaginatedIssuesResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = opts.pageSize ?? 50;
+  const issues = await prisma.issue.findMany({
+    where: {
+      collectionId,
+      ...(opts.areaIds && opts.areaIds.length > 0
+        ? { collectionAreaId: { in: opts.areaIds } }
+        : {}),
+    },
+    orderBy: [
+      { collectionAreaId: "asc" },
+      { year: "asc" },
+      { name: "asc" },
+      { createdAt: "asc" },
+    ],
+    select: ISSUE_LIST_SELECT,
+    take: pageSize + 1,
+    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = issues.length > pageSize;
+  const items = (hasMore ? issues.slice(0, pageSize) : issues).map(toIssueListItem);
+  const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+  return { items, nextCursor };
+}
+
+export async function listIssueMembers(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<StampNodeData[]> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  const members = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: MEMBER_SELECT,
+  });
+  return members.map(toStampNode);
+}
+
+// ── Mutations ───────────────────────────────────────────────────────────────
+
 export async function createIssue(
   ownerId: string,
   collectionId: string,

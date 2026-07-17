@@ -3,7 +3,6 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
-import { listIssuesForArea } from "@/lib/issues";
 import { IssuesPanel } from "./issues-panel";
 
 interface AreaDetailPageProps {
@@ -19,10 +18,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [areas, issues] = await Promise.all([
-    getCollectionAreas(session.user.id, collection.id),
-    listIssuesForArea(session.user.id, collection.id, areaId),
-  ]);
+  const areas = await getCollectionAreas(session.user.id, collection.id);
 
   const area = areas.find((a) => a.id === areaId);
   if (!area) notFound();
@@ -55,7 +51,6 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         area={area}
-        initialIssues={issues}
       />
     </div>
   );

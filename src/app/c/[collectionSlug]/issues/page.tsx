@@ -3,7 +3,6 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
-import { listAllIssues } from "@/lib/issues";
 import { IssuesListPanel } from "./issues-list-panel";
 
 interface IssuesPageProps {
@@ -11,7 +10,10 @@ interface IssuesPageProps {
   searchParams: Promise<{ areaId?: string }>;
 }
 
-export default async function IssuesPage({ params, searchParams }: IssuesPageProps) {
+export default async function IssuesPage({
+  params,
+  searchParams,
+}: IssuesPageProps) {
   const { collectionSlug } = await params;
   const { areaId: filterAreaId } = await searchParams;
 
@@ -23,7 +25,6 @@ export default async function IssuesPage({ params, searchParams }: IssuesPagePro
 
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
-  // Resolve descendant area IDs for the filter (include selected area + all its descendants)
   function collectDescendantIds(rootId: string): string[] {
     const ids: string[] = [rootId];
     for (const a of areas) {
@@ -32,9 +33,9 @@ export default async function IssuesPage({ params, searchParams }: IssuesPagePro
     return ids;
   }
 
-  const filterAreaIds = filterAreaId ? collectDescendantIds(filterAreaId) : undefined;
-
-  const issues = await listAllIssues(session.user.id, collection.id, filterAreaIds);
+  const filterAreaIds = filterAreaId
+    ? collectDescendantIds(filterAreaId)
+    : undefined;
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -52,8 +53,8 @@ export default async function IssuesPage({ params, searchParams }: IssuesPagePro
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         areas={areas}
-        initialIssues={issues}
         filterAreaId={filterAreaId ?? null}
+        filterAreaIds={filterAreaIds}
       />
     </div>
   );

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
+import { QueryProvider } from "@/app/query-provider";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -112,7 +113,9 @@ export default async function CollectionLayout({
           </a>
         </div>
       </aside>
-      <main style={{ flex: 1, overflow: "auto" }}>{children}</main>
+      <main style={{ flex: 1, overflow: "auto" }}>
+          <QueryProvider>{children}</QueryProvider>
+        </main>
     </div>
   );
 }

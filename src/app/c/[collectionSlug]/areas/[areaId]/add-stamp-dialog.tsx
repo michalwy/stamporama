@@ -7,7 +7,8 @@ import {
   DialogActions,
   LabelWithError,
 } from "@/app/dialog-shell";
-import type { IssueData } from "@/lib/issues";
+import { useIssueMembers } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import type { IssueListItem } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -31,13 +32,11 @@ const FORM_STYLE: React.CSSProperties = {
 };
 
 interface AddStampDialogProps {
-  issues: IssueData[];
+  collectionId: string;
+  issues: IssueListItem[];
   areaVendors: AreaCatalogEntry[];
-  /** Pre-filled issue — skips issue step if set */
   prefilledIssueId?: string | null;
-  /** Pre-filled parent stamp — skips parent step if set */
   prefilledParentStampId?: string | null;
-  /** Default catalog numbers (prefilled from parent stamp) */
   defaultCatalogNumbers?: { catalogVendorId: string; number: string }[];
   isPending: boolean;
   error?: string;
@@ -46,6 +45,7 @@ interface AddStampDialogProps {
 }
 
 export function AddStampDialog({
+  collectionId,
   issues,
   areaVendors,
   prefilledIssueId,
@@ -56,7 +56,6 @@ export function AddStampDialog({
   onClose,
   onSubmit,
 }: AddStampDialogProps) {
-  // Deduplicate vendors by catalogVendorId for catalog number inputs
   const vendors = Array.from(
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );
@@ -76,13 +75,17 @@ export function AddStampDialog({
     prefilledParentStampId ?? ""
   );
 
-  // Default required=true for first-level stamps (no prefilled parent)
   const [requiredForCompleteness, setRequiredForCompleteness] = useState(
     !prefilledParentStampId
   );
 
-  const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? null;
-  const stampOptions = selectedIssue ? selectedIssue.members : [];
+  const needsMembers = !!selectedIssueId && !autoCreateIssue && !prefilledParentStampId;
+  const { data: members } = useIssueMembers(
+    collectionId,
+    selectedIssueId || "",
+    needsMembers
+  );
+  const stampOptions = members ?? [];
 
   const showIssueStep = !prefilledIssueId;
 
@@ -291,10 +294,10 @@ export function AddStampDialog({
                   placeholder="Year"
                   min={1840}
                   max={2100}
-                  defaultValue={(() => {
-                    const issue = issues.find((i) => i.id === selectedIssueId);
-                    return issue?.year ?? undefined;
-                  })()}
+                  defaultValue={
+                    issues.find((i) => i.id === selectedIssueId)?.year ??
+                    undefined
+                  }
                   style={{ ...INPUT_STYLE, flex: 1 }}
                 />
               </div>
