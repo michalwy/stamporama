@@ -7,10 +7,11 @@ import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } f
 export interface DialogShellProps {
   title: string;
   onClose: () => void;
+  minHeight?: string;
   children: ReactNode;
 }
 
-export function DialogShell({ title, onClose, children }: DialogShellProps) {
+export function DialogShell({ title, onClose, minHeight, children }: DialogShellProps) {
   const headingId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +60,7 @@ export function DialogShell({ title, onClose, children }: DialogShellProps) {
           width: "100%",
           maxWidth: "32rem",
           maxHeight: "calc(100vh - 4rem)",
+          minHeight,
           display: "flex",
           flexDirection: "column",
           background: "var(--color-bg-elevated)",
