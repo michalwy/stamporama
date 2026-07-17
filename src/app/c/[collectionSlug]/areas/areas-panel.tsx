@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
+import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 
 interface AreasPanelProps {
   collectionId: string;
@@ -91,17 +92,6 @@ function buildFlatTree(areas: CollectionAreaData[]): TreeNode[] {
   return collectChildren(null, 0);
 }
 
-function getDepthOf(areaId: string, byId: Map<string, CollectionAreaData>): number {
-  let d = 0;
-  let current = byId.get(areaId);
-  while (current?.parentId) {
-    d++;
-    current = byId.get(current.parentId);
-    if (d > 50) break;
-  }
-  return d;
-}
-
 function getDescendantIds(areas: CollectionAreaData[], areaId: string): Set<string> {
   const result = new Set<string>();
   const queue = [areaId];
@@ -115,10 +105,6 @@ function getDescendantIds(areas: CollectionAreaData[], areaId: string): Set<stri
     }
   }
   return result;
-}
-
-function emDashPrefix(depth: number): string {
-  return depth === 0 ? "" : "— ".repeat(Math.min(depth, 4));
 }
 
 // ── Shared styles ────────────────────────────────────────────────────────────
@@ -217,12 +203,6 @@ function CollectionAreaForm({
   catalogNames,
   isPending,
 }: CollectionAreaFormProps) {
-  const byId = useMemo(() => {
-    const m = new Map<string, CollectionAreaData>();
-    for (const a of areas) m.set(a.id, a);
-    return m;
-  }, [areas]);
-
   const catalogById = useMemo(() => {
     const m = new Map<string, CatalogNameFlat>();
     for (const c of catalogNames) m.set(c.id, c);
@@ -234,13 +214,14 @@ function CollectionAreaForm({
     [areas, currentAreaId]
   );
 
-  const parentOptions = areas
-    .filter((a) => a.id !== currentAreaId && !excludedIds.has(a.id))
-    .map((a) => ({ area: a, depth: getDepthOf(a.id, byId) }))
-    .sort((a, b) => {
-      if (a.depth !== b.depth) return a.depth - b.depth;
-      return a.area.name.localeCompare(b.area.name);
-    });
+  const selectableAreas = useMemo(
+    () => areas.filter((a) => a.id !== currentAreaId && !excludedIds.has(a.id)),
+    [areas, currentAreaId, excludedIds]
+  );
+
+  const selectableTree = useMemo(() => buildAreaTree(selectableAreas), [selectableAreas]);
+
+  const [parentId, setParentId] = useState(defaultParentId ?? "");
 
   const [entries, setEntries] = useState<EntryState[]>(
     (defaultCatalogEntries ?? []).map((e) => ({
@@ -286,21 +267,16 @@ function CollectionAreaForm({
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-parent">Parent area</LabelWithError>
-        <select
-          id="f-area-parent"
+        <LabelWithError htmlFor="f-area-parent-button">Parent area</LabelWithError>
+        <AreaTreeSelect
+          areas={selectableAreas}
+          areaTree={selectableTree}
           name="parentId"
-          defaultValue={defaultParentId ?? ""}
+          selectedId={parentId}
+          onSelectedIdChange={setParentId}
           disabled={isPending}
-          style={INPUT_STYLE}
-        >
-          <option value="">— None (top-level)</option>
-          {parentOptions.map(({ area, depth }) => (
-            <option key={area.id} value={area.id}>
-              {emDashPrefix(depth)}{area.name}
-            </option>
-          ))}
-        </select>
+          noneOptionLabel="— None (top-level)"
+        />
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
