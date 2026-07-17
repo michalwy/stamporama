@@ -44,6 +44,7 @@ interface StampTreeNodeProps {
   depth: number;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
+  isLast: boolean;
   onAddChild: (parentStampId: string) => void;
   onRemove: (stampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
@@ -55,12 +56,14 @@ function StampTreeNode({
   depth,
   primaryVendorId,
   vendorMap,
+  isLast,
   onAddChild,
   onRemove,
   onDelete,
   onMove,
 }: StampTreeNodeProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
   const dateStr = formatIssuedDate(
     node.issuedDay,
@@ -84,9 +87,14 @@ function StampTreeNode({
   return (
     <>
       <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
           fontSize: "0.8125rem",
+          background: hovered ? "var(--color-bg-row-hover)" : undefined,
+          transition: "background 0.1s ease",
+          borderBottom: isLast ? undefined : "1px solid var(--color-border)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -202,13 +210,14 @@ function StampTreeNode({
         )}
       </div>
       {!collapsed &&
-        children.map((child) => (
+        children.map((child, i) => (
           <StampTreeNode
             key={child.node.stampId}
             treeNode={child}
             depth={depth + 1}
             primaryVendorId={primaryVendorId}
             vendorMap={vendorMap}
+            isLast={isLast && i === children.length - 1}
             onAddChild={onAddChild}
             onRemove={onRemove}
             onDelete={onDelete}
@@ -260,6 +269,7 @@ export function IssueRow({
   defaultExpanded,
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
+  const [hovered, setHovered] = useState(false);
 
   const { data: members, isLoading: membersLoading } = useIssueMembers(
     collectionId,
@@ -285,9 +295,12 @@ export function IssueRow({
       }}
     >
       <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           padding: "0.875rem 1.25rem",
-          background: "var(--color-bg-elevated)",
+          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          transition: "background 0.1s ease",
         }}
       >
         <div
@@ -492,13 +505,14 @@ export function IssueRow({
               </button>
             </div>
           ) : (
-            stampTree.map((treeNode) => (
+            stampTree.map((treeNode, i) => (
               <StampTreeNode
                 key={treeNode.node.stampId}
                 treeNode={treeNode}
                 depth={0}
                 primaryVendorId={primaryVendorId}
                 vendorMap={vendorMap}
+                isLast={i === stampTree.length - 1}
                 onAddChild={(parentStampId) => {
                   const parentNode = members?.find(
                     (m) => m.stampId === parentStampId

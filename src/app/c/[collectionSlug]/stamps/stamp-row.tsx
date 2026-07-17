@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { StampListItem } from "@/lib/stamps";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
@@ -45,6 +46,7 @@ export function StampRow({
   onEdit,
   onDelete,
 }: StampRowProps) {
+  const [hovered, setHovered] = useState(false);
   const dateStr = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
   const areaPath = buildAreaPath(areas, stamp.areaId);
 
@@ -65,9 +67,12 @@ export function StampRow({
       }}
     >
       <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           padding: "0.75rem 1.25rem",
-          background: "var(--color-bg-elevated)",
+          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          transition: "background 0.1s ease",
         }}
       >
         {/* Line 1: name + actions (only if name exists) */}
