@@ -63,7 +63,6 @@ model CatalogName {
   catalogEditions        CatalogEdition[]
   collectionAreaCatalogs CollectionAreaCatalog[]
   primaryForAreas        CollectionArea[]        @relation("CollectionAreaPrimaryCatalog")
-  issues                 Issue[]
 
   @@map("catalog_name")
 }
@@ -96,6 +95,7 @@ model CollectionArea {
   primaryCatalogName     CatalogName?           @relation("CollectionAreaPrimaryCatalog", fields: [primaryCatalogNameId], references: [id])
   collectionAreaCatalogs CollectionAreaCatalog[]
   collectionAreaVendors  CollectionAreaVendor[]
+  issues                 Issue[]
 
   @@map("collection_area")
 }
@@ -180,16 +180,17 @@ model CollectionAreaVendor {
 }
 
 model Issue {
-  id            String   @id @default(cuid())
-  collectionId  String
-  catalogNameId String
-  name          String?
-  isAutoCreated Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  id               String   @id @default(cuid())
+  collectionId     String
+  collectionAreaId String
+  name             String?
+  year             Int?
+  isAutoCreated    Boolean  @default(false)
+  createdAt        DateTime @default(now())
 
-  collection  Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  catalogName CatalogName   @relation(fields: [catalogNameId], references: [id], onDelete: Cascade)
-  members     IssueMember[]
+  collection     Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  members        IssueMember[]
 
   @@map("issue")
 }

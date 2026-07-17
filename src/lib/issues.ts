@@ -1,0 +1,306 @@
+import "server-only";
+import { prisma } from "./db";
+
+async function assertCollectionOwner(
+  ownerId: string,
+  collectionId: string
+): Promise<void> {
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+}
+
+async function resolveIssueArea(issueId: string): Promise<{ collectionId: string; collectionAreaId: string }> {
+  const issue = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { collectionId: true, collectionAreaId: true },
+  });
+  if (!issue) throw new Error("Issue not found.");
+  return issue;
+}
+
+export interface StampNodeData {
+  stampId: string;
+  parentId: string | null;
+  name: string | null;
+  issuedYear: number | null;
+  requiredForCompleteness: boolean;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+}
+
+export interface IssueData {
+  id: string;
+  collectionId: string;
+  collectionAreaId: string;
+  name: string | null;
+  year: number | null;
+  isAutoCreated: boolean;
+  createdAt: Date;
+  members: StampNodeData[];
+  completeness: { required: number; owned: number };
+}
+
+const MEMBER_SELECT = {
+  stampId: true,
+  requiredForCompleteness: true,
+  stamp: {
+    select: {
+      parentId: true,
+      name: true,
+      issuedYear: true,
+      catalogNumbers: { select: { catalogVendorId: true, number: true } },
+    },
+  },
+} as const;
+
+function toStampNode(m: {
+  stampId: string;
+  requiredForCompleteness: boolean;
+  stamp: {
+    parentId: string | null;
+    name: string | null;
+    issuedYear: number | null;
+    catalogNumbers: { catalogVendorId: string; number: string }[];
+  };
+}): StampNodeData {
+  return {
+    stampId: m.stampId,
+    parentId: m.stamp.parentId,
+    name: m.stamp.name,
+    issuedYear: m.stamp.issuedYear,
+    requiredForCompleteness: m.requiredForCompleteness,
+    catalogNumbers: m.stamp.catalogNumbers,
+  };
+}
+
+export async function listIssuesForArea(
+  ownerId: string,
+  collectionId: string,
+  areaId: string
+): Promise<IssueData[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const issues = await prisma.issue.findMany({
+    where: { collectionId, collectionAreaId: areaId },
+    orderBy: [{ year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      collectionId: true,
+      collectionAreaId: true,
+      name: true,
+      year: true,
+      isAutoCreated: true,
+      createdAt: true,
+      members: { select: MEMBER_SELECT },
+    },
+  });
+  return issues.map((issue) => {
+    const required = issue.members.filter((m) => m.requiredForCompleteness).length;
+    return {
+      id: issue.id,
+      collectionId: issue.collectionId,
+      collectionAreaId: issue.collectionAreaId,
+      name: issue.name,
+      year: issue.year,
+      isAutoCreated: issue.isAutoCreated,
+      createdAt: issue.createdAt,
+      members: issue.members.map(toStampNode),
+      completeness: { required, owned: 0 },
+    };
+  });
+}
+
+export async function createIssue(
+  ownerId: string,
+  collectionId: string,
+  areaId: string,
+  data: { name?: string | null; year?: number | null }
+): Promise<{ id: string }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const area = await prisma.collectionArea.findUnique({
+    where: { id: areaId },
+    select: { collectionId: true },
+  });
+  if (!area || area.collectionId !== collectionId) {
+    throw new Error("Collection area not found.");
+  }
+  const created = await prisma.issue.create({
+    data: {
+      collectionId,
+      collectionAreaId: areaId,
+      name: data.name ?? null,
+      year: data.year ?? null,
+    },
+    select: { id: true },
+  });
+  return { id: created.id };
+}
+
+export async function updateIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  data: { name?: string | null; year?: number | null }
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.issue.update({
+    where: { id: issueId },
+    data: { name: data.name ?? null, year: data.year ?? null },
+  });
+}
+
+export async function deleteIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.issue.delete({ where: { id: issueId } });
+}
+
+export interface AddStampData {
+  name?: string | null;
+  issuedYear?: number | null;
+  parentStampId?: string | null;
+  requiredForCompleteness: boolean;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+}
+
+export async function addStampToIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  data: AddStampData
+): Promise<{ stampId: string }> {
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  if (data.parentStampId) {
+    const parentMember = await prisma.issueMember.findUnique({
+      where: { issueId_stampId: { issueId, stampId: data.parentStampId } },
+    });
+    if (!parentMember) {
+      throw new Error("Parent stamp is not a member of this issue.");
+    }
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const stamp = await tx.stamp.create({
+      data: {
+        collectionId,
+        name: data.name ?? null,
+        issuedYear: data.issuedYear ?? null,
+        parentId: data.parentStampId ?? null,
+      },
+      select: { id: true },
+    });
+
+    await tx.stampCollectionArea.create({
+      data: { stampId: stamp.id, collectionAreaId, isPrimary: true },
+    });
+
+    await tx.issueMember.create({
+      data: {
+        issueId,
+        stampId: stamp.id,
+        requiredForCompleteness: data.requiredForCompleteness,
+      },
+    });
+
+    if (data.catalogNumbers.length > 0) {
+      await tx.stampCatalogNumber.createMany({
+        data: data.catalogNumbers.map((cn) => ({
+          stampId: stamp.id,
+          catalogVendorId: cn.catalogVendorId,
+          number: cn.number,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    return { stampId: stamp.id };
+  });
+
+  return result;
+}
+
+export async function toggleIssueMemberRequired(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  required: boolean
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.issueMember.update({
+    where: { issueId_stampId: { issueId, stampId } },
+    data: { requiredForCompleteness: required },
+  });
+}
+
+export async function removeStampFromIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.issueMember.delete({
+    where: { issueId_stampId: { issueId, stampId } },
+  });
+}
+
+export async function moveStampNode(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  targetIssueId: string
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  const { collectionId: targetCollection } = await resolveIssueArea(targetIssueId);
+  if (targetCollection !== collectionId) throw new Error("Target issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  // Collect the stamp and all its descendants that are members of this issue
+  const allMembers = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: { stampId: true, requiredForCompleteness: true, stamp: { select: { parentId: true } } },
+  });
+
+  const memberSet = new Map(allMembers.map((m) => [m.stampId, m]));
+
+  function collectSubtree(rootId: string): string[] {
+    const ids: string[] = [rootId];
+    for (const [sid, member] of memberSet) {
+      if (member.stamp.parentId === rootId) {
+        ids.push(...collectSubtree(sid));
+      }
+    }
+    return ids;
+  }
+
+  const stampIds = collectSubtree(stampId);
+
+  await prisma.$transaction(
+    stampIds.map((sid) =>
+      prisma.issueMember.update({
+        where: { issueId_stampId: { issueId, stampId: sid } },
+        data: { issueId: targetIssueId },
+      })
+    )
+  );
+}

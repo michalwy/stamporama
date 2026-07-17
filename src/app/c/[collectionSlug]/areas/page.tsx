@@ -38,6 +38,7 @@ export default async function AreasPage({ params }: AreasPageProps) {
       </h2>
       <AreasPanel
         collectionId={collection.id}
+        collectionSlug={collectionSlug}
         initialAreas={areas}
         catalogNames={catalogNames}
       />

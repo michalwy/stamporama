@@ -21,6 +21,7 @@ import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 
 interface AreasPanelProps {
   collectionId: string;
+  collectionSlug: string;
   initialAreas: CollectionAreaData[];
   catalogNames: CatalogNameFlat[];
 }
@@ -423,6 +424,7 @@ function CollectionAreaForm({
 
 export function AreasPanel({
   collectionId,
+  collectionSlug,
   initialAreas,
   catalogNames,
 }: AreasPanelProps) {
@@ -557,7 +559,8 @@ export function AreasPanel({
                     idx < flatTree.length - 1 ? "1px solid var(--color-border)" : undefined,
                 }}
               >
-                <span
+                <a
+                  href={`/c/${collectionSlug}/areas/${area.id}`}
                   style={{
                     flex: 1,
                     fontSize: "0.9375rem",
@@ -567,10 +570,13 @@ export function AreasPanel({
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
+                    textDecoration: "none",
                   }}
+                  onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "underline"; }}
+                  onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "none"; }}
                 >
                   {area.name}
-                </span>
+                </a>
 
                 {/* Primary catalog badge */}
                 {primaryCatalog && (

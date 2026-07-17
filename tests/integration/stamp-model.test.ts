@@ -108,8 +108,7 @@ describe("Stamp tree and catalog numbers", () => {
 describe("Issue and IssueMember", () => {
   let userId: string;
   let collectionId: string;
-  let vendorId: string;
-  let catalogNameId: string;
+  let areaId: string;
   let s1Id: string;
   let s2Id: string;
   let s3Id: string;
@@ -122,15 +121,10 @@ describe("Issue and IssueMember", () => {
     const c = await createTestCollection(userId, `issue-${ts}`);
     collectionId = c.id;
 
-    const vendor = await prisma.catalogVendor.create({
-      data: { collectionId, name: "Scott", abbreviation: "Sc" },
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: "Test Area" },
     });
-    vendorId = vendor.id;
-
-    const cn = await prisma.catalogName.create({
-      data: { vendorId, name: "Standard Postage Stamp Catalogue", currency: "USD" },
-    });
-    catalogNameId = cn.id;
+    areaId = area.id;
 
     const s1 = await prisma.stamp.create({ data: { collectionId, name: "Stamp 1" } });
     s1Id = s1.id;
@@ -140,7 +134,7 @@ describe("Issue and IssueMember", () => {
     s3Id = s3.id;
 
     const issue = await prisma.issue.create({
-      data: { collectionId, catalogNameId, name: "Test Issue", isAutoCreated: false },
+      data: { collectionId, collectionAreaId: areaId, name: "Test Issue", isAutoCreated: false },
     });
     issueId = issue.id;
 
@@ -157,7 +151,6 @@ describe("Issue and IssueMember", () => {
     await prisma.issueMember.deleteMany({ where: { issueId } });
     await prisma.issue.deleteMany({ where: { collectionId } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
-    await prisma.catalogVendor.delete({ where: { id: vendorId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
@@ -191,7 +184,7 @@ describe("Issue and IssueMember", () => {
 
   it("isAutoCreated roundtrip with true", async () => {
     const autoIssue = await prisma.issue.create({
-      data: { collectionId, catalogNameId, isAutoCreated: true },
+      data: { collectionId, collectionAreaId: areaId, isAutoCreated: true },
     });
     const fetched = await prisma.issue.findUnique({ where: { id: autoIssue.id } });
     assert.ok(fetched);
