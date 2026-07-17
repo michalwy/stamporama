@@ -20,7 +20,7 @@ import {
 } from "@/app/actions/issues";
 import type { IssueListItem, IssueCatalogNumberData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import { AddStampDialog } from "@/app/c/[collectionSlug]/areas/[areaId]/add-stamp-dialog";
+import { AddStampDialog } from "./add-stamp-dialog";
 import { useIssuesInfinite, useInvalidateIssues } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 
