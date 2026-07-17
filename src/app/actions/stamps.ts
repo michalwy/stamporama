@@ -25,19 +25,40 @@ async function getSession() {
   return session;
 }
 
+function parseIssuedDate(formData: FormData): {
+  issuedDay: number | undefined;
+  issuedMonth: number | undefined;
+  issuedYear: number | undefined;
+  error?: string;
+} {
+  const dayRaw = ((formData.get("issuedDay") as string | null) ?? "").trim();
+  const monthRaw = ((formData.get("issuedMonth") as string | null) ?? "").trim();
+  const yearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
+  const issuedDay = dayRaw ? parseInt(dayRaw, 10) : undefined;
+  const issuedMonth = monthRaw ? parseInt(monthRaw, 10) : undefined;
+  const issuedYear = yearRaw ? parseInt(yearRaw, 10) : undefined;
+  if (yearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
+    return { issuedDay, issuedMonth, issuedYear, error: "Issued year must be a valid year (1840–2100)." };
+  }
+  if (monthRaw && (isNaN(issuedMonth!) || issuedMonth! < 1 || issuedMonth! > 12)) {
+    return { issuedDay, issuedMonth, issuedYear, error: "Issued month must be between 1 and 12." };
+  }
+  if (dayRaw && (isNaN(issuedDay!) || issuedDay! < 1 || issuedDay! > 31)) {
+    return { issuedDay, issuedMonth, issuedYear, error: "Issued day must be between 1 and 31." };
+  }
+  return { issuedDay, issuedMonth, issuedYear };
+}
+
 export async function createStampAction(
   collectionId: string,
   formData: FormData
 ): Promise<StampActionState> {
   const session = await getSession();
   const name = ((formData.get("name") as string | null) ?? "").trim() || undefined;
-  const issuedYearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
-  const issuedYear = issuedYearRaw ? parseInt(issuedYearRaw, 10) : undefined;
-  if (issuedYearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
-    return { status: "error", message: "Issued year must be a valid year." };
-  }
+  const { issuedDay, issuedMonth, issuedYear, error } = parseIssuedDate(formData);
+  if (error) return { status: "error", message: error };
   try {
-    await createStamp(session.user.id, collectionId, { name, issuedYear });
+    await createStamp(session.user.id, collectionId, { name, issuedDay, issuedMonth, issuedYear });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create stamp. Please try again." };
@@ -50,13 +71,10 @@ export async function createVariantAction(
 ): Promise<StampActionState> {
   const session = await getSession();
   const name = ((formData.get("name") as string | null) ?? "").trim() || undefined;
-  const issuedYearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
-  const issuedYear = issuedYearRaw ? parseInt(issuedYearRaw, 10) : undefined;
-  if (issuedYearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
-    return { status: "error", message: "Issued year must be a valid year." };
-  }
+  const { issuedDay, issuedMonth, issuedYear, error } = parseIssuedDate(formData);
+  if (error) return { status: "error", message: error };
   try {
-    await createVariant(session.user.id, parentId, { name, issuedYear });
+    await createVariant(session.user.id, parentId, { name, issuedDay, issuedMonth, issuedYear });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create variant. Please try again." };
@@ -70,13 +88,23 @@ export async function updateStampAction(
   const session = await getSession();
   const nameRaw = ((formData.get("name") as string | null) ?? "").trim();
   const name = nameRaw || null;
-  const issuedYearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
-  const issuedYear = issuedYearRaw ? parseInt(issuedYearRaw, 10) : null;
-  if (issuedYearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
-    return { status: "error", message: "Issued year must be a valid year." };
+  const dayRaw = ((formData.get("issuedDay") as string | null) ?? "").trim();
+  const monthRaw = ((formData.get("issuedMonth") as string | null) ?? "").trim();
+  const yearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
+  const issuedDay = dayRaw ? parseInt(dayRaw, 10) : null;
+  const issuedMonth = monthRaw ? parseInt(monthRaw, 10) : null;
+  const issuedYear = yearRaw ? parseInt(yearRaw, 10) : null;
+  if (yearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
+    return { status: "error", message: "Issued year must be a valid year (1840–2100)." };
+  }
+  if (monthRaw && (isNaN(issuedMonth!) || issuedMonth! < 1 || issuedMonth! > 12)) {
+    return { status: "error", message: "Issued month must be between 1 and 12." };
+  }
+  if (dayRaw && (isNaN(issuedDay!) || issuedDay! < 1 || issuedDay! > 31)) {
+    return { status: "error", message: "Issued day must be between 1 and 31." };
   }
   try {
-    await updateStamp(session.user.id, stampId, { name, issuedYear });
+    await updateStamp(session.user.id, stampId, { name, issuedDay, issuedMonth, issuedYear });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update stamp. Please try again." };

@@ -48,6 +48,7 @@ model CatalogVendor {
   collection            Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogNames          CatalogName[]
   stampCatalogNumbers   StampCatalogNumber[]
+  issueCatalogNumbers   IssueCatalogNumber[]
   collectionAreaVendors CollectionAreaVendor[]
 
   @@map("catalog_vendor")
@@ -117,6 +118,8 @@ model Stamp {
   collectionId String
   parentId     String?
   name         String?
+  issuedDay    Int?
+  issuedMonth  Int?
   issuedYear   Int?
   createdAt    DateTime @default(now())
 
@@ -188,11 +191,25 @@ model Issue {
   isAutoCreated    Boolean  @default(false)
   createdAt        DateTime @default(now())
 
-  collection     Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  collection     Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   members        IssueMember[]
+  catalogNumbers IssueCatalogNumber[]
 
   @@map("issue")
+}
+
+model IssueCatalogNumber {
+  issueId         String
+  catalogVendorId String
+  firstNumber     String
+  lastNumber      String?
+
+  issue         Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, catalogVendorId])
+  @@map("issue_catalog_number")
 }
 
 model IssueMember {

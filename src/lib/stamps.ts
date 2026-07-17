@@ -34,6 +34,8 @@ export interface StampVariantData {
   collectionId: string;
   parentId: string | null;
   name: string | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
   issuedYear: number | null;
   createdAt: Date;
   catalogNumbers: StampCatalogNumberData[];
@@ -48,6 +50,8 @@ const VARIANT_SELECT = {
   collectionId: true,
   parentId: true,
   name: true,
+  issuedDay: true,
+  issuedMonth: true,
   issuedYear: true,
   createdAt: true,
   catalogNumbers: {
@@ -63,13 +67,15 @@ const STAMP_SELECT = {
 export async function createStamp(
   ownerId: string,
   collectionId: string,
-  data: { name?: string; issuedYear?: number }
+  data: { name?: string; issuedDay?: number; issuedMonth?: number; issuedYear?: number }
 ): Promise<StampData> {
   await assertCollectionOwner(ownerId, collectionId);
   const stamp = await prisma.stamp.create({
     data: {
       collectionId,
       name: data.name ?? null,
+      issuedDay: data.issuedDay ?? null,
+      issuedMonth: data.issuedMonth ?? null,
       issuedYear: data.issuedYear ?? null,
     },
     select: { ...STAMP_SELECT, variants: { select: STAMP_SELECT } },
@@ -80,7 +86,7 @@ export async function createStamp(
 export async function createVariant(
   ownerId: string,
   parentId: string,
-  data: { name?: string; issuedYear?: number }
+  data: { name?: string; issuedDay?: number; issuedMonth?: number; issuedYear?: number }
 ): Promise<StampData> {
   const collectionId = await resolveStampCollection(parentId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -89,6 +95,8 @@ export async function createVariant(
       collectionId,
       parentId,
       name: data.name ?? null,
+      issuedDay: data.issuedDay ?? null,
+      issuedMonth: data.issuedMonth ?? null,
       issuedYear: data.issuedYear ?? null,
     },
     select: { ...STAMP_SELECT, variants: { select: STAMP_SELECT } },
@@ -99,7 +107,7 @@ export async function createVariant(
 export async function updateStamp(
   ownerId: string,
   stampId: string,
-  data: { name?: string | null; issuedYear?: number | null }
+  data: { name?: string | null; issuedDay?: number | null; issuedMonth?: number | null; issuedYear?: number | null }
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);

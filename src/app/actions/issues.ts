@@ -24,6 +24,22 @@ async function getSession() {
   return session;
 }
 
+function parseCatalogNumbers(formData: FormData): { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[] {
+  const result: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[] = [];
+  const vendorIds = new Set<string>();
+  for (const key of formData.keys()) {
+    if (key.startsWith("issueCatalogFirst_")) {
+      vendorIds.add(key.slice("issueCatalogFirst_".length));
+    }
+  }
+  for (const catalogVendorId of vendorIds) {
+    const first = ((formData.get(`issueCatalogFirst_${catalogVendorId}`) as string | null) ?? "").trim();
+    const last = ((formData.get(`issueCatalogLast_${catalogVendorId}`) as string | null) ?? "").trim() || null;
+    if (first) result.push({ catalogVendorId, firstNumber: first, lastNumber: last });
+  }
+  return result;
+}
+
 export async function createIssueAction(
   collectionId: string,
   areaId: string,
@@ -36,8 +52,9 @@ export async function createIssueAction(
   if (yearRaw && (isNaN(year!) || year! < 1840 || year! > 2100)) {
     return { status: "error", message: "Year must be a valid year (1840–2100)." };
   }
+  const catalogNumbers = parseCatalogNumbers(formData);
   try {
-    await createIssue(session.user.id, collectionId, areaId, { name, year });
+    await createIssue(session.user.id, collectionId, areaId, { name, year, catalogNumbers });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create issue. Please try again." };
@@ -56,8 +73,9 @@ export async function updateIssueAction(
   if (yearRaw && (isNaN(year!) || year! < 1840 || year! > 2100)) {
     return { status: "error", message: "Year must be a valid year (1840–2100)." };
   }
+  const catalogNumbers = parseCatalogNumbers(formData);
   try {
-    await updateIssue(session.user.id, collectionId, issueId, { name, year });
+    await updateIssue(session.user.id, collectionId, issueId, { name, year, catalogNumbers });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update issue. Please try again." };
@@ -84,11 +102,23 @@ export async function addStampToIssueAction(
 ): Promise<IssueActionState> {
   const session = await getSession();
   const name = ((formData.get("name") as string | null) ?? "").trim() || null;
+
+  const dayRaw = ((formData.get("issuedDay") as string | null) ?? "").trim();
+  const monthRaw = ((formData.get("issuedMonth") as string | null) ?? "").trim();
   const yearRaw = ((formData.get("issuedYear") as string | null) ?? "").trim();
+  const issuedDay = dayRaw ? parseInt(dayRaw, 10) : null;
+  const issuedMonth = monthRaw ? parseInt(monthRaw, 10) : null;
   const issuedYear = yearRaw ? parseInt(yearRaw, 10) : null;
   if (yearRaw && (isNaN(issuedYear!) || issuedYear! < 1840 || issuedYear! > 2100)) {
     return { status: "error", message: "Issued year must be a valid year (1840–2100)." };
   }
+  if (monthRaw && (isNaN(issuedMonth!) || issuedMonth! < 1 || issuedMonth! > 12)) {
+    return { status: "error", message: "Issued month must be between 1 and 12." };
+  }
+  if (dayRaw && (isNaN(issuedDay!) || issuedDay! < 1 || issuedDay! > 31)) {
+    return { status: "error", message: "Issued day must be between 1 and 31." };
+  }
+
   const parentStampId = (formData.get("parentStampId") as string | null) || null;
   const requiredForCompleteness = formData.get("requiredForCompleteness") === "true";
 
@@ -104,6 +134,8 @@ export async function addStampToIssueAction(
   try {
     await addStampToIssue(session.user.id, collectionId, issueId, {
       name,
+      issuedDay,
+      issuedMonth,
       issuedYear,
       parentStampId,
       requiredForCompleteness,

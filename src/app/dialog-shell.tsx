@@ -23,9 +23,13 @@ export function DialogShell({ title, onClose, children }: DialogShellProps) {
   }, [onClose]);
 
   useEffect(() => {
-    const first = panelRef.current?.querySelector<HTMLElement>(
-      'input, button, textarea, select, [tabindex]:not([tabindex="-1"])'
-    );
+    const el = panelRef.current;
+    if (!el) return;
+    const explicit = el.querySelector<HTMLElement>("[data-autofocus]");
+    if (explicit) { explicit.focus(); return; }
+    const first =
+      el.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="checkbox"]), textarea, select') ??
+      el.querySelector<HTMLElement>('button, [tabindex]:not([tabindex="-1"])');
     first?.focus();
   }, []);
 

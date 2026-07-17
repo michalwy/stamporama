@@ -27,9 +27,17 @@ export interface StampNodeData {
   stampId: string;
   parentId: string | null;
   name: string | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
   issuedYear: number | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+}
+
+export interface IssueCatalogNumberData {
+  catalogVendorId: string;
+  firstNumber: string;
+  lastNumber: string | null;
 }
 
 export interface IssueData {
@@ -41,6 +49,7 @@ export interface IssueData {
   isAutoCreated: boolean;
   createdAt: Date;
   members: StampNodeData[];
+  catalogNumbers: IssueCatalogNumberData[];
   completeness: { required: number; owned: number };
 }
 
@@ -51,6 +60,8 @@ const MEMBER_SELECT = {
     select: {
       parentId: true,
       name: true,
+      issuedDay: true,
+      issuedMonth: true,
       issuedYear: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
     },
@@ -63,6 +74,8 @@ function toStampNode(m: {
   stamp: {
     parentId: string | null;
     name: string | null;
+    issuedDay: number | null;
+    issuedMonth: number | null;
     issuedYear: number | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
   };
@@ -71,9 +84,60 @@ function toStampNode(m: {
     stampId: m.stampId,
     parentId: m.stamp.parentId,
     name: m.stamp.name,
+    issuedDay: m.stamp.issuedDay,
+    issuedMonth: m.stamp.issuedMonth,
     issuedYear: m.stamp.issuedYear,
     requiredForCompleteness: m.requiredForCompleteness,
     catalogNumbers: m.stamp.catalogNumbers,
+  };
+}
+
+const ISSUE_SELECT = {
+  id: true,
+  collectionId: true,
+  collectionAreaId: true,
+  name: true,
+  year: true,
+  isAutoCreated: true,
+  createdAt: true,
+  members: { select: MEMBER_SELECT },
+  catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+} as const;
+
+function toIssueData(issue: {
+  id: string;
+  collectionId: string;
+  collectionAreaId: string;
+  name: string | null;
+  year: number | null;
+  isAutoCreated: boolean;
+  createdAt: Date;
+  members: {
+    stampId: string;
+    requiredForCompleteness: boolean;
+    stamp: {
+      parentId: string | null;
+      name: string | null;
+      issuedDay: number | null;
+      issuedMonth: number | null;
+      issuedYear: number | null;
+      catalogNumbers: { catalogVendorId: string; number: string }[];
+    };
+  }[];
+  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
+}): IssueData {
+  const required = issue.members.filter((m) => m.requiredForCompleteness).length;
+  return {
+    id: issue.id,
+    collectionId: issue.collectionId,
+    collectionAreaId: issue.collectionAreaId,
+    name: issue.name,
+    year: issue.year,
+    isAutoCreated: issue.isAutoCreated,
+    createdAt: issue.createdAt,
+    members: issue.members.map(toStampNode),
+    catalogNumbers: issue.catalogNumbers,
+    completeness: { required, owned: 0 },
   };
 }
 
@@ -86,38 +150,37 @@ export async function listIssuesForArea(
   const issues = await prisma.issue.findMany({
     where: { collectionId, collectionAreaId: areaId },
     orderBy: [{ year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      collectionId: true,
-      collectionAreaId: true,
-      name: true,
-      year: true,
-      isAutoCreated: true,
-      createdAt: true,
-      members: { select: MEMBER_SELECT },
+    select: ISSUE_SELECT,
+  });
+  return issues.map(toIssueData);
+}
+
+export async function listAllIssues(
+  ownerId: string,
+  collectionId: string,
+  areaIds?: string[]
+): Promise<IssueData[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const issues = await prisma.issue.findMany({
+    where: {
+      collectionId,
+      ...(areaIds && areaIds.length > 0 ? { collectionAreaId: { in: areaIds } } : {}),
     },
+    orderBy: [{ collectionAreaId: "asc" }, { year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
+    select: ISSUE_SELECT,
   });
-  return issues.map((issue) => {
-    const required = issue.members.filter((m) => m.requiredForCompleteness).length;
-    return {
-      id: issue.id,
-      collectionId: issue.collectionId,
-      collectionAreaId: issue.collectionAreaId,
-      name: issue.name,
-      year: issue.year,
-      isAutoCreated: issue.isAutoCreated,
-      createdAt: issue.createdAt,
-      members: issue.members.map(toStampNode),
-      completeness: { required, owned: 0 },
-    };
-  });
+  return issues.map(toIssueData);
 }
 
 export async function createIssue(
   ownerId: string,
   collectionId: string,
   areaId: string,
-  data: { name?: string | null; year?: number | null }
+  data: {
+    name?: string | null;
+    year?: number | null;
+    catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+  }
 ): Promise<{ id: string }> {
   await assertCollectionOwner(ownerId, collectionId);
   const area = await prisma.collectionArea.findUnique({
@@ -127,14 +190,28 @@ export async function createIssue(
   if (!area || area.collectionId !== collectionId) {
     throw new Error("Collection area not found.");
   }
-  const created = await prisma.issue.create({
-    data: {
-      collectionId,
-      collectionAreaId: areaId,
-      name: data.name ?? null,
-      year: data.year ?? null,
-    },
-    select: { id: true },
+  const created = await prisma.$transaction(async (tx) => {
+    const issue = await tx.issue.create({
+      data: {
+        collectionId,
+        collectionAreaId: areaId,
+        name: data.name ?? null,
+        year: data.year ?? null,
+      },
+      select: { id: true },
+    });
+    if (data.catalogNumbers && data.catalogNumbers.length > 0) {
+      await tx.issueCatalogNumber.createMany({
+        data: data.catalogNumbers.map((cn) => ({
+          issueId: issue.id,
+          catalogVendorId: cn.catalogVendorId,
+          firstNumber: cn.firstNumber,
+          lastNumber: cn.lastNumber ?? null,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    return issue;
   });
   return { id: created.id };
 }
@@ -143,14 +220,34 @@ export async function updateIssue(
   ownerId: string,
   collectionId: string,
   issueId: string,
-  data: { name?: string | null; year?: number | null }
+  data: {
+    name?: string | null;
+    year?: number | null;
+    catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+  }
 ): Promise<void> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.issue.update({
-    where: { id: issueId },
-    data: { name: data.name ?? null, year: data.year ?? null },
+  await prisma.$transaction(async (tx) => {
+    await tx.issue.update({
+      where: { id: issueId },
+      data: { name: data.name ?? null, year: data.year ?? null },
+    });
+    if (data.catalogNumbers !== undefined) {
+      await tx.issueCatalogNumber.deleteMany({ where: { issueId } });
+      if (data.catalogNumbers.length > 0) {
+        await tx.issueCatalogNumber.createMany({
+          data: data.catalogNumbers.map((cn) => ({
+            issueId,
+            catalogVendorId: cn.catalogVendorId,
+            firstNumber: cn.firstNumber,
+            lastNumber: cn.lastNumber ?? null,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
   });
 }
 
@@ -167,6 +264,8 @@ export async function deleteIssue(
 
 export interface AddStampData {
   name?: string | null;
+  issuedDay?: number | null;
+  issuedMonth?: number | null;
   issuedYear?: number | null;
   parentStampId?: string | null;
   requiredForCompleteness: boolean;
@@ -197,6 +296,8 @@ export async function addStampToIssue(
       data: {
         collectionId,
         name: data.name ?? null,
+        issuedDay: data.issuedDay ?? null,
+        issuedMonth: data.issuedMonth ?? null,
         issuedYear: data.issuedYear ?? null,
         parentId: data.parentStampId ?? null,
       },

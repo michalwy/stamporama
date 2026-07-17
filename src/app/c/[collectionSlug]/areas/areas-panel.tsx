@@ -560,7 +560,7 @@ export function AreasPanel({
                 }}
               >
                 <a
-                  href={`/c/${collectionSlug}/areas/${area.id}`}
+                  href={`/c/${collectionSlug}/issues?areaId=${area.id}`}
                   style={{
                     flex: 1,
                     fontSize: "0.9375rem",

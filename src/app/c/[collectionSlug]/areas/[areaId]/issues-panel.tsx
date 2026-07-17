@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { formatIssuedDate, formatIssueCatalogNumber } from "@/app/stamp-display";
 import {
   DialogShell,
   DialogBody,
@@ -14,13 +15,12 @@ import {
   updateIssueAction,
   deleteIssueAction,
   addStampToIssueAction,
-  toggleIssueMemberRequiredAction,
   removeStampFromIssueAction,
   moveStampNodeAction,
   type IssueActionState,
 } from "@/app/actions/issues";
-import type { IssueData, StampNodeData } from "@/lib/issues";
-import type { CollectionAreaData } from "@/lib/areas";
+import type { IssueData, StampNodeData, IssueCatalogNumberData } from "@/lib/issues";
+import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { AddStampDialog } from "./add-stamp-dialog";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -68,6 +68,68 @@ const addBtnStyle: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+const ISSUE_PRIMARY_CHIP: React.CSSProperties = {
+  fontFamily: "monospace",
+  fontSize: "0.8125rem",
+  fontWeight: 700,
+  color: "var(--color-accent)",
+  border: "1.5px solid var(--color-accent)",
+  borderRadius: "0.3rem",
+  padding: "0.1rem 0.45rem",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const ISSUE_SECONDARY_CHIP: React.CSSProperties = {
+  fontFamily: "monospace",
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+  background: "var(--color-bg-page)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.3rem",
+  padding: "0.1rem 0.4rem",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const STAMP_PRIMARY_CHIP: React.CSSProperties = {
+  fontFamily: "monospace",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "var(--color-accent)",
+  border: "1px solid var(--color-accent)",
+  borderRadius: "0.25rem",
+  padding: "0.05rem 0.35rem",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  opacity: 0.85,
+};
+
+const STAMP_SECONDARY_CHIP: React.CSSProperties = {
+  fontFamily: "monospace",
+  fontSize: "0.6875rem",
+  color: "var(--color-text-muted)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.25rem",
+  padding: "0.05rem 0.3rem",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const STAMP_MUTED_PRIMARY_CHIP: React.CSSProperties = {
+  ...STAMP_PRIMARY_CHIP,
+  color: "var(--color-text-muted)",
+  borderColor: "var(--color-border)",
+  opacity: 0.7,
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatStampCN(number: string, v?: AreaCatalogEntry): string {
+  if (!v) return number;
+  return v.prefix ? `${v.vendorAbbreviation}·${v.prefix} ${number}` : `${v.vendorAbbreviation} ${number}`;
+}
+
 // ── Tree building ─────────────────────────────────────────────────────────────
 
 interface TreeNode {
@@ -97,9 +159,9 @@ interface StampTreeNodeProps {
   treeNode: TreeNode;
   depth: number;
   primaryVendorId: string | null;
+  vendorMap: Map<string, AreaCatalogEntry>;
   onAddChild: (parentStampId: string) => void;
   onRemove: (stampId: string) => void;
-  onToggleRequired: (stampId: string, required: boolean) => void;
   onMove: (stampId: string) => void;
 }
 
@@ -107,110 +169,92 @@ function StampTreeNode({
   treeNode,
   depth,
   primaryVendorId,
+  vendorMap,
   onAddChild,
   onRemove,
-  onToggleRequired,
   onMove,
 }: StampTreeNodeProps) {
+  const [collapsed, setCollapsed] = useState(true);
   const { node, children } = treeNode;
+  const dateStr = formatIssuedDate(node.issuedDay, node.issuedMonth, node.issuedYear);
+  const hasChildren = children.length > 0;
+  const indent = `${depth * 1.25}rem`;
 
-  const primaryCatalogNumber = primaryVendorId
-    ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId)?.number ?? null
+  const primaryCN = primaryVendorId
+    ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
     : null;
+  const secondaryCNs = node.catalogNumbers.filter(
+    (cn) => cn.catalogVendorId !== primaryVendorId
+  );
+
+  const notRequired = !node.requiredForCompleteness;
 
   return (
-    <div>
+    <>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          padding: "0.5rem 1rem",
-          paddingLeft: `${1 + depth * 1.5}rem`,
-          background: depth % 2 === 0 ? "var(--color-bg-page)" : "var(--color-bg-subtle)",
-          borderTop: "1px solid var(--color-border)",
+          padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
+          fontSize: "0.8125rem",
         }}
       >
-        {primaryCatalogNumber && (
-          <span
-            style={{
-              fontFamily: "monospace",
-              fontSize: "0.8125rem",
-              color: "var(--color-accent)",
-              fontWeight: 600,
-              flexShrink: 0,
-              minWidth: "3rem",
-            }}
-          >
-            {primaryCatalogNumber}
-          </span>
-        )}
-
-        <span
-          style={{
-            flex: 1,
-            fontSize: "0.875rem",
-            color: node.name ? "var(--color-text-primary)" : "var(--color-text-muted)",
-            fontStyle: node.name ? undefined : "italic",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {node.name ?? "(unnamed)"}
-          {node.issuedYear && (
-            <span style={{ marginLeft: "0.375rem", color: "var(--color-text-muted)", fontWeight: 400 }}>
-              {node.issuedYear}
-            </span>
+        {/* Row 1: expand + Date, Name + actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              aria-label={collapsed ? "Expand" : "Collapse"}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.625rem", padding: "0.125rem", flexShrink: 0, lineHeight: 1, width: "0.875rem", textAlign: "center" }}
+            >
+              {collapsed ? "▶" : "▼"}
+            </button>
+          ) : (
+            <span style={{ width: "0.875rem", flexShrink: 0 }} />
           )}
-        </span>
 
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            fontSize: "0.75rem",
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-          title="Required for completeness"
-        >
-          <input
-            type="checkbox"
-            checked={node.requiredForCompleteness}
-            onChange={(e) => onToggleRequired(node.stampId, e.target.checked)}
-          />
-          Required
-        </label>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {dateStr && (
+              <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>{dateStr}, </span>
+            )}
+            <span style={{ color: node.name ? "var(--color-text-primary)" : "var(--color-text-muted)", fontStyle: node.name ? undefined : "italic" }}>
+              {node.name ?? "(unnamed)"}
+            </span>
+          </span>
 
-        <button type="button" onClick={() => onAddChild(node.stampId)} style={addBtnStyle}>
-          + Child
-        </button>
+          <button type="button" onClick={() => onAddChild(node.stampId)} style={addBtnStyle}>+ Child</button>
+          <button type="button" onClick={() => onMove(node.stampId)} style={rowBtnStyle}>Move</button>
+          <button type="button" onClick={() => onRemove(node.stampId)} style={rowBtnDangerStyle}>Remove</button>
+        </div>
 
-        <button type="button" onClick={() => onMove(node.stampId)} style={rowBtnStyle}>
-          Move
-        </button>
-
-        <button type="button" onClick={() => onRemove(node.stampId)} style={rowBtnDangerStyle}>
-          Remove
-        </button>
+        {/* Row 2: catalog chips */}
+        {(primaryCN || secondaryCNs.length > 0) && (
+          <div style={{ display: "flex", gap: "0.3rem", marginTop: "0.15rem", paddingLeft: "1.375rem", flexWrap: "wrap" }}>
+            {primaryCN && (
+              <span style={notRequired ? STAMP_MUTED_PRIMARY_CHIP : STAMP_PRIMARY_CHIP}>
+                {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
+              </span>
+            )}
+            {secondaryCNs.map((cn) => (
+              <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
+                {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-
-      {children.map((child) => (
+      {!collapsed && children.map((child) => (
         <StampTreeNode
           key={child.node.stampId}
           treeNode={child}
           depth={depth + 1}
           primaryVendorId={primaryVendorId}
+          vendorMap={vendorMap}
           onAddChild={onAddChild}
           onRemove={onRemove}
-          onToggleRequired={onToggleRequired}
           onMove={onMove}
         />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -221,7 +265,7 @@ type DialogState =
   | { kind: "create-issue" }
   | { kind: "edit-issue"; issue: IssueData }
   | { kind: "delete-issue"; issue: IssueData }
-  | { kind: "add-stamp"; issueId?: string; parentStampId?: string }
+  | { kind: "add-stamp"; issueId?: string; parentStampId?: string; parentCatalogNumbers?: { catalogVendorId: string; number: string }[] }
   | { kind: "move-stamp"; issueId: string; stampId: string };
 
 interface IssuesPanelProps {
@@ -242,7 +286,6 @@ export function IssuesPanel({
   const [isPending, startTransition] = useTransition();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  // Deduplicate vendors for catalog number inputs (by catalogVendorId)
   const areaVendors = useMemo(
     () =>
       Array.from(
@@ -251,7 +294,11 @@ export function IssuesPanel({
     [area.catalogEntries]
   );
 
-  // The primary vendor for display (from primary catalog)
+  const vendorMap = useMemo(
+    () => new Map(areaVendors.map((v) => [v.catalogVendorId, v])),
+    [areaVendors]
+  );
+
   const primaryVendorId = useMemo(() => {
     if (!area.primaryCatalogNameId) return null;
     const entry = area.catalogEntries.find(
@@ -295,13 +342,6 @@ export function IssuesPanel({
     });
   }
 
-  function handleToggleRequired(issueId: string, stampId: string, required: boolean) {
-    startTransition(async () => {
-      await toggleIssueMemberRequiredAction(collectionId, issueId, stampId, required);
-      router.refresh();
-    });
-  }
-
   function handleRemoveStamp(issueId: string, stampId: string) {
     if (!confirm("Remove this stamp from the issue?")) return;
     startTransition(async () => {
@@ -317,7 +357,6 @@ export function IssuesPanel({
     startTransition(async () => {
       const targetIssueId = issueId;
 
-      // If auto-creating a new issue, create it first then add stamp
       if (!issueId && (newIssueName !== null || newIssueYear !== null)) {
         const issueForm = new FormData();
         if (newIssueName) issueForm.set("name", newIssueName);
@@ -327,8 +366,6 @@ export function IssuesPanel({
           setActionState(createResult);
           return;
         }
-        // We don't get the new issue id back from the action easily,
-        // so we refresh and skip the stamp add for now — user can add from the new issue row.
         setDialog({ kind: "none" });
         router.refresh();
         return;
@@ -338,10 +375,6 @@ export function IssuesPanel({
         setActionState({ status: "error", message: "Please select or create an issue." });
         return;
       }
-
-      // Encode requiredForCompleteness checkbox properly
-      const required = fd.get("requiredForCompleteness") === "true" ? "true" : "false";
-      fd.set("requiredForCompleteness", required);
 
       const result = await addStampToIssueAction(collectionId, targetIssueId, fd);
       setActionState(result);
@@ -410,6 +443,13 @@ export function IssuesPanel({
             const stampTree = buildStampTree(issue.members);
             const requiredCount = issue.completeness.required;
 
+            const primaryCatEntry = primaryVendorId
+              ? issue.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
+              : null;
+            const secondaryCatEntries = issue.catalogNumbers.filter(
+              (cn) => cn.catalogVendorId !== primaryVendorId
+            );
+
             return (
               <div
                 key={issue.id}
@@ -420,105 +460,73 @@ export function IssuesPanel({
                       : undefined,
                 }}
               >
-                {/* Issue row */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    padding: "0.875rem 1.25rem",
-                    background: "var(--color-bg-elevated)",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(issue.id)}
-                    aria-label={isExpanded ? "Collapse" : "Expand"}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "var(--color-text-muted)",
-                      fontSize: "0.75rem",
-                      padding: "0.25rem",
-                      flexShrink: 0,
-                      lineHeight: 1,
-                    }}
-                  >
-                    {isExpanded ? "▼" : "▶"}
-                  </button>
+                {/* Issue row — two rows */}
+                <div style={{ padding: "0.875rem 1.25rem", background: "var(--color-bg-elevated)" }}>
+                  {/* Row 1: expand + year, name + actions */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(issue.id)}
+                      aria-label={isExpanded ? "Collapse" : "Expand"}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.75rem", padding: "0.25rem", flexShrink: 0, lineHeight: 1 }}
+                    >
+                      {isExpanded ? "▼" : "▶"}
+                    </button>
 
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: "0.9375rem",
-                      fontWeight: 600,
-                      color: issue.name ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                      fontStyle: issue.name ? undefined : "italic",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {issue.name ?? "(unnamed)"}
-                  </span>
-
-                  {issue.year && (
-                    <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", flexShrink: 0 }}>
-                      {issue.year}
+                    {/* Year, Name */}
+                    <span style={{ flex: 1, fontSize: "0.9375rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {issue.year && (
+                        <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>{issue.year}, </span>
+                      )}
+                      <span style={{ fontWeight: 600, fontStyle: issue.name ? undefined : "italic", color: issue.name ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
+                        {issue.name ?? "(unnamed)"}
+                      </span>
                     </span>
+
+                    <button type="button" onClick={() => openDialog({ kind: "add-stamp", issueId: issue.id })} style={addBtnStyle}>+ Stamp</button>
+                    <button type="button" onClick={() => openDialog({ kind: "edit-issue", issue })} style={rowBtnStyle}>Edit</button>
+                    <button type="button" onClick={() => openDialog({ kind: "delete-issue", issue })} style={rowBtnDangerStyle}>Delete</button>
+                  </div>
+
+                  {/* Row 2: catalog chips + count badge */}
+                  {(issue.catalogNumbers.length > 0 || issue.members.length > 0) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", paddingLeft: "1.75rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
+                      {primaryCatEntry && primaryVendorId && (() => {
+                        const v = vendorMap.get(primaryVendorId);
+                        return (
+                          <span style={ISSUE_PRIMARY_CHIP}>
+                            {formatIssueCatalogNumber(primaryCatEntry.firstNumber, primaryCatEntry.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix)}
+                          </span>
+                        );
+                      })()}
+                      {secondaryCatEntries.map((cn) => {
+                        const v = vendorMap.get(cn.catalogVendorId);
+                        return (
+                          <span key={cn.catalogVendorId} style={ISSUE_SECONDARY_CHIP}>
+                            {formatIssueCatalogNumber(cn.firstNumber, cn.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix)}
+                          </span>
+                        );
+                      })}
+
+                      {issue.members.length > 0 && (
+                        <span
+                          style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "var(--color-text-muted)", background: "var(--color-bg-muted)", border: "1px solid var(--color-border)", borderRadius: "0.25rem", padding: "0.1rem 0.4rem", flexShrink: 0, whiteSpace: "nowrap" }}
+                          title="Required / Total stamps"
+                        >
+                          {requiredCount}/{issue.members.length}
+                        </span>
+                      )}
+                    </div>
                   )}
-
-                  {/* Completeness indicator */}
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--color-text-muted)",
-                      background: "var(--color-bg-muted)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "0.25rem",
-                      padding: "0.125rem 0.5rem",
-                      flexShrink: 0,
-                    }}
-                    title={requiredCount === 0 ? "No required stamps set" : "Completeness tracking requires inventory (#7)"}
-                  >
-                    {requiredCount === 0 ? "—" : `N/A (${requiredCount} req.)`}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => openDialog({ kind: "add-stamp", issueId: issue.id })}
-                    style={addBtnStyle}
-                  >
-                    + Stamp
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => openDialog({ kind: "edit-issue", issue })}
-                    style={rowBtnStyle}
-                  >
-                    Edit
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => openDialog({ kind: "delete-issue", issue })}
-                    style={rowBtnDangerStyle}
-                  >
-                    Delete
-                  </button>
                 </div>
 
                 {/* Expanded stamp tree */}
                 {isExpanded && (
-                  <div>
+                  <div style={{ background: "var(--color-bg-elevated)", borderTop: "1px solid var(--color-border)", marginLeft: "1.25rem", borderLeft: "2px solid var(--color-border)" }}>
                     {stampTree.length === 0 ? (
                       <div
                         style={{
-                          padding: "0.875rem 1.25rem",
-                          background: "var(--color-bg-page)",
-                          borderTop: "1px solid var(--color-border)",
+                          padding: "0.875rem 0 0.875rem 0.5rem",
                           fontSize: "0.875rem",
                           color: "var(--color-text-muted)",
                           fontStyle: "italic",
@@ -540,13 +548,17 @@ export function IssuesPanel({
                           treeNode={treeNode}
                           depth={0}
                           primaryVendorId={primaryVendorId}
-                          onAddChild={(parentStampId) =>
-                            openDialog({ kind: "add-stamp", issueId: issue.id, parentStampId })
-                          }
+                          vendorMap={vendorMap}
+                          onAddChild={(parentStampId) => {
+                            const parentNode = issue.members.find((m) => m.stampId === parentStampId);
+                            openDialog({
+                              kind: "add-stamp",
+                              issueId: issue.id,
+                              parentStampId,
+                              parentCatalogNumbers: parentNode?.catalogNumbers ?? [],
+                            });
+                          }}
                           onRemove={(stampId) => handleRemoveStamp(issue.id, stampId)}
-                          onToggleRequired={(stampId, required) =>
-                            handleToggleRequired(issue.id, stampId, required)
-                          }
                           onMove={(stampId) => openDialog({ kind: "move-stamp", issueId: issue.id, stampId })}
                         />
                       ))
@@ -570,7 +582,7 @@ export function IssuesPanel({
             }
           >
             <DialogBody>
-              <IssueForm isPending={isPending} />
+              <IssueForm vendors={areaVendors} primaryVendorId={primaryVendorId} isPending={isPending} autoFocusName />
             </DialogBody>
             <DialogActions
               actionLabel={isPending ? "Saving…" : "Save"}
@@ -592,8 +604,11 @@ export function IssuesPanel({
           >
             <DialogBody>
               <IssueForm
+                vendors={areaVendors}
+                primaryVendorId={primaryVendorId}
                 defaultName={dialog.issue.name ?? ""}
                 defaultYear={dialog.issue.year ?? undefined}
+                defaultCatalogNumbers={dialog.issue.catalogNumbers}
                 isPending={isPending}
               />
             </DialogBody>
@@ -642,12 +657,13 @@ export function IssuesPanel({
         );
       })()}
 
-      {(dialog.kind === "add-stamp") && (
+      {dialog.kind === "add-stamp" && (
         <AddStampDialog
           issues={initialIssues}
           areaVendors={areaVendors}
           prefilledIssueId={dialog.issueId}
           prefilledParentStampId={dialog.parentStampId}
+          defaultCatalogNumbers={dialog.parentCatalogNumbers}
           isPending={isPending}
           error={error}
           onClose={closeDialog}
@@ -710,12 +726,25 @@ export function IssuesPanel({
 // ── IssueForm ─────────────────────────────────────────────────────────────────
 
 interface IssueFormProps {
+  vendors: AreaCatalogEntry[];
+  primaryVendorId?: string | null;
   defaultName?: string;
   defaultYear?: number;
+  defaultCatalogNumbers?: IssueCatalogNumberData[];
   isPending: boolean;
+  autoFocusName?: boolean;
 }
 
-function IssueForm({ defaultName, defaultYear, isPending }: IssueFormProps) {
+function IssueForm({ vendors, primaryVendorId, defaultName, defaultYear, defaultCatalogNumbers = [], isPending, autoFocusName }: IssueFormProps) {
+  const sortedVendors = useMemo(() => {
+    if (!primaryVendorId) return vendors;
+    return [...vendors].sort((a, b) => {
+      if (a.catalogVendorId === primaryVendorId) return -1;
+      if (b.catalogVendorId === primaryVendorId) return 1;
+      return 0;
+    });
+  }, [vendors, primaryVendorId]);
+
   return (
     <>
       <div style={{ marginBottom: "1rem" }}>
@@ -728,9 +757,10 @@ function IssueForm({ defaultName, defaultYear, isPending }: IssueFormProps) {
           disabled={isPending}
           placeholder="e.g. First Issue"
           style={INPUT_STYLE}
+          data-autofocus={autoFocusName || undefined}
         />
       </div>
-      <div>
+      <div style={{ marginBottom: sortedVendors.length > 0 ? "1rem" : undefined }}>
         <LabelWithError htmlFor="f-issue-year">Year (optional)</LabelWithError>
         <input
           id="f-issue-year"
@@ -744,6 +774,50 @@ function IssueForm({ defaultName, defaultYear, isPending }: IssueFormProps) {
           style={INPUT_STYLE}
         />
       </div>
+      {sortedVendors.length > 0 && (
+        <div>
+          <LabelWithError>Catalog numbers</LabelWithError>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {sortedVendors.map((v) => {
+              const isPrimary = v.catalogVendorId === primaryVendorId;
+              const existing = defaultCatalogNumbers?.find((cn) => cn.catalogVendorId === v.catalogVendorId);
+              return (
+                <div key={v.catalogVendorId}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginBottom: "0.25rem" }}>
+                    <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
+                      {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
+                    </span>
+                    {isPrimary && (
+                      <span style={{ fontSize: "0.6875rem", color: "var(--color-accent)", border: "1px solid var(--color-accent)", borderRadius: "0.2rem", padding: "0.05rem 0.3rem", fontWeight: 600, lineHeight: 1.5 }}>
+                        Primary
+                      </span>
+                    )}
+                  </span>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <input
+                      name={`issueCatalogFirst_${v.catalogVendorId}`}
+                      type="text"
+                      defaultValue={existing?.firstNumber ?? ""}
+                      disabled={isPending}
+                      placeholder="First"
+                      style={{ ...INPUT_STYLE, flex: 1 }}
+                    />
+                    <span style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", flexShrink: 0 }}>–</span>
+                    <input
+                      name={`issueCatalogLast_${v.catalogVendorId}`}
+                      type="text"
+                      defaultValue={existing?.lastNumber ?? ""}
+                      disabled={isPending}
+                      placeholder="Last (optional)"
+                      style={{ ...INPUT_STYLE, flex: 1 }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 }

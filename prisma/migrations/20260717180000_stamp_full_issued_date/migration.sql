@@ -1,0 +1,2 @@
+ALTER TABLE "stamp" ADD COLUMN "issuedDay" INTEGER;
+ALTER TABLE "stamp" ADD COLUMN "issuedMonth" INTEGER;

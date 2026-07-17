@@ -37,6 +37,8 @@ interface AddStampDialogProps {
   prefilledIssueId?: string | null;
   /** Pre-filled parent stamp — skips parent step if set */
   prefilledParentStampId?: string | null;
+  /** Default catalog numbers (prefilled from parent stamp) */
+  defaultCatalogNumbers?: { catalogVendorId: string; number: string }[];
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -48,6 +50,7 @@ export function AddStampDialog({
   areaVendors,
   prefilledIssueId,
   prefilledParentStampId,
+  defaultCatalogNumbers = [],
   isPending,
   error,
   onClose,
@@ -58,8 +61,8 @@ export function AddStampDialog({
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );
 
-  // Step 1 is always skipped (area is pre-filled from URL context).
-  // Step 2 (issue) is skipped when prefilledIssueId is set.
+  const skipToFields = !!prefilledIssueId;
+
   const [selectedIssueId, setSelectedIssueId] = useState(
     prefilledIssueId ?? (issues[0]?.id ?? "")
   );
@@ -69,13 +72,16 @@ export function AddStampDialog({
   const [newIssueName, setNewIssueName] = useState("");
   const [newIssueYear, setNewIssueYear] = useState("");
 
-  // Step 3: parent node (optional). Always shown after issue step.
   const [selectedParentId, setSelectedParentId] = useState(
     prefilledParentStampId ?? ""
   );
 
+  // Default required=true for first-level stamps (no prefilled parent)
+  const [requiredForCompleteness, setRequiredForCompleteness] = useState(
+    !prefilledParentStampId
+  );
+
   const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? null;
-  // Stamp nodes for the selected issue (flat list)
   const stampOptions = selectedIssue ? selectedIssue.members : [];
 
   const showIssueStep = !prefilledIssueId;
@@ -84,13 +90,13 @@ export function AddStampDialog({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
 
-    // If creating a new issue, we need to handle that differently —
-    // the action will create the issue first then add the stamp.
-    // We encode it in the FormData using a special field.
     if (autoCreateIssue) {
       fd.set("newIssueName", newIssueName.trim());
       fd.set("newIssueYear", newIssueYear.trim());
     }
+
+    // Override the checkbox value explicitly
+    fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
 
     const issueId = autoCreateIssue ? "" : selectedIssueId;
     onSubmit(issueId, fd);
@@ -197,66 +203,102 @@ export function AddStampDialog({
             <input type="hidden" name="parentStampId" value={prefilledParentStampId} />
           )}
 
-          {/* ── Stamp fields ── */}
-          <div style={{ marginBottom: "1.25rem", paddingTop: showIssueStep && !prefilledParentStampId && !autoCreateIssue && stampOptions.length > 0 ? 0 : undefined }}>
-            <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.75rem" }}>
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="f-stamp-name">Name (optional)</LabelWithError>
-                <input
-                  id="f-stamp-name"
-                  name="name"
-                  type="text"
-                  disabled={isPending}
-                  placeholder="e.g. 5 kr blue"
-                  style={INPUT_STYLE}
-                />
-              </div>
-              <div style={{ width: "6rem", flexShrink: 0 }}>
-                <LabelWithError htmlFor="f-stamp-year">Issued year</LabelWithError>
-                <input
-                  id="f-stamp-year"
-                  name="issuedYear"
-                  type="number"
-                  disabled={isPending}
-                  placeholder="1860"
-                  min={1840}
-                  max={2100}
-                  style={INPUT_STYLE}
-                />
-              </div>
-            </div>
-
+          {/* ── Stamp fields (reordered: catalog → required → name → date) ── */}
+          <div>
+            {/* Catalog numbers */}
             {vendors.length > 0 && (
-              <div style={{ marginBottom: "0.75rem" }}>
+              <div style={{ marginBottom: "0.875rem" }}>
                 <LabelWithError>Catalog numbers</LabelWithError>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                  {vendors.map((v) => (
-                    <div key={v.catalogVendorId} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ width: "4rem", flexShrink: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
-                        {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
-                      </span>
-                      <input
-                        name={`catalogNumber_${v.catalogVendorId}`}
-                        type="text"
-                        disabled={isPending}
-                        placeholder="e.g. 1"
-                        style={{ ...INPUT_STYLE, flex: 1 }}
-                      />
-                    </div>
-                  ))}
+                  {vendors.map((v, i) => {
+                    const defaultNum = defaultCatalogNumbers.find(
+                      (cn) => cn.catalogVendorId === v.catalogVendorId
+                    )?.number ?? "";
+                    return (
+                      <div key={v.catalogVendorId} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ width: "4rem", flexShrink: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
+                          {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
+                        </span>
+                        <input
+                          name={`catalogNumber_${v.catalogVendorId}`}
+                          type="text"
+                          disabled={isPending}
+                          placeholder="e.g. 1"
+                          defaultValue={defaultNum}
+                          data-autofocus={skipToFields && i === 0 || undefined}
+                          style={{ ...INPUT_STYLE, flex: 1 }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "var(--color-text-secondary)", cursor: "pointer" }}>
+            {/* Required for completeness */}
+            <div style={{ marginBottom: "0.875rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "var(--color-text-secondary)", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={requiredForCompleteness}
+                  onChange={(e) => setRequiredForCompleteness(e.target.checked)}
+                  disabled={isPending}
+                />
+                Required for completeness
+              </label>
+            </div>
+
+            {/* Name */}
+            <div style={{ marginBottom: "0.875rem" }}>
+              <LabelWithError htmlFor="f-stamp-name">Name (optional)</LabelWithError>
               <input
-                type="checkbox"
-                name="requiredForCompleteness"
-                value="true"
+                id="f-stamp-name"
+                name="name"
+                type="text"
                 disabled={isPending}
+                placeholder="e.g. 5 kr blue"
+                data-autofocus={skipToFields && vendors.length === 0 || undefined}
+                style={INPUT_STYLE}
               />
-              Required for completeness
-            </label>
+            </div>
+
+            {/* Issued date */}
+            <div>
+              <LabelWithError>Issued date (optional — any part)</LabelWithError>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  name="issuedDay"
+                  type="number"
+                  disabled={isPending}
+                  placeholder="Day"
+                  min={1}
+                  max={31}
+                  style={{ ...INPUT_STYLE, width: "4.5rem", flex: "none" }}
+                />
+                <input
+                  name="issuedMonth"
+                  type="number"
+                  disabled={isPending}
+                  placeholder="Month"
+                  min={1}
+                  max={12}
+                  style={{ ...INPUT_STYLE, width: "5rem", flex: "none" }}
+                />
+                <input
+                  name="issuedYear"
+                  type="number"
+                  disabled={isPending}
+                  placeholder="Year"
+                  min={1840}
+                  max={2100}
+                  defaultValue={(() => {
+                    const issue = issues.find((i) => i.id === selectedIssueId);
+                    return issue?.year ?? undefined;
+                  })()}
+                  style={{ ...INPUT_STYLE, flex: 1 }}
+                />
+              </div>
+            </div>
           </div>
         </DialogBody>
         <DialogActions
