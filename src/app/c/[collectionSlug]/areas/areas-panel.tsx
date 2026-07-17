@@ -296,7 +296,7 @@ function CollectionAreaForm({
         <>
           <div style={{ marginBottom: "1rem" }}>
             <LabelWithError htmlFor="f-area-primary-catalog">
-              Primary catalog (optional)
+              Primary catalog
             </LabelWithError>
             <select
               id="f-area-primary-catalog"
@@ -305,7 +305,11 @@ function CollectionAreaForm({
               disabled={isPending}
               style={INPUT_STYLE}
             >
-              <option value="">— None (inherit from parent)</option>
+              <option value="">
+                {inheritedPrimaryId
+                  ? "— None (inherit from parent)"
+                  : "— Select a catalog —"}
+              </option>
               {catalogNames.map((cn) => (
                 <option key={cn.id} value={cn.id}>
                   {cn.vendorName} / {cn.name}
@@ -320,6 +324,11 @@ function CollectionAreaForm({
                 </p>
               ) : null;
             })()}
+            {!inheritedPrimaryId && !defaultPrimaryCatalogNameId && (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Required for top-level areas (or set on a parent area).
+              </p>
+            )}
           </div>
 
           <div>

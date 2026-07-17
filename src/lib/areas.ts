@@ -23,6 +23,28 @@ async function resolveAreaCollection(areaId: string): Promise<string> {
   return area.collectionId;
 }
 
+async function assertEffectivePrimaryCatalog(
+  primaryCatalogNameId: string | null | undefined,
+  parentId: string | null | undefined
+): Promise<void> {
+  if (primaryCatalogNameId) return;
+  let currentId = parentId ?? null;
+  let depth = 0;
+  while (currentId && depth < 50) {
+    const ancestor = await prisma.collectionArea.findUnique({
+      where: { id: currentId },
+      select: { primaryCatalogNameId: true, parentId: true },
+    });
+    if (!ancestor) break;
+    if (ancestor.primaryCatalogNameId) return;
+    currentId = ancestor.parentId;
+    depth++;
+  }
+  throw new Error(
+    "A primary catalog is required. Set one on this area or on a parent area."
+  );
+}
+
 export interface AreaCatalogEntry {
   catalogNameId: string;
   catalogVendorId: string;
@@ -123,6 +145,10 @@ export async function createCollectionArea(
       throw new Error("Parent area not found.");
     }
   }
+  await assertEffectivePrimaryCatalog(
+    data.primaryCatalogNameId,
+    data.parentId
+  );
   const created = await prisma.collectionArea.create({
     data: {
       collectionId,
@@ -173,6 +199,10 @@ export async function updateCollectionArea(
     }
   }
 
+  await assertEffectivePrimaryCatalog(
+    data.primaryCatalogNameId,
+    data.parentId
+  );
   await prisma.collectionArea.update({
     where: { id: areaId },
     data: {

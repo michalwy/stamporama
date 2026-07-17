@@ -101,11 +101,19 @@ describe("getCollectionAreas", () => {
 describe("createCollectionArea", () => {
   let userId: string;
   let collectionId: string;
+  let catalogNameId: string;
 
   before(async () => {
     const ts = Date.now();
     userId = (await createTestUser(`cca-${ts}`)).id;
     collectionId = (await createTestCollection(userId, `cca-${ts}`)).id;
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const cn = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Deutschland", currency: "EUR" },
+    });
+    catalogNameId = cn.id;
   });
 
   after(async () => {
@@ -113,40 +121,37 @@ describe("createCollectionArea", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("creates a top-level area with name only", async () => {
-    await createCollectionArea(userId, collectionId, { name: "Europe" });
+  it("creates a top-level area with primary catalog", async () => {
+    await createCollectionArea(userId, collectionId, {
+      name: "Europe",
+      primaryCatalogNameId: catalogNameId,
+    });
     const found = await prisma.collectionArea.findFirst({
       where: { collectionId, name: "Europe" },
     });
     assert.ok(found);
     assert.equal(found.parentId, null);
     assert.equal(found.description, null);
-    assert.equal(found.primaryCatalogNameId, null);
+    assert.equal(found.primaryCatalogNameId, catalogNameId);
   });
 
   it("creates an area with all optional fields", async () => {
-    const vendor = await prisma.catalogVendor.create({
-      data: { collectionId, name: "Michel", abbreviation: "Mi" },
-    });
-    const catalogName = await prisma.catalogName.create({
-      data: { vendorId: vendor.id, name: "Deutschland", currency: "EUR" },
-    });
     await createCollectionArea(userId, collectionId, {
       name: "Germany",
       description: "German stamps",
-      primaryCatalogNameId: catalogName.id,
+      primaryCatalogNameId: catalogNameId,
     });
     const found = await prisma.collectionArea.findFirst({
       where: { collectionId, name: "Germany" },
     });
     assert.ok(found);
     assert.equal(found.description, "German stamps");
-    assert.equal(found.primaryCatalogNameId, catalogName.id);
+    assert.equal(found.primaryCatalogNameId, catalogNameId);
   });
 
-  it("creates a child area with parentId", async () => {
+  it("creates a child area inheriting primary catalog from parent", async () => {
     const parent = await prisma.collectionArea.create({
-      data: { collectionId, name: "ParentArea" },
+      data: { collectionId, name: "ParentArea", primaryCatalogNameId: catalogNameId },
     });
     await createCollectionArea(userId, collectionId, {
       name: "ChildArea",
@@ -157,6 +162,14 @@ describe("createCollectionArea", () => {
     });
     assert.ok(found);
     assert.equal(found.parentId, parent.id);
+    assert.equal(found.primaryCatalogNameId, null);
+  });
+
+  it("throws when no effective primary catalog exists", async () => {
+    await assert.rejects(
+      () => createCollectionArea(userId, collectionId, { name: "NoCatalog" }),
+      /primary catalog is required/i
+    );
   });
 
   it("throws when parentId references area in a different collection", async () => {
@@ -184,14 +197,22 @@ describe("createCollectionArea", () => {
 describe("updateCollectionArea", () => {
   let userId: string;
   let collectionId: string;
+  let catalogNameId: string;
   let areaId: string;
 
   before(async () => {
     const ts = Date.now();
     userId = (await createTestUser(`uca-${ts}`)).id;
     collectionId = (await createTestCollection(userId, `uca-${ts}`)).id;
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const cn = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Deutschland", currency: "EUR" },
+    });
+    catalogNameId = cn.id;
     const area = await prisma.collectionArea.create({
-      data: { collectionId, name: "Original", description: "Old desc" },
+      data: { collectionId, name: "Original", description: "Old desc", primaryCatalogNameId: catalogNameId },
     });
     areaId = area.id;
   });
@@ -202,25 +223,32 @@ describe("updateCollectionArea", () => {
   });
 
   it("updates name and description", async () => {
-    await updateCollectionArea(userId, areaId, { name: "Updated", description: "New desc" });
+    await updateCollectionArea(userId, areaId, { name: "Updated", description: "New desc", primaryCatalogNameId: catalogNameId });
     const found = await prisma.collectionArea.findUniqueOrThrow({ where: { id: areaId } });
     assert.equal(found.name, "Updated");
     assert.equal(found.description, "New desc");
   });
 
-  it("clears optional fields when null is passed", async () => {
-    await updateCollectionArea(userId, areaId, { name: "Updated", description: null, primaryCatalogNameId: null });
+  it("clears description but keeps primary catalog", async () => {
+    await updateCollectionArea(userId, areaId, { name: "Updated", description: null, primaryCatalogNameId: catalogNameId });
     const found = await prisma.collectionArea.findUniqueOrThrow({ where: { id: areaId } });
     assert.equal(found.description, null);
-    assert.equal(found.primaryCatalogNameId, null);
+    assert.equal(found.primaryCatalogNameId, catalogNameId);
+  });
+
+  it("throws when clearing primary catalog on top-level area", async () => {
+    await assert.rejects(
+      () => updateCollectionArea(userId, areaId, { name: "Updated", primaryCatalogNameId: null }),
+      /primary catalog is required/i
+    );
   });
 
   it("throws when attempting to create a cycle", async () => {
     const ts = Date.now();
-    const a = await prisma.collectionArea.create({ data: { collectionId, name: `CycleA-${ts}` } });
+    const a = await prisma.collectionArea.create({ data: { collectionId, name: `CycleA-${ts}`, primaryCatalogNameId: catalogNameId } });
     const b = await prisma.collectionArea.create({ data: { collectionId, name: `CycleB-${ts}`, parentId: a.id } });
     await assert.rejects(
-      () => updateCollectionArea(userId, a.id, { name: `CycleA-${ts}`, parentId: b.id }),
+      () => updateCollectionArea(userId, a.id, { name: `CycleA-${ts}`, parentId: b.id, primaryCatalogNameId: catalogNameId }),
       /cannot set an area as its own ancestor/i
     );
   });
@@ -327,7 +355,7 @@ describe("syncAreaCatalogEntries", () => {
   });
 
   it("creates catalog entries and reads them back via getCollectionAreas", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "SynTest" });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "SynTest", primaryCatalogNameId: catalogNameId });
     await syncAreaCatalogEntries(userId, areaId, [
       { catalogNameId, prefix: "1" },
       { catalogNameId: catalogName2Id, prefix: null },
@@ -345,7 +373,7 @@ describe("syncAreaCatalogEntries", () => {
   });
 
   it("replaces all existing entries on re-sync", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ReplaceTest" });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ReplaceTest", primaryCatalogNameId: catalogNameId });
     await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId, prefix: "old" }]);
     await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId: catalogName2Id, prefix: "new" }]);
     const areas = await getCollectionAreas(userId, collectionId);
@@ -357,7 +385,7 @@ describe("syncAreaCatalogEntries", () => {
   });
 
   it("syncing with empty array removes all entries", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ClearTest" });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "ClearTest", primaryCatalogNameId: catalogNameId });
     await syncAreaCatalogEntries(userId, areaId, [{ catalogNameId, prefix: "x" }]);
     await syncAreaCatalogEntries(userId, areaId, []);
     const areas = await getCollectionAreas(userId, collectionId);
@@ -375,7 +403,7 @@ describe("syncAreaCatalogEntries", () => {
     const otherCn = await prisma.catalogName.create({
       data: { vendorId: otherVendor.id, name: "USA", currency: "USD" },
     });
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "BadCatalog" });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "BadCatalog", primaryCatalogNameId: catalogNameId });
     await assert.rejects(
       () => syncAreaCatalogEntries(userId, areaId, [{ catalogNameId: otherCn.id, prefix: null }]),
       /catalog name not found/i
@@ -385,7 +413,7 @@ describe("syncAreaCatalogEntries", () => {
   });
 
   it("throws when collection is not owned by user", async () => {
-    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "AuthTest" });
+    const { id: areaId } = await createCollectionArea(userId, collectionId, { name: "AuthTest", primaryCatalogNameId: catalogNameId });
     await assert.rejects(
       () => syncAreaCatalogEntries("wrong-user", areaId, []),
       /access denied/i
