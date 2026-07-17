@@ -244,6 +244,7 @@ interface IssueRowProps {
   areaName?: string;
   onFilterByArea?: (areaId: string) => void;
   callbacks: IssueRowCallbacks;
+  defaultExpanded?: boolean;
 }
 
 export function IssueRow({
@@ -256,8 +257,9 @@ export function IssueRow({
   areaName,
   onFilterByArea,
   callbacks,
+  defaultExpanded,
 }: IssueRowProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
 
   const { data: members, isLoading: membersLoading } = useIssueMembers(
     collectionId,

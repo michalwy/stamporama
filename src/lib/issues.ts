@@ -282,6 +282,12 @@ export async function listIssueMembers(
 
 // ── Mutations ───────────────────────────────────────────────────────────────
 
+export interface AutoCreateStampsInput {
+  rangeFrom: number;
+  rangeTo: number;
+  vendorIds: string[];
+}
+
 export async function createIssue(
   ownerId: string,
   collectionId: string,
@@ -290,6 +296,7 @@ export async function createIssue(
     name?: string | null;
     year?: number | null;
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+    autoCreateStamps?: AutoCreateStampsInput;
   }
 ): Promise<{ id: string }> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -300,6 +307,14 @@ export async function createIssue(
   if (!area || area.collectionId !== collectionId) {
     throw new Error("Collection area not found.");
   }
+
+  if (data.autoCreateStamps) {
+    const { rangeFrom, rangeTo, vendorIds } = data.autoCreateStamps;
+    if (rangeFrom > rangeTo) throw new Error("Range start must be <= range end.");
+    if (rangeTo - rangeFrom + 1 > 50) throw new Error("Range cannot exceed 50 stamps.");
+    if (vendorIds.length === 0) throw new Error("At least one catalog vendor must be selected.");
+  }
+
   const created = await prisma.$transaction(async (tx) => {
     const issue = await tx.issue.create({
       data: {
@@ -321,6 +336,54 @@ export async function createIssue(
         skipDuplicates: true,
       });
     }
+
+    if (data.autoCreateStamps) {
+      const { rangeFrom, rangeTo, vendorIds } = data.autoCreateStamps;
+      const stampIds: string[] = [];
+
+      for (let n = rangeFrom; n <= rangeTo; n++) {
+        const stamp = await tx.stamp.create({
+          data: {
+            collectionId,
+            issuedYear: data.year ?? null,
+          },
+          select: { id: true },
+        });
+        stampIds.push(stamp.id);
+      }
+
+      await tx.stampCollectionArea.createMany({
+        data: stampIds.map((stampId) => ({
+          stampId,
+          collectionAreaId: areaId,
+          isPrimary: true,
+        })),
+      });
+
+      await tx.issueMember.createMany({
+        data: stampIds.map((stampId) => ({
+          issueId: issue.id,
+          stampId,
+          requiredForCompleteness: true,
+        })),
+      });
+
+      const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
+      for (let i = 0; i < stampIds.length; i++) {
+        const num = String(rangeFrom + i);
+        for (const vendorId of vendorIds) {
+          catalogNumberRows.push({
+            stampId: stampIds[i],
+            catalogVendorId: vendorId,
+            number: num,
+          });
+        }
+      }
+      if (catalogNumberRows.length > 0) {
+        await tx.stampCatalogNumber.createMany({ data: catalogNumberRows });
+      }
+    }
+
     return issue;
   });
   return { id: created.id };

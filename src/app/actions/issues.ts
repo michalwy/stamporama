@@ -17,7 +17,7 @@ import type { IssueDeletionPreview } from "@/lib/issues";
 
 export type IssueActionState =
   | { status: "idle" }
-  | { status: "success" }
+  | { status: "success"; issueId?: string }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -55,9 +55,42 @@ export async function createIssueAction(
     return { status: "error", message: "Year must be a valid year (1840–2100)." };
   }
   const catalogNumbers = parseCatalogNumbers(formData);
+
+  let autoCreateStamps: { rangeFrom: number; rangeTo: number; vendorIds: string[] } | undefined;
+  if (formData.get("autoCreateStamps") === "true") {
+    const vendorIds: string[] = [];
+    for (const key of formData.keys()) {
+      if (key.startsWith("autoCreateVendor_")) {
+        vendorIds.push(key.slice("autoCreateVendor_".length));
+      }
+    }
+    if (vendorIds.length === 0) {
+      return { status: "error", message: "Select at least one catalog vendor for auto-create." };
+    }
+    const rangeVendor = catalogNumbers.find((cn) => vendorIds.includes(cn.catalogVendorId) && cn.firstNumber);
+    if (!rangeVendor) {
+      return { status: "error", message: "Enter a First catalog number for at least one selected vendor." };
+    }
+    const rangeFrom = parseInt(rangeVendor.firstNumber, 10);
+    const rangeTo = rangeVendor.lastNumber ? parseInt(rangeVendor.lastNumber, 10) : rangeFrom;
+    if (isNaN(rangeFrom) || rangeFrom < 1) {
+      return { status: "error", message: "First catalog number must be a positive integer for auto-create." };
+    }
+    if (isNaN(rangeTo) || rangeTo < 1) {
+      return { status: "error", message: "Last catalog number must be a positive integer for auto-create." };
+    }
+    if (rangeFrom > rangeTo) {
+      return { status: "error", message: "First catalog number must be ≤ Last." };
+    }
+    if (rangeTo - rangeFrom + 1 > 50) {
+      return { status: "error", message: "Range cannot exceed 50 stamps." };
+    }
+    autoCreateStamps = { rangeFrom, rangeTo, vendorIds };
+  }
+
   try {
-    await createIssue(session.user.id, collectionId, areaId, { name, year, catalogNumbers });
-    return { status: "success" };
+    const result = await createIssue(session.user.id, collectionId, areaId, { name, year, catalogNumbers, autoCreateStamps });
+    return { status: "success", issueId: result.id };
   } catch {
     return { status: "error", message: "Failed to create issue. Please try again." };
   }

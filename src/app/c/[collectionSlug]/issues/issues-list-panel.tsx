@@ -61,6 +61,7 @@ interface IssueFormProps {
   defaultCatalogNumbers?: IssueCatalogNumberData[];
   isPending: boolean;
   autoFocusName?: boolean;
+  autoCreate?: boolean;
 }
 
 function IssueForm({
@@ -71,6 +72,7 @@ function IssueForm({
   defaultCatalogNumbers = [],
   isPending,
   autoFocusName,
+  autoCreate,
 }: IssueFormProps) {
   const sortedVendors = useMemo(() => {
     if (!primaryVendorId) return vendors;
@@ -183,6 +185,27 @@ function IssueForm({
                       style={{ ...INPUT_STYLE, flex: 1 }}
                     />
                   </div>
+                  {autoCreate && (
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.375rem",
+                        marginTop: "0.25rem",
+                        fontSize: "0.75rem",
+                        color: "var(--color-text-muted)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        name={`autoCreateVendor_${v.catalogVendorId}`}
+                        defaultChecked={isPrimary}
+                        disabled={isPending}
+                      />
+                      Assign to stamps
+                    </label>
+                  )}
                 </div>
               );
             })}
@@ -215,6 +238,7 @@ function CreateIssueDialog({
   const [selectedAreaId, setSelectedAreaId] = useState(
     defaultAreaId ?? areas[0]?.id ?? ""
   );
+  const [autoCreate, setAutoCreate] = useState(false);
 
   const vendors = useMemo(
     () => (selectedAreaId ? effectiveVendorsForArea(areas, selectedAreaId) : []),
@@ -264,7 +288,31 @@ function CreateIssueDialog({
             primaryVendorId={primaryVendorId}
             isPending={isPending}
             autoFocusName
+            autoCreate={autoCreate}
           />
+          {vendors.length > 0 && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                marginTop: "0.75rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                name="autoCreateStamps"
+                value="true"
+                checked={autoCreate}
+                onChange={(e) => setAutoCreate(e.target.checked)}
+                disabled={isPending}
+              />
+              Auto-create stamps from catalog number range
+            </label>
+          )}
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}
@@ -321,6 +369,7 @@ export function IssuesListPanel({
     status: "idle",
   });
   const [isPending, startTransition] = useTransition();
+  const [autoExpandIssueId, setAutoExpandIssueId] = useState<string | null>(null);
   const { invalidateList, invalidateMembers } = useInvalidateIssues();
 
   const {
@@ -361,6 +410,7 @@ export function IssuesListPanel({
 
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
+    setAutoExpandIssueId(null);
     setDialog(d);
   }
 
@@ -430,7 +480,10 @@ export function IssuesListPanel({
     startTransition(async () => {
       const result = await createIssueAction(collectionId, areaId, fd);
       setActionState(result);
-      if (result.status === "success") handleSuccess();
+      if (result.status === "success") {
+        if (result.issueId) setAutoExpandIssueId(result.issueId);
+        handleSuccess();
+      }
     });
   }
 
@@ -592,6 +645,7 @@ export function IssuesListPanel({
                   areaName={area?.name}
                   onFilterByArea={handleNavigateFilter}
                   callbacks={callbacks}
+                  defaultExpanded={issue.id === autoExpandIssueId}
                 />
               );
             })}
