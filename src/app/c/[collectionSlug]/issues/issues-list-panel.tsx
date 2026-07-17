@@ -8,14 +8,12 @@ import {
   DialogActions,
   DialogSecondaryButton,
   LabelWithError,
-  ConfirmDialog,
 } from "@/app/dialog-shell";
 import {
   createIssueAction,
   updateIssueAction,
   deleteIssueAction,
   addStampToIssueAction,
-  removeStampFromIssueAction,
   moveStampNodeAction,
   type IssueActionState,
 } from "@/app/actions/issues";
@@ -347,7 +345,6 @@ type DialogState =
     }
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-stamp"; issueId: string; stampId: string }
-  | { kind: "remove-stamp"; issueId: string; stampId: string }
   | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
 
 interface IssuesListPanelProps {
@@ -443,10 +440,6 @@ export function IssuesListPanel({
     });
   }
 
-  function handleRemoveStamp(issueId: string, stampId: string) {
-    openDialog({ kind: "remove-stamp", issueId, stampId });
-  }
-
   function handleAddStampSubmit(issueId: string, fd: FormData) {
     const newIssueName = fd.get("newIssueName") as string | null;
     const newIssueYear = fd.get("newIssueYear") as string | null;
@@ -502,7 +495,6 @@ export function IssuesListPanel({
         parentStampId,
         parentCatalogNumbers,
       }),
-    onRemoveStamp: handleRemoveStamp,
     onEditStamp: (issueId, stamp) =>
       openDialog({ kind: "edit-stamp", issueId, stamp }),
     onDeleteStamp: (issueId, stampId, stampName) =>
@@ -736,28 +728,6 @@ export function IssuesListPanel({
               if (result.status === "success") handleSuccess();
             });
           }}
-        />
-      )}
-
-      {dialog.kind === "remove-stamp" && (
-        <ConfirmDialog
-          title="Remove stamp"
-          message="Remove this stamp from the issue?"
-          actionLabel="Remove"
-          pendingLabel="Removing…"
-          onClose={closeDialog}
-          onConfirm={() => {
-            startTransition(async () => {
-              await removeStampFromIssueAction(
-                collectionId,
-                dialog.issueId,
-                dialog.stampId
-              );
-              handleStampSuccess(dialog.issueId);
-            });
-          }}
-          isPending={isPending}
-          error={error}
         />
       )}
 
