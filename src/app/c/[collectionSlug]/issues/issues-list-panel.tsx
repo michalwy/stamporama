@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogSecondaryButton,
   LabelWithError,
+  ConfirmDialog,
 } from "@/app/dialog-shell";
 import {
   createIssueAction,
@@ -493,7 +494,8 @@ type DialogState =
       parentStampId?: string;
       parentCatalogNumbers?: { catalogVendorId: string; number: string }[];
     }
-  | { kind: "move-stamp"; issueId: string; stampId: string };
+  | { kind: "move-stamp"; issueId: string; stampId: string }
+  | { kind: "remove-stamp"; issueId: string; stampId: string };
 
 interface IssuesListPanelProps {
   collectionId: string;
@@ -587,11 +589,7 @@ export function IssuesListPanel({
   }
 
   function handleRemoveStamp(issueId: string, stampId: string) {
-    if (!confirm("Remove this stamp from the issue?")) return;
-    startTransition(async () => {
-      await removeStampFromIssueAction(collectionId, issueId, stampId);
-      handleStampSuccess(issueId);
-    });
+    openDialog({ kind: "remove-stamp", issueId, stampId });
   }
 
   function handleAddStampSubmit(issueId: string, fd: FormData) {
@@ -862,16 +860,10 @@ export function IssuesListPanel({
         (() => {
           const { issue } = dialog;
           return (
-            <DialogShell title="Delete issue" onClose={closeDialog}>
-              <DialogBody>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "0.9375rem",
-                    color: "var(--color-text-primary)",
-                    lineHeight: 1.6,
-                  }}
-                >
+            <ConfirmDialog
+              title="Delete issue"
+              message={
+                <>
                   Delete issue{" "}
                   <strong>{issue.name ?? "(unnamed)"}</strong>?
                   {issue.memberCount > 0 && (
@@ -886,28 +878,48 @@ export function IssuesListPanel({
                     </>
                   )}{" "}
                   This cannot be undone.
-                </p>
-              </DialogBody>
-              <DialogActions
-                actionLabel={isPending ? "Deleting…" : "Delete"}
-                variant="destructive"
-                onCancel={closeDialog}
-                onAction={() => {
-                  startTransition(async () => {
-                    const result = await deleteIssueAction(
-                      collectionId,
-                      issue.id
-                    );
-                    setActionState(result);
-                    if (result.status === "success") handleSuccess();
-                  });
-                }}
-                disabled={isPending}
-                error={error}
-              />
-            </DialogShell>
+                </>
+              }
+              actionLabel="Delete"
+              pendingLabel="Deleting…"
+              onClose={closeDialog}
+              onConfirm={() => {
+                startTransition(async () => {
+                  const result = await deleteIssueAction(
+                    collectionId,
+                    issue.id
+                  );
+                  setActionState(result);
+                  if (result.status === "success") handleSuccess();
+                });
+              }}
+              isPending={isPending}
+              error={error}
+            />
           );
         })()}
+
+      {dialog.kind === "remove-stamp" && (
+        <ConfirmDialog
+          title="Remove stamp"
+          message="Remove this stamp from the issue?"
+          actionLabel="Remove"
+          pendingLabel="Removing…"
+          onClose={closeDialog}
+          onConfirm={() => {
+            startTransition(async () => {
+              await removeStampFromIssueAction(
+                collectionId,
+                dialog.issueId,
+                dialog.stampId
+              );
+              handleStampSuccess(dialog.issueId);
+            });
+          }}
+          isPending={isPending}
+          error={error}
+        />
+      )}
 
       {dialog.kind === "add-stamp" &&
         dialog.issueId &&

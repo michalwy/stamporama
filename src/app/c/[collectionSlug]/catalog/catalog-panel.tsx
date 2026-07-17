@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogActions,
   LabelWithError,
+  ConfirmDialog,
 } from "@/app/dialog-shell";
 import {
   createCatalogVendorAction,
@@ -350,21 +351,20 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
       )}
 
       {dialog.kind === "delete-vendor" && (
-        <DialogShell title="Delete vendor" onClose={closeDialog}>
-          <DialogBody>
-            <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
+        <ConfirmDialog
+          title="Delete vendor"
+          message={
+            <>
               Delete vendor <strong>{dialog.vendor.name}</strong>? This will also delete all its catalog names and editions. This cannot be undone.
-            </p>
-          </DialogBody>
-          <DialogActions
-            actionLabel={isPending ? "Deleting…" : "Delete"}
-            variant="destructive"
-            onCancel={closeDialog}
-            onAction={() => submitDelete(() => deleteCatalogVendorAction(dialog.vendor.id))}
-            disabled={isPending}
-            error={error}
-          />
-        </DialogShell>
+            </>
+          }
+          actionLabel="Delete"
+          pendingLabel="Deleting…"
+          onClose={closeDialog}
+          onConfirm={() => submitDelete(() => deleteCatalogVendorAction(dialog.vendor.id))}
+          isPending={isPending}
+          error={error}
+        />
       )}
 
       {dialog.kind === "add-name" && (
@@ -394,21 +394,20 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
       )}
 
       {dialog.kind === "delete-name" && (
-        <DialogShell title="Delete catalog name" onClose={closeDialog}>
-          <DialogBody>
-            <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
+        <ConfirmDialog
+          title="Delete catalog name"
+          message={
+            <>
               Delete catalog name <strong>{dialog.name.name}</strong>? All its editions will also be deleted. This cannot be undone.
-            </p>
-          </DialogBody>
-          <DialogActions
-            actionLabel={isPending ? "Deleting…" : "Delete"}
-            variant="destructive"
-            onCancel={closeDialog}
-            onAction={() => submitDelete(() => deleteCatalogNameAction(dialog.name.id))}
-            disabled={isPending}
-            error={error}
-          />
-        </DialogShell>
+            </>
+          }
+          actionLabel="Delete"
+          pendingLabel="Deleting…"
+          onClose={closeDialog}
+          onConfirm={() => submitDelete(() => deleteCatalogNameAction(dialog.name.id))}
+          isPending={isPending}
+          error={error}
+        />
       )}
 
       {dialog.kind === "add-edition" && (
@@ -434,21 +433,20 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
       )}
 
       {dialog.kind === "delete-edition" && (
-        <DialogShell title="Delete edition" onClose={closeDialog}>
-          <DialogBody>
-            <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
+        <ConfirmDialog
+          title="Delete edition"
+          message={
+            <>
               Delete edition <strong>{dialog.edition.year}</strong>? This cannot be undone.
-            </p>
-          </DialogBody>
-          <DialogActions
-            actionLabel={isPending ? "Deleting…" : "Delete"}
-            variant="destructive"
-            onCancel={closeDialog}
-            onAction={() => submitDelete(() => deleteCatalogEditionAction(dialog.edition.id))}
-            disabled={isPending}
-            error={error}
-          />
-        </DialogShell>
+            </>
+          }
+          actionLabel="Delete"
+          pendingLabel="Deleting…"
+          onClose={closeDialog}
+          onConfirm={() => submitDelete(() => deleteCatalogEditionAction(dialog.edition.id))}
+          isPending={isPending}
+          error={error}
+        />
       )}
     </>
   );

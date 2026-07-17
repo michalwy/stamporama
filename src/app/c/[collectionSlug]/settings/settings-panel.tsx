@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
+import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
   type ResetToDemoState,
@@ -132,30 +132,22 @@ export function SettingsPanel({ collectionId, collectionName }: SettingsPanelPro
       </section>
 
       {dialogOpen && (
-        <DialogShell title="Reset to demo data?" onClose={closeDialog}>
-          <DialogBody>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.9375rem",
-                color: "var(--color-text-primary)",
-                lineHeight: 1.6,
-              }}
-            >
+        <ConfirmDialog
+          title="Reset to demo data?"
+          message={
+            <>
               This will permanently delete all current data in{" "}
               <strong>{collectionName}</strong> and replace it with the demo
               dataset. This cannot be undone.
-            </p>
-          </DialogBody>
-          <DialogActions
-            actionLabel={isPending ? "Resetting…" : "Reset"}
-            variant="destructive"
-            onCancel={closeDialog}
-            onAction={handleReset}
-            disabled={isPending}
-            error={actionState.status === "error" ? actionState.message : undefined}
-          />
-        </DialogShell>
+            </>
+          }
+          actionLabel="Reset"
+          pendingLabel="Resetting…"
+          onClose={closeDialog}
+          onConfirm={handleReset}
+          isPending={isPending}
+          error={actionState.status === "error" ? actionState.message : undefined}
+        />
       )}
     </>
   );

@@ -300,6 +300,57 @@ export function LabelWithError({ htmlFor, error, children }: LabelWithErrorProps
   );
 }
 
+// ── ConfirmDialog ────────────────────────────────────────────────────────────
+
+export interface ConfirmDialogProps {
+  title: string;
+  message: ReactNode;
+  actionLabel: string;
+  pendingLabel?: string;
+  variant?: "primary" | "destructive";
+  isPending?: boolean;
+  error?: ReactNode;
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+export function ConfirmDialog({
+  title,
+  message,
+  actionLabel,
+  pendingLabel,
+  variant = "destructive",
+  isPending,
+  error,
+  onConfirm,
+  onClose,
+}: ConfirmDialogProps) {
+  return (
+    <DialogShell title={title} onClose={onClose}>
+      <DialogBody>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.9375rem",
+            color: "var(--color-text-primary)",
+            lineHeight: 1.6,
+          }}
+        >
+          {message}
+        </p>
+      </DialogBody>
+      <DialogActions
+        actionLabel={isPending && pendingLabel ? pendingLabel : actionLabel}
+        variant={variant}
+        onCancel={onClose}
+        onAction={onConfirm}
+        disabled={isPending}
+        error={error}
+      />
+    </DialogShell>
+  );
+}
+
 export function ErrorBubble({ children }: { children?: ReactNode }) {
   if (!children) return null;
   return (
