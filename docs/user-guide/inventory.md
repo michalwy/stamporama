@@ -75,6 +75,14 @@ could not be converted.
 
    Choose a specific variant if you know it, or the **base stamp** if the variant is
    unknown. The chosen stamp appears as a summary with a **Change** link to reselect.
+
+   If the stamp isn't in your catalog yet, you can add it without leaving the browser
+   (you must still pick an existing **area** first):
+   - **+ New issue** (top of the issue list) adds an issue to the selected area. It then
+     appears in the list, ready for you to add a stamp to it.
+   - **+ New stamp** (inside an expanded issue) adds a stamp to that issue and selects it
+     for the copy straight away.
+   - **+ variant** (next to a base stamp) adds a variant under that stamp and selects it.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection*.

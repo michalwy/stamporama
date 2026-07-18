@@ -205,5 +205,15 @@ export function useInvalidateInventory() {
       queryClient.invalidateQueries({
         queryKey: inventoryKeys.all(collectionId),
       }),
+    /** Refresh the picker popup's area→issue→stamp data after an inline create
+     * (#105), so a new issue/stamp shows without touching the inventory list. */
+    invalidatePickerData: (collectionId: string) => {
+      queryClient.invalidateQueries({
+        queryKey: ["inventory", collectionId, "issuesByArea"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["inventory", collectionId, "issueMembers"],
+      });
+    },
   };
 }

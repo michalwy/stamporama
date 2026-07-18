@@ -30,7 +30,7 @@ export async function getIssuePriceDetailsAction(
 
 export type IssueActionState =
   | { status: "idle" }
-  | { status: "success"; issueId?: string }
+  | { status: "success"; issueId?: string; stampId?: string }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -238,7 +238,7 @@ export async function addStampToIssueAction(
   }
 
   try {
-    await addStampToIssue(session.user.id, collectionId, issueId, {
+    const { stampId } = await addStampToIssue(session.user.id, collectionId, issueId, {
       name,
       issuedDay,
       issuedMonth,
@@ -248,7 +248,7 @@ export async function addStampToIssueAction(
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
     });
-    return { status: "success" };
+    return { status: "success", stampId };
   } catch {
     return { status: "error", message: "Failed to add stamp. Please try again." };
   }
