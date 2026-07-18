@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
-import { SettingsPanel } from "./settings-panel";
+import { getCollectionAreas } from "@/lib/areas";
+import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
+import { SettingsTabs } from "./settings-tabs";
 
 interface SettingsPageProps {
   params: Promise<{ collectionSlug: string }>;
@@ -17,19 +20,25 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
+  const [areas, catalogNames, catalogTree] = await Promise.all([
+    getCollectionAreas(session.user.id, collection.id),
+    getCatalogNames(session.user.id, collection.id),
+    getCatalogTree(session.user.id, collection.id),
+  ]);
+
   return (
-    <div style={{ padding: "2rem", maxWidth: "40rem" }}>
-      <h2
-        style={{
-          margin: "0 0 2rem",
-          fontSize: "1.25rem",
-          fontWeight: 600,
-          color: "var(--color-text-primary)",
-        }}
-      >
-        Settings
-      </h2>
-      <SettingsPanel collectionId={collection.id} collectionName={collection.name} baseCurrency={collection.baseCurrency} />
+    <div style={{ padding: "2rem", maxWidth: "56rem" }}>
+      <Suspense fallback={null}>
+        <SettingsTabs
+          collectionId={collection.id}
+          collectionName={collection.name}
+          baseCurrency={collection.baseCurrency}
+          collectionSlug={collectionSlug}
+          initialAreas={areas}
+          catalogNames={catalogNames}
+          initialTree={catalogTree}
+        />
+      </Suspense>
     </div>
   );
 }

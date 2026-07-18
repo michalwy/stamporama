@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getCollectionBySlug } from "@/lib/collections";
+import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { CollectionSidebar } from "./collection-sidebar";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -19,7 +19,10 @@ export default async function CollectionLayout({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const collection = await getCollectionBySlug(session.user.id, collectionSlug);
+  const [collection, collections] = await Promise.all([
+    getCollectionBySlug(session.user.id, collectionSlug),
+    getCollectionsByOwner(session.user.id),
+  ]);
   if (!collection) notFound();
 
   return (
@@ -30,107 +33,14 @@ export default async function CollectionLayout({
         background: "var(--color-bg-page)",
       }}
     >
-      <aside
-        style={{
-          width: "15rem",
-          flexShrink: 0,
-          background: "var(--color-bg-elevated)",
-          borderRight: "1px solid var(--color-border)",
-          display: "flex",
-          flexDirection: "column",
-          position: "sticky",
-          top: 0,
-          height: "100vh",
-          overflowY: "auto",
-        }}
-      >
-        <div
-          style={{
-            padding: "1.25rem 1rem",
-            borderBottom: "1px solid var(--color-border)",
-          }}
-        >
-          <p
-            style={{
-              margin: 0,
-              fontSize: "0.75rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            Collection
-          </p>
-          <h1
-            style={{
-              margin: "0.25rem 0 0",
-              fontSize: "1rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            {collection.name}
-          </h1>
-        </div>
-        <nav
-          style={{
-            padding: "0.75rem 0.5rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.125rem",
-          }}
-        >
-          {[
-            { label: "Overview", href: `/c/${collectionSlug}` },
-            { label: "Catalog", href: `/c/${collectionSlug}/catalog` },
-            { label: "Areas", href: `/c/${collectionSlug}/areas` },
-            { label: "Issues", href: `/c/${collectionSlug}/issues` },
-            { label: "Stamps", href: `/c/${collectionSlug}/stamps` },
-            { label: "Items", href: `/c/${collectionSlug}/items` },
-            { label: "Settings", href: `/c/${collectionSlug}/settings` },
-          ].map(({ label, href }) => (
-            <a
-              key={href}
-              href={href}
-              style={{
-                display: "block",
-                padding: "0.5rem 0.75rem",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                color: "var(--color-text-secondary)",
-                textDecoration: "none",
-              }}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <div
-          style={{
-            marginTop: "auto",
-            padding: "1rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.75rem",
-          }}
-        >
-          <ThemeToggle />
-          <a
-            href="/collections"
-            style={{
-              fontSize: "0.8125rem",
-              color: "var(--color-text-muted)",
-              textDecoration: "none",
-            }}
-          >
-            ← All collections
-          </a>
-        </div>
-      </aside>
+      <CollectionSidebar
+        collectionSlug={collectionSlug}
+        collectionName={collection.name}
+        collections={collections.map((c) => ({ slug: c.slug, name: c.name }))}
+      />
       <main style={{ flex: 1, overflow: "auto" }}>
-          <QueryProvider>{children}</QueryProvider>
-        </main>
+        <QueryProvider>{children}</QueryProvider>
+      </main>
     </div>
   );
 }
