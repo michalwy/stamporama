@@ -16,20 +16,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
-
-function buildAreaPath(areas: CollectionAreaData[], areaId: string | null): string | null {
-  if (!areaId) return null;
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  const path: string[] = [];
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    path.unshift(current.name);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return path.length > 0 ? path.join(" › ") : null;
-}
+import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 interface StampRowProps {
   stamp: StampListItem;

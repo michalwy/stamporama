@@ -383,6 +383,8 @@ export interface ItemListItem {
   issuedMonth: number | null;
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  /** Area the stamp is primarily linked to, used to resolve catalog-vendor display. */
+  areaId: string | null;
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
@@ -467,6 +469,7 @@ export async function listItemsPaginated(
           issuedMonth: true,
           issuedYear: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           _count: { select: { variants: true } },
           issueMemberships: {
             select: { issue: { select: { id: true, name: true, year: true } } },
@@ -493,6 +496,9 @@ export async function listItemsPaginated(
 
   const items: ItemListItem[] = page.map((row) => {
     const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
+    const primaryLink = row.stamp.stampAreaLinks.find((l) => l.isPrimary);
+    const areaId =
+      primaryLink?.collectionAreaId ?? row.stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
     return {
       id: row.id,
       stampId: row.stampId,
@@ -503,6 +509,7 @@ export async function listItemsPaginated(
       issuedMonth: row.stamp.issuedMonth,
       issuedYear: row.stamp.issuedYear,
       catalogNumbers: row.stamp.catalogNumbers,
+      areaId,
       issueId: firstIssue?.id ?? null,
       issueName: firstIssue?.name ?? null,
       issueYear: firstIssue?.year ?? null,

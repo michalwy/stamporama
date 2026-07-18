@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { formatIssuedDate } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
-import { rowBtnStyle, rowBtnDangerStyle } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import {
+  rowBtnStyle,
+  rowBtnDangerStyle,
+  STAMP_PRIMARY_CHIP,
+  STAMP_SECONDARY_CHIP,
+  formatStampCN,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -15,17 +24,50 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const DISPOSITION_CHIP: React.CSSProperties = {
-  ...CHIP,
-  color: "var(--color-accent)",
-  borderColor: "var(--color-accent-soft)",
-  background: "var(--color-accent-soft)",
-};
+/** A soft-tinted chip so each disposition is visually distinct without being
+ * loud: a pale, theme-aware background with colored text and border. */
+function dispositionChip(token: string): React.CSSProperties {
+  return {
+    ...CHIP,
+    color: `var(--color-disposition-${token})`,
+    borderColor: `var(--color-disposition-${token}-border)`,
+    background: `var(--color-disposition-${token}-soft)`,
+  };
+}
+
+const DISPOSITIONS = [
+  { key: "inCollection", label: "In collection", token: "collection" },
+  { key: "forSale", label: "For sale", token: "sale" },
+  { key: "forTrade", label: "For trade", token: "trade" },
+] as const;
 
 const META: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
+};
+
+/** Muted breadcrumb chip for the stamp's area path (mirrors the stamps list). */
+const AREA_CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+  background: "var(--color-bg-page)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.25rem",
+  padding: "0.1rem 0.4rem",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  maxWidth: "20rem",
+  flexShrink: 0,
+};
+
+/** Muted date/issue line (mirrors the stamps list). */
+const META_INLINE: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 function acquiredText(item: ItemListItem): string | null {
@@ -73,7 +115,10 @@ function CopyValue({ item, baseCurrency }: { item: ItemListItem; baseCurrency: s
 
 interface InventoryItemRowProps {
   item: ItemListItem;
+  areas: CollectionAreaData[];
   baseCurrency: string;
+  primaryVendorId: string | null;
+  vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
   onEdit: (item: ItemListItem) => void;
   onIdentify: (item: ItemListItem) => void;
@@ -83,7 +128,10 @@ interface InventoryItemRowProps {
 
 export function InventoryItemRow({
   item,
+  areas,
   baseCurrency,
+  primaryVendorId,
+  vendorMap,
   isLast,
   onEdit,
   onIdentify,
@@ -92,20 +140,55 @@ export function InventoryItemRow({
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
 
-  const catalogText = item.catalogNumbers.map((c) => c.number).join(", ");
-  const issueText = [item.issueName ?? null, item.issueYear ? `(${item.issueYear})` : null]
-    .filter(Boolean)
-    .join(" ");
+  const primaryCN = primaryVendorId
+    ? (item.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
+    : null;
+  const secondaryCNs = item.catalogNumbers.filter(
+    (cn) => cn.catalogVendorId !== primaryVendorId
+  );
+  const hasCatalog = item.catalogNumbers.length > 0;
+
+  const areaPath = buildAreaPath(areas, item.areaId);
+  const dateStr = formatIssuedDate(item.issuedDay, item.issuedMonth, item.issuedYear);
+  const hasIssue = !!(item.issueName || item.issueYear);
+
   const acquired = acquiredText(item);
   const price =
     item.purchasePrice != null
       ? `${item.purchasePrice}${item.purchaseCurrency ? ` ${item.purchaseCurrency}` : ""}`
       : null;
 
-  const dispositions: string[] = [];
-  if (item.inCollection) dispositions.push("In collection");
-  if (item.forSale) dispositions.push("For sale");
-  if (item.forTrade) dispositions.push("For trade");
+  const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
+
+  const actions = (
+    <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+      {item.unknownVariant && (
+        <button type="button" style={rowBtnStyle} onClick={() => onIdentify(item)}>
+          Identify variant
+        </button>
+      )}
+      {item.hasHistory && (
+        <button type="button" style={rowBtnStyle} onClick={() => onViewHistory(item)}>
+          History
+        </button>
+      )}
+      <button type="button" style={rowBtnStyle} onClick={() => onEdit(item)}>
+        Edit
+      </button>
+      <button type="button" style={rowBtnDangerStyle} onClick={() => onDelete(item)}>
+        Delete
+      </button>
+    </div>
+  );
+
+  const unknownVariantChip = item.unknownVariant && (
+    <span
+      style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning-border, var(--color-border))" }}
+      title="Copy is linked to the base stamp; the specific variant is unknown."
+    >
+      unknown variant
+    </span>
+  );
 
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
@@ -116,73 +199,110 @@ export function InventoryItemRow({
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.375rem",
         }}
       >
-        {/* Line 1: identity + actions */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
-            {catalogText && (
-              <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-                {catalogText}
-              </span>
-            )}
-            {item.stampName && (
-              <span style={{ fontSize: "0.9375rem", color: "var(--color-text-primary)" }}>
-                {item.stampName}
-              </span>
-            )}
-            {!catalogText && !item.stampName && (
-              <span style={{ fontSize: "0.9375rem", color: "var(--color-text-muted)" }}>(stamp)</span>
-            )}
-            {issueText && <span style={META}>· {issueText}</span>}
-            {item.unknownVariant && (
-              <span
-                style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning-border, var(--color-border))" }}
-                title="Copy is linked to the base stamp; the specific variant is unknown."
-              >
-                unknown variant
-              </span>
-            )}
+        {/* Line 1: stamp name + actions (only when the copy's stamp is named) */}
+        {item.stampName && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span
+              style={{
+                flex: 1,
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item.stampName}
+            </span>
+            {actions}
           </div>
-          <CopyValue item={item} baseCurrency={baseCurrency} />
-          <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
-            {item.unknownVariant && (
-              <button type="button" style={rowBtnStyle} onClick={() => onIdentify(item)}>
-                Identify variant
-              </button>
+        )}
+
+        {/* Line 2: area path, date, issue (actions here when there is no name) */}
+        {(areaPath || dateStr || hasIssue || !item.stampName) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginTop: item.stampName ? "0.2rem" : undefined,
+            }}
+          >
+            {areaPath && <span style={AREA_CHIP}>{areaPath}</span>}
+
+            {(dateStr || hasIssue) && (
+              <span style={META_INLINE}>
+                {dateStr}
+                {dateStr && hasIssue && ", "}
+                {hasIssue && (
+                  <>
+                    {item.issueName ?? "(unnamed issue)"}
+                    {item.issueYear ? ` (${item.issueYear})` : ""}
+                  </>
+                )}
+              </span>
             )}
-            {item.hasHistory && (
-              <button type="button" style={rowBtnStyle} onClick={() => onViewHistory(item)}>
-                History
-              </button>
-            )}
-            <button type="button" style={rowBtnStyle} onClick={() => onEdit(item)}>
-              Edit
-            </button>
-            <button type="button" style={rowBtnDangerStyle} onClick={() => onDelete(item)}>
-              Delete
-            </button>
+
+            {!item.stampName && <span style={{ flex: 1 }} />}
+            {!item.stampName && actions}
           </div>
+        )}
+
+        {/* Line 3: catalog numbers + catalog valuation */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+            marginTop: "0.6rem",
+            flexWrap: "wrap",
+          }}
+        >
+          {primaryCN && (
+            <span style={STAMP_PRIMARY_CHIP}>
+              {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
+            </span>
+          )}
+          {secondaryCNs.map((cn) => (
+            <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
+              {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
+            </span>
+          ))}
+          {!hasCatalog && !item.stampName && (
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
+          )}
+          {unknownVariantChip}
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+            <CopyValue item={item} baseCurrency={baseCurrency} />
+          </span>
         </div>
 
-        {/* Line 2: condition, disposition, certificate, price, acquired, notes */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+        {/* Line 4: condition, disposition, certificate, source, price, acquired, notes */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginTop: "0.6rem",
+            flexWrap: "wrap",
+          }}
+        >
           <span style={CHIP} title={item.conditionName}>
             {item.conditionAbbreviation}
           </span>
-          {dispositions.map((d) => (
-            <span key={d} style={DISPOSITION_CHIP}>
-              {d}
-            </span>
-          ))}
           {item.certificateStatusName && (
             <span style={CHIP} title="Certificate status">
               {item.certificateStatusName}
             </span>
           )}
+          {dispositions.map((d) => (
+            <span key={d.key} style={dispositionChip(d.token)}>
+              {d.label}
+            </span>
+          ))}
           {item.contactName && (
             <span style={META} title="Acquisition source">
               From {item.contactName}

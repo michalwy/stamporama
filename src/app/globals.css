@@ -16,6 +16,16 @@
   --color-warning: #a16207;
   --color-warning-soft: #fef3c7;
   --color-warning-border: #fde68a;
+  /* Inventory disposition chips (distinct hues, soft tint) */
+  --color-disposition-collection: #15803d;
+  --color-disposition-collection-soft: #dcfce7;
+  --color-disposition-collection-border: #86efac;
+  --color-disposition-sale: #1d4ed8;
+  --color-disposition-sale-soft: #dbeafe;
+  --color-disposition-sale-border: #93c5fd;
+  --color-disposition-trade: #7c3aed;
+  --color-disposition-trade-soft: #ede9fe;
+  --color-disposition-trade-border: #c4b5fd;
   --color-action-primary: var(--color-accent);
   --color-action-primary-hover: var(--color-accent-hover);
   /* Surface tokens */
@@ -54,6 +64,16 @@
   --color-warning: #fbbf24;
   --color-warning-soft: #451a03;
   --color-warning-border: #92400e;
+  /* Inventory disposition chips (distinct hues, soft tint) */
+  --color-disposition-collection: #6bbf8a;
+  --color-disposition-collection-soft: #122a1c;
+  --color-disposition-collection-border: #244a33;
+  --color-disposition-sale: #7aa2d6;
+  --color-disposition-sale-soft: #14213b;
+  --color-disposition-sale-border: #294066;
+  --color-disposition-trade: #a48ad4;
+  --color-disposition-trade-soft: #221a3a;
+  --color-disposition-trade-border: #3d2f63;
   --color-action-primary: var(--color-accent);
   --color-action-primary-hover: var(--color-accent-hover);
   /* Surface tokens */
