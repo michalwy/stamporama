@@ -12,8 +12,21 @@ import {
   toggleIssueMemberRequired,
   removeStampFromIssue,
   moveStampNode,
+  getIssuePriceTotalsByCondition,
 } from "@/lib/issues";
-import type { AutoCreateStampsInput, IssueDeletionPreview } from "@/lib/issues";
+import type {
+  AutoCreateStampsInput,
+  IssueDeletionPreview,
+  IssueConditionTotal,
+} from "@/lib/issues";
+
+export async function getIssuePriceTotalsByConditionAction(
+  collectionId: string,
+  issueId: string
+): Promise<IssueConditionTotal[]> {
+  const session = await getSession();
+  return getIssuePriceTotalsByCondition(session.user.id, collectionId, issueId);
+}
 
 export type IssueActionState =
   | { status: "idle" }

@@ -1,7 +1,11 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { listIssuesPaginated, listIssueMembers } from "../../src/lib/issues";
+import {
+  listIssuesPaginated,
+  listIssueMembers,
+  getIssuePriceTotalsByCondition,
+} from "../../src/lib/issues";
 
 // Records a single price against the given condition (no certificate status).
 async function addPrice(
@@ -228,5 +232,15 @@ describe("issue total edition-mix handling", () => {
     assert.equal(t.usesOlderEdition, false);
     assert.equal(t.pricedCount, 2);
     assert.equal(t.olderEditionExcludedCount, 0);
+  });
+
+  it("getIssuePriceTotalsByCondition returns the total per condition", async () => {
+    const totals = await getIssuePriceTotalsByCondition(userId, collectionId, issueId);
+    assert.equal(totals.length, 1); // collection has a single condition
+    const mnh = totals.find((t) => t.conditionId === conditionId);
+    assert.ok(mnh);
+    assert.equal(mnh.conditionAbbreviation, "MNH");
+    assert.equal(mnh.total?.amount, "18.00");
+    assert.equal(mnh.total?.pricedCount, 2);
   });
 });

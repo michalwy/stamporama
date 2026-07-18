@@ -62,7 +62,7 @@ If the collection has no conditions yet, the Prices tab prompts you to add some 
 
 The item list and the issues list each show a **single price column**. Because a stamp now has many prices, a **"Price for …" selector** above the list chooses which **condition** the column reflects (certificate status = None). Your choice is remembered per collection in your browser; the default is the first condition in your list.
 
-Next to a shown price, a small **⋯** button opens a popover with **all** of that stamp's recorded prices — every condition and certificate status — so you can see the full picture without changing the selector. These are loaded on demand when you open the popover.
+Next to a shown price, a small **⋯** button opens a popover with **all** of that stamp's recorded prices — every condition and certificate status — so you can see the full picture without changing the selector. On an **issue row**, the same **⋯** button next to the issue total shows the required-stamps total computed for **each condition**. These are loaded on demand when you open the popover.
 
 ## Staleness warnings
 

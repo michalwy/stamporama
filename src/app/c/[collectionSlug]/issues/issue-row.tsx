@@ -22,6 +22,7 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
+import { IssuePricesButton } from "@/app/c/[collectionSlug]/shared/issue-prices-button";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -537,6 +538,7 @@ export function IssueRow({
                   )}
                   {secondary && <span style={PRICE_CONVERTED}>{secondary}</span>}
                   <span style={PRICE_MAIN}>{moneyPrimaryText(t)}</span>
+                  <IssuePricesButton collectionId={collectionId} issueId={issue.id} />
                 </span>
               );
             })()}

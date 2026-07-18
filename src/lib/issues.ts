@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { getStampConditions } from "./conditions";
 import {
   type IssuePriceTotal,
   type MoneyDisplay,
@@ -273,6 +274,66 @@ const ISSUE_LIST_SELECT = {
   },
 } as const;
 
+/**
+ * Sum of required members' main catalog prices for one display condition
+ * (certificate = none). Members priced only on an older edition are handled the
+ * same way as the list total: if any member is priced on the current edition the
+ * total uses only those, otherwise it falls back to older-edition prices.
+ * `convertedAmount` is left null for the caller to fill after fetching rates.
+ */
+function computeRequiredPriceTotal(
+  requiredMembers: { stamp: { catalogPrices: RawCatalogPrice[] } }[],
+  primaryNameId: string | null,
+  baseCurrency: string,
+  latestYearByName: Map<string, number>,
+  displayConditionId: string | null
+): IssuePriceTotal | null {
+  let sumCurrent = 0;
+  let currentCount = 0;
+  let sumOlder = 0;
+  let olderCount = 0;
+  let currency: string | null = null;
+  for (const m of requiredMembers) {
+    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId, displayConditionId);
+    if (!main) continue;
+    currency = main.currency;
+    const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
+    if (isOlder) {
+      sumOlder += main.amount;
+      olderCount += 1;
+    } else {
+      sumCurrent += main.amount;
+      currentCount += 1;
+    }
+  }
+
+  if (currency && currentCount > 0) {
+    return {
+      amount: sumCurrent.toFixed(2),
+      currency,
+      convertedAmount: null,
+      baseCurrency,
+      pricedCount: currentCount,
+      requiredCount: requiredMembers.length,
+      usesOlderEdition: false,
+      olderEditionExcludedCount: olderCount,
+    };
+  }
+  if (currency && olderCount > 0) {
+    return {
+      amount: sumOlder.toFixed(2),
+      currency,
+      convertedAmount: null,
+      baseCurrency,
+      pricedCount: olderCount,
+      requiredCount: requiredMembers.length,
+      usesOlderEdition: true,
+      olderEditionExcludedCount: 0,
+    };
+  }
+  return null;
+}
+
 function toIssueListItem(
   issue: {
     id: string;
@@ -296,53 +357,14 @@ function toIssueListItem(
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
 
-  // Split each required member's main price into "current" (on the latest edition of
-  // the primary catalog) vs. "older" (only priced on an earlier edition).
-  let sumCurrent = 0;
-  let currentCount = 0;
-  let sumOlder = 0;
-  let olderCount = 0;
-  let currency: string | null = null;
-  for (const m of requiredMembers) {
-    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId, displayConditionId);
-    if (!main) continue;
-    currency = main.currency;
-    const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
-    if (isOlder) {
-      sumOlder += main.amount;
-      olderCount += 1;
-    } else {
-      sumCurrent += main.amount;
-      currentCount += 1;
-    }
-  }
-
-  // If any member is priced on the current edition, the total uses only those prices
-  // (older-only members count as unpriced). Otherwise fall back to older-edition prices.
-  let requiredPriceTotal: IssuePriceTotal | null = null;
-  if (currency && currentCount > 0) {
-    requiredPriceTotal = {
-      amount: sumCurrent.toFixed(2),
-      currency,
-      convertedAmount: null, // filled after rates are fetched
-      baseCurrency,
-      pricedCount: currentCount,
-      requiredCount: requiredMembers.length,
-      usesOlderEdition: false,
-      olderEditionExcludedCount: olderCount,
-    };
-  } else if (currency && olderCount > 0) {
-    requiredPriceTotal = {
-      amount: sumOlder.toFixed(2),
-      currency,
-      convertedAmount: null,
-      baseCurrency,
-      pricedCount: olderCount,
-      requiredCount: requiredMembers.length,
-      usesOlderEdition: true,
-      olderEditionExcludedCount: 0,
-    };
-  }
+  // convertedAmount filled after rates are fetched (see buildIssueListItems).
+  const requiredPriceTotal = computeRequiredPriceTotal(
+    requiredMembers,
+    primaryNameId,
+    baseCurrency,
+    latestYearByName,
+    displayConditionId
+  );
 
   return {
     id: issue.id,
@@ -573,6 +595,79 @@ export async function listIssueMembers(
     if (mp) mp.convertedAmount = applyConversion(Number(mp.amount), mp.currency, baseCurrency, rates);
   }
   return nodes;
+}
+
+export interface IssueConditionTotal {
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  total: IssuePriceTotal | null;
+}
+
+/**
+ * The issue's required-stamps total computed for every condition (certificate =
+ * none), so the issue row's popover can show its value across conditions without
+ * changing the list's selected condition. See #95.
+ */
+export async function getIssuePriceTotalsByCondition(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<IssueConditionTotal[]> {
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const [members, conditions, primaryCatalogByArea, baseCurrency, latestYearByName] =
+    await Promise.all([
+      prisma.issueMember.findMany({
+        where: { issueId, requiredForCompleteness: true },
+        select: {
+          stamp: {
+            select: {
+              catalogPrices: {
+                select: {
+                  price: true,
+                  currency: true,
+                  conditionId: true,
+                  certificateStatusId: true,
+                  catalogEdition: { select: { year: true, catalogNameId: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      getStampConditions(ownerId, collectionId),
+      buildEffectivePrimaryCatalogMap(collectionId),
+      getCollectionBaseCurrency(collectionId),
+      getLatestEditionYearByName(collectionId),
+    ]);
+
+  const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
+
+  const totals = conditions.map((c) => ({
+    conditionId: c.id,
+    conditionName: c.name,
+    conditionAbbreviation: c.abbreviation,
+    total: computeRequiredPriceTotal(members, primaryNameId, baseCurrency, latestYearByName, c.id),
+  }));
+
+  const currencies = totals
+    .map((t) => t.total?.currency)
+    .filter((c): c is string => !!c);
+  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+  for (const t of totals) {
+    if (t.total) {
+      t.total.convertedAmount = applyConversion(
+        Number(t.total.amount),
+        t.total.currency,
+        baseCurrency,
+        rates
+      );
+    }
+  }
+  return totals;
 }
 
 // ── Mutations ───────────────────────────────────────────────────────────────
