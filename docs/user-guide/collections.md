@@ -26,6 +26,10 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - Navigation links for each section (Overview, Catalog, Items — more sections will be added as features are built)
 - A **← All collections** link to return to the collection picker
 
+## Required for completeness
+
+Each stamp carries a **Required for completeness** flag that controls whether it counts toward its issue's required-stamps total. The flag can be set when adding a stamp and changed later from the stamp's **Edit** dialog — toggle the **Required for completeness** checkbox and save.
+
 ## Catalog prices and staleness warnings
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog). Open a stamp's **Edit** dialog and switch to the **Prices** tab to enter a price for each edition of the catalogs assigned to that stamp's area. The currency is fixed by the catalog and shown next to each field.

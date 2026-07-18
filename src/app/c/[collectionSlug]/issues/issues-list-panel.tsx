@@ -818,7 +818,10 @@ export function IssuesListPanel({
               mode="edit"
               stampId={stamp.stampId}
               collectionId={collectionId}
-              stamp={stamp}
+              stamp={{
+                ...stamp,
+                issues: [{ requiredForCompleteness: stamp.requiredForCompleteness }],
+              }}
               areaVendors={areaVendors}
               isPending={isPending}
               error={error}

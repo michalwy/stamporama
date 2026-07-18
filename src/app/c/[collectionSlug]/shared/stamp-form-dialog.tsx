@@ -50,6 +50,7 @@ export interface StampFormData {
   issuedMonth: number | null;
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  issues?: { requiredForCompleteness: boolean }[];
 }
 
 type StampFormDialogProps = {
@@ -154,7 +155,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
     addProps?.prefilledParentStampId ?? ""
   );
   const [requiredForCompleteness, setRequiredForCompleteness] = useState(
-    !addProps?.prefilledParentStampId
+    editProps
+      ? (editProps.stamp.issues?.some((m) => m.requiredForCompleteness) ?? false)
+      : !addProps?.prefilledParentStampId
   );
 
   const needsMembers =
@@ -184,6 +187,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
     }
 
     if (props.mode === "edit") {
+      fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
       props.onSubmit(fd);
       return;
     }
@@ -370,8 +374,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
               </div>
             )}
 
-            {/* Required for completeness (add only) */}
-            {addProps && (
+            {/* Required for completeness */}
+            {(addProps || (editProps?.stamp.issues?.length ?? 0) > 0) && (
               <div style={{ marginBottom: "0.875rem" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "var(--color-text-secondary)", cursor: "pointer" }}>
                   <input

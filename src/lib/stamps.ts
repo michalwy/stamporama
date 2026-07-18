@@ -500,6 +500,7 @@ export async function updateStampWithCatalog(
     issuedYear?: number | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
     catalogPrices?: CatalogPriceInput[];
+    requiredForCompleteness?: boolean;
   }
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
@@ -514,6 +515,12 @@ export async function updateStampWithCatalog(
         issuedYear: data.issuedYear ?? null,
       },
     });
+    if (data.requiredForCompleteness !== undefined) {
+      await tx.issueMember.updateMany({
+        where: { stampId },
+        data: { requiredForCompleteness: data.requiredForCompleteness },
+      });
+    }
     await tx.stampCatalogNumber.deleteMany({ where: { stampId } });
     if (data.catalogNumbers.length > 0) {
       await tx.stampCatalogNumber.createMany({

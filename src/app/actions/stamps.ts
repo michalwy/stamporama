@@ -153,6 +153,10 @@ export async function updateStampWithCatalogAction(
   const hasPriceEntries = Array.from(formData.keys()).some((k) => k.startsWith("catalogPrice_"));
   const catalogPrices = hasPriceEntries ? parseCatalogPrices(formData) : undefined;
 
+  const requiredRaw = formData.get("requiredForCompleteness") as string | null;
+  const requiredForCompleteness =
+    requiredRaw === null ? undefined : requiredRaw === "true";
+
   try {
     await updateStampWithCatalog(session.user.id, stampId, {
       name,
@@ -161,6 +165,7 @@ export async function updateStampWithCatalogAction(
       issuedYear: issuedYear ?? null,
       catalogNumbers,
       catalogPrices,
+      requiredForCompleteness,
     });
     return { status: "success" };
   } catch {
