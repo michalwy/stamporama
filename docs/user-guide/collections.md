@@ -39,7 +39,16 @@ Each collection keeps its own list of **conditions** — the grades used when va
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
 
-Certificate and guarantee status is tracked as a separate dimension, not as part of condition.
+Certificate and guarantee status is tracked as a separate dimension, not as part of condition — see below. Both lists live on the same **Settings → Conditions** tab.
+
+## Certificate statuses
+
+Each collection keeps its own list of **certificate statuses** — the certificate or guarantee status used when valuing stamps (for example Certificate or Guarantee). This is an independent dimension from condition, so a stamp's grade and its certificate status are recorded separately rather than combined. Manage them in the **Certificate statuses** section of the **Settings → Conditions** tab.
+
+- Certificate status is **optional**: leaving no status selected means the stamp has none, so there is no "None" entry to manage. New collections start with an empty list — add the statuses you use.
+- **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
+- **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
+- **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
 
 ## Catalog prices and staleness warnings
 

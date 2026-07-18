@@ -5,9 +5,11 @@ import { SettingsPanel } from "./settings-panel";
 import { CatalogPanel } from "../catalog/catalog-panel";
 import { AreasPanel } from "../areas/areas-panel";
 import { ConditionsPanel } from "./conditions-panel";
+import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
 import type { StampConditionData } from "@/lib/conditions";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -18,6 +20,7 @@ interface SettingsTabsProps {
   catalogNames: CatalogNameFlat[];
   initialTree: CatalogVendorData[];
   initialConditions: StampConditionData[];
+  initialCertificateStatuses: CertificateStatusData[];
 }
 
 const TABS = [
@@ -29,6 +32,13 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
+const sectionHeadingStyle: React.CSSProperties = {
+  fontSize: "1rem",
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
+  margin: "0 0 1rem",
+};
+
 export function SettingsTabs({
   collectionId,
   collectionName,
@@ -38,6 +48,7 @@ export function SettingsTabs({
   catalogNames,
   initialTree,
   initialConditions,
+  initialCertificateStatuses,
 }: SettingsTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -108,10 +119,22 @@ export function SettingsTabs({
         <CatalogPanel collectionId={collectionId} initialTree={initialTree} />
       )}
       {activeTab === "conditions" && (
-        <ConditionsPanel
-          collectionId={collectionId}
-          initialConditions={initialConditions}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+          <section>
+            <h2 style={sectionHeadingStyle}>Conditions</h2>
+            <ConditionsPanel
+              collectionId={collectionId}
+              initialConditions={initialConditions}
+            />
+          </section>
+          <section>
+            <h2 style={sectionHeadingStyle}>Certificate statuses</h2>
+            <CertificateStatusesPanel
+              collectionId={collectionId}
+              initialStatuses={initialCertificateStatuses}
+            />
+          </section>
+        </div>
       )}
       {activeTab === "areas" && (
         <AreasPanel
