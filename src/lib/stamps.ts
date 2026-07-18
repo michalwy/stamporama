@@ -2,6 +2,12 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import {
+  catalogDigits,
+  catalogKeyMatches,
+  catalogMatchKey,
+  formatCatalogNumber,
+} from "./catalog-number";
+import {
   type MoneyDisplay,
   type RawCatalogPrice,
   buildEffectivePrimaryCatalogMap,
@@ -492,6 +498,193 @@ export async function listStampsPaginated(
   const nextCursor = hasMore ? String(offset + pageSize) : null;
 
   return { items, nextCursor };
+}
+
+// ── Stamp picker search (inventory item dialog, #104) ──────────────────────
+
+/** One suggestion row for the inventory stamp/variant picker, carrying enough
+ * identity to disambiguate a stamp: catalog labels, name, year, area, and the
+ * issue it belongs to. A base stamp with variants is selectable as the
+ * "unknown variant" (ADR-0007 §2); `isVariant` marks an identified variant. */
+export interface StampSearchItem {
+  stampId: string;
+  parentId: string | null;
+  isVariant: boolean;
+  /** True for a base stamp that has variants — selecting it means the specific
+   * variant is unknown (ADR-0007 §2). */
+  hasVariants: boolean;
+  name: string | null;
+  issuedYear: number | null;
+  areaId: string | null;
+  areaName: string | null;
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  /** Formatted catalog labels, e.g. ["Mi·PL 200"]. */
+  catalogNumbers: string[];
+}
+
+interface AreaPrefixNode {
+  parentId: string | null;
+  name: string;
+  /** Per-vendor prefix rows set directly on this area (value may be null). */
+  vendorPrefix: Map<string, string | null>;
+}
+
+/** Resolve the effective per-vendor area prefix, inheriting from the nearest
+ * ancestor area that sets one (mirrors `effectiveVendorsForArea` on the client). */
+function resolveEffectivePrefix(
+  areaId: string,
+  vendorId: string,
+  nodes: Map<string, AreaPrefixNode>
+): string | null {
+  let current: string | null = areaId;
+  let depth = 0;
+  while (current && depth < 50) {
+    const node: AreaPrefixNode | undefined = nodes.get(current);
+    if (!node) break;
+    if (node.vendorPrefix.has(vendorId)) return node.vendorPrefix.get(vendorId) ?? null;
+    current = node.parentId;
+    depth++;
+  }
+  return null;
+}
+
+const PICKER_LIMIT = 20;
+
+/**
+ * Search a collection's stamps for the inventory picker autocomplete (#104).
+ *
+ * The database query is a broad *recall* net — name / issue-name substring plus a
+ * catalog-number-digits `contains` — and the JS pass is *precision*: a candidate
+ * survives only if the query matches its name/issue text or, via
+ * {@link catalogKeyMatches}, its normalized catalog keys (vendor abbreviation +
+ * effective area prefix + number). That normalization is what lets `Mi PL200`,
+ * `MiPL200`, and `200` all resolve to the same stamp. Returns ≤20 rows, catalog
+ * matches first, then by newest issue year.
+ */
+export async function searchStampsForPicker(
+  ownerId: string,
+  collectionId: string,
+  query: string
+): Promise<StampSearchItem[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const text = query.trim();
+  if (!text) return [];
+  const digits = catalogDigits(text);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const or: any[] = [
+    { name: { contains: text, mode: "insensitive" } },
+    { issueMemberships: { some: { issue: { name: { contains: text, mode: "insensitive" } } } } },
+  ];
+  if (digits) {
+    or.push({ catalogNumbers: { some: { number: { contains: digits } } } });
+  }
+
+  const [candidates, vendors, areaRows] = await Promise.all([
+    prisma.stamp.findMany({
+      where: { collectionId, OR: or },
+      select: {
+        id: true,
+        parentId: true,
+        name: true,
+        issuedYear: true,
+        catalogNumbers: { select: { catalogVendorId: true, number: true } },
+        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        issueMemberships: {
+          select: { issueId: true, issue: { select: { name: true, year: true } } },
+          take: 1,
+        },
+        _count: { select: { variants: true } },
+      },
+      // Cap recall generously; precision + ranking narrow to PICKER_LIMIT below.
+      take: 200,
+    }),
+    prisma.catalogVendor.findMany({
+      where: { collectionId },
+      select: { id: true, abbreviation: true },
+    }),
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+      },
+    }),
+  ]);
+
+  const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
+  const areaNames = new Map(areaRows.map((a) => [a.id, a.name]));
+  const areaNodes = new Map<string, AreaPrefixNode>(
+    areaRows.map((a) => [
+      a.id,
+      {
+        parentId: a.parentId,
+        name: a.name,
+        vendorPrefix: new Map(
+          a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
+        ),
+      },
+    ])
+  );
+
+  interface Scored {
+    item: StampSearchItem;
+    exactCatalog: boolean;
+  }
+  const scored: Scored[] = [];
+
+  for (const s of candidates) {
+    const primaryLink = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
+    const areaId = primaryLink?.collectionAreaId ?? null;
+
+    const labels: string[] = [];
+    const keys: string[] = [];
+    for (const cn of s.catalogNumbers) {
+      const abbr = vendorAbbr.get(cn.catalogVendorId) ?? "";
+      const prefix = areaId ? resolveEffectivePrefix(areaId, cn.catalogVendorId, areaNodes) : null;
+      labels.push(formatCatalogNumber(abbr, prefix, cn.number));
+      keys.push(catalogMatchKey(abbr, prefix, cn.number));
+    }
+
+    const membership = s.issueMemberships[0];
+    const lower = text.toLowerCase();
+    const nameHit = !!s.name && s.name.toLowerCase().includes(lower);
+    const issueName = membership?.issue.name ?? null;
+    const issueHit = !!issueName && issueName.toLowerCase().includes(lower);
+    const catalogHit = catalogKeyMatches(text, keys);
+
+    if (!nameHit && !issueHit && !catalogHit) continue;
+
+    scored.push({
+      // Catalog-number matches are the most specific intent, so rank them first.
+      exactCatalog: catalogHit,
+      item: {
+        stampId: s.id,
+        parentId: s.parentId,
+        isVariant: s.parentId !== null,
+        hasVariants: s._count.variants > 0,
+        name: s.name,
+        issuedYear: s.issuedYear,
+        areaId,
+        areaName: areaId ? (areaNames.get(areaId) ?? null) : null,
+        issueId: membership?.issueId ?? null,
+        issueName,
+        issueYear: membership?.issue.year ?? null,
+        catalogNumbers: labels,
+      },
+    });
+  }
+
+  scored.sort((a, b) => {
+    if (a.exactCatalog !== b.exactCatalog) return a.exactCatalog ? -1 : 1;
+    return (b.item.issueYear ?? 0) - (a.item.issueYear ?? 0);
+  });
+
+  return scored.slice(0, PICKER_LIMIT).map((x) => x.item);
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────

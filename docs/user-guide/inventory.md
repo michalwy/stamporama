@@ -64,8 +64,17 @@ could not be converted.
 ## Adding a copy
 
 1. Click **Add copy**.
-2. **Search for an issue**, then pick the stamp from that issue's tree. Choose a specific
-   variant if you know it, or the **base stamp** if the variant is unknown.
+2. **Choose the stamp or variant** in one of two ways:
+   - **Type to search** in the field. Suggestions match the stamp name, its issue name,
+     and **catalog numbers** — including the vendor and area prefix. Catalog search
+     ignores spacing, so `Mi PL 200`, `Mi PL200`, `MiPL200`, and just `200` all find the
+     same stamp. Each suggestion shows its catalog number, name, issue, year, and area so
+     you can tell similar stamps apart.
+   - **Browse…** opens a larger picker: pick an **area** on the left, filter its **issues**
+     on the right, then expand an issue to choose a stamp or one of its variants.
+
+   Choose a specific variant if you know it, or the **base stamp** if the variant is
+   unknown. The chosen stamp appears as a summary with a **Change** link to reselect.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection*.

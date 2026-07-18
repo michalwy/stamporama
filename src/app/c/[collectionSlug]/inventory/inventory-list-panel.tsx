@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
+import type { CollectionAreaData } from "@/lib/areas";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
@@ -51,6 +52,7 @@ const CONTROL_STYLE: React.CSSProperties = {
 interface InventoryListPanelProps {
   collectionId: string;
   collectionSlug: string;
+  areas: CollectionAreaData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
@@ -59,6 +61,7 @@ interface InventoryListPanelProps {
 export function InventoryListPanel({
   collectionId,
   collectionSlug,
+  areas,
   conditions,
   certificateStatuses,
   baseCurrency,
@@ -276,6 +279,7 @@ export function InventoryListPanel({
         <InventoryItemFormDialog
           mode={dialog.kind}
           collectionId={collectionId}
+          areas={areas}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           baseCurrency={baseCurrency}

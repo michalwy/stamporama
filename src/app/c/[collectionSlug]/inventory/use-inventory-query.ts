@@ -8,7 +8,8 @@ import type {
 } from "@/lib/items";
 import type { HoldingsTotal } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
-import type { StampNodeData } from "@/lib/issues";
+import type { StampNodeData, IssueData } from "@/lib/issues";
+import type { StampSearchItem } from "@/lib/stamps";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -155,6 +156,46 @@ export function useInvalidateContacts() {
         queryKey: ["inventory", collectionId, "contactSearch"],
       }),
   };
+}
+
+/** Stamp/variant suggestions for the inventory picker autocomplete (#104). Backed
+ * by the stamp-search API; disabled until the user types (the dropdown only opens
+ * then), matching {@link useContactSearch}. */
+export function useStampPickerSearch(collectionId: string, query: string) {
+  return useQuery<StampSearchItem[]>({
+    queryKey: ["inventory", collectionId, "stampSearch", query] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: query });
+      const res = await fetch(
+        `/api/collections/${collectionId}/stamps/search?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to search stamps");
+      const data = await res.json();
+      return data.items;
+    },
+    enabled: query.length >= 1,
+  });
+}
+
+/** Full issues (with embedded stamp members) for the picker popup browser's
+ * issue → stamp/variant drill-down (#104). `areaIds` scopes to a set of areas (a
+ * selected area plus its descendants, so a parent selection includes children);
+ * `null` means "All areas" and returns every issue in the collection. */
+export function useIssuesByArea(collectionId: string, areaIds: string[] | null) {
+  const key = areaIds && areaIds.length > 0 ? [...areaIds].sort() : null;
+  return useQuery<IssueData[]>({
+    queryKey: ["inventory", collectionId, "issuesByArea", key ?? "all"] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (key) params.set("areaIds", key.join(","));
+      const res = await fetch(
+        `/api/collections/${collectionId}/issues/by-area?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch issues for area");
+      const data = await res.json();
+      return data.items;
+    },
+  });
 }
 
 export function useInvalidateInventory() {

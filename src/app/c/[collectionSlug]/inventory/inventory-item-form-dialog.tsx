@@ -10,8 +10,10 @@ import {
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
+import type { CollectionAreaData } from "@/lib/areas";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
-import { StampSelect, type StampSelectInitial } from "./stamp-select";
+import { StampSelect } from "./stamp-select";
+import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import { ContactSelect } from "./contact-select";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -47,6 +49,7 @@ type DispositionKey = (typeof DISPOSITIONS)[number]["key"];
 export interface InventoryItemFormDialogProps {
   mode: "add" | "edit";
   collectionId: string;
+  areas: CollectionAreaData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
@@ -63,6 +66,7 @@ export interface InventoryItemFormDialogProps {
 export function InventoryItemFormDialog({
   mode,
   collectionId,
+  areas,
   conditions,
   certificateStatuses,
   baseCurrency,
@@ -79,9 +83,23 @@ export function InventoryItemFormDialog({
     forTrade: item?.forTrade ?? false,
   });
 
-  const initialIssue: StampSelectInitial | undefined =
-    mode === "edit" && item?.issueId
-      ? { issueId: item.issueId, issueName: item.issueName, issueYear: item.issueYear }
+  // Prefill the picker summary in edit mode. Catalog numbers on the item are raw
+  // (vendor id + number), so the summary shows the joined numbers; the popup and
+  // autocomplete render prefix-formatted labels when a fresh pick is made.
+  const initialStamp: PickedStamp | undefined =
+    mode === "edit" && item
+      ? {
+          stampId: item.stampId,
+          primary: primaryLabel(
+            item.catalogNumbers.map((c) => c.number),
+            item.stampName
+          ),
+          secondary:
+            item.issueName || item.issueYear
+              ? issueLabel(item.issueName, item.issueYear)
+              : null,
+          unknownVariant: item.unknownVariant,
+        }
       : undefined;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -107,9 +125,11 @@ export function InventoryItemFormDialog({
             <div style={SECTION_LABEL}>Stamp</div>
             <StampSelect
               collectionId={collectionId}
+              areas={areas}
               selectedStampId={stampId}
               onSelectedStampIdChange={setStampId}
-              initial={initialIssue}
+              initial={initialStamp}
+              disabled={isPending}
             />
           </div>
 

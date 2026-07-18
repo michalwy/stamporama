@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatIssuedDate, formatIssueCatalogNumber, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
+import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { useIssueMembers } from "./use-issues-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -9,45 +9,27 @@ import {
   rowBtnStyle,
   rowBtnDangerStyle,
   addBtnStyle,
-  ISSUE_PRIMARY_CHIP,
-  ISSUE_SECONDARY_CHIP,
-  STAMP_PRIMARY_CHIP,
-  STAMP_SECONDARY_CHIP,
-  STAMP_MUTED_PRIMARY_CHIP,
   PRICE_MAIN,
   PRICE_CONVERTED,
   PRICE_STALE_ICON,
-  formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import {
+  buildStampTree,
+  IssueTitle,
+  IssueCatalogChips,
+  StampCountBadge,
+  StampTitle,
+  StampDetailLine,
+  type StampTreeNodeData,
+} from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 import { IssuePricesButton } from "@/app/c/[collectionSlug]/shared/issue-prices-button";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
-interface TreeNode {
-  node: StampNodeData;
-  children: TreeNode[];
-}
-
-function buildStampTree(members: StampNodeData[]): TreeNode[] {
-  const byId = new Map<string, TreeNode>();
-  for (const m of members) byId.set(m.stampId, { node: m, children: [] });
-  const roots: TreeNode[] = [];
-  for (const [, treeNode] of byId) {
-    const parentId = treeNode.node.parentId;
-    if (parentId && byId.has(parentId)) {
-      byId.get(parentId)!.children.push(treeNode);
-    } else {
-      roots.push(treeNode);
-    }
-  }
-  return roots;
-}
-
 interface StampTreeNodeProps {
-  treeNode: TreeNode;
+  treeNode: StampTreeNodeData;
   depth: number;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
@@ -72,24 +54,8 @@ function StampTreeNode({
   const [collapsed, setCollapsed] = useState(true);
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
-  const dateStr = formatIssuedDate(
-    node.issuedDay,
-    node.issuedMonth,
-    node.issuedYear
-  );
   const hasChildren = children.length > 0;
   const indent = `${depth * 1.25}rem`;
-
-  const primaryCN = primaryVendorId
-    ? (node.catalogNumbers.find(
-        (cn) => cn.catalogVendorId === primaryVendorId
-      ) ?? null)
-    : null;
-  const secondaryCNs = node.catalogNumbers.filter(
-    (cn) => cn.catalogVendorId !== primaryVendorId
-  );
-
-  const notRequired = !node.requiredForCompleteness;
 
   return (
     <>
@@ -137,23 +103,7 @@ function StampTreeNode({
               whiteSpace: "nowrap",
             }}
           >
-            {dateStr && (
-              <span
-                style={{ color: "var(--color-text-muted)", fontWeight: 400 }}
-              >
-                {dateStr},{" "}
-              </span>
-            )}
-            <span
-              style={{
-                color: node.name
-                  ? "var(--color-text-primary)"
-                  : "var(--color-text-muted)",
-                fontStyle: node.name ? undefined : "italic",
-              }}
-            >
-              {node.name ?? "(unnamed)"}
-            </span>
+            <StampTitle node={node} />
           </span>
 
           <button
@@ -186,53 +136,12 @@ function StampTreeNode({
           </button>
         </div>
 
-        {(primaryCN || secondaryCNs.length > 0 || node.mainCatalogPrice) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.3rem",
-              marginTop: "0.45rem",
-              paddingLeft: "1.375rem",
-              flexWrap: "wrap",
-            }}
-          >
-            {primaryCN && (
-              <span
-                style={
-                  notRequired ? STAMP_MUTED_PRIMARY_CHIP : STAMP_PRIMARY_CHIP
-                }
-              >
-                {formatStampCN(
-                  primaryCN.number,
-                  vendorMap.get(primaryCN.catalogVendorId)
-                )}
-              </span>
-            )}
-            {secondaryCNs.map((cn) => (
-              <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
-                {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-              </span>
-            ))}
-            {node.mainCatalogPrice && (
-              <span
-                style={{
-                  marginLeft: "auto",
-                  display: "inline-flex",
-                  alignItems: "baseline",
-                  gap: "0.35rem",
-                }}
-              >
-                {node.mainCatalogPriceStale && <StalePriceIcon />}
-                {moneySecondaryText(node.mainCatalogPrice) && (
-                  <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
-                )}
-                <span style={PRICE_MAIN}>{moneyPrimaryText(node.mainCatalogPrice)}</span>
-                <AllPricesButton stampId={node.stampId} />
-              </span>
-            )}
-          </div>
-        )}
+        <StampDetailLine
+          node={node}
+          vendorMap={vendorMap}
+          primaryVendorId={primaryVendorId}
+          priceTrailing={<AllPricesButton stampId={node.stampId} />}
+        />
       </div>
       {!collapsed &&
         children.map((child, i) => (
@@ -304,15 +213,6 @@ export function IssueRow({
 
   const stampTree = members ? buildStampTree(members) : [];
 
-  const primaryCatEntry = primaryVendorId
-    ? (issue.catalogNumbers.find(
-        (cn) => cn.catalogVendorId === primaryVendorId
-      ) ?? null)
-    : null;
-  const secondaryCatEntries = issue.catalogNumbers.filter(
-    (cn) => cn.catalogVendorId !== primaryVendorId
-  );
-
   return (
     <div
       style={{
@@ -379,24 +279,7 @@ export function IssueRow({
               whiteSpace: "nowrap",
             }}
           >
-            {issue.year && (
-              <span
-                style={{ color: "var(--color-text-muted)", fontWeight: 400 }}
-              >
-                {issue.year},{" "}
-              </span>
-            )}
-            <span
-              style={{
-                fontWeight: 600,
-                fontStyle: issue.name ? undefined : "italic",
-                color: issue.name
-                  ? "var(--color-text-primary)"
-                  : "var(--color-text-muted)",
-              }}
-            >
-              {issue.name ?? "(unnamed)"}
-            </span>
+            <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
           <button
@@ -433,52 +316,14 @@ export function IssueRow({
               flexWrap: "wrap",
             }}
           >
-            {primaryCatEntry &&
-              primaryVendorId &&
-              (() => {
-                const v = vendorMap.get(primaryVendorId);
-                return (
-                  <span style={ISSUE_PRIMARY_CHIP}>
-                    {formatIssueCatalogNumber(
-                      primaryCatEntry.firstNumber,
-                      primaryCatEntry.lastNumber,
-                      v?.vendorAbbreviation ?? "",
-                      v?.prefix
-                    )}
-                  </span>
-                );
-              })()}
-            {secondaryCatEntries.map((cn) => {
-              const v = vendorMap.get(cn.catalogVendorId);
-              return (
-                <span key={cn.catalogVendorId} style={ISSUE_SECONDARY_CHIP}>
-                  {formatIssueCatalogNumber(
-                    cn.firstNumber,
-                    cn.lastNumber,
-                    v?.vendorAbbreviation ?? "",
-                    v?.prefix
-                  )}
-                </span>
-              );
-            })}
+            <IssueCatalogChips
+              catalogNumbers={issue.catalogNumbers}
+              vendorMap={vendorMap}
+              primaryVendorId={primaryVendorId}
+            />
 
             {issue.memberCount > 0 && (
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  fontFamily: "monospace",
-                  color: "var(--color-text-muted)",
-                  background: "var(--color-bg-muted)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "0.25rem",
-                  padding: "0.1rem 0.4rem",
-                  flexShrink: 0,
-                  whiteSpace: "nowrap",
-                }}
-                title="Required / Total stamps"
-              >
-                {issue.requiredCount}/{issue.memberCount}
-              </span>
+              <StampCountBadge required={issue.requiredCount} total={issue.memberCount} />
             )}
 
             {issue.requiredPriceTotal && (() => {
