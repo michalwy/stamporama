@@ -30,6 +30,7 @@ export interface CreateCollectionResult {
 export async function createCollection(
   ownerId: string,
   name: string,
+  baseCurrency: string,
   options?: { seedDemo?: boolean }
 ): Promise<CreateCollectionResult> {
   const trimmed = name.trim();
@@ -39,7 +40,7 @@ export async function createCollection(
 
   return prisma.$transaction(async (tx) => {
     const created = await tx.collection.create({
-      data: { ownerId, name: trimmed, slug },
+      data: { ownerId, name: trimmed, slug, baseCurrency },
       select: { id: true, slug: true, name: true },
     });
     if (options?.seedDemo) {
@@ -69,13 +70,13 @@ export async function getCollectionsByOwner(ownerId: string) {
   return prisma.collection.findMany({
     where: { ownerId },
     orderBy: { createdAt: "asc" },
-    select: { id: true, slug: true, name: true, createdAt: true },
+    select: { id: true, slug: true, name: true, baseCurrency: true, createdAt: true },
   });
 }
 
 export async function getCollectionBySlug(ownerId: string, slug: string) {
   return prisma.collection.findUnique({
     where: { ownerId_slug: { ownerId, slug } },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, baseCurrency: true },
   });
 }

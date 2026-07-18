@@ -29,7 +29,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
       >
         Settings
       </h2>
-      <SettingsPanel collectionId={collection.id} collectionName={collection.name} />
+      <SettingsPanel collectionId={collection.id} collectionName={collection.name} baseCurrency={collection.baseCurrency} />
     </div>
   );
 }

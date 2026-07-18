@@ -1,0 +1,1 @@
+ALTER TABLE "collection" ADD COLUMN "baseCurrency" TEXT NOT NULL DEFAULT 'EUR';

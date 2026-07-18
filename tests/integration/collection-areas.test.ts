@@ -20,6 +20,7 @@ async function createTestCollection(ownerId: string, suffix: string) {
     data: {
       slug: `col-${suffix}`,
       name: `Collection ${suffix}`,
+      baseCurrency: "EUR",
       ownerId,
     },
   });

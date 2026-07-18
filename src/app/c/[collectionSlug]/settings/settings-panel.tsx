@@ -10,9 +10,10 @@ import {
 interface SettingsPanelProps {
   collectionId: string;
   collectionName: string;
+  baseCurrency: string;
 }
 
-export function SettingsPanel({ collectionId, collectionName }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -38,6 +39,55 @@ export function SettingsPanel({ collectionId, collectionName }: SettingsPanelPro
 
   return (
     <>
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Base currency
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Set at creation and cannot be changed.
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            {baseCurrency}
+          </span>
+        </div>
+      </section>
+
       <section
         style={{
           border: "1px solid var(--color-error-border)",

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createCollection, resetCollectionToDemo } from "@/lib/collections";
+import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
 export type CreateCollectionState =
   | { status: "idle" }
@@ -27,11 +28,16 @@ export async function createCollectionAction(
     };
   }
 
+  const rawCurrency = (formData.get("baseCurrency") as string | null) ?? "";
+  const baseCurrency = (BASE_CURRENCIES as readonly string[]).includes(rawCurrency)
+    ? rawCurrency
+    : DEFAULT_BASE_CURRENCY;
+
   const seedDemo = formData.get("seedDemoData") === "on";
 
   let slug: string;
   try {
-    const collection = await createCollection(session.user.id, name, { seedDemo });
+    const collection = await createCollection(session.user.id, name, baseCurrency, { seedDemo });
     slug = collection.slug;
   } catch {
     return {

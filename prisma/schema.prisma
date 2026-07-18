@@ -23,11 +23,12 @@ model User {
 }
 
 model Collection {
-  id        String   @id @default(cuid())
-  slug      String
-  name      String
-  ownerId   String
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  slug         String
+  name         String
+  baseCurrency String
+  ownerId      String
+  createdAt    DateTime @default(now())
 
   owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   collectionAreas CollectionArea[]

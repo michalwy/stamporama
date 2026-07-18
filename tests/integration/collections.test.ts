@@ -36,7 +36,7 @@ describe("createCollection", () => {
   });
 
   it("creates a collection with the correct name and owner", async () => {
-    const c = await createCollection(userId, "My Test Collection");
+    const c = await createCollection(userId, "My Test Collection", "EUR");
     assert.equal(c.name, "My Test Collection");
     assert.equal(typeof c.slug, "string");
     assert.ok(c.slug.length > 0);
@@ -44,26 +44,26 @@ describe("createCollection", () => {
   });
 
   it("generates a slug from the name", async () => {
-    const c = await createCollection(userId, "Airmail Stamps");
+    const c = await createCollection(userId, "Airmail Stamps", "EUR");
     assert.equal(c.slug, "airmail-stamps");
   });
 
   it("appends -2 suffix when slug already exists for the same user", async () => {
-    const first = await createCollection(userId, "Duplicated Name");
-    const second = await createCollection(userId, "Duplicated Name");
+    const first = await createCollection(userId, "Duplicated Name", "EUR");
+    const second = await createCollection(userId, "Duplicated Name", "EUR");
     assert.equal(first.slug, "duplicated-name");
     assert.equal(second.slug, "duplicated-name-2");
   });
 
   it("rejects an empty name", async () => {
     await assert.rejects(
-      () => createCollection(userId, "   "),
+      () => createCollection(userId, "   ", "EUR"),
       /required/i
     );
   });
 
   it("strips special characters in the slug", async () => {
-    const c = await createCollection(userId, "Stamps & Coins!");
+    const c = await createCollection(userId, "Stamps & Coins!", "EUR");
     assert.equal(c.slug, "stamps-coins");
   });
 });
@@ -84,8 +84,8 @@ describe("createCollection — cross-user isolation", () => {
   });
 
   it("allows the same slug for different users", async () => {
-    const a = await createCollection(userA, "Airmail");
-    const b = await createCollection(userB, "Airmail");
+    const a = await createCollection(userA, "Airmail", "EUR");
+    const b = await createCollection(userB, "Airmail", "USD");
     assert.equal(a.slug, "airmail");
     assert.equal(b.slug, "airmail");
   });
@@ -96,8 +96,8 @@ describe("getCollectionsByOwner", () => {
 
   before(async () => {
     userId = (await createTestUser(`gco-${Date.now()}`)).id;
-    await createCollection(userId, "First");
-    await createCollection(userId, "Second");
+    await createCollection(userId, "First", "EUR");
+    await createCollection(userId, "Second", "PLN");
   });
 
   after(async () => {
@@ -112,7 +112,7 @@ describe("getCollectionsByOwner", () => {
 
   it("does not return collections belonging to other users", async () => {
     const other = await createTestUser(`gcoo-${Date.now()}`);
-    await createCollection(other.id, "Other User Collection");
+    await createCollection(other.id, "Other User Collection", "EUR");
     try {
       const cols = await getCollectionsByOwner(userId);
       for (const c of cols) {
@@ -131,7 +131,7 @@ describe("getCollectionBySlug", () => {
 
   before(async () => {
     userId = (await createTestUser(`gcbs-${Date.now()}`)).id;
-    const c = await createCollection(userId, "Slug Test");
+    const c = await createCollection(userId, "Slug Test", "EUR");
     slug = c.slug;
   });
 
@@ -168,7 +168,7 @@ describe("createCollection — seedDemo option", () => {
 
   before(async () => {
     userId = (await createTestUser(`sd-${Date.now()}`)).id;
-    const c = await createCollection(userId, "Demo Collection", { seedDemo: true });
+    const c = await createCollection(userId, "Demo Collection", "EUR", { seedDemo: true });
     collectionId = c.id;
   });
 

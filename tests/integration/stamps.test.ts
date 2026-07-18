@@ -31,7 +31,7 @@ async function createTestUser(suffix: string) {
 
 async function createTestCollection(ownerId: string, suffix: string) {
   return prisma.collection.create({
-    data: { slug: `col-stamps-${suffix}`, name: `Collection ${suffix}`, ownerId },
+    data: { slug: `col-stamps-${suffix}`, name: `Collection ${suffix}`, baseCurrency: "EUR", ownerId },
   });
 }
 
@@ -381,7 +381,7 @@ describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPr
       },
     });
     const col = await prisma.collection.create({
-      data: { slug: `col-stamps-scp-${ts}`, name: `Collection scp-${ts}`, ownerId: userId },
+      data: { slug: `col-stamps-scp-${ts}`, name: `Collection scp-${ts}`, baseCurrency: "EUR", ownerId: userId },
     });
     collectionId = col.id;
 

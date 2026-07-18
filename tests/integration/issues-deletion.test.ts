@@ -18,7 +18,7 @@ async function createTestUser(suffix: string) {
 
 async function createTestCollection(ownerId: string, suffix: string) {
   return prisma.collection.create({
-    data: { slug: `col-issdel-${suffix}`, name: `Collection ${suffix}`, ownerId },
+    data: { slug: `col-issdel-${suffix}`, name: `Collection ${suffix}`, baseCurrency: "EUR", ownerId },
   });
 }
 

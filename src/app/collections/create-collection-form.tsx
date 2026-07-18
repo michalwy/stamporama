@@ -5,6 +5,7 @@ import {
   createCollectionAction,
   type CreateCollectionState,
 } from "@/app/actions/collections";
+import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
 const initial: CreateCollectionState = { status: "idle" };
 
@@ -80,6 +81,38 @@ export function CreateCollectionForm() {
               width: "100%",
             }}
           />
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          <span
+            style={{
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            Base currency
+          </span>
+          <select
+            name="baseCurrency"
+            defaultValue={DEFAULT_BASE_CURRENCY}
+            style={{
+              padding: "0.5rem 0.75rem",
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.375rem",
+              fontSize: "0.9375rem",
+              color: "var(--color-text-primary)",
+              background: "var(--color-bg-page)",
+              outline: "none",
+              width: "100%",
+            }}
+          >
+            {BASE_CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>

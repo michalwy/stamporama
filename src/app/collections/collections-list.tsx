@@ -6,6 +6,7 @@ interface Collection {
   id: string;
   slug: string;
   name: string;
+  baseCurrency: string;
   createdAt: Date;
 }
 
@@ -60,7 +61,7 @@ export function CollectionsList({ collections }: CollectionsListProps) {
                 marginTop: "0.125rem",
               }}
             >
-              /c/{c.slug}
+              /c/{c.slug} · {c.baseCurrency}
             </div>
           </div>
           <Link

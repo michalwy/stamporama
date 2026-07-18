@@ -7,7 +7,8 @@ A **collection** is the top-level organizing unit in Stamporama. All your stamps
 1. Sign in and open the **Your Collections** page at `/collections`.
 2. Click **New collection**.
 3. Enter a name (up to 100 characters).
-4. Click **Create collection**.
+4. Select a **base currency** (EUR, USD, GBP, PLN, CHF, CZK, DKK, SEK, or NOK). This is the currency used for all reports, valuations, and price summaries. It cannot be changed after creation.
+5. Click **Create collection**.
 
 Stamporama generates a URL-friendly slug from the name automatically (e.g. "Polish Definitive Stamps" becomes `polish-definitive-stamps`). If you already have a collection with the same slug, a numeric suffix is added (`-2`, `-3`, …).
 
