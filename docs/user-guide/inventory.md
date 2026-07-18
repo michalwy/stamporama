@@ -15,6 +15,7 @@ Each row shows:
 - The **condition** and any **certificate status**.
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once.
+- The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
 - The **purchase price** and **acquired date**, when recorded.
 - A notes indicator when the copy has notes (hover to read them).
 
@@ -32,6 +33,33 @@ page URL, so you can bookmark or share a filtered view.
   chosen marker.
 - **Condition** — show only copies of one condition.
 - **Sort** — by date added or acquired date, ascending or descending.
+
+## Copy value and holdings total
+
+Each copy is valued from your **catalog prices** — this is independent of what you paid
+(the purchase price). A copy's value is the price for its **own condition and certificate
+status**, taken from the **primary catalog of the stamp's area** at that catalog's
+**latest recorded edition**:
+
+- **Identified copy** — the price of its specific variant.
+- **Unknown-variant copy** — if the base stamp itself has a price, that is used;
+  otherwise the **lowest** price among the base stamp's variants (compared in your base
+  currency). Either way the value is an estimate: it is shown in italics with a leading
+  `~`, because the exact variant isn't settled. Resolving the variant later replaces the
+  estimate with that variant's own price.
+
+The certificate status must match exactly — a copy with a certificate is only valued from
+a price recorded *for that certificate status*; there is no fall-back to the no-certificate
+price. A copy with no matching catalog price shows **—** (unpriced).
+
+Values are converted to your collection's **base currency** for display and totalling. A
+price in a currency with no available exchange rate is shown in its own currency and left
+out of the total.
+
+Above the list, the **Holdings value** bar sums the value of every copy that matches your
+current filters (change the filters and the total follows). It also tells you how much of
+the total is uncertain (unknown-variant estimates) and how many copies are unpriced or
+could not be converted.
 
 ## Adding a copy
 

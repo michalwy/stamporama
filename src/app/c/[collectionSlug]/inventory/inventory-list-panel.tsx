@@ -9,9 +9,11 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   useInventoryItemsInfinite,
+  useHoldingsValuation,
   useInvalidateInventory,
   type InventoryItemFilters,
 } from "./use-inventory-query";
+import { HoldingsSummaryBar } from "./holdings-summary-bar";
 import { InventoryItemRow } from "./inventory-item-row";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
@@ -106,6 +108,7 @@ export function InventoryListPanel({
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useInventoryItemsInfinite(collectionId, filters);
+  const { data: holdingsTotal } = useHoldingsValuation(collectionId, filters);
 
   const allCopies = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -217,6 +220,9 @@ export function InventoryListPanel({
         </button>
       </div>
 
+      {/* Holdings valuation total */}
+      <HoldingsSummaryBar total={holdingsTotal} />
+
       {/* List */}
       <div
         style={{
@@ -248,6 +254,7 @@ export function InventoryListPanel({
               <InventoryItemRow
                 key={item.id}
                 item={item}
+                baseCurrency={baseCurrency}
                 isLast={idx === allCopies.length - 1 && !hasNextPage}
                 onEdit={(it) => setDialog({ kind: "edit", item: it })}
                 onIdentify={(it) => setDialog({ kind: "identify", item: it })}

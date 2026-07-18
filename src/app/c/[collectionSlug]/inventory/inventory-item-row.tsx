@@ -32,8 +32,48 @@ function acquiredText(item: ItemListItem): string | null {
   return item.acquiredDate ? `Acquired ${item.acquiredDate}` : null;
 }
 
+/** Catalog valuation of a copy (ADR-0007 §7). Uncertain values (unknown variant, valued
+ * at the lowest child price) are prefixed `~` and muted; unpriced copies show `—`;
+ * a price in a currency with no base rate falls back to its own currency. */
+function CopyValue({ item, baseCurrency }: { item: ItemListItem; baseCurrency: string }) {
+  const v = item.value;
+  if (v.unpriced) {
+    return (
+      <span style={{ ...META, fontVariantNumeric: "tabular-nums" }} title="No catalog price recorded for this condition.">
+        —
+      </span>
+    );
+  }
+  const converted = v.baseAmountDisplay != null;
+  const text = converted
+    ? `${v.baseAmountDisplay} ${baseCurrency}`
+    : `${v.amount} ${v.currency}`;
+  const title = v.uncertain
+    ? "Estimated from the lowest child-variant price — the specific variant isn't identified yet."
+    : converted
+      ? "Catalog value"
+      : `Catalog value (no ${baseCurrency} rate available)`;
+  return (
+    <span
+      title={title}
+      style={{
+        fontSize: "0.875rem",
+        fontWeight: 600,
+        fontVariantNumeric: "tabular-nums",
+        color: v.uncertain ? "var(--color-text-muted)" : "var(--color-text-primary)",
+        fontStyle: v.uncertain ? "italic" : undefined,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {v.uncertain ? "~" : ""}
+      {text}
+    </span>
+  );
+}
+
 interface InventoryItemRowProps {
   item: ItemListItem;
+  baseCurrency: string;
   isLast: boolean;
   onEdit: (item: ItemListItem) => void;
   onIdentify: (item: ItemListItem) => void;
@@ -43,6 +83,7 @@ interface InventoryItemRowProps {
 
 export function InventoryItemRow({
   item,
+  baseCurrency,
   isLast,
   onEdit,
   onIdentify,
@@ -106,6 +147,7 @@ export function InventoryItemRow({
               </span>
             )}
           </div>
+          <CopyValue item={item} baseCurrency={baseCurrency} />
           <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
             {item.unknownVariant && (
               <button type="button" style={rowBtnStyle} onClick={() => onIdentify(item)}>

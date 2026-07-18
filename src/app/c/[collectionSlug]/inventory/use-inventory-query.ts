@@ -6,6 +6,7 @@ import type {
   ItemSortBy,
   ItemVariantHistoryData,
 } from "@/lib/items";
+import type { HoldingsTotal } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 
@@ -55,6 +56,38 @@ export function useInventoryItemsInfinite(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+/** Holdings valuation total over the whole filtered copy set (ADR-0007 §7, #101).
+ * Shares the list's disposition/condition/certificate filters (not sort/pagination)
+ * so the figure tracks what the list is showing. */
+export function useHoldingsValuation(
+  collectionId: string,
+  filters: InventoryItemFilters
+) {
+  return useQuery<HoldingsTotal>({
+    queryKey: ["inventory", collectionId, "valuation", {
+      conditionId: filters.conditionId,
+      certificateStatusId: filters.certificateStatusId,
+      inCollection: filters.inCollection,
+      forSale: filters.forSale,
+      forTrade: filters.forTrade,
+    }] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.conditionId) params.set("conditionId", filters.conditionId);
+      if (filters.certificateStatusId)
+        params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.inCollection) params.set("inCollection", "true");
+      if (filters.forSale) params.set("forSale", "true");
+      if (filters.forTrade) params.set("forTrade", "true");
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch holdings valuation");
+      return res.json();
+    },
   });
 }
 

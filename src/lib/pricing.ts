@@ -1,35 +1,23 @@
 import "server-only";
-import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 
-/** A price shown in its catalog currency and, when different, the collection base currency. */
-export interface MoneyDisplay {
-  amount: string; // catalog-currency amount, 2 decimals
-  currency: string;
-  convertedAmount: string | null; // base-currency amount, or null when same currency / no rate
-  baseCurrency: string;
-}
-
-/** Aggregate price for the required members of an issue. */
-export interface IssuePriceTotal extends MoneyDisplay {
-  pricedCount: number; // required members contributing to the sum
-  requiredCount: number; // total required members
-  // True when the sum falls back to older-edition prices because no required member
-  // is priced on the current (latest) edition of the primary catalog.
-  usesOlderEdition: boolean;
-  // Required members priced only on an older edition, excluded from a current-edition sum.
-  olderEditionExcludedCount: number;
-}
-
-/** Raw catalog price shape needed to pick the main-catalog price. */
-export interface RawCatalogPrice {
-  price: Decimal;
-  currency: string;
-  conditionId: string;
-  certificateStatusId: string | null;
-  catalogEdition: { year: number; catalogNameId: string };
-}
+// Pure catalog-price helpers moved to `./catalog-price` (no Prisma / server-only)
+// so they can be shared with unit-tested domain modules. Re-exported here so this
+// module's existing importers keep working unchanged.
+export {
+  pickMainCatalogPrice,
+  pickCatalogPriceFor,
+  baseValueOf,
+  averageOf,
+  applyConversion,
+} from "./catalog-price";
+export type {
+  MoneyDisplay,
+  IssuePriceTotal,
+  RawCatalogPrice,
+  PickedPrice,
+} from "./catalog-price";
 
 /**
  * Effective primary catalog name per area, inheriting from ancestors.
@@ -59,34 +47,6 @@ export async function buildEffectivePrimaryCatalogMap(
     result.set(a.id, found);
   }
   return result;
-}
-
-/**
- * Latest catalog edition (by year) that has a recorded price for the primary
- * catalog name, in the given display condition with no certificate status
- * (the "headline" price shown in lists and summed for issue totals).
- * Returns null when no condition is selected or no matching price exists.
- */
-export function pickMainCatalogPrice(
-  prices: RawCatalogPrice[],
-  primaryCatalogNameId: string | null,
-  displayConditionId: string | null
-): { amount: number; currency: string; catalogNameId: string; editionYear: number } | null {
-  if (!primaryCatalogNameId || !displayConditionId) return null;
-  let best: RawCatalogPrice | null = null;
-  for (const p of prices) {
-    if (p.catalogEdition.catalogNameId !== primaryCatalogNameId) continue;
-    if (p.conditionId !== displayConditionId) continue;
-    if (p.certificateStatusId !== null) continue;
-    if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
-  }
-  if (!best) return null;
-  return {
-    amount: Number(best.price),
-    currency: best.currency,
-    catalogNameId: best.catalogEdition.catalogNameId,
-    editionYear: best.catalogEdition.year,
-  };
 }
 
 /**
@@ -128,41 +88,6 @@ export async function safeRateMap(
     }
   }
   return map;
-}
-
-/**
- * Value of an amount expressed in the collection base currency, or null when it
- * cannot be expressed there (non-base currency with no available rate). Amounts
- * already in the base currency return unchanged. Used to make catalog prices in
- * different currencies comparable so they can be averaged. See price-details dialog.
- */
-export function baseValueOf(
-  amount: number,
-  currency: string,
-  baseCurrency: string,
-  rates: Map<string, number | null>
-): number | null {
-  if (currency === baseCurrency) return amount;
-  const rate = rates.get(currency) ?? null;
-  return rate != null ? amount * rate : null;
-}
-
-/** Arithmetic mean of the given values, or null when the list is empty. */
-export function averageOf(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-/** Convert an amount to the base currency using a rate map; null when same currency or no rate. */
-export function applyConversion(
-  amount: number,
-  currency: string,
-  baseCurrency: string,
-  rates: Map<string, number | null>
-): string | null {
-  if (currency === baseCurrency) return null;
-  const rate = rates.get(currency) ?? null;
-  return rate != null ? (amount * rate).toFixed(2) : null;
 }
 
 /**

@@ -1,5 +1,17 @@
 import "server-only";
 import { prisma } from "./db";
+import {
+  buildEffectivePrimaryCatalogMap,
+  getCollectionBaseCurrency,
+  safeRateMap,
+} from "./pricing";
+import type { RawCatalogPrice } from "./catalog-price";
+import {
+  valuateCopy,
+  aggregateHoldings,
+  type CopyValuation,
+  type HoldingsTotal,
+} from "./valuation";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -391,6 +403,8 @@ export interface ItemListItem {
   purchaseCurrency: string | null;
   notes: string | null;
   createdAt: Date;
+  /** Catalog valuation of this copy (ADR-0007 §7). Uncertain for unknown variants. */
+  value: CopyValuation;
 }
 
 export interface PaginatedItemsResult {
@@ -466,6 +480,17 @@ export async function listItemsPaginated(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
 
+  const valuations = await valuateItemRows(
+    collectionId,
+    page.map((row) => ({
+      id: row.id,
+      stampId: row.stampId,
+      conditionId: row.condition.id,
+      certificateStatusId: row.certificateStatus?.id ?? null,
+      unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+    }))
+  );
+
   const items: ItemListItem[] = page.map((row) => {
     const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
     return {
@@ -496,6 +521,7 @@ export async function listItemsPaginated(
       purchaseCurrency: row.purchaseCurrency,
       notes: row.notes,
       createdAt: row.createdAt,
+      value: valuations.get(row.id)!,
     };
   });
 
@@ -605,4 +631,179 @@ async function isDescendantStamp(
     cursor = node.parentId;
   }
   return false;
+}
+
+// ── Copy valuation (ADR-0007 §7) ────────────────────────────────────────────
+// Assembles the inputs the pure `valuateCopy` needs (area primary catalog, own +
+// descendant-variant prices, currency rates) and delegates the rule to `valuation.ts`.
+
+/** Minimal copy projection needed to value it. */
+interface ValuationRow {
+  id: string;
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+  /** True when the copy links to a base stamp that has variants (variant unknown). */
+  unknownVariant: boolean;
+}
+
+const VALUATION_PRICE_SELECT = {
+  price: true,
+  currency: true,
+  conditionId: true,
+  certificateStatusId: true,
+  catalogEdition: { select: { year: true, catalogNameId: true } },
+} as const;
+
+/** For each ancestor stamp id, the set of all descendant stamp ids (children,
+ * grandchildren, …). Built from one flat read of the collection's variant tree so
+ * unknown-variant valuation can gather every child's prices. Empty when no ancestors. */
+async function buildDescendantMap(
+  collectionId: string,
+  ancestorIds: Set<string>
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  if (ancestorIds.size === 0) return result;
+  const all = await prisma.stamp.findMany({
+    where: { collectionId },
+    select: { id: true, parentId: true },
+  });
+  const childrenByParent = new Map<string, string[]>();
+  for (const s of all) {
+    if (!s.parentId) continue;
+    const arr = childrenByParent.get(s.parentId) ?? [];
+    arr.push(s.id);
+    childrenByParent.set(s.parentId, arr);
+  }
+  for (const ancestor of ancestorIds) {
+    const acc = new Set<string>();
+    const queue = [...(childrenByParent.get(ancestor) ?? [])];
+    while (queue.length > 0) {
+      const id = queue.pop()!;
+      if (acc.has(id)) continue;
+      acc.add(id);
+      for (const child of childrenByParent.get(id) ?? []) queue.push(child);
+    }
+    result.set(ancestor, acc);
+  }
+  return result;
+}
+
+/** Value a set of copies. Loads the stamp prices, area primary catalogs, descendant
+ * variant prices, and currency rates once, then applies the pure `valuateCopy` rule.
+ * Caller must have already asserted collection ownership. Returns id → valuation. */
+async function valuateItemRows(
+  collectionId: string,
+  rows: ValuationRow[]
+): Promise<Map<string, CopyValuation>> {
+  if (rows.length === 0) return new Map();
+
+  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+  ]);
+
+  const unknownStampIds = new Set(
+    rows.filter((r) => r.unknownVariant).map((r) => r.stampId)
+  );
+  const descendantsByStamp = await buildDescendantMap(collectionId, unknownStampIds);
+
+  // Every stamp whose prices/area we must load: the copies' own stamps plus the
+  // descendant variants of any unknown-variant copy.
+  const stampIds = new Set<string>();
+  for (const r of rows) stampIds.add(r.stampId);
+  for (const set of descendantsByStamp.values()) {
+    for (const id of set) stampIds.add(id);
+  }
+
+  const stamps = await prisma.stamp.findMany({
+    where: { id: { in: [...stampIds] } },
+    select: {
+      id: true,
+      catalogPrices: { select: VALUATION_PRICE_SELECT },
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+    },
+  });
+
+  const pricesByStamp = new Map<string, RawCatalogPrice[]>();
+  const primaryCatalogByStamp = new Map<string, string | null>();
+  const currencies: string[] = [];
+  for (const s of stamps) {
+    pricesByStamp.set(s.id, s.catalogPrices);
+    for (const p of s.catalogPrices) currencies.push(p.currency);
+    const link = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
+    const areaId = link?.collectionAreaId ?? null;
+    primaryCatalogByStamp.set(
+      s.id,
+      areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null
+    );
+  }
+
+  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+
+  const result = new Map<string, CopyValuation>();
+  for (const r of rows) {
+    const descendants = r.unknownVariant
+      ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())]
+      : null;
+    result.set(
+      r.id,
+      valuateCopy({
+        conditionId: r.conditionId,
+        certificateStatusId: r.certificateStatusId,
+        unknownVariant: r.unknownVariant,
+        primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
+        ownPrices: pricesByStamp.get(r.stampId) ?? [],
+        variantPrices: descendants
+          ? descendants.map((id) => pricesByStamp.get(id) ?? [])
+          : undefined,
+        baseCurrency,
+        rates,
+      })
+    );
+  }
+  return result;
+}
+
+/** Aggregate holdings valuation over every copy matching the given filters (the whole
+ * filtered set, not one page). Mirrors the disposition/condition/certificate filters of
+ * `listItemsPaginated` so the total reflects what the Copies screen is showing. */
+export async function getHoldingsValuation(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<HoldingsTotal> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const rows = await prisma.item.findMany({
+    where: {
+      collectionId,
+      ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
+      ...(filters.certificateStatusId
+        ? { certificateStatusId: filters.certificateStatusId }
+        : {}),
+      ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
+      ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
+      ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
+    },
+    select: {
+      id: true,
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      stamp: { select: { parentId: true, _count: { select: { variants: true } } } },
+    },
+  });
+
+  const valuationRows: ValuationRow[] = rows.map((row) => ({
+    id: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+  }));
+
+  const valuations = await valuateItemRows(collectionId, valuationRows);
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  return aggregateHoldings([...valuations.values()], baseCurrency);
 }
