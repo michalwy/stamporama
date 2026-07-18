@@ -1,27 +1,44 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useMemo, useCallback, useSyncExternalStore } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import { getDescendantIds, flattenAreaTree } from "./area-helpers";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
 
-function loadCollapsed(): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return new Set(JSON.parse(raw));
-  } catch {
-    // ignore
-  }
-  return new Set();
+// The persisted collapsed set lives in localStorage (not a cookie, which would
+// be sent on every request). It's exposed as an external store so it can be read
+// with useSyncExternalStore: the server snapshot is null — a "not yet loaded"
+// sentinel that lets the tree hold off rendering until the real state is known,
+// avoiding a flash of the wrong expansion on refresh.
+const collapsedListeners = new Set<() => void>();
+
+function subscribeCollapsed(onChange: () => void) {
+  collapsedListeners.add(onChange);
+  return () => collapsedListeners.delete(onChange);
 }
 
-function saveCollapsed(ids: Set<string>) {
+/** Client snapshot: the raw JSON string, or "" when nothing is saved yet. */
+function getCollapsedRaw(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Server / pre-hydration snapshot: null means "not loaded yet". */
+function getCollapsedServerRaw(): string | null {
+  return null;
+}
+
+function writeCollapsed(ids: Set<string>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
   } catch {
     // ignore
   }
+  for (const listener of collapsedListeners) listener();
 }
 
 interface AreaFilterSidebarProps {
@@ -45,9 +62,23 @@ export function AreaFilterSidebar({
     return set;
   }, [areas]);
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    const saved = loadCollapsed();
-    if (saved.size > 0) return saved;
+  // null until localStorage has been read on the client (see server snapshot).
+  const collapsedRaw = useSyncExternalStore(
+    subscribeCollapsed,
+    getCollapsedRaw,
+    getCollapsedServerRaw
+  );
+  const loaded = collapsedRaw !== null;
+
+  const collapsed = useMemo<Set<string>>(() => {
+    if (collapsedRaw) {
+      try {
+        return new Set<string>(JSON.parse(collapsedRaw));
+      } catch {
+        // fall through to defaults
+      }
+    }
+    // Default: collapse all nested parents.
     const defaults = new Set<string>();
     for (const { area, depth } of flatTree) {
       if (depth > 0 && parentIds.has(area.id)) {
@@ -55,26 +86,20 @@ export function AreaFilterSidebar({
       }
     }
     return defaults;
-  });
-
-  useEffect(() => {
-    saveCollapsed(collapsed);
-  }, [collapsed]);
+  }, [collapsedRaw, flatTree, parentIds]);
 
   const toggleCollapse = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      setCollapsed((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
-        return next;
-      });
+      const next = new Set(collapsed);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      writeCollapsed(next);
     },
-    []
+    [collapsed]
   );
 
   const visibleTree = useMemo(() => {
@@ -99,9 +124,13 @@ export function AreaFilterSidebar({
   return (
     <aside
       style={{
-        width: "14rem",
+        width: "22rem",
         flexShrink: 0,
-        borderRight: "1px solid var(--color-border)",
+        alignSelf: "flex-start",
+        position: "sticky",
+        top: 0,
+        maxHeight: "100vh",
+        background: "var(--color-bg-elevated)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -125,16 +154,23 @@ export function AreaFilterSidebar({
         </span>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         <button
           type="button"
           onClick={() => onNavigate(null)}
+          onMouseEnter={(e) => {
+            if (filterAreaId)
+              e.currentTarget.style.background = "var(--color-bg-muted)";
+          }}
+          onMouseLeave={(e) => {
+            if (filterAreaId) e.currentTarget.style.background = "transparent";
+          }}
           style={{
             display: "block",
             width: "100%",
             textAlign: "left",
             padding: "0.5rem 1rem",
-            background: !filterAreaId ? "var(--color-bg-subtle)" : "transparent",
+            background: !filterAreaId ? "var(--color-accent-soft)" : "transparent",
             border: "none",
             borderBottom: "1px solid var(--color-border)",
             cursor: "pointer",
@@ -148,7 +184,8 @@ export function AreaFilterSidebar({
           All areas
         </button>
 
-        {visibleTree.map(({ area, depth }) => {
+        {loaded &&
+          visibleTree.map(({ area, depth, isLast, ancestorHasNextSibling }) => {
           const isSelected = filterAreaId === area.id;
           const isInScope = activeIds ? activeIds.has(area.id) : false;
           const hasChildren = parentIds.has(area.id);
@@ -159,16 +196,21 @@ export function AreaFilterSidebar({
               key={area.id}
               type="button"
               onClick={() => onNavigate(isSelected ? null : area.id)}
+              onMouseEnter={(e) => {
+                if (!isSelected)
+                  e.currentTarget.style.background = "var(--color-bg-muted)";
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) e.currentTarget.style.background = "transparent";
+              }}
               style={{
                 display: "flex",
-                alignItems: "center",
+                alignItems: "stretch",
                 width: "100%",
                 textAlign: "left",
-                padding: "0.4rem 1rem",
-                paddingLeft: `${1 + depth * 0.875}rem`,
-                background: isSelected ? "var(--color-bg-subtle)" : "transparent",
+                paddingLeft: "0.75rem",
+                background: isSelected ? "var(--color-accent-soft)" : "transparent",
                 border: "none",
-                borderBottom: "1px solid var(--color-border)",
                 cursor: "pointer",
                 fontSize: "0.8125rem",
                 fontWeight: isSelected ? 600 : 400,
@@ -179,37 +221,93 @@ export function AreaFilterSidebar({
                     : "var(--color-text-secondary)",
               }}
             >
-              {hasChildren ? (
-                <span
-                  role="button"
-                  tabIndex={-1}
-                  onClick={(e) => toggleCollapse(area.id, e)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "1rem",
-                    height: "1rem",
-                    marginRight: "0.25rem",
-                    flexShrink: 0,
-                    fontSize: "0.625rem",
-                    color: "var(--color-text-muted)",
-                    borderRadius: "2px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {isCollapsed ? "▶" : "▼"}
-                </span>
-              ) : (
-                <span
-                  style={{
-                    width: "1rem",
-                    marginRight: "0.25rem",
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-              {area.name}
+              {Array.from({ length: depth }).map((_, i) => {
+                const isNodeLevel = i === depth - 1;
+                // Cell i sits under the depth-i ancestor's chevron, so its
+                // pass-through rail continues while the next ancestor on the
+                // path (i+1) still has siblings below. Node level: draw the
+                // elbow — a rail down to the tick (stopping there when this
+                // node is the last child).
+                const showRail = isNodeLevel || ancestorHasNextSibling[i + 1];
+                return (
+                  <span
+                    key={i}
+                    aria-hidden
+                    style={{
+                      position: "relative",
+                      display: "block",
+                      width: "1.25rem",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {/* Vertical rail, centered under the parent's chevron */}
+                    {showRail && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          bottom: isNodeLevel && isLast ? "50%" : 0,
+                          left: "0.5rem",
+                          borderLeft: "1px solid var(--color-border-strong)",
+                        }}
+                      />
+                    )}
+                    {/* Horizontal tick connecting the rail to this node */}
+                    {isNodeLevel && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "0.5rem",
+                          width: "0.75rem",
+                          borderTop: "1px solid var(--color-border-strong)",
+                        }}
+                      />
+                    )}
+                  </span>
+                );
+              })}
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "0.4rem 1rem 0.4rem 0",
+                }}
+              >
+                {hasChildren ? (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    onClick={(e) => toggleCollapse(area.id, e)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "1rem",
+                      height: "1rem",
+                      marginRight: "0.25rem",
+                      flexShrink: 0,
+                      fontSize: "0.625rem",
+                      color: "var(--color-text-muted)",
+                      borderRadius: "2px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {isCollapsed ? "▶" : "▼"}
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      width: "1rem",
+                      marginRight: "0.25rem",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                {area.name}
+              </span>
             </button>
           );
         })}

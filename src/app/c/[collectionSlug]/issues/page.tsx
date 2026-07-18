@@ -38,7 +38,14 @@ export default async function IssuesPage({
     : undefined;
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <div
+      style={{
+        padding: "2rem",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <h2
         style={{
           margin: "0 0 1.5rem",

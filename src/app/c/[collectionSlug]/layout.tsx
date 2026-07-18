@@ -40,7 +40,7 @@ export default async function CollectionLayout({
         collections={collections.map((c) => ({ slug: c.slug, name: c.name }))}
         appVersion={getAppVersionLabel()}
       />
-      <main style={{ flex: 1, overflow: "auto" }}>
+      <main style={{ flex: 1, minWidth: 0 }}>
         <QueryProvider>{children}</QueryProvider>
       </main>
     </div>

@@ -63,19 +63,32 @@ export function effectivePrimaryVendorId(
 export interface AreaTreeItem {
   area: CollectionAreaData;
   depth: number;
+  /** True when this node is the last among its siblings. */
+  isLast: boolean;
+  /**
+   * Per ancestor level (index 0 = top level), whether that ancestor has a
+   * following sibling — i.e. whether a vertical guide rail should continue
+   * through this node's row at that level.
+   */
+  ancestorHasNextSibling: boolean[];
 }
 
 export function flattenAreaTree(areas: CollectionAreaData[]): AreaTreeItem[] {
   function collect(
     parentId: string | null,
-    depth: number
+    depth: number,
+    ancestorHasNextSibling: boolean[]
   ): AreaTreeItem[] {
     const nodes: AreaTreeItem[] = [];
-    for (const a of areas.filter((x) => x.parentId === parentId)) {
-      nodes.push({ area: a, depth });
-      nodes.push(...collect(a.id, depth + 1));
-    }
+    const siblings = areas.filter((x) => x.parentId === parentId);
+    siblings.forEach((a, i) => {
+      const isLast = i === siblings.length - 1;
+      nodes.push({ area: a, depth, isLast, ancestorHasNextSibling });
+      nodes.push(
+        ...collect(a.id, depth + 1, [...ancestorHasNextSibling, !isLast])
+      );
+    });
     return nodes;
   }
-  return collect(null, 0);
+  return collect(null, 0, []);
 }

@@ -623,8 +623,10 @@ export function IssuesListPanel({
         gap: 0,
         border: "1px solid var(--color-border)",
         borderRadius: "0.75rem",
-        overflow: "hidden",
+        overflow: "clip",
+        flex: 1,
         minHeight: "24rem",
+        background: "var(--color-bg-elevated)",
       }}
     >
       <AreaFilterSidebar
@@ -639,6 +641,7 @@ export function IssuesListPanel({
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
+          borderLeft: "1px solid var(--color-border)",
         }}
       >
         {/* Toolbar */}
