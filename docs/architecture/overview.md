@@ -119,6 +119,20 @@ model Collection {
 
 **Dialog primitive:** All modal dialogs use the shared shell at `src/app/dialog-shell.tsx`. It provides: backdrop, header with close button, scrollable body, optional fixed footer.
 
+### Physical holdings (`Item`)
+
+`Item` represents a collector's physical copies. Per ADR-0007, there is **one row per physical copy** — no quantity field — because copies of the same stamp and condition can differ (e.g. postmark type) in ways that affect value and intent.
+
+- `stampId` → `Stamp` at any level of the variant tree: a base stamp (`parentId = null`) means the variant is unknown; a variant row means the copy is identified. The tree level implicitly encodes variant certainty; there is no "unknown" flag.
+- `conditionId` → `StampCondition` and `certificateStatusId?` → `CertificateStatus` reference the per-collection configurable sets (Issues #93/#94), mirroring `StampCatalogPrice`.
+- Disposition is three **independent booleans** — `inCollection`, `forSale`, `forTrade` — not a mutually-exclusive status. A copy can hold any combination.
+- Acquisition/purchase fields (`acquisitionSource`, `acquiredDay/Month/Year`, `purchasePrice` `Decimal(10,2)`, `purchaseCurrency`, `notes`) are entered by hand now; a future acquisitions module will populate them.
+- `ItemVariantHistory` records in-place re-pointing of `stampId` when an unknown-variant copy is later identified (`fromStampId`, `toStampId`, `changedAt`, `note?`), giving a refinement trail without versioning the whole `Item`.
+
+Referential actions: `collectionId` and `stampId` cascade; `conditionId` and `certificateStatusId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`.
+
+Valuation of an unknown-variant copy (lowest child-variant catalog price, flagged uncertain) is shared domain logic and belongs out of UI components; it lands with a later child issue.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:

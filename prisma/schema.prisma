@@ -38,6 +38,7 @@ model Collection {
   exchangeRates   ExchangeRate[]
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
+  items           Item[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -52,6 +53,7 @@ model StampCondition {
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
+  items         Item[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -66,6 +68,7 @@ model CertificateStatus {
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
+  items         Item[]
 
   @@index([collectionId])
   @@map("certificate_status")
@@ -162,6 +165,9 @@ model Stamp {
   catalogNumbers    StampCatalogNumber[]
   catalogPrices     StampCatalogPrice[]
   issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
+  items              Item[]               @relation("ItemStamp")
+  variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
+  variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
 
   @@map("stamp")
 }
@@ -200,6 +206,52 @@ model StampCatalogPrice {
   @@index([conditionId])
   @@index([certificateStatusId])
   @@map("stamp_catalog_price")
+}
+
+model Item {
+  id                  String   @id @default(cuid())
+  collectionId        String
+  stampId             String
+  conditionId         String
+  certificateStatusId String?
+  inCollection        Boolean  @default(true)
+  forSale             Boolean  @default(false)
+  forTrade            Boolean  @default(false)
+  acquisitionSource   String?
+  acquiredDay         Int?
+  acquiredMonth       Int?
+  acquiredYear        Int?
+  purchasePrice       Decimal? @db.Decimal(10, 2)
+  purchaseCurrency    String?
+  notes               String?
+  createdAt           DateTime @default(now())
+
+  collection        Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)
+  condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  variantHistory    ItemVariantHistory[]
+
+  @@index([collectionId])
+  @@index([stampId])
+  @@index([conditionId])
+  @@map("item")
+}
+
+model ItemVariantHistory {
+  id          String   @id @default(cuid())
+  itemId      String
+  fromStampId String
+  toStampId   String
+  changedAt   DateTime @default(now())
+  note        String?
+
+  item      Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromStamp Stamp @relation("ItemVariantHistoryFrom", fields: [fromStampId], references: [id], onDelete: Cascade)
+  toStamp   Stamp @relation("ItemVariantHistoryTo", fields: [toStampId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("item_variant_history")
 }
 
 model CollectionAreaCatalog {
