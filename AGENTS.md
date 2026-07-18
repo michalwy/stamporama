@@ -73,7 +73,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Tabs inside dialogs are visual grouping only — one logical save action. Dialog height determined by default tab; switching tabs must not change height. Body scrolls, header/footer fixed.
 - Prefer in-place editing for fields where inline edits are practical.
 - Shared base components for list screens (loading, empty, filters, table, endless scroll).
-- Use semantic color tokens from `src/app/globals.css` for UI intent.
+- Use semantic color tokens from `src/app/globals.css` for UI intent. New tokens must have values in both `:root` (light) and `.dark` blocks.
 - URL state for navigation/filters/sorting/pagination; toast for ephemeral feedback.
 
 ## Testing Direction

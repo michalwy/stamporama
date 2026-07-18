@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -101,7 +102,16 @@ export default async function CollectionLayout({
             </a>
           ))}
         </nav>
-        <div style={{ marginTop: "auto", padding: "1rem" }}>
+        <div
+          style={{
+            marginTop: "auto",
+            padding: "1rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.75rem",
+          }}
+        >
+          <ThemeToggle />
           <a
             href="/collections"
             style={{

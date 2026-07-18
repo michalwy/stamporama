@@ -5,6 +5,7 @@ import { getCollectionsByOwner } from "@/lib/collections";
 import SignOutButton from "./sign-out-button";
 import { CollectionsList } from "./collections-list";
 import { CreateCollectionForm } from "./create-collection-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function CollectionsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -41,7 +42,10 @@ export default async function CollectionsPage() {
         >
           Stamporama
         </span>
-        <SignOutButton />
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </header>
 
       {/* Main content */}
