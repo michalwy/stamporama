@@ -218,7 +218,7 @@ model Item {
   inCollection        Boolean  @default(true)
   forSale             Boolean  @default(false)
   forTrade            Boolean  @default(false)
-  acquisitionSource   String?
+  contactId           String?
   acquiredDate        DateTime? @db.Date
   purchasePrice       Decimal? @db.Decimal(10, 2)
   purchaseCurrency    String?
@@ -229,11 +229,13 @@ model Item {
   stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)
   condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  contact           Contact?             @relation(fields: [contactId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
 
   @@index([collectionId])
   @@index([stampId])
   @@index([conditionId])
+  @@index([contactId])
   @@map("item")
 }
 
@@ -271,6 +273,9 @@ model Contact {
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Items acquired from this contact. `onDelete: Restrict` on the FK (from `Item`)
+  // means a referenced contact cannot be deleted without first detaching it (ADR-0008).
+  items      Item[]
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

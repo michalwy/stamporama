@@ -41,7 +41,10 @@ page URL, so you can bookmark or share a filtered view.
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection*.
 5. Optionally record the **acquisition source**, **acquired date**, **purchase price and
-   currency**, and free-form **notes**.
+   currency**, and free-form **notes**. The **source** is a contact: start typing to
+   search your existing contacts, or type a new name and choose **Create** to add it —
+   a new contact is created and linked to the copy. (You can fill in that contact's
+   roles and details later from your contacts.)
 6. Click **Add copy**. Everything is saved together in one step.
 
 ## Editing a copy

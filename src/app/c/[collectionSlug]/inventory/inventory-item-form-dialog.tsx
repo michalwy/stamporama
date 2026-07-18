@@ -12,6 +12,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { StampSelect, type StampSelectInitial } from "./stamp-select";
+import { ContactSelect } from "./contact-select";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -200,14 +201,12 @@ export function InventoryItemFormDialog({
             <div style={SECTION_LABEL}>Acquisition</div>
             <div style={{ marginBottom: "0.75rem" }}>
               <LabelWithError htmlFor="copy-source">Source</LabelWithError>
-              <input
-                id="copy-source"
-                name="acquisitionSource"
-                type="text"
-                placeholder="Where / from whom obtained"
-                defaultValue={item?.acquisitionSource ?? ""}
+              <ContactSelect
+                collectionId={collectionId}
+                inputId="copy-source"
+                initialContactId={item?.contactId}
+                initialContactName={item?.contactName}
                 disabled={isPending}
-                style={INPUT_STYLE}
               />
             </div>
             <div style={{ marginBottom: "0.75rem" }}>

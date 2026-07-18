@@ -31,7 +31,7 @@ interface ItemFields {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  acquisitionSource: string | null;
+  contactId: string | null;
   acquiredDate: string | null;
   purchasePrice: string | null;
   purchaseCurrency: string | null;
@@ -60,7 +60,7 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     inCollection: bool(formData, "inCollection"),
     forSale: bool(formData, "forSale"),
     forTrade: bool(formData, "forTrade"),
-    acquisitionSource: str(formData, "acquisitionSource") || null,
+    contactId: str(formData, "contactId") || null,
     acquiredDate: acquiredRaw || null,
     purchasePrice: priceRaw || null,
     purchaseCurrency: currencyRaw || null,

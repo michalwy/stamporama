@@ -122,6 +122,11 @@ export function InventoryItemRow({ item, isLast, onEdit, onDelete }: InventoryIt
               {item.certificateStatusName}
             </span>
           )}
+          {item.contactName && (
+            <span style={META} title="Acquisition source">
+              From {item.contactName}
+            </span>
+          )}
           {price && <span style={META}>{price}</span>}
           {acquired && <span style={META}>{acquired}</span>}
           {item.notes && (

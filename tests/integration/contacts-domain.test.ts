@@ -160,3 +160,35 @@ describe("contact name uniqueness scope", () => {
     assert.equal(b.name, "Shared Name");
   });
 });
+
+describe("contact referenced by an item (onDelete: Restrict)", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`rd-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `rd-${ts}`)).id;
+  });
+
+  after(async () => {
+    // Detach items before the collection cascade so the Restrict FK doesn't block cleanup.
+    await prisma.item.deleteMany({ where: { collectionId } });
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("blocks deleting a contact still referenced by an item (ADR-0008 §4)", async () => {
+    const contact = await createContact(userId, collectionId, { name: "Cornerstone Auctions" });
+    const condition = await prisma.stampCondition.create({
+      data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+    });
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Sourced" } });
+    await prisma.item.create({
+      data: { collectionId, stampId: stamp.id, conditionId: condition.id, contactId: contact.id },
+    });
+
+    // The Restrict FK rejects the delete at the database level.
+    await assert.rejects(() => prisma.contact.delete({ where: { id: contact.id } }));
+  });
+});

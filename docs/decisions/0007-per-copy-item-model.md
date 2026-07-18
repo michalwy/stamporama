@@ -62,7 +62,13 @@ and profit/loss therefore belong to that future lot/listing layer, **not** to `I
 
 ### 5. Acquisition & purchase fields live on the `Item` (manual now, automated later)
 
-- `acquisitionSource` — free-form `String?` (where/from whom obtained).
+- Acquisition source — `contactId` `String?`, a nullable FK to a **`Contact`**
+  (ADR-0008, #108), `onDelete: Restrict`. (Revised from the original free-form
+  `acquisitionSource String?`: the same sellers/dealers/platforms recur, so the
+  source is now a first-class collection-scoped entity the sales layer can also
+  reference. The item form's Source field is an autocomplete that suggests existing
+  contacts and, on typing a new name, creates a role-less contact and links it.
+  No production data existed, so the string column was dropped without backfill.)
 - `acquiredDate` — nullable `DateTime? @db.Date`, a **complete** acquisition date
   entered via a date control. (Revised from the original day/month/year partial-date
   sketch, which mirrored the `Stamp` issued-date pattern: a physical copy's acquisition
@@ -118,7 +124,7 @@ Item
   inCollection  Boolean
   forSale       Boolean
   forTrade      Boolean
-  acquisitionSource  String?
+  contactId?    → Contact      (acquisition source; onDelete: Restrict — ADR-0008, #108)
   acquiredDate  DateTime? @db.Date
   purchasePrice  Decimal?
   purchaseCurrency String?

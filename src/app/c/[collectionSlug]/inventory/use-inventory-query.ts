@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
+import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 
 interface InventoryItemsPage {
@@ -67,6 +68,33 @@ export function useIssueMembers(collectionId: string, issueId: string) {
     },
     enabled: !!issueId,
   });
+}
+
+/** Contact suggestions for the acquisition-source autocomplete (#108). Backed by the
+ * #107 search API; an empty query returns the first contacts by name. */
+export function useContactSearch(collectionId: string, query: string) {
+  return useQuery<ContactData[]>({
+    queryKey: ["inventory", collectionId, "contactSearch", query] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: query });
+      const res = await fetch(
+        `/api/collections/${collectionId}/contacts/search?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to search contacts");
+      const data = await res.json();
+      return data.items;
+    },
+  });
+}
+
+export function useInvalidateContacts() {
+  const queryClient = useQueryClient();
+  return {
+    invalidateContacts: (collectionId: string) =>
+      queryClient.invalidateQueries({
+        queryKey: ["inventory", collectionId, "contactSearch"],
+      }),
+  };
 }
 
 export function useInvalidateInventory() {

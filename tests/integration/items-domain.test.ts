@@ -62,13 +62,16 @@ describe("createItem", () => {
   });
   after(() => cleanup(f.userId));
 
-  it("creates a copy with disposition defaults and a decimal purchase price", async () => {
+  it("creates a copy with disposition defaults, a decimal purchase price, and a source contact", async () => {
+    const contact = await prisma.contact.create({
+      data: { collectionId: f.collectionId, name: "eBay" },
+    });
     const item = await createItem(f.userId, f.collectionId, {
       stampId: f.baseStamp.id,
       conditionId: f.condition.id,
       purchasePrice: "12.50",
       purchaseCurrency: "EUR",
-      acquisitionSource: "eBay",
+      contactId: contact.id,
       acquiredDate: "2024-05-01",
       notes: "commemorative postmark",
     });
@@ -78,9 +81,26 @@ describe("createItem", () => {
     assert.equal(item.forTrade, false);
     assert.equal(item.purchasePrice, "12.5");
     assert.equal(item.purchaseCurrency, "EUR");
-    assert.equal(item.acquisitionSource, "eBay");
+    assert.equal(item.contactId, contact.id);
     assert.equal(item.acquiredDate, "2024-05-01");
     assert.equal(item.notes, "commemorative postmark");
+  });
+
+  it("rejects a contact from another collection", async () => {
+    const other = await seedFixtures(`othercontact-${Date.now()}`);
+    const otherContact = await prisma.contact.create({
+      data: { collectionId: other.collectionId, name: "Foreign dealer" },
+    });
+    await assert.rejects(
+      () =>
+        createItem(f.userId, f.collectionId, {
+          stampId: f.baseStamp.id,
+          conditionId: f.condition.id,
+          contactId: otherContact.id,
+        }),
+      /contact not found in this collection/i
+    );
+    await cleanup(other.userId);
   });
 
   it("accepts a certificate status and explicit disposition flags", async () => {

@@ -95,8 +95,9 @@ route and a create server action back the autocomplete.
 - The per-collection unique name is enforced by a hand-written unique index; the
   domain surfaces a `ContactNameTakenError` so create-on-type can fall back to the
   existing row instead of failing.
-- `Item.acquisitionSource` (free-form string) stays as-is for now; wiring copies to
-  contacts via an `acquisitionContactId` FK (with the `onDelete: Restrict` rule
-  above) is deferred to #103b.
+- `Item.acquisitionSource` (free-form string) was replaced by `Item.contactId`
+  (nullable FK, `onDelete: Restrict`) in #108 — the first reference to a contact.
+  The inventory Source field is now an autocomplete that create-on-types role-less
+  contacts. Future sales lots will add further `onDelete: Restrict` references.
 - The sales/lot layer (brief §5) is out of scope here; this entity is the hook it
   will build on.

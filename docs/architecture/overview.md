@@ -126,7 +126,7 @@ model Collection {
 - `stampId` → `Stamp` at any level of the variant tree: a base stamp (`parentId = null`) means the variant is unknown; a variant row means the copy is identified. The tree level implicitly encodes variant certainty; there is no "unknown" flag.
 - `conditionId` → `StampCondition` and `certificateStatusId?` → `CertificateStatus` reference the per-collection configurable sets (Issues #93/#94), mirroring `StampCatalogPrice`.
 - Disposition is three **independent booleans** — `inCollection`, `forSale`, `forTrade` — not a mutually-exclusive status. A copy can hold any combination.
-- Acquisition/purchase fields (`acquisitionSource`, `acquiredDay/Month/Year`, `purchasePrice` `Decimal(10,2)`, `purchaseCurrency`, `notes`) are entered by hand now; a future acquisitions module will populate them.
+- Acquisition/purchase fields (`contactId` → `Contact` acquisition source, `acquiredDate`, `purchasePrice` `Decimal(10,2)`, `purchaseCurrency`, `notes`) are entered by hand now; a future acquisitions module will populate them. The Source field is an autocomplete that create-on-types role-less contacts (#108); `contactId` uses `onDelete: Restrict`.
 - `ItemVariantHistory` records in-place re-pointing of `stampId` when an unknown-variant copy is later identified (`fromStampId`, `toStampId`, `changedAt`, `note?`), giving a refinement trail without versioning the whole `Item`.
 
 Referential actions: `collectionId` and `stampId` cascade; `conditionId` and `certificateStatusId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`.

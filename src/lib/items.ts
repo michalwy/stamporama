@@ -61,6 +61,17 @@ async function assertCertificateStatusInCollection(
   if (!cert) throw new Error("Certificate status not found in this collection.");
 }
 
+async function assertContactInCollection(
+  collectionId: string,
+  contactId: string
+): Promise<void> {
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, collectionId },
+    select: { id: true },
+  });
+  if (!contact) throw new Error("Contact not found in this collection.");
+}
+
 export interface ItemData {
   id: string;
   collectionId: string;
@@ -70,7 +81,9 @@ export interface ItemData {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  acquisitionSource: string | null;
+  /** Acquisition source, referencing a `Contact` (ADR-0007 §5, #108). Null when
+   * not recorded. */
+  contactId: string | null;
   /** Full acquisition date as `YYYY-MM-DD` (ADR-0007 §5). Null when not recorded. */
   acquiredDate: string | null;
   purchasePrice: string | null;
@@ -97,7 +110,7 @@ const ITEM_SELECT = {
   inCollection: true,
   forSale: true,
   forTrade: true,
-  acquisitionSource: true,
+  contactId: true,
   acquiredDate: true,
   purchasePrice: true,
   purchaseCurrency: true,
@@ -116,7 +129,7 @@ function toItemData(row: {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  acquisitionSource: string | null;
+  contactId: string | null;
   acquiredDate: Date | null;
   purchasePrice: { toString(): string } | null;
   purchaseCurrency: string | null;
@@ -148,7 +161,8 @@ export interface ItemCreateInput {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
-  acquisitionSource?: string | null;
+  /** Acquisition source contact id (ADR-0007 §5, #108). */
+  contactId?: string | null;
   /** Full acquisition date as `YYYY-MM-DD`. */
   acquiredDate?: string | null;
   purchasePrice?: string | null;
@@ -163,7 +177,8 @@ export interface ItemUpdateInput {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
-  acquisitionSource?: string | null;
+  /** Acquisition source contact id (ADR-0007 §5, #108). */
+  contactId?: string | null;
   /** Full acquisition date as `YYYY-MM-DD`. */
   acquiredDate?: string | null;
   purchasePrice?: string | null;
@@ -191,6 +206,9 @@ export async function createItem(
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
+  if (data.contactId) {
+    await assertContactInCollection(collectionId, data.contactId);
+  }
   const item = await prisma.item.create({
     data: {
       collectionId,
@@ -200,7 +218,7 @@ export async function createItem(
       inCollection: data.inCollection ?? true,
       forSale: data.forSale ?? false,
       forTrade: data.forTrade ?? false,
-      acquisitionSource: data.acquisitionSource ?? null,
+      contactId: data.contactId ?? null,
       acquiredDate: fromDateString(data.acquiredDate),
       purchasePrice: data.purchasePrice ?? null,
       purchaseCurrency: data.purchaseCurrency ?? null,
@@ -263,6 +281,9 @@ export async function updateItem(
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
+  if (data.contactId) {
+    await assertContactInCollection(collectionId, data.contactId);
+  }
 
   const repointing =
     data.stampId !== undefined && data.stampId !== current.stampId;
@@ -277,9 +298,7 @@ export async function updateItem(
     ...(fields.inCollection !== undefined ? { inCollection: fields.inCollection } : {}),
     ...(fields.forSale !== undefined ? { forSale: fields.forSale } : {}),
     ...(fields.forTrade !== undefined ? { forTrade: fields.forTrade } : {}),
-    ...(fields.acquisitionSource !== undefined
-      ? { acquisitionSource: fields.acquisitionSource }
-      : {}),
+    ...(fields.contactId !== undefined ? { contactId: fields.contactId } : {}),
     ...(fields.acquiredDate !== undefined
       ? { acquiredDate: fromDateString(fields.acquiredDate) }
       : {}),
@@ -346,7 +365,9 @@ export interface ItemListItem {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  acquisitionSource: string | null;
+  /** Acquisition source contact, or null. */
+  contactId: string | null;
+  contactName: string | null;
   /** Full acquisition date as `YYYY-MM-DD`, or null. */
   acquiredDate: string | null;
   purchasePrice: string | null;
@@ -397,7 +418,7 @@ export async function listItemsPaginated(
       inCollection: true,
       forSale: true,
       forTrade: true,
-      acquisitionSource: true,
+      contactId: true,
       acquiredDate: true,
       purchasePrice: true,
       purchaseCurrency: true,
@@ -405,6 +426,7 @@ export async function listItemsPaginated(
       createdAt: true,
       condition: { select: { id: true, name: true, abbreviation: true } },
       certificateStatus: { select: { id: true, name: true } },
+      contact: { select: { name: true } },
       stamp: {
         select: {
           parentId: true,
@@ -448,7 +470,8 @@ export async function listItemsPaginated(
       inCollection: row.inCollection,
       forSale: row.forSale,
       forTrade: row.forTrade,
-      acquisitionSource: row.acquisitionSource,
+      contactId: row.contactId,
+      contactName: row.contact?.name ?? null,
       acquiredDate: toDateString(row.acquiredDate),
       purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
       purchaseCurrency: row.purchaseCurrency,
