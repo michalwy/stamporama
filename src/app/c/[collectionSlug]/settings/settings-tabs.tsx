@@ -21,6 +21,7 @@ interface SettingsTabsProps {
   initialTree: CatalogVendorData[];
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
+  appVersion: string;
 }
 
 const TABS = [
@@ -49,6 +50,7 @@ export function SettingsTabs({
   initialTree,
   initialConditions,
   initialCertificateStatuses,
+  appVersion,
 }: SettingsTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -113,6 +115,7 @@ export function SettingsTabs({
           collectionId={collectionId}
           collectionName={collectionName}
           baseCurrency={baseCurrency}
+          appVersion={appVersion}
         />
       )}
       {activeTab === "catalogs" && (

@@ -7,6 +7,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
+import { getAppVersionLabel } from "@/lib/version";
 import { SettingsTabs } from "./settings-tabs";
 
 interface SettingsPageProps {
@@ -44,6 +45,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialTree={catalogTree}
           initialConditions={conditions}
           initialCertificateStatuses={certificateStatuses}
+          appVersion={getAppVersionLabel()}
         />
       </Suspense>
     </div>

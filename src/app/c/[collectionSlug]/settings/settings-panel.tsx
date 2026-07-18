@@ -11,9 +11,10 @@ interface SettingsPanelProps {
   collectionId: string;
   collectionName: string;
   baseCurrency: string;
+  appVersion: string;
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, appVersion }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -84,6 +85,55 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency }: Se
             }}
           >
             {baseCurrency}
+          </span>
+        </div>
+      </section>
+
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              App version
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              The version of Stamporama currently running.
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            {appVersion}
           </span>
         </div>
       </section>

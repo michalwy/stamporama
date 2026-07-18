@@ -10,6 +10,7 @@ interface CollectionSidebarProps {
   collectionSlug: string;
   collectionName: string;
   collections: Array<{ slug: string; name: string }>;
+  appVersion: string;
 }
 
 const IconHome = () => (
@@ -128,6 +129,7 @@ export function CollectionSidebar({
   collectionSlug,
   collectionName,
   collections,
+  appVersion,
 }: CollectionSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -373,6 +375,16 @@ export function CollectionSidebar({
           <IconSignOut />
           Sign out
         </button>
+        <p
+          style={{
+            margin: 0,
+            padding: "0.25rem 0.75rem 0.125rem",
+            fontSize: "0.6875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          {appVersion}
+        </p>
       </div>
     </aside>
   );

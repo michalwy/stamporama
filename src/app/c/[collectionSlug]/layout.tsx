@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
+import { getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
 
 interface CollectionLayoutProps {
@@ -37,6 +38,7 @@ export default async function CollectionLayout({
         collectionSlug={collectionSlug}
         collectionName={collection.name}
         collections={collections.map((c) => ({ slug: c.slug, name: c.name }))}
+        appVersion={getAppVersionLabel()}
       />
       <main style={{ flex: 1, overflow: "auto" }}>
         <QueryProvider>{children}</QueryProvider>

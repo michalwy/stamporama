@@ -25,6 +25,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - The collection name
 - Navigation links for each section (Overview, Catalog, Items — more sections will be added as features are built)
 - A **← All collections** link to return to the collection picker
+- The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**)
 
 ## Required for completeness
 
