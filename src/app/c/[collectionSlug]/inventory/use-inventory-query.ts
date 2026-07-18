@@ -1,7 +1,11 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ItemListItem, ItemSortBy } from "@/lib/items";
+import type {
+  ItemListItem,
+  ItemSortBy,
+  ItemVariantHistoryData,
+} from "@/lib/items";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 
@@ -67,6 +71,26 @@ export function useIssueMembers(collectionId: string, issueId: string) {
       return data.members;
     },
     enabled: !!issueId,
+  });
+}
+
+/** Refinement history for a copy (#100). Fetched lazily when a history view is opened. */
+export function useItemVariantHistory(
+  collectionId: string,
+  itemId: string | null,
+  enabled: boolean
+) {
+  return useQuery<ItemVariantHistoryData[]>({
+    queryKey: ["inventory", collectionId, "variantHistory", itemId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/${itemId}/variant-history`
+      );
+      if (!res.ok) throw new Error("Failed to fetch variant history");
+      const data = await res.json();
+      return data.history;
+    },
+    enabled: enabled && !!itemId,
   });
 }
 

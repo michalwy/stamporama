@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { createItem, updateItem, deleteItem } from "@/lib/items";
+import { createItem, updateItem, deleteItem, resolveItemVariant } from "@/lib/items";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -113,6 +113,30 @@ export async function updateItemAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update copy. Please try again." };
+  }
+}
+
+/** First-class "Identify variant" action (ADR-0007 §6): re-point an unknown-variant copy
+ * to a specific descendant variant, recording the change in its refinement history. */
+export async function resolveItemVariantAction(
+  itemId: string,
+  formData: FormData
+): Promise<ItemActionState> {
+  const session = await getSession();
+  const toStampId = str(formData, "stampId");
+  if (!toStampId) return { status: "error", message: "A variant must be selected." };
+  try {
+    await resolveItemVariant(
+      session.user.id,
+      itemId,
+      toStampId,
+      str(formData, "variantChangeNote") || null
+    );
+    return { status: "success" };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "Failed to identify variant. Please try again.";
+    return { status: "error", message };
   }
 }
 

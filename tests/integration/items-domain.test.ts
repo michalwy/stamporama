@@ -8,6 +8,7 @@ import {
   updateItem,
   deleteItem,
   getItemVariantHistory,
+  resolveItemVariant,
 } from "../../src/lib/items";
 
 async function createTestUser(suffix: string) {
@@ -276,6 +277,98 @@ describe("updateItem", () => {
     });
     await assert.rejects(
       () => updateItem("wrong-user", item.id, { forSale: true }),
+      /access denied/i
+    );
+  });
+});
+
+describe("resolveItemVariant", () => {
+  let f: Awaited<ReturnType<typeof seedFixtures>>;
+  before(async () => {
+    f = await seedFixtures(`resolve-${Date.now()}`);
+  });
+  after(() => cleanup(f.userId));
+
+  it("re-points an unknown-variant copy to a descendant and appends labelled history", async () => {
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    const resolved = await resolveItemVariant(
+      f.userId,
+      item.id,
+      f.variant.id,
+      "watermark confirmed"
+    );
+    assert.equal(resolved.stampId, f.variant.id);
+    const history = await getItemVariantHistory(f.userId, item.id);
+    assert.equal(history.length, 1);
+    assert.equal(history[0].fromStampId, f.baseStamp.id);
+    assert.equal(history[0].toStampId, f.variant.id);
+    assert.equal(history[0].fromStampLabel, "Stamp 2");
+    assert.equal(history[0].toStampLabel, "Stamp 2a");
+    assert.equal(history[0].note, "watermark confirmed");
+  });
+
+  it("resolves through multiple tree levels (grandchild descendant)", async () => {
+    const subVariant = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 2a-i", parentId: f.variant.id },
+    });
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    const resolved = await resolveItemVariant(f.userId, item.id, subVariant.id);
+    assert.equal(resolved.stampId, subVariant.id);
+  });
+
+  it("rejects resolving to the same stamp", async () => {
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    await assert.rejects(
+      () => resolveItemVariant(f.userId, item.id, f.baseStamp.id),
+      /different from the current stamp/i
+    );
+  });
+
+  it("rejects resolving to a non-descendant stamp", async () => {
+    const sibling = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 3" },
+    });
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    await assert.rejects(
+      () => resolveItemVariant(f.userId, item.id, sibling.id),
+      /variant of its current stamp/i
+    );
+    const history = await getItemVariantHistory(f.userId, item.id);
+    assert.equal(history.length, 0);
+  });
+
+  it("rejects a stamp from another collection", async () => {
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    const other = await seedFixtures(`resolveforeign-${Date.now()}`);
+    await assert.rejects(
+      () => resolveItemVariant(f.userId, item.id, other.variant.id),
+      /stamp not found in this collection/i
+    );
+    await cleanup(other.userId);
+  });
+
+  it("rejects a foreign owner", async () => {
+    const item = await createItem(f.userId, f.collectionId, {
+      stampId: f.baseStamp.id,
+      conditionId: f.condition.id,
+    });
+    await assert.rejects(
+      () => resolveItemVariant("wrong-user", item.id, f.variant.id),
       /access denied/i
     );
   });

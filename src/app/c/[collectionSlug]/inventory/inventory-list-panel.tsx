@@ -14,11 +14,15 @@ import {
 } from "./use-inventory-query";
 import { InventoryItemRow } from "./inventory-item-row";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
+import { IdentifyVariantDialog } from "./identify-variant-dialog";
+import { VariantHistoryDialog } from "./variant-history-dialog";
 
 type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "edit"; item: ItemListItem }
+  | { kind: "identify"; item: ItemListItem }
+  | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem };
 
 const DISPOSITION_FILTERS = [
@@ -246,6 +250,8 @@ export function InventoryListPanel({
                 item={item}
                 isLast={idx === allCopies.length - 1 && !hasNextPage}
                 onEdit={(it) => setDialog({ kind: "edit", item: it })}
+                onIdentify={(it) => setDialog({ kind: "identify", item: it })}
+                onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
               />
             ))}
@@ -285,6 +291,34 @@ export function InventoryListPanel({
               }
             });
           }}
+        />
+      )}
+
+      {/* Identify variant */}
+      {dialog.kind === "identify" && (
+        <IdentifyVariantDialog
+          collectionId={collectionId}
+          item={dialog.item}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            startTransition(async () => {
+              const { resolveItemVariantAction } = await import("@/app/actions/items");
+              const result = await resolveItemVariantAction(dialog.item.id, fd);
+              if (result.status === "success") handleSuccess();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {/* Refinement history */}
+      {dialog.kind === "history" && (
+        <VariantHistoryDialog
+          collectionId={collectionId}
+          item={dialog.item}
+          onClose={closeDialog}
         />
       )}
 

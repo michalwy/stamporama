@@ -97,8 +97,23 @@ export interface ItemVariantHistoryData {
   itemId: string;
   fromStampId: string;
   toStampId: string;
+  /** Display label (catalog numbers + name) of the stamp the copy was re-pointed from. */
+  fromStampLabel: string;
+  /** Display label of the stamp the copy was re-pointed to. */
+  toStampLabel: string;
   changedAt: Date;
   note: string | null;
+}
+
+/** Build a human label for a stamp from its catalog numbers and name, mirroring the
+ * client-side `stampNodeLabel`. Kept here so history can be enriched server-side. */
+function stampLabel(stamp: {
+  name: string | null;
+  catalogNumbers: { number: string }[];
+}): string {
+  const cn = stamp.catalogNumbers.map((c) => c.number).join(", ");
+  const parts = [cn || null, stamp.name || null].filter(Boolean);
+  return parts.join(" · ") || "(unnamed)";
 }
 
 const ITEM_SELECT = {
@@ -350,6 +365,8 @@ export interface ItemListItem {
   /** True when the copy links to a base stamp (parentId === null) that has variants,
    * i.e. the specific variant is unknown (ADR-0007 §2). */
   unknownVariant: boolean;
+  /** True when the copy has at least one `ItemVariantHistory` entry (has been refined). */
+  hasHistory: boolean;
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
@@ -424,6 +441,7 @@ export async function listItemsPaginated(
       purchaseCurrency: true,
       notes: true,
       createdAt: true,
+      _count: { select: { variantHistory: true } },
       condition: { select: { id: true, name: true, abbreviation: true } },
       certificateStatus: { select: { id: true, name: true } },
       contact: { select: { name: true } },
@@ -455,6 +473,7 @@ export async function listItemsPaginated(
       stampId: row.stampId,
       stampName: row.stamp.name,
       unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+      hasHistory: row._count.variantHistory > 0,
       issuedDay: row.stamp.issuedDay,
       issuedMonth: row.stamp.issuedMonth,
       issuedYear: row.stamp.issuedYear,
@@ -490,14 +509,15 @@ export async function deleteItem(ownerId: string, itemId: string): Promise<void>
   await prisma.item.delete({ where: { id: itemId } });
 }
 
-/** Variant refinement trail for a copy, oldest change first. */
+/** Variant refinement trail for a copy, oldest change first. Each entry carries the
+ * from/to stamp labels so the UI can render the change without extra lookups. */
 export async function getItemVariantHistory(
   ownerId: string,
   itemId: string
 ): Promise<ItemVariantHistoryData[]> {
   const collectionId = await resolveItemCollection(itemId);
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.itemVariantHistory.findMany({
+  const rows = await prisma.itemVariantHistory.findMany({
     where: { itemId },
     orderBy: { changedAt: "asc" },
     select: {
@@ -507,6 +527,82 @@ export async function getItemVariantHistory(
       toStampId: true,
       changedAt: true,
       note: true,
+      fromStamp: { select: { name: true, catalogNumbers: { select: { number: true } } } },
+      toStamp: { select: { name: true, catalogNumbers: { select: { number: true } } } },
     },
   });
+  return rows.map((row) => ({
+    id: row.id,
+    itemId: row.itemId,
+    fromStampId: row.fromStampId,
+    toStampId: row.toStampId,
+    fromStampLabel: stampLabel(row.fromStamp),
+    toStampLabel: stampLabel(row.toStamp),
+    changedAt: row.changedAt,
+    note: row.note,
+  }));
+}
+
+/** First-class variant refinement (ADR-0007 §6): re-point an unknown-variant copy from
+ * its base stamp to a **descendant** variant and append an `ItemVariantHistory` row, in
+ * one transaction. The descendant guard keeps this a genuine refinement — a copy can only
+ * be resolved to a more specific variant of the same stamp, never re-pointed elsewhere. */
+export async function resolveItemVariant(
+  ownerId: string,
+  itemId: string,
+  toStampId: string,
+  note?: string | null
+): Promise<ItemData> {
+  const current = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { collectionId: true, stampId: true },
+  });
+  if (!current) throw new Error("Item not found.");
+  await assertCollectionOwner(ownerId, current.collectionId);
+  if (toStampId === current.stampId) {
+    throw new Error("Pick a variant different from the current stamp.");
+  }
+  await assertStampInCollection(current.collectionId, toStampId);
+  if (!(await isDescendantStamp(toStampId, current.stampId))) {
+    throw new Error("A copy can only be resolved to a variant of its current stamp.");
+  }
+
+  const item = await prisma.$transaction(async (tx) => {
+    const updated = await tx.item.update({
+      where: { id: itemId },
+      data: { stampId: toStampId },
+      select: ITEM_SELECT,
+    });
+    await tx.itemVariantHistory.create({
+      data: {
+        itemId,
+        fromStampId: current.stampId,
+        toStampId,
+        note: note ?? null,
+      },
+    });
+    return updated;
+  });
+  return toItemData(item);
+}
+
+/** True when `stampId` is a descendant (child, grandchild, …) of `ancestorId` by walking
+ * the variant tree upward. Bounded by the tree depth; the collection scope is already
+ * asserted by the caller. */
+async function isDescendantStamp(
+  stampId: string,
+  ancestorId: string
+): Promise<boolean> {
+  let cursor: string | null = stampId;
+  // Guard against cycles/very deep trees; variant trees are shallow in practice.
+  for (let hops = 0; cursor && hops < 50; hops++) {
+    const node: { parentId: string | null } | null = await prisma.stamp.findUnique({
+      where: { id: cursor },
+      select: { parentId: true },
+    });
+    if (!node) return false;
+    if (node.parentId === ancestorId) return true;
+    cursor = node.parentId;
+  }
+  return false;
 }

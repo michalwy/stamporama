@@ -19,7 +19,8 @@ Each row shows:
 - A notes indicator when the copy has notes (hover to read them).
 
 If a copy is linked to a base stamp whose specific variant is unknown, it is flagged
-**unknown variant**.
+**unknown variant**. Such a copy is valued cautiously and its uncertainty stays visible;
+you can pin down the exact variant later — see [Identifying a variant](#identifying-a-variant).
 
 The list loads more rows as you scroll. Your filters, sort, and position are kept in the
 page URL, so you can bookmark or share a filtered view.
@@ -52,6 +53,30 @@ page URL, so you can bookmark or share a filtered view.
 Hover a row and click **Edit**. The same dialog opens with the copy's current values.
 Changing the stamp to a more specific variant re-points the copy and records the change
 in its refinement history.
+
+## Identifying a variant
+
+When you record a copy against a **base stamp** because you don't yet know its exact
+variant, the copy is flagged **unknown variant**. Once you work out which variant it
+actually is, resolve it:
+
+1. On an unknown-variant row, click **Identify variant**.
+2. Pick the specific variant from the list — only the variants of that copy's own stamp
+   are offered, so you can only refine to a *more specific* variant, never re-point the
+   copy to an unrelated stamp.
+3. Optionally add a **reason** (for example, what let you tell the variants apart).
+4. Click **Identify variant**. The copy is re-pointed to the chosen variant, the
+   *unknown variant* flag clears, and the change is recorded in the copy's refinement
+   history.
+
+## Refinement history
+
+Every time a copy is re-pointed to a different variant — whether through **Identify
+variant** or by changing the stamp in **Edit** — the change is appended to that copy's
+**refinement history**: what it was, what it became, when, and any reason you noted. Any
+copy that has been refined shows a **History** button; click it to see the full trail.
+The trail is never erased, so a copy's identification path stays traceable even after the
+variant is settled.
 
 ## Deleting a copy
 

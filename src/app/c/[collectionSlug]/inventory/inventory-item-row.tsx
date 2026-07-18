@@ -36,10 +36,19 @@ interface InventoryItemRowProps {
   item: ItemListItem;
   isLast: boolean;
   onEdit: (item: ItemListItem) => void;
+  onIdentify: (item: ItemListItem) => void;
+  onViewHistory: (item: ItemListItem) => void;
   onDelete: (item: ItemListItem) => void;
 }
 
-export function InventoryItemRow({ item, isLast, onEdit, onDelete }: InventoryItemRowProps) {
+export function InventoryItemRow({
+  item,
+  isLast,
+  onEdit,
+  onIdentify,
+  onViewHistory,
+  onDelete,
+}: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
 
   const catalogText = item.catalogNumbers.map((c) => c.number).join(", ");
@@ -98,6 +107,16 @@ export function InventoryItemRow({ item, isLast, onEdit, onDelete }: InventoryIt
             )}
           </div>
           <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+            {item.unknownVariant && (
+              <button type="button" style={rowBtnStyle} onClick={() => onIdentify(item)}>
+                Identify variant
+              </button>
+            )}
+            {item.hasHistory && (
+              <button type="button" style={rowBtnStyle} onClick={() => onViewHistory(item)}>
+                History
+              </button>
+            )}
             <button type="button" style={rowBtnStyle} onClick={() => onEdit(item)}>
               Edit
             </button>
