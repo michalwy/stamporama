@@ -516,10 +516,16 @@ export async function listIssueMembers(
 
 // ── Mutations ───────────────────────────────────────────────────────────────
 
-export interface AutoCreateStampsInput {
+export interface AutoCreateVendorRange {
+  catalogVendorId: string;
   rangeFrom: number;
-  rangeTo: number;
-  vendorIds: string[];
+}
+
+export interface AutoCreateStampsInput {
+  /** Number of stamps to create; every vendor's numbering spans this many positions. */
+  count: number;
+  /** Each selected vendor with the first catalog number of its own range. */
+  vendors: AutoCreateVendorRange[];
 }
 
 export async function createIssue(
@@ -543,10 +549,10 @@ export async function createIssue(
   }
 
   if (data.autoCreateStamps) {
-    const { rangeFrom, rangeTo, vendorIds } = data.autoCreateStamps;
-    if (rangeFrom > rangeTo) throw new Error("Range start must be <= range end.");
-    if (rangeTo - rangeFrom + 1 > 50) throw new Error("Range cannot exceed 50 stamps.");
-    if (vendorIds.length === 0) throw new Error("At least one catalog vendor must be selected.");
+    const { count, vendors } = data.autoCreateStamps;
+    if (count < 1) throw new Error("Range must include at least one stamp.");
+    if (count > 50) throw new Error("Range cannot exceed 50 stamps.");
+    if (vendors.length === 0) throw new Error("At least one catalog vendor must be selected.");
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -572,10 +578,10 @@ export async function createIssue(
     }
 
     if (data.autoCreateStamps) {
-      const { rangeFrom, rangeTo, vendorIds } = data.autoCreateStamps;
+      const { count, vendors } = data.autoCreateStamps;
       const stampIds: string[] = [];
 
-      for (let n = rangeFrom; n <= rangeTo; n++) {
+      for (let n = 0; n < count; n++) {
         const stamp = await tx.stamp.create({
           data: {
             collectionId,
@@ -604,12 +610,11 @@ export async function createIssue(
 
       const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
       for (let i = 0; i < stampIds.length; i++) {
-        const num = String(rangeFrom + i);
-        for (const vendorId of vendorIds) {
+        for (const v of vendors) {
           catalogNumberRows.push({
             stampId: stampIds[i],
-            catalogVendorId: vendorId,
-            number: num,
+            catalogVendorId: v.catalogVendorId,
+            number: String(v.rangeFrom + i),
           });
         }
       }
