@@ -1,41 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import {
+  Autocomplete,
+  SEARCH_INPUT_STYLE,
+  useDebouncedValue,
+} from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useIssueSearch } from "./use-stamps-query";
 
 const INPUT_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2rem",
+  ...SEARCH_INPUT_STYLE,
   width: "12rem",
 };
 
-const DROPDOWN_STYLE: React.CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  right: 0,
-  zIndex: 20,
-  marginTop: "0.25rem",
-  background: "var(--color-bg-elevated)",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-  maxHeight: "12rem",
-  overflowY: "auto",
-};
-
-const ITEM_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  fontSize: "0.8125rem",
-  cursor: "pointer",
-  color: "var(--color-text-primary)",
-};
+function issueLabel(name: string | null, year: number | null): string {
+  return (
+    [name, year ? `(${year})` : null].filter(Boolean).join(" ") || "(unnamed)"
+  );
+}
 
 interface IssueFilterAutocompleteProps {
   collectionId: string;
@@ -50,12 +32,9 @@ export function IssueFilterAutocomplete({
   selectedIssueId,
   onSelect,
 }: IssueFilterAutocompleteProps) {
-  const [inputValue, setInputValue] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
+  const [value, setValue] = useState("");
   const [selectedLabel, setSelectedLabel] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(value);
 
   const { data: suggestions = [] } = useIssueSearch(
     collectionId,
@@ -63,44 +42,11 @@ export function IssueFilterAutocomplete({
     areaIds
   );
 
-  const handleInput = useCallback((value: string) => {
-    setInputValue(value);
-    setIsOpen(true);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(value);
-    }, 300);
-  }, []);
-
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
-
-  const effectiveLabel = selectedIssueId ? selectedLabel : "";
-  const showChip = !!(selectedIssueId && effectiveLabel);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  function handleSelect(id: string, name: string | null, year: number | null) {
-    const label = [name, year ? `(${year})` : null].filter(Boolean).join(" ") || "(unnamed)";
-    setSelectedLabel(label);
-    setInputValue("");
-    setIsOpen(false);
-    onSelect(id);
-  }
+  const showChip = !!(selectedIssueId && selectedLabel);
 
   function handleClear() {
     setSelectedLabel("");
-    setInputValue("");
-    setDebouncedQuery("");
+    setValue("");
     onSelect("");
   }
 
@@ -132,7 +78,7 @@ export function IssueFilterAutocomplete({
             gap: "0.375rem",
           }}
         >
-          {effectiveLabel}
+          {selectedLabel}
           <button
             type="button"
             onClick={handleClear}
@@ -155,35 +101,20 @@ export function IssueFilterAutocomplete({
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
-      <input
-        type="text"
-        placeholder="Filter by issue..."
-        value={inputValue}
-        onChange={(e) => handleInput(e.target.value)}
-        onFocus={() => { if (inputValue) setIsOpen(true); }}
-        style={INPUT_STYLE}
-      />
-      {isOpen && suggestions.length > 0 && (
-        <div style={DROPDOWN_STYLE}>
-          {suggestions.map((issue) => (
-            <div
-              key={issue.id}
-              onClick={() => handleSelect(issue.id, issue.name, issue.year)}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "var(--color-bg-page)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "transparent";
-              }}
-              style={ITEM_STYLE}
-            >
-              {issue.name ?? "(unnamed)"}
-              {issue.year ? ` (${issue.year})` : ""}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Autocomplete
+      value={value}
+      onValueChange={setValue}
+      items={suggestions}
+      getItemKey={(issue) => issue.id}
+      renderItem={(issue) => issueLabel(issue.name, issue.year)}
+      onSelect={(issue) => {
+        setSelectedLabel(issueLabel(issue.name, issue.year));
+        setValue("");
+        onSelect(issue.id);
+      }}
+      placeholder="Filter by issue..."
+      inputStyle={INPUT_STYLE}
+      zIndex={20}
+    />
   );
 }

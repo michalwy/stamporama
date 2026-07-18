@@ -1,19 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const INPUT_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2rem",
-};
+const INPUT_STYLE = SEARCH_INPUT_STYLE;
 
 const SELECT_STYLE: React.CSSProperties = {
   ...INPUT_STYLE,
@@ -79,23 +71,22 @@ export function ListToolbar({
   onCatalogSearchChange,
   children,
 }: ListToolbarProps) {
+  // Plain debounced search box (no suggestions dropdown): debounce the local input
+  // and push the settled value up, skipping the initial mount so it doesn't refetch.
   const [localSearch, setLocalSearch] = useState(search);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSearchInput = useCallback(
-    (value: string) => {
-      setLocalSearch(value);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        onSearchChange(value);
-      }, 300);
-    },
-    [onSearchChange]
-  );
-
+  const debouncedSearch = useDebouncedValue(localSearch);
+  const onSearchChangeRef = useRef(onSearchChange);
   useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
+    onSearchChangeRef.current = onSearchChange;
+  });
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    onSearchChangeRef.current(debouncedSearch);
+  }, [debouncedSearch]);
 
   const showCatalogSearch =
     catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;
@@ -118,13 +109,13 @@ export function ListToolbar({
             type="text"
             placeholder="Search..."
             value={localSearch}
-            onChange={(e) => handleSearchInput(e.target.value)}
+            onChange={(e) => setLocalSearch(e.target.value)}
             style={{ ...INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
           />
           {localSearch && (
             <button
               type="button"
-              onClick={() => handleSearchInput("")}
+              onClick={() => setLocalSearch("")}
               style={{
                 ...CLEAR_BTN,
                 position: "absolute",

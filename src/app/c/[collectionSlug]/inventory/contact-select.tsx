@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import {
+  Autocomplete,
+  useDebouncedValue,
+  type AutocompleteAction,
+} from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useContactSearch, useInvalidateContacts } from "./use-inventory-query";
 
+// Larger form-field input than the compact autocompletes (0.875rem), so it keeps
+// its own style rather than the shared SEARCH_INPUT_STYLE.
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
   padding: "0.5rem 0.625rem",
@@ -12,28 +19,6 @@ const INPUT_STYLE: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   boxSizing: "border-box",
-};
-
-const DROPDOWN_STYLE: React.CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  right: 0,
-  zIndex: 30,
-  marginTop: "0.25rem",
-  background: "var(--color-bg-elevated)",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-  maxHeight: "12rem",
-  overflowY: "auto",
-};
-
-const OPTION_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  fontSize: "0.8125rem",
-  cursor: "pointer",
-  color: "var(--color-text-primary)",
 };
 
 interface ContactSelectProps {
@@ -60,51 +45,29 @@ export function ContactSelect({
   disabled,
 }: ContactSelectProps) {
   const [selectedId, setSelectedId] = useState(initialContactId ?? "");
-  const [inputValue, setInputValue] = useState(initialContactName ?? "");
-  const [isOpen, setIsOpen] = useState(false);
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [value, setValue] = useState(initialContactName ?? "");
   const [createError, setCreateError] = useState<string | undefined>();
   const [isCreating, startCreate] = useTransition();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedQuery = useDebouncedValue(value);
 
   const { data: suggestions = [] } = useContactSearch(collectionId, debouncedQuery);
   const { invalidateContacts } = useInvalidateContacts();
 
-  const handleInput = useCallback((value: string) => {
-    setInputValue(value);
+  function handleValueChange(next: string) {
     // Editing the text detaches any linked contact; a new link is only formed by
     // picking a suggestion or creating a contact below.
     setSelectedId("");
-    setIsOpen(true);
     setCreateError(undefined);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQuery(value), 300);
-  }, []);
-
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
-
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+    setValue(next);
+  }
 
   function pick(contact: { id: string; name: string }) {
     setSelectedId(contact.id);
-    setInputValue(contact.name);
-    setDebouncedQuery("");
-    setIsOpen(false);
+    setValue(contact.name);
     setCreateError(undefined);
   }
 
-  const trimmed = inputValue.trim();
+  const trimmed = value.trim();
   const exactMatch = suggestions.some(
     (c) => c.name.toLocaleLowerCase("en") === trimmed.toLocaleLowerCase("en")
   );
@@ -128,66 +91,46 @@ export function ContactSelect({
     });
   }
 
+  const actions: AutocompleteAction[] = canCreate
+    ? [
+        {
+          key: "__create__",
+          node: isCreating ? "Creating…" : `Create “${trimmed}”`,
+          onSelect: createAndSelect,
+          style: {
+            borderTop:
+              suggestions.length > 0 ? "1px solid var(--color-border)" : undefined,
+            color: "var(--color-accent)",
+            fontWeight: 500,
+          },
+        },
+      ]
+    : [];
+
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
+    <>
       {/* Empty when no contact is linked → the item's source is cleared. */}
       <input type="hidden" name="contactId" value={selectedId} />
-      <input
-        id={inputId}
-        type="text"
+      <Autocomplete
+        value={value}
+        onValueChange={handleValueChange}
+        items={suggestions}
+        getItemKey={(c) => c.id}
+        renderItem={(c) => (
+          <span style={{ fontWeight: c.id === selectedId ? 600 : 400 }}>{c.name}</span>
+        )}
+        onSelect={(c) => pick({ id: c.id, name: c.name })}
+        actions={actions}
         placeholder="Search or add a contact…"
-        value={inputValue}
+        inputStyle={INPUT_STYLE}
+        inputId={inputId}
         disabled={disabled || isCreating}
-        onChange={(e) => handleInput(e.target.value)}
-        onFocus={() => { if (inputValue.trim()) setIsOpen(true); }}
-        style={INPUT_STYLE}
       />
-      {isOpen && trimmed.length > 0 && (canCreate || suggestions.length > 0) && (
-        <div style={DROPDOWN_STYLE}>
-          {suggestions.map((c) => (
-            <div
-              key={c.id}
-              onClick={() => pick({ id: c.id, name: c.name })}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "var(--color-bg-page)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "transparent";
-              }}
-              style={{
-                ...OPTION_STYLE,
-                fontWeight: c.id === selectedId ? 600 : 400,
-              }}
-            >
-              {c.name}
-            </div>
-          ))}
-          {canCreate && (
-            <div
-              onClick={createAndSelect}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "var(--color-bg-page)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "transparent";
-              }}
-              style={{
-                ...OPTION_STYLE,
-                borderTop: suggestions.length > 0 ? "1px solid var(--color-border)" : undefined,
-                color: "var(--color-accent)",
-                fontWeight: 500,
-              }}
-            >
-              {isCreating ? "Creating…" : `Create “${trimmed}”`}
-            </div>
-          )}
-        </div>
-      )}
       {createError && (
         <p style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
           {createError}
         </p>
       )}
-    </div>
+    </>
   );
 }

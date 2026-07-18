@@ -128,7 +128,7 @@ export function useItemVariantHistory(
 }
 
 /** Contact suggestions for the acquisition-source autocomplete (#108). Backed by the
- * #107 search API; an empty query returns the first contacts by name. */
+ * #107 search API; disabled until the user types (the dropdown only opens then). */
 export function useContactSearch(collectionId: string, query: string) {
   return useQuery<ContactData[]>({
     queryKey: ["inventory", collectionId, "contactSearch", query] as const,
@@ -141,6 +141,9 @@ export function useContactSearch(collectionId: string, query: string) {
       const data = await res.json();
       return data.items;
     },
+    // The dropdown only opens once the user types; skip the redundant empty-query
+    // fetch on mount (matches useIssueSearch).
+    enabled: query.length >= 1,
   });
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { StampNodeData } from "@/lib/issues";
 import { buildTree, type TreeNode } from "@/app/tree-picker-utils";
 import {
@@ -9,6 +9,11 @@ import {
   defaultTreeSelectButtonClassName,
   useTreeSelect,
 } from "@/app/tree-select";
+import {
+  Autocomplete,
+  SEARCH_INPUT_STYLE,
+  useDebouncedValue,
+} from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useIssueSearch } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
 import { useIssueMembers } from "./use-inventory-query";
 
@@ -55,30 +60,8 @@ export interface StampSelectInitial {
 }
 
 const INPUT_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2rem",
+  ...SEARCH_INPUT_STYLE,
   width: "100%",
-};
-
-const DROPDOWN_STYLE: React.CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  right: 0,
-  zIndex: 30,
-  marginTop: "0.25rem",
-  background: "var(--color-bg-elevated)",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-  maxHeight: "12rem",
-  overflowY: "auto",
 };
 
 function issueLabel(name: string | null, year: number | null): string {
@@ -133,34 +116,10 @@ function IssuePicker({
   issue: StampSelectInitial | null;
   onPick: (issue: StampSelectInitial) => void;
 }) {
-  const [inputValue, setInputValue] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [value, setValue] = useState("");
+  const debouncedQuery = useDebouncedValue(value);
 
   const { data: suggestions = [] } = useIssueSearch(collectionId, debouncedQuery);
-
-  const handleInput = useCallback((value: string) => {
-    setInputValue(value);
-    setIsOpen(true);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQuery(value), 300);
-  }, []);
-
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
-
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   if (issue) {
     return (
@@ -181,8 +140,7 @@ function IssuePicker({
         <button
           type="button"
           onClick={() => {
-            setInputValue("");
-            setDebouncedQuery("");
+            setValue("");
             onPick({ issueId: "", issueName: null, issueYear: null });
           }}
           style={{
@@ -200,44 +158,19 @@ function IssuePicker({
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
-      <input
-        type="text"
-        placeholder="Search for an issue…"
-        value={inputValue}
-        onChange={(e) => handleInput(e.target.value)}
-        onFocus={() => { if (inputValue) setIsOpen(true); }}
-        style={INPUT_STYLE}
-      />
-      {isOpen && suggestions.length > 0 && (
-        <div style={DROPDOWN_STYLE}>
-          {suggestions.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => {
-                setIsOpen(false);
-                setInputValue("");
-                onPick({ issueId: s.id, issueName: s.name, issueYear: s.year });
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "var(--color-bg-page)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = "transparent";
-              }}
-              style={{
-                padding: "0.375rem 0.625rem",
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {issueLabel(s.name, s.year)}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Autocomplete
+      value={value}
+      onValueChange={setValue}
+      items={suggestions}
+      getItemKey={(s) => s.id}
+      renderItem={(s) => issueLabel(s.name, s.year)}
+      onSelect={(s) => {
+        setValue("");
+        onPick({ issueId: s.id, issueName: s.name, issueYear: s.year });
+      }}
+      placeholder="Search for an issue…"
+      inputStyle={INPUT_STYLE}
+    />
   );
 }
 
