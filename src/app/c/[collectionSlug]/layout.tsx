@@ -38,6 +38,10 @@ export default async function CollectionLayout({
           borderRight: "1px solid var(--color-border)",
           display: "flex",
           flexDirection: "column",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflowY: "auto",
         }}
       >
         <div
