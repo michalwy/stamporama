@@ -19,10 +19,9 @@ import {
 } from "@/app/actions/issues";
 import type { IssueListItem, IssueCatalogNumberData, IssueSortBy, StampNodeData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import { AddStampDialog } from "./add-stamp-dialog";
+import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
-import { StampEditDialog } from "@/app/c/[collectionSlug]/shared/stamp-edit-dialog";
 import { useIssuesInfinite, useInvalidateIssues, type IssueListFilters } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
@@ -815,7 +814,10 @@ export function IssuesListPanel({
             issue.collectionAreaId
           );
           return (
-            <StampEditDialog
+            <StampFormDialog
+              mode="edit"
+              stampId={stamp.stampId}
+              collectionId={collectionId}
               stamp={stamp}
               areaVendors={areaVendors}
               isPending={isPending}
@@ -855,7 +857,8 @@ export function IssuesListPanel({
             ).values()
           );
           return (
-            <AddStampDialog
+            <StampFormDialog
+              mode="add"
               collectionId={collectionId}
               issues={[issue]}
               areaVendors={uniqueAreaVendors}
@@ -871,7 +874,8 @@ export function IssuesListPanel({
         })()}
 
       {dialog.kind === "add-stamp" && !dialog.issueId && (
-        <AddStampDialog
+        <StampFormDialog
+          mode="add"
           collectionId={collectionId}
           issues={allIssues}
           areaVendors={[]}

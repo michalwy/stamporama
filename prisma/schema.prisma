@@ -151,7 +151,7 @@ model StampCatalogNumber {
 model StampCatalogPrice {
   stampId          String
   catalogEditionId String
-  price            Decimal
+  price            Decimal @db.Decimal(10, 2)
   currency         String
 
   stamp          Stamp          @relation(fields: [stampId], references: [id], onDelete: Cascade)

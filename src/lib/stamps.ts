@@ -1,6 +1,15 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
+import {
+  type MoneyDisplay,
+  type RawCatalogPrice,
+  buildEffectivePrimaryCatalogMap,
+  pickMainCatalogPrice,
+  safeRateMap,
+  applyConversion,
+  getCollectionBaseCurrency,
+} from "./pricing";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -217,6 +226,7 @@ export interface StampListItem {
   catalogNumbers: StampCatalogNumberData[];
   areaId: string | null;
   issues: StampIssueMembership[];
+  mainCatalogPrice: MoneyDisplay | null;
 }
 
 export interface PaginatedStampsResult {
@@ -234,6 +244,13 @@ const STAMP_LIST_SELECT = {
   issuedYear: true,
   createdAt: true,
   catalogNumbers: { select: { catalogVendorId: true, number: true } },
+  catalogPrices: {
+    select: {
+      price: true,
+      currency: true,
+      catalogEdition: { select: { year: true, catalogNameId: true } },
+    },
+  },
   stampAreaLinks: {
     select: { collectionAreaId: true, isPrimary: true },
   },
@@ -246,25 +263,32 @@ const STAMP_LIST_SELECT = {
   },
 } as const;
 
-function toStampListItem(stamp: {
-  id: string;
-  collectionId: string;
-  parentId: string | null;
-  name: string | null;
-  issuedDay: number | null;
-  issuedMonth: number | null;
-  issuedYear: number | null;
-  createdAt: Date;
-  catalogNumbers: { catalogVendorId: string; number: string }[];
-  stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
-  issueMemberships: {
-    issueId: string;
-    requiredForCompleteness: boolean;
-    issue: { name: string | null; year: number | null };
-  }[];
-}): StampListItem {
+function toStampListItem(
+  stamp: {
+    id: string;
+    collectionId: string;
+    parentId: string | null;
+    name: string | null;
+    issuedDay: number | null;
+    issuedMonth: number | null;
+    issuedYear: number | null;
+    createdAt: Date;
+    catalogNumbers: { catalogVendorId: string; number: string }[];
+    catalogPrices: RawCatalogPrice[];
+    stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
+    issueMemberships: {
+      issueId: string;
+      requiredForCompleteness: boolean;
+      issue: { name: string | null; year: number | null };
+    }[];
+  },
+  primaryCatalogByArea: Map<string, string | null>,
+  baseCurrency: string
+): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
+  const primaryNameId = areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null;
+  const main = pickMainCatalogPrice(stamp.catalogPrices, primaryNameId);
   return {
     id: stamp.id,
     collectionId: stamp.collectionId,
@@ -282,7 +306,32 @@ function toStampListItem(stamp: {
       issueYear: m.issue.year,
       requiredForCompleteness: m.requiredForCompleteness,
     })),
+    // convertedAmount filled by buildStampListItems after rates are fetched
+    mainCatalogPrice: main
+      ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency }
+      : null,
   };
+}
+
+/** Map stamps to list items and attach base-currency conversions in one batched rate fetch. */
+async function buildStampListItems(
+  stamps: Parameters<typeof toStampListItem>[0][],
+  collectionId: string,
+  primaryCatalogByArea: Map<string, string | null>,
+  baseCurrency: string
+): Promise<StampListItem[]> {
+  const items = stamps.map((s) => toStampListItem(s, primaryCatalogByArea, baseCurrency));
+  const currencies = items
+    .map((i) => i.mainCatalogPrice?.currency)
+    .filter((c): c is string => !!c);
+  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+  for (const it of items) {
+    const mp = it.mainCatalogPrice;
+    if (mp) {
+      mp.convertedAmount = applyConversion(Number(mp.amount), mp.currency, baseCurrency, rates);
+    }
+  }
+  return items;
 }
 
 export type StampSortBy = "issueDate" | "catalogNumber" | "name" | "issueName";
@@ -314,6 +363,10 @@ export async function listStampsPaginated(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const dir = opts.sortDir ?? "asc";
+  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const conditions: any[] = [];
@@ -386,7 +439,7 @@ export async function listStampsPaginated(
     const idOrder = new Map(finalIds.map((id, i) => [id, i]));
     stamps.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
 
-    const items = stamps.map(toStampListItem);
+    const items = await buildStampListItems(stamps, collectionId, primaryCatalogByArea, baseCurrency);
     const nextCursor = hasMore ? String(offset + pageSize) : null;
     return { items, nextCursor };
   }
@@ -407,13 +460,24 @@ export async function listStampsPaginated(
   });
 
   const hasMore = stamps.length > pageSize;
-  const items = (hasMore ? stamps.slice(0, pageSize) : stamps).map(toStampListItem);
+  const items = await buildStampListItems(
+    hasMore ? stamps.slice(0, pageSize) : stamps,
+    collectionId,
+    primaryCatalogByArea,
+    baseCurrency
+  );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
 
   return { items, nextCursor };
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────
+
+export interface CatalogPriceInput {
+  catalogEditionId: string;
+  price: string;
+  currency: string;
+}
 
 export async function updateStampWithCatalog(
   ownerId: string,
@@ -424,6 +488,7 @@ export async function updateStampWithCatalog(
     issuedMonth?: number | null;
     issuedYear?: number | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
+    catalogPrices?: CatalogPriceInput[];
   }
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
@@ -448,6 +513,20 @@ export async function updateStampWithCatalog(
         })),
         skipDuplicates: true,
       });
+    }
+    if (data.catalogPrices !== undefined) {
+      await tx.stampCatalogPrice.deleteMany({ where: { stampId } });
+      if (data.catalogPrices.length > 0) {
+        await tx.stampCatalogPrice.createMany({
+          data: data.catalogPrices.map((cp) => ({
+            stampId,
+            catalogEditionId: cp.catalogEditionId,
+            price: cp.price,
+            currency: cp.currency,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
   });
 }
@@ -483,6 +562,57 @@ export interface StampCatalogPriceData {
   catalogEditionId: string;
   price: Decimal;
   currency: string;
+}
+
+export interface StampCatalogPriceDisplay {
+  catalogEditionId: string;
+  price: string;
+  currency: string;
+  editionYear: number;
+  catalogNameId: string;
+  catalogName: string;
+  vendorAbbreviation: string;
+  catalogNameCurrency: string;
+}
+
+export async function getStampCatalogPrices(
+  ownerId: string,
+  stampId: string
+): Promise<StampCatalogPriceDisplay[]> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const prices = await prisma.stampCatalogPrice.findMany({
+    where: { stampId },
+    select: {
+      catalogEditionId: true,
+      price: true,
+      currency: true,
+      catalogEdition: {
+        select: {
+          year: true,
+          catalogNameId: true,
+          catalogName: {
+            select: {
+              name: true,
+              currency: true,
+              vendor: { select: { abbreviation: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { catalogEdition: { year: "desc" } },
+  });
+  return prices.map((p) => ({
+    catalogEditionId: p.catalogEditionId,
+    price: p.price.toString(),
+    currency: p.currency,
+    editionYear: p.catalogEdition.year,
+    catalogNameId: p.catalogEdition.catalogNameId,
+    catalogName: p.catalogEdition.catalogName.name,
+    vendorAbbreviation: p.catalogEdition.catalogName.vendor.abbreviation,
+    catalogNameCurrency: p.catalogEdition.catalogName.currency,
+  }));
 }
 
 export async function upsertStampCatalogPrice(

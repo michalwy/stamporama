@@ -178,6 +178,18 @@ export async function addStampToIssueAction(
     }
   }
 
+  const catalogPrices: { catalogEditionId: string; price: string; currency: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("catalogPrice_")) {
+      const catalogEditionId = key.slice("catalogPrice_".length);
+      const price = (value as string).trim();
+      if (!price || isNaN(Number(price))) continue;
+      const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
+      if (!currency) continue;
+      catalogPrices.push({ catalogEditionId, price, currency });
+    }
+  }
+
   try {
     await addStampToIssue(session.user.id, collectionId, issueId, {
       name,
@@ -187,6 +199,7 @@ export async function addStampToIssueAction(
       parentStampId,
       requiredForCompleteness,
       catalogNumbers,
+      catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
     });
     return { status: "success" };
   } catch {

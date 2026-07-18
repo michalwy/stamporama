@@ -13,6 +13,28 @@ export function formatIssuedDate(
   return parts.join(" ");
 }
 
+export interface MoneyLike {
+  amount: string;
+  currency: string;
+  convertedAmount: string | null;
+  baseCurrency: string;
+}
+
+/**
+ * Primary (emphasised) amount — the collection base currency.
+ * "≈ 3.20 EUR" when converted, or "12.50 EUR" when the catalog already uses the base currency.
+ */
+export function moneyPrimaryText(m: MoneyLike): string {
+  if (m.convertedAmount != null) return `≈ ${m.convertedAmount} ${m.baseCurrency}`;
+  return `${m.amount} ${m.currency}`;
+}
+
+/** Secondary (muted) amount — the catalog currency, only when it differs from the base. */
+export function moneySecondaryText(m: MoneyLike): string | null {
+  if (m.convertedAmount == null) return null;
+  return `${m.amount} ${m.currency}`;
+}
+
 export function formatIssueCatalogNumber(
   firstNumber: string,
   lastNumber: string | null | undefined,

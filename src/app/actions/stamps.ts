@@ -12,9 +12,11 @@ import {
   getStampChildCount,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
+  getStampCatalogPrices,
   upsertStampCatalogPrice,
   deleteStampCatalogPrice,
 } from "@/lib/stamps";
+import type { CatalogPriceInput, StampCatalogPriceDisplay } from "@/lib/stamps";
 
 export type StampActionState =
   | { status: "idle" }
@@ -25,6 +27,22 @@ async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return session;
+}
+
+function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
+  const prices: CatalogPriceInput[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("catalogPrice_")) {
+      const catalogEditionId = key.slice("catalogPrice_".length);
+      const price = (value as string).trim();
+      if (!price) continue;
+      const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
+      if (!currency) continue;
+      if (isNaN(Number(price))) continue;
+      prices.push({ catalogEditionId, price, currency });
+    }
+  }
+  return prices;
 }
 
 function parseIssuedDate(formData: FormData): {
@@ -132,6 +150,9 @@ export async function updateStampWithCatalogAction(
     }
   }
 
+  const hasPriceEntries = Array.from(formData.keys()).some((k) => k.startsWith("catalogPrice_"));
+  const catalogPrices = hasPriceEntries ? parseCatalogPrices(formData) : undefined;
+
   try {
     await updateStampWithCatalog(session.user.id, stampId, {
       name,
@@ -139,6 +160,7 @@ export async function updateStampWithCatalogAction(
       issuedMonth: issuedMonth ?? null,
       issuedYear: issuedYear ?? null,
       catalogNumbers,
+      catalogPrices,
     });
     return { status: "success" };
   } catch {
@@ -198,6 +220,13 @@ export async function deleteStampCatalogNumberAction(
   } catch {
     return { status: "error", message: "Failed to delete catalog number. Please try again." };
   }
+}
+
+export async function getStampCatalogPricesAction(
+  stampId: string
+): Promise<StampCatalogPriceDisplay[]> {
+  const session = await getSession();
+  return getStampCatalogPrices(session.user.id, stampId);
 }
 
 export async function upsertStampCatalogPriceAction(

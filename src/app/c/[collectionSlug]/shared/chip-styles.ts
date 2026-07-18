@@ -78,6 +78,21 @@ export const STAMP_MUTED_PRIMARY_CHIP: React.CSSProperties = {
   opacity: 0.7,
 };
 
+export const PRICE_MAIN: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 700,
+  color: "var(--color-text-primary)",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+export const PRICE_CONVERTED: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  color: "var(--color-text-muted)",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
 export function formatStampCN(number: string, v?: AreaCatalogEntry): string {
   if (!v) return number;
   return v.prefix

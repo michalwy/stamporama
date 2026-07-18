@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatIssuedDate, formatIssueCatalogNumber } from "@/app/stamp-display";
+import { formatIssuedDate, formatIssueCatalogNumber, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { useIssueMembers } from "./use-issues-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -14,8 +14,11 @@ import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
   STAMP_MUTED_PRIMARY_CHIP,
+  PRICE_MAIN,
+  PRICE_CONVERTED,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -179,10 +182,11 @@ function StampTreeNode({
           </button>
         </div>
 
-        {(primaryCN || secondaryCNs.length > 0) && (
+        {(primaryCN || secondaryCNs.length > 0 || node.mainCatalogPrice) && (
           <div
             style={{
               display: "flex",
+              alignItems: "center",
               gap: "0.3rem",
               marginTop: "0.15rem",
               paddingLeft: "1.375rem",
@@ -206,6 +210,21 @@ function StampTreeNode({
                 {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
               </span>
             ))}
+            {node.mainCatalogPrice && (
+              <span
+                style={{
+                  marginLeft: "auto",
+                  display: "inline-flex",
+                  alignItems: "baseline",
+                  gap: "0.35rem",
+                }}
+              >
+                {moneySecondaryText(node.mainCatalogPrice) && (
+                  <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
+                )}
+                <span style={PRICE_MAIN}>{moneyPrimaryText(node.mainCatalogPrice)}</span>
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -455,6 +474,57 @@ export function IssueRow({
                 {issue.requiredCount}/{issue.memberCount}
               </span>
             )}
+
+            {issue.requiredPriceTotal && (() => {
+              const t = issue.requiredPriceTotal;
+              const incomplete = t.pricedCount < t.requiredCount;
+              const secondary = moneySecondaryText(t);
+              return (
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                  }}
+                  title={incomplete ? undefined : "Total of required stamps (main catalog)"}
+                >
+                  {incomplete && (
+                    <Tooltip
+                      content={
+                        <>
+                          <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
+                            Partial total
+                          </div>
+                          <div style={{ color: "var(--color-text-secondary)" }}>
+                            {t.pricedCount} of {t.requiredCount} required stamps priced
+                          </div>
+                          {t.requiredCount - t.pricedCount > 0 && (
+                            <div style={{ color: "var(--color-text-muted)" }}>
+                              {t.requiredCount - t.pricedCount} without a main-catalog price
+                            </div>
+                          )}
+                        </>
+                      }
+                    >
+                      <span
+                        aria-label="Partial total"
+                        style={{
+                          color: "var(--color-warning)",
+                          fontSize: "0.8125rem",
+                          lineHeight: 1,
+                          cursor: "help",
+                        }}
+                      >
+                        ⚠
+                      </span>
+                    </Tooltip>
+                  )}
+                  {secondary && <span style={PRICE_CONVERTED}>{secondary}</span>}
+                  <span style={PRICE_MAIN}>{moneyPrimaryText(t)}</span>
+                </span>
+              );
+            })()}
           </div>
         )}
       </div>

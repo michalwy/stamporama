@@ -1,5 +1,15 @@
 import "server-only";
 import { prisma } from "./db";
+import {
+  type IssuePriceTotal,
+  type MoneyDisplay,
+  type RawCatalogPrice,
+  buildEffectivePrimaryCatalogMap,
+  pickMainCatalogPrice,
+  safeRateMap,
+  applyConversion,
+  getCollectionBaseCurrency,
+} from "./pricing";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -32,6 +42,7 @@ export interface StampNodeData {
   issuedYear: number | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  mainCatalogPrice: MoneyDisplay | null;
 }
 
 export interface IssueCatalogNumberData {
@@ -64,22 +75,36 @@ const MEMBER_SELECT = {
       issuedMonth: true,
       issuedYear: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      catalogPrices: {
+        select: {
+          price: true,
+          currency: true,
+          catalogEdition: { select: { year: true, catalogNameId: true } },
+        },
+      },
     },
   },
 } as const;
 
-function toStampNode(m: {
-  stampId: string;
-  requiredForCompleteness: boolean;
-  stamp: {
-    parentId: string | null;
-    name: string | null;
-    issuedDay: number | null;
-    issuedMonth: number | null;
-    issuedYear: number | null;
-    catalogNumbers: { catalogVendorId: string; number: string }[];
-  };
-}): StampNodeData {
+function toStampNode(
+  m: {
+    stampId: string;
+    requiredForCompleteness: boolean;
+    stamp: {
+      parentId: string | null;
+      name: string | null;
+      issuedDay: number | null;
+      issuedMonth: number | null;
+      issuedYear: number | null;
+      catalogNumbers: { catalogVendorId: string; number: string }[];
+      catalogPrices: RawCatalogPrice[];
+    };
+  },
+  pricing?: { primaryNameId: string | null; baseCurrency: string }
+): StampNodeData {
+  const main = pricing
+    ? pickMainCatalogPrice(m.stamp.catalogPrices, pricing.primaryNameId)
+    : null;
   return {
     stampId: m.stampId,
     parentId: m.stamp.parentId,
@@ -89,6 +114,11 @@ function toStampNode(m: {
     issuedYear: m.stamp.issuedYear,
     requiredForCompleteness: m.requiredForCompleteness,
     catalogNumbers: m.stamp.catalogNumbers,
+    // convertedAmount filled by the caller after rates are fetched
+    mainCatalogPrice:
+      main && pricing
+        ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency: pricing.baseCurrency }
+        : null,
   };
 }
 
@@ -122,6 +152,7 @@ function toIssueData(issue: {
       issuedMonth: number | null;
       issuedYear: number | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
+      catalogPrices: RawCatalogPrice[];
     };
   }[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
@@ -135,7 +166,7 @@ function toIssueData(issue: {
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
-    members: issue.members.map(toStampNode),
+    members: issue.members.map((m) => toStampNode(m)),
     catalogNumbers: issue.catalogNumbers,
     completeness: { required, owned: 0 },
   };
@@ -187,6 +218,7 @@ export interface IssueListItem {
   catalogNumbers: IssueCatalogNumberData[];
   memberCount: number;
   requiredCount: number;
+  requiredPriceTotal: IssuePriceTotal | null;
 }
 
 export interface PaginatedIssuesResult {
@@ -203,20 +235,68 @@ const ISSUE_LIST_SELECT = {
   isAutoCreated: true,
   createdAt: true,
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
-  members: { select: { requiredForCompleteness: true } },
+  members: {
+    select: {
+      requiredForCompleteness: true,
+      stamp: {
+        select: {
+          catalogPrices: {
+            select: {
+              price: true,
+              currency: true,
+              catalogEdition: { select: { year: true, catalogNameId: true } },
+            },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
-function toIssueListItem(issue: {
-  id: string;
-  collectionId: string;
-  collectionAreaId: string;
-  name: string | null;
-  year: number | null;
-  isAutoCreated: boolean;
-  createdAt: Date;
-  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-  members: { requiredForCompleteness: boolean }[];
-}): IssueListItem {
+function toIssueListItem(
+  issue: {
+    id: string;
+    collectionId: string;
+    collectionAreaId: string;
+    name: string | null;
+    year: number | null;
+    isAutoCreated: boolean;
+    createdAt: Date;
+    catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
+    members: {
+      requiredForCompleteness: boolean;
+      stamp: { catalogPrices: RawCatalogPrice[] };
+    }[];
+  },
+  primaryCatalogByArea: Map<string, string | null>,
+  baseCurrency: string
+): IssueListItem {
+  const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
+  const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
+
+  let sum = 0;
+  let pricedCount = 0;
+  let currency: string | null = null;
+  for (const m of requiredMembers) {
+    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId);
+    if (!main) continue;
+    sum += main.amount;
+    pricedCount += 1;
+    currency = main.currency;
+  }
+
+  const requiredPriceTotal: IssuePriceTotal | null =
+    pricedCount > 0 && currency
+      ? {
+          amount: sum.toFixed(2),
+          currency,
+          convertedAmount: null, // filled after rates are fetched
+          baseCurrency,
+          pricedCount,
+          requiredCount: requiredMembers.length,
+        }
+      : null;
+
   return {
     id: issue.id,
     collectionId: issue.collectionId,
@@ -227,8 +307,30 @@ function toIssueListItem(issue: {
     createdAt: issue.createdAt.toISOString(),
     catalogNumbers: issue.catalogNumbers,
     memberCount: issue.members.length,
-    requiredCount: issue.members.filter((m) => m.requiredForCompleteness).length,
+    requiredCount: requiredMembers.length,
+    requiredPriceTotal,
   };
+}
+
+/** Map issues to list items and attach base-currency conversions in one batched rate fetch. */
+async function buildIssueListItems(
+  issues: Parameters<typeof toIssueListItem>[0][],
+  collectionId: string,
+  primaryCatalogByArea: Map<string, string | null>,
+  baseCurrency: string
+): Promise<IssueListItem[]> {
+  const items = issues.map((i) => toIssueListItem(i, primaryCatalogByArea, baseCurrency));
+  const currencies = items
+    .map((i) => i.requiredPriceTotal?.currency)
+    .filter((c): c is string => !!c);
+  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+  for (const it of items) {
+    const t = it.requiredPriceTotal;
+    if (t) {
+      t.convertedAmount = applyConversion(Number(t.amount), t.currency, baseCurrency, rates);
+    }
+  }
+  return items;
 }
 
 function parseNumericCatalog(val: string | null | undefined): number {
@@ -257,6 +359,10 @@ export async function listIssuesPaginated(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const dir = opts.sortDir ?? "asc";
+  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const conditions: any[] = [];
@@ -319,7 +425,7 @@ export async function listIssuesPaginated(
     const idOrder = new Map(finalIds.map((id, i) => [id, i]));
     issues.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
 
-    const items = issues.map(toIssueListItem);
+    const items = await buildIssueListItems(issues, collectionId, primaryCatalogByArea, baseCurrency);
     const nextCursor = hasMore ? String(offset + pageSize) : null;
     return { items, nextCursor };
   }
@@ -340,7 +446,12 @@ export async function listIssuesPaginated(
   });
 
   const hasMore = issues.length > pageSize;
-  const items = (hasMore ? issues.slice(0, pageSize) : issues).map(toIssueListItem);
+  const items = await buildIssueListItems(
+    hasMore ? issues.slice(0, pageSize) : issues,
+    collectionId,
+    primaryCatalogByArea,
+    baseCurrency
+  );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
 
   return { items, nextCursor };
@@ -377,14 +488,30 @@ export async function listIssueMembers(
   collectionId: string,
   issueId: string
 ): Promise<StampNodeData[]> {
-  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
   const members = await prisma.issueMember.findMany({
     where: { issueId },
     select: MEMBER_SELECT,
   });
-  return members.map(toStampNode);
+
+  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+  ]);
+  const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
+
+  const nodes = members.map((m) => toStampNode(m, { primaryNameId, baseCurrency }));
+  const currencies = nodes
+    .map((n) => n.mainCatalogPrice?.currency)
+    .filter((c): c is string => !!c);
+  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+  for (const n of nodes) {
+    const mp = n.mainCatalogPrice;
+    if (mp) mp.convertedAmount = applyConversion(Number(mp.amount), mp.currency, baseCurrency, rates);
+  }
+  return nodes;
 }
 
 // ── Mutations ───────────────────────────────────────────────────────────────
@@ -643,6 +770,7 @@ export interface AddStampData {
   parentStampId?: string | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  catalogPrices?: { catalogEditionId: string; price: string; currency: string }[];
 }
 
 export async function addStampToIssue(
@@ -695,6 +823,18 @@ export async function addStampToIssue(
           stampId: stamp.id,
           catalogVendorId: cn.catalogVendorId,
           number: cn.number,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (data.catalogPrices && data.catalogPrices.length > 0) {
+      await tx.stampCatalogPrice.createMany({
+        data: data.catalogPrices.map((cp) => ({
+          stampId: stamp.id,
+          catalogEditionId: cp.catalogEditionId,
+          price: cp.price,
+          currency: cp.currency,
         })),
         skipDuplicates: true,
       });

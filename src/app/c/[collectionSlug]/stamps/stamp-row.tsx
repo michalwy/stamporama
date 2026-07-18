@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatIssuedDate } from "@/app/stamp-display";
+import { formatIssuedDate, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import type { StampListItem } from "@/lib/stamps";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import {
@@ -10,6 +10,8 @@ import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
   STAMP_MUTED_PRIMARY_CHIP,
+  PRICE_MAIN,
+  PRICE_CONVERTED,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 
@@ -183,8 +185,8 @@ export function StampRow({
           )}
         </div>
 
-        {/* Line 3: catalog numbers */}
-        {(primaryCN || secondaryCNs.length > 0) && (
+        {/* Line 3: catalog numbers + main-catalog price */}
+        {(primaryCN || secondaryCNs.length > 0 || stamp.mainCatalogPrice) && (
         <div
           style={{
             display: "flex",
@@ -204,6 +206,21 @@ export function StampRow({
               {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
             </span>
           ))}
+          {stamp.mainCatalogPrice && (
+            <span
+              style={{
+                marginLeft: "auto",
+                display: "inline-flex",
+                alignItems: "baseline",
+                gap: "0.35rem",
+              }}
+            >
+              {moneySecondaryText(stamp.mainCatalogPrice) && (
+                <span style={PRICE_CONVERTED}>{moneySecondaryText(stamp.mainCatalogPrice)}</span>
+              )}
+              <span style={PRICE_MAIN}>{moneyPrimaryText(stamp.mainCatalogPrice)}</span>
+            </span>
+          )}
         </div>
         )}
       </div>
