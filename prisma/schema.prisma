@@ -50,7 +50,8 @@ model StampCondition {
   abbreviation String
   sortOrder    Int
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogPrices StampCatalogPrice[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -63,7 +64,8 @@ model CertificateStatus {
   abbreviation String
   sortOrder    Int
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogPrices StampCatalogPrice[]
 
   @@index([collectionId])
   @@map("certificate_status")
@@ -177,15 +179,26 @@ model StampCatalogNumber {
 }
 
 model StampCatalogPrice {
-  stampId          String
-  catalogEditionId String
-  price            Decimal @db.Decimal(10, 2)
-  currency         String
+  id                  String  @id @default(cuid())
+  stampId             String
+  catalogEditionId    String
+  conditionId         String
+  certificateStatusId String?
+  price               Decimal @db.Decimal(10, 2)
+  currency            String
 
-  stamp          Stamp          @relation(fields: [stampId], references: [id], onDelete: Cascade)
-  catalogEdition CatalogEdition @relation(fields: [catalogEditionId], references: [id], onDelete: Cascade)
+  stamp             Stamp              @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  catalogEdition    CatalogEdition     @relation(fields: [catalogEditionId], references: [id], onDelete: Cascade)
+  condition         StampCondition     @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
 
-  @@id([stampId, catalogEditionId])
+  // Uniqueness on (stampId, catalogEditionId, conditionId, certificateStatusId)
+  // is enforced by a raw `UNIQUE ... NULLS NOT DISTINCT` index (see migration),
+  // which Prisma cannot express — so no @@unique here. Requires PostgreSQL 15+.
+  @@index([stampId])
+  @@index([catalogEditionId])
+  @@index([conditionId])
+  @@index([certificateStatusId])
   @@map("stamp_catalog_price")
 }
 

@@ -25,6 +25,7 @@ export async function GET(
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
+  const displayConditionId = sp.get("displayConditionId") || undefined;
   const sortByParam = sp.get("sortBy") as StampSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -38,6 +39,7 @@ export async function GET(
       catalogVendorId,
       catalogNumber,
       issueId,
+      displayConditionId,
       sortBy,
       sortDir,
       pageSize: 50,

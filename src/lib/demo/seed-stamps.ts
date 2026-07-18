@@ -1,5 +1,6 @@
 import "server-only";
 import { PrismaClient } from "@/generated/prisma/client";
+import { seedDefaultConditions } from "../conditions";
 import type { DemoCatalog } from "./seed-catalog";
 import type { DemoAreas } from "./seed-areas";
 
@@ -632,6 +633,26 @@ export async function seedStamps(
 ): Promise<void> {
   const issues = buildIssues();
 
+  // Demo prices are recorded against the collection's first condition (MNH) with
+  // no certificate status. Conditions are normally seeded before demo data (see
+  // createCollection); when demo is seeded directly onto a bare collection, seed
+  // the defaults here so the seeder stays self-sufficient.
+  let firstCondition = await tx.stampCondition.findFirst({
+    where: { collectionId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true },
+  });
+  if (!firstCondition) {
+    await seedDefaultConditions(collectionId, tx);
+    firstCondition = await tx.stampCondition.findFirst({
+      where: { collectionId },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+  }
+  if (!firstCondition) throw new Error("Demo seed requires seeded conditions.");
+  const conditionId = firstCondition.id;
+
   for (const def of issues) {
     const areaId = areas[def.a];
     const isGerman = def.a.startsWith("de-") || def.a.startsWith("brd") || def.a === "ddr" || def.a === "de-mod";
@@ -695,14 +716,14 @@ export async function seedStamps(
       }
 
       const stampPrice = round2(priceBase * (1 + i * 0.15));
-      const prices: { stampId: string; catalogEditionId: string; price: number; currency: string }[] = [];
+      const prices: { stampId: string; catalogEditionId: string; conditionId: string; certificateStatusId: null; price: number; currency: string }[] = [];
       if (def.fi != null) {
-        prices.push({ stampId: stamp.id, catalogEditionId: catalog.fischerEditionId, price: stampPrice, currency: "PLN" });
+        prices.push({ stampId: stamp.id, catalogEditionId: catalog.fischerEditionId, conditionId, certificateStatusId: null, price: stampPrice, currency: "PLN" });
       }
       if (isGerman) {
-        prices.push({ stampId: stamp.id, catalogEditionId: catalog.michelDeutschlandEditionId, price: round2(stampPrice * 0.25), currency: "EUR" });
+        prices.push({ stampId: stamp.id, catalogEditionId: catalog.michelDeutschlandEditionId, conditionId, certificateStatusId: null, price: round2(stampPrice * 0.25), currency: "EUR" });
       } else if (def.mi != null) {
-        prices.push({ stampId: stamp.id, catalogEditionId: catalog.michelOsteuropaEditionId, price: round2(stampPrice * 0.25), currency: "EUR" });
+        prices.push({ stampId: stamp.id, catalogEditionId: catalog.michelOsteuropaEditionId, conditionId, certificateStatusId: null, price: round2(stampPrice * 0.25), currency: "EUR" });
       }
       if (prices.length > 0) {
         await tx.stampCatalogPrice.createMany({ data: prices });
@@ -730,14 +751,14 @@ export async function seedStamps(
           }
 
           const variantPrice = round2(stampPrice * 2.5);
-          const vPrices: { stampId: string; catalogEditionId: string; price: number; currency: string }[] = [];
+          const vPrices: { stampId: string; catalogEditionId: string; conditionId: string; certificateStatusId: null; price: number; currency: string }[] = [];
           if (def.fi != null) {
-            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.fischerEditionId, price: variantPrice, currency: "PLN" });
+            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.fischerEditionId, conditionId, certificateStatusId: null, price: variantPrice, currency: "PLN" });
           }
           if (isGerman) {
-            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.michelDeutschlandEditionId, price: round2(variantPrice * 0.25), currency: "EUR" });
+            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.michelDeutschlandEditionId, conditionId, certificateStatusId: null, price: round2(variantPrice * 0.25), currency: "EUR" });
           } else if (def.mi != null) {
-            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.michelOsteuropaEditionId, price: round2(variantPrice * 0.25), currency: "EUR" });
+            vPrices.push({ stampId: variant.id, catalogEditionId: catalog.michelOsteuropaEditionId, conditionId, certificateStatusId: null, price: round2(variantPrice * 0.25), currency: "EUR" });
           }
           if (vPrices.length > 0) {
             await tx.stampCatalogPrice.createMany({ data: vPrices });

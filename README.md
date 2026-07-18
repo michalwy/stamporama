@@ -40,7 +40,7 @@ docker compose --profile autoupdate up -d
 
 ## Development
 
-Prerequisites: Docker, Node.js 22+, pnpm.
+Prerequisites: Docker, Node.js 22+, pnpm. Self-hosting against an external database requires **PostgreSQL 15+** (the bundled containers use Postgres 16).
 
 **Run the standard local stack** (built image, `next start`):
 

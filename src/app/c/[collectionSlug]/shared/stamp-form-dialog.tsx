@@ -11,7 +11,9 @@ import { useIssueMembers } from "@/app/c/[collectionSlug]/issues/use-issues-quer
 import type { IssueListItem } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogVendorData } from "@/lib/catalog";
-import { StampCatalogPricesTab, formatPrice } from "./stamp-catalog-prices-tab";
+import type { StampConditionData } from "@/lib/conditions";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -83,7 +85,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
 
   const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [catalogTree, setCatalogTree] = useState<CatalogVendorData[]>([]);
+  const [conditions, setConditions] = useState<StampConditionData[]>([]);
+  const [certificateStatuses, setCertificateStatuses] = useState<CertificateStatusData[]>([]);
+  // Keyed by `${editionId}~${conditionId}~${certId}` (certId "" = no certificate).
   const [priceEdits, setPriceEdits] = useState<Map<string, string>>(new Map());
+  // Cell keys (`${editionId}~${conditionId}~${certId}`) that had a price at load,
+  // used to decide which older edition/condition rows to show. Snapshotted so the
+  // grid doesn't jump around as the user types.
+  const [pricedCells, setPricedCells] = useState<Set<string>>(new Set());
   const [pricesLoaded, setPricesLoaded] = useState(false);
 
   const vendors = Array.from(
@@ -107,14 +116,24 @@ export function StampFormDialog(props: StampFormDialogProps) {
   // ── Prices data: catalog tree (both modes) + existing prices (edit only) ──
   const stampId = editProps?.stampId;
   const fetchPriceData = useCallback(async () => {
-    const [{ getStampCatalogPricesAction }, { getCatalogTreeAction }] =
-      await Promise.all([
-        import("@/app/actions/stamps"),
-        import("@/app/actions/catalog"),
-      ]);
-    const tree = await getCatalogTreeAction(collectionId);
-    const prices = stampId ? await getStampCatalogPricesAction(stampId) : [];
-    return { tree, prices };
+    const [
+      { getStampCatalogPricesAction },
+      { getCatalogTreeAction },
+      { getStampConditionsAction },
+      { getCertificateStatusesAction },
+    ] = await Promise.all([
+      import("@/app/actions/stamps"),
+      import("@/app/actions/catalog"),
+      import("@/app/actions/conditions"),
+      import("@/app/actions/certificate-statuses"),
+    ]);
+    const [tree, conditions, certificateStatuses, prices] = await Promise.all([
+      getCatalogTreeAction(collectionId),
+      getStampConditionsAction(collectionId),
+      getCertificateStatusesAction(collectionId),
+      stampId ? getStampCatalogPricesAction(stampId) : Promise.resolve([]),
+    ]);
+    return { tree, conditions, certificateStatuses, prices };
   }, [collectionId, stampId]);
 
   useEffect(() => {
@@ -123,20 +142,26 @@ export function StampFormDialog(props: StampFormDialogProps) {
     fetchPriceData().then((data) => {
       if (cancelled) return;
       setCatalogTree(data.tree);
+      setConditions(data.conditions);
+      setCertificateStatuses(data.certificateStatuses);
       const edits = new Map<string, string>();
+      const priced = new Set<string>();
       for (const p of data.prices) {
-        edits.set(p.catalogEditionId, formatPrice(p.price));
+        const key = priceCellKey(p.catalogEditionId, p.conditionId, p.certificateStatusId);
+        edits.set(key, formatPrice(p.price));
+        priced.add(key);
       }
       setPriceEdits(edits);
+      setPricedCells(priced);
       setPricesLoaded(true);
     });
     return () => { cancelled = true; };
   }, [fetchPriceData, hasPricesTab]);
 
-  function handlePriceChange(editionId: string, value: string) {
+  function handlePriceChange(cellKey: string, value: string) {
     setPriceEdits((prev) => {
       const next = new Map(prev);
-      next.set(editionId, value);
+      next.set(cellKey, value);
       return next;
     });
   }
@@ -172,15 +197,16 @@ export function StampFormDialog(props: StampFormDialogProps) {
     const fd = new FormData(e.currentTarget);
 
     if (pricesLoaded) {
-      for (const [editionId, price] of priceEdits) {
+      for (const [cellKey, price] of priceEdits) {
+        const editionId = cellKey.split("~")[0];
         const currency = currencyByEdition.get(editionId);
         if (!currency) continue;
         if (props.mode === "edit") {
-          // Send every row (incl. cleared) so removals are applied.
-          fd.set(`catalogPrice_${editionId}`, price);
+          // Send every touched cell (incl. cleared) so removals are applied.
+          fd.set(`catalogPrice_${cellKey}`, price);
           fd.set(`catalogCurrency_${editionId}`, currency);
         } else if (price.trim()) {
-          fd.set(`catalogPrice_${editionId}`, price);
+          fd.set(`catalogPrice_${cellKey}`, price);
           fd.set(`catalogCurrency_${editionId}`, currency);
         }
       }
@@ -468,7 +494,10 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 <StampCatalogPricesTab
                   catalogTree={catalogTree}
                   areaVendors={areaVendors}
+                  conditions={conditions}
+                  certificateStatuses={certificateStatuses}
                   priceEdits={priceEdits}
+                  pricedCells={pricedCells}
                   onPriceChange={handlePriceChange}
                   disabled={isPending}
                 />

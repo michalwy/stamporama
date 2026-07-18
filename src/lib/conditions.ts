@@ -108,14 +108,13 @@ export async function updateStampCondition(
 }
 
 /**
- * Whether a condition is referenced by catalog prices and therefore cannot be
- * deleted. The catalog-price ↔ condition relation is introduced by #91; until
- * then no price references a condition, so this always reports "not in use".
- * Once #91 lands, count `stampCatalogPrice` rows referencing the condition here.
+ * Whether a condition is referenced by any catalog price and therefore cannot
+ * be deleted. The database also enforces this via an onDelete: Restrict FK;
+ * this check surfaces a friendly error before we hit that constraint.
  */
 export async function isConditionInUse(conditionId: string): Promise<boolean> {
-  void conditionId;
-  return false;
+  const count = await prisma.stampCatalogPrice.count({ where: { conditionId } });
+  return count > 0;
 }
 
 export async function deleteStampCondition(

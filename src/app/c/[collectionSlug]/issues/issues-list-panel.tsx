@@ -27,6 +27,8 @@ import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issu
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
+import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
+import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { effectiveVendorsForArea, effectivePrimaryVendorId, flattenAreaTree } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -437,16 +439,20 @@ export function IssuesListPanel({
   const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
 
+  const { conditions, displayConditionId, setDisplayConditionId } =
+    useDisplayCondition(collectionId);
+
   const filters: IssueListFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
       catalogVendorId: catalogVendorId || undefined,
       catalogNumber: catalogNumber || undefined,
+      displayConditionId: displayConditionId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, sortBy, sortDir]
+    [filterAreaIds, search, catalogVendorId, catalogNumber, displayConditionId, sortBy, sortDir]
   );
 
   const updateParams = useCallback(
@@ -667,6 +673,11 @@ export function IssuesListPanel({
           >
             + Add issue
           </button>
+          <ConditionPriceSwitcher
+            conditions={conditions}
+            value={displayConditionId}
+            onChange={setDisplayConditionId}
+          />
         </ListToolbar>
 
         {/* Issues list */}

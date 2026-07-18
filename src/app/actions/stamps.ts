@@ -13,8 +13,6 @@ import {
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
   getStampCatalogPrices,
-  upsertStampCatalogPrice,
-  deleteStampCatalogPrice,
 } from "@/lib/stamps";
 import type { CatalogPriceInput, StampCatalogPriceDisplay } from "@/lib/stamps";
 
@@ -29,18 +27,29 @@ async function getSession() {
   return session;
 }
 
+// Price cells are serialized as `catalogPrice_<editionId>~<conditionId>~<certId>`
+// (empty cert segment = no certificate status; `~` never occurs in a cuid).
+// Currency is per-edition: `catalogCurrency_<editionId>`.
 function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
   const prices: CatalogPriceInput[] = [];
   for (const [key, value] of formData.entries()) {
-    if (key.startsWith("catalogPrice_")) {
-      const catalogEditionId = key.slice("catalogPrice_".length);
-      const price = (value as string).trim();
-      if (!price) continue;
-      const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
-      if (!currency) continue;
-      if (isNaN(Number(price))) continue;
-      prices.push({ catalogEditionId, price, currency });
-    }
+    if (!key.startsWith("catalogPrice_")) continue;
+    const [catalogEditionId, conditionId, certRaw] = key
+      .slice("catalogPrice_".length)
+      .split("~");
+    if (!catalogEditionId || !conditionId) continue;
+    const price = (value as string).trim();
+    if (!price) continue;
+    const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
+    if (!currency) continue;
+    if (isNaN(Number(price))) continue;
+    prices.push({
+      catalogEditionId,
+      conditionId,
+      certificateStatusId: certRaw ? certRaw : null,
+      price,
+      currency,
+    });
   }
   return prices;
 }
@@ -232,36 +241,4 @@ export async function getStampCatalogPricesAction(
 ): Promise<StampCatalogPriceDisplay[]> {
   const session = await getSession();
   return getStampCatalogPrices(session.user.id, stampId);
-}
-
-export async function upsertStampCatalogPriceAction(
-  stampId: string,
-  catalogEditionId: string,
-  formData: FormData
-): Promise<StampActionState> {
-  const session = await getSession();
-  const priceRaw = ((formData.get("price") as string | null) ?? "").trim();
-  const currency = ((formData.get("currency") as string | null) ?? "").trim();
-  if (!priceRaw) return { status: "error", message: "Price is required." };
-  if (!currency) return { status: "error", message: "Currency is required." };
-  if (isNaN(Number(priceRaw))) return { status: "error", message: "Price must be a valid number." };
-  try {
-    await upsertStampCatalogPrice(session.user.id, stampId, catalogEditionId, priceRaw, currency);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save catalog price. Please try again." };
-  }
-}
-
-export async function deleteStampCatalogPriceAction(
-  stampId: string,
-  catalogEditionId: string
-): Promise<StampActionState> {
-  const session = await getSession();
-  try {
-    await deleteStampCatalogPrice(session.user.id, stampId, catalogEditionId);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to delete catalog price. Please try again." };
-  }
 }

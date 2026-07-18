@@ -8,7 +8,9 @@ import {
   updateCertificateStatus,
   deleteCertificateStatus,
   reorderCertificateStatuses,
+  getCertificateStatuses,
   CertificateStatusInUseError,
+  type CertificateStatusData,
 } from "@/lib/certificate-statuses";
 
 export type CertificateStatusActionState =
@@ -20,6 +22,13 @@ async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return session;
+}
+
+export async function getCertificateStatusesAction(
+  collectionId: string
+): Promise<CertificateStatusData[]> {
+  const session = await getSession();
+  return getCertificateStatuses(session.user.id, collectionId);
 }
 
 function parseFields(formData: FormData): { name: string; abbreviation: string } {

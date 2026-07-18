@@ -8,7 +8,9 @@ import {
   updateStampCondition,
   deleteStampCondition,
   reorderStampConditions,
+  getStampConditions,
   ConditionInUseError,
+  type StampConditionData,
 } from "@/lib/conditions";
 
 export type ConditionActionState =
@@ -20,6 +22,13 @@ async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return session;
+}
+
+export async function getStampConditionsAction(
+  collectionId: string
+): Promise<StampConditionData[]> {
+  const session = await getSession();
+  return getStampConditions(session.user.id, collectionId);
 }
 
 function parseFields(formData: FormData): { name: string; abbreviation: string } {

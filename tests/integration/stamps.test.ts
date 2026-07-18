@@ -12,10 +12,11 @@ import {
   getStampChildCount,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
-  upsertStampCatalogPrice,
-  deleteStampCatalogPrice,
+  updateStampWithCatalog,
+  getStampCatalogPrices,
   findStaleCatalogPrices,
 } from "../../src/lib/stamps";
+import { deleteStampCondition, ConditionInUseError } from "../../src/lib/conditions";
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -361,12 +362,14 @@ describe("upsertStampCatalogNumber / deleteStampCatalogNumber", () => {
   });
 });
 
-describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPrices", () => {
+describe("catalog prices per condition & certificate status", () => {
   let userId: string;
   let collectionId: string;
   let stampId: string;
   let editionId2023: string;
   let editionId2024: string;
+  let conditionId: string;
+  let certStatusId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -403,6 +406,15 @@ describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPr
       data: { catalogNameId: catalogName.id, year: 2024 },
     });
     editionId2024 = ed2024.id;
+
+    const condition = await prisma.stampCondition.create({
+      data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+    });
+    conditionId = condition.id;
+    const cert = await prisma.certificateStatus.create({
+      data: { collectionId, name: "Certificate", abbreviation: "Cert", sortOrder: 0 },
+    });
+    certStatusId = cert.id;
   });
 
   after(async () => {
@@ -410,72 +422,70 @@ describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPr
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("upsert creates a catalog price entry", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2023, "12.50", "EUR");
-    const entry = await prisma.stampCatalogPrice.findUnique({
-      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
-    });
-    assert.ok(entry);
-    assert.equal(entry.currency, "EUR");
-    assert.equal(Number(entry.price), 12.5);
+  async function setPrices(
+    prices: { catalogEditionId: string; conditionId: string; certificateStatusId: string | null; price: string; currency: string }[]
+  ) {
+    await updateStampWithCatalog(userId, stampId, { catalogNumbers: [], catalogPrices: prices });
+  }
+
+  it("records a price for a (condition, no certificate) pair", async () => {
+    await setPrices([
+      { catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "12.50", currency: "EUR" },
+    ]);
+    const rows = await getStampCatalogPrices(userId, stampId);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].conditionId, conditionId);
+    assert.equal(rows[0].certificateStatusId, null);
+    assert.equal(Number(rows[0].price), 12.5);
   });
 
-  it("second upsert updates price in place", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2023, "15.00", "EUR");
-    const entry = await prisma.stampCatalogPrice.findUnique({
-      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
+  it("stores multiple prices per edition across condition/certificate pairs", async () => {
+    await setPrices([
+      { catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "50.00", currency: "EUR" },
+      { catalogEditionId: editionId2023, conditionId, certificateStatusId: certStatusId, price: "120.00", currency: "EUR" },
+    ]);
+    const rows = await prisma.stampCatalogPrice.findMany({
+      where: { stampId, catalogEditionId: editionId2023 },
     });
-    assert.ok(entry);
-    assert.equal(Number(entry.price), 15);
-    const all = await prisma.stampCatalogPrice.findMany({ where: { stampId } });
-    assert.equal(all.length, 1);
+    assert.equal(rows.length, 2);
+    const withCert = rows.find((r) => r.certificateStatusId === certStatusId);
+    const noCert = rows.find((r) => r.certificateStatusId === null);
+    assert.equal(Number(withCert?.price), 120);
+    assert.equal(Number(noCert?.price), 50);
   });
 
-  it("upsert throws when caller does not own the stamp's collection", async () => {
-    await assert.rejects(
-      () => upsertStampCatalogPrice("wrong-user", stampId, editionId2023, "1.00", "EUR"),
-      /access denied/i
+  it("unique index treats NULL certificate as a single value (no duplicate no-cert rows)", async () => {
+    await assert.rejects(() =>
+      prisma.stampCatalogPrice.create({
+        data: { stampId, catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "9.99", currency: "EUR" },
+      })
     );
   });
 
-  it("findStaleCatalogPrices returns price linked to non-latest edition", async () => {
-    // price is on 2023 edition; 2024 exists → stale
+  it("blocks deleting a condition that is referenced by a price", async () => {
+    await assert.rejects(
+      () => deleteStampCondition(userId, conditionId),
+      (err) => err instanceof ConditionInUseError
+    );
+  });
+
+  it("findStaleCatalogPrices flags a price on a non-latest edition", async () => {
+    // Reset to a single 2023 price; 2024 edition exists → stale.
+    await setPrices([
+      { catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "15.00", currency: "EUR" },
+    ]);
     const stale = await findStaleCatalogPrices(userId, collectionId);
     assert.equal(stale.length, 1);
-    assert.equal(stale[0].stampId, stampId);
     assert.equal(stale[0].catalogEditionId, editionId2023);
     assert.equal(stale[0].latestEditionId, editionId2024);
-    assert.equal(stale[0].latestEditionYear, 2024);
-    assert.equal(stale[0].editionYear, 2023);
   });
 
-  it("findStaleCatalogPrices returns empty when price is on the latest edition", async () => {
-    // add price for 2024 edition (the latest)
-    await upsertStampCatalogPrice(userId, stampId, editionId2024, "20.00", "EUR");
-    // remove the stale 2023 price
-    await prisma.stampCatalogPrice.delete({
-      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2023 } },
-    });
+  it("findStaleCatalogPrices is empty when the price is on the latest edition", async () => {
+    await setPrices([
+      { catalogEditionId: editionId2024, conditionId, certificateStatusId: null, price: "20.00", currency: "EUR" },
+    ]);
     const stale = await findStaleCatalogPrices(userId, collectionId);
     assert.equal(stale.length, 0);
-  });
-
-  it("delete removes the catalog price entry", async () => {
-    await deleteStampCatalogPrice(userId, stampId, editionId2024);
-    const entry = await prisma.stampCatalogPrice.findUnique({
-      where: { stampId_catalogEditionId: { stampId, catalogEditionId: editionId2024 } },
-    });
-    assert.equal(entry, null);
-  });
-
-  it("delete throws when caller does not own the stamp's collection", async () => {
-    await prisma.stampCatalogPrice.create({
-      data: { stampId, catalogEditionId: editionId2023, price: "5.00", currency: "EUR" },
-    });
-    await assert.rejects(
-      () => deleteStampCatalogPrice("wrong-user", stampId, editionId2023),
-      /access denied/i
-    );
   });
 
   it("findStaleCatalogPrices throws when caller does not own the collection", async () => {
@@ -492,11 +502,17 @@ describe("listStamps mainCatalogPriceStale", () => {
   let stampId: string;
   let editionId2023: string;
   let editionId2024: string;
+  let conditionId: string;
 
   before(async () => {
     const ts = Date.now();
     userId = (await createTestUser(`lsstale-${ts}`)).id;
     collectionId = (await createTestCollection(userId, `lsstale-${ts}`)).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+      })
+    ).id;
 
     const vendor = await prisma.catalogVendor.create({
       data: { collectionId, name: "Michel", abbreviation: "Mi" },
@@ -528,7 +544,12 @@ describe("listStamps mainCatalogPriceStale", () => {
   });
 
   it("flags the displayed price as stale when only a non-latest edition is priced", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2023, "12.50", "EUR");
+    await updateStampWithCatalog(userId, stampId, {
+      catalogNumbers: [],
+      catalogPrices: [
+        { catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "12.50", currency: "EUR" },
+      ],
+    });
     const { items } = await listStampsPaginated(userId, collectionId, {});
     const item = items.find((s) => s.id === stampId);
     assert.ok(item);
@@ -537,7 +558,13 @@ describe("listStamps mainCatalogPriceStale", () => {
   });
 
   it("clears the flag once the latest edition is priced", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2024, "20.00", "EUR");
+    await updateStampWithCatalog(userId, stampId, {
+      catalogNumbers: [],
+      catalogPrices: [
+        { catalogEditionId: editionId2023, conditionId, certificateStatusId: null, price: "12.50", currency: "EUR" },
+        { catalogEditionId: editionId2024, conditionId, certificateStatusId: null, price: "20.00", currency: "EUR" },
+      ],
+    });
     const { items } = await listStampsPaginated(userId, collectionId, {});
     const item = items.find((s) => s.id === stampId);
     assert.ok(item);

@@ -196,16 +196,32 @@ export async function addStampToIssueAction(
     }
   }
 
-  const catalogPrices: { catalogEditionId: string; price: string; currency: string }[] = [];
+  // Price cells: `catalogPrice_<editionId>~<conditionId>~<certId>` (empty cert
+  // segment = no certificate status). Currency is per-edition.
+  const catalogPrices: {
+    catalogEditionId: string;
+    conditionId: string;
+    certificateStatusId: string | null;
+    price: string;
+    currency: string;
+  }[] = [];
   for (const [key, value] of formData.entries()) {
-    if (key.startsWith("catalogPrice_")) {
-      const catalogEditionId = key.slice("catalogPrice_".length);
-      const price = (value as string).trim();
-      if (!price || isNaN(Number(price))) continue;
-      const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
-      if (!currency) continue;
-      catalogPrices.push({ catalogEditionId, price, currency });
-    }
+    if (!key.startsWith("catalogPrice_")) continue;
+    const [catalogEditionId, conditionId, certRaw] = key
+      .slice("catalogPrice_".length)
+      .split("~");
+    if (!catalogEditionId || !conditionId) continue;
+    const price = (value as string).trim();
+    if (!price || isNaN(Number(price))) continue;
+    const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
+    if (!currency) continue;
+    catalogPrices.push({
+      catalogEditionId,
+      conditionId,
+      certificateStatusId: certRaw ? certRaw : null,
+      price,
+      currency,
+    });
   }
 
   try {

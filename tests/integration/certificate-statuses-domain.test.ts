@@ -7,6 +7,7 @@ import {
   updateCertificateStatus,
   deleteCertificateStatus,
   reorderCertificateStatuses,
+  CertificateStatusInUseError,
 } from "../../src/lib/certificate-statuses";
 import { createCollection } from "../../src/lib/collections";
 
@@ -130,6 +131,40 @@ describe("deleteCertificateStatus", () => {
     await assert.rejects(
       () => deleteCertificateStatus("wrong-user", s.id),
       /access denied/i
+    );
+  });
+
+  it("blocks deleting a status referenced by a catalog price", async () => {
+    const status = await prisma.certificateStatus.create({
+      data: { collectionId, name: "Photo certificate", abbreviation: "Photo", sortOrder: 2 },
+    });
+    const condition = await prisma.stampCondition.create({
+      data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+    });
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Michel Katalog", currency: "EUR" },
+    });
+    const edition = await prisma.catalogEdition.create({
+      data: { catalogNameId: catalogName.id, year: 2024 },
+    });
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Priced" } });
+    await prisma.stampCatalogPrice.create({
+      data: {
+        stampId: stamp.id,
+        catalogEditionId: edition.id,
+        conditionId: condition.id,
+        certificateStatusId: status.id,
+        price: "99.00",
+        currency: "EUR",
+      },
+    });
+
+    await assert.rejects(
+      () => deleteCertificateStatus(userId, status.id),
+      (err) => err instanceof CertificateStatusInUseError
     );
   });
 });

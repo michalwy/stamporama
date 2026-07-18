@@ -21,6 +21,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
+import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -190,7 +191,7 @@ function StampTreeNode({
               display: "flex",
               alignItems: "center",
               gap: "0.3rem",
-              marginTop: "0.15rem",
+              marginTop: "0.45rem",
               paddingLeft: "1.375rem",
               flexWrap: "wrap",
             }}
@@ -226,6 +227,7 @@ function StampTreeNode({
                   <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
                 )}
                 <span style={PRICE_MAIN}>{moneyPrimaryText(node.mainCatalogPrice)}</span>
+                <AllPricesButton stampId={node.stampId} />
               </span>
             )}
           </div>

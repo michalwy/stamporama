@@ -77,15 +77,15 @@ export async function updateCertificateStatus(
 }
 
 /**
- * Whether a certificate status is referenced by catalog prices and therefore
- * cannot be deleted. The catalog-price ↔ certificate-status relation is
- * introduced by #91; until then no price references a status, so this always
- * reports "not in use". Once #91 lands, count `stampCatalogPrice` rows
- * referencing the status here.
+ * Whether a certificate status is referenced by any catalog price and therefore
+ * cannot be deleted. The database also enforces this via an onDelete: Restrict
+ * FK; this check surfaces a friendly error before we hit that constraint.
  */
 export async function isCertificateStatusInUse(statusId: string): Promise<boolean> {
-  void statusId;
-  return false;
+  const count = await prisma.stampCatalogPrice.count({
+    where: { certificateStatusId: statusId },
+  });
+  return count > 0;
 }
 
 export async function deleteCertificateStatus(

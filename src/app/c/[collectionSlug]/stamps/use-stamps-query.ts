@@ -17,6 +17,8 @@ export interface StampListFilters {
   issueId?: string;
   sortBy?: StampSortBy;
   sortDir?: "asc" | "desc";
+  /** Condition whose price fills the price column. */
+  displayConditionId?: string | null;
 }
 
 export const stampKeys = {
@@ -42,6 +44,7 @@ export function useStampsInfinite(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
+      if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(

@@ -50,9 +50,23 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
 
-## Catalog prices and staleness warnings
+## Catalog prices
 
-Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog). Open a stamp's **Edit** dialog and switch to the **Prices** tab to enter a price for each edition of the catalogs assigned to that stamp's area. The currency is fixed by the catalog and shown next to each field.
+Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).
+
+Open a stamp's **Edit** dialog and switch to the **Prices** tab. For each catalog edition you get a small grid: **conditions are rows**, and **certificate statuses are columns** (with a **None** column for "no certificate"). Fill in a price in whichever cells you have data for — for example MNH / None and MNH / Certificate can hold different prices for the same edition. The currency is fixed by the catalog and shown next to each edition.
+
+If the collection has no conditions yet, the Prices tab prompts you to add some first (in **Settings → Conditions**), since every price belongs to a condition.
+
+### Which price the lists show
+
+The item list and the issues list each show a **single price column**. Because a stamp now has many prices, a **"Price for …" selector** above the list chooses which **condition** the column reflects (certificate status = None). Your choice is remembered per collection in your browser; the default is the first condition in your list.
+
+Next to a shown price, a small **⋯** button opens a popover with **all** of that stamp's recorded prices — every condition and certificate status — so you can see the full picture without changing the selector. These are loaded on demand when you open the popover.
+
+## Staleness warnings
+
+Because prices are edition-specific, a recorded price becomes **stale** when a newer edition of the same catalog is added but has no price yet:
 
 Because prices are edition-specific, a recorded price becomes **stale** when a newer edition of the same catalog is added but has no price yet:
 
@@ -61,7 +75,7 @@ Because prices are edition-specific, a recorded price becomes **stale** when a n
   - **all required stamps priced on the current edition** — the total uses those prices, no warning;
   - **none priced on the current edition** — the total falls back to older-edition prices and shows a **⚠** (hover: "Older-edition prices");
   - **some on the current edition, some not** — the total counts **only** current-edition prices, and a **⚠** flags that it is partial (hover shows how many stamps are priced on the current edition, priced only on an older edition, or unpriced).
-- **In the Prices tab**, any priced edition that has a newer, still-unpriced edition is highlighted, with an **⚠ Update {year}** button. Clicking it copies the existing price into the newest edition's field as a starting point — adjust the value if needed and save. The older edition's price is kept as history; nothing is deleted.
+- **In the Prices tab**, a price cell on an older edition is highlighted with a small **⚠** button when the same condition/certificate cell on the newest edition is still empty. Clicking it copies the price into the newest edition's matching cell as a starting point — adjust the value if needed and save. The older edition's price is kept as history; nothing is deleted.
 
 The warning clears once the newest edition has its own price.
 

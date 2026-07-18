@@ -26,6 +26,8 @@ export interface IssuePriceTotal extends MoneyDisplay {
 export interface RawCatalogPrice {
   price: Decimal;
   currency: string;
+  conditionId: string;
+  certificateStatusId: string | null;
   catalogEdition: { year: number; catalogNameId: string };
 }
 
@@ -59,15 +61,23 @@ export async function buildEffectivePrimaryCatalogMap(
   return result;
 }
 
-/** Latest catalog edition (by year) that has a recorded price for the primary catalog name. */
+/**
+ * Latest catalog edition (by year) that has a recorded price for the primary
+ * catalog name, in the given display condition with no certificate status
+ * (the "headline" price shown in lists and summed for issue totals).
+ * Returns null when no condition is selected or no matching price exists.
+ */
 export function pickMainCatalogPrice(
   prices: RawCatalogPrice[],
-  primaryCatalogNameId: string | null
+  primaryCatalogNameId: string | null,
+  displayConditionId: string | null
 ): { amount: number; currency: string; catalogNameId: string; editionYear: number } | null {
-  if (!primaryCatalogNameId) return null;
+  if (!primaryCatalogNameId || !displayConditionId) return null;
   let best: RawCatalogPrice | null = null;
   for (const p of prices) {
     if (p.catalogEdition.catalogNameId !== primaryCatalogNameId) continue;
+    if (p.conditionId !== displayConditionId) continue;
+    if (p.certificateStatusId !== null) continue;
     if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
   }
   if (!best) return null;
@@ -130,6 +140,25 @@ export function applyConversion(
   if (currency === baseCurrency) return null;
   const rate = rates.get(currency) ?? null;
   return rate != null ? (amount * rate).toFixed(2) : null;
+}
+
+/**
+ * The condition a list's price column values by: the caller's explicit choice,
+ * else the collection's first condition by sortOrder, else null when the
+ * collection has no conditions. Certificate status for the headline price is
+ * always "none". See #95.
+ */
+export async function resolveDisplayConditionId(
+  collectionId: string,
+  requested: string | null | undefined
+): Promise<string | null> {
+  if (requested) return requested;
+  const first = await prisma.stampCondition.findFirst({
+    where: { collectionId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true },
+  });
+  return first?.id ?? null;
 }
 
 /** Collection base currency (small dedicated query for list endpoints). */

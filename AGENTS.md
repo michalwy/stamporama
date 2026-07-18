@@ -59,7 +59,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Collection-scoped access control: `collectionId` on data, owner has full access, checks live server-side.
 - Collection URLs: `/c/[collectionSlug]/...`; slug resolution authorizes by internal `collectionId`.
 - Better Auth for authentication.
-- Prisma with PostgreSQL. Treat schema changes as product decisions.
+- Prisma with PostgreSQL (minimum **version 15** — migrations use `NULLS NOT DISTINCT`; see ADR-0006). Treat schema changes as product decisions.
 - SPA-like collection interaction: Next.js App Router as route/auth shell, client-side queries/mutations for rich screens.
 - TanStack Query for data fetching, TanStack Table for list views.
 - Cursor-backed infinite scrolling for large lists via shared primitives.

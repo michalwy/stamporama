@@ -19,6 +19,8 @@ export interface IssueListFilters {
   catalogNumber?: string;
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
+  /** Condition whose price fills the price column / issue totals. */
+  displayConditionId?: string | null;
 }
 
 export const issueKeys = {
@@ -43,6 +45,7 @@ export function useIssuesInfinite(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(

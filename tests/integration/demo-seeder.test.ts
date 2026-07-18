@@ -219,11 +219,27 @@ describe("seedDemoData", () => {
     assert.equal(memberCount, rootStampCount);
   });
 
-  it("seeds catalog prices for stamps", async () => {
+  it("seeds catalog prices for stamps against a condition", async () => {
     const priceCount = await prisma.stampCatalogPrice.count({
       where: { stamp: { collectionId } },
     });
     assert.ok(priceCount >= 600, `Expected >=600 prices, got ${priceCount}`);
+
+    // Every seeded price is tagged with the collection's first condition and no
+    // certificate status (see #91 / seed-stamps).
+    const firstCondition = await prisma.stampCondition.findFirst({
+      where: { collectionId },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    assert.ok(firstCondition);
+    const mismatched = await prisma.stampCatalogPrice.count({
+      where: {
+        stamp: { collectionId },
+        OR: [{ conditionId: { not: firstCondition.id } }, { certificateStatusId: { not: null } }],
+      },
+    });
+    assert.equal(mismatched, 0);
   });
 
   it("includes issues with optional stamps", async () => {

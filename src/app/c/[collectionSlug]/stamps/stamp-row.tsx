@@ -15,6 +15,7 @@ import {
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
+import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 
 function buildAreaPath(areas: CollectionAreaData[], areaId: string | null): string | null {
   if (!areaId) return null;
@@ -193,7 +194,7 @@ export function StampRow({
             display: "flex",
             alignItems: "center",
             gap: "0.375rem",
-            marginTop: "0.4rem",
+            marginTop: "0.6rem",
             flexWrap: "wrap",
           }}
         >
@@ -221,6 +222,7 @@ export function StampRow({
                 <span style={PRICE_CONVERTED}>{moneySecondaryText(stamp.mainCatalogPrice)}</span>
               )}
               <span style={PRICE_MAIN}>{moneyPrimaryText(stamp.mainCatalogPrice)}</span>
+              <AllPricesButton stampId={stamp.id} />
             </span>
           )}
         </div>

@@ -2,7 +2,18 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { listIssuesPaginated, listIssueMembers } from "../../src/lib/issues";
-import { upsertStampCatalogPrice } from "../../src/lib/stamps";
+
+// Records a single price against the given condition (no certificate status).
+async function addPrice(
+  stampId: string,
+  catalogEditionId: string,
+  conditionId: string,
+  price: string
+) {
+  await prisma.stampCatalogPrice.create({
+    data: { stampId, catalogEditionId, conditionId, certificateStatusId: null, price, currency: "EUR" },
+  });
+}
 
 describe("issue list price staleness", () => {
   let userId: string;
@@ -11,6 +22,7 @@ describe("issue list price staleness", () => {
   let stampId: string;
   let editionId2023: string;
   let editionId2024: string;
+  let conditionId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -43,6 +55,12 @@ describe("issue list price staleness", () => {
       await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
     ).id;
 
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+      })
+    ).id;
+
     const area = await prisma.collectionArea.create({
       data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
     });
@@ -67,7 +85,7 @@ describe("issue list price staleness", () => {
   });
 
   it("flags the issue total as stale when a required member is priced on a non-latest edition", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2023, "12.50", "EUR");
+    await addPrice(stampId, editionId2023, conditionId, "12.50");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const item = items.find((i) => i.id === issueId);
@@ -83,7 +101,7 @@ describe("issue list price staleness", () => {
   });
 
   it("clears the flag once the latest edition is priced", async () => {
-    await upsertStampCatalogPrice(userId, stampId, editionId2024, "20.00", "EUR");
+    await addPrice(stampId, editionId2024, conditionId, "20.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const item = items.find((i) => i.id === issueId);
@@ -106,6 +124,7 @@ describe("issue total edition-mix handling", () => {
   let stampOldId: string;
   let editionId2023: string;
   let editionId2024: string;
+  let conditionId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -138,6 +157,12 @@ describe("issue total edition-mix handling", () => {
       await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
     ).id;
 
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+      })
+    ).id;
+
     const area = await prisma.collectionArea.create({
       data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
     });
@@ -166,8 +191,8 @@ describe("issue total edition-mix handling", () => {
   });
 
   it("all-old: sums older-edition prices and flags stale", async () => {
-    await upsertStampCatalogPrice(userId, stampCurrentId, editionId2023, "10.00", "EUR");
-    await upsertStampCatalogPrice(userId, stampOldId, editionId2023, "5.00", "EUR");
+    await addPrice(stampCurrentId, editionId2023, conditionId, "10.00");
+    await addPrice(stampOldId, editionId2023, conditionId, "5.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
@@ -181,7 +206,7 @@ describe("issue total edition-mix handling", () => {
 
   it("mixed: sums only current-edition prices and excludes older-only members", async () => {
     // promote one member to the current (2024) edition; the other stays on 2023
-    await upsertStampCatalogPrice(userId, stampCurrentId, editionId2024, "12.00", "EUR");
+    await addPrice(stampCurrentId, editionId2024, conditionId, "12.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
@@ -194,7 +219,7 @@ describe("issue total edition-mix handling", () => {
   });
 
   it("all-current: full sum with no warning", async () => {
-    await upsertStampCatalogPrice(userId, stampOldId, editionId2024, "6.00", "EUR");
+    await addPrice(stampOldId, editionId2024, conditionId, "6.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;

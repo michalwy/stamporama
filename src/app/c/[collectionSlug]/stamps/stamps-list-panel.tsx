@@ -9,6 +9,8 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
+import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
+import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
@@ -63,6 +65,9 @@ export function StampsListPanel({
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
 
+  const { conditions, displayConditionId, setDisplayConditionId } =
+    useDisplayCondition(collectionId);
+
   const filters: StampListFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
@@ -70,10 +75,11 @@ export function StampsListPanel({
       catalogVendorId: catalogVendorId || undefined,
       catalogNumber: catalogNumber || undefined,
       issueId: issueId || undefined,
+      displayConditionId: displayConditionId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, sortBy, sortDir]
+    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, displayConditionId, sortBy, sortDir]
   );
 
   const updateParams = useCallback(
@@ -204,6 +210,11 @@ export function StampsListPanel({
             areaIds={filterAreaIds}
             selectedIssueId={issueId}
             onSelect={(id) => updateParams({ issueId: id })}
+          />
+          <ConditionPriceSwitcher
+            conditions={conditions}
+            value={displayConditionId}
+            onChange={setDisplayConditionId}
           />
         </ListToolbar>
 

@@ -10,6 +10,7 @@ import {
   safeRateMap,
   applyConversion,
   getCollectionBaseCurrency,
+  resolveDisplayConditionId,
 } from "./pricing";
 
 async function assertCollectionOwner(
@@ -82,6 +83,8 @@ const MEMBER_SELECT = {
         select: {
           price: true,
           currency: true,
+          conditionId: true,
+          certificateStatusId: true,
           catalogEdition: { select: { year: true, catalogNameId: true } },
         },
       },
@@ -107,10 +110,11 @@ function toStampNode(
     primaryNameId: string | null;
     baseCurrency: string;
     latestYearByName: Map<string, number>;
+    displayConditionId: string | null;
   }
 ): StampNodeData {
   const main = pricing
-    ? pickMainCatalogPrice(m.stamp.catalogPrices, pricing.primaryNameId)
+    ? pickMainCatalogPrice(m.stamp.catalogPrices, pricing.primaryNameId, pricing.displayConditionId)
     : null;
   const mainCatalogPriceStale =
     main && pricing
@@ -258,6 +262,8 @@ const ISSUE_LIST_SELECT = {
             select: {
               price: true,
               currency: true,
+              conditionId: true,
+              certificateStatusId: true,
               catalogEdition: { select: { year: true, catalogNameId: true } },
             },
           },
@@ -284,7 +290,8 @@ function toIssueListItem(
   },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
-  latestYearByName: Map<string, number>
+  latestYearByName: Map<string, number>,
+  displayConditionId: string | null
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
@@ -297,7 +304,7 @@ function toIssueListItem(
   let olderCount = 0;
   let currency: string | null = null;
   for (const m of requiredMembers) {
-    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId);
+    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId, displayConditionId);
     if (!main) continue;
     currency = main.currency;
     const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
@@ -358,11 +365,12 @@ async function buildIssueListItems(
   issues: Parameters<typeof toIssueListItem>[0][],
   collectionId: string,
   primaryCatalogByArea: Map<string, string | null>,
-  baseCurrency: string
+  baseCurrency: string,
+  displayConditionId: string | null
 ): Promise<IssueListItem[]> {
   const latestYearByName = await getLatestEditionYearByName(collectionId);
   const items = issues.map((i) =>
-    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName)
+    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId)
   );
   const currencies = items
     .map((i) => i.requiredPriceTotal?.currency)
@@ -392,6 +400,9 @@ export interface IssueListFilterOpts {
   catalogNumber?: string;
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
+  /** Condition whose price fills the list price column / issue totals. When
+   *  omitted, defaults to the collection's first condition by sortOrder. */
+  displayConditionId?: string | null;
 }
 
 export async function listIssuesPaginated(
@@ -403,9 +414,10 @@ export async function listIssuesPaginated(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const dir = opts.sortDir ?? "asc";
-  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+  const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts.displayConditionId),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -469,7 +481,7 @@ export async function listIssuesPaginated(
     const idOrder = new Map(finalIds.map((id, i) => [id, i]));
     issues.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
 
-    const items = await buildIssueListItems(issues, collectionId, primaryCatalogByArea, baseCurrency);
+    const items = await buildIssueListItems(issues, collectionId, primaryCatalogByArea, baseCurrency, displayConditionId);
     const nextCursor = hasMore ? String(offset + pageSize) : null;
     return { items, nextCursor };
   }
@@ -494,7 +506,8 @@ export async function listIssuesPaginated(
     hasMore ? issues.slice(0, pageSize) : issues,
     collectionId,
     primaryCatalogByArea,
-    baseCurrency
+    baseCurrency,
+    displayConditionId
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
 
@@ -540,15 +553,16 @@ export async function listIssueMembers(
     select: MEMBER_SELECT,
   });
 
-  const [primaryCatalogByArea, baseCurrency, latestYearByName] = await Promise.all([
+  const [primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
     getLatestEditionYearByName(collectionId),
+    resolveDisplayConditionId(collectionId, undefined),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
 
   const nodes = members.map((m) =>
-    toStampNode(m, { primaryNameId, baseCurrency, latestYearByName })
+    toStampNode(m, { primaryNameId, baseCurrency, latestYearByName, displayConditionId })
   );
   const currencies = nodes
     .map((n) => n.mainCatalogPrice?.currency)
@@ -822,7 +836,13 @@ export interface AddStampData {
   parentStampId?: string | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
-  catalogPrices?: { catalogEditionId: string; price: string; currency: string }[];
+  catalogPrices?: {
+    catalogEditionId: string;
+    conditionId: string;
+    certificateStatusId: string | null;
+    price: string;
+    currency: string;
+  }[];
 }
 
 export async function addStampToIssue(
@@ -885,6 +905,8 @@ export async function addStampToIssue(
         data: data.catalogPrices.map((cp) => ({
           stampId: stamp.id,
           catalogEditionId: cp.catalogEditionId,
+          conditionId: cp.conditionId,
+          certificateStatusId: cp.certificateStatusId,
           price: cp.price,
           currency: cp.currency,
         })),
