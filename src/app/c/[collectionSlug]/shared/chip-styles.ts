@@ -93,6 +93,14 @@ export const PRICE_CONVERTED: React.CSSProperties = {
   flexShrink: 0,
 };
 
+export const PRICE_STALE_ICON: React.CSSProperties = {
+  color: "var(--color-warning)",
+  fontSize: "0.8125rem",
+  lineHeight: 1,
+  cursor: "help",
+  flexShrink: 0,
+};
+
 export function formatStampCN(number: string, v?: AreaCatalogEntry): string {
   if (!v) return number;
   return v.prefix

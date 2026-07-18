@@ -26,6 +26,21 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - Navigation links for each section (Overview, Catalog, Items — more sections will be added as features are built)
 - A **← All collections** link to return to the collection picker
 
+## Catalog prices and staleness warnings
+
+Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog). Open a stamp's **Edit** dialog and switch to the **Prices** tab to enter a price for each edition of the catalogs assigned to that stamp's area. The currency is fixed by the catalog and shown next to each field.
+
+Because prices are edition-specific, a recorded price becomes **stale** when a newer edition of the same catalog is added but has no price yet:
+
+- **In the item list**, a stamp shows a small **⚠** icon next to its price when the displayed price comes from an edition that is no longer the newest for that catalog. Hover it for details.
+- **In the issues list**, individual stamps show the same **⚠** icon when expanded, and the issue's required-stamps total reflects the mix of editions:
+  - **all required stamps priced on the current edition** — the total uses those prices, no warning;
+  - **none priced on the current edition** — the total falls back to older-edition prices and shows a **⚠** (hover: "Older-edition prices");
+  - **some on the current edition, some not** — the total counts **only** current-edition prices, and a **⚠** flags that it is partial (hover shows how many stamps are priced on the current edition, priced only on an older edition, or unpriced).
+- **In the Prices tab**, any priced edition that has a newer, still-unpriced edition is highlighted, with an **⚠ Update {year}** button. Clicking it copies the existing price into the newest edition's field as a starting point — adjust the value if needed and save. The older edition's price is kept as history; nothing is deleted.
+
+The warning clears once the newest edition has its own price.
+
 ## URL structure
 
 Collection URLs follow the pattern `/c/[slug]/...`. The slug is unique per user, so two users can independently have a collection named "Airmail" without conflict.

@@ -13,8 +13,13 @@ export interface MoneyDisplay {
 
 /** Aggregate price for the required members of an issue. */
 export interface IssuePriceTotal extends MoneyDisplay {
-  pricedCount: number; // required members that had a main-catalog price
+  pricedCount: number; // required members contributing to the sum
   requiredCount: number; // total required members
+  // True when the sum falls back to older-edition prices because no required member
+  // is priced on the current (latest) edition of the primary catalog.
+  usesOlderEdition: boolean;
+  // Required members priced only on an older edition, excluded from a current-edition sum.
+  olderEditionExcludedCount: number;
 }
 
 /** Raw catalog price shape needed to pick the main-catalog price. */
@@ -58,7 +63,7 @@ export async function buildEffectivePrimaryCatalogMap(
 export function pickMainCatalogPrice(
   prices: RawCatalogPrice[],
   primaryCatalogNameId: string | null
-): { amount: number; currency: string } | null {
+): { amount: number; currency: string; catalogNameId: string; editionYear: number } | null {
   if (!primaryCatalogNameId) return null;
   let best: RawCatalogPrice | null = null;
   for (const p of prices) {
@@ -66,7 +71,31 @@ export function pickMainCatalogPrice(
     if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
   }
   if (!best) return null;
-  return { amount: Number(best.price), currency: best.currency };
+  return {
+    amount: Number(best.price),
+    currency: best.currency,
+    catalogNameId: best.catalogEdition.catalogNameId,
+    editionYear: best.catalogEdition.year,
+  };
+}
+
+/**
+ * Latest edition year per catalog name in a collection.
+ * Used to detect stale prices (a price whose edition is not the newest for its catalog name).
+ */
+export async function getLatestEditionYearByName(
+  collectionId: string
+): Promise<Map<string, number>> {
+  const editions = await prisma.catalogEdition.findMany({
+    where: { catalogName: { vendor: { collectionId } } },
+    select: { catalogNameId: true, year: true },
+  });
+  const map = new Map<string, number>();
+  for (const e of editions) {
+    const cur = map.get(e.catalogNameId);
+    if (cur === undefined || e.year > cur) map.set(e.catalogNameId, e.year);
+  }
+  return map;
 }
 
 /**

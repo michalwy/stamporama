@@ -6,6 +6,7 @@ import {
   type RawCatalogPrice,
   buildEffectivePrimaryCatalogMap,
   pickMainCatalogPrice,
+  getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
   getCollectionBaseCurrency,
@@ -227,6 +228,8 @@ export interface StampListItem {
   areaId: string | null;
   issues: StampIssueMembership[];
   mainCatalogPrice: MoneyDisplay | null;
+  /** True when the displayed main price is on a non-latest edition of its catalog name. */
+  mainCatalogPriceStale: boolean;
 }
 
 export interface PaginatedStampsResult {
@@ -283,12 +286,16 @@ function toStampListItem(
     }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
-  baseCurrency: string
+  baseCurrency: string,
+  latestYearByName: Map<string, number>
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
   const primaryNameId = areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null;
   const main = pickMainCatalogPrice(stamp.catalogPrices, primaryNameId);
+  const mainCatalogPriceStale = main
+    ? (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear
+    : false;
   return {
     id: stamp.id,
     collectionId: stamp.collectionId,
@@ -310,6 +317,7 @@ function toStampListItem(
     mainCatalogPrice: main
       ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency }
       : null,
+    mainCatalogPriceStale,
   };
 }
 
@@ -320,7 +328,10 @@ async function buildStampListItems(
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string
 ): Promise<StampListItem[]> {
-  const items = stamps.map((s) => toStampListItem(s, primaryCatalogByArea, baseCurrency));
+  const latestYearByName = await getLatestEditionYearByName(collectionId);
+  const items = stamps.map((s) =>
+    toStampListItem(s, primaryCatalogByArea, baseCurrency, latestYearByName)
+  );
   const currencies = items
     .map((i) => i.mainCatalogPrice?.currency)
     .filter((c): c is string => !!c);

@@ -16,9 +16,11 @@ import {
   STAMP_MUTED_PRIMARY_CHIP,
   PRICE_MAIN,
   PRICE_CONVERTED,
+  PRICE_STALE_ICON,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -219,6 +221,7 @@ function StampTreeNode({
                   gap: "0.35rem",
                 }}
               >
+                {node.mainCatalogPriceStale && <StalePriceIcon />}
                 {moneySecondaryText(node.mainCatalogPrice) && (
                   <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
                 )}
@@ -478,7 +481,10 @@ export function IssueRow({
             {issue.requiredPriceTotal && (() => {
               const t = issue.requiredPriceTotal;
               const incomplete = t.pricedCount < t.requiredCount;
+              const unpriced = t.requiredCount - t.pricedCount - t.olderEditionExcludedCount;
+              const showWarning = t.usesOlderEdition || incomplete;
               const secondary = moneySecondaryText(t);
+              const warningLabel = t.usesOlderEdition ? "Older-edition prices" : "Partial total";
               return (
                 <span
                   style={{
@@ -487,35 +493,42 @@ export function IssueRow({
                     alignItems: "center",
                     gap: "0.35rem",
                   }}
-                  title={incomplete ? undefined : "Total of required stamps (main catalog)"}
+                  title={showWarning ? undefined : "Total of required stamps (main catalog)"}
                 >
-                  {incomplete && (
+                  {showWarning && (
                     <Tooltip
+                      align="end"
                       content={
                         <>
                           <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
-                            Partial total
+                            {warningLabel}
                           </div>
-                          <div style={{ color: "var(--color-text-secondary)" }}>
-                            {t.pricedCount} of {t.requiredCount} required stamps priced
-                          </div>
-                          {t.requiredCount - t.pricedCount > 0 && (
+                          {t.usesOlderEdition ? (
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                              No required stamp is priced on the current edition — the total uses
+                              older-edition prices.
+                            </div>
+                          ) : (
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                              {t.pricedCount} of {t.requiredCount} required stamps priced on the
+                              current edition
+                            </div>
+                          )}
+                          {!t.usesOlderEdition && t.olderEditionExcludedCount > 0 && (
                             <div style={{ color: "var(--color-text-muted)" }}>
-                              {t.requiredCount - t.pricedCount} without a main-catalog price
+                              {t.olderEditionExcludedCount} priced only on an older edition (not
+                              counted)
+                            </div>
+                          )}
+                          {unpriced > 0 && (
+                            <div style={{ color: "var(--color-text-muted)" }}>
+                              {unpriced} without any catalog price
                             </div>
                           )}
                         </>
                       }
                     >
-                      <span
-                        aria-label="Partial total"
-                        style={{
-                          color: "var(--color-warning)",
-                          fontSize: "0.8125rem",
-                          lineHeight: 1,
-                          cursor: "help",
-                        }}
-                      >
+                      <span aria-label={warningLabel} style={PRICE_STALE_ICON}>
                         ⚠
                       </span>
                     </Tooltip>

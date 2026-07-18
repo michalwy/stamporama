@@ -26,6 +26,7 @@ export function formatPrice(value: string): string {
 
 interface EditionRow {
   editionId: string;
+  catalogNameId: string;
   vendorName: string;
   catalogName: string;
   year: number;
@@ -60,6 +61,7 @@ export function StampCatalogPricesTab({
         for (const ed of name.catalogEditions) {
           result.push({
             editionId: ed.id,
+            catalogNameId: name.id,
             vendorName: vendor.name,
             catalogName: name.name,
             year: ed.year,
@@ -78,6 +80,18 @@ export function StampCatalogPricesTab({
     return result;
   }, [catalogTree, relevantNameIds]);
 
+  // Latest edition (by year) per catalog name — used to detect stale prices.
+  const latestByName = useMemo(() => {
+    const m = new Map<string, { editionId: string; year: number }>();
+    for (const row of rows) {
+      const cur = m.get(row.catalogNameId);
+      if (!cur || row.year > cur.year) {
+        m.set(row.catalogNameId, { editionId: row.editionId, year: row.year });
+      }
+    }
+    return m;
+  }, [rows]);
+
   if (rows.length === 0) {
     return (
       <div style={{ color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
@@ -93,6 +107,16 @@ export function StampCatalogPricesTab({
       {rows.map((row) => {
         const price = priceEdits.get(row.editionId) ?? "";
 
+        // A priced row is stale when a newer edition exists for the same catalog
+        // name and that newest edition has no price yet.
+        const latest = latestByName.get(row.catalogNameId);
+        const latestPrice = latest ? (priceEdits.get(latest.editionId) ?? "") : "";
+        const isStale =
+          !!latest &&
+          latest.editionId !== row.editionId &&
+          price.trim() !== "" &&
+          latestPrice.trim() === "";
+
         return (
           <div
             key={row.editionId}
@@ -100,18 +124,51 @@ export function StampCatalogPricesTab({
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
+              ...(isStale
+                ? {
+                    paddingLeft: "0.375rem",
+                    borderLeft: "2px solid var(--color-warning-border)",
+                  }
+                : null),
             }}
           >
             <span style={{
               flex: 1,
               minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
               fontSize: "0.8125rem",
               color: "var(--color-text-secondary)",
               overflow: "hidden",
-              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}>
-              {row.vendorName} · {row.catalogName} · {row.year}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                {row.vendorName} · {row.catalogName} · {row.year}
+              </span>
+              {isStale && latest && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onPriceChange(latest.editionId, formatPrice(price))}
+                  title={`Copy this price to the ${latest.year} edition. The ${row.year} price is kept as history.`}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: "0.6875rem",
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    color: "var(--color-warning)",
+                    background: "var(--color-warning-soft)",
+                    border: "1px solid var(--color-warning-border)",
+                    borderRadius: "0.25rem",
+                    padding: "0.15rem 0.35rem",
+                    cursor: disabled ? "default" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ⚠ Update {latest.year}
+                </button>
+              )}
             </span>
             <input
               type="text"

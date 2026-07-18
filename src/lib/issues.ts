@@ -6,6 +6,7 @@ import {
   type RawCatalogPrice,
   buildEffectivePrimaryCatalogMap,
   pickMainCatalogPrice,
+  getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
   getCollectionBaseCurrency,
@@ -43,6 +44,8 @@ export interface StampNodeData {
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   mainCatalogPrice: MoneyDisplay | null;
+  /** True when the displayed main price is on a non-latest edition of its catalog name. */
+  mainCatalogPriceStale: boolean;
 }
 
 export interface IssueCatalogNumberData {
@@ -100,11 +103,19 @@ function toStampNode(
       catalogPrices: RawCatalogPrice[];
     };
   },
-  pricing?: { primaryNameId: string | null; baseCurrency: string }
+  pricing?: {
+    primaryNameId: string | null;
+    baseCurrency: string;
+    latestYearByName: Map<string, number>;
+  }
 ): StampNodeData {
   const main = pricing
     ? pickMainCatalogPrice(m.stamp.catalogPrices, pricing.primaryNameId)
     : null;
+  const mainCatalogPriceStale =
+    main && pricing
+      ? (pricing.latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear
+      : false;
   return {
     stampId: m.stampId,
     parentId: m.stamp.parentId,
@@ -119,6 +130,7 @@ function toStampNode(
       main && pricing
         ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency: pricing.baseCurrency }
         : null,
+    mainCatalogPriceStale,
   };
 }
 
@@ -219,6 +231,8 @@ export interface IssueListItem {
   memberCount: number;
   requiredCount: number;
   requiredPriceTotal: IssuePriceTotal | null;
+  /** True when at least one required member's counted price is on a non-latest edition. */
+  requiredPriceStale: boolean;
 }
 
 export interface PaginatedIssuesResult {
@@ -269,33 +283,59 @@ function toIssueListItem(
     }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
-  baseCurrency: string
+  baseCurrency: string,
+  latestYearByName: Map<string, number>
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
 
-  let sum = 0;
-  let pricedCount = 0;
+  // Split each required member's main price into "current" (on the latest edition of
+  // the primary catalog) vs. "older" (only priced on an earlier edition).
+  let sumCurrent = 0;
+  let currentCount = 0;
+  let sumOlder = 0;
+  let olderCount = 0;
   let currency: string | null = null;
   for (const m of requiredMembers) {
     const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId);
     if (!main) continue;
-    sum += main.amount;
-    pricedCount += 1;
     currency = main.currency;
+    const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
+    if (isOlder) {
+      sumOlder += main.amount;
+      olderCount += 1;
+    } else {
+      sumCurrent += main.amount;
+      currentCount += 1;
+    }
   }
 
-  const requiredPriceTotal: IssuePriceTotal | null =
-    pricedCount > 0 && currency
-      ? {
-          amount: sum.toFixed(2),
-          currency,
-          convertedAmount: null, // filled after rates are fetched
-          baseCurrency,
-          pricedCount,
-          requiredCount: requiredMembers.length,
-        }
-      : null;
+  // If any member is priced on the current edition, the total uses only those prices
+  // (older-only members count as unpriced). Otherwise fall back to older-edition prices.
+  let requiredPriceTotal: IssuePriceTotal | null = null;
+  if (currency && currentCount > 0) {
+    requiredPriceTotal = {
+      amount: sumCurrent.toFixed(2),
+      currency,
+      convertedAmount: null, // filled after rates are fetched
+      baseCurrency,
+      pricedCount: currentCount,
+      requiredCount: requiredMembers.length,
+      usesOlderEdition: false,
+      olderEditionExcludedCount: olderCount,
+    };
+  } else if (currency && olderCount > 0) {
+    requiredPriceTotal = {
+      amount: sumOlder.toFixed(2),
+      currency,
+      convertedAmount: null,
+      baseCurrency,
+      pricedCount: olderCount,
+      requiredCount: requiredMembers.length,
+      usesOlderEdition: true,
+      olderEditionExcludedCount: 0,
+    };
+  }
 
   return {
     id: issue.id,
@@ -309,6 +349,7 @@ function toIssueListItem(
     memberCount: issue.members.length,
     requiredCount: requiredMembers.length,
     requiredPriceTotal,
+    requiredPriceStale: requiredPriceTotal?.usesOlderEdition ?? false,
   };
 }
 
@@ -319,7 +360,10 @@ async function buildIssueListItems(
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string
 ): Promise<IssueListItem[]> {
-  const items = issues.map((i) => toIssueListItem(i, primaryCatalogByArea, baseCurrency));
+  const latestYearByName = await getLatestEditionYearByName(collectionId);
+  const items = issues.map((i) =>
+    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName)
+  );
   const currencies = items
     .map((i) => i.requiredPriceTotal?.currency)
     .filter((c): c is string => !!c);
@@ -496,13 +540,16 @@ export async function listIssueMembers(
     select: MEMBER_SELECT,
   });
 
-  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
+  const [primaryCatalogByArea, baseCurrency, latestYearByName] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
+    getLatestEditionYearByName(collectionId),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
 
-  const nodes = members.map((m) => toStampNode(m, { primaryNameId, baseCurrency }));
+  const nodes = members.map((m) =>
+    toStampNode(m, { primaryNameId, baseCurrency, latestYearByName })
+  );
   const currencies = nodes
     .map((n) => n.mainCatalogPrice?.currency)
     .filter((c): c is string => !!c);

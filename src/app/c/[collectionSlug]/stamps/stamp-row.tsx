@@ -14,6 +14,7 @@ import {
   PRICE_CONVERTED,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 
 function buildAreaPath(areas: CollectionAreaData[], areaId: string | null): string | null {
   if (!areaId) return null;
@@ -215,6 +216,7 @@ export function StampRow({
                 gap: "0.35rem",
               }}
             >
+              {stamp.mainCatalogPriceStale && <StalePriceIcon />}
               {moneySecondaryText(stamp.mainCatalogPrice) && (
                 <span style={PRICE_CONVERTED}>{moneySecondaryText(stamp.mainCatalogPrice)}</span>
               )}

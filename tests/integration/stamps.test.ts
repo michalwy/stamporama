@@ -8,6 +8,7 @@ import {
   deleteStamp,
   getStamp,
   listStamps,
+  listStampsPaginated,
   getStampChildCount,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
@@ -482,6 +483,67 @@ describe("upsertStampCatalogPrice / deleteStampCatalogPrice / findStaleCatalogPr
       () => findStaleCatalogPrices("wrong-user", collectionId),
       /access denied/i
     );
+  });
+});
+
+describe("listStamps mainCatalogPriceStale", () => {
+  let userId: string;
+  let collectionId: string;
+  let stampId: string;
+  let editionId2023: string;
+  let editionId2024: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`lsstale-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `lsstale-${ts}`)).id;
+
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Michel Katalog", currency: "EUR" },
+    });
+    editionId2023 = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2023 } })
+    ).id;
+    editionId2024 = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
+    ).id;
+
+    // Area whose primary catalog is this catalog name, so the price surfaces in the list.
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
+    });
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Staleness Test" } });
+    stampId = stamp.id;
+    await prisma.stampCollectionArea.create({
+      data: { stampId, collectionAreaId: area.id, isPrimary: true },
+    });
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("flags the displayed price as stale when only a non-latest edition is priced", async () => {
+    await upsertStampCatalogPrice(userId, stampId, editionId2023, "12.50", "EUR");
+    const { items } = await listStampsPaginated(userId, collectionId, {});
+    const item = items.find((s) => s.id === stampId);
+    assert.ok(item);
+    assert.equal(item.mainCatalogPrice?.amount, "12.50");
+    assert.equal(item.mainCatalogPriceStale, true);
+  });
+
+  it("clears the flag once the latest edition is priced", async () => {
+    await upsertStampCatalogPrice(userId, stampId, editionId2024, "20.00", "EUR");
+    const { items } = await listStampsPaginated(userId, collectionId, {});
+    const item = items.find((s) => s.id === stampId);
+    assert.ok(item);
+    // main price is now the 2024 (latest) edition
+    assert.equal(item.mainCatalogPrice?.amount, "20.00");
+    assert.equal(item.mainCatalogPriceStale, false);
   });
 });
 
