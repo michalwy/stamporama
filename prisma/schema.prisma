@@ -39,6 +39,7 @@ model Collection {
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
   items           Item[]
+  contacts        Contact[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -250,6 +251,31 @@ model ItemVariantHistory {
 
   @@index([itemId])
   @@map("item_variant_history")
+}
+
+model Contact {
+  id               String   @id @default(cuid())
+  collectionId     String
+  name             String
+  notes            String?
+  email            String?
+  phone            String?
+  // Roles are independent, combinable boolean flags (a contact can be several at
+  // once), mirroring the disposition flags on `Item` (ADR-0007 §4, ADR-0008).
+  buyer            Boolean  @default(false)
+  seller           Boolean  @default(false)
+  exchangePartner  Boolean  @default(false)
+  auctionHouse     Boolean  @default(false)
+  platform         Boolean  @default(false)
+  other            Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // `name` is unique per collection (see migration).
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("contact")
 }
 
 model CollectionAreaCatalog {

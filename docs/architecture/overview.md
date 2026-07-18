@@ -133,6 +133,16 @@ Referential actions: `collectionId` and `stampId` cascade; `conditionId` and `ce
 
 Valuation of an unknown-variant copy (lowest child-variant catalog price, flagged uncertain) is shared domain logic and belongs out of UI components; it lands with a later child issue.
 
+### Contacts (`Contact`)
+
+`Contact` is a per-collection address book of everyone the collector deals with — sellers, buyers, exchange partners, auction houses, platforms (see [ADR-0008](../decisions/0008-contact-entity.md)). It is the foundation for the acquisition-source autocomplete and the future sales/trade layer.
+
+- `name` is **unique per collection**; `notes`, `email`, `phone` are optional.
+- Roles are six **independent booleans** — `buyer`, `seller`, `exchangePartner`, `auctionHouse`, `platform`, `other` — not an enum. A contact can hold several at once, mirroring the `Item` disposition flags.
+- A contact may be created with **no roles set** (create-on-type from the acquisition-source autocomplete produces a role-less contact; roles are filled in later).
+- `collectionId` cascades. Future foreign keys pointing *at* a contact (from `Item` and sales lots) use `onDelete: Restrict` so a referenced contact cannot be deleted without first detaching it.
+- Domain module `src/lib/contacts.ts` (server-only) exposes `listContacts` / `searchContacts` / `createContact`, all collection-owner-authorized.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:
