@@ -130,6 +130,29 @@ export async function safeRateMap(
   return map;
 }
 
+/**
+ * Value of an amount expressed in the collection base currency, or null when it
+ * cannot be expressed there (non-base currency with no available rate). Amounts
+ * already in the base currency return unchanged. Used to make catalog prices in
+ * different currencies comparable so they can be averaged. See price-details dialog.
+ */
+export function baseValueOf(
+  amount: number,
+  currency: string,
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): number | null {
+  if (currency === baseCurrency) return amount;
+  const rate = rates.get(currency) ?? null;
+  return rate != null ? amount * rate : null;
+}
+
+/** Arithmetic mean of the given values, or null when the list is empty. */
+export function averageOf(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((s, v) => s + v, 0) / values.length;
+}
+
 /** Convert an amount to the base currency using a rate map; null when same currency or no rate. */
 export function applyConversion(
   amount: number,

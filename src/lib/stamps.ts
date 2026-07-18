@@ -9,6 +9,8 @@ import {
   getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
+  baseValueOf,
+  averageOf,
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
@@ -674,6 +676,189 @@ export async function getStampCatalogPrices(
     vendorAbbreviation: p.catalogEdition.catalogName.vendor.abbreviation,
     catalogNameCurrency: p.catalogEdition.catalogName.currency,
   }));
+}
+
+/** Axes shared by every price/average cell so the dialog can lay them out as a matrix. */
+interface StampCellAxes {
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  conditionSortOrder: number;
+  certificateStatusId: string | null;
+  certificateStatusName: string | null;
+  certificateStatusAbbreviation: string | null;
+  /** Certificate sort order; -1 for "None" so it always leads. */
+  certificateSortOrder: number;
+}
+
+/** One averaged price across catalogs, for a (condition × certificate) intersection. */
+export interface StampAverageCell extends StampCellAxes {
+  /** Mean of the per-catalog prices in the collection base currency, 2 decimals; null when none convertible. */
+  averageBase: string | null;
+  baseCurrency: string;
+  /** Catalogs that contributed to the average. */
+  catalogCount: number;
+  /** Catalogs that priced this intersection but whose currency could not be converted (excluded). */
+  excludedNoRateCount: number;
+}
+
+/** One recorded price at a (condition × certificate) intersection of a single edition. */
+export interface StampPriceCell extends StampCellAxes {
+  price: string;
+  currency: string;
+  convertedAmount: string | null;
+  baseCurrency: string;
+}
+
+/** One catalog edition — the collapsible unit in the dialog's catalog breakdown. */
+export interface StampEditionGroup {
+  catalogEditionId: string;
+  editionYear: number;
+  /** True for the newest edition (by year) of its catalog that has any price. */
+  isNewest: boolean;
+  catalogNameId: string;
+  catalogName: string;
+  vendorAbbreviation: string;
+  catalogNameCurrency: string;
+  cells: StampPriceCell[];
+}
+
+export interface StampPriceDetails {
+  baseCurrency: string;
+  /** Averages across catalogs, always in the collection base currency. */
+  averageCells: StampAverageCell[];
+  /** One entry per catalog edition, ordered by catalog name then newest year first. */
+  editions: StampEditionGroup[];
+}
+
+/**
+ * A stamp's recorded prices, shaped for the price-details dialog: the cross-catalog
+ * average per (condition × certificate) plus the full per-edition breakdown. Averages
+ * take, per catalog, the newest edition that prices a given combination, convert it to
+ * the collection base currency, and mean those values; they are independent of the
+ * dialog's latest/all toggle. Cells carry condition/certificate sort orders so the
+ * dialog can render them as a conditions-as-rows × certificates-as-columns matrix.
+ * See price-details dialog.
+ */
+export async function getStampPriceDetails(
+  ownerId: string,
+  stampId: string
+): Promise<StampPriceDetails> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const prices = await prisma.stampCatalogPrice.findMany({
+    where: { stampId },
+    select: {
+      catalogEditionId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      price: true,
+      currency: true,
+      condition: { select: { name: true, abbreviation: true, sortOrder: true } },
+      certificateStatus: { select: { name: true, abbreviation: true, sortOrder: true } },
+      catalogEdition: {
+        select: {
+          year: true,
+          catalogNameId: true,
+          catalogName: {
+            select: {
+              name: true,
+              currency: true,
+              vendor: { select: { abbreviation: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { catalogEdition: { year: "desc" } },
+  });
+
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const rates = await safeRateMap(
+    collectionId,
+    baseCurrency,
+    prices.map((p) => p.currency)
+  );
+
+  const axesOf = (p: (typeof prices)[number]): StampCellAxes => ({
+    conditionId: p.conditionId,
+    conditionName: p.condition.name,
+    conditionAbbreviation: p.condition.abbreviation,
+    conditionSortOrder: p.condition.sortOrder,
+    certificateStatusId: p.certificateStatusId,
+    certificateStatusName: p.certificateStatus?.name ?? null,
+    certificateStatusAbbreviation: p.certificateStatus?.abbreviation ?? null,
+    certificateSortOrder: p.certificateStatus?.sortOrder ?? -1,
+  });
+
+  // ── Averages: per catalog, the newest edition pricing each (condition × cert). ──
+  const bestPerCatalogCombo = new Map<string, (typeof prices)[number]>();
+  for (const p of prices) {
+    const key = `${p.catalogEdition.catalogNameId}~${p.conditionId}~${p.certificateStatusId ?? ""}`;
+    const cur = bestPerCatalogCombo.get(key);
+    if (!cur || p.catalogEdition.year > cur.catalogEdition.year) bestPerCatalogCombo.set(key, p);
+  }
+  const comboGroups = new Map<
+    string,
+    { sample: (typeof prices)[number]; values: number[]; excluded: number }
+  >();
+  for (const p of bestPerCatalogCombo.values()) {
+    const key = `${p.conditionId}~${p.certificateStatusId ?? ""}`;
+    let g = comboGroups.get(key);
+    if (!g) {
+      g = { sample: p, values: [], excluded: 0 };
+      comboGroups.set(key, g);
+    }
+    const bv = baseValueOf(Number(p.price), p.currency, baseCurrency, rates);
+    if (bv == null) g.excluded += 1;
+    else g.values.push(bv);
+  }
+  const averageCells: StampAverageCell[] = [...comboGroups.values()].map((g) => {
+    const avg = averageOf(g.values);
+    return {
+      ...axesOf(g.sample),
+      averageBase: avg == null ? null : avg.toFixed(2),
+      baseCurrency,
+      catalogCount: g.values.length,
+      excludedNoRateCount: g.excluded,
+    };
+  });
+
+  // ── Per-edition breakdown (each edition is a collapsible section). ──
+  const edMap = new Map<string, StampEditionGroup>();
+  for (const p of prices) {
+    let ed = edMap.get(p.catalogEditionId);
+    if (!ed) {
+      ed = {
+        catalogEditionId: p.catalogEditionId,
+        editionYear: p.catalogEdition.year,
+        isNewest: false,
+        catalogNameId: p.catalogEdition.catalogNameId,
+        catalogName: p.catalogEdition.catalogName.name,
+        vendorAbbreviation: p.catalogEdition.catalogName.vendor.abbreviation,
+        catalogNameCurrency: p.catalogEdition.catalogName.currency,
+        cells: [],
+      };
+      edMap.set(p.catalogEditionId, ed);
+    }
+    ed.cells.push({
+      ...axesOf(p),
+      price: Number(p.price).toFixed(2),
+      currency: p.currency,
+      convertedAmount: applyConversion(Number(p.price), p.currency, baseCurrency, rates),
+      baseCurrency,
+    });
+  }
+  const newestByCatalog = new Map<string, number>();
+  for (const ed of edMap.values()) {
+    const cur = newestByCatalog.get(ed.catalogNameId);
+    if (cur === undefined || ed.editionYear > cur) newestByCatalog.set(ed.catalogNameId, ed.editionYear);
+  }
+  const editions = [...edMap.values()]
+    .map((ed) => ({ ...ed, isNewest: ed.editionYear === newestByCatalog.get(ed.catalogNameId) }))
+    .sort((a, b) => a.catalogName.localeCompare(b.catalogName) || b.editionYear - a.editionYear);
+
+  return { baseCurrency, averageCells, editions };
 }
 
 export interface StaleCatalogPrice {

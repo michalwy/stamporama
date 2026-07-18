@@ -13,8 +13,13 @@ import {
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
   getStampCatalogPrices,
+  getStampPriceDetails,
 } from "@/lib/stamps";
-import type { CatalogPriceInput, StampCatalogPriceDisplay } from "@/lib/stamps";
+import type {
+  CatalogPriceInput,
+  StampCatalogPriceDisplay,
+  StampPriceDetails,
+} from "@/lib/stamps";
 
 export type StampActionState =
   | { status: "idle" }
@@ -241,4 +246,11 @@ export async function getStampCatalogPricesAction(
 ): Promise<StampCatalogPriceDisplay[]> {
   const session = await getSession();
   return getStampCatalogPrices(session.user.id, stampId);
+}
+
+export async function getStampPriceDetailsAction(
+  stampId: string
+): Promise<StampPriceDetails> {
+  const session = await getSession();
+  return getStampPriceDetails(session.user.id, stampId);
 }

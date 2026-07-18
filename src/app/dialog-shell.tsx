@@ -8,10 +8,14 @@ export interface DialogShellProps {
   title: string;
   onClose: () => void;
   minHeight?: string;
+  /** Overrides the default 32rem cap for wide dialogs. */
+  maxWidth?: string;
+  /** Fixes the panel height so its content scrolls internally instead of resizing the dialog. */
+  height?: string;
   children: ReactNode;
 }
 
-export function DialogShell({ title, onClose, minHeight, children }: DialogShellProps) {
+export function DialogShell({ title, onClose, minHeight, maxWidth, height, children }: DialogShellProps) {
   const headingId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -58,8 +62,9 @@ export function DialogShell({ title, onClose, minHeight, children }: DialogShell
           transform: "translate(-50%, -50%)",
           zIndex: 101,
           width: "100%",
-          maxWidth: "32rem",
+          maxWidth: maxWidth ?? "32rem",
           maxHeight: "calc(100vh - 4rem)",
+          height,
           minHeight,
           display: "flex",
           flexDirection: "column",

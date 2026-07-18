@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { getStampConditions } from "./conditions";
+import { getCertificateStatuses } from "./certificate-statuses";
 import {
   type IssuePriceTotal,
   type MoneyDisplay,
@@ -10,6 +11,8 @@ import {
   getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
+  baseValueOf,
+  averageOf,
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
@@ -597,28 +600,94 @@ export async function listIssueMembers(
   return nodes;
 }
 
-export interface IssueConditionTotal {
+/** Axes shared by every issue price/average cell so the dialog can lay them out as a matrix. */
+interface IssueCellAxes {
   conditionId: string;
   conditionName: string;
   conditionAbbreviation: string;
-  total: IssuePriceTotal | null;
+  conditionSortOrder: number;
+  certificateStatusId: string | null;
+  certificateStatusName: string | null;
+  certificateStatusAbbreviation: string | null;
+  /** Certificate sort order; -1 for "None" so it always leads. */
+  certificateSortOrder: number;
+}
+
+/** One catalog's required-stamps total at a (condition × certificate) intersection. */
+export interface IssueCatalogCell extends IssueCellAxes {
+  /** Sum in the catalog's currency, 2 decimals. */
+  sumCatalog: string;
+  catalogCurrency: string;
+  /** Sum converted to the collection base currency, or null when same currency / no rate. */
+  convertedSum: string | null;
+  baseCurrency: string;
+  pricedCount: number;
+  requiredCount: number;
+  /** True when this catalog prices every required member for this intersection. */
+  complete: boolean;
+}
+
+export interface IssueCatalogGroup {
+  catalogNameId: string;
+  catalogName: string;
+  vendorAbbreviation: string;
+  catalogNameCurrency: string;
+  /** Every (condition × certificate) intersection this catalog prices at least one member for. */
+  cells: IssueCatalogCell[];
+}
+
+/** A catalog excluded from an intersection's average because it does not price every required member. */
+export interface IssueIncompleteCatalog {
+  catalogNameId: string;
+  catalogName: string;
+  vendorAbbreviation: string;
+  pricedCount: number;
+  requiredCount: number;
+}
+
+/** Cross-catalog average at a (condition × certificate) intersection. */
+export interface IssueAverageCell extends IssueCellAxes {
+  /** Mean of the complete catalogs' base-currency totals, 2 decimals; null when none can be averaged. */
+  averageBase: string | null;
+  baseCurrency: string;
+  completeCatalogCount: number;
+  /** Catalogs that priced some but not all required members (excluded from the average). */
+  incompleteCatalogs: IssueIncompleteCatalog[];
+}
+
+export interface IssuePriceDetails {
+  baseCurrency: string;
+  requiredCount: number;
+  /** Per (condition × certificate) average of the complete catalogs' totals, always in the base currency. */
+  averageCells: IssueAverageCell[];
+  /** Per-catalog breakdown using only each catalog's newest (current) edition. */
+  catalogsLatest: IssueCatalogGroup[];
+  /** Per-catalog breakdown using each member's newest priced edition (older-edition fallback). */
+  catalogsAll: IssueCatalogGroup[];
 }
 
 /**
- * The issue's required-stamps total computed for every condition (certificate =
- * none), so the issue row's popover can show its value across conditions without
- * changing the list's selected condition. See #95.
+ * An issue's required-stamps totals broken down per catalog and averaged across
+ * catalogs, shaped for the price-details dialog. Two per-catalog breakdowns are
+ * returned: `catalogsLatest` sums each member's price on the catalog's newest
+ * (current) edition only; `catalogsAll` sums each member's newest priced edition
+ * (older-edition fallback) — the dialog's latest/all toggle chooses between them.
+ * Averages are always computed from the latest-edition totals (toggle-independent):
+ * per (condition × certificate), the mean of the base-currency totals of catalogs
+ * that price *all* required members in that variant; incomplete catalogs are always
+ * reported so the gap is visible. Totals are broken down per certificate status
+ * (plus "None"), mirroring the stamp matrix. See price-details dialog.
  */
-export async function getIssuePriceTotalsByCondition(
+export async function getIssuePriceDetails(
   ownerId: string,
   collectionId: string,
   issueId: string
-): Promise<IssueConditionTotal[]> {
-  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+): Promise<IssuePriceDetails> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
 
-  const [members, conditions, primaryCatalogByArea, baseCurrency, latestYearByName] =
+  const [members, conditions, certificateStatuses, baseCurrency, latestYearByName] =
     await Promise.all([
       prisma.issueMember.findMany({
         where: { issueId, requiredForCompleteness: true },
@@ -631,7 +700,19 @@ export async function getIssuePriceTotalsByCondition(
                   currency: true,
                   conditionId: true,
                   certificateStatusId: true,
-                  catalogEdition: { select: { year: true, catalogNameId: true } },
+                  catalogEdition: {
+                    select: {
+                      year: true,
+                      catalogNameId: true,
+                      catalogName: {
+                        select: {
+                          name: true,
+                          currency: true,
+                          vendor: { select: { abbreviation: true } },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -639,35 +720,179 @@ export async function getIssuePriceTotalsByCondition(
         },
       }),
       getStampConditions(ownerId, collectionId),
-      buildEffectivePrimaryCatalogMap(collectionId),
+      getCertificateStatuses(ownerId, collectionId),
       getCollectionBaseCurrency(collectionId),
       getLatestEditionYearByName(collectionId),
     ]);
 
-  const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
+  const requiredCount = members.length;
 
-  const totals = conditions.map((c) => ({
-    conditionId: c.id,
-    conditionName: c.name,
-    conditionAbbreviation: c.abbreviation,
-    total: computeRequiredPriceTotal(members, primaryNameId, baseCurrency, latestYearByName, c.id),
-  }));
+  // Axis metadata for cells: condition + certificate (with "None" = null → key "").
+  const condMeta = new Map(
+    conditions.map((c) => [c.id, { name: c.name, abbreviation: c.abbreviation, sort: c.sortOrder }])
+  );
+  const certMeta = new Map<string, { name: string | null; abbreviation: string | null; sort: number }>();
+  certMeta.set("", { name: null, abbreviation: null, sort: -1 });
+  for (const cs of certificateStatuses) {
+    certMeta.set(cs.id, { name: cs.name, abbreviation: cs.abbreviation, sort: cs.sortOrder });
+  }
+  const axesFor = (comboKey: string): IssueCellAxes => {
+    const [conditionId, certKey] = comboKey.split("~");
+    const cm = condMeta.get(conditionId);
+    const cert = certMeta.get(certKey) ?? { name: null, abbreviation: null, sort: -1 };
+    return {
+      conditionId,
+      conditionName: cm?.name ?? "",
+      conditionAbbreviation: cm?.abbreviation ?? "",
+      conditionSortOrder: cm?.sort ?? 0,
+      certificateStatusId: certKey === "" ? null : certKey,
+      certificateStatusName: cert.name,
+      certificateStatusAbbreviation: cert.abbreviation,
+      certificateSortOrder: cert.sort,
+    };
+  };
 
-  const currencies = totals
-    .map((t) => t.total?.currency)
-    .filter((c): c is string => !!c);
-  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
-  for (const t of totals) {
-    if (t.total) {
-      t.total.convertedAmount = applyConversion(
-        Number(t.total.amount),
-        t.total.currency,
-        baseCurrency,
-        rates
-      );
+  // Catalog metadata (name/currency/vendor) discovered from the priced members.
+  const catalogMeta = new Map<
+    string,
+    { catalogName: string; vendorAbbreviation: string; catalogNameCurrency: string }
+  >();
+  type Acc = { sum: number; priced: number };
+  // catalogNameId → `${conditionId}~${certKey}` → { sum, priced }, for each edition-selection variant.
+  const latestSums = new Map<string, Map<string, Acc>>();
+  const allSums = new Map<string, Map<string, Acc>>();
+  const addTo = (
+    target: Map<string, Map<string, Acc>>,
+    catId: string,
+    comboKey: string,
+    amount: number
+  ) => {
+    let byCombo = target.get(catId);
+    if (!byCombo) {
+      byCombo = new Map();
+      target.set(catId, byCombo);
+    }
+    const acc = byCombo.get(comboKey) ?? { sum: 0, priced: 0 };
+    acc.sum += amount;
+    acc.priced += 1;
+    byCombo.set(comboKey, acc);
+  };
+
+  for (const m of members) {
+    // Per (catalog, condition, certificate): the member's newest priced edition
+    // (for "all") and, separately, its price on the catalog's current edition ("latest").
+    const bestAll = new Map<string, { year: number; amount: number }>();
+    const latestHit = new Map<string, number>();
+    for (const p of m.stamp.catalogPrices) {
+      const catId = p.catalogEdition.catalogNameId;
+      if (!catalogMeta.has(catId)) {
+        catalogMeta.set(catId, {
+          catalogName: p.catalogEdition.catalogName.name,
+          vendorAbbreviation: p.catalogEdition.catalogName.vendor.abbreviation,
+          catalogNameCurrency: p.catalogEdition.catalogName.currency,
+        });
+      }
+      const certKey = p.certificateStatusId ?? "";
+      const key = `${catId}~${p.conditionId}~${certKey}`;
+      const cur = bestAll.get(key);
+      if (!cur || p.catalogEdition.year > cur.year) {
+        bestAll.set(key, { year: p.catalogEdition.year, amount: Number(p.price) });
+      }
+      if (p.catalogEdition.year === latestYearByName.get(catId)) {
+        latestHit.set(key, Number(p.price));
+      }
+    }
+    const toCombo = (key: string) => {
+      const first = key.indexOf("~");
+      return { catId: key.slice(0, first), comboKey: key.slice(first + 1) };
+    };
+    for (const [key, best] of bestAll) {
+      const { catId, comboKey } = toCombo(key);
+      addTo(allSums, catId, comboKey, best.amount);
+    }
+    for (const [key, amount] of latestHit) {
+      const { catId, comboKey } = toCombo(key);
+      addTo(latestSums, catId, comboKey, amount);
     }
   }
-  return totals;
+
+  const rates = await safeRateMap(
+    collectionId,
+    baseCurrency,
+    [...catalogMeta.values()].map((c) => c.catalogNameCurrency)
+  );
+
+  const comboSort = (a: IssueCellAxes, b: IssueCellAxes) =>
+    a.conditionSortOrder - b.conditionSortOrder || a.certificateSortOrder - b.certificateSortOrder;
+
+  // Per-catalog breakdown: one cell per priced (condition × certificate) intersection.
+  const buildCatalogs = (sums: Map<string, Map<string, Acc>>): IssueCatalogGroup[] =>
+    [...sums.entries()]
+      .map(([catId, byCombo]) => {
+        const meta = catalogMeta.get(catId)!;
+        const cells: IssueCatalogCell[] = [...byCombo.entries()]
+          .map(([comboKey, acc]) => ({
+            ...axesFor(comboKey),
+            sumCatalog: acc.sum.toFixed(2),
+            catalogCurrency: meta.catalogNameCurrency,
+            convertedSum: applyConversion(acc.sum, meta.catalogNameCurrency, baseCurrency, rates),
+            baseCurrency,
+            pricedCount: acc.priced,
+            requiredCount,
+            complete: acc.priced === requiredCount,
+          }))
+          .sort(comboSort);
+        return {
+          catalogNameId: catId,
+          catalogName: meta.catalogName,
+          vendorAbbreviation: meta.vendorAbbreviation,
+          catalogNameCurrency: meta.catalogNameCurrency,
+          cells,
+        };
+      })
+      .sort((a, b) => a.catalogName.localeCompare(b.catalogName));
+
+  const catalogsLatest = buildCatalogs(latestSums);
+  const catalogsAll = buildCatalogs(allSums);
+
+  // Per (condition × certificate) average over the latest-edition complete catalogs.
+  const comboKeys = new Set<string>();
+  for (const byCombo of latestSums.values()) for (const k of byCombo.keys()) comboKeys.add(k);
+  const averageCells: IssueAverageCell[] = [...comboKeys]
+    .map((comboKey) => {
+      const completeValues: number[] = [];
+      const incompleteCatalogs: IssueIncompleteCatalog[] = [];
+      for (const [catId, byCombo] of latestSums) {
+        const acc = byCombo.get(comboKey);
+        if (!acc) continue;
+        const meta = catalogMeta.get(catId)!;
+        if (acc.priced === requiredCount) {
+          const bv = baseValueOf(acc.sum, meta.catalogNameCurrency, baseCurrency, rates);
+          if (bv != null) completeValues.push(bv);
+        } else {
+          incompleteCatalogs.push({
+            catalogNameId: catId,
+            catalogName: meta.catalogName,
+            vendorAbbreviation: meta.vendorAbbreviation,
+            pricedCount: acc.priced,
+            requiredCount,
+          });
+        }
+      }
+      const avg = averageOf(completeValues);
+      return {
+        ...axesFor(comboKey),
+        averageBase: avg == null ? null : avg.toFixed(2),
+        baseCurrency,
+        completeCatalogCount: completeValues.length,
+        incompleteCatalogs: incompleteCatalogs.sort((a, b) =>
+          a.catalogName.localeCompare(b.catalogName)
+        ),
+      };
+    })
+    .sort(comboSort);
+
+  return { baseCurrency, requiredCount, averageCells, catalogsLatest, catalogsAll };
 }
 
 // ── Mutations ───────────────────────────────────────────────────────────────

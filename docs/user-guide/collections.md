@@ -62,7 +62,21 @@ If the collection has no conditions yet, the Prices tab prompts you to add some 
 
 The item list and the issues list each show a **single price column**. Because a stamp now has many prices, a **"Price for …" selector** above the list chooses which **condition** the column reflects (certificate status = None). Your choice is remembered per collection in your browser; the default is the first condition in your list.
 
-Next to a shown price, a small **⋯** button opens a popover with **all** of that stamp's recorded prices — every condition and certificate status — so you can see the full picture without changing the selector. On an **issue row**, the same **⋯** button next to the issue total shows the required-stamps total computed for **each condition**. These are loaded on demand when you open the popover.
+### The price details dialog
+
+Next to a shown price, a small **⋯** button opens the **price details** dialog — for a single stamp, or, next to an issue total, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has two kinds of section:
+
+- **Average across all catalogs** (open by default) — a grid with **conditions as rows and certificate statuses as columns** (plus a **No cert.** column for prices recorded without a certificate). For a stamp, each cell is the mean price for that condition/certificate, taking each catalog's newest edition and converting to the collection currency. For an issue, each cell is the average of the catalogs' required-stamps totals for that condition/certificate. Only catalogs that price **every** required stamp (for that cell) are averaged; a catalog that prices some but not all is excluded — hover the **⚠** to see which catalogs and how many they price. If no catalog prices all required stamps for a cell, it reads **incomplete** (hover for details). Averages are always shown in the **collection currency**.
+- **Catalog breakdown** (collapsed by default, one expandable section each) — for a stamp, one section per **catalog edition**; for an issue, one section per catalog. Each shows the same conditions × certificate-status grid: the recorded price for a stamp, or the required-stamps total for an issue (with a **⚠** when the catalog does not price every required stamp).
+
+Certificate columns are shared across all the grids, so a certificate that appears in even one catalog gets a column everywhere and the columns line up.
+
+The dialog opens at a fixed size: the toolbar stays pinned at the top and the sections scroll beneath it, so expanding or collapsing a section never resizes the window.
+
+Two toggles control the catalog sections (they never change the averages):
+
+- **Editions** — *Latest only* (default) shows just each catalog's newest edition; *All editions* shows every recorded edition.
+- **Currency** — *Catalog* (default) shows prices in each catalog's own currency; *Collection* converts them to the collection currency.
 
 ## Staleness warnings
 
