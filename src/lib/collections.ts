@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { seedDemoData, wipeDemoData } from "./demo";
+import { seedDefaultConditions } from "./conditions";
 
 export async function generateUniqueSlug(
   ownerId: string,
@@ -43,6 +44,7 @@ export async function createCollection(
       data: { ownerId, name: trimmed, slug, baseCurrency },
       select: { id: true, slug: true, name: true },
     });
+    await seedDefaultConditions(created.id, tx as never);
     if (options?.seedDemo) {
       await seedDemoData(created.id, tx as never);
     }

@@ -4,8 +4,10 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SettingsPanel } from "./settings-panel";
 import { CatalogPanel } from "../catalog/catalog-panel";
 import { AreasPanel } from "../areas/areas-panel";
+import { ConditionsPanel } from "./conditions-panel";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
+import type { StampConditionData } from "@/lib/conditions";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -15,11 +17,13 @@ interface SettingsTabsProps {
   initialAreas: CollectionAreaData[];
   catalogNames: CatalogNameFlat[];
   initialTree: CatalogVendorData[];
+  initialConditions: StampConditionData[];
 }
 
 const TABS = [
   { key: "general", label: "General" },
   { key: "catalogs", label: "Catalogs" },
+  { key: "conditions", label: "Conditions" },
   { key: "areas", label: "Areas" },
 ] as const;
 
@@ -33,6 +37,7 @@ export function SettingsTabs({
   initialAreas,
   catalogNames,
   initialTree,
+  initialConditions,
 }: SettingsTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -40,7 +45,9 @@ export function SettingsTabs({
 
   const rawTab = searchParams.get("tab");
   const activeTab: TabKey =
-    rawTab === "catalogs" || rawTab === "areas" ? rawTab : "general";
+    rawTab === "catalogs" || rawTab === "areas" || rawTab === "conditions"
+      ? rawTab
+      : "general";
 
   function setTab(tab: TabKey) {
     const params = new URLSearchParams(searchParams.toString());
@@ -99,6 +106,12 @@ export function SettingsTabs({
       )}
       {activeTab === "catalogs" && (
         <CatalogPanel collectionId={collectionId} initialTree={initialTree} />
+      )}
+      {activeTab === "conditions" && (
+        <ConditionsPanel
+          collectionId={collectionId}
+          initialConditions={initialConditions}
+        />
       )}
       {activeTab === "areas" && (
         <AreasPanel

@@ -30,6 +30,17 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 Each stamp carries a **Required for completeness** flag that controls whether it counts toward its issue's required-stamps total. The flag can be set when adding a stamp and changed later from the stamp's **Edit** dialog — toggle the **Required for completeness** checkbox and save.
 
+## Stamp conditions
+
+Each collection keeps its own list of **conditions** — the grades used when valuing stamps (for example Mint Never Hinged, Mint Hinged, Used, or Cancelled to Order). Manage them from **Settings → Conditions**.
+
+- Every new collection starts with a default set: **MNH**, **MH**, **MNG**, **U**, **CTO**, and **FDC**. These are ordinary conditions — rename, reorder, or delete any of them.
+- **Add** a condition with a full name (e.g. "Mint Never Hinged") and a short abbreviation (e.g. "MNH").
+- **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
+- **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
+
+Certificate and guarantee status is tracked as a separate dimension, not as part of condition.
+
 ## Catalog prices and staleness warnings
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog). Open a stamp's **Edit** dialog and switch to the **Prices** tab to enter a price for each edition of the catalogs assigned to that stamp's area. The currency is fixed by the catalog and shown next to each field.

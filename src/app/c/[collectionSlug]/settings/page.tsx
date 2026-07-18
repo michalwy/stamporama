@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
+import { getStampConditions } from "@/lib/conditions";
 import { SettingsTabs } from "./settings-tabs";
 
 interface SettingsPageProps {
@@ -20,10 +21,11 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [areas, catalogNames, catalogTree] = await Promise.all([
+  const [areas, catalogNames, catalogTree, conditions] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getCatalogNames(session.user.id, collection.id),
     getCatalogTree(session.user.id, collection.id),
+    getStampConditions(session.user.id, collection.id),
   ]);
 
   return (
@@ -37,6 +39,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialAreas={areas}
           catalogNames={catalogNames}
           initialTree={catalogTree}
+          initialConditions={conditions}
         />
       </Suspense>
     </div>

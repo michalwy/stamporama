@@ -36,9 +36,23 @@ model Collection {
   stamps          Stamp[]
   issues          Issue[]
   exchangeRates   ExchangeRate[]
+  stampConditions StampCondition[]
 
   @@unique([ownerId, slug])
   @@map("collection")
+}
+
+model StampCondition {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  abbreviation String
+  sortOrder    Int
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@map("stamp_condition")
 }
 
 model CatalogVendor {
