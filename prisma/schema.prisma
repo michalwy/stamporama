@@ -35,6 +35,7 @@ model Collection {
   catalogVendors  CatalogVendor[]
   stamps          Stamp[]
   issues          Issue[]
+  exchangeRates   ExchangeRate[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -223,6 +224,20 @@ model IssueMember {
 
   @@id([issueId, stampId])
   @@map("issue_member")
+}
+
+model ExchangeRate {
+  id           String   @id @default(cuid())
+  collectionId String
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal
+  fetchedAt    DateTime
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, fromCurrency, toCurrency])
+  @@map("exchange_rate")
 }
 
 model Session {
