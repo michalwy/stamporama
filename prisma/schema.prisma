@@ -218,9 +218,7 @@ model Item {
   forSale             Boolean  @default(false)
   forTrade            Boolean  @default(false)
   acquisitionSource   String?
-  acquiredDay         Int?
-  acquiredMonth       Int?
-  acquiredYear        Int?
+  acquiredDate        DateTime? @db.Date
   purchasePrice       Decimal? @db.Decimal(10, 2)
   purchaseCurrency    String?
   notes               String?

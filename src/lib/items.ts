@@ -71,9 +71,8 @@ export interface ItemData {
   forSale: boolean;
   forTrade: boolean;
   acquisitionSource: string | null;
-  acquiredDay: number | null;
-  acquiredMonth: number | null;
-  acquiredYear: number | null;
+  /** Full acquisition date as `YYYY-MM-DD` (ADR-0007 §5). Null when not recorded. */
+  acquiredDate: string | null;
   purchasePrice: string | null;
   purchaseCurrency: string | null;
   notes: string | null;
@@ -99,9 +98,7 @@ const ITEM_SELECT = {
   forSale: true,
   forTrade: true,
   acquisitionSource: true,
-  acquiredDay: true,
-  acquiredMonth: true,
-  acquiredYear: true,
+  acquiredDate: true,
   purchasePrice: true,
   purchaseCurrency: true,
   notes: true,
@@ -120,9 +117,7 @@ function toItemData(row: {
   forSale: boolean;
   forTrade: boolean;
   acquisitionSource: string | null;
-  acquiredDay: number | null;
-  acquiredMonth: number | null;
-  acquiredYear: number | null;
+  acquiredDate: Date | null;
   purchasePrice: { toString(): string } | null;
   purchaseCurrency: string | null;
   notes: string | null;
@@ -130,8 +125,20 @@ function toItemData(row: {
 }): ItemData {
   return {
     ...row,
+    acquiredDate: toDateString(row.acquiredDate),
     purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
   };
+}
+
+/** Prisma `@db.Date` → `YYYY-MM-DD` string for a clean server/client boundary. */
+function toDateString(value: Date | null): string | null {
+  return value == null ? null : value.toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-DD` (or null) → a UTC-midnight Date for a `@db.Date` column. */
+function fromDateString(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  return new Date(`${value}T00:00:00.000Z`);
 }
 
 export interface ItemCreateInput {
@@ -142,9 +149,8 @@ export interface ItemCreateInput {
   forSale?: boolean;
   forTrade?: boolean;
   acquisitionSource?: string | null;
-  acquiredDay?: number | null;
-  acquiredMonth?: number | null;
-  acquiredYear?: number | null;
+  /** Full acquisition date as `YYYY-MM-DD`. */
+  acquiredDate?: string | null;
   purchasePrice?: string | null;
   purchaseCurrency?: string | null;
   notes?: string | null;
@@ -158,9 +164,8 @@ export interface ItemUpdateInput {
   forSale?: boolean;
   forTrade?: boolean;
   acquisitionSource?: string | null;
-  acquiredDay?: number | null;
-  acquiredMonth?: number | null;
-  acquiredYear?: number | null;
+  /** Full acquisition date as `YYYY-MM-DD`. */
+  acquiredDate?: string | null;
   purchasePrice?: string | null;
   purchaseCurrency?: string | null;
   notes?: string | null;
@@ -196,9 +201,7 @@ export async function createItem(
       forSale: data.forSale ?? false,
       forTrade: data.forTrade ?? false,
       acquisitionSource: data.acquisitionSource ?? null,
-      acquiredDay: data.acquiredDay ?? null,
-      acquiredMonth: data.acquiredMonth ?? null,
-      acquiredYear: data.acquiredYear ?? null,
+      acquiredDate: fromDateString(data.acquiredDate),
       purchasePrice: data.purchasePrice ?? null,
       purchaseCurrency: data.purchaseCurrency ?? null,
       notes: data.notes ?? null,
@@ -277,9 +280,9 @@ export async function updateItem(
     ...(fields.acquisitionSource !== undefined
       ? { acquisitionSource: fields.acquisitionSource }
       : {}),
-    ...(fields.acquiredDay !== undefined ? { acquiredDay: fields.acquiredDay } : {}),
-    ...(fields.acquiredMonth !== undefined ? { acquiredMonth: fields.acquiredMonth } : {}),
-    ...(fields.acquiredYear !== undefined ? { acquiredYear: fields.acquiredYear } : {}),
+    ...(fields.acquiredDate !== undefined
+      ? { acquiredDate: fromDateString(fields.acquiredDate) }
+      : {}),
     ...(fields.purchasePrice !== undefined ? { purchasePrice: fields.purchasePrice } : {}),
     ...(fields.purchaseCurrency !== undefined
       ? { purchaseCurrency: fields.purchaseCurrency }
@@ -306,6 +309,156 @@ export async function updateItem(
     return updated;
   });
   return toItemData(item);
+}
+
+export type ItemSortBy = "created" | "acquired";
+
+export interface ItemListFiltersPaginated extends ItemListFilters {
+  certificateStatusId?: string;
+  sortBy?: ItemSortBy;
+  sortDir?: "asc" | "desc";
+  offset?: number;
+  pageSize?: number;
+}
+
+/** A copy enriched with the display data the list screen needs: the linked stamp's
+ * identity (catalog numbers, name, issued date, owning issue), condition and
+ * certificate labels, disposition flags, and acquisition/purchase fields. */
+export interface ItemListItem {
+  id: string;
+  stampId: string;
+  stampName: string | null;
+  /** True when the copy links to a base stamp (parentId === null) that has variants,
+   * i.e. the specific variant is unknown (ADR-0007 §2). */
+  unknownVariant: boolean;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  issuedYear: number | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  certificateStatusId: string | null;
+  certificateStatusName: string | null;
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
+  acquisitionSource: string | null;
+  /** Full acquisition date as `YYYY-MM-DD`, or null. */
+  acquiredDate: string | null;
+  purchasePrice: string | null;
+  purchaseCurrency: string | null;
+  notes: string | null;
+  createdAt: Date;
+}
+
+export interface PaginatedItemsResult {
+  items: ItemListItem[];
+  nextCursor: string | null;
+}
+
+/** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
+ * condition, and certificate status; sorts by added or acquired date; offset-paginated
+ * to feed the shared infinite-scroll primitive (mirrors `listStampsPaginated`). */
+export async function listItemsPaginated(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<PaginatedItemsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+  const dir = filters.sortDir ?? "asc";
+  const orderBy =
+    filters.sortBy === "acquired"
+      ? [{ acquiredDate: dir }, { createdAt: dir }]
+      : [{ createdAt: dir }];
+
+  const rows = await prisma.item.findMany({
+    where: {
+      collectionId,
+      ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
+      ...(filters.certificateStatusId
+        ? { certificateStatusId: filters.certificateStatusId }
+        : {}),
+      ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
+      ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
+      ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
+    },
+    orderBy,
+    take: pageSize + 1,
+    skip: offset,
+    select: {
+      id: true,
+      stampId: true,
+      inCollection: true,
+      forSale: true,
+      forTrade: true,
+      acquisitionSource: true,
+      acquiredDate: true,
+      purchasePrice: true,
+      purchaseCurrency: true,
+      notes: true,
+      createdAt: true,
+      condition: { select: { id: true, name: true, abbreviation: true } },
+      certificateStatus: { select: { id: true, name: true } },
+      stamp: {
+        select: {
+          parentId: true,
+          name: true,
+          issuedDay: true,
+          issuedMonth: true,
+          issuedYear: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          _count: { select: { variants: true } },
+          issueMemberships: {
+            select: { issue: { select: { id: true, name: true, year: true } } },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const hasMore = rows.length > pageSize;
+  const page = hasMore ? rows.slice(0, pageSize) : rows;
+
+  const items: ItemListItem[] = page.map((row) => {
+    const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
+    return {
+      id: row.id,
+      stampId: row.stampId,
+      stampName: row.stamp.name,
+      unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+      issuedDay: row.stamp.issuedDay,
+      issuedMonth: row.stamp.issuedMonth,
+      issuedYear: row.stamp.issuedYear,
+      catalogNumbers: row.stamp.catalogNumbers,
+      issueId: firstIssue?.id ?? null,
+      issueName: firstIssue?.name ?? null,
+      issueYear: firstIssue?.year ?? null,
+      conditionId: row.condition.id,
+      conditionName: row.condition.name,
+      conditionAbbreviation: row.condition.abbreviation,
+      certificateStatusId: row.certificateStatus?.id ?? null,
+      certificateStatusName: row.certificateStatus?.name ?? null,
+      inCollection: row.inCollection,
+      forSale: row.forSale,
+      forTrade: row.forTrade,
+      acquisitionSource: row.acquisitionSource,
+      acquiredDate: toDateString(row.acquiredDate),
+      purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
+      purchaseCurrency: row.purchaseCurrency,
+      notes: row.notes,
+      createdAt: row.createdAt,
+    };
+  });
+
+  const nextCursor = hasMore ? String(offset + pageSize) : null;
+  return { items, nextCursor };
 }
 
 export async function deleteItem(ownerId: string, itemId: string): Promise<void> {

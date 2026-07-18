@@ -63,8 +63,13 @@ and profit/loss therefore belong to that future lot/listing layer, **not** to `I
 ### 5. Acquisition & purchase fields live on the `Item` (manual now, automated later)
 
 - `acquisitionSource` — free-form `String?` (where/from whom obtained).
-- `acquiredDay` / `acquiredMonth` / `acquiredYear` — nullable `Int` partial date,
-  mirroring the `Stamp` issued-date pattern.
+- `acquiredDate` — nullable `DateTime? @db.Date`, a **complete** acquisition date
+  entered via a date control. (Revised from the original day/month/year partial-date
+  sketch, which mirrored the `Stamp` issued-date pattern: a physical copy's acquisition
+  is a concrete event, so a full date is used and a native date picker is the natural
+  input. Partial acquisition dates are no longer supported; the `Stamp` issued date
+  keeps its partial-date shape because catalog issue dates are often only known to the
+  year.)
 - `purchasePrice` `Decimal?` + `purchaseCurrency` `String?` — mirrors
   `StampCatalogPrice` money shape; feeds future profit/loss tracking.
 
@@ -114,7 +119,7 @@ Item
   forSale       Boolean
   forTrade      Boolean
   acquisitionSource  String?
-  acquiredDay/Month/Year  Int?
+  acquiredDate  DateTime? @db.Date
   purchasePrice  Decimal?
   purchaseCurrency String?
   notes          String?

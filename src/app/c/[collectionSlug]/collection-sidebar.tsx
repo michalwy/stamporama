@@ -37,6 +37,13 @@ const IconStamps = () => (
   </svg>
 );
 
+const IconCopies = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
+  </svg>
+);
+
 const IconSettings = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
@@ -330,6 +337,14 @@ export function CollectionSidebar({
           icon={<IconStamps />}
           label="Stamps"
           active={isActive(`${base}/stamps`)}
+        />
+
+        <p style={sectionLabelStyle}>Collection</p>
+        <NavItem
+          href={`${base}/inventory`}
+          icon={<IconCopies />}
+          label="Inventory"
+          active={isActive(`${base}/inventory`)}
         />
       </nav>
 

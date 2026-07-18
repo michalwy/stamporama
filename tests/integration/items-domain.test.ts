@@ -69,7 +69,7 @@ describe("createItem", () => {
       purchasePrice: "12.50",
       purchaseCurrency: "EUR",
       acquisitionSource: "eBay",
-      acquiredYear: 2024,
+      acquiredDate: "2024-05-01",
       notes: "commemorative postmark",
     });
     assert.equal(item.stampId, f.baseStamp.id);
@@ -79,7 +79,7 @@ describe("createItem", () => {
     assert.equal(item.purchasePrice, "12.5");
     assert.equal(item.purchaseCurrency, "EUR");
     assert.equal(item.acquisitionSource, "eBay");
-    assert.equal(item.acquiredYear, 2024);
+    assert.equal(item.acquiredDate, "2024-05-01");
     assert.equal(item.notes, "commemorative postmark");
   });
 
