@@ -83,7 +83,7 @@ function buildIssues(): CompactIssue[] {
     { a: "sr-com", n: "Marshal Piłsudski", y: 1934, fi: 270, mi: 280, s: [
       "5gr green", "15gr violet", "25gr blue", "75gr dark brown",
     ] },
-    { a: "sr-com", n: "Gordon Bennett Cup", y: 1936, fi: 286, s: [
+    { a: "sr-com", n: "Gordon Bennett Cup", y: 1936, fi: 316, s: [
       "15gr dark violet", "25gr blue", "55gr dark green",
     ] },
     { a: "sr-com", n: "Polish Legion Anniversary", y: 1933, fi: 260, s: [
@@ -119,10 +119,10 @@ function buildIssues(): CompactIssue[] {
     { a: "sr-air", n: "Airmail Overprints", y: 1928, fi: 228, s: [
       "1zł on 5gr green", "2zł on 15gr violet", "5zł on 30gr blue",
     ] },
-    { a: "sr-air", n: "Balloon Post", y: 1936, fi: 289, s: [
+    { a: "sr-air", n: "Balloon Post", y: 1936, fi: 319, s: [
       "30gr dark violet", "1zł dark blue",
     ] },
-    { a: "sr-air", n: "Trans-Atlantic Flight", y: 1934, fi: 276, s: [
+    { a: "sr-air", n: "Trans-Atlantic Flight", y: 1934, fi: 308, s: [
       "30gr dark blue", "1zł dark brown",
     ] },
 
@@ -392,7 +392,7 @@ function buildIssues(): CompactIssue[] {
     { a: "de-emp", n: "War Charity", y: 1917, mi: 97, s: [
       "2½+2½pf gray", "5+5pf green", "7½+7½pf brown-orange", "15+5pf dark violet",
     ] },
-    { a: "de-emp", n: "Inflation Overprints", y: 1920, mi: 107, s: [
+    { a: "de-emp", n: "Inflation Overprints", y: 1920, mi: 101, s: [
       "10pf on 7½pf orange", "15pf on 10pf carmine", "20pf on 15pf violet",
       "30pf on 20pf blue", "40pf on 30pf olive", "75pf on 50pf chocolate",
     ] },
@@ -465,7 +465,7 @@ function buildIssues(): CompactIssue[] {
       "10pf green (Flensburg gate)", "15pf red (Frankfurt Römer)", "20pf blue (Baden-Baden spa)",
       "25pf brown (St. Mary Lübeck)", "30pf red-brown (Zwinger Dresden)",
     ] },
-    { a: "brd-def", n: "Posthorn Definitives", y: 1951, mi: 123, s: [
+    { a: "brd-def", n: "Posthorn Definitives", y: 1951, mi: 131, s: [
       "2pf black", "4pf green", "5pf dark green", "7pf dark blue",
       "8pf orange", "10pf green", "15pf red", "20pf blue",
     ] },
@@ -481,7 +481,7 @@ function buildIssues(): CompactIssue[] {
       "10pf green (Dürer)", "15pf red (Cranach)", "20pf blue (Bach)",
       "25pf brown (Leibniz)", "40pf olive (Lessing)",
     ] },
-    { a: "brd-def", n: "Bedeutende Deutsche II", y: 1964, mi: 454, s: [
+    { a: "brd-def", n: "Bedeutende Deutsche II", y: 1964, mi: 460, s: [
       "10pf green (Dürer)", "20pf blue (Bach)", "30pf orange (Kant)",
       "40pf violet (Lessing)", "50pf olive (Goethe)", "80pf dark blue (Schiller)",
     ] },
@@ -505,7 +505,7 @@ function buildIssues(): CompactIssue[] {
 
     // ═══ Germany > West Germany > Commemoratives ═══
 
-    { a: "brd-com", n: "First Federal President", y: 1949, mi: 111, s: [
+    { a: "brd-com", n: "First Federal President", y: 1949, mi: 114, s: [
       "10pf green", "20pf blue", "30pf brown",
     ] },
     { a: "brd-com", n: "Refugees Welfare", y: 1952, mi: 148, s: [
@@ -557,7 +557,7 @@ function buildIssues(): CompactIssue[] {
     { a: "ddr", n: "Olympic Games Rome", y: 1960, mi: 746, s: [
       "10+5pf green (running)", "20+10pf red (boxing)", "25+10pf blue (rowing)", "40+20pf brown (cycling)",
     ] },
-    { a: "ddr", n: "Space Cosmonauts", y: 1962, mi: 917, s: [
+    { a: "ddr", n: "Space Cosmonauts", y: 1962, mi: 905, s: [
       "10pf green (Gagarin)", "20pf red (Titov)", "25pf dark blue (Tereshkova)",
     ] },
     { a: "ddr", n: "Wartburg Castle", y: 1966, mi: 1233, s: [
