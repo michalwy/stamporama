@@ -183,6 +183,25 @@ export async function getStampChildCount(
   return prisma.stamp.count({ where: { parentId: stampId } });
 }
 
+export interface StampSubtypeAssignment {
+  parentId: string | null;
+  subtypeId: string | null;
+  actsAsVariantOverride: boolean | null;
+}
+
+/** The subtype classification of a single stamp, for prefilling the edit form. */
+export async function getStampSubtypeAssignment(
+  ownerId: string,
+  stampId: string
+): Promise<StampSubtypeAssignment> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.stamp.findUniqueOrThrow({
+    where: { id: stampId },
+    select: { parentId: true, subtypeId: true, actsAsVariantOverride: true },
+  });
+}
+
 export async function getStamp(
   ownerId: string,
   stampId: string

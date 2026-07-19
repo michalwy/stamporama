@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DialogShell } from "@/app/dialog-shell";
 import { Tooltip } from "./tooltip";
+import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
 import type { IssuePriceDetails } from "@/lib/issues";
 
@@ -461,54 +462,6 @@ function Muted({ children }: { children: ReactNode }) {
 
 function Empty({ children }: { children: ReactNode }) {
   return <div style={{ color: "var(--color-text-muted)" }}>{children}</div>;
-}
-
-function Segmented<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string }[];
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>{label}</span>
-      <div
-        style={{
-          display: "inline-flex",
-          border: "1px solid var(--color-border-strong)",
-          borderRadius: "0.375rem",
-          overflow: "hidden",
-        }}
-      >
-        {options.map((o) => {
-          const active = o.value === value;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange(o.value)}
-              style={{
-                padding: "0.35rem 0.75rem",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.8125rem",
-                fontWeight: active ? 600 : 500,
-                background: active ? "var(--color-action-primary)" : "var(--color-bg-page)",
-                color: active ? "#fff" : "var(--color-text-secondary)",
-              }}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function CollapsibleSection({

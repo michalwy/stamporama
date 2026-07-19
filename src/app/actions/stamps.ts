@@ -10,11 +10,13 @@ import {
   updateStampWithCatalog,
   deleteStamp,
   getStampChildCount,
+  getStampSubtypeAssignment,
   upsertStampCatalogNumber,
   deleteStampCatalogNumber,
   getStampCatalogPrices,
   getStampPriceDetails,
 } from "@/lib/stamps";
+import type { StampSubtypeAssignment } from "@/lib/stamps";
 import type {
   CatalogPriceInput,
   StampCatalogPriceDisplay,
@@ -227,6 +229,13 @@ export async function getStampChildCountAction(
   } catch {
     return { error: "Failed to check stamp children." };
   }
+}
+
+export async function getStampSubtypeAssignmentAction(
+  stampId: string
+): Promise<StampSubtypeAssignment> {
+  const session = await getSession();
+  return getStampSubtypeAssignment(session.user.id, stampId);
 }
 
 export async function upsertStampCatalogNumberAction(

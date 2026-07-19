@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createCollection } from "../../src/lib/collections";
 import { addStampToIssue } from "../../src/lib/issues";
-import { updateStampWithCatalog } from "../../src/lib/stamps";
+import { updateStampWithCatalog, getStampSubtypeAssignment } from "../../src/lib/stamps";
 import { getDefaultSubtypeId, getStampSubtypes } from "../../src/lib/subtypes";
 
 describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => {
@@ -138,6 +138,20 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
     child = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
     assert.equal(child.subtypeId, defaultSubtypeId);
     assert.equal(child.actsAsVariantOverride, null);
+  });
+
+  it("reads back a child's assignment for edit prefill", async () => {
+    const { stampId } = await addStampToIssue(userId, collectionId, issueId, {
+      parentStampId,
+      subtypeId: errorSubtypeId,
+      actsAsVariantOverride: false,
+      requiredForCompleteness: false,
+      catalogNumbers: [],
+    });
+    const assignment = await getStampSubtypeAssignment(userId, stampId);
+    assert.equal(assignment.parentId, parentStampId);
+    assert.equal(assignment.subtypeId, errorSubtypeId);
+    assert.equal(assignment.actsAsVariantOverride, false);
   });
 
   it("leaves subtype untouched on edit when fields are omitted", async () => {

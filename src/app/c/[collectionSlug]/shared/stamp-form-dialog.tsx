@@ -15,6 +15,7 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
+import { Segmented } from "./segmented";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -54,10 +55,6 @@ export interface StampFormData {
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   issues?: { requiredForCompleteness: boolean }[];
-  // Subtype classification (ADR-0010). Meaningful only for child stamps.
-  parentId?: string | null;
-  subtypeId?: string | null;
-  actsAsVariantOverride?: boolean | null;
 }
 
 type StampFormDialogProps = {
@@ -195,29 +192,38 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [selectedSubtypeId, setSelectedSubtypeId] = useState<string>("");
   // "" = use subtype setting, "true" = acts as variant, "false" = not a variant.
   const [overrideValue, setOverrideValue] = useState<string>("");
+  // In edit mode the current classification is fetched fresh by stampId so it does
+  // not depend on the caller's row shape (issue members, list rows, …) carrying it.
+  const [editParentId, setEditParentId] = useState<string | null | undefined>(undefined);
 
-  const editInitialSubtypeId = editProps?.stamp.subtypeId ?? null;
-  const editInitialOverride = editProps?.stamp.actsAsVariantOverride ?? null;
-  const mode = props.mode;
+  const editStampId = props.mode === "edit" ? editProps!.stampId : undefined;
   useEffect(() => {
     let cancelled = false;
-    import("@/app/actions/subtypes")
-      .then(({ getStampSubtypesAction }) => getStampSubtypesAction(collectionId))
-      .then((list) => {
-        if (cancelled) return;
-        setSubtypes(list);
-        const defId = list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? "";
-        if (mode === "edit") {
-          setSelectedSubtypeId(editInitialSubtypeId ?? defId);
-          setOverrideValue(
-            editInitialOverride === true ? "true" : editInitialOverride === false ? "false" : ""
-          );
-        } else {
-          setSelectedSubtypeId(defId);
-        }
-      });
+    Promise.all([
+      import("@/app/actions/subtypes").then((m) => m.getStampSubtypesAction(collectionId)),
+      editStampId
+        ? import("@/app/actions/stamps").then((m) => m.getStampSubtypeAssignmentAction(editStampId))
+        : Promise.resolve(null),
+    ]).then(([list, assignment]) => {
+      if (cancelled) return;
+      setSubtypes(list);
+      const defId = list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? "";
+      if (assignment) {
+        setEditParentId(assignment.parentId);
+        setSelectedSubtypeId(assignment.subtypeId ?? defId);
+        setOverrideValue(
+          assignment.actsAsVariantOverride === true
+            ? "true"
+            : assignment.actsAsVariantOverride === false
+              ? "false"
+              : ""
+        );
+      } else {
+        setSelectedSubtypeId(defId);
+      }
+    });
     return () => { cancelled = true; };
-  }, [collectionId, mode, editInitialSubtypeId, editInitialOverride]);
+  }, [collectionId, editStampId]);
 
   const needsMembers =
     !!addProps && !!selectedIssueId && !autoCreateIssue && !addProps.prefilledParentStampId;
@@ -230,7 +236,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
   // has a parent; in add mode when a parent is chosen or prefilled.
   const isChildContext =
     props.mode === "edit"
-      ? editProps!.stamp.parentId != null
+      ? editParentId != null
       : !!selectedParentId || !!addProps?.prefilledParentStampId;
   const selectedSubtype = subtypes.find((s) => s.id === selectedSubtypeId);
   const inheritLabel = selectedSubtype
@@ -420,42 +426,6 @@ export function StampFormDialog(props: StampFormDialogProps) {
               <input type="hidden" name="parentStampId" value={addProps.prefilledParentStampId} />
             )}
 
-            {/* Subtype classification (child stamps only) */}
-            {isChildContext && subtypes.length > 0 && (
-              <div style={{ marginBottom: "1.25rem", display: "flex", gap: "0.75rem" }}>
-                <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="f-stamp-subtype">Subtype</LabelWithError>
-                  <select
-                    id="f-stamp-subtype"
-                    name="subtypeId"
-                    value={selectedSubtypeId}
-                    onChange={(e) => setSelectedSubtypeId(e.target.value)}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  >
-                    {subtypes.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="f-stamp-variant-override">Acts as variant</LabelWithError>
-                  <select
-                    id="f-stamp-variant-override"
-                    name="actsAsVariantOverride"
-                    value={overrideValue}
-                    onChange={(e) => setOverrideValue(e.target.value)}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  >
-                    <option value="">Use subtype setting{inheritLabel}</option>
-                    <option value="true">Acts as variant</option>
-                    <option value="false">Not a variant</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
             {/* Catalog numbers */}
             {vendors.length > 0 && (
               <div style={{ marginBottom: "0.875rem" }}>
@@ -555,6 +525,48 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 />
               </div>
             </div>
+
+            {/* Subtype classification (child stamps only) */}
+            {isChildContext && subtypes.length > 0 && (
+              <div
+                style={{
+                  marginTop: "1.25rem",
+                  display: "flex",
+                  gap: "1rem",
+                  alignItems: "flex-end",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <LabelWithError htmlFor="f-stamp-subtype">Subtype</LabelWithError>
+                  <select
+                    id="f-stamp-subtype"
+                    name="subtypeId"
+                    value={selectedSubtypeId}
+                    onChange={(e) => setSelectedSubtypeId(e.target.value)}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  >
+                    {subtypes.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.actsAsVariant ? " (variant)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <input type="hidden" name="actsAsVariantOverride" value={overrideValue} />
+                <Segmented
+                  label="Acts as variant"
+                  value={overrideValue}
+                  onChange={setOverrideValue}
+                  disabled={isPending}
+                  options={[
+                    { value: "", label: "↳", title: `Use subtype setting${inheritLabel}` },
+                    { value: "true", label: "✓", title: "Acts as variant" },
+                    { value: "false", label: "✕", title: "Not a variant" },
+                  ]}
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Prices tab (overlays Details; own scroll if taller) ── */}
