@@ -38,6 +38,7 @@ model Collection {
   exchangeRates   ExchangeRate[]
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
+  stampSubtypes   StampSubtype[]
   items           Item[]
   contacts        Contact[]
   locations       Location[]
@@ -74,6 +75,25 @@ model CertificateStatus {
 
   @@index([collectionId])
   @@map("certificate_status")
+}
+
+model StampSubtype {
+  id            String  @id @default(cuid())
+  collectionId  String
+  name          String
+  actsAsVariant Boolean @default(true)
+  isDefault     Boolean @default(false)
+  sortOrder     Int
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps     Stamp[]
+
+  @@index([collectionId])
+  // Exactly-one-default is enforced by a partial unique index written by hand in
+  // the migration SQL (Prisma cannot express partial indexes):
+  //   CREATE UNIQUE INDEX "stamp_subtype_one_default"
+  //     ON "stamp_subtype"("collectionId") WHERE "isDefault";
+  @@map("stamp_subtype")
 }
 
 model CatalogVendor {
@@ -154,6 +174,7 @@ model Stamp {
   id           String   @id @default(cuid())
   collectionId String
   parentId     String?
+  subtypeId    String?
   name         String?
   issuedDay    Int?
   issuedMonth  Int?
@@ -162,6 +183,7 @@ model Stamp {
 
   collection        Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   parent            Stamp?                @relation("StampVariants", fields: [parentId], references: [id])
+  subtype           StampSubtype?         @relation(fields: [subtypeId], references: [id], onDelete: Restrict)
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
   catalogNumbers    StampCatalogNumber[]
@@ -171,6 +193,7 @@ model Stamp {
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
 
+  @@index([subtypeId])
   @@map("stamp")
 }
 
