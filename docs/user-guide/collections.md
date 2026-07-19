@@ -29,7 +29,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 ## Row actions
 
-Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, and certificate statuses — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
+Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
 ## Required for completeness
 
@@ -54,6 +54,22 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 - **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
+
+## Stamp subtypes
+
+Stamps can be nested: a base stamp (for example catalog number **2**) can have child stamps under it. Those children come in two philatelic flavours, and the difference matters for how the base stamp is valued and counted:
+
+- **Variants** — colour, perforation, paper or watermark differences (**2a**, **2b**). Here the base **2** legitimately stands for "I own this stamp but don't know which variant", so owning it without a precise variant is meaningful.
+- **Distinct entries** — errors, plate flaws or overprints (**2 B1**). These are their own fully-identified collectibles, nested under **2** only for catalog adjacency; the base **2** stays a concrete stamp in its own right.
+
+Each collection keeps its own list of **subtypes** that records this distinction. Manage them from **Settings → Subtypes**. Each subtype carries an **Acts as variant** switch — turn it **on** for variant-like categories and **off** for distinct entries.
+
+- Every new collection starts with a default set: **Variant**, **Colour variety**, **Perforation variety**, **Paper variety**, **Watermark variety** and **Print variety** (acts as variant), plus **Error**, **Plate flaw** and **Overprint** (distinct entries). These are ordinary rows — rename, reorder, or delete any of them.
+- **Add** a subtype with a name (e.g. "Colour variety") and choose whether it acts as a variant.
+- **Select the default** with the radio button on the left of each row. Exactly one subtype is always the default; it is the one assigned to newly created child stamps. Choosing a new default clears the old one.
+- **Toggle Acts as variant** directly on a row at any time.
+- **Reorder** subtypes by dragging rows.
+- **Delete** a subtype you no longer need. The current default cannot be deleted — pick another default first — and a subtype already assigned to stamps cannot be deleted either.
 
 ## Catalog prices
 
