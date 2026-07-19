@@ -200,7 +200,10 @@ lives in a pure module unit-tested without Prisma (#119).
 - Storage locations (#55/#56) become a **prerequisite**: intake assigns a location to
   each received copy; both were raised low → medium priority.
 - Reporting must treat a `null` cost-basis as *pending*, not zero, and must tolerate
-  retroactive changes when a closed lot is corrected.
+  retroactive changes when a closed lot is corrected. The pure `resolveCostBasis`
+  accessor (`src/lib/cost-basis.ts`, #123) encodes this: it maps
+  `(costBasis, lotId, lotStatus)` to an explicit `known | pending | none` state, and is
+  the single documented entry point downstream profit/loss reads cost-basis through.
 - The trade/exchange layer will write the same `Item.costBasis` snapshot through its
   own path, keeping profit/loss uniform.
 - Implementation is tracked in #118 (schema + this ADR), #119 (allocation engine),

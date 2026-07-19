@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
+import { resolveCostBasis } from "@/lib/cost-basis";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import {
@@ -181,6 +182,34 @@ function CopyValue({
   );
 }
 
+/** Acquisition cost-basis of a copy (ADR-0009, #123), resolved through the shared
+ * `resolveCostBasis` accessor: a frozen base-currency amount, a **pending** marker while
+ * the owning lot is still open, or nothing at all for copies with no cost-basis (added by
+ * hand, or dropped from a lot). This is the general-purpose read-only surface; the lot
+ * intake screen renders its own editable cost chip. */
+function CostBasisChip({ item, baseCurrency }: { item: ItemListItem; baseCurrency: string }) {
+  const cb = resolveCostBasis(item);
+  if (cb.state === "known") {
+    return (
+      <Tooltip content="What this copy cost you (base currency), frozen when its purchase lot closed.">
+        <span style={{ ...CHIP, fontVariantNumeric: "tabular-nums" }}>
+          cost {cb.amount} {baseCurrency}
+        </span>
+      </Tooltip>
+    );
+  }
+  if (cb.state === "pending") {
+    return (
+      <Tooltip content="Cost-basis is pending — it is frozen when this copy's purchase lot is closed.">
+        <span style={{ ...CHIP, color: "var(--color-text-muted)", fontStyle: "italic" }}>
+          cost pending
+        </span>
+      </Tooltip>
+    );
+  }
+  return null;
+}
+
 interface InventoryItemRowProps {
   item: ItemListItem;
   areas: CollectionAreaData[];
@@ -207,6 +236,10 @@ interface InventoryItemRowProps {
   /** Suppress the built-in disposition chips — the lot view renders its own interactive
    * disposition editor in `trailingChips` instead (#121). */
   hideDispositions?: boolean;
+  /** Show the copy's acquisition cost-basis chip (#123). On by default for the general
+   * copy views (Copies list, inventory popup); the lot intake screen leaves it off because
+   * it renders its own live/frozen cost chip in `trailingChips`. */
+  showCostBasis?: boolean;
   onEdit?: (item: ItemListItem) => void;
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
@@ -228,6 +261,7 @@ export function InventoryItemRow({
   onSetCatalogPrice,
   onSetLocation,
   hideDispositions = false,
+  showCostBasis = false,
   onEdit,
   onIdentify,
   onViewHistory,
@@ -437,6 +471,7 @@ export function InventoryItemRow({
                 {d.label}
               </span>
             ))}
+          {showCostBasis && <CostBasisChip item={item} baseCurrency={baseCurrency} />}
           {item.notes && (
             <Tooltip content={item.notes}>
               <span style={META}>📝 notes</span>

@@ -16,6 +16,8 @@ Each row shows:
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once.
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
+- Its **cost-basis** — what the copy actually cost you — when it came from a
+  [purchase](purchases.md) (see [Cost-basis](#cost-basis)).
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
 - A notes indicator when the copy has notes (hover to read them).
@@ -71,6 +73,27 @@ Above the list, the **Holdings value** bar sums the value of every copy that mat
 current filters (change the filters and the total follows). It also tells you how much of
 the total is uncertain (unknown-variant estimates) and how many copies are unpriced or
 could not be converted.
+
+## Cost-basis
+
+Where **catalog value** is what a copy is worth, its **cost-basis** is what you actually
+**paid** for it — the figure profit or loss is measured against when you sell. Cost-basis
+comes from [purchases](purchases.md): the price you paid for a lot, plus its fair share of
+the order's shipping, is split across the lot's copies when the lot is closed, and each
+copy's share is frozen in your **base currency**.
+
+On a copy's row the cost-basis shows as:
+
+- **cost 12.34 EUR** — the frozen amount, once the copy's purchase lot has been closed.
+- **cost pending** — the copy belongs to a purchase lot that is still **open**; its
+  cost-basis is frozen only when you close the lot (see
+  [Closing a lot](purchases.md#closing-a-lot)).
+- *nothing* — the copy has no cost-basis: you added it by hand rather than through a
+  purchase, or it was marked *not delivered* and dropped from its lot.
+
+A frozen cost-basis is **not** recomputed automatically if you later edit catalog prices
+or re-point the copy to another variant — to change it, reopen the lot, correct the copies,
+and close it again.
 
 ## Viewing copies from the catalog
 
@@ -139,8 +162,9 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 7. Click **Add copy**. Everything is saved together in one step.
 
 > **Acquisition and cost** — supplier, date, and what you paid — are recorded on a
-> **purchase**, not on the copy. Purchase tracking is being built; until it lands, the
-> copy form captures identity, condition, disposition, storage, and notes only.
+> [purchase](purchases.md), not on the copy: the copy form captures identity, condition,
+> disposition, storage, and notes only. A copy taken in through a purchase carries a
+> [cost-basis](#cost-basis); one added here by hand has none.
 
 ## Editing a copy
 

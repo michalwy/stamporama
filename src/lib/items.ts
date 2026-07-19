@@ -485,6 +485,10 @@ export interface ItemListItem {
   forTrade: boolean;
   /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null. */
   lotId: string | null;
+  /** Owning lot's lifecycle status (`open | closed`), or null when the copy has no lot.
+   * Feeds `resolveCostBasis` so a null cost-basis on an open lot reads as **pending**
+   * rather than "no cost" (#123). */
+  lotStatus: string | null;
   /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
   deliveryState: string;
   /** Base-currency cost-basis snapshot (ADR-0009), or null when pending. */
@@ -551,6 +555,7 @@ export async function listItemsPaginated(
       forSale: true,
       forTrade: true,
       lotId: true,
+      lot: { select: { status: true } },
       deliveryState: true,
       costBasis: true,
       notes: true,
@@ -623,6 +628,7 @@ export async function listItemsPaginated(
       forSale: row.forSale,
       forTrade: row.forTrade,
       lotId: row.lotId,
+      lotStatus: row.lot?.status ?? null,
       deliveryState: row.deliveryState,
       costBasis: row.costBasis == null ? null : row.costBasis.toString(),
       notes: row.notes,

@@ -71,6 +71,7 @@ export function InventoryCopyList({
             vendorMap={vendorMap}
             isLast={idx === copies.length - 1 && !hasNextPage}
             readOnly={readOnly}
+            showCostBasis
             onEdit={onEdit}
             onIdentify={onIdentify}
             onViewHistory={onViewHistory}
