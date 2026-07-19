@@ -12,6 +12,7 @@ import {
   type CopyValuation,
   type HoldingsTotal,
 } from "./valuation";
+import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -572,7 +573,7 @@ export async function listItemsPaginated(
           issuedYear: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-          _count: { select: { variants: true } },
+          variants: { select: VARIANT_FLAG_SELECT },
           issueMemberships: {
             select: { issue: { select: { id: true, name: true, year: true } } },
             take: 1,
@@ -592,7 +593,8 @@ export async function listItemsPaginated(
       stampId: row.stampId,
       conditionId: row.condition.id,
       certificateStatusId: row.certificateStatus?.id ?? null,
-      unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+      unknownVariant:
+        row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
     }))
   );
 
@@ -605,7 +607,8 @@ export async function listItemsPaginated(
       id: row.id,
       stampId: row.stampId,
       stampName: row.stamp.name,
-      unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+      unknownVariant:
+        row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
       hasHistory: row._count.variantHistory > 0,
       issuedDay: row.stamp.issuedDay,
       issuedMonth: row.stamp.issuedMonth,
@@ -833,14 +836,19 @@ async function valuateItemRows(
       id: true,
       catalogPrices: { select: VALUATION_PRICE_SELECT },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      ...VARIANT_FLAG_SELECT,
     },
   });
 
   const pricesByStamp = new Map<string, RawCatalogPrice[]>();
   const primaryCatalogByStamp = new Map<string, string | null>();
+  // Which descendants count as variants (ADR-0010 §3): only variant-kind children
+  // feed the lowest-child price; distinct-entry descendants are excluded.
+  const isVariantByStamp = new Map<string, boolean>();
   const currencies: string[] = [];
   for (const s of stamps) {
     pricesByStamp.set(s.id, s.catalogPrices);
+    isVariantByStamp.set(s.id, childIsVariant(s));
     for (const p of s.catalogPrices) currencies.push(p.currency);
     const link = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
     const areaId = link?.collectionAreaId ?? null;
@@ -855,7 +863,9 @@ async function valuateItemRows(
   const result = new Map<string, CopyValuation>();
   for (const r of rows) {
     const descendants = r.unknownVariant
-      ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())]
+      ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())].filter(
+          (id) => isVariantByStamp.get(id) ?? false
+        )
       : null;
     result.set(
       r.id,
@@ -907,7 +917,7 @@ export async function getHoldingsValuation(
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
-      stamp: { select: { parentId: true, _count: { select: { variants: true } } } },
+      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
 
@@ -916,7 +926,8 @@ export async function getHoldingsValuation(
     stampId: row.stampId,
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
-    unknownVariant: row.stamp.parentId === null && row.stamp._count.variants > 0,
+    unknownVariant:
+      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
   }));
 
   const valuations = await valuateItemRows(collectionId, valuationRows);

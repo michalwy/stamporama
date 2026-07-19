@@ -20,6 +20,7 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
+import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -623,7 +624,7 @@ export async function searchStampsForPicker(
           select: { issueId: true, issue: { select: { name: true, year: true } } },
           take: 1,
         },
-        _count: { select: { variants: true } },
+        variants: { select: VARIANT_FLAG_SELECT },
       },
       // Cap recall generously; precision + ranking narrow to PICKER_LIMIT below.
       take: 200,
@@ -693,7 +694,7 @@ export async function searchStampsForPicker(
         stampId: s.id,
         parentId: s.parentId,
         isVariant: s.parentId !== null,
-        hasVariants: s._count.variants > 0,
+        hasVariants: s.variants.some(childIsVariant),
         name: s.name,
         issuedYear: s.issuedYear,
         areaId,

@@ -102,6 +102,14 @@ This gives a traceable refinement trail without versioning the whole `Item`.
 
 ### 7. Valuation of an unknown-variant copy: lowest child price, flagged uncertain
 
+> **Revised by [ADR-0010](0010-stamp-subtype-variant-classification.md).** "Unknown
+> variant" and "child variants" below no longer mean *any* child of a base stamp. A
+> base stamp is an unknown-variant umbrella only when it has at least one child whose
+> effective `actsAsVariant` is true, and the lowest-child price is taken **only over
+> those variant-kind children**. A base stamp whose children are all distinct entries
+> (errors, overprints…) is a concrete priced stamp, valued by its own price and not
+> flagged uncertain.
+
 An `Item` linked to a base stamp has no single catalog price. Its value is taken as
 the **lowest** catalog price among the base stamp's child variants for the copy's
 condition (and certificate dimension where applicable), and the value is **flagged

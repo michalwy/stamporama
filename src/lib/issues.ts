@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
+import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import {
   type IssuePriceTotal,
   type MoneyDisplay,
@@ -51,6 +52,9 @@ export interface StampNodeData {
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
+  /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
+   *  A base stamp is an unknown-variant umbrella iff a child has this true. */
+  actsAsVariant: boolean;
 }
 
 export interface IssueCatalogNumberData {
@@ -92,6 +96,7 @@ const MEMBER_SELECT = {
           catalogEdition: { select: { year: true, catalogNameId: true } },
         },
       },
+      ...VARIANT_FLAG_SELECT,
     },
   },
 } as const;
@@ -108,6 +113,8 @@ function toStampNode(
       issuedYear: number | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
+      actsAsVariantOverride: boolean | null;
+      subtype: { actsAsVariant: boolean } | null;
     };
   },
   pricing?: {
@@ -139,6 +146,7 @@ function toStampNode(
         ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency: pricing.baseCurrency }
         : null,
     mainCatalogPriceStale,
+    actsAsVariant: childIsVariant(m.stamp),
   };
 }
 
@@ -173,6 +181,8 @@ function toIssueData(issue: {
       issuedYear: number | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
+      actsAsVariantOverride: boolean | null;
+      subtype: { actsAsVariant: boolean } | null;
     };
   }[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];

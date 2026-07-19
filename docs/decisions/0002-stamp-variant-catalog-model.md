@@ -89,6 +89,8 @@ A `Series` is a named grouping of base stamps within a specific `CatalogName`. T
 
 **Completeness:** The catalog can require either (a) any variant of a base stamp, or (b) a specific variant. This is stored per series member as a nullable `requiredVariantId`. If null, any variant of the linked stamp counts toward completeness. If non-null, only that specific variant (or a more specific sub-variant) counts.
 
+> **Revised by [ADR-0010](0010-stamp-subtype-variant-classification.md).** Where "any variant of a base stamp" counts toward completeness, "variant" means a child whose effective `actsAsVariant` is true (its per-stamp override, else its subtype's flag). Distinct-entry children (errors, overprints…) never satisfy the base stamp's slot on their own. (Ownership-based completeness is not yet implemented in code.)
+
 ```
 Series (per CatalogName)
   └── SeriesMember

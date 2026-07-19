@@ -25,6 +25,13 @@ If a copy is linked to a base stamp whose specific variant is unknown, it is fla
 **unknown variant**. Such a copy is valued cautiously and its uncertainty stays visible;
 you can pin down the exact variant later — see [Identifying a variant](#identifying-a-variant).
 
+A base stamp counts as "unknown variant" only when it actually has **variant** children
+(see [Subtypes](collections.md#stamp-subtypes)). If all of its children are distinct
+entries — errors, overprints and the like — the base stamp is a concrete stamp in its
+own right: a copy on it is valued by its own catalog price and is **not** flagged
+uncertain. A base stamp with a mix keeps the unknown-variant treatment over its variant
+children only.
+
 The list loads more rows as you scroll. Your filters, sort, and position are kept in the
 page URL, so you can bookmark or share a filtered view.
 

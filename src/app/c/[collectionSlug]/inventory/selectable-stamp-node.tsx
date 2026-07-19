@@ -38,8 +38,10 @@ export function SelectableStampNode({
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
-  // A base stamp (top level) with variants is selectable as the "unknown variant".
-  const isUnknownVariant = depth === 0 && hasChildren;
+  // A base stamp (top level) is selectable as the "unknown variant" only when it has
+  // at least one child that acts as a variant (ADR-0010 §3) — not for a stamp whose
+  // children are all distinct entries (errors, overprints…).
+  const isUnknownVariant = depth === 0 && children.some((c) => c.node.actsAsVariant);
   const indent = `${depth * 1.25}rem`;
 
   return (

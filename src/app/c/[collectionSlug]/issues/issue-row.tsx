@@ -85,7 +85,9 @@ function StampTreeNode({
           node.name
         ),
         secondary: null,
-        unknownVariant: children.length > 0,
+        // Umbrella only when a child acts as a variant (ADR-0010 §3), not for a base
+        // stamp whose children are all distinct entries.
+        unknownVariant: children.some((c) => c.node.actsAsVariant),
       },
     },
   });
