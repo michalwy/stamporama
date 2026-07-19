@@ -5,6 +5,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
 import {
   useInventoryItemsInfinite,
+  useCollectionLocations,
   type InventoryItemFilters,
 } from "./use-inventory-query";
 import { InventoryCopyList } from "./inventory-copy-list";
@@ -43,6 +44,7 @@ export function InventoryPopupDialog({
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useInventoryItemsInfinite(collectionId, filters);
+  const { data: locations = [] } = useCollectionLocations(collectionId);
 
   const copies = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -81,6 +83,7 @@ export function InventoryPopupDialog({
             <InventoryCopyList
               copies={copies}
               areas={areas}
+              locations={locations}
               baseCurrency={baseCurrency}
               hasNextPage={!!hasNextPage}
               isFetchingNextPage={isFetchingNextPage}

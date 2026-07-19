@@ -127,9 +127,10 @@ model Collection {
 - `conditionId` → `StampCondition` and `certificateStatusId?` → `CertificateStatus` reference the per-collection configurable sets (Issues #93/#94), mirroring `StampCatalogPrice`.
 - Disposition is three **independent booleans** — `inCollection`, `forSale`, `forTrade` — not a mutually-exclusive status. A copy can hold any combination.
 - Acquisition/purchase fields (`contactId` → `Contact` acquisition source, `acquiredDate`, `purchasePrice` `Decimal(10,2)`, `purchaseCurrency`, `notes`) are entered by hand now; a future acquisitions module will populate them. The Source field is an autocomplete that create-on-types role-less contacts (#108); `contactId` uses `onDelete: Restrict`.
+- Physical storage (#56): `locationId?` → `Location` (an assignable storage node) records where the copy is filed; `locationRef?` is a free-text identifier within that location (e.g. a page/pocket like `p.12`), per copy and **not unique**. Only `assignable = true` locations are valid targets, enforced server-side.
 - `ItemVariantHistory` records in-place re-pointing of `stampId` when an unknown-variant copy is later identified (`fromStampId`, `toStampId`, `changedAt`, `note?`), giving a refinement trail without versioning the whole `Item`.
 
-Referential actions: `collectionId` and `stampId` cascade; `conditionId` and `certificateStatusId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`.
+Referential actions: `collectionId` and `stampId` cascade; `conditionId`, `certificateStatusId`, and `locationId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`, `contactId`, `locationId`.
 
 Valuation of an unknown-variant copy (lowest child-variant catalog price, flagged uncertain) is shared domain logic and belongs out of UI components; it lands with a later child issue.
 
@@ -142,6 +143,16 @@ Valuation of an unknown-variant copy (lowest child-variant catalog price, flagge
 - A contact may be created with **no roles set** (create-on-type from the acquisition-source autocomplete produces a role-less contact; roles are filled in later).
 - `collectionId` cascades. Future foreign keys pointing *at* a contact (from `Item` and sales lots) use `onDelete: Restrict` so a referenced contact cannot be deleted without first detaching it.
 - Domain module `src/lib/contacts.ts` (server-only) exposes `listContacts` / `searchContacts` / `createContact`, all collection-owner-authorized.
+
+### Storage locations (`Location`)
+
+`Location` is a per-collection **adjacency-list hierarchy** of physical storage — cabinets, stockbooks, albums, boxes — reusing the same pattern as `CollectionArea` (see [ADR-0010](../decisions/0010-storage-location-model.md), design in #55, built in #56).
+
+- Fields: `id`, `collectionId`, `name`, `parentId?` (arbitrary depth), `description?`, `assignable` (`Boolean`, default `true`), `createdAt`.
+- `assignable` distinguishes grouping-only nodes (a cabinet — `false`) from leaf storage that can actually hold copies (a stockbook — `true`). A copy's `locationId` may only point at an `assignable = true` location.
+- `collectionId` cascades; the self `parentId` FK is `SetNull` (matching `CollectionArea`), but deleting a location that still has children or stored copies is blocked in the domain layer. The `Item.locationId` FK is `onDelete: Restrict` so a stored copy is never orphaned.
+- Filtering the inventory by a location includes the whole **subtree** (a parent selection shows copies in its descendants), resolved server-side in `src/lib/items.ts`.
+- Domain module `src/lib/locations.ts` (server-only) exposes `getLocations` / `createLocation` / `updateLocation` / `deleteLocation`, all collection-owner-authorized, with the cycle, assignable, and delete guards.
 
 ## CI
 

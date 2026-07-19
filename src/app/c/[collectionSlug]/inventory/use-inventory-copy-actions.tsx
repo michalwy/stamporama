@@ -13,6 +13,7 @@ import type { PickedStamp } from "./stamp-picker-shared";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import {
   useCollectionCertificateStatuses,
+  useCollectionLocations,
   useInvalidateInventory,
 } from "./use-inventory-query";
 
@@ -90,6 +91,7 @@ export function useInventoryAddAction({
   const { data: conditions = [] } = useCollectionConditions(collectionId);
   const { data: certificateStatuses = [] } =
     useCollectionCertificateStatuses(collectionId);
+  const { data: locations = [] } = useCollectionLocations(collectionId);
 
   function close() {
     if (!isPending) {
@@ -110,6 +112,7 @@ export function useInventoryAddAction({
       mode="add"
       collectionId={collectionId}
       areas={areas}
+      locations={locations}
       conditions={conditions}
       certificateStatuses={certificateStatuses}
       baseCurrency={baseCurrency}

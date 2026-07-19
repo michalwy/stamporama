@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
@@ -11,6 +12,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -44,6 +46,22 @@ const META: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
+};
+
+/** Storage location chip (#56): muted breadcrumb of the location path plus an optional
+ * in-location ref, truncated so a deep path doesn't blow out the row. */
+const LOCATION_CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-page)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  maxWidth: "18rem",
 };
 
 /** Muted breadcrumb chip for the stamp's area path (mirrors the stamps list). */
@@ -115,6 +133,7 @@ function CopyValue({ item, baseCurrency }: { item: ItemListItem; baseCurrency: s
 interface InventoryItemRowProps {
   item: ItemListItem;
   areas: CollectionAreaData[];
+  locations: LocationData[];
   baseCurrency: string;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
@@ -130,6 +149,7 @@ interface InventoryItemRowProps {
 export function InventoryItemRow({
   item,
   areas,
+  locations,
   baseCurrency,
   primaryVendorId,
   vendorMap,
@@ -161,6 +181,8 @@ export function InventoryItemRow({
       : null;
 
   const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
+
+  const locationPath = buildLocationPath(locations, item.locationId);
 
   const menuActions: RowAction[] = [
     ...(item.unknownVariant
@@ -299,6 +321,15 @@ export function InventoryItemRow({
           {item.certificateStatusName && (
             <span style={CHIP} title="Certificate status">
               {item.certificateStatusName}
+            </span>
+          )}
+          {locationPath && (
+            <span
+              style={LOCATION_CHIP}
+              title={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
+            >
+              📍 {locationPath}
+              {item.locationRef ? ` · ${item.locationRef}` : ""}
             </span>
           )}
           {dispositions.map((d) => (

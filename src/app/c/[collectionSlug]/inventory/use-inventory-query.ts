@@ -11,6 +11,7 @@ import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { LocationData } from "@/lib/locations";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -24,6 +25,8 @@ export interface InventoryItemFilters {
   stampId?: string;
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
   issueId?: string;
+  /** Restrict to copies stored in a location or its descendants (subtree, #56). */
+  locationId?: string;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -51,6 +54,7 @@ export function useInventoryItemsInfinite(
         params.set("certificateStatusId", filters.certificateStatusId);
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
+      if (filters.locationId) params.set("locationId", filters.locationId);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
@@ -78,6 +82,7 @@ export function useHoldingsValuation(
     queryKey: ["inventory", collectionId, "valuation", {
       conditionId: filters.conditionId,
       certificateStatusId: filters.certificateStatusId,
+      locationId: filters.locationId,
       inCollection: filters.inCollection,
       forSale: filters.forSale,
       forTrade: filters.forTrade,
@@ -87,6 +92,7 @@ export function useHoldingsValuation(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.locationId) params.set("locationId", filters.locationId);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
@@ -216,6 +222,20 @@ export function useCollectionCertificateStatuses(collectionId: string) {
         "@/app/actions/certificate-statuses"
       );
       return getCertificateStatusesAction(collectionId);
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** Storage locations for the add-copy dialog opened from list rows and the read-only
+ * popup (#56). Mirrors {@link useCollectionCertificateStatuses}: fetched client-side so
+ * the stamp/issue lists don't thread server-loaded locations down to every row. */
+export function useCollectionLocations(collectionId: string) {
+  return useQuery<LocationData[]>({
+    queryKey: ["locations", collectionId] as const,
+    queryFn: async () => {
+      const { getLocationsAction } = await import("@/app/actions/locations");
+      return getLocationsAction(collectionId);
     },
     staleTime: 60_000,
   });

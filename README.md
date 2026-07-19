@@ -7,7 +7,7 @@ Stamporama helps you manage your stamp collection, track trades and purchases, h
 ## Features (planned)
 
 - **Catalog** — stamps you own, by catalog number, series, topic, and country
-- **Collection** — condition, acquisition details, duplicates for trade or sale
+- **Collection** — condition, acquisition details, storage locations, duplicates for trade or sale
 - **Trading** — agree on scope, track progress with other collectors
 - **Purchases & Sales** — what you bought and sold, prices, profit/loss
 - **Stamp hunting** — want list, auction tracking, price history

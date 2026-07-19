@@ -6,6 +6,8 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
+import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   useInventoryItemsInfinite,
@@ -52,6 +54,7 @@ interface InventoryListPanelProps {
   collectionId: string;
   collectionSlug: string;
   areas: CollectionAreaData[];
+  locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
@@ -61,6 +64,7 @@ export function InventoryListPanel({
   collectionId,
   collectionSlug,
   areas,
+  locations,
   conditions,
   certificateStatuses,
   baseCurrency,
@@ -73,6 +77,7 @@ export function InventoryListPanel({
   const { invalidateList } = useInvalidateInventory();
 
   const conditionId = searchParams.get("conditionId") ?? "";
+  const locationId = searchParams.get("locationId") ?? "";
   const sortBy = (searchParams.get("sortBy") as ItemSortBy) || "created";
   const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "asc";
   const activeDispositions = useMemo(() => {
@@ -86,14 +91,17 @@ export function InventoryListPanel({
   const filters: InventoryItemFilters = useMemo(
     () => ({
       conditionId: conditionId || undefined,
+      locationId: locationId || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       sortBy,
       sortDir,
     }),
-    [conditionId, activeDispositions, sortBy, sortDir]
+    [conditionId, locationId, activeDispositions, sortBy, sortDir]
   );
+
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -130,7 +138,8 @@ export function InventoryListPanel({
     invalidateList(collectionId);
   }
 
-  const hasActiveFilters = !!conditionId || activeDispositions.size > 0;
+  const hasActiveFilters =
+    !!conditionId || !!locationId || activeDispositions.size > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -179,6 +188,19 @@ export function InventoryListPanel({
             </option>
           ))}
         </select>
+
+        {locations.length > 0 && (
+          <div style={{ width: "14rem" }}>
+            <LocationTreeSelect
+              locations={locations}
+              locationTree={locationTree}
+              name="location-filter"
+              selectedId={locationId}
+              onSelectedIdChange={(id) => updateParams({ locationId: id })}
+              noneOptionLabel="All locations"
+            />
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", marginLeft: "auto" }}>
           <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -255,6 +277,7 @@ export function InventoryListPanel({
             <InventoryCopyList
               copies={allCopies}
               areas={areas}
+              locations={locations}
               baseCurrency={baseCurrency}
               hasNextPage={!!hasNextPage}
               isFetchingNextPage={isFetchingNextPage}
@@ -274,6 +297,7 @@ export function InventoryListPanel({
           mode={dialog.kind}
           collectionId={collectionId}
           areas={areas}
+          locations={locations}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           baseCurrency={baseCurrency}

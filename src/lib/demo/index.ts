@@ -4,6 +4,7 @@ import { seedCatalog } from "./seed-catalog";
 import { seedAreas } from "./seed-areas";
 import { seedStamps } from "./seed-stamps";
 import { seedInventory } from "./seed-inventory";
+import { seedLocations } from "./seed-locations";
 
 export async function seedDemoData(
   collectionId: string,
@@ -13,6 +14,8 @@ export async function seedDemoData(
   const areas = await seedAreas(collectionId, tx, catalog);
   await seedStamps(collectionId, tx, catalog, areas);
   await seedInventory(collectionId, tx);
+  // Locations run last: they assign the seeded copies to physical storage (#56).
+  await seedLocations(collectionId, tx);
 }
 
 export async function wipeDemoData(
@@ -26,6 +29,10 @@ export async function wipeDemoData(
     where: { item: { collectionId } },
   });
   await tx.item.deleteMany({ where: { collectionId } });
+  // Locations after items: `item.locationId` is ON DELETE RESTRICT, so the copies must
+  // be gone first (#56). Children reference parents with SET NULL, so a single
+  // deleteMany over the collection is safe.
+  await tx.location.deleteMany({ where: { collectionId } });
   await tx.contact.deleteMany({ where: { collectionId } });
   await tx.certificateStatus.deleteMany({ where: { collectionId } });
   await tx.exchangeRate.deleteMany({ where: { collectionId } });

@@ -5,6 +5,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getCollectionAreas } from "@/lib/areas";
+import { getLocations } from "@/lib/locations";
 import { InventoryListPanel } from "./inventory-list-panel";
 
 interface InventoryPageProps {
@@ -20,10 +21,11 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [conditions, certificateStatuses, areas] = await Promise.all([
+  const [conditions, certificateStatuses, areas, locations] = await Promise.all([
     getStampConditions(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getCollectionAreas(session.user.id, collection.id),
+    getLocations(session.user.id, collection.id),
   ]);
 
   return (
@@ -49,6 +51,7 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         areas={areas}
+        locations={locations}
         conditions={conditions}
         certificateStatuses={certificateStatuses}
         baseCurrency={collection.baseCurrency}

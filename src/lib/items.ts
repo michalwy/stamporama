@@ -84,6 +84,54 @@ async function assertContactInCollection(
   if (!contact) throw new Error("Contact not found in this collection.");
 }
 
+/** A copy can only be filed in a location that lives in the same collection and is
+ * marked `assignable` (grouping-only nodes cannot hold copies, #56). */
+async function assertLocationAssignable(
+  collectionId: string,
+  locationId: string
+): Promise<void> {
+  const location = await prisma.location.findFirst({
+    where: { id: locationId, collectionId },
+    select: { assignable: true },
+  });
+  if (!location) throw new Error("Location not found in this collection.");
+  if (!location.assignable) {
+    throw new Error("This location cannot hold copies. Pick an assignable location.");
+  }
+}
+
+/** The set of a location's own id plus every descendant id, for subtree filtering
+ * ("show all copies in Klaser A", including nested locations). Built from one flat
+ * read of the collection's locations. */
+async function resolveLocationSubtree(
+  collectionId: string,
+  locationId: string
+): Promise<string[]> {
+  const all = await prisma.location.findMany({
+    where: { collectionId },
+    select: { id: true, parentId: true },
+  });
+  const childrenByParent = new Map<string, string[]>();
+  for (const l of all) {
+    if (!l.parentId) continue;
+    const arr = childrenByParent.get(l.parentId) ?? [];
+    arr.push(l.id);
+    childrenByParent.set(l.parentId, arr);
+  }
+  const ids = new Set<string>([locationId]);
+  const queue = [locationId];
+  while (queue.length > 0) {
+    const id = queue.pop()!;
+    for (const child of childrenByParent.get(id) ?? []) {
+      if (!ids.has(child)) {
+        ids.add(child);
+        queue.push(child);
+      }
+    }
+  }
+  return [...ids];
+}
+
 export interface ItemData {
   id: string;
   collectionId: string;
@@ -101,6 +149,10 @@ export interface ItemData {
   purchasePrice: string | null;
   purchaseCurrency: string | null;
   notes: string | null;
+  /** Assignable storage location this copy is filed in (#56), or null. */
+  locationId: string | null;
+  /** Free-text identifier within the location (e.g. `A234`), or null. */
+  locationRef: string | null;
   createdAt: Date;
 }
 
@@ -142,6 +194,8 @@ const ITEM_SELECT = {
   purchasePrice: true,
   purchaseCurrency: true,
   notes: true,
+  locationId: true,
+  locationRef: true,
   createdAt: true,
 } as const;
 
@@ -161,6 +215,8 @@ function toItemData(row: {
   purchasePrice: { toString(): string } | null;
   purchaseCurrency: string | null;
   notes: string | null;
+  locationId: string | null;
+  locationRef: string | null;
   createdAt: Date;
 }): ItemData {
   return {
@@ -195,6 +251,9 @@ export interface ItemCreateInput {
   purchasePrice?: string | null;
   purchaseCurrency?: string | null;
   notes?: string | null;
+  /** Assignable storage location id (#56). Must be `assignable = true`. */
+  locationId?: string | null;
+  locationRef?: string | null;
 }
 
 export interface ItemUpdateInput {
@@ -211,6 +270,9 @@ export interface ItemUpdateInput {
   purchasePrice?: string | null;
   purchaseCurrency?: string | null;
   notes?: string | null;
+  /** Assignable storage location id (#56). Must be `assignable = true`. */
+  locationId?: string | null;
+  locationRef?: string | null;
   /** Optional reason recorded on the ItemVariantHistory row when `stampId` changes. */
   variantChangeNote?: string | null;
 }
@@ -236,6 +298,9 @@ export async function createItem(
   if (data.contactId) {
     await assertContactInCollection(collectionId, data.contactId);
   }
+  if (data.locationId) {
+    await assertLocationAssignable(collectionId, data.locationId);
+  }
   const item = await prisma.item.create({
     data: {
       collectionId,
@@ -250,6 +315,9 @@ export async function createItem(
       purchasePrice: data.purchasePrice ?? null,
       purchaseCurrency: data.purchaseCurrency ?? null,
       notes: data.notes ?? null,
+      locationId: data.locationId ?? null,
+      // A ref only makes sense with a location; drop it when none is set.
+      locationRef: data.locationId ? (data.locationRef ?? null) : null,
     },
     select: ITEM_SELECT,
   });
@@ -311,6 +379,9 @@ export async function updateItem(
   if (data.contactId) {
     await assertContactInCollection(collectionId, data.contactId);
   }
+  if (data.locationId) {
+    await assertLocationAssignable(collectionId, data.locationId);
+  }
 
   const repointing =
     data.stampId !== undefined && data.stampId !== current.stampId;
@@ -334,6 +405,14 @@ export async function updateItem(
       ? { purchaseCurrency: fields.purchaseCurrency }
       : {}),
     ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+    ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
+    // A ref only makes sense with a location; clear it whenever the location is
+    // cleared, and only persist a ref update when a location is present.
+    ...(fields.locationId !== undefined && !fields.locationId
+      ? { locationRef: null }
+      : fields.locationRef !== undefined
+        ? { locationRef: fields.locationRef }
+        : {}),
   };
 
   const item = await prisma.$transaction(async (tx) => {
@@ -365,6 +444,8 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   stampId?: string;
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
   issueId?: string;
+  /** Restrict to copies stored in this location or any of its descendants (#56). */
+  locationId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -408,6 +489,11 @@ export interface ItemListItem {
   purchasePrice: string | null;
   purchaseCurrency: string | null;
   notes: string | null;
+  /** Assignable storage location this copy is filed in (#56), or null. The display
+   * name/path is resolved client-side from the collection's locations list. */
+  locationId: string | null;
+  /** Free-text identifier within the location (e.g. `A234`), or null. */
+  locationRef: string | null;
   createdAt: Date;
   /** Catalog valuation of this copy (ADR-0007 §7). Uncertain for unknown variants. */
   value: CopyValuation;
@@ -435,6 +521,11 @@ export async function listItemsPaginated(
       ? [{ acquiredDate: dir }, { createdAt: dir }]
       : [{ createdAt: dir }];
 
+  // A location filter matches the location and all its descendants (subtree, #56).
+  const locationIds = filters.locationId
+    ? await resolveLocationSubtree(collectionId, filters.locationId)
+    : null;
+
   const rows = await prisma.item.findMany({
     where: {
       collectionId,
@@ -446,6 +537,7 @@ export async function listItemsPaginated(
       ...(filters.issueId
         ? { stamp: { issueMemberships: { some: { issueId: filters.issueId } } } }
         : {}),
+      ...(locationIds ? { locationId: { in: locationIds } } : {}),
       ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
       ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
       ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
@@ -464,6 +556,8 @@ export async function listItemsPaginated(
       purchasePrice: true,
       purchaseCurrency: true,
       notes: true,
+      locationId: true,
+      locationRef: true,
       createdAt: true,
       _count: { select: { variantHistory: true } },
       condition: { select: { id: true, name: true, abbreviation: true } },
@@ -535,6 +629,8 @@ export async function listItemsPaginated(
       purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
       purchaseCurrency: row.purchaseCurrency,
       notes: row.notes,
+      locationId: row.locationId,
+      locationRef: row.locationRef,
       createdAt: row.createdAt,
       value: valuations.get(row.id)!,
     };
@@ -790,6 +886,10 @@ export async function getHoldingsValuation(
 ): Promise<HoldingsTotal> {
   await assertCollectionOwner(ownerId, collectionId);
 
+  const locationIds = filters.locationId
+    ? await resolveLocationSubtree(collectionId, filters.locationId)
+    : null;
+
   const rows = await prisma.item.findMany({
     where: {
       collectionId,
@@ -797,6 +897,7 @@ export async function getHoldingsValuation(
       ...(filters.certificateStatusId
         ? { certificateStatusId: filters.certificateStatusId }
         : {}),
+      ...(locationIds ? { locationId: { in: locationIds } } : {}),
       ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
       ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
       ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),

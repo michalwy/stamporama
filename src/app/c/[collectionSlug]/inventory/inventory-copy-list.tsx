@@ -2,15 +2,20 @@
 
 import type { ItemListItem } from "@/lib/items";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "./inventory-item-row";
 
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
+const EMPTY_LOCATIONS: LocationData[] = [];
 
 interface InventoryCopyListProps {
   copies: ItemListItem[];
   areas: CollectionAreaData[];
+  /** Storage locations, for resolving each copy's location path (#56). Defaults to
+   * empty (e.g. read-only popup contexts that don't load locations). */
+  locations?: LocationData[];
   baseCurrency: string;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -32,6 +37,7 @@ interface InventoryCopyListProps {
 export function InventoryCopyList({
   copies,
   areas,
+  locations = EMPTY_LOCATIONS,
   baseCurrency,
   hasNextPage,
   isFetchingNextPage,
@@ -59,6 +65,7 @@ export function InventoryCopyList({
             key={item.id}
             item={item}
             areas={areas}
+            locations={locations}
             baseCurrency={baseCurrency}
             primaryVendorId={primaryVendorId}
             vendorMap={vendorMap}

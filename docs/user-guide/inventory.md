@@ -16,6 +16,8 @@ Each row shows:
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once.
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
+- Its **storage location** (a 📍 chip with the location path and any in-location ref),
+  when the copy has been filed — see [Locations](locations.md).
 - The **purchase price** and **acquired date**, when recorded.
 - A notes indicator when the copy has notes (hover to read them).
 
@@ -32,6 +34,9 @@ page URL, so you can bookmark or share a filtered view.
   selected, all copies are shown. Selecting several narrows to copies matching every
   chosen marker.
 - **Condition** — show only copies of one condition.
+- **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
+  location includes copies in every location nested inside it, so filtering by a cabinet
+  shows the copies in all of its stockbooks at once.
 - **Sort** — by date added or acquired date, ascending or descending.
 
 ## Copy value and holdings total
@@ -126,7 +131,10 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    search your existing contacts, or type a new name and choose **Create** to add it —
    a new contact is created and linked to the copy. (You can fill in that contact's
    roles and details later from your contacts.)
-6. Click **Add copy**. Everything is saved together in one step.
+6. Optionally file the copy into a **storage location** and add an in-location **ref**
+   (e.g. a page or pocket). Only locations that can hold copies are selectable — see
+   [Locations](locations.md).
+7. Click **Add copy**. Everything is saved together in one step.
 
 ## Editing a copy
 

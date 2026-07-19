@@ -308,6 +308,35 @@ describe("seedDemoData", () => {
     });
     assert.ok(count >= 5, `Expected >=5 variant history rows, got ${count}`);
   });
+
+  it("seeds storage locations with grouping and assignable nodes", async () => {
+    const grouping = await prisma.location.count({
+      where: { collectionId, assignable: false },
+    });
+    const assignable = await prisma.location.count({
+      where: { collectionId, assignable: true },
+    });
+    assert.ok(grouping > 0, "Expected some grouping-only locations");
+    assert.ok(assignable > 0, "Expected some assignable locations");
+  });
+
+  it("files some inventory copies into locations, some with a ref", async () => {
+    const withLocation = await prisma.item.count({
+      where: { collectionId, locationId: { not: null } },
+    });
+    const withRef = await prisma.item.count({
+      where: { collectionId, locationRef: { not: null } },
+    });
+    assert.ok(withLocation > 0, "Expected some copies filed in a location");
+    assert.ok(withRef > 0, "Expected some copies with an in-location ref");
+  });
+
+  it("only ever files copies into assignable locations", async () => {
+    const misfiled = await prisma.item.count({
+      where: { collectionId, location: { assignable: false } },
+    });
+    assert.equal(misfiled, 0);
+  });
 });
 
 describe("wipeDemoData", () => {
@@ -350,6 +379,11 @@ describe("wipeDemoData", () => {
 
   it("removes all collection areas", async () => {
     const count = await prisma.collectionArea.count({ where: { collectionId } });
+    assert.equal(count, 0);
+  });
+
+  it("removes all storage locations", async () => {
+    const count = await prisma.location.count({ where: { collectionId } });
     assert.equal(count, 0);
   });
 

@@ -24,7 +24,7 @@ Stamps in a collection are identified by catalog number (e.g. Michel, Scott, Fis
 
 ### Collection items
 
-Each physical copy a collector owns is a separate item (no quantity field — see ADR-0007). An item links a stamp to a copy's condition, certificate status, acquisition source, purchase price, disposition (in collection / for sale / for trade), and any notes. Copies of the same stamp and condition can differ (e.g. by postmark), so each is its own record.
+Each physical copy a collector owns is a separate item (no quantity field — see ADR-0007). An item links a stamp to a copy's condition, certificate status, acquisition source, purchase price, disposition (in collection / for sale / for trade), physical storage location (see ADR-0010), and any notes. Copies of the same stamp and condition can differ (e.g. by postmark), so each is its own record.
 
 ## Planned Feature Areas
 

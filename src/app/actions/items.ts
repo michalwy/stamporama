@@ -36,6 +36,8 @@ interface ItemFields {
   purchasePrice: string | null;
   purchaseCurrency: string | null;
   notes: string | null;
+  locationId: string | null;
+  locationRef: string | null;
 }
 
 interface ParsedItemFields {
@@ -65,6 +67,11 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     purchasePrice: priceRaw || null,
     purchaseCurrency: currencyRaw || null,
     notes: str(formData, "notes") || null,
+    locationId: str(formData, "locationId") || null,
+    // A ref without a location is meaningless; drop it unless a location is set.
+    locationRef: str(formData, "locationId")
+      ? str(formData, "locationRef") || null
+      : null,
   };
 
   if (!stampId) return { data, error: "A stamp must be selected." };

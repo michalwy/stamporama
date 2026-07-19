@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -11,11 +11,21 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { StampSelect } from "./stamp-select";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { ContactSelect } from "./contact-select";
+import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
+import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
+
+// The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
+// dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
+// its min-height and vertical padding to line the Storage row up.
+const LOCATION_SELECT_BUTTON_CLASS = defaultTreeSelectButtonClassName
+  .replace("min-h-8", "min-h-9")
+  .replace("py-1", "py-2");
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -51,6 +61,7 @@ export interface InventoryItemFormDialogProps {
   mode: "add" | "edit";
   collectionId: string;
   areas: CollectionAreaData[];
+  locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
@@ -74,6 +85,7 @@ export function InventoryItemFormDialog({
   mode,
   collectionId,
   areas,
+  locations,
   conditions,
   certificateStatuses,
   baseCurrency,
@@ -87,6 +99,8 @@ export function InventoryItemFormDialog({
   onSubmit,
 }: InventoryItemFormDialogProps) {
   const [stampId, setStampId] = useState(item?.stampId ?? initialStampId ?? "");
+  const [locationId, setLocationId] = useState(item?.locationId ?? "");
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>({
     inCollection: item ? item.inCollection : true,
     forSale: item?.forSale ?? false,
@@ -285,6 +299,47 @@ export function InventoryItemFormDialog({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Storage location (#56) */}
+          <div style={FIELD_GAP}>
+            <div style={SECTION_LABEL}>Storage</div>
+            {locations.length === 0 ? (
+              <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                No locations defined yet. Add some on the Locations screen to file copies away.
+              </p>
+            ) : (
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div style={{ flex: 2 }}>
+                  <LabelWithError htmlFor="copy-location-button">Location</LabelWithError>
+                  <LocationTreeSelect
+                    locations={locations}
+                    locationTree={locationTree}
+                    name="locationId"
+                    selectedId={locationId}
+                    onSelectedIdChange={setLocationId}
+                    onlyAssignableSelectable
+                    disabled={isPending}
+                    noneOptionLabel="— None"
+                    // Taller trigger so it matches the sibling text/select inputs
+                    // in this dialog (INPUT_STYLE), not the compact toolbar default.
+                    buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="copy-location-ref">Ref</LabelWithError>
+                  <input
+                    id="copy-location-ref"
+                    name="locationRef"
+                    type="text"
+                    placeholder="e.g. A234"
+                    defaultValue={item?.locationRef ?? ""}
+                    disabled={isPending || !locationId}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notes */}

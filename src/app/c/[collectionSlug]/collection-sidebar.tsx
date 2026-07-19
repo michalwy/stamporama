@@ -44,6 +44,13 @@ const IconCopies = () => (
   </svg>
 );
 
+const IconLocations = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 21s-6-5.686-6-10a6 6 0 0112 0c0 4.314-6 10-6 10z" />
+    <circle cx="12" cy="11" r="2" />
+  </svg>
+);
+
 const IconSettings = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
@@ -345,6 +352,12 @@ export function CollectionSidebar({
           icon={<IconCopies />}
           label="Inventory"
           active={isActive(`${base}/inventory`)}
+        />
+        <NavItem
+          href={`${base}/locations`}
+          icon={<IconLocations />}
+          label="Locations"
+          active={isActive(`${base}/locations`)}
         />
       </nav>
 

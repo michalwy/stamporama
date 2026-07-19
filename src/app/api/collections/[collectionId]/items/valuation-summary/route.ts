@@ -22,6 +22,7 @@ export async function GET(
     const total = await getHoldingsValuation(session.user.id, collectionId, {
       conditionId: sp.get("conditionId") || undefined,
       certificateStatusId: sp.get("certificateStatusId") || undefined,
+      locationId: sp.get("locationId") || undefined,
       inCollection: boolParam(sp.get("inCollection")),
       forSale: boolParam(sp.get("forSale")),
       forTrade: boolParam(sp.get("forTrade")),

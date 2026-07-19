@@ -40,6 +40,7 @@ model Collection {
   certificateStatuses CertificateStatus[]
   items           Item[]
   contacts        Contact[]
+  locations       Location[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -223,6 +224,11 @@ model Item {
   purchasePrice       Decimal? @db.Decimal(10, 2)
   purchaseCurrency    String?
   notes               String?
+  // Physical storage: at most one assignable `Location` per copy, plus an optional
+  // free-text identifier within that location (e.g. a page/pocket ref like `A234`),
+  // not unique. `onDelete: Restrict` guards against orphaning a stored copy (#56).
+  locationId          String?
+  locationRef         String?
   createdAt           DateTime @default(now())
 
   collection        Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -230,12 +236,14 @@ model Item {
   condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   contact           Contact?             @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
 
   @@index([collectionId])
   @@index([stampId])
   @@index([conditionId])
   @@index([contactId])
+  @@index([locationId])
   @@map("item")
 }
 
@@ -281,6 +289,29 @@ model Contact {
   @@unique([collectionId, name])
   @@index([collectionId])
   @@map("contact")
+}
+
+model Location {
+  id           String   @id @default(cuid())
+  collectionId String
+  name         String
+  parentId     String?
+  description  String?
+  // Grouping-only nodes (e.g. a cabinet) have `assignable = false`; leaf storage
+  // that can hold copies (e.g. a stockbook) has `assignable = true`. Defaults true (#56).
+  assignable   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Adjacency-list hierarchy (same pattern as `CollectionArea`). Deleting a location
+  // with children or items is blocked in the domain layer; the FK is SetNull as a
+  // backstop, matching `CollectionArea`.
+  parent     Location?  @relation("LocationChildren", fields: [parentId], references: [id])
+  children   Location[] @relation("LocationChildren")
+  items      Item[]
+
+  @@index([collectionId])
+  @@map("location")
 }
 
 model CollectionAreaCatalog {
