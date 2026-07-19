@@ -171,6 +171,21 @@ export async function updateStampWithCatalogAction(
   const requiredForCompleteness =
     requiredRaw === null ? undefined : requiredRaw === "true";
 
+  // Subtype fields are present only when the edit form renders them (child stamps).
+  // `undefined` leaves the stored values untouched.
+  const subtypeId = formData.has("subtypeId")
+    ? ((formData.get("subtypeId") as string) || null)
+    : undefined;
+  const overrideRaw = formData.get("actsAsVariantOverride") as string | null;
+  const actsAsVariantOverride =
+    overrideRaw === null
+      ? undefined
+      : overrideRaw === "true"
+        ? true
+        : overrideRaw === "false"
+          ? false
+          : null;
+
   try {
     await updateStampWithCatalog(session.user.id, stampId, {
       name,
@@ -180,6 +195,8 @@ export async function updateStampWithCatalogAction(
       catalogNumbers,
       catalogPrices,
       requiredForCompleteness,
+      subtypeId,
+      actsAsVariantOverride,
     });
     return { status: "success" };
   } catch {

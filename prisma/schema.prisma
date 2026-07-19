@@ -175,6 +175,10 @@ model Stamp {
   collectionId String
   parentId     String?
   subtypeId    String?
+  // Per-stamp override of the subtype's `actsAsVariant` (ADR-0010). Tri-state:
+  // null = inherit from the subtype; true/false = force. Effective value is
+  // `actsAsVariantOverride ?? subtype.actsAsVariant`. Meaningful only for children.
+  actsAsVariantOverride Boolean?
   name         String?
   issuedDay    Int?
   issuedMonth  Int?

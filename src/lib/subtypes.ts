@@ -82,6 +82,17 @@ export async function seedDefaultSubtypes(
   });
 }
 
+/** The collection's default subtype id, or null if none is set. */
+export async function getDefaultSubtypeId(
+  collectionId: string
+): Promise<string | null> {
+  const def = await prisma.stampSubtype.findFirst({
+    where: { collectionId, isDefault: true },
+    select: { id: true },
+  });
+  return def?.id ?? null;
+}
+
 export async function getStampSubtypes(
   ownerId: string,
   collectionId: string

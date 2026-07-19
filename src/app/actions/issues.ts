@@ -200,6 +200,12 @@ export async function addStampToIssueAction(
   const parentStampId = (formData.get("parentStampId") as string | null) || null;
   const requiredForCompleteness = formData.get("requiredForCompleteness") === "true";
 
+  // Child subtype classification (ignored server-side for top-level stamps).
+  const subtypeId = (formData.get("subtypeId") as string | null) || null;
+  const overrideRaw = formData.get("actsAsVariantOverride") as string | null;
+  const actsAsVariantOverride =
+    overrideRaw === "true" ? true : overrideRaw === "false" ? false : null;
+
   const catalogNumbers: { catalogVendorId: string; number: string }[] = [];
   for (const [key, value] of formData.entries()) {
     if (key.startsWith("catalogNumber_")) {
@@ -244,6 +250,8 @@ export async function addStampToIssueAction(
       issuedMonth,
       issuedYear,
       parentStampId,
+      subtypeId,
+      actsAsVariantOverride,
       requiredForCompleteness,
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,

@@ -71,6 +71,18 @@ Each collection keeps its own list of **subtypes** that records this distinction
 - **Reorder** subtypes by dragging rows.
 - **Delete** a subtype you no longer need. The current default cannot be deleted — pick another default first — and a subtype already assigned to stamps cannot be deleted either.
 
+### Assigning a subtype to a child stamp
+
+Subtypes attach to **child** stamps only (a stamp nested under a parent); top-level stamps are never classified. When you add or edit a child stamp, the form shows two extra fields:
+
+- **Subtype** — which category this child is. New children start on the collection's default subtype; change it here.
+- **Acts as variant** — a per-stamp override with three choices:
+  - **Use subtype setting** (default) — follow whatever the chosen subtype says.
+  - **Acts as variant** — force this child to count as a variant, whatever its subtype.
+  - **Not a variant** — force this child to be a distinct entry, whatever its subtype.
+
+Use the override for the odd child that does not follow its category — for example a single colour-variety row you want treated as a distinct entry. Left on **Use subtype setting**, the child simply inherits its subtype.
+
 ## Catalog prices
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).

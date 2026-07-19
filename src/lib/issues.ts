@@ -1154,6 +1154,12 @@ export interface AddStampData {
   issuedMonth?: number | null;
   issuedYear?: number | null;
   parentStampId?: string | null;
+  // Child-only subtype classification (ADR-0010). For a child, `subtypeId` defaults
+  // to the collection's default subtype when omitted; `actsAsVariantOverride` is the
+  // tri-state per-stamp override (null = inherit from the subtype). Ignored for
+  // top-level stamps, which stay unclassified.
+  subtypeId?: string | null;
+  actsAsVariantOverride?: boolean | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   catalogPrices?: {
@@ -1185,6 +1191,28 @@ export async function addStampToIssue(
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    // Children carry a subtype (chosen or the collection default) and an optional
+    // per-stamp actsAsVariant override; top-level stamps stay unclassified.
+    let subtypeId: string | null = null;
+    let actsAsVariantOverride: boolean | null = null;
+    if (data.parentStampId) {
+      subtypeId = data.subtypeId ?? null;
+      if (subtypeId) {
+        const sub = await tx.stampSubtype.findFirst({
+          where: { id: subtypeId, collectionId },
+          select: { id: true },
+        });
+        if (!sub) throw new Error("Subtype not found in this collection.");
+      } else {
+        const def = await tx.stampSubtype.findFirst({
+          where: { collectionId, isDefault: true },
+          select: { id: true },
+        });
+        subtypeId = def?.id ?? null;
+      }
+      actsAsVariantOverride = data.actsAsVariantOverride ?? null;
+    }
+
     const stamp = await tx.stamp.create({
       data: {
         collectionId,
@@ -1193,6 +1221,8 @@ export async function addStampToIssue(
         issuedMonth: data.issuedMonth ?? null,
         issuedYear: data.issuedYear ?? null,
         parentId: data.parentStampId ?? null,
+        subtypeId,
+        actsAsVariantOverride,
       },
       select: { id: true },
     });

@@ -228,6 +228,8 @@ export interface StampListItem {
   id: string;
   collectionId: string;
   parentId: string | null;
+  subtypeId: string | null;
+  actsAsVariantOverride: boolean | null;
   name: string | null;
   issuedDay: number | null;
   issuedMonth: number | null;
@@ -250,6 +252,8 @@ const STAMP_LIST_SELECT = {
   id: true,
   collectionId: true,
   parentId: true,
+  subtypeId: true,
+  actsAsVariantOverride: true,
   name: true,
   issuedDay: true,
   issuedMonth: true,
@@ -282,6 +286,8 @@ function toStampListItem(
     id: string;
     collectionId: string;
     parentId: string | null;
+    subtypeId: string | null;
+    actsAsVariantOverride: boolean | null;
     name: string | null;
     issuedDay: number | null;
     issuedMonth: number | null;
@@ -312,6 +318,8 @@ function toStampListItem(
     id: stamp.id,
     collectionId: stamp.collectionId,
     parentId: stamp.parentId,
+    subtypeId: stamp.subtypeId,
+    actsAsVariantOverride: stamp.actsAsVariantOverride,
     name: stamp.name,
     issuedDay: stamp.issuedDay,
     issuedMonth: stamp.issuedMonth,
@@ -708,11 +716,51 @@ export async function updateStampWithCatalog(
     catalogNumbers: { catalogVendorId: string; number: string }[];
     catalogPrices?: CatalogPriceInput[];
     requiredForCompleteness?: boolean;
+    // Child-only subtype classification (ADR-0010). `undefined` leaves the current
+    // value untouched; for a child, `subtypeId: null` falls back to the collection
+    // default. Top-level stamps are always forced back to null on both fields.
+    subtypeId?: string | null;
+    actsAsVariantOverride?: boolean | null;
   }
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.$transaction(async (tx) => {
+    const managesSubtype =
+      data.subtypeId !== undefined || data.actsAsVariantOverride !== undefined;
+    const subtypeData: { subtypeId?: string | null; actsAsVariantOverride?: boolean | null } = {};
+    if (managesSubtype) {
+      const current = await tx.stamp.findUniqueOrThrow({
+        where: { id: stampId },
+        select: { parentId: true },
+      });
+      if (current.parentId === null) {
+        // Top-level stamps are never classified.
+        subtypeData.subtypeId = null;
+        subtypeData.actsAsVariantOverride = null;
+      } else {
+        if (data.subtypeId !== undefined) {
+          let sid = data.subtypeId;
+          if (sid) {
+            const sub = await tx.stampSubtype.findFirst({
+              where: { id: sid, collectionId },
+              select: { id: true },
+            });
+            if (!sub) throw new Error("Subtype not found in this collection.");
+          } else {
+            const def = await tx.stampSubtype.findFirst({
+              where: { collectionId, isDefault: true },
+              select: { id: true },
+            });
+            sid = def?.id ?? null;
+          }
+          subtypeData.subtypeId = sid;
+        }
+        if (data.actsAsVariantOverride !== undefined) {
+          subtypeData.actsAsVariantOverride = data.actsAsVariantOverride;
+        }
+      }
+    }
     await tx.stamp.update({
       where: { id: stampId },
       data: {
@@ -720,6 +768,7 @@ export async function updateStampWithCatalog(
         issuedDay: data.issuedDay ?? null,
         issuedMonth: data.issuedMonth ?? null,
         issuedYear: data.issuedYear ?? null,
+        ...subtypeData,
       },
     });
     if (data.requiredForCompleteness !== undefined) {

@@ -90,22 +90,48 @@ stamp keeps `subtypeId = null`. A new child is created with the collection's def
 subtype. `null` means "unclassified / not a variant" — there is no hidden
 `null ⇒ variant` rule.
 
-### 3. Behaviour keys off `actsAsVariant`, not tree shape
+### 2a. `Stamp.actsAsVariantOverride` — per-stamp tri-state override
+
+The subtype's `actsAsVariant` is the *default* behaviour for its category, but an
+individual child may need to deviate (e.g. one colour-variety row that should not act
+as a variant, or one otherwise-distinct entry that should). `Stamp` therefore gains a
+nullable `actsAsVariantOverride Boolean?`:
+
+- `null` (default) — **inherit** from the subtype's `actsAsVariant`.
+- `true` — force acts-as-variant.
+- `false` — force not-a-variant.
+
+The **effective** value used everywhere behaviour keys off `actsAsVariant` is:
+
+```
+effectiveActsAsVariant(child) = child.actsAsVariantOverride ?? child.subtype.actsAsVariant
+```
+
+Like `subtypeId`, the override is meaningful only for children; a top-level stamp
+keeps it `null`. Surfaced in the create/edit UI as three choices: **Use subtype
+setting** (null), **Acts as variant** (true), **Not a variant** (false), defaulting to
+"Use subtype setting".
+
+### 3. Behaviour keys off the effective `actsAsVariant`, not tree shape
+
+Every rule below uses `effectiveActsAsVariant(child)` (§2a: the child's override when
+set, otherwise its subtype's `actsAsVariant`), never the subtype's raw flag alone and
+never tree shape.
 
 - **Unknown-variant umbrella:** a stamp is an unknown-variant umbrella ⇔ it has at
-  least one child whose subtype has `actsAsVariant = true`. This replaces the
+  least one child with `effectiveActsAsVariant = true`. This replaces the
   `depth === 0 && hasChildren` rule in `SelectableStampNode` and drives the
   "— unknown variant" label, its selectability in pickers, and the `hasVariants`
   flag in `searchStampsForPicker` (`src/lib/stamps.ts`).
 - **Valuation (revises ADR-0007 §7):** the lowest-child catalog price is taken only
-  over children whose subtype `actsAsVariant = true`. A stamp with children that are
+  over children with `effectiveActsAsVariant = true`. A stamp with children that are
   *all* non-variant (e.g. `2 → 2 B1, 2 B2`) is valued by **its own** catalog price
   and is **not** flagged uncertain. A mixed parent keeps unknown-variant valuation
   over its variant children only.
 - **Completeness (revises ADR-0002 §6):** wherever a base stamp is considered
-  satisfiable by "any variant", that means any child whose subtype
-  `actsAsVariant = true`. Non-variant children never satisfy the parent's slot on
-  their own.
+  satisfiable by "any variant", that means any child with
+  `effectiveActsAsVariant = true`. Non-variant children never satisfy the parent's
+  slot on their own.
 
 ### 4. Exactly-one-default invariant, enforced in DB + app
 
@@ -156,8 +182,9 @@ model StampSubtype {
 
 model Stamp {
   // ... existing fields ...
-  subtypeId String?
-  subtype   StampSubtype? @relation(fields: [subtypeId], references: [id], onDelete: Restrict)
+  subtypeId             String?
+  actsAsVariantOverride Boolean? // null = inherit subtype.actsAsVariant; true/false = force
+  subtype               StampSubtype? @relation(fields: [subtypeId], references: [id], onDelete: Restrict)
 }
 ```
 
