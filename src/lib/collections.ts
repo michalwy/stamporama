@@ -39,17 +39,22 @@ export async function createCollection(
 
   const slug = await generateUniqueSlug(ownerId, trimmed);
 
-  return prisma.$transaction(async (tx) => {
-    const created = await tx.collection.create({
-      data: { ownerId, name: trimmed, slug, baseCurrency },
-      select: { id: true, slug: true, name: true },
-    });
-    await seedDefaultConditions(created.id, tx as never);
-    if (options?.seedDemo) {
-      await seedDemoData(created.id, tx as never);
-    }
-    return created;
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      const created = await tx.collection.create({
+        data: { ownerId, name: trimmed, slug, baseCurrency },
+        select: { id: true, slug: true, name: true },
+      });
+      await seedDefaultConditions(created.id, tx as never);
+      if (options?.seedDemo) {
+        await seedDemoData(created.id, tx as never);
+      }
+      return created;
+    },
+    // Demo seeding writes the full catalog plus a large inventory; the default
+    // 5s interactive-transaction timeout is not enough.
+    { timeout: 120_000, maxWait: 10_000 }
+  );
 }
 
 export async function resetCollectionToDemo(
@@ -62,10 +67,15 @@ export async function resetCollectionToDemo(
   });
   if (!owned) throw new Error("Collection not found or access denied.");
 
-  await prisma.$transaction(async (tx) => {
-    await wipeDemoData(collectionId, tx as never);
-    await seedDemoData(collectionId, tx as never);
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await wipeDemoData(collectionId, tx as never);
+      await seedDemoData(collectionId, tx as never);
+    },
+    // Wipe + full reseed (catalog + large inventory); needs more than the
+    // default 5s interactive-transaction timeout.
+    { timeout: 120_000, maxWait: 10_000 }
+  );
 }
 
 export async function getCollectionsByOwner(ownerId: string) {

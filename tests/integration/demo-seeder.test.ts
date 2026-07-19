@@ -259,6 +259,55 @@ describe("seedDemoData", () => {
     });
     assert.ok(parents.length >= 5, `Expected >=5 stamps with variants, got ${parents.length}`);
   });
+
+  it("seeds acquisition source contacts", async () => {
+    const count = await prisma.contact.count({ where: { collectionId } });
+    assert.ok(count >= 5, `Expected >=5 contacts, got ${count}`);
+  });
+
+  it("seeds certificate statuses", async () => {
+    const count = await prisma.certificateStatus.count({ where: { collectionId } });
+    assert.ok(count >= 1, `Expected >=1 certificate status, got ${count}`);
+  });
+
+  it("seeds a large inventory of owned copies", async () => {
+    const count = await prisma.item.count({ where: { collectionId } });
+    assert.ok(count >= 1000, `Expected >=1000 items, got ${count}`);
+  });
+
+  it("links some inventory copies to conditions, contacts and prices", async () => {
+    const withContact = await prisma.item.count({
+      where: { collectionId, contactId: { not: null } },
+    });
+    const withPrice = await prisma.item.count({
+      where: { collectionId, purchasePrice: { not: null } },
+    });
+    const withCert = await prisma.item.count({
+      where: { collectionId, certificateStatusId: { not: null } },
+    });
+    assert.ok(withContact > 0, "Expected some items with a source contact");
+    assert.ok(withPrice > 0, "Expected some items with a purchase price");
+    assert.ok(withCert > 0, "Expected some items with a certificate status");
+  });
+
+  it("seeds exchange rates for offline valuation", async () => {
+    // Test collection base is EUR; demo prices are in PLN and EUR, so a PLN→EUR
+    // rate is seeded (EUR→EUR is identity and not stored).
+    const rates = await prisma.exchangeRate.findMany({ where: { collectionId } });
+    assert.ok(rates.length >= 1, `Expected >=1 exchange rate, got ${rates.length}`);
+    const plnToEur = rates.find(
+      (r) => r.fromCurrency === "PLN" && r.toCurrency === "EUR"
+    );
+    assert.ok(plnToEur, "Expected a PLN→EUR rate");
+    assert.ok(Number(plnToEur.rate) > 0, "Expected a positive PLN→EUR rate");
+  });
+
+  it("records refinement history for variant copies", async () => {
+    const count = await prisma.itemVariantHistory.count({
+      where: { item: { collectionId } },
+    });
+    assert.ok(count >= 5, `Expected >=5 variant history rows, got ${count}`);
+  });
 });
 
 describe("wipeDemoData", () => {
@@ -302,6 +351,23 @@ describe("wipeDemoData", () => {
   it("removes all collection areas", async () => {
     const count = await prisma.collectionArea.count({ where: { collectionId } });
     assert.equal(count, 0);
+  });
+
+  it("removes all inventory items and contacts", async () => {
+    const items = await prisma.item.count({ where: { collectionId } });
+    const history = await prisma.itemVariantHistory.count({
+      where: { item: { collectionId } },
+    });
+    const contacts = await prisma.contact.count({ where: { collectionId } });
+    const certStatuses = await prisma.certificateStatus.count({
+      where: { collectionId },
+    });
+    const rates = await prisma.exchangeRate.count({ where: { collectionId } });
+    assert.equal(items, 0);
+    assert.equal(history, 0);
+    assert.equal(contacts, 0);
+    assert.equal(certStatuses, 0);
+    assert.equal(rates, 0);
   });
 
   it("leaves the collection itself intact", async () => {
