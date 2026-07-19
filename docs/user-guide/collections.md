@@ -27,6 +27,10 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - A **← All collections** link to return to the collection picker
 - The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**)
 
+## Row actions
+
+Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, and certificate statuses — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
+
 ## Required for completeness
 
 Each stamp carries a **Required for completeness** flag that controls whether it counts toward its issue's required-stamps total. The flag can be set when adding a stamp and changed later from the stamp's **Edit** dialog — toggle the **Required for completeness** checkbox and save.
@@ -65,7 +69,7 @@ The item list and the issues list each show a **single price column**. Because a
 
 ### The price details dialog
 
-Next to a shown price, a small **⋯** button opens the **price details** dialog — for a single stamp, or, next to an issue total, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has two kinds of section:
+Each stamp and issue row's **⋮** actions menu has a **Show catalog prices** action that opens the **price details** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has two kinds of section:
 
 - **Average across all catalogs** (open by default) — a grid with **conditions as rows and certificate statuses as columns** (plus a **No cert.** column for prices recorded without a certificate). For a stamp, each cell is the mean price for that condition/certificate, taking each catalog's newest edition and converting to the collection currency. For an issue, each cell is the average of the catalogs' required-stamps totals for that condition/certificate. Only catalogs that price **every** required stamp (for that cell) are averaged; a catalog that prices some but not all is excluded — hover the **⚠** to see which catalogs and how many they price. If no catalog prices all required stamps for a cell, it reads **incomplete** (hover for details). Averages are always shown in the **collection currency**.
 - **Catalog breakdown** (collapsed by default, one expandable section each) — for a stamp, one section per **catalog edition**; for an issue, one section per catalog. Each shows the same conditions × certificate-status grid: the recorded price for a stamp, or the required-stamps total for an issue (with a **⚠** when the catalog does not price every required stamp).

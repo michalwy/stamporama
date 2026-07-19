@@ -70,6 +70,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 ## UI Direction
 
 - Modal dialogs for list actions (add, edit). Build with shared `src/app/dialog-shell.tsx` primitives — do not duplicate dialog header, close, viewport constraint, or height behavior.
+- Row-level actions go in a single `⋮` menu, not a cluster of per-row buttons. Use the shared `RowActionsMenu` (`src/app/c/[collectionSlug]/shared/row-actions-menu.tsx`); destructive actions get `danger` + `separatorBefore`. Dialog-opening actions expose `{ action, dialog }` hooks rendered at the row level (see `use-price-details-action.tsx`, `use-inventory-copy-actions.tsx`) so the dialog survives the menu closing. Section-level adds (e.g. + Add area) stay as standalone buttons.
 - Tabs inside dialogs are visual grouping only — one logical save action. Dialog height determined by default tab; switching tabs must not change height. Body scrolls, header/footer fixed.
 - Prefer in-place editing for fields where inline edits are practical.
 - Shared base components for list screens (loading, empty, filters, table, endless scroll).

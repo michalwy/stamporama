@@ -5,12 +5,11 @@ import { formatIssuedDate } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import {
-  rowBtnStyle,
-  rowBtnDangerStyle,
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 const CHIP: React.CSSProperties = {
@@ -163,25 +162,26 @@ export function InventoryItemRow({
 
   const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
 
+  const menuActions: RowAction[] = [
+    ...(item.unknownVariant
+      ? [{ key: "identify", label: "Identify variant", icon: "◈", onSelect: () => onIdentify?.(item) }]
+      : []),
+    ...(item.hasHistory
+      ? [{ key: "history", label: "View history", icon: "↻", onSelect: () => onViewHistory?.(item) }]
+      : []),
+    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "✕",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => onDelete?.(item),
+    },
+  ];
+
   const actions = readOnly ? null : (
-    <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
-      {item.unknownVariant && (
-        <button type="button" style={rowBtnStyle} onClick={() => onIdentify?.(item)}>
-          Identify variant
-        </button>
-      )}
-      {item.hasHistory && (
-        <button type="button" style={rowBtnStyle} onClick={() => onViewHistory?.(item)}>
-          History
-        </button>
-      )}
-      <button type="button" style={rowBtnStyle} onClick={() => onEdit?.(item)}>
-        Edit
-      </button>
-      <button type="button" style={rowBtnDangerStyle} onClick={() => onDelete?.(item)}>
-        Delete
-      </button>
-    </div>
+    <RowActionsMenu actions={menuActions} ariaLabel="Copy actions" />
   );
 
   const unknownVariantChip = item.unknownVariant && (

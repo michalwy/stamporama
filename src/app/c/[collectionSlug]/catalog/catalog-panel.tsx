@@ -22,6 +22,7 @@ import {
   type CatalogActionState,
 } from "@/app/actions/catalog";
 import type { CatalogVendorData, CatalogNameData, CatalogEditionData } from "@/lib/catalog";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 
 const CURRENCIES = [
   "AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP",
@@ -252,8 +253,20 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
               {vendor.name}
             </span>
             <span style={abbrBadgeStyle}>{vendor.abbreviation}</span>
-            <button type="button" onClick={() => openDialog({ kind: "edit-vendor", vendor })} style={rowBtnStyle}>Edit</button>
-            <button type="button" onClick={() => openDialog({ kind: "delete-vendor", vendor })} style={rowBtnDangerStyle}>Delete</button>
+            <RowActionsMenu
+              ariaLabel="Vendor actions"
+              actions={[
+                { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit-vendor", vendor }) },
+                {
+                  key: "delete",
+                  label: "Delete",
+                  icon: "✕",
+                  danger: true,
+                  separatorBefore: true,
+                  onSelect: () => openDialog({ kind: "delete-vendor", vendor }),
+                },
+              ]}
+            />
           </div>
 
           {/* Catalog names */}
@@ -272,8 +285,20 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
                   {name.name}
                 </span>
                 <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>{name.currency}</span>
-                <button type="button" onClick={() => openDialog({ kind: "edit-name", vendor, name })} style={rowBtnStyle}>Edit</button>
-                <button type="button" onClick={() => openDialog({ kind: "delete-name", name })} style={rowBtnDangerStyle}>Delete</button>
+                <RowActionsMenu
+                  ariaLabel="Catalog name actions"
+                  actions={[
+                    { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit-name", vendor, name }) },
+                    {
+                      key: "delete",
+                      label: "Delete",
+                      icon: "✕",
+                      danger: true,
+                      separatorBefore: true,
+                      onSelect: () => openDialog({ kind: "delete-name", name }),
+                    },
+                  ]}
+                />
               </div>
 
               {/* Editions row */}
@@ -462,24 +487,6 @@ const abbrBadgeStyle: React.CSSProperties = {
   borderRadius: "0.25rem",
   padding: "0.1rem 0.4rem",
   fontFamily: "monospace",
-};
-
-const rowBtnStyle: React.CSSProperties = {
-  padding: "0.25rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  cursor: "pointer",
-  background: "transparent",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
-const rowBtnDangerStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-error)",
-  borderColor: "var(--color-error-border)",
 };
 
 const addBtnStyle: React.CSSProperties = {

@@ -17,6 +17,7 @@ import {
   type ConditionActionState,
 } from "@/app/actions/conditions";
 import type { StampConditionData } from "@/lib/conditions";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -243,20 +244,20 @@ export function ConditionsPanel({ collectionId, initialConditions }: ConditionsP
               {condition.name}
             </span>
             <span style={abbrBadgeStyle}>{condition.abbreviation}</span>
-            <button
-              type="button"
-              onClick={() => openDialog({ kind: "edit", condition })}
-              style={rowBtnStyle}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => openDialog({ kind: "delete", condition })}
-              style={rowBtnDangerStyle}
-            >
-              Delete
-            </button>
+            <RowActionsMenu
+              ariaLabel="Condition actions"
+              actions={[
+                { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit", condition }) },
+                {
+                  key: "delete",
+                  label: "Delete",
+                  icon: "✕",
+                  danger: true,
+                  separatorBefore: true,
+                  onSelect: () => openDialog({ kind: "delete", condition }),
+                },
+              ]}
+            />
           </div>
         ))}
       </div>
@@ -321,20 +322,3 @@ const abbrBadgeStyle: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
-const rowBtnStyle: React.CSSProperties = {
-  padding: "0.25rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  cursor: "pointer",
-  background: "transparent",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
-const rowBtnDangerStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-error)",
-  borderColor: "var(--color-error-border)",
-};

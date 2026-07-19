@@ -1,28 +1,5 @@
 import type { AreaCatalogEntry } from "@/lib/areas";
 
-export const rowBtnStyle: React.CSSProperties = {
-  padding: "0.25rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  cursor: "pointer",
-  background: "transparent",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
-export const rowBtnDangerStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-error)",
-  borderColor: "var(--color-error-border)",
-};
-
-export const addBtnStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-text-muted)",
-};
-
 /** Dashed "create inline" affordance (+ New stamp / + variant) used in the stamp pickers. */
 export const CREATE_LINK_STYLE: React.CSSProperties = {
   background: "none",

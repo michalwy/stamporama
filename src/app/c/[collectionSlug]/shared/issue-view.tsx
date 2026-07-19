@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import {
   formatIssuedDate,
   formatIssueCatalogNumber,
@@ -145,18 +144,15 @@ export function StampTitle({ node }: { node: StampNodeData }) {
 }
 
 /** Stamp detail line: catalog-number chips (muted when not required for
- * completeness) and the main catalog price with an optional trailing control
- * (e.g. an all-prices button). Renders nothing when there's neither. */
+ * completeness) and the main catalog price. Renders nothing when there's neither. */
 export function StampDetailLine({
   node,
   vendorMap,
   primaryVendorId,
-  priceTrailing,
 }: {
   node: StampNodeData;
   vendorMap: VendorMap;
   primaryVendorId: string | null;
-  priceTrailing?: ReactNode;
 }) {
   const primaryCN = primaryVendorId
     ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
@@ -194,7 +190,6 @@ export function StampDetailLine({
             <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
           )}
           <span style={PRICE_MAIN}>{moneyPrimaryText(node.mainCatalogPrice)}</span>
-          {priceTrailing}
         </span>
       )}
     </div>

@@ -18,6 +18,7 @@ import {
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 
 interface AreasPanelProps {
   collectionId: string;
@@ -128,24 +129,6 @@ const FORM_STYLE: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
   overflow: "hidden",
-};
-
-const rowBtnStyle: React.CSSProperties = {
-  padding: "0.25rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.3rem",
-  cursor: "pointer",
-  background: "transparent",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
-const rowBtnDangerStyle: React.CSSProperties = {
-  ...rowBtnStyle,
-  color: "var(--color-error)",
-  borderColor: "var(--color-error-border)",
 };
 
 const addBtnStyle: React.CSSProperties = {
@@ -636,29 +619,33 @@ export function AreasPanel({
                   </span>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => openDialog({ kind: "add-area", defaultParentId: area.id, ...inheritedValuesFor(area.id) })}
-                  style={addBtnStyle}
-                >
-                  + Sub-area
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openDialog({ kind: "edit-area", area, ...inheritedValuesFor(area.parentId) })}
-                  style={rowBtnStyle}
-                >
-                  Edit
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openDialog({ kind: "delete-area", area })}
-                  style={rowBtnDangerStyle}
-                >
-                  Delete
-                </button>
+                <RowActionsMenu
+                  ariaLabel="Area actions"
+                  actions={[
+                    {
+                      key: "add-sub",
+                      label: "Add sub-area",
+                      icon: "＋",
+                      onSelect: () =>
+                        openDialog({ kind: "add-area", defaultParentId: area.id, ...inheritedValuesFor(area.id) }),
+                    },
+                    {
+                      key: "edit",
+                      label: "Edit",
+                      icon: "✎",
+                      onSelect: () =>
+                        openDialog({ kind: "edit-area", area, ...inheritedValuesFor(area.parentId) }),
+                    },
+                    {
+                      key: "delete",
+                      label: "Delete",
+                      icon: "✕",
+                      danger: true,
+                      separatorBefore: true,
+                      onSelect: () => openDialog({ kind: "delete-area", area }),
+                    },
+                  ]}
+                />
               </div>
             );
           })}

@@ -5,8 +5,6 @@ import { formatIssuedDate, moneyPrimaryText, moneySecondaryText } from "@/app/st
 import type { StampListItem } from "@/lib/stamps";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import {
-  rowBtnStyle,
-  rowBtnDangerStyle,
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
   STAMP_MUTED_PRIMARY_CHIP,
@@ -15,9 +13,12 @@ import {
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
-import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
-import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
-import { InventoryAddButton } from "@/app/c/[collectionSlug]/inventory/inventory-add-button";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import {
+  useInventoryPopupAction,
+  useInventoryAddAction,
+} from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import {
   issueLabel,
   primaryLabel,
@@ -66,41 +67,63 @@ export function StampRow({
     primaryCN?.number ??
     stamp.catalogNumbers[0]?.number ??
     "(stamp)";
-  const inventoryButton = (
-    <InventoryPopupButton
-      collectionId={collectionId}
-      areas={areas}
-      baseCurrency={baseCurrency}
-      target={{ kind: "stamp", stampId: stamp.id, label: popupLabel }}
-    />
-  );
-  const addCopyButton = (
-    <InventoryAddButton
-      collectionId={collectionId}
-      areas={areas}
-      baseCurrency={baseCurrency}
-      target={{
-        kind: "stamp",
+
+  const addCopy = useInventoryAddAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: {
+      kind: "stamp",
+      stampId: stamp.id,
+      initial: {
         stampId: stamp.id,
-        initial: {
-          stampId: stamp.id,
-          primary: primaryLabel(
-            stamp.catalogNumbers.map((cn) => cn.number),
-            stamp.name
-          ),
-          secondary:
-            [
-              firstIssue
-                ? issueLabel(firstIssue.issueName, firstIssue.issueYear)
-                : null,
-              areaPath,
-            ]
-              .filter(Boolean)
-              .join(" · ") || null,
-          unknownVariant: false,
-        },
-      }}
-    />
+        primary: primaryLabel(
+          stamp.catalogNumbers.map((cn) => cn.number),
+          stamp.name
+        ),
+        secondary:
+          [
+            firstIssue
+              ? issueLabel(firstIssue.issueName, firstIssue.issueYear)
+              : null,
+            areaPath,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null,
+        unknownVariant: false,
+      },
+    },
+  });
+  const copies = useInventoryPopupAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: { kind: "stamp", stampId: stamp.id, label: popupLabel },
+  });
+  const prices = usePriceDetailsAction({ kind: "stamp", stampId: stamp.id });
+
+  const actions: RowAction[] = [
+    addCopy.action,
+    copies.action,
+    ...(stamp.mainCatalogPrice ? [prices.action] : []),
+    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(stamp) },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "✕",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => onDelete(stamp),
+    },
+  ];
+
+  const actionsMenu = (
+    <>
+      <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
+      {addCopy.dialog}
+      {copies.dialog}
+      {prices.dialog}
+    </>
   );
 
   return (
@@ -137,22 +160,7 @@ export function StampRow({
               {stamp.name}
             </span>
 
-            {addCopyButton}
-            {inventoryButton}
-            <button
-              type="button"
-              onClick={() => onEdit(stamp)}
-              style={rowBtnStyle}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(stamp)}
-              style={rowBtnDangerStyle}
-            >
-              Delete
-            </button>
+            {actionsMenu}
           </div>
         )}
 
@@ -208,26 +216,7 @@ export function StampRow({
 
           {!stamp.name && <span style={{ flex: 1 }} />}
 
-          {!stamp.name && (
-            <>
-              {addCopyButton}
-              {inventoryButton}
-              <button
-                type="button"
-                onClick={() => onEdit(stamp)}
-                style={rowBtnStyle}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(stamp)}
-                style={rowBtnDangerStyle}
-              >
-                Delete
-              </button>
-            </>
-          )}
+          {!stamp.name && actionsMenu}
         </div>
 
         {/* Line 3: catalog numbers + main-catalog price */}
@@ -265,7 +254,6 @@ export function StampRow({
                 <span style={PRICE_CONVERTED}>{moneySecondaryText(stamp.mainCatalogPrice)}</span>
               )}
               <span style={PRICE_MAIN}>{moneyPrimaryText(stamp.mainCatalogPrice)}</span>
-              <AllPricesButton stampId={stamp.id} />
             </span>
           )}
         </div>

@@ -63,14 +63,17 @@ could not be converted.
 
 ## Viewing copies from the catalog
 
-You don't have to open the Inventory screen to see what you own. Both the **Stamps**
-list and the **Issues** list carry a **Copies** button:
+You don't have to open the Inventory screen to see what you own. Every row across the
+app carries a single **⋮** actions button on the right; opening it reveals that row's
+actions as a menu. On the **Stamps** list and the **Issues** list, that menu includes
+**View copies**:
 
-- On a **stamp** row, **Copies** opens a popup listing every copy you own of that stamp.
-- On an **issue** row, **Copies** opens a popup listing every copy of *any* stamp in that
-  issue — a quick way to see your holdings for a whole issue at once.
-- Expanding an issue reveals its individual stamps, each with its own **Copies** button
-  for the copies of just that stamp.
+- On a **stamp** row, **View copies** opens a popup listing every copy you own of that
+  stamp.
+- On an **issue** row, **View copies** opens a popup listing every copy of *any* stamp in
+  that issue — a quick way to see your holdings for a whole issue at once.
+- Expanding an issue reveals its individual stamps, each with its own **View copies**
+  action for the copies of just that stamp.
 
 The popup shows the same copy details as the Inventory list (condition, disposition,
 value, purchase and acquisition details), but is **read-only** — it's for looking, not
@@ -79,19 +82,19 @@ To edit or delete existing copies, use the **Inventory** screen.
 
 ## Adding a copy from the catalog
 
-You can record a new copy without leaving the Stamps or Issues list. Alongside each
-**Copies** button is a **+ Copy** button that opens the same add-copy dialog described
-below, already pointed at the right stamp:
+You can record a new copy without leaving the Stamps or Issues list. Alongside
+**View copies** in the same **⋮** menu is an **Add copy** action that opens the add-copy
+dialog described below, already pointed at the right stamp:
 
-- On a **stamp** row — and on each stamp inside an expanded issue — **+ Copy** opens the
+- On a **stamp** row — and on each stamp inside an expanded issue — **Add copy** opens the
   dialog with that stamp pre-selected. You can still **Change** it if needed.
-- On an **issue** row, **+ Copy** opens the dialog and immediately pops up a stamp/variant
+- On an **issue** row, **Add copy** opens the dialog and immediately pops up a stamp/variant
   tree **limited to that issue's stamps** — the same tree as the **Browse…** picker, so
   variants read the same. Pick which stamp the copy is. If you close the popup without
   picking, a **Select a stamp…** button reopens it.
 
 Fill in the rest of the dialog as usual and save. The new copy appears on the Inventory
-screen, and any open **Copies** popup for that stamp or issue reflects it.
+screen, and any open **View copies** popup for that stamp or issue reflects it.
 
 ## Adding a copy
 
@@ -127,9 +130,9 @@ screen, and any open **Copies** popup for that stamp or issue reflects it.
 
 ## Editing a copy
 
-Hover a row and click **Edit**. The same dialog opens with the copy's current values.
-Changing the stamp to a more specific variant re-points the copy and records the change
-in its refinement history.
+Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the copy's
+current values. Changing the stamp to a more specific variant re-points the copy and
+records the change in its refinement history.
 
 ## Identifying a variant
 
@@ -137,7 +140,7 @@ When you record a copy against a **base stamp** because you don't yet know its e
 variant, the copy is flagged **unknown variant**. Once you work out which variant it
 actually is, resolve it:
 
-1. On an unknown-variant row, click **Identify variant**.
+1. On an unknown-variant row, open the **⋮** menu and choose **Identify variant**.
 2. Pick the specific variant from the list — only the variants of that copy's own stamp
    are offered, so you can only refine to a *more specific* variant, never re-point the
    copy to an unrelated stamp.
@@ -151,11 +154,12 @@ actually is, resolve it:
 Every time a copy is re-pointed to a different variant — whether through **Identify
 variant** or by changing the stamp in **Edit** — the change is appended to that copy's
 **refinement history**: what it was, what it became, when, and any reason you noted. Any
-copy that has been refined shows a **History** button; click it to see the full trail.
+copy that has been refined offers a **View history** action in its **⋮** menu; choose it
+to see the full trail.
 The trail is never erased, so a copy's identification path stays traceable even after the
 variant is settled.
 
 ## Deleting a copy
 
-Hover a row and click **Delete**, then confirm. This permanently removes that physical
-copy record and cannot be undone.
+Open the row's **⋮** menu and choose **Delete**, then confirm. This permanently removes
+that physical copy record and cannot be undone.

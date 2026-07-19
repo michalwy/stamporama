@@ -6,9 +6,6 @@ import { useIssueMembers } from "./use-issues-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import {
-  rowBtnStyle,
-  rowBtnDangerStyle,
-  addBtnStyle,
   PRICE_MAIN,
   PRICE_CONVERTED,
   PRICE_STALE_ICON,
@@ -23,10 +20,12 @@ import {
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
-import { IssuePricesButton } from "@/app/c/[collectionSlug]/shared/issue-prices-button";
-import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
-import { InventoryAddButton } from "@/app/c/[collectionSlug]/inventory/inventory-add-button";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import {
+  useInventoryPopupAction,
+  useInventoryAddAction,
+} from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
@@ -71,6 +70,49 @@ function StampTreeNode({
     node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId)?.number ??
     node.catalogNumbers[0]?.number ??
     "(stamp)";
+
+  const addCopy = useInventoryAddAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: {
+      kind: "stamp",
+      stampId: node.stampId,
+      initial: {
+        stampId: node.stampId,
+        primary: primaryLabel(
+          node.catalogNumbers.map((cn) => cn.number),
+          node.name
+        ),
+        secondary: null,
+        unknownVariant: children.length > 0,
+      },
+    },
+  });
+  const copies = useInventoryPopupAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: { kind: "stamp", stampId: node.stampId, label: popupLabel },
+  });
+  const prices = usePriceDetailsAction({ kind: "stamp", stampId: node.stampId });
+
+  const actions: RowAction[] = [
+    { key: "add-child", label: "Add child stamp", icon: "＋", onSelect: () => onAddChild(node.stampId) },
+    { key: "move", label: "Move to another issue…", icon: "⇄", onSelect: () => onMove(node.stampId) },
+    addCopy.action,
+    copies.action,
+    ...(node.mainCatalogPrice ? [prices.action] : []),
+    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(node.stampId) },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "✕",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => onDelete(node.stampId, node.name ?? "(unnamed)"),
+    },
+  ];
 
   return (
     <>
@@ -121,65 +163,16 @@ function StampTreeNode({
             <StampTitle node={node} />
           </span>
 
-          <button
-            type="button"
-            onClick={() => onAddChild(node.stampId)}
-            style={addBtnStyle}
-          >
-            + Child
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove(node.stampId)}
-            style={rowBtnStyle}
-          >
-            Move
-          </button>
-          <InventoryAddButton
-            collectionId={collectionId}
-            areas={areas}
-            baseCurrency={baseCurrency}
-            target={{
-              kind: "stamp",
-              stampId: node.stampId,
-              initial: {
-                stampId: node.stampId,
-                primary: primaryLabel(
-                  node.catalogNumbers.map((cn) => cn.number),
-                  node.name
-                ),
-                secondary: null,
-                unknownVariant: children.length > 0,
-              },
-            }}
-          />
-          <InventoryPopupButton
-            collectionId={collectionId}
-            areas={areas}
-            baseCurrency={baseCurrency}
-            target={{ kind: "stamp", stampId: node.stampId, label: popupLabel }}
-          />
-          <button
-            type="button"
-            onClick={() => onEdit(node.stampId)}
-            style={rowBtnStyle}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(node.stampId, node.name ?? "(unnamed)")}
-            style={rowBtnDangerStyle}
-          >
-            Delete
-          </button>
+          <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
+          {addCopy.dialog}
+          {copies.dialog}
+          {prices.dialog}
         </div>
 
         <StampDetailLine
           node={node}
           vendorMap={vendorMap}
           primaryVendorId={primaryVendorId}
-          priceTrailing={<AllPricesButton stampId={node.stampId} />}
         />
       </div>
       {!collapsed &&
@@ -259,6 +252,48 @@ export function IssueRow({
 
   const stampTree = members ? buildStampTree(members) : [];
 
+  const addCopy = useInventoryAddAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: {
+      kind: "issue",
+      issue: {
+        id: issue.id,
+        name: issue.name,
+        year: issue.year,
+        collectionAreaId: issue.collectionAreaId,
+      },
+    },
+  });
+  const copies = useInventoryPopupAction({
+    collectionId,
+    areas,
+    baseCurrency,
+    target: {
+      kind: "issue",
+      issueId: issue.id,
+      label: issue.name ?? "(unnamed issue)",
+    },
+  });
+  const prices = usePriceDetailsAction({ kind: "issue", collectionId, issueId: issue.id });
+
+  const actions: RowAction[] = [
+    { key: "add-stamp", label: "Add stamp", icon: "＋", onSelect: () => callbacks.onAddStamp(issue.id) },
+    addCopy.action,
+    copies.action,
+    ...(issue.requiredPriceTotal ? [prices.action] : []),
+    { key: "edit", label: "Edit", icon: "✎", onSelect: () => callbacks.onEdit(issue) },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "✕",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => callbacks.onDelete(issue),
+    },
+  ];
+
   return (
     <div
       style={{
@@ -328,52 +363,10 @@ export function IssueRow({
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
-          <button
-            type="button"
-            onClick={() => callbacks.onAddStamp(issue.id)}
-            style={addBtnStyle}
-          >
-            + Stamp
-          </button>
-          <InventoryAddButton
-            collectionId={collectionId}
-            areas={areas}
-            baseCurrency={baseCurrency}
-            target={{
-              kind: "issue",
-              issue: {
-                id: issue.id,
-                name: issue.name,
-                year: issue.year,
-                collectionAreaId: issue.collectionAreaId,
-              },
-            }}
-            label="+ Copy"
-          />
-          <InventoryPopupButton
-            collectionId={collectionId}
-            areas={areas}
-            baseCurrency={baseCurrency}
-            target={{
-              kind: "issue",
-              issueId: issue.id,
-              label: issue.name ?? "(unnamed issue)",
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => callbacks.onEdit(issue)}
-            style={rowBtnStyle}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => callbacks.onDelete(issue)}
-            style={rowBtnDangerStyle}
-          >
-            Delete
-          </button>
+          <RowActionsMenu actions={actions} ariaLabel="Issue actions" />
+          {addCopy.dialog}
+          {copies.dialog}
+          {prices.dialog}
         </div>
 
         {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
@@ -454,7 +447,6 @@ export function IssueRow({
                   )}
                   {secondary && <span style={PRICE_CONVERTED}>{secondary}</span>}
                   <span style={PRICE_MAIN}>{moneyPrimaryText(t)}</span>
-                  <IssuePricesButton collectionId={collectionId} issueId={issue.id} />
                 </span>
               );
             })()}
