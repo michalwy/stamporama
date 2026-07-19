@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 
@@ -47,18 +48,23 @@ function statusChip(status: string): { style: React.CSSProperties; label: string
 
 interface PurchaseRowProps {
   purchase: PurchaseListItem;
+  collectionSlug: string;
   isLast: boolean;
   onEdit: (purchase: PurchaseListItem) => void;
   onDelete: (purchase: PurchaseListItem) => void;
 }
 
 /** A single purchase as a stacked card row (mirrors `InventoryItemRow`): supplier and
- * total on top, then a meta line (date · status), then the line-count / shipping chips. */
-export function PurchaseRow({ purchase: p, isLast, onEdit, onDelete }: PurchaseRowProps) {
+ * total on top, then a meta line (date · status), then the line-count / shipping chips.
+ * The whole row opens the intake / lot-lifecycle detail (#121). */
+export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDelete }: PurchaseRowProps) {
+  const router = useRouter();
   const [hovered, setHovered] = useState(false);
   const status = statusChip(p.status);
+  const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
 
   const menuActions: RowAction[] = [
+    { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(p) },
     {
       key: "delete",
@@ -75,10 +81,17 @@ export function PurchaseRow({ purchase: p, isLast, onEdit, onDelete }: PurchaseR
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onClick={() => router.push(detailHref)}
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") router.push(detailHref);
+        }}
         style={{
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          cursor: "pointer",
         }}
       >
         {/* Line 1: supplier (· via platform) + actions */}
@@ -104,7 +117,9 @@ export function PurchaseRow({ purchase: p, isLast, onEdit, onDelete }: PurchaseR
             </span>
           )}
           <span style={{ flex: 1 }} />
-          <RowActionsMenu actions={menuActions} ariaLabel="Purchase actions" />
+          <span onClick={(e) => e.stopPropagation()}>
+            <RowActionsMenu actions={menuActions} ariaLabel="Purchase actions" />
+          </span>
         </div>
 
         {/* Line 2: date + status */}

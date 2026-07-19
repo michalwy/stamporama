@@ -26,6 +26,7 @@ import {
   type VendorMap,
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
@@ -127,15 +128,26 @@ const NEW_ISSUE_BUTTON_STYLE: React.CSSProperties = {
  * a parent area includes its descendants. Right: the scope's issues, text-filterable,
  * each expandable to its stamp/variant tree — rendered with the same shared
  * presentation as the main issues list, minus action buttons; a click selects. */
+/** A whole issue picked for bulk intake (#121): the issue id, a display label, and how
+ * many of its stamps are required-for-completeness (the copies that will be created). */
+export interface PickedIssue {
+  issueId: string;
+  label: string;
+  requiredCount: number;
+}
+
 export function StampPickerBrowser({
   collectionId,
   areas,
   onPick,
+  onPickIssue,
   onClose,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
   onPick: (picked: PickedStamp) => void;
+  /** When provided, each issue row offers an "Add whole issue" action (lot intake, #121). */
+  onPickIssue?: (picked: PickedIssue) => void;
   onClose: () => void;
 }) {
   const [areaId, setAreaId] = useState<string | null>(null);
@@ -252,6 +264,7 @@ export function StampPickerBrowser({
               selectedAreaId={areaId}
               justCreatedIssueId={justCreatedIssueId}
               onPick={onPick}
+              onPickIssue={onPickIssue}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
               onNewVariant={(issue, parentStampId) =>
@@ -316,6 +329,7 @@ function IssueBrowser({
   selectedAreaId,
   justCreatedIssueId,
   onPick,
+  onPickIssue,
   onNewIssue,
   onNewStamp,
   onNewVariant,
@@ -325,6 +339,7 @@ function IssueBrowser({
   selectedAreaId: string | null;
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
+  onPickIssue?: (picked: PickedIssue) => void;
   onNewIssue: (areaId: string | null) => void;
   onNewStamp: (issue: IssueData) => void;
   onNewVariant: (issue: IssueData, parentStampId: string) => void;
@@ -433,6 +448,16 @@ function IssueBrowser({
               isLast={i === filtered.length - 1}
               defaultExpanded={issue.id === justCreatedIssueId}
               onPick={handlePick}
+              onPickIssue={
+                onPickIssue
+                  ? () =>
+                      onPickIssue({
+                        issueId: issue.id,
+                        label: issueLabel(issue.name, issue.year),
+                        requiredCount: issue.completeness.required,
+                      })
+                  : undefined
+              }
               onNewStamp={() => onNewStamp(issue)}
               onNewVariant={(parentStampId) => onNewVariant(issue, parentStampId)}
             />
@@ -452,6 +477,7 @@ function PickIssueRow({
   isLast,
   defaultExpanded,
   onPick,
+  onPickIssue,
   onNewStamp,
   onNewVariant,
 }: {
@@ -463,6 +489,8 @@ function PickIssueRow({
   isLast: boolean;
   defaultExpanded: boolean;
   onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueData) => void;
+  /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
+  onPickIssue?: () => void;
   onNewStamp: () => void;
   onNewVariant: (parentStampId: string) => void;
 }) {
@@ -533,6 +561,32 @@ function PickIssueRow({
           >
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
+
+          {onPickIssue && issue.completeness.required > 0 && (
+            <Tooltip content="Add every required stamp of this issue to the lot" align="end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPickIssue();
+                }}
+                style={{
+                  flexShrink: 0,
+                  padding: "0.25rem 0.5rem",
+                  background: "transparent",
+                  color: "var(--color-text-secondary)",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + Whole issue ({issue.completeness.required})
+              </button>
+            </Tooltip>
+          )}
         </div>
 
         {(issue.catalogNumbers.length > 0 || issue.members.length > 0) && (

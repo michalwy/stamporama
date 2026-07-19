@@ -92,10 +92,18 @@ moment money was spent), reusing the `ExchangeRate` mechanism from the currency 
 
 **Physical delivery** is a separate axis. `Purchase.status` is
 `preparing | in_transit | arrived` at the header, and each `Item` carries an
-independent **`deliveryState`** = `in_transit | delivered | not_delivered | damaged`.
+independent **`deliveryState`** = `ordered | in_transit | delivered | not_delivered | damaged`.
 This axis is orthogonal to `inCollection` and `forSale`/`forTrade` (a copy can be
 `in_transit` and already `forSale`). A lot may be **closed before the shipment
 physically arrives**.
+
+Intake (#121) creates copies as **`ordered`** and **not** `inCollection` — a purchased
+copy is not a holding until it arrives. `ordered` behaves like `in_transit` for
+allocation (it stays in the lot and receives a cost-basis on close); it only distinguishes
+"placed the order" from "shipped" for the collector. Intake accepts either a single stamp
+or a whole issue, fanning the issue out to its **required-for-completeness** members, all
+sharing one condition/certificate. Removing such a copy from its lot **deletes** it, since
+it exists only to populate the lot.
 
 - **Not-delivered** → the item is removed from its lot and its share **redistributes**
   to the survivors (typically a refund or a copy that never came).
@@ -139,6 +147,8 @@ Purchase                                         -- table "purchase"
 PurchaseLot                                      -- table "purchase_lot"
   id            String   @id @default(cuid())
   purchaseId    String   → Purchase     (onDelete: Cascade)
+  title         String?                           -- optional label; UI derives one from
+                                                  -- the lot's copies when blank (#121)
   price         Decimal  @db.Decimal(10, 2)
   status        String   @default("open")        -- open | closed
   -- items: Item[]
@@ -151,7 +161,7 @@ PurchaseExpense                                  -- table "purchase_expense"
 
 Item  (additions to ADR-0007)                    -- table "item"
   lotId         String?  → PurchaseLot  (onDelete: Restrict)   -- optional acquisition link
-  deliveryState String   @default("delivered")   -- in_transit | delivered | not_delivered | damaged
+  deliveryState String   @default("delivered")   -- ordered | in_transit | delivered | not_delivered | damaged
   costBasis     Decimal? @db.Decimal(10, 2)       -- base-currency snapshot, null = pending
 ```
 

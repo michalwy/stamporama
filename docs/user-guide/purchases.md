@@ -76,3 +76,87 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
 - **Delete** removes the purchase along with any lots and expenses. This cannot be undone.
   Once lots have been resolved into copies (during intake), a purchase whose lots still hold
   copies cannot be deleted until those copies are detached.
+
+## Intake and the lot lifecycle
+
+Click a purchase row (or **Open** in its **⋮** menu) to open its **detail** screen. This is
+where you build up the order's lots and identify copies into them over time.
+
+### Lots
+
+Use **Add lot** to add a priced inventory line. A lot can carry an optional **title** (e.g.
+*Album Polska 1950s* or *Box lot*) so you can tell lots apart. Leave the title blank and the
+lot is labelled automatically from its copies' **catalog numbers** (with the usual vendor
+prefixes) — up to three, with *+N more* beyond that — falling back to *Lot 1*, *Lot 2*, …
+while it is still empty. Each lot shows:
+
+- its **title** (or the derived label),
+- its **price** (in the purchase's transaction currency),
+- its **status** — **Open** while you are still identifying copies, **Closed** once its cost
+  has been allocated,
+- how many **copies** have been identified into it,
+- its **pool** — the lot's price plus its fair share of the shipping cost — shown in the
+  transaction currency and, when a rate is known, in your base currency. The pool is what
+  gets split across the lot's copies when you close it.
+
+A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reopen** it, or
+**Delete** it. A
+lot can only be deleted once it holds no copies, and its price can only be edited while it is
+open.
+
+### Identifying stamps (intake)
+
+A large lot is rarely sorted in one sitting — you identify stamps into it as you work through
+the parcel, often long after the money changed hands. Open a lot's **⋮** menu and choose
+**Add stamps**. This opens the same **browse popup** used across the app: navigate areas and
+issues, and either
+
+- pick a **single stamp** (creating the issue/stamp first if needed), or
+- add a **whole issue** with the **+ Whole issue** button on the issue row — this creates a
+  copy for every stamp in that issue marked *required for completeness*.
+
+You are then asked once for the **condition** and (optional) **certificate**; they apply to
+every copy created in that step. The copies are linked to the lot and marked **Ordered** —
+purchased but not yet in hand, so they are deliberately **not** counted as *in collection*
+yet. (They become part of your collection later, once received.)
+
+While the lot is **open**, each copy shows a **live estimated cost-basis** (prefixed with
+`~`) — the share of the lot's pool it would receive if you closed the lot right now, computed
+from the current copies and their catalog prices. It updates as you add, remove, or price
+copies, and is **not** saved; the real cost-basis is frozen only when the lot closes. A copy
+with no catalog price (or a purchase with no base-currency rate) shows `cost —` until that is
+resolved.
+
+The copies list can be shown **Flat** or grouped **By issue** using the toggle above the
+list — handy when a lot spans several issues. In the grouped view each issue appears as a
+header that reads like a row on the Issues screen (area, title, catalog numbers, and its
+required/total stamp count) and can be collapsed or expanded.
+
+Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
+disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
+**Prices** tab) — so you can correct a copy or fill in a missing price without leaving the
+lot.
+
+To remove a stamp from a lot, use its **⋮** menu → **Remove from lot**. Because these copies
+exist only to populate the lot, removing one **deletes** it.
+
+### Closing a lot
+
+When a lot is fully sorted, **Close lot** runs the cost allocation: the lot's pool is
+distributed across its copies in proportion to each copy's **primary-catalog price** for its
+condition (and certificate), and each copy's share is **frozen** as its cost-basis. Closing
+works even if the shipment has not physically arrived yet.
+
+Closing is **blocked** if any copy lacks a primary-catalog price for its condition — there is
+no weight to split the pool by. The screen highlights the copies that need a price and shows
+how many are unpriced; click the **⚠ N unpriced** chip to filter the list down to just those
+copies. To price them without leaving the screen, click the **+ catalog value** link in the
+copy's catalog-value column — a small dialog sets that value on the stamp's **primary catalog**
+(latest edition) for the copy's condition × certificate. (For fuller edits, a copy's **⋮**
+menu → **Edit stamp** opens the **Prices** tab.) Then try the close again.
+
+### Reopening for corrections
+
+**Reopen lot** flips a closed lot back to open and returns every copy's cost-basis to
+pending, so you can add, remove, or re-price copies. Close it again to re-run the allocation
+with the corrected membership.

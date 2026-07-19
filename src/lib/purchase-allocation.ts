@@ -61,7 +61,12 @@ export interface LotPool {
   poolBase: number;
 }
 
-export type DeliveryState = "in_transit" | "delivered" | "not_delivered" | "damaged";
+export type DeliveryState =
+  | "ordered"
+  | "in_transit"
+  | "delivered"
+  | "not_delivered"
+  | "damaged";
 
 /** An item participating in a lot close. */
 export interface LotItem {
@@ -217,6 +222,30 @@ export function allocateLot(poolBase: number, items: LotItem[]): LotAllocation {
     snapshots: staying.map((it, i) => ({ itemId: it.id, costBasis: shares[i] })),
     notDeliveredItemIds,
   };
+}
+
+/** A per-item cost-basis **estimate** for an open lot, computed from whatever data is
+ * available right now and never persisted (the real snapshot is frozen on close by
+ * `allocateLot`). Unlike `allocateLot` it never throws: not-delivered, unpriced, and
+ * zero-weight copies are excluded (a `null` estimate) and the pool is apportioned across the
+ * remaining priced copies. When no copy carries a positive weight, every estimate is `null`.
+ * When every staying copy is priced, the estimates equal the eventual close snapshots. */
+export interface ItemCostEstimate {
+  itemId: string;
+  /** Estimated base-currency share (2 dp), or null when it can't be estimated yet. */
+  costBasis: number | null;
+}
+
+export function estimateLot(poolBase: number, items: LotItem[]): ItemCostEstimate[] {
+  const included = items.map(
+    (it) =>
+      it.deliveryState !== "not_delivered" && it.catalogPrice != null && it.catalogPrice > 0
+  );
+  const weights = items.map((it, i) => (included[i] ? (it.catalogPrice as number) : 0));
+  const base = weights.reduce((sum, w) => sum + w, 0);
+  if (base <= 0) return items.map((it) => ({ itemId: it.id, costBasis: null }));
+  const shares = apportion(poolBase, weights);
+  return items.map((it, i) => ({ itemId: it.id, costBasis: included[i] ? shares[i] : null }));
 }
 
 /**

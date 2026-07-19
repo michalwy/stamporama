@@ -252,8 +252,9 @@ model Item {
   // on `Purchase`/`PurchaseLot`, superseding the flat cost fields from ADR-0007.
   lotId               String?
   // Physical delivery axis (ADR-0009 §5), orthogonal to `inCollection`/`forSale`/`forTrade`.
-  // One of: in_transit | delivered | not_delivered | damaged. Defaults `delivered` — a
-  // manually added copy is in hand; purchase intake sets `in_transit` explicitly.
+  // One of: ordered | in_transit | delivered | not_delivered | damaged. Defaults `delivered`
+  // — a manually added copy is in hand; purchase intake sets `ordered` explicitly (and leaves
+  // the copy out of the collection until it arrives).
   deliveryState       String   @default("delivered")
   // Base-currency cost-basis snapshot (ADR-0009 §2/§3). Null = pending (lot still open,
   // or the copy entered via a channel that has not written a cost yet).
@@ -345,6 +346,10 @@ model Purchase {
 model PurchaseLot {
   id         String @id @default(cuid())
   purchaseId String
+  // Optional free-text title identifying the lot (e.g. "Album Polska 1950s", "Box lot").
+  // When blank, the UI derives a display label from the copies identified into the lot,
+  // falling back to a positional "Lot N" (#121).
+  title      String?
   // Line price in the purchase's transaction currency.
   price      Decimal @db.Decimal(10, 2)
   // Intake status: open (items still being identified, cost pending) | closed

@@ -224,6 +224,42 @@ export interface ItemCreateInput {
   /** Assignable storage location id (#56). Must be `assignable = true`. */
   locationId?: string | null;
   locationRef?: string | null;
+  /** Acquisition link: the open `PurchaseLot` this copy is being identified into during
+   * intake (ADR-0009 §5, #121). When set, the lot must live in the same collection and be
+   * `open`; the copy's cost-basis stays pending (null) until the lot is closed. */
+  lotId?: string | null;
+  /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered |
+   * damaged. Defaults to `delivered` (a manually added copy is in hand); intake passes
+   * `in_transit`. */
+  deliveryState?: string | null;
+}
+
+/** The delivery axis values a copy may carry (ADR-0009 §5). `ordered` is the intake
+ * default (#121): a purchased copy that is not yet in hand — like `in_transit` for
+ * allocation (it stays in the lot), but flagged as merely ordered, not shipped. */
+const VALID_DELIVERY_STATES = new Set([
+  "ordered",
+  "in_transit",
+  "delivered",
+  "not_delivered",
+  "damaged",
+]);
+
+/** A lot referenced during intake must belong to this collection and be open — a copy
+ * cannot be identified into another user's lot, nor into a lot whose cost is already
+ * frozen (ADR-0009 §5). Returns nothing; throws with a friendly message otherwise. */
+async function assertLotOpenInCollection(
+  collectionId: string,
+  lotId: string
+): Promise<void> {
+  const lot = await prisma.purchaseLot.findFirst({
+    where: { id: lotId, purchase: { collectionId } },
+    select: { status: true },
+  });
+  if (!lot) throw new Error("Lot not found in this collection.");
+  if (lot.status !== "open") {
+    throw new Error("This lot is closed. Reopen it before identifying more copies.");
+  }
 }
 
 export interface ItemUpdateInput {
@@ -262,6 +298,13 @@ export async function createItem(
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
+  if (data.lotId) {
+    await assertLotOpenInCollection(collectionId, data.lotId);
+  }
+  const deliveryState =
+    data.deliveryState && VALID_DELIVERY_STATES.has(data.deliveryState)
+      ? data.deliveryState
+      : "delivered";
   const item = await prisma.item.create({
     data: {
       collectionId,
@@ -275,6 +318,8 @@ export async function createItem(
       locationId: data.locationId ?? null,
       // A ref only makes sense with a location; drop it when none is set.
       locationRef: data.locationId ? (data.locationRef ?? null) : null,
+      lotId: data.lotId ?? null,
+      deliveryState,
     },
     select: ITEM_SELECT,
   });
@@ -392,6 +437,8 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   issueId?: string;
   /** Restrict to copies stored in this location or any of its descendants (#56). */
   locationId?: string;
+  /** Restrict to copies identified into a single purchase lot (intake view, #121). */
+  lotId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -480,6 +527,7 @@ export async function listItemsPaginated(
         ? { stamp: { issueMemberships: { some: { issueId: filters.issueId } } } }
         : {}),
       ...(locationIds ? { locationId: { in: locationIds } } : {}),
+      ...(filters.lotId ? { lotId: filters.lotId } : {}),
       ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
       ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
       ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
@@ -578,6 +626,22 @@ export async function listItemsPaginated(
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+/** Every copy identified into a single lot, fully enriched (same shape and catalog-vendor
+ * valuation as the Copies screen), oldest first — for the lot intake view (#121). A lot
+ * holds a bounded set of copies, so this returns them all rather than paginating. */
+export async function listLotCopies(
+  ownerId: string,
+  collectionId: string,
+  lotId: string
+): Promise<ItemListItem[]> {
+  const { items } = await listItemsPaginated(ownerId, collectionId, {
+    lotId,
+    sortDir: "asc",
+    pageSize: 1000,
+  });
+  return items;
 }
 
 export async function deleteItem(ownerId: string, itemId: string): Promise<void> {
@@ -823,6 +887,38 @@ async function valuateItemRows(
   return result;
 }
 
+/** Value a set of copies by id, resolving each copy's condition, certificate, and
+ * unknown-variant flag from the database, then applying the same primary-catalog
+ * price-for-condition×certificate rule the Copies screen uses. Returned as id →
+ * valuation; ids not found are simply absent. The lot-close flow (#121) reads
+ * `baseAmount` off each valuation as the allocation weight (ADR-0009 §3.3). Caller
+ * must have already asserted collection ownership. */
+export async function valuateItemsByIds(
+  collectionId: string,
+  itemIds: string[]
+): Promise<Map<string, CopyValuation>> {
+  if (itemIds.length === 0) return new Map();
+  const rows = await prisma.item.findMany({
+    where: { id: { in: itemIds }, collectionId },
+    select: {
+      id: true,
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+    },
+  });
+  const valuationRows: ValuationRow[] = rows.map((row) => ({
+    id: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    unknownVariant:
+      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+  }));
+  return valuateItemRows(collectionId, valuationRows);
+}
+
 /** Aggregate holdings valuation over every copy matching the given filters (the whole
  * filtered set, not one page). Mirrors the disposition/condition/certificate filters of
  * `listItemsPaginated` so the total reflects what the Copies screen is showing. */
@@ -845,6 +941,7 @@ export async function getHoldingsValuation(
         ? { certificateStatusId: filters.certificateStatusId }
         : {}),
       ...(locationIds ? { locationId: { in: locationIds } } : {}),
+      ...(filters.lotId ? { lotId: filters.lotId } : {}),
       ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
       ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
       ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),

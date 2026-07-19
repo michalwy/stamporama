@@ -15,8 +15,10 @@ import {
   deleteStampCatalogNumber,
   getStampCatalogPrices,
   getStampPriceDetails,
+  getQuickCatalogPriceContext,
+  quickSetCatalogPrice,
 } from "@/lib/stamps";
-import type { StampSubtypeAssignment } from "@/lib/stamps";
+import type { StampSubtypeAssignment, QuickCatalogPriceContext } from "@/lib/stamps";
 import type {
   CatalogPriceInput,
   StampCatalogPriceDisplay,
@@ -28,10 +30,63 @@ export type StampActionState =
   | { status: "success" }
   | { status: "error"; message: string };
 
+/** Result of loading quick-price context: the resolved target + any existing amount. */
+export type QuickPriceContextState =
+  | { status: "success"; context: QuickCatalogPriceContext }
+  | { status: "error"; message: string };
+
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return session;
+}
+
+/** Load the quick catalog-price editor's context (target catalog/edition/currency and the
+ * current amount) for a stamp at a condition × certificate (#121). */
+export async function getQuickCatalogPriceContextAction(
+  stampId: string,
+  conditionId: string,
+  certificateStatusId: string | null
+): Promise<QuickPriceContextState> {
+  const session = await getSession();
+  try {
+    const context = await getQuickCatalogPriceContext(
+      session.user.id,
+      stampId,
+      conditionId,
+      certificateStatusId
+    );
+    return { status: "success", context };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Could not load catalog context.",
+    };
+  }
+}
+
+/** Quickly set a single catalog value for a stamp at a condition × certificate on its
+ * primary catalog's latest edition (#121). `amount` is the raw string from the input. */
+export async function quickSetCatalogPriceAction(
+  stampId: string,
+  conditionId: string,
+  certificateStatusId: string | null,
+  amount: string
+): Promise<StampActionState> {
+  const session = await getSession();
+  const n = Number(amount);
+  if (!amount.trim() || !Number.isFinite(n) || n < 0) {
+    return { status: "error", message: "Enter a valid non-negative amount." };
+  }
+  try {
+    await quickSetCatalogPrice(session.user.id, stampId, conditionId, certificateStatusId, n);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to set the catalog price.",
+    };
+  }
 }
 
 // Price cells are serialized as `catalogPrice_<editionId>~<conditionId>~<certId>`

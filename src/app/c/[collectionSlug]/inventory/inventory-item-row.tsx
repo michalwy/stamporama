@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
@@ -11,6 +11,7 @@ import {
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 
@@ -90,13 +91,45 @@ const META_INLINE: React.CSSProperties = {
 /** Catalog valuation of a copy (ADR-0007 §7). Uncertain values (unknown variant, valued
  * at the lowest child price) are prefixed `~` and muted; unpriced copies show `—`;
  * a price in a currency with no base rate falls back to its own currency. */
-function CopyValue({ item, baseCurrency }: { item: ItemListItem; baseCurrency: string }) {
+function CopyValue({
+  item,
+  baseCurrency,
+  onSetPrice,
+}: {
+  item: ItemListItem;
+  baseCurrency: string;
+  /** When provided, the value area becomes an inline catalog-price editor (#121): a
+   * "+ price" link when unpriced, and a click-to-edit affordance when priced. */
+  onSetPrice?: () => void;
+}) {
   const v = item.value;
   if (v.unpriced) {
+    if (onSetPrice) {
+      return (
+        <Tooltip content="Set the catalog value for this condition on the primary catalog">
+          <button
+            type="button"
+            onClick={onSetPrice}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "var(--color-accent)",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            + catalog value
+          </button>
+        </Tooltip>
+      );
+    }
     return (
-      <span style={{ ...META, fontVariantNumeric: "tabular-nums" }} title="No catalog price recorded for this condition.">
-        —
-      </span>
+      <Tooltip content="No catalog price recorded for this condition.">
+        <span style={{ ...META, fontVariantNumeric: "tabular-nums" }}>—</span>
+      </Tooltip>
     );
   }
   const converted = v.baseAmountDisplay != null;
@@ -108,21 +141,43 @@ function CopyValue({ item, baseCurrency }: { item: ItemListItem; baseCurrency: s
     : converted
       ? "Catalog value"
       : `Catalog value (no ${baseCurrency} rate available)`;
+  const valueStyle: React.CSSProperties = {
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    fontVariantNumeric: "tabular-nums",
+    color: v.uncertain ? "var(--color-text-muted)" : "var(--color-text-primary)",
+    fontStyle: v.uncertain ? "italic" : undefined,
+    whiteSpace: "nowrap",
+  };
+  if (onSetPrice) {
+    return (
+      <Tooltip content={`${title} — click to edit`} align="end">
+        <button
+          type="button"
+          onClick={onSetPrice}
+          style={{
+            ...valueStyle,
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            textDecoration: "underline dotted",
+            textUnderlineOffset: "0.2em",
+          }}
+        >
+          {v.uncertain ? "~" : ""}
+          {text}
+        </button>
+      </Tooltip>
+    );
+  }
   return (
-    <span
-      title={title}
-      style={{
-        fontSize: "0.875rem",
-        fontWeight: 600,
-        fontVariantNumeric: "tabular-nums",
-        color: v.uncertain ? "var(--color-text-muted)" : "var(--color-text-primary)",
-        fontStyle: v.uncertain ? "italic" : undefined,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {v.uncertain ? "~" : ""}
-      {text}
-    </span>
+    <Tooltip content={title} align="end">
+      <span style={valueStyle}>
+        {v.uncertain ? "~" : ""}
+        {text}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -136,6 +191,16 @@ interface InventoryItemRowProps {
   isLast: boolean;
   /** Read-only mode hides the row actions (used by the inventory popup, #110). */
   readOnly?: boolean;
+  /** Replace the default edit/identify/history/delete menu with a custom action set
+   * (used by the lot intake view, which offers "Remove from lot", #121). */
+  actionsOverride?: RowAction[];
+  /** Extra chips appended to the last (condition/disposition) line — e.g. the lot
+   * delivery state and cost-basis on the intake screen (#121). */
+  trailingChips?: ReactNode;
+  /** Tint the row background to flag it (e.g. a copy blocking a lot close, #121). */
+  highlight?: boolean;
+  /** When provided, the catalog-value area becomes an inline price editor (#121). */
+  onSetCatalogPrice?: () => void;
   onEdit?: (item: ItemListItem) => void;
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
@@ -151,6 +216,10 @@ export function InventoryItemRow({
   vendorMap,
   isLast,
   readOnly = false,
+  actionsOverride,
+  trailingChips,
+  highlight = false,
+  onSetCatalogPrice,
   onEdit,
   onIdentify,
   onViewHistory,
@@ -193,16 +262,17 @@ export function InventoryItemRow({
   ];
 
   const actions = readOnly ? null : (
-    <RowActionsMenu actions={menuActions} ariaLabel="Copy actions" />
+    <RowActionsMenu actions={actionsOverride ?? menuActions} ariaLabel="Copy actions" />
   );
 
   const unknownVariantChip = item.unknownVariant && (
-    <span
-      style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning-border, var(--color-border))" }}
-      title="Copy is linked to the base stamp; the specific variant is unknown."
-    >
-      unknown variant
-    </span>
+    <Tooltip content="Copy is linked to the base stamp; the specific variant is unknown.">
+      <span
+        style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning-border, var(--color-border))" }}
+      >
+        unknown variant
+      </span>
+    </Tooltip>
   );
 
   return (
@@ -212,7 +282,11 @@ export function InventoryItemRow({
         onMouseLeave={() => setHovered(false)}
         style={{
           padding: "0.75rem 1.25rem",
-          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          background: hovered
+            ? "var(--color-bg-row-hover)"
+            : highlight
+              ? "var(--color-error-soft, var(--color-bg-page))"
+              : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
         }}
       >
@@ -291,7 +365,7 @@ export function InventoryItemRow({
           )}
           {unknownVariantChip}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
-            <CopyValue item={item} baseCurrency={baseCurrency} />
+            <CopyValue item={item} baseCurrency={baseCurrency} onSetPrice={onSetCatalogPrice} />
           </span>
         </div>
 
@@ -305,22 +379,23 @@ export function InventoryItemRow({
             flexWrap: "wrap",
           }}
         >
-          <span style={CHIP} title={item.conditionName}>
-            {item.conditionAbbreviation}
-          </span>
+          <Tooltip content={item.conditionName}>
+            <span style={CHIP}>{item.conditionAbbreviation}</span>
+          </Tooltip>
           {item.certificateStatusName && (
-            <span style={CHIP} title="Certificate status">
-              {item.certificateStatusName}
-            </span>
+            <Tooltip content="Certificate status">
+              <span style={CHIP}>{item.certificateStatusName}</span>
+            </Tooltip>
           )}
           {locationPath && (
-            <span
-              style={LOCATION_CHIP}
-              title={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
+            <Tooltip
+              content={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
             >
-              📍 {locationPath}
-              {item.locationRef ? ` · ${item.locationRef}` : ""}
-            </span>
+              <span style={LOCATION_CHIP}>
+                📍 {locationPath}
+                {item.locationRef ? ` · ${item.locationRef}` : ""}
+              </span>
+            </Tooltip>
           )}
           {dispositions.map((d) => (
             <span key={d.key} style={dispositionChip(d.token)}>
@@ -328,10 +403,11 @@ export function InventoryItemRow({
             </span>
           ))}
           {item.notes && (
-            <span style={META} title={item.notes}>
-              📝 notes
-            </span>
+            <Tooltip content={item.notes}>
+              <span style={META}>📝 notes</span>
+            </Tooltip>
           )}
+          {trailingChips}
         </div>
       </div>
     </div>

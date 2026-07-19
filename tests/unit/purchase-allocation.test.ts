@@ -4,6 +4,7 @@ import {
   distributeSharedCost,
   computeLotPool,
   allocateLot,
+  estimateLot,
   closeLot,
   LotCloseBlockedError,
   type PurchaseCosts,
@@ -283,6 +284,50 @@ describe("allocateLot — close-blocking", () => {
     assert.deepEqual(snapshots, [
       { itemId: "a", costBasis: 0 },
       { itemId: "b", costBasis: 0 },
+    ]);
+  });
+});
+
+describe("estimateLot — live open-lot estimate", () => {
+  it("matches the close snapshots when every staying copy is priced", () => {
+    const items = [item("a", 3), item("b", 1)];
+    const est = estimateLot(100, items);
+    const { snapshots } = allocateLot(100, items);
+    assert.deepEqual(
+      est.map((e) => ({ itemId: e.itemId, costBasis: e.costBasis })),
+      snapshots
+    );
+    // and it reconciles to the pool
+    assert.equal(est.reduce((s, e) => s + (e.costBasis ?? 0), 0), 100);
+  });
+
+  it("excludes unpriced copies (null) and splits the pool across the priced ones", () => {
+    const est = estimateLot(100, [item("a", 3), item("b", null), item("c", 1)]);
+    assert.deepEqual(est, [
+      { itemId: "a", costBasis: 75 },
+      { itemId: "b", costBasis: null },
+      { itemId: "c", costBasis: 25 },
+    ]);
+  });
+
+  it("excludes not-delivered copies from the estimate", () => {
+    const est = estimateLot(90, [
+      item("a", 1),
+      item("b", 2),
+      item("gone", 1, "not_delivered"),
+    ]);
+    assert.deepEqual(est, [
+      { itemId: "a", costBasis: 30 },
+      { itemId: "b", costBasis: 60 },
+      { itemId: "gone", costBasis: null },
+    ]);
+  });
+
+  it("returns all-null (never throws) when no copy has a positive weight", () => {
+    const est = estimateLot(50, [item("a", null), item("b", 0)]);
+    assert.deepEqual(est, [
+      { itemId: "a", costBasis: null },
+      { itemId: "b", costBasis: null },
     ]);
   });
 });

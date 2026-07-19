@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface TooltipProps {
   content: ReactNode;
@@ -15,57 +16,78 @@ interface TooltipProps {
   align?: "center" | "start" | "end";
 }
 
-/** Lightweight hover tooltip that supports rich (formatted) content. */
+/** Gap between the trigger and the tooltip, in pixels (~0.4rem). */
+const GAP = 6;
+
+/**
+ * Lightweight hover tooltip that supports rich (formatted) content. The bubble is rendered
+ * in a portal to <body> and positioned with `fixed` coordinates taken from the trigger, so
+ * it is never clipped by an ancestor's `overflow` (rows, cards, dialogs) — a problem the
+ * old absolutely-positioned bubble had.
+ */
 export function Tooltip({ content, children, placement = "top", align = "center" }: TooltipProps) {
-  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
 
-  const vertical =
-    placement === "top"
-      ? { bottom: "calc(100% + 0.4rem)" }
-      : { top: "calc(100% + 0.4rem)" };
+  function show() {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) setRect(r);
+  }
+  function hide() {
+    setRect(null);
+  }
 
-  const horizontal =
-    align === "center"
-      ? { left: "50%", transform: "translateX(-50%)" }
-      : align === "end"
-        ? { right: 0 }
-        : { left: 0 };
+  let bubble: ReactNode = null;
+  if (rect && typeof document !== "undefined") {
+    const top = placement === "top" ? rect.top - GAP : rect.bottom + GAP;
+    const translateY = placement === "top" ? "translateY(-100%)" : "";
+    const left =
+      align === "center" ? rect.left + rect.width / 2 : align === "end" ? rect.right : rect.left;
+    const translateX =
+      align === "center" ? "translateX(-50%)" : align === "end" ? "translateX(-100%)" : "";
+    const transform = [translateX, translateY].filter(Boolean).join(" ");
+
+    bubble = createPortal(
+      <span
+        role="tooltip"
+        style={{
+          position: "fixed",
+          top,
+          left,
+          transform: transform || undefined,
+          zIndex: 1000,
+          background: "var(--color-bg-elevated)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.5rem",
+          boxShadow: "0 4px 16px rgb(0 0 0 / 0.15)",
+          padding: "0.5rem 0.625rem",
+          fontSize: "0.75rem",
+          lineHeight: 1.45,
+          color: "var(--color-text-primary)",
+          whiteSpace: "normal",
+          width: "max-content",
+          maxWidth: "16rem",
+          textAlign: "left",
+          pointerEvents: "none",
+        }}
+      >
+        {content}
+      </span>,
+      document.body
+    );
+  }
 
   return (
     <span
-      style={{ position: "relative", display: "inline-flex" }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
+      ref={triggerRef}
+      style={{ display: "inline-flex" }}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
     >
       {children}
-      {open && (
-        <span
-          role="tooltip"
-          style={{
-            position: "absolute",
-            ...vertical,
-            ...horizontal,
-            zIndex: 50,
-            background: "var(--color-bg-elevated)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            boxShadow: "0 4px 16px rgb(0 0 0 / 0.15)",
-            padding: "0.5rem 0.625rem",
-            fontSize: "0.75rem",
-            lineHeight: 1.45,
-            color: "var(--color-text-primary)",
-            whiteSpace: "normal",
-            width: "max-content",
-            maxWidth: "16rem",
-            textAlign: "left",
-            pointerEvents: "none",
-          }}
-        >
-          {content}
-        </span>
-      )}
+      {bubble}
     </span>
   );
 }

@@ -233,6 +233,51 @@ export async function listAllIssues(
   return issues.map(toIssueData);
 }
 
+/** Just the fields needed to render an issue header (title, catalog chips, counts) —
+ * used by the lot intake view's grouped-by-issue mode (#121) so a lot's issue rows read
+ * like the issues list without loading each issue's stamp tree. */
+export interface IssueHeader {
+  id: string;
+  name: string | null;
+  year: number | null;
+  collectionAreaId: string;
+  catalogNumbers: IssueCatalogNumberData[];
+  memberCount: number;
+  requiredCount: number;
+}
+
+/** Fetch issue headers for a set of ids, collection-scoped. Ids not found are omitted. */
+export async function getIssueHeadersByIds(
+  ownerId: string,
+  collectionId: string,
+  issueIds: string[]
+): Promise<IssueHeader[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (issueIds.length === 0) return [];
+  const rows = await prisma.issue.findMany({
+    where: { id: { in: issueIds }, collectionId },
+    select: {
+      id: true,
+      name: true,
+      year: true,
+      collectionAreaId: true,
+      catalogNumbers: {
+        select: { catalogVendorId: true, firstNumber: true, lastNumber: true },
+      },
+      members: { select: { requiredForCompleteness: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    year: r.year,
+    collectionAreaId: r.collectionAreaId,
+    catalogNumbers: r.catalogNumbers,
+    memberCount: r.members.length,
+    requiredCount: r.members.filter((m) => m.requiredForCompleteness).length,
+  }));
+}
+
 // ── Paginated queries (used by API routes) ─────────────────────────────────
 
 export type IssueSortBy = "year" | "name" | "catalogNumber";

@@ -209,6 +209,7 @@ export function PurchasesListPanel({
               <PurchaseRow
                 key={p.id}
                 purchase={p}
+                collectionSlug={collectionSlug}
                 isLast={idx === rows.length - 1 && !hasNextPage}
                 onEdit={(row) => setDialog({ kind: "edit", purchase: row })}
                 onDelete={(row) => setDialog({ kind: "delete", purchase: row })}
