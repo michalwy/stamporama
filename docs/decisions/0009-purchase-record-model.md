@@ -67,10 +67,13 @@ from ADR-0007 — supplier, date, and price now live on `Purchase`/`PurchaseLot`
    (ADR-0006 multidimensional prices).
 4. The result is **frozen** as the per-item snapshot; later catalog-price drift does
    not change it.
-5. A **structural** change to a closed lot — membership change, or a variant
-   reassignment (`ItemVariantHistory`, ADR-0007) — **recomputes** the allocation and
-   overwrites affected snapshots. Retroactively changing the cost-basis of an
-   already-sold item is accepted.
+5. Snapshots are **frozen for good** at close. A later variant reassignment, condition change,
+   or catalog-price edit does **not** retroactively recompute a closed lot (#122): the copy is
+   assumed correctly identified at close, and automatic recompute was rejected — a single
+   catalog-price edit would otherwise have to cascade across every lot holding that stamp (and
+   across every catalog re-import), which is more cost than benefit. To correct a closed lot,
+   **reopen** it (which returns its copies' cost-basis to pending), fix the copies, and
+   **close** again to re-run the allocation.
 
 ### 4. Currency
 

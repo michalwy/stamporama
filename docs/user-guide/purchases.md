@@ -246,3 +246,7 @@ menu → **Edit stamp** opens the **Prices** tab.) Then try the close again.
 **Reopen lot** flips a closed lot back to open and returns every copy's cost-basis to
 pending, so you can add, remove, or re-price copies. Close it again to re-run the allocation
 with the corrected membership.
+
+Cost-basis is **frozen at close** and is not recomputed automatically afterwards. If you later
+correct a copy's variant or condition, or edit a catalog price, a closed lot's snapshots stay
+as they were — reopen and re-close the lot if you want them recalculated.

@@ -270,8 +270,8 @@ export async function createLotWithStamps(
 }
 
 /** Edit a lot's price while it is still open. A closed lot's price is frozen into the
- * cost-basis snapshots; changing it is a structural recompute (ADR-0009 §3.5, #122), so
- * it is rejected here — reopen the lot first. */
+ * cost-basis snapshots, which are never recomputed in place (ADR-0009 §3.5, #122), so a
+ * price change on a closed lot is rejected here — reopen the lot first, then close again. */
 export async function updateLot(
   ownerId: string,
   lotId: string,
@@ -541,6 +541,12 @@ export async function reopenLot(ownerId: string, lotId: string): Promise<void> {
     await tx.purchaseLot.update({ where: { id: lotId }, data: { status: "open" } });
   });
 }
+
+// Cost-basis snapshots are frozen for good at close (ADR-0009 §3.5): a later variant
+// reassignment, condition change, or catalog-price edit does NOT retroactively recompute a
+// closed lot. Auto-recompute was deliberately rejected — a single catalog-price edit would
+// have to cascade across every lot holding that stamp (and every catalog re-import), which is
+// more cost than benefit. To correct a closed lot, reopen it, fix the copies, and close again.
 
 // ---------------------------------------------------------------------------
 // Arrival & sorting (ADR-0009 §5, #121)
