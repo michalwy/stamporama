@@ -46,6 +46,30 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
   marginBottom: "0.75rem",
 };
 
+// ── Range helpers ─────────────────────────────────────────────────────────────
+
+// Number of stamps a vendor's entered range spans, mirroring the auto-create
+// generation logic in src/app/actions/issues.ts. Returns null when the range is
+// unusable for comparison (no/invalid first number, or first > last).
+function rangeCount(first: string, last: string): number | null {
+  const from = parseInt(first.trim(), 10);
+  if (isNaN(from) || from < 1) return null;
+  if (!last.trim()) return 1;
+  const to = parseInt(last.trim(), 10);
+  if (isNaN(to) || to < 1 || from > to) return null;
+  return to - from + 1;
+}
+
+// Reads a vendor's current range inputs straight from the form DOM (the inputs
+// are uncontrolled) and returns its stamp count.
+function rangeCountFromForm(form: HTMLFormElement, vendorId: string): number | null {
+  const firstEl = form.elements.namedItem(`issueCatalogFirst_${vendorId}`);
+  const lastEl = form.elements.namedItem(`issueCatalogLast_${vendorId}`);
+  const first = firstEl instanceof HTMLInputElement ? firstEl.value : "";
+  const last = lastEl instanceof HTMLInputElement ? lastEl.value : "";
+  return rangeCount(first, last);
+}
+
 // ── IssueForm ───────────────────────────────────────────────────────────────
 
 interface IssueFormProps {
@@ -58,7 +82,9 @@ interface IssueFormProps {
   autoFocusName?: boolean;
   showAutoCreate?: boolean;
   autoCreate?: boolean;
-  onAutoCreateChange?: (checked: boolean) => void;
+  onAutoCreateChange?: (checked: boolean, form: HTMLFormElement | null) => void;
+  vendorSelection?: Record<string, boolean>;
+  onVendorToggle?: (vendorId: string, checked: boolean) => void;
 }
 
 function IssueForm({
@@ -72,6 +98,8 @@ function IssueForm({
   showAutoCreate,
   autoCreate,
   onAutoCreateChange,
+  vendorSelection,
+  onVendorToggle,
 }: IssueFormProps) {
   const sortedVendors = useMemo(() => {
     if (!primaryVendorId) return vendors;
@@ -207,7 +235,10 @@ function IssueForm({
                       <input
                         type="checkbox"
                         name={autoCreate ? `autoCreateVendor_${v.catalogVendorId}` : undefined}
-                        defaultChecked={isPrimary}
+                        checked={vendorSelection?.[v.catalogVendorId] ?? isPrimary}
+                        onChange={(e) =>
+                          onVendorToggle?.(v.catalogVendorId, e.target.checked)
+                        }
                         disabled={isPending}
                       />
                       Assign to stamps
@@ -236,7 +267,7 @@ function IssueForm({
                 name="autoCreateStamps"
                 value="true"
                 checked={autoCreate}
-                onChange={(e) => onAutoCreateChange?.(e.target.checked)}
+                onChange={(e) => onAutoCreateChange?.(e.target.checked, e.currentTarget.form)}
                 disabled={isPending}
               />
               Auto-create stamps from catalog number range
@@ -279,6 +310,9 @@ export function IssueDialog(props: IssueDialogProps) {
     return props.issue.collectionAreaId;
   });
   const [autoCreate, setAutoCreate] = useState(false);
+  // Per-vendor "Assign to stamps" selection. Empty until the user interacts;
+  // each checkbox falls back to "primary only" while unset.
+  const [vendorSelection, setVendorSelection] = useState<Record<string, boolean>>({});
 
   const vendors = useMemo(
     () => (selectedAreaId ? effectiveVendorsForArea(areas, selectedAreaId) : []),
@@ -292,6 +326,31 @@ export function IssueDialog(props: IssueDialogProps) {
   );
 
   const flatTree = useMemo(() => (isCreate ? flattenAreaTree(areas) : []), [isCreate, areas]);
+
+  // On toggling auto-create on, pre-select every vendor whose entered range
+  // spans the same number of stamps as the primary catalog's range (the primary
+  // is always selected). Vendors with a mismatched or unusable range stay
+  // unchecked; the user can still adjust any of them manually.
+  function handleAutoCreateChange(checked: boolean, form: HTMLFormElement | null) {
+    setAutoCreate(checked);
+    if (!checked || !form || !primaryVendorId) return;
+    const primaryCount = rangeCountFromForm(form, primaryVendorId);
+    const next: Record<string, boolean> = {};
+    for (const v of vendors) {
+      const id = v.catalogVendorId;
+      if (id === primaryVendorId) {
+        next[id] = true;
+        continue;
+      }
+      const count = rangeCountFromForm(form, id);
+      next[id] = primaryCount !== null && count === primaryCount;
+    }
+    setVendorSelection(next);
+  }
+
+  function handleVendorToggle(vendorId: string, checked: boolean) {
+    setVendorSelection((prev) => ({ ...prev, [vendorId]: checked }));
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -317,7 +376,10 @@ export function IssueDialog(props: IssueDialogProps) {
               <select
                 id="f-issue-area"
                 value={selectedAreaId}
-                onChange={(e) => setSelectedAreaId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedAreaId(e.target.value);
+                  setVendorSelection({});
+                }}
                 disabled={isPending}
                 style={INPUT_STYLE}
               >
@@ -343,7 +405,9 @@ export function IssueDialog(props: IssueDialogProps) {
             autoFocusName={isCreate}
             showAutoCreate={isCreate && vendors.length > 0}
             autoCreate={autoCreate}
-            onAutoCreateChange={setAutoCreate}
+            onAutoCreateChange={handleAutoCreateChange}
+            vendorSelection={vendorSelection}
+            onVendorToggle={handleVendorToggle}
           />
         </DialogBody>
         <DialogActions
