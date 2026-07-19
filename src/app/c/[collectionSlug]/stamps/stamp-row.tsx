@@ -16,11 +16,14 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
+import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 interface StampRowProps {
   stamp: StampListItem;
+  collectionId: string;
   areas: CollectionAreaData[];
+  baseCurrency: string;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
@@ -30,7 +33,9 @@ interface StampRowProps {
 
 export function StampRow({
   stamp,
+  collectionId,
   areas,
+  baseCurrency,
   primaryVendorId,
   vendorMap,
   isLast,
@@ -50,6 +55,20 @@ export function StampRow({
 
   const firstIssue = stamp.issues[0] ?? null;
   const isRequired = stamp.issues.some((m) => m.requiredForCompleteness);
+
+  const popupLabel =
+    stamp.name ??
+    primaryCN?.number ??
+    stamp.catalogNumbers[0]?.number ??
+    "(stamp)";
+  const inventoryButton = (
+    <InventoryPopupButton
+      collectionId={collectionId}
+      areas={areas}
+      baseCurrency={baseCurrency}
+      target={{ kind: "stamp", stampId: stamp.id, label: popupLabel }}
+    />
+  );
 
   return (
     <div
@@ -85,6 +104,7 @@ export function StampRow({
               {stamp.name}
             </span>
 
+            {inventoryButton}
             <button
               type="button"
               onClick={() => onEdit(stamp)}
@@ -156,6 +176,7 @@ export function StampRow({
 
           {!stamp.name && (
             <>
+              {inventoryButton}
               <button
                 type="button"
                 onClick={() => onEdit(stamp)}

@@ -22,6 +22,8 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const conditionId = sp.get("conditionId") || undefined;
   const certificateStatusId = sp.get("certificateStatusId") || undefined;
+  const stampId = sp.get("stampId") || undefined;
+  const issueId = sp.get("issueId") || undefined;
   const inCollection = boolParam(sp.get("inCollection"));
   const forSale = boolParam(sp.get("forSale"));
   const forTrade = boolParam(sp.get("forTrade"));
@@ -38,6 +40,8 @@ export async function GET(
       offset,
       conditionId,
       certificateStatusId,
+      stampId,
+      issueId,
       inCollection,
       forSale,
       forTrade,

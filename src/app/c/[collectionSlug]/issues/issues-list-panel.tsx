@@ -30,7 +30,8 @@ import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import { effectiveVendorsForArea, effectivePrimaryVendorId } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ interface IssuesListPanelProps {
   collectionId: string;
   collectionSlug: string;
   areas: CollectionAreaData[];
+  baseCurrency: string;
   filterAreaId: string | null;
   filterAreaIds: string[] | undefined;
 }
@@ -95,6 +97,7 @@ export function IssuesListPanel({
   collectionId,
   collectionSlug,
   areas,
+  baseCurrency,
   filterAreaId,
   filterAreaIds,
 }: IssuesListPanelProps) {
@@ -181,23 +184,7 @@ export function IssuesListPanel({
     [areas]
   );
 
-  const primaryVendorByArea = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const a of areas) {
-      m.set(a.id, effectivePrimaryVendorId(areas, a.id));
-    }
-    return m;
-  }, [areas]);
-
-  const vendorMapByArea = useMemo(() => {
-    const m = new Map<string, Map<string, AreaCatalogEntry>>();
-    for (const a of areas) {
-      const vendors = effectiveVendorsForArea(areas, a.id);
-      const unique = new Map(vendors.map((v) => [v.catalogVendorId, v]));
-      m.set(a.id, unique);
-    }
-    return m;
-  }, [areas]);
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
@@ -406,6 +393,8 @@ export function IssuesListPanel({
                   key={issue.id}
                   issue={issue}
                   collectionId={collectionId}
+                  areas={areas}
+                  baseCurrency={baseCurrency}
                   primaryVendorId={primaryVendorId}
                   vendorMap={vendorMap}
                   isLast={idx === allIssues.length - 1 && !hasNextPage}

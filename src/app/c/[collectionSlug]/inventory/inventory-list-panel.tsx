@@ -5,12 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import {
-  effectiveVendorsForArea,
-  effectivePrimaryVendorId,
-} from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import type { CollectionAreaData } from "@/lib/areas";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   useInventoryItemsInfinite,
@@ -19,7 +14,7 @@ import {
   type InventoryItemFilters,
 } from "./use-inventory-query";
 import { HoldingsSummaryBar } from "./holdings-summary-bar";
-import { InventoryItemRow } from "./inventory-item-row";
+import { InventoryCopyList } from "./inventory-copy-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
@@ -121,23 +116,6 @@ export function InventoryListPanel({
     () => data?.pages.flatMap((p) => p.items) ?? [],
     [data]
   );
-
-  const primaryVendorByArea = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const a of areas) {
-      m.set(a.id, effectivePrimaryVendorId(areas, a.id));
-    }
-    return m;
-  }, [areas]);
-
-  const vendorMapByArea = useMemo(() => {
-    const m = new Map<string, Map<string, AreaCatalogEntry>>();
-    for (const a of areas) {
-      const vendors = effectiveVendorsForArea(areas, a.id);
-      m.set(a.id, new Map(vendors.map((v) => [v.catalogVendorId, v])));
-    }
-    return m;
-  }, [areas]);
 
   function closeDialog() {
     if (!isPending) {
@@ -274,34 +252,17 @@ export function InventoryListPanel({
 
         {allCopies.length > 0 && (
           <div>
-            {allCopies.map((item, idx) => {
-              const areaId = item.areaId;
-              const primaryVendorId = areaId
-                ? (primaryVendorByArea.get(areaId) ?? null)
-                : null;
-              const vendorMap = areaId
-                ? (vendorMapByArea.get(areaId) ?? new Map<string, AreaCatalogEntry>())
-                : new Map<string, AreaCatalogEntry>();
-              return (
-              <InventoryItemRow
-                key={item.id}
-                item={item}
-                areas={areas}
-                baseCurrency={baseCurrency}
-                primaryVendorId={primaryVendorId}
-                vendorMap={vendorMap}
-                isLast={idx === allCopies.length - 1 && !hasNextPage}
-                onEdit={(it) => setDialog({ kind: "edit", item: it })}
-                onIdentify={(it) => setDialog({ kind: "identify", item: it })}
-                onViewHistory={(it) => setDialog({ kind: "history", item: it })}
-                onDelete={(it) => setDialog({ kind: "delete", item: it })}
-              />
-              );
-            })}
-            <InfiniteScrollSentinel
+            <InventoryCopyList
+              copies={allCopies}
+              areas={areas}
+              baseCurrency={baseCurrency}
+              hasNextPage={!!hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
               onLoadMore={fetchNextPage}
-              hasMore={!!hasNextPage}
-              isLoading={isFetchingNextPage}
+              onEdit={(it) => setDialog({ kind: "edit", item: it })}
+              onIdentify={(it) => setDialog({ kind: "identify", item: it })}
+              onViewHistory={(it) => setDialog({ kind: "history", item: it })}
+              onDelete={(it) => setDialog({ kind: "delete", item: it })}
             />
           </div>
         )}

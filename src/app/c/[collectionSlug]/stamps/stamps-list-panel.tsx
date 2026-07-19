@@ -11,10 +11,8 @@ import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import {
-  effectiveVendorsForArea,
-  effectivePrimaryVendorId,
-} from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { useStampsInfinite, useInvalidateStamps, type StampListFilters } from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -29,6 +27,7 @@ interface StampsListPanelProps {
   collectionId: string;
   collectionSlug: string;
   areas: CollectionAreaData[];
+  baseCurrency: string;
   filterAreaId: string | null;
   filterAreaIds: string[] | undefined;
 }
@@ -44,6 +43,7 @@ export function StampsListPanel({
   collectionId,
   collectionSlug,
   areas,
+  baseCurrency,
   filterAreaId,
   filterAreaIds,
 }: StampsListPanelProps) {
@@ -124,23 +124,7 @@ export function StampsListPanel({
     [data]
   );
 
-  const primaryVendorByArea = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const a of areas) {
-      m.set(a.id, effectivePrimaryVendorId(areas, a.id));
-    }
-    return m;
-  }, [areas]);
-
-  const vendorMapByArea = useMemo(() => {
-    const m = new Map<string, Map<string, AreaCatalogEntry>>();
-    for (const a of areas) {
-      const vendors = effectiveVendorsForArea(areas, a.id);
-      const unique = new Map(vendors.map((v) => [v.catalogVendorId, v]));
-      m.set(a.id, unique);
-    }
-    return m;
-  }, [areas]);
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
   function handleNavigateFilter(areaId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -265,7 +249,9 @@ export function StampsListPanel({
                 <StampRow
                   key={stamp.id}
                   stamp={stamp}
+                  collectionId={collectionId}
                   areas={areas}
+                  baseCurrency={baseCurrency}
                   primaryVendorId={primaryVendorId}
                   vendorMap={vendorMap}
                   isLast={idx === allStamps.length - 1 && !hasNextPage}

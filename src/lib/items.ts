@@ -361,6 +361,10 @@ export type ItemSortBy = "created" | "acquired";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
   certificateStatusId?: string;
+  /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
+  stampId?: string;
+  /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
+  issueId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -437,6 +441,10 @@ export async function listItemsPaginated(
       ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
       ...(filters.certificateStatusId
         ? { certificateStatusId: filters.certificateStatusId }
+        : {}),
+      ...(filters.stampId ? { stampId: filters.stampId } : {}),
+      ...(filters.issueId
+        ? { stamp: { issueMemberships: { some: { issueId: filters.issueId } } } }
         : {}),
       ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
       ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),

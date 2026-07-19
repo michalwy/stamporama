@@ -19,6 +19,10 @@ interface InventoryItemsPage {
 export interface InventoryItemFilters {
   conditionId?: string;
   certificateStatusId?: string;
+  /** Restrict to copies of a single stamp (stamp-level inventory popup, #110). */
+  stampId?: string;
+  /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
+  issueId?: string;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -44,6 +48,8 @@ export function useInventoryItemsInfinite(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.stampId) params.set("stampId", filters.stampId);
+      if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");

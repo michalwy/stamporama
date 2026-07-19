@@ -61,6 +61,22 @@ current filters (change the filters and the total follows). It also tells you ho
 the total is uncertain (unknown-variant estimates) and how many copies are unpriced or
 could not be converted.
 
+## Viewing copies from the catalog
+
+You don't have to open the Inventory screen to see what you own. Both the **Stamps**
+list and the **Issues** list carry a **Copies** button:
+
+- On a **stamp** row, **Copies** opens a popup listing every copy you own of that stamp.
+- On an **issue** row, **Copies** opens a popup listing every copy of *any* stamp in that
+  issue — a quick way to see your holdings for a whole issue at once.
+- Expanding an issue reveals its individual stamps, each with its own **Copies** button
+  for the copies of just that stamp.
+
+The popup shows the same copy details as the Inventory list (condition, disposition,
+value, purchase and acquisition details), but is **read-only** — it's for looking, not
+editing. Close it to return to the list exactly where you were; nothing navigates away.
+To add, edit, or delete copies, use the **Inventory** screen.
+
 ## Adding a copy
 
 1. Click **Add copy**.

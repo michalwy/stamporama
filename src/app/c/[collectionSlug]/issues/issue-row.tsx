@@ -4,7 +4,7 @@ import { useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { useIssueMembers } from "./use-issues-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
-import type { AreaCatalogEntry } from "@/lib/areas";
+import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import {
   rowBtnStyle,
   rowBtnDangerStyle,
@@ -25,12 +25,16 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 import { IssuePricesButton } from "@/app/c/[collectionSlug]/shared/issue-prices-button";
+import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
 interface StampTreeNodeProps {
   treeNode: StampTreeNodeData;
   depth: number;
+  collectionId: string;
+  areas: CollectionAreaData[];
+  baseCurrency: string;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
@@ -43,6 +47,9 @@ interface StampTreeNodeProps {
 function StampTreeNode({
   treeNode,
   depth,
+  collectionId,
+  areas,
+  baseCurrency,
   primaryVendorId,
   vendorMap,
   isLast,
@@ -56,6 +63,12 @@ function StampTreeNode({
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
   const indent = `${depth * 1.25}rem`;
+
+  const popupLabel =
+    node.name ??
+    node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId)?.number ??
+    node.catalogNumbers[0]?.number ??
+    "(stamp)";
 
   return (
     <>
@@ -120,6 +133,12 @@ function StampTreeNode({
           >
             Move
           </button>
+          <InventoryPopupButton
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={baseCurrency}
+            target={{ kind: "stamp", stampId: node.stampId, label: popupLabel }}
+          />
           <button
             type="button"
             onClick={() => onEdit(node.stampId)}
@@ -149,6 +168,9 @@ function StampTreeNode({
             key={child.node.stampId}
             treeNode={child}
             depth={depth + 1}
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={baseCurrency}
             primaryVendorId={primaryVendorId}
             vendorMap={vendorMap}
             isLast={isLast && i === children.length - 1}
@@ -180,6 +202,8 @@ export interface IssueRowCallbacks {
 interface IssueRowProps {
   issue: IssueListItem;
   collectionId: string;
+  areas: CollectionAreaData[];
+  baseCurrency: string;
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
@@ -193,6 +217,8 @@ interface IssueRowProps {
 export function IssueRow({
   issue,
   collectionId,
+  areas,
+  baseCurrency,
   primaryVendorId,
   vendorMap,
   isLast,
@@ -289,6 +315,16 @@ export function IssueRow({
           >
             + Stamp
           </button>
+          <InventoryPopupButton
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={baseCurrency}
+            target={{
+              kind: "issue",
+              issueId: issue.id,
+              label: issue.name ?? "(unnamed issue)",
+            }}
+          />
           <button
             type="button"
             onClick={() => callbacks.onEdit(issue)}
@@ -442,6 +478,9 @@ export function IssueRow({
                 key={treeNode.node.stampId}
                 treeNode={treeNode}
                 depth={0}
+                collectionId={collectionId}
+                areas={areas}
+                baseCurrency={baseCurrency}
                 primaryVendorId={primaryVendorId}
                 vendorMap={vendorMap}
                 isLast={i === stampTree.length - 1}

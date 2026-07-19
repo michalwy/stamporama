@@ -120,10 +120,12 @@ interface InventoryItemRowProps {
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
-  onEdit: (item: ItemListItem) => void;
-  onIdentify: (item: ItemListItem) => void;
-  onViewHistory: (item: ItemListItem) => void;
-  onDelete: (item: ItemListItem) => void;
+  /** Read-only mode hides the row actions (used by the inventory popup, #110). */
+  readOnly?: boolean;
+  onEdit?: (item: ItemListItem) => void;
+  onIdentify?: (item: ItemListItem) => void;
+  onViewHistory?: (item: ItemListItem) => void;
+  onDelete?: (item: ItemListItem) => void;
 }
 
 export function InventoryItemRow({
@@ -133,6 +135,7 @@ export function InventoryItemRow({
   primaryVendorId,
   vendorMap,
   isLast,
+  readOnly = false,
   onEdit,
   onIdentify,
   onViewHistory,
@@ -160,22 +163,22 @@ export function InventoryItemRow({
 
   const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
 
-  const actions = (
+  const actions = readOnly ? null : (
     <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
       {item.unknownVariant && (
-        <button type="button" style={rowBtnStyle} onClick={() => onIdentify(item)}>
+        <button type="button" style={rowBtnStyle} onClick={() => onIdentify?.(item)}>
           Identify variant
         </button>
       )}
       {item.hasHistory && (
-        <button type="button" style={rowBtnStyle} onClick={() => onViewHistory(item)}>
+        <button type="button" style={rowBtnStyle} onClick={() => onViewHistory?.(item)}>
           History
         </button>
       )}
-      <button type="button" style={rowBtnStyle} onClick={() => onEdit(item)}>
+      <button type="button" style={rowBtnStyle} onClick={() => onEdit?.(item)}>
         Edit
       </button>
-      <button type="button" style={rowBtnDangerStyle} onClick={() => onDelete(item)}>
+      <button type="button" style={rowBtnDangerStyle} onClick={() => onDelete?.(item)}>
         Delete
       </button>
     </div>

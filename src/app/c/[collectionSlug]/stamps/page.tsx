@@ -60,6 +60,7 @@ export default async function StampsPage({
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         areas={areas}
+        baseCurrency={collection.baseCurrency}
         filterAreaId={filterAreaId ?? null}
         filterAreaIds={filterAreaIds}
       />
