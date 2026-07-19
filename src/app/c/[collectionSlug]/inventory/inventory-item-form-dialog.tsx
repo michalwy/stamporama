@@ -14,6 +14,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { StampSelect } from "./stamp-select";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
+import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { ContactSelect } from "./contact-select";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -54,6 +55,12 @@ export interface InventoryItemFormDialogProps {
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
   item?: ItemListItem;
+  /** Add mode: pre-select this stamp (opened from a stamp list row, #111). */
+  initialStamp?: PickedStamp;
+  initialStampId?: string;
+  /** Add mode: constrain the stamp picker to this issue's stamps (opened from an issue
+   * list row, #111). */
+  scopeIssue?: IssuePickerContext;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -71,22 +78,26 @@ export function InventoryItemFormDialog({
   certificateStatuses,
   baseCurrency,
   item,
+  initialStamp,
+  initialStampId,
+  scopeIssue,
   isPending,
   error,
   onClose,
   onSubmit,
 }: InventoryItemFormDialogProps) {
-  const [stampId, setStampId] = useState(item?.stampId ?? "");
+  const [stampId, setStampId] = useState(item?.stampId ?? initialStampId ?? "");
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>({
     inCollection: item ? item.inCollection : true,
     forSale: item?.forSale ?? false,
     forTrade: item?.forTrade ?? false,
   });
 
-  // Prefill the picker summary in edit mode. Catalog numbers on the item are raw
-  // (vendor id + number), so the summary shows the joined numbers; the popup and
+  // Prefill the picker summary. In edit mode it is derived from the item; in add mode a
+  // caller may pass one (adding a copy from a stamp list row, #111). Catalog numbers on the
+  // item are raw (vendor id + number), so the summary shows the joined numbers; the popup and
   // autocomplete render prefix-formatted labels when a fresh pick is made.
-  const initialStamp: PickedStamp | undefined =
+  const pickerInitial: PickedStamp | undefined =
     mode === "edit" && item
       ? {
           stampId: item.stampId,
@@ -100,7 +111,7 @@ export function InventoryItemFormDialog({
               : null,
           unknownVariant: item.unknownVariant,
         }
-      : undefined;
+      : initialStamp;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -128,7 +139,8 @@ export function InventoryItemFormDialog({
               areas={areas}
               selectedStampId={stampId}
               onSelectedStampIdChange={setStampId}
-              initial={initialStamp}
+              initial={pickerInitial}
+              scopeIssue={scopeIssue}
               disabled={isPending}
             />
           </div>

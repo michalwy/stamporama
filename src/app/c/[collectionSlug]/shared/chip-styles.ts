@@ -23,6 +23,19 @@ export const addBtnStyle: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+/** Dashed "create inline" affordance (+ New stamp / + variant) used in the stamp pickers. */
+export const CREATE_LINK_STYLE: React.CSSProperties = {
+  background: "none",
+  border: "1px dashed var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  cursor: "pointer",
+  color: "var(--color-accent)",
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  padding: "0.3rem 0.6rem",
+  whiteSpace: "nowrap",
+};
+
 export const ISSUE_PRIMARY_CHIP: React.CSSProperties = {
   fontFamily: "monospace",
   fontSize: "0.8125rem",

@@ -26,6 +26,8 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 import { IssuePricesButton } from "@/app/c/[collectionSlug]/shared/issue-prices-button";
 import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
+import { InventoryAddButton } from "@/app/c/[collectionSlug]/inventory/inventory-add-button";
+import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -133,6 +135,24 @@ function StampTreeNode({
           >
             Move
           </button>
+          <InventoryAddButton
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={baseCurrency}
+            target={{
+              kind: "stamp",
+              stampId: node.stampId,
+              initial: {
+                stampId: node.stampId,
+                primary: primaryLabel(
+                  node.catalogNumbers.map((cn) => cn.number),
+                  node.name
+                ),
+                secondary: null,
+                unknownVariant: children.length > 0,
+              },
+            }}
+          />
           <InventoryPopupButton
             collectionId={collectionId}
             areas={areas}
@@ -315,6 +335,21 @@ export function IssueRow({
           >
             + Stamp
           </button>
+          <InventoryAddButton
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={baseCurrency}
+            target={{
+              kind: "issue",
+              issue: {
+                id: issue.id,
+                name: issue.name,
+                year: issue.year,
+                collectionAreaId: issue.collectionAreaId,
+              },
+            }}
+            label="+ Copy"
+          />
           <InventoryPopupButton
             collectionId={collectionId}
             areas={areas}

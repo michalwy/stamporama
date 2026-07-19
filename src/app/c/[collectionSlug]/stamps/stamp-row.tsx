@@ -17,6 +17,11 @@ import {
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { AllPricesButton } from "@/app/c/[collectionSlug]/shared/all-prices-button";
 import { InventoryPopupButton } from "@/app/c/[collectionSlug]/inventory/inventory-popup-button";
+import { InventoryAddButton } from "@/app/c/[collectionSlug]/inventory/inventory-add-button";
+import {
+  issueLabel,
+  primaryLabel,
+} from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 
 interface StampRowProps {
@@ -69,6 +74,34 @@ export function StampRow({
       target={{ kind: "stamp", stampId: stamp.id, label: popupLabel }}
     />
   );
+  const addCopyButton = (
+    <InventoryAddButton
+      collectionId={collectionId}
+      areas={areas}
+      baseCurrency={baseCurrency}
+      target={{
+        kind: "stamp",
+        stampId: stamp.id,
+        initial: {
+          stampId: stamp.id,
+          primary: primaryLabel(
+            stamp.catalogNumbers.map((cn) => cn.number),
+            stamp.name
+          ),
+          secondary:
+            [
+              firstIssue
+                ? issueLabel(firstIssue.issueName, firstIssue.issueYear)
+                : null,
+              areaPath,
+            ]
+              .filter(Boolean)
+              .join(" · ") || null,
+          unknownVariant: false,
+        },
+      }}
+    />
+  );
 
   return (
     <div
@@ -104,6 +137,7 @@ export function StampRow({
               {stamp.name}
             </span>
 
+            {addCopyButton}
             {inventoryButton}
             <button
               type="button"
@@ -176,6 +210,7 @@ export function StampRow({
 
           {!stamp.name && (
             <>
+              {addCopyButton}
               {inventoryButton}
               <button
                 type="button"

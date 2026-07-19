@@ -12,6 +12,7 @@ import { buildTree, type TreeNode } from "@/app/tree-picker-utils";
 import { stampNodeLabel } from "./stamp-select";
 import { useIssueMembers, useItemVariantHistory } from "./use-inventory-query";
 import { VariantHistoryList } from "./variant-history-list";
+import { SelectableStampTree } from "./selectable-stamp-tree";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -122,17 +123,11 @@ export function IdentifyVariantDialog({
                 This stamp has no variants to resolve to.
               </p>
             ) : (
-              <ol style={{ display: "grid", gap: "0.25rem", margin: 0, padding: 0, listStyle: "none" }}>
-                {descendantTree.map((node) => (
-                  <VariantNode
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                  />
-                ))}
-              </ol>
+              <SelectableStampTree
+                nodes={descendantTree}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
             )}
             <input type="hidden" name="stampId" value={selectedId} />
           </div>
@@ -164,59 +159,6 @@ export function IdentifyVariantDialog({
         />
       </form>
     </DialogShell>
-  );
-}
-
-function VariantNode({
-  node,
-  level,
-  selectedId,
-  onSelect,
-}: {
-  node: TreeNode<VariantItem>;
-  level: number;
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  const isSelected = selectedId === node.id;
-  return (
-    <li>
-      <button
-        type="button"
-        aria-pressed={isSelected}
-        onClick={() => onSelect(node.id)}
-        style={{
-          display: "block",
-          width: "100%",
-          textAlign: "left",
-          minHeight: "2.25rem",
-          padding: "0.5rem 0.625rem",
-          marginLeft: `${level}rem`,
-          borderRadius: "0.375rem",
-          fontSize: "0.875rem",
-          cursor: "pointer",
-          color: isSelected ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-          fontWeight: isSelected ? 600 : 400,
-          background: isSelected ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-          border: `1px solid ${isSelected ? "var(--color-accent)" : "var(--color-border-strong)"}`,
-        }}
-      >
-        {node.name}
-      </button>
-      {node.children.length > 0 && (
-        <ol style={{ display: "grid", gap: "0.25rem", margin: "0.25rem 0 0", padding: 0, listStyle: "none" }}>
-          {node.children.map((child) => (
-            <VariantNode
-              key={child.id}
-              node={child}
-              level={level + 1}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          ))}
-        </ol>
-      )}
-    </li>
   );
 }
 

@@ -10,6 +10,7 @@ import type { HoldingsTotal } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -201,6 +202,22 @@ export function useIssuesByArea(collectionId: string, areaIds: string[] | null) 
       const data = await res.json();
       return data.items;
     },
+  });
+}
+
+/** Certificate statuses for the add-copy dialog opened from list rows (#111). Mirrors
+ * {@link useCollectionConditions}; both feed the add/edit dialog's selects client-side so
+ * the stamp/issue lists don't have to thread server-loaded props down to every row. */
+export function useCollectionCertificateStatuses(collectionId: string) {
+  return useQuery<CertificateStatusData[]>({
+    queryKey: ["certificateStatuses", collectionId] as const,
+    queryFn: async () => {
+      const { getCertificateStatusesAction } = await import(
+        "@/app/actions/certificate-statuses"
+      );
+      return getCertificateStatusesAction(collectionId);
+    },
+    staleTime: 60_000,
   });
 }
 

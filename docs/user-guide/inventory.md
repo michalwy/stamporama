@@ -75,7 +75,23 @@ list and the **Issues** list carry a **Copies** button:
 The popup shows the same copy details as the Inventory list (condition, disposition,
 value, purchase and acquisition details), but is **read-only** — it's for looking, not
 editing. Close it to return to the list exactly where you were; nothing navigates away.
-To add, edit, or delete copies, use the **Inventory** screen.
+To edit or delete existing copies, use the **Inventory** screen.
+
+## Adding a copy from the catalog
+
+You can record a new copy without leaving the Stamps or Issues list. Alongside each
+**Copies** button is a **+ Copy** button that opens the same add-copy dialog described
+below, already pointed at the right stamp:
+
+- On a **stamp** row — and on each stamp inside an expanded issue — **+ Copy** opens the
+  dialog with that stamp pre-selected. You can still **Change** it if needed.
+- On an **issue** row, **+ Copy** opens the dialog and immediately pops up a stamp/variant
+  tree **limited to that issue's stamps** — the same tree as the **Browse…** picker, so
+  variants read the same. Pick which stamp the copy is. If you close the popup without
+  picking, a **Select a stamp…** button reopens it.
+
+Fill in the rest of the dialog as usual and save. The new copy appears on the Inventory
+screen, and any open **Copies** popup for that stamp or issue reflects it.
 
 ## Adding a copy
 
