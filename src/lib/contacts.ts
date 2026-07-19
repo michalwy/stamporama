@@ -98,17 +98,21 @@ export async function listContacts(
 }
 
 /** Case-insensitive name search, capped at 20 rows, for the acquisition-source
- * autocomplete (#103b). An empty query returns the first 20 contacts by name. */
+ * autocomplete (#103b). An empty query returns the first 20 contacts by name. An optional
+ * `role` narrows to contacts carrying that role flag (e.g. `platform` for the purchase
+ * platform picker, #120), so people don't show up where only platforms belong. */
 export async function searchContacts(
   ownerId: string,
   collectionId: string,
-  query: string
+  query: string,
+  role?: keyof ContactRoles
 ): Promise<ContactData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   return prisma.contact.findMany({
     where: {
       collectionId,
       name: { contains: query, mode: "insensitive" },
+      ...(role ? { [role]: true } : {}),
     },
     select: CONTACT_SELECT,
     orderBy: { name: "asc" },

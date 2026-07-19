@@ -305,9 +305,14 @@ model ItemVariantHistory {
 model Purchase {
   id           String   @id @default(cuid())
   collectionId String
-  // Optional supplier. `onDelete: Restrict`: a contact referenced by a purchase cannot
-  // be deleted without first detaching it (ADR-0008 §4, ADR-0009).
+  // Optional supplier — who the stamps were bought from. `onDelete: Restrict`: a contact
+  // referenced by a purchase cannot be deleted without first detaching it (ADR-0008 §4,
+  // ADR-0009).
   contactId    String?
+  // Optional platform — the marketplace/intermediary a purchase went through (e.g. Allegro,
+  // eBay), distinct from the supplier (ADR-0009 §1). A `Contact` carrying the `platform`
+  // role; same `onDelete: Restrict` guard.
+  platformId   String?
   // The moment money was spent; the FX rate is frozen as of this date.
   purchasedAt  DateTime @db.Date
   // Single transaction currency for every amount on this purchase and its lines.
@@ -323,12 +328,14 @@ model Purchase {
   createdAt    DateTime @default(now())
 
   collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  contact    Contact?          @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  contact    Contact?          @relation("PurchaseSupplier", fields: [contactId], references: [id], onDelete: Restrict)
+  platform   Contact?          @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   lots       PurchaseLot[]
   expenses   PurchaseExpense[]
 
   @@index([collectionId])
   @@index([contactId])
+  @@index([platformId])
   @@map("purchase")
 }
 
@@ -389,7 +396,10 @@ model Contact {
   // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
   // (from `Purchase`) means a referenced contact cannot be deleted without first
   // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
-  purchases  Purchase[]
+  purchases         Purchase[] @relation("PurchaseSupplier")
+  // Purchases routed through this contact as their platform (e.g. Allegro). Same
+  // `onDelete: Restrict` guard from the `Purchase.platformId` FK.
+  platformPurchases Purchase[] @relation("PurchasePlatform")
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

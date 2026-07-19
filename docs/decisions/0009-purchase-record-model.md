@@ -25,8 +25,11 @@ and delivery. It is the design output of #26; implementation is split across
 
 ### 1. Three-level structure plus a non-inventory line
 
-- **`Purchase`** — the transaction header: optional supplier (`Contact`), date, a
-  **single transaction currency**, shared costs (shipping), and a delivery status.
+- **`Purchase`** — the transaction header: an optional supplier (`Contact`), an optional
+  **platform** (also a `Contact`, carrying the `platform` role — the marketplace or
+  intermediary a purchase went through, e.g. Allegro or eBay, distinct from who you
+  actually bought from), date, a **single transaction currency**, shared costs (shipping),
+  and a delivery status. Both contact links use `onDelete: Restrict`. Added in #120.
 - **`PurchaseLot`** — an **inventory** line: a price, an intake status
   (`open | closed`), and the `Item`s it resolves into. A lot may be one stamp, a
   whole issue, an album, or an entire collection.

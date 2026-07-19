@@ -61,6 +61,8 @@ const DEMO_CONTACTS: ReadonlyArray<DemoContact> = [
   { name: "Deutsche Briefmarken GmbH", seller: true },
   { name: "Berlin Auktionshaus", auctionHouse: true },
   { name: "Delcampe", platform: true },
+  { name: "Allegro", platform: true },
+  { name: "eBay", platform: true },
   { name: "Jan Kowalski", exchangePartner: true },
   { name: "Piotr Nowak", buyer: true, exchangePartner: true },
   { name: "Estate Collection Lot", other: true },

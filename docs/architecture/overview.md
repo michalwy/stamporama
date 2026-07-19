@@ -146,12 +146,13 @@ Valuation of an unknown-variant copy (lowest child-variant catalog price, flagge
 
 ### Purchases (`Purchase` / `PurchaseLot` / `PurchaseExpense`)
 
-The purchase model (see [ADR-0009](../decisions/0009-purchase-record-model.md), schema in #118) is the channel-agnostic source of cost-basis. **Schema only so far** — no UI or domain logic yet (allocation is #119, CRUD/intake are #120+).
+The purchase model (see [ADR-0009](../decisions/0009-purchase-record-model.md), schema in #118) is the channel-agnostic source of cost-basis. **CRUD is live** (#120): the pure allocation engine landed in #119, and lot close / item intake follow in #121+.
 
-- `Purchase` — transaction header: optional `contactId?` → `Contact` supplier (`onDelete: Restrict`), `purchasedAt` (date), a single `currency`, `fxRateToBase?` frozen at `purchasedAt` (`Decimal(65,30)`, reuses the `ExchangeRate` mechanism), `shippingCost?` `Decimal(10,2)` (shared cost), and a delivery `status` (`preparing | in_transit | arrived`). Scoped to `Collection` (`onDelete: Cascade`).
+- `Purchase` — transaction header: optional `contactId?` → `Contact` supplier and optional `platformId?` → `Contact` platform (the marketplace/intermediary, e.g. Allegro — a contact with the `platform` role; both FKs `onDelete: Restrict`), `purchasedAt` (date), a single `currency`, `fxRateToBase?` frozen at `purchasedAt` (`Decimal(65,30)`, reuses the `ExchangeRate` mechanism), `shippingCost?` `Decimal(10,2)` (shared cost), and a delivery `status` (`preparing | in_transit | arrived`). Scoped to `Collection` (`onDelete: Cascade`).
 - `PurchaseLot` — inventory line: `price` `Decimal(10,2)`, intake `status` (`open | closed`), and the `Item`s it resolves into. `onDelete: Cascade` from `Purchase`.
 - `PurchaseExpense` — non-inventory line (e.g. a magnifier): `label` + `price` `Decimal(10,2)`, no lifecycle and no items. `onDelete: Cascade` from `Purchase`.
 - Statuses are `String` columns (the schema uses no native Postgres enums), with allowed values documented in the schema and enforced by the domain layer.
+- Domain module `src/lib/purchases.ts` (server-only) exposes `listPurchasesPaginated` / `getPurchase` / `createPurchase` / `updatePurchase` / `deletePurchase`, all collection-owner-authorized. Create/update persist the **header only** (supplier, platform, date, currency, delivery status, and the shared shipping cost) and freeze `fxRateToBase` (best-effort) via the `ExchangeRate` mechanism. **The order's line items are intentionally not written by #120** — both inventory lots and non-inventory expenses are added during lot intake (#121), so `createPurchase`/`updatePurchase` never touch them; the read/list side still surfaces lot and expense counts and rolls them into the total. The `Purchases` screen (`src/app/c/[collectionSlug]/purchases/`) is a URL-state, card-row infinite-scroll list with a dialog-shell header add/edit form; the paginated list is served by `GET /api/collections/[collectionId]/purchases` and mutations go through server actions in `src/app/actions/purchases.ts`.
 
 ### Storage locations (`Location`)
 

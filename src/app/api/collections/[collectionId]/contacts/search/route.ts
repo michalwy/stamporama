@@ -14,9 +14,12 @@ export async function GET(
 
   const { collectionId } = await params;
   const query = request.nextUrl.searchParams.get("q") ?? "";
+  // Only `platform` role-filtering is exposed today (purchase platform picker, #120);
+  // any other value is ignored so the endpoint stays a plain name search.
+  const role = request.nextUrl.searchParams.get("role") === "platform" ? "platform" : undefined;
 
   try {
-    const items = await searchContacts(session.user.id, collectionId, query);
+    const items = await searchContacts(session.user.id, collectionId, query, role);
     return NextResponse.json({ items });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
