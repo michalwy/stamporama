@@ -362,16 +362,18 @@ export function CollectionSidebar({
           active={isActive(`${base}/inventory`)}
         />
         <NavItem
-          href={`${base}/purchases`}
-          icon={<IconPurchases />}
-          label="Purchases"
-          active={isActive(`${base}/purchases`)}
-        />
-        <NavItem
           href={`${base}/locations`}
           icon={<IconLocations />}
           label="Locations"
           active={isActive(`${base}/locations`)}
+        />
+
+        <p style={sectionLabelStyle}>Trading</p>
+        <NavItem
+          href={`${base}/purchases`}
+          icon={<IconPurchases />}
+          label="Purchases"
+          active={isActive(`${base}/purchases`)}
         />
       </nav>
 
