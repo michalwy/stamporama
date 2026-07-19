@@ -4,6 +4,7 @@ import {
   type PickedPrice,
   type RawCatalogPrice,
 } from "./catalog-price";
+import type { CostBasisTotal } from "./cost-basis";
 
 // Pure copy-valuation domain logic (ADR-0007 §7). No Prisma / server-only, so it is
 // unit-testable in isolation; the server assembles the inputs in `items.ts`.
@@ -140,6 +141,13 @@ export interface HoldingsTotal {
   uncertainCount: number;
   /** Portion of the total contributed by uncertain copies, 2-dp string. */
   uncertainBaseAmount: string;
+}
+
+/** The holdings summary bar's full figure (#134): the catalog {@link HoldingsTotal} plus
+ * the actual purchase {@link CostBasisTotal} aggregated over the same filtered copy set,
+ * so a collector can compare paid-vs-catalog value at a glance. */
+export interface HoldingsSummary extends HoldingsTotal {
+  cost: CostBasisTotal;
 }
 
 /** Aggregate per-copy valuations into a holdings total in the base currency. Pure. */

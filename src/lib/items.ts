@@ -10,8 +10,9 @@ import {
   valuateCopy,
   aggregateHoldings,
   type CopyValuation,
-  type HoldingsTotal,
+  type HoldingsSummary,
 } from "./valuation";
+import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
@@ -941,7 +942,7 @@ export async function getHoldingsValuation(
   ownerId: string,
   collectionId: string,
   filters: ItemListFiltersPaginated = {}
-): Promise<HoldingsTotal> {
+): Promise<HoldingsSummary> {
   await assertCollectionOwner(ownerId, collectionId);
 
   const locationIds = filters.locationId
@@ -966,6 +967,9 @@ export async function getHoldingsValuation(
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
+      costBasis: true,
+      lotId: true,
+      lot: { select: { status: true } },
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -979,7 +983,18 @@ export async function getHoldingsValuation(
       row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
   }));
 
+  // Actual purchase cost-basis over the same filtered set (#134). Snapshots are frozen in
+  // the base currency, so this needs no rate handling — unlike the catalog valuation above.
+  const costInputs: CostBasisInput[] = rows.map((row) => ({
+    costBasis: row.costBasis == null ? null : row.costBasis.toString(),
+    lotId: row.lotId,
+    lotStatus: row.lot?.status ?? null,
+  }));
+
   const valuations = await valuateItemRows(collectionId, valuationRows);
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  return aggregateHoldings([...valuations.values()], baseCurrency);
+  return {
+    ...aggregateHoldings([...valuations.values()], baseCurrency),
+    cost: aggregateCostBasis(costInputs, baseCurrency),
+  };
 }

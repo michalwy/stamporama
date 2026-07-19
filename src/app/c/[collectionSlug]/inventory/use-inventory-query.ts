@@ -6,7 +6,7 @@ import type {
   ItemSortBy,
   ItemVariantHistoryData,
 } from "@/lib/items";
-import type { HoldingsTotal } from "@/lib/valuation";
+import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
@@ -78,7 +78,7 @@ export function useHoldingsValuation(
   collectionId: string,
   filters: InventoryItemFilters
 ) {
-  return useQuery<HoldingsTotal>({
+  return useQuery<HoldingsSummary>({
     queryKey: ["inventory", collectionId, "valuation", {
       conditionId: filters.conditionId,
       certificateStatusId: filters.certificateStatusId,

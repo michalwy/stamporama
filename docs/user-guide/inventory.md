@@ -69,10 +69,19 @@ Values are converted to your collection's **base currency** for display and tota
 price in a currency with no available exchange rate is shown in its own currency and left
 out of the total.
 
-Above the list, the **Holdings value** bar sums the value of every copy that matches your
-current filters (change the filters and the total follows). It also tells you how much of
-the total is uncertain (unknown-variant estimates) and how many copies are unpriced or
-could not be converted.
+Above the list, the holdings summary bar sums two figures over every copy that matches your
+current filters (change the filters and both totals follow):
+
+- **Catalog value** — what your holdings are worth, as described above. It also tells you
+  how much of the total is uncertain (unknown-variant estimates) and how many copies are
+  unpriced or could not be converted.
+- **Purchase cost** — what you actually paid, summed from the frozen
+  [cost-basis](#cost-basis) of the same copies (in your base currency). It calls out copies
+  whose cost is still **pending** (on an open purchase lot) or has **no cost recorded** (added
+  by hand, or dropped from a lot) — those contribute nothing to the total, the same way the
+  per-copy cost-basis distinguishes them.
+
+Comparing the two lines shows paid-versus-catalog value at a glance.
 
 ## Cost-basis
 

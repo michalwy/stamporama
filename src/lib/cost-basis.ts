@@ -49,3 +49,50 @@ export function resolveCostBasis(input: CostBasisInput): CostBasisState {
   }
   return { state: "none" };
 }
+
+/** Aggregate actual purchase cost-basis over a set of copies (#134), mirroring the shape
+ * of a holdings valuation total. Cost-basis snapshots are already frozen in the base
+ * currency, so the sum needs no conversion. Copies are split by their {@link CostBasisState}:
+ * `known` amounts sum into the total, `pending` (open lot) and `none` (no cost recorded)
+ * are counted but never summed. Pure. */
+export interface CostBasisTotal {
+  baseCurrency: string;
+  /** Sum of frozen cost-basis snapshots in the base currency, 2-dp string. */
+  totalCostBasis: string;
+  /** Copies with a frozen cost-basis contributing to the total. */
+  knownCount: number;
+  /** Copies whose cost-basis is pending — they belong to a still-open purchase lot. */
+  pendingCount: number;
+  /** Copies with no cost-basis recorded (added by hand, or dropped from a closed lot). */
+  noneCount: number;
+}
+
+/** Aggregate per-copy cost-basis into a {@link CostBasisTotal}. See the module header for
+ * the per-copy state rules; see the interface for how each state contributes. Pure. */
+export function aggregateCostBasis(
+  inputs: CostBasisInput[],
+  baseCurrency: string
+): CostBasisTotal {
+  let total = 0;
+  let knownCount = 0;
+  let pendingCount = 0;
+  let noneCount = 0;
+  for (const input of inputs) {
+    const resolved = resolveCostBasis(input);
+    if (resolved.state === "known") {
+      knownCount++;
+      total += Number(resolved.amount);
+    } else if (resolved.state === "pending") {
+      pendingCount++;
+    } else {
+      noneCount++;
+    }
+  }
+  return {
+    baseCurrency,
+    totalCostBasis: total.toFixed(2),
+    knownCount,
+    pendingCount,
+    noneCount,
+  };
+}
