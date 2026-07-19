@@ -163,6 +163,59 @@ export async function searchContacts(
   });
 }
 
+/** Resolve a purchase contact field (supplier / platform) to a contact id, creating the
+ * contact on the fly when the user typed a new name without picking a suggestion (#120).
+ *
+ * Resolution order:
+ *  1. An explicit `id` is honoured only if it belongs to `collectionId` (guards against a
+ *     tampered/cross-collection id); otherwise it is ignored and we fall through to name.
+ *  2. A `name` is matched case-insensitively against existing contacts and reused, so the
+ *     same supplier is never duplicated.
+ *  3. Failing both, a new contact is created carrying `role` (a supplier gets `seller`, a
+ *     platform gets `platform`). Returns `null` when neither id nor name is given.
+ *
+ * The caller must already have asserted ownership of `collectionId`. */
+export async function resolvePurchaseContact(
+  collectionId: string,
+  input: { id?: string | null; name?: string | null; role: keyof ContactRoles }
+): Promise<string | null> {
+  const id = input.id?.trim();
+  if (id) {
+    const existing = await prisma.contact.findFirst({
+      where: { id, collectionId },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+  }
+
+  const name = input.name?.trim();
+  if (!name) return null;
+
+  const byName = await prisma.contact.findFirst({
+    where: { collectionId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (byName) return byName.id;
+
+  try {
+    const created = await prisma.contact.create({
+      data: { collectionId, name, [input.role]: true },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (err) {
+    // Lost a race (or an exact-case duplicate slipped past the insensitive match): re-read.
+    if (isUniqueViolation(err)) {
+      const again = await prisma.contact.findFirst({
+        where: { collectionId, name: { equals: name, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (again) return again.id;
+    }
+    throw err;
+  }
+}
+
 /** Create a contact. `name` is required; roles are optional and independent, so a
  * contact may be created with no roles at all (create-on-type, #103b). Throws
  * {@link ContactNameTakenError} when the name already exists in the collection. */

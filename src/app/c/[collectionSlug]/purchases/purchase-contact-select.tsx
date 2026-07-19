@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   Autocomplete,
   useDebouncedValue,
-  type AutocompleteAction,
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
-import {
-  usePurchaseContactSearch,
-  useInvalidatePurchases,
-} from "./use-purchases-query";
+import { usePurchaseContactSearch } from "./use-purchases-query";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -24,26 +20,31 @@ const INPUT_STYLE: React.CSSProperties = {
 
 interface PurchaseContactSelectProps {
   collectionId: string;
-  /** Hidden input the form submits — `contactId` for supplier, `platformId` for platform. */
-  fieldName: string;
+  /** Hidden input carrying the picked contact id — `contactId` (supplier) / `platformId`. */
+  idFieldName: string;
+  /** Hidden input carrying the typed name, so the server can find-or-create on save —
+   * `contactName` (supplier) / `platformName`. */
+  nameFieldName: string;
   initialContactId?: string | null;
   initialContactName?: string | null;
   inputId?: string;
   placeholder: string;
-  /** Narrows suggestions to contacts carrying this role (platform picker), and tags a
-   * newly created contact with it. Omit for the plain supplier picker. */
-  role?: "platform";
+  /** Narrows suggestions to contacts carrying this role, and (server-side) tags a newly
+   * created contact with it: `seller` for suppliers, `platform` for platforms. */
+  role: "platform" | "seller";
   disabled?: boolean;
 }
 
 /** Create-on-type contact picker for the purchase dialog, shared by the supplier and
- * platform fields. A single always-editable text input: searches existing contacts (#107)
- * and, on a new name, offers a "Create" option that creates the contact (tagged with
- * `role` when given) and links it. The linked contact id is written to the hidden
- * `fieldName` input; editing the text clears the link, and a blank input means "none". */
+ * platform fields. A single always-editable text input: it searches existing contacts of
+ * the given `role` (#107) and lets you pick one. You do NOT have to pick — whatever name is
+ * left in the box is submitted alongside the picked id (if any), and the server resolves it
+ * on save: an existing contact of that name is reused, otherwise a new one is created with
+ * the role (#120). Editing the text clears any picked id; a blank box means "none". */
 export function PurchaseContactSelect({
   collectionId,
-  fieldName,
+  idFieldName,
+  nameFieldName,
   initialContactId,
   initialContactName,
   inputId,
@@ -53,8 +54,6 @@ export function PurchaseContactSelect({
 }: PurchaseContactSelectProps) {
   const [selectedId, setSelectedId] = useState(initialContactId ?? "");
   const [value, setValue] = useState(initialContactName ?? "");
-  const [createError, setCreateError] = useState<string | undefined>();
-  const [isCreating, startCreate] = useTransition();
   const debouncedQuery = useDebouncedValue(value);
 
   const { data: suggestions = [] } = usePurchaseContactSearch(
@@ -62,63 +61,24 @@ export function PurchaseContactSelect({
     debouncedQuery,
     role
   );
-  const { invalidateContacts } = useInvalidatePurchases();
 
   function handleValueChange(next: string) {
+    // Editing the text detaches any picked contact; the server will resolve the new name.
     setSelectedId("");
-    setCreateError(undefined);
     setValue(next);
   }
 
   function pick(contact: { id: string; name: string }) {
     setSelectedId(contact.id);
     setValue(contact.name);
-    setCreateError(undefined);
   }
-
-  const trimmed = value.trim();
-  const exactMatch = suggestions.some(
-    (c) => c.name.toLocaleLowerCase("en") === trimmed.toLocaleLowerCase("en")
-  );
-  const canCreate = trimmed.length > 0 && !exactMatch && !selectedId;
-
-  function createAndSelect() {
-    const name = trimmed;
-    if (!name) return;
-    startCreate(async () => {
-      const { createContactAction } = await import("@/app/actions/contacts");
-      const fd = new FormData();
-      fd.set("name", name);
-      if (role) fd.set(role, "true");
-      const result = await createContactAction(collectionId, fd);
-      if (result.status === "success") {
-        invalidateContacts(collectionId);
-        pick({ id: result.contact.id, name: result.contact.name });
-      } else if (result.status === "error") {
-        setCreateError(result.message);
-      }
-    });
-  }
-
-  const actions: AutocompleteAction[] = canCreate
-    ? [
-        {
-          key: "__create__",
-          node: isCreating ? "Creating…" : `Create “${trimmed}”`,
-          onSelect: createAndSelect,
-          style: {
-            borderTop:
-              suggestions.length > 0 ? "1px solid var(--color-border)" : undefined,
-            color: "var(--color-accent)",
-            fontWeight: 500,
-          },
-        },
-      ]
-    : [];
 
   return (
     <>
-      <input type="hidden" name={fieldName} value={selectedId} />
+      {/* Both are submitted: the id wins when a suggestion was picked, otherwise the
+          server find-or-creates a contact from the name. */}
+      <input type="hidden" name={idFieldName} value={selectedId} />
+      <input type="hidden" name={nameFieldName} value={value} />
       <Autocomplete
         value={value}
         onValueChange={handleValueChange}
@@ -128,17 +88,11 @@ export function PurchaseContactSelect({
           <span style={{ fontWeight: c.id === selectedId ? 600 : 400 }}>{c.name}</span>
         )}
         onSelect={(c) => pick({ id: c.id, name: c.name })}
-        actions={actions}
         placeholder={placeholder}
         inputStyle={INPUT_STYLE}
         inputId={inputId}
-        disabled={disabled || isCreating}
+        disabled={disabled}
       />
-      {createError && (
-        <p style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
-          {createError}
-        </p>
-      )}
     </>
   );
 }

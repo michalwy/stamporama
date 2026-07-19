@@ -50,12 +50,12 @@ export function usePurchasesInfinite(
 
 /** Contact suggestions for the supplier / platform pickers. Backed by the #107 search
  * API; disabled until the user types (the dropdown only opens then), mirroring the
- * inventory acquisition-source autocomplete. Pass `role: "platform"` to narrow to
- * platform contacts (Allegro, eBay…) for the platform picker. */
+ * inventory acquisition-source autocomplete. Pass `role` to narrow the list: `"seller"`
+ * for the supplier field, `"platform"` for platforms (Allegro, eBay…). */
 export function usePurchaseContactSearch(
   collectionId: string,
   query: string,
-  role?: "platform"
+  role?: "platform" | "seller"
 ) {
   return useQuery<ContactData[]>({
     queryKey: ["purchases", collectionId, "contactSearch", role ?? "any", query] as const,

@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
+import { resolvePurchaseContact } from "./contacts";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -128,8 +129,12 @@ export interface PurchaseExpenseInput {
 }
 
 export interface PurchaseCreateInput {
+  // Supplier / platform may arrive as a picked id, or as a typed name that is resolved to
+  // an existing contact or created on save (#120). When both are present the id wins.
   contactId?: string | null;
+  contactName?: string | null;
   platformId?: string | null;
+  platformName?: string | null;
   purchasedAt: string;
   currency: string;
   shippingCost?: number | null;
@@ -319,12 +324,22 @@ export async function createPurchase(
 
   const purchasedAt = toDate(data.purchasedAt);
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
+  const contactId = await resolvePurchaseContact(collectionId, {
+    id: data.contactId,
+    name: data.contactName,
+    role: "seller",
+  });
+  const platformId = await resolvePurchaseContact(collectionId, {
+    id: data.platformId,
+    name: data.platformName,
+    role: "platform",
+  });
 
   const created = await prisma.purchase.create({
     data: {
       collectionId,
-      contactId: data.contactId || null,
-      platformId: data.platformId || null,
+      contactId,
+      platformId,
       purchasedAt,
       currency,
       fxRateToBase,
@@ -355,12 +370,22 @@ export async function updatePurchase(
 
   const purchasedAt = toDate(data.purchasedAt);
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
+  const contactId = await resolvePurchaseContact(collectionId, {
+    id: data.contactId,
+    name: data.contactName,
+    role: "seller",
+  });
+  const platformId = await resolvePurchaseContact(collectionId, {
+    id: data.platformId,
+    name: data.platformName,
+    role: "platform",
+  });
 
   await prisma.purchase.update({
     where: { id: purchaseId },
     data: {
-      contactId: data.contactId || null,
-      platformId: data.platformId || null,
+      contactId,
+      platformId,
       purchasedAt,
       currency,
       fxRateToBase,

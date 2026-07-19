@@ -85,7 +85,9 @@ export function PurchaseFormDialog({
               <LabelWithError htmlFor="purchase-supplier">Supplier</LabelWithError>
               <PurchaseContactSelect
                 collectionId={collectionId}
-                fieldName="contactId"
+                idFieldName="contactId"
+                nameFieldName="contactName"
+                role="seller"
                 initialContactId={purchase?.contactId}
                 initialContactName={purchase?.contactName}
                 inputId="purchase-supplier"
@@ -97,7 +99,8 @@ export function PurchaseFormDialog({
               <LabelWithError htmlFor="purchase-platform">Platform</LabelWithError>
               <PurchaseContactSelect
                 collectionId={collectionId}
-                fieldName="platformId"
+                idFieldName="platformId"
+                nameFieldName="platformName"
                 role="platform"
                 initialContactId={purchase?.platformId}
                 initialContactName={purchase?.platformName}

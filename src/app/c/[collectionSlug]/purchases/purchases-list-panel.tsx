@@ -60,7 +60,7 @@ export function PurchasesListPanel({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
-  const { invalidateList } = useInvalidatePurchases();
+  const { invalidateList, invalidateContacts } = useInvalidatePurchases();
 
   const statusParam = searchParams.get("status") as PurchaseStatus | null;
   const status = statusParam && STATUS_FILTERS.some((s) => s.value === statusParam)
@@ -103,6 +103,8 @@ export function PurchasesListPanel({
     setDialog({ kind: "none" });
     setActionError(undefined);
     invalidateList(collectionId);
+    // A save may have created a supplier / platform on the fly; refresh the pickers' cache.
+    invalidateContacts(collectionId);
   }
 
   const hasActiveFilters = !!status;

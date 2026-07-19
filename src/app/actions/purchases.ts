@@ -55,7 +55,9 @@ function parseFields(formData: FormData): { data: PurchaseCreateInput; error?: s
   return {
     data: {
       contactId: optionalStr(formData, "contactId"),
+      contactName: optionalStr(formData, "contactName"),
       platformId: optionalStr(formData, "platformId"),
+      platformName: optionalStr(formData, "platformName"),
       purchasedAt,
       currency,
       shippingCost: parseMoney(str(formData, "shippingCost")),
