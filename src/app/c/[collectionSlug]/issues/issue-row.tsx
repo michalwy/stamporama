@@ -74,7 +74,6 @@ function StampTreeNode({
   const addCopy = useInventoryAddAction({
     collectionId,
     areas,
-    baseCurrency,
     target: {
       kind: "stamp",
       stampId: node.stampId,
@@ -257,7 +256,6 @@ export function IssueRow({
   const addCopy = useInventoryAddAction({
     collectionId,
     areas,
-    baseCurrency,
     target: {
       kind: "issue",
       issue: {

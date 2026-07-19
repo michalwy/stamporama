@@ -106,41 +106,57 @@ lot optionally referencing an auction lot — is left to #23.
 
 ## Schema
 
-```
-Purchase
-  id
-  collectionId   → Collection  (onDelete: Cascade)
-  contactId      → Contact?     (onDelete: Restrict)   -- optional supplier
-  purchasedAt    Date
-  currency       String                                -- transaction currency
-  fxRateToBase   Decimal?                              -- frozen at purchasedAt
-  shippingCost   Decimal?                              -- shared cost
-  status         enum  preparing | in_transit | arrived
-  createdAt
+Landed in #118 (`prisma/schema.prisma`, migration `20260719120000_add_purchase_model`).
+Concrete column names, types, and precision below.
 
-PurchaseLot
-  id
-  purchaseId     → Purchase     (onDelete: Cascade)
-  price          Decimal
-  status         enum  open | closed
+**Enum representation.** The schema has no native Postgres enums; every status is a
+`String` column with the allowed values documented in the schema and enforced by the
+domain layer, matching the existing convention (currency codes, etc.).
+
+**Decimal precision.** Money uses `Decimal @db.Decimal(10, 2)` (as elsewhere).
+`fxRateToBase` carries no `@db.Decimal` annotation, so it inherits Prisma's default
+`Decimal(65, 30)` — the same precision as `ExchangeRate.rate`, which rates need.
+
+**The three cost concepts** are named for what they are: shared cost =
+`Purchase.shippingCost`; inventory line = `PurchaseLot.price`; non-inventory line =
+`PurchaseExpense.price`.
+
+```
+Purchase                                         -- table "purchase"
+  id            String   @id @default(cuid())
+  collectionId  String   → Collection  (onDelete: Cascade)
+  contactId     String?  → Contact      (onDelete: Restrict)   -- optional supplier
+  purchasedAt   DateTime @db.Date                              -- money-spent date
+  currency      String                                         -- transaction currency
+  fxRateToBase  Decimal?                        -- DECIMAL(65,30), frozen at purchasedAt
+  shippingCost  Decimal? @db.Decimal(10, 2)                    -- shared cost
+  status        String   @default("preparing")  -- preparing | in_transit | arrived
+  createdAt     DateTime @default(now())
+
+PurchaseLot                                      -- table "purchase_lot"
+  id            String   @id @default(cuid())
+  purchaseId    String   → Purchase     (onDelete: Cascade)
+  price         Decimal  @db.Decimal(10, 2)
+  status        String   @default("open")        -- open | closed
   -- items: Item[]
 
-PurchaseExpense
-  id
-  purchaseId     → Purchase     (onDelete: Cascade)
-  label          String
-  price          Decimal
+PurchaseExpense                                  -- table "purchase_expense"
+  id            String   @id @default(cuid())
+  purchaseId    String   → Purchase     (onDelete: Cascade)
+  label         String
+  price         Decimal  @db.Decimal(10, 2)
 
-Item  (additions to ADR-0007)
-  lotId          → PurchaseLot?  (onDelete: Restrict)  -- optional acquisition link
-  deliveryState  enum  in_transit | delivered | not_delivered | damaged
-  costBasis      Decimal?        -- base-currency snapshot, null = pending
+Item  (additions to ADR-0007)                    -- table "item"
+  lotId         String?  → PurchaseLot  (onDelete: Restrict)   -- optional acquisition link
+  deliveryState String   @default("delivered")   -- in_transit | delivered | not_delivered | damaged
+  costBasis     Decimal? @db.Decimal(10, 2)       -- base-currency snapshot, null = pending
 ```
 
-Exact column names, precision, currency-code handling, and the precise naming of the
-three cost concepts (shared cost vs `PurchaseLot` vs `PurchaseExpense`) are settled in
-the schema issue (#118). The allocation logic lives in a pure module unit-tested
-without Prisma (#119).
+`Item.deliveryState` is `NOT NULL DEFAULT 'delivered'` (a manually added copy is in
+hand; purchase intake sets `in_transit` explicitly). The flat acquisition/cost fields
+from ADR-0007 (`contactId`, `acquiredDate`, `purchasePrice`, `purchaseCurrency`) were
+**dropped** in the same migration (empty/demo data — no backfill). The allocation logic
+lives in a pure module unit-tested without Prisma (#119).
 
 ## Consequences
 

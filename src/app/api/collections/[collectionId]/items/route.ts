@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listItemsPaginated, type ItemSortBy } from "@/lib/items";
 
-const VALID_SORT_BY = new Set<ItemSortBy>(["created", "acquired"]);
+const VALID_SORT_BY = new Set<ItemSortBy>(["created"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
 
 export async function GET(

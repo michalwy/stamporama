@@ -1,10 +1,11 @@
 import "server-only";
 import { PrismaClient } from "@/generated/prisma/client";
 
-// Inventory demo data: owned copies (`Item`), acquisition sources (`Contact`),
+// Inventory demo data: owned copies (`Item`), contacts (`Contact` address book),
 // certificate statuses, and refinement history (`ItemVariantHistory`). Seeded on
 // top of the catalog data (stamps/issues/areas) so the Inventory screen — list,
-// filters, holdings valuation, source contacts — is populated in the demo.
+// filters, holdings valuation — is populated in the demo. Acquisition/cost now live
+// on the purchase model (ADR-0009); purchase demo data is seeded by #124.
 //
 // Fully deterministic: a fixed-seed PRNG drives every choice, so repeated seeds
 // produce the same inventory. Stamps are read back in `id` order for stability.
@@ -92,10 +93,6 @@ function weightedIndex(rng: () => number, weights: number[]): number {
   return weights.length - 1;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 export async function seedInventory(
   collectionId: string,
   tx: PrismaClient
@@ -143,10 +140,11 @@ export async function seedInventory(
     certStatusIds.push(cs.id);
   }
 
-  // Acquisition source contacts.
-  const contactIds: string[] = [];
+  // Contacts (address book). Under the purchase model (ADR-0009) suppliers link to a
+  // `Purchase`, not directly to items; #124 seeds purchases. Seeded here so the
+  // Contacts screen is populated in the demo.
   for (const c of DEMO_CONTACTS) {
-    const contact = await tx.contact.create({
+    await tx.contact.create({
       data: {
         collectionId,
         name: c.name,
@@ -158,7 +156,6 @@ export async function seedInventory(
         other: c.other ?? false,
       },
     });
-    contactIds.push(contact.id);
   }
 
   const conditions = await tx.stampCondition.findMany({
@@ -174,12 +171,7 @@ export async function seedInventory(
   const stamps = await tx.stamp.findMany({
     where: { collectionId },
     orderBy: { id: "asc" },
-    select: {
-      id: true,
-      parentId: true,
-      issuedYear: true,
-      catalogPrices: { select: { price: true, currency: true }, take: 1 },
-    },
+    select: { id: true, parentId: true },
   });
 
   type ItemData = {
@@ -190,10 +182,6 @@ export async function seedInventory(
     inCollection: boolean;
     forSale: boolean;
     forTrade: boolean;
-    contactId: string | null;
-    acquiredDate: Date | null;
-    purchasePrice: number | null;
-    purchaseCurrency: string | null;
     notes: string | null;
   };
 
@@ -205,26 +193,6 @@ export async function seedInventory(
     const forTrade = rng() < 0.12;
     const inCollection = !(forSale && rng() < 0.3);
 
-    const contactId =
-      rng() < 0.4 ? contactIds[Math.floor(rng() * contactIds.length)] : null;
-
-    let acquiredDate: Date | null = null;
-    if (rng() < 0.72) {
-      const year = 2005 + Math.floor(rng() * 20);
-      const month = 1 + Math.floor(rng() * 12);
-      const day = 1 + Math.floor(rng() * 28);
-      acquiredDate = new Date(Date.UTC(year, month - 1, day));
-    }
-
-    let purchasePrice: number | null = null;
-    let purchaseCurrency: string | null = null;
-    if (rng() < 0.6) {
-      const cat = stamp.catalogPrices[0];
-      const base = cat ? Number(cat.price) : 5;
-      purchaseCurrency = cat?.currency ?? "EUR";
-      purchasePrice = round2(base * (0.3 + rng() * 1.2));
-    }
-
     const notes = rng() < 0.2 ? DEMO_NOTES[Math.floor(rng() * DEMO_NOTES.length)] : null;
 
     return {
@@ -235,10 +203,6 @@ export async function seedInventory(
       inCollection,
       forSale,
       forTrade,
-      contactId,
-      acquiredDate,
-      purchasePrice,
-      purchaseCurrency,
       notes,
     };
   }

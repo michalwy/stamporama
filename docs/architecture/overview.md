@@ -126,23 +126,32 @@ model Collection {
 - `stampId` → `Stamp` at any level of the variant tree: a base stamp (`parentId = null`) means the variant is unknown; a variant row means the copy is identified. The tree level implicitly encodes variant certainty; there is no "unknown" flag.
 - `conditionId` → `StampCondition` and `certificateStatusId?` → `CertificateStatus` reference the per-collection configurable sets (Issues #93/#94), mirroring `StampCatalogPrice`.
 - Disposition is three **independent booleans** — `inCollection`, `forSale`, `forTrade` — not a mutually-exclusive status. A copy can hold any combination.
-- Acquisition/purchase fields (`contactId` → `Contact` acquisition source, `acquiredDate`, `purchasePrice` `Decimal(10,2)`, `purchaseCurrency`, `notes`) are entered by hand now; a future acquisitions module will populate them. The Source field is an autocomplete that create-on-types role-less contacts (#108); `contactId` uses `onDelete: Restrict`.
+- Acquisition & cost (ADR-0009, #118): a copy links to its acquisition via `lotId?` → `PurchaseLot` (`onDelete: Restrict`) — one channel among several, so nullable. Supplier, date, and price live on `Purchase`/`PurchaseLot`, not on `Item`; the flat fields from ADR-0007 (`contactId`, `acquiredDate`, `purchasePrice`, `purchaseCurrency`) were removed. `costBasis?` `Decimal(10,2)` is a base-currency snapshot (null = pending). `deliveryState` (`in_transit | delivered | not_delivered | damaged`, default `delivered`) is an independent physical-delivery axis. `notes` holds free-form per-copy detail. **No copy-level UI captures purchase data yet** — the purchase CRUD/intake screens land in #120+.
 - Physical storage (#56): `locationId?` → `Location` (an assignable storage node) records where the copy is filed; `locationRef?` is a free-text identifier within that location (e.g. a page/pocket like `p.12`), per copy and **not unique**. Only `assignable = true` locations are valid targets, enforced server-side.
 - `ItemVariantHistory` records in-place re-pointing of `stampId` when an unknown-variant copy is later identified (`fromStampId`, `toStampId`, `changedAt`, `note?`), giving a refinement trail without versioning the whole `Item`.
 
-Referential actions: `collectionId` and `stampId` cascade; `conditionId`, `certificateStatusId`, and `locationId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`, `contactId`, `locationId`.
+Referential actions: `collectionId` and `stampId` cascade; `conditionId`, `certificateStatusId`, `lotId`, and `locationId` restrict (mirrors `StampCatalogPrice`). Indexed on `collectionId`, `stampId`, `conditionId`, `lotId`, `locationId`.
 
 Valuation of an unknown-variant copy (lowest child-variant catalog price, flagged uncertain) is shared domain logic and belongs out of UI components; it lands with a later child issue.
 
 ### Contacts (`Contact`)
 
-`Contact` is a per-collection address book of everyone the collector deals with — sellers, buyers, exchange partners, auction houses, platforms (see [ADR-0008](../decisions/0008-contact-entity.md)). It is the foundation for the acquisition-source autocomplete and the future sales/trade layer.
+`Contact` is a per-collection address book of everyone the collector deals with — sellers, buyers, exchange partners, auction houses, platforms (see [ADR-0008](../decisions/0008-contact-entity.md)). It is the supplier reference for purchases (ADR-0009) and the foundation for the future sales/trade layer.
 
 - `name` is **unique per collection**; `notes`, `email`, `phone` are optional.
 - Roles are six **independent booleans** — `buyer`, `seller`, `exchangePartner`, `auctionHouse`, `platform`, `other` — not an enum. A contact can hold several at once, mirroring the `Item` disposition flags.
-- A contact may be created with **no roles set** (create-on-type from the acquisition-source autocomplete produces a role-less contact; roles are filled in later).
-- `collectionId` cascades. Future foreign keys pointing *at* a contact (from `Item` and sales lots) use `onDelete: Restrict` so a referenced contact cannot be deleted without first detaching it.
+- A contact may be created with **no roles set** (roles are filled in later).
+- `collectionId` cascades. Foreign keys pointing *at* a contact (from `Purchase`, and future sales lots) use `onDelete: Restrict` so a referenced contact cannot be deleted without first detaching it.
 - Domain module `src/lib/contacts.ts` (server-only) exposes `listContacts` / `searchContacts` / `createContact`, all collection-owner-authorized.
+
+### Purchases (`Purchase` / `PurchaseLot` / `PurchaseExpense`)
+
+The purchase model (see [ADR-0009](../decisions/0009-purchase-record-model.md), schema in #118) is the channel-agnostic source of cost-basis. **Schema only so far** — no UI or domain logic yet (allocation is #119, CRUD/intake are #120+).
+
+- `Purchase` — transaction header: optional `contactId?` → `Contact` supplier (`onDelete: Restrict`), `purchasedAt` (date), a single `currency`, `fxRateToBase?` frozen at `purchasedAt` (`Decimal(65,30)`, reuses the `ExchangeRate` mechanism), `shippingCost?` `Decimal(10,2)` (shared cost), and a delivery `status` (`preparing | in_transit | arrived`). Scoped to `Collection` (`onDelete: Cascade`).
+- `PurchaseLot` — inventory line: `price` `Decimal(10,2)`, intake `status` (`open | closed`), and the `Item`s it resolves into. `onDelete: Cascade` from `Purchase`.
+- `PurchaseExpense` — non-inventory line (e.g. a magnifier): `label` + `price` `Decimal(10,2)`, no lifecycle and no items. `onDelete: Cascade` from `Purchase`.
+- Statuses are `String` columns (the schema uses no native Postgres enums), with allowed values documented in the schema and enforced by the domain layer.
 
 ### Storage locations (`Location`)
 

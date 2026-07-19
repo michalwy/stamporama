@@ -12,11 +12,9 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { StampSelect } from "./stamp-select";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
-import { ContactSelect } from "./contact-select";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 
@@ -64,7 +62,6 @@ export interface InventoryItemFormDialogProps {
   locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
-  baseCurrency: string;
   item?: ItemListItem;
   /** Add mode: pre-select this stamp (opened from a stamp list row, #111). */
   initialStamp?: PickedStamp;
@@ -79,8 +76,9 @@ export interface InventoryItemFormDialogProps {
 }
 
 /** Add/edit an inventory item (physical copy). One logical save (ADR-0007, AGENTS.md
- * dialog rules): the stamp/variant picker, condition, certificate, disposition, and
- * acquisition fields all submit together. */
+ * dialog rules): the stamp/variant picker, condition, certificate, disposition,
+ * storage, and notes all submit together. Acquisition/cost live on the purchase model
+ * (ADR-0009) and are captured there, not here. */
 export function InventoryItemFormDialog({
   mode,
   collectionId,
@@ -88,7 +86,6 @@ export function InventoryItemFormDialog({
   locations,
   conditions,
   certificateStatuses,
-  baseCurrency,
   item,
   initialStamp,
   initialStampId,
@@ -240,65 +237,6 @@ export function InventoryItemFormDialog({
             {DISPOSITIONS.map(({ key }) => (
               <input key={key} type="hidden" name={key} value={disposition[key] ? "true" : "false"} />
             ))}
-          </div>
-
-          {/* Acquisition */}
-          <div style={FIELD_GAP}>
-            <div style={SECTION_LABEL}>Acquisition</div>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <LabelWithError htmlFor="copy-source">Source</LabelWithError>
-              <ContactSelect
-                collectionId={collectionId}
-                inputId="copy-source"
-                initialContactId={item?.contactId}
-                initialContactName={item?.contactName}
-                disabled={isPending}
-              />
-            </div>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <LabelWithError htmlFor="copy-acquired-date">Acquired date</LabelWithError>
-              <input
-                id="copy-acquired-date"
-                name="acquiredDate"
-                type="date"
-                defaultValue={item?.acquiredDate ?? ""}
-                min="1840-01-01"
-                max="2100-12-31"
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <input
-                name="purchasePrice"
-                type="text"
-                inputMode="decimal"
-                placeholder="Purchase price"
-                defaultValue={item?.purchasePrice ?? ""}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, flex: 2 }}
-              />
-              <select
-                name="purchaseCurrency"
-                defaultValue={item?.purchaseCurrency ?? baseCurrency}
-                disabled={isPending}
-                aria-label="Purchase currency"
-                style={{ ...INPUT_STYLE, flex: 1 }}
-              >
-                {/* Include any legacy currency not in the common list so edits are lossless. */}
-                {item?.purchaseCurrency &&
-                  !COMMON_CURRENCIES.includes(
-                    item.purchaseCurrency as (typeof COMMON_CURRENCIES)[number]
-                  ) && (
-                    <option value={item.purchaseCurrency}>{item.purchaseCurrency}</option>
-                  )}
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {/* Storage location (#56) */}

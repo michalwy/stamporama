@@ -69,14 +69,12 @@ export type InventoryAddTarget =
 export function useInventoryAddAction({
   collectionId,
   areas,
-  baseCurrency,
   target,
   key = "add-copy",
   label = "Add copy",
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
-  baseCurrency: string;
   target: InventoryAddTarget;
   key?: string;
   label?: string;
@@ -115,7 +113,6 @@ export function useInventoryAddAction({
       locations={locations}
       conditions={conditions}
       certificateStatuses={certificateStatuses}
-      baseCurrency={baseCurrency}
       initialStamp={target.kind === "stamp" ? target.initial : undefined}
       initialStampId={target.kind === "stamp" ? target.stampId : undefined}
       scopeIssue={target.kind === "issue" ? target.issue : undefined}

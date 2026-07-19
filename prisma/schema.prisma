@@ -42,6 +42,7 @@ model Collection {
   items           Item[]
   contacts        Contact[]
   locations       Location[]
+  purchases       Purchase[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -246,10 +247,17 @@ model Item {
   inCollection        Boolean  @default(true)
   forSale             Boolean  @default(false)
   forTrade            Boolean  @default(false)
-  contactId           String?
-  acquiredDate        DateTime? @db.Date
-  purchasePrice       Decimal? @db.Decimal(10, 2)
-  purchaseCurrency    String?
+  // Acquisition link (ADR-0009). A purchase is one channel among several; `lotId` is a
+  // nullable FK to a `PurchaseLot` (`onDelete: Restrict`). Supplier/date/price now live
+  // on `Purchase`/`PurchaseLot`, superseding the flat cost fields from ADR-0007.
+  lotId               String?
+  // Physical delivery axis (ADR-0009 §5), orthogonal to `inCollection`/`forSale`/`forTrade`.
+  // One of: in_transit | delivered | not_delivered | damaged. Defaults `delivered` — a
+  // manually added copy is in hand; purchase intake sets `in_transit` explicitly.
+  deliveryState       String   @default("delivered")
+  // Base-currency cost-basis snapshot (ADR-0009 §2/§3). Null = pending (lot still open,
+  // or the copy entered via a channel that has not written a cost yet).
+  costBasis           Decimal? @db.Decimal(10, 2)
   notes               String?
   // Physical storage: at most one assignable `Location` per copy, plus an optional
   // free-text identifier within that location (e.g. a page/pocket ref like `A234`),
@@ -262,14 +270,14 @@ model Item {
   stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)
   condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
-  contact           Contact?             @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
 
   @@index([collectionId])
   @@index([stampId])
   @@index([conditionId])
-  @@index([contactId])
+  @@index([lotId])
   @@index([locationId])
   @@map("item")
 }
@@ -290,6 +298,76 @@ model ItemVariantHistory {
   @@map("item_variant_history")
 }
 
+// Purchase transaction header (ADR-0009 §1). A single acquisition event: optional
+// supplier, one transaction currency, shared shipping cost, and a physical delivery
+// status. Its inventory lines are `PurchaseLot`s; non-inventory lines are
+// `PurchaseExpense`s. Scoped to a collection.
+model Purchase {
+  id           String   @id @default(cuid())
+  collectionId String
+  // Optional supplier. `onDelete: Restrict`: a contact referenced by a purchase cannot
+  // be deleted without first detaching it (ADR-0008 §4, ADR-0009).
+  contactId    String?
+  // The moment money was spent; the FX rate is frozen as of this date.
+  purchasedAt  DateTime @db.Date
+  // Single transaction currency for every amount on this purchase and its lines.
+  currency     String
+  // Base-currency FX rate frozen at `purchasedAt` (ADR-0009 §4), reusing the
+  // `ExchangeRate` mechanism (#20). Extra fractional digits like `ExchangeRate.rate`
+  // (DECIMAL(65,30)); null when base == transaction currency or no rate is known yet.
+  fxRateToBase Decimal?
+  // Shared cost (shipping/handling) distributed across all lines by price (ADR-0009 §3).
+  shippingCost Decimal? @db.Decimal(10, 2)
+  // Physical delivery status of the shipment: preparing | in_transit | arrived.
+  status       String   @default("preparing")
+  createdAt    DateTime @default(now())
+
+  collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contact    Contact?          @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  lots       PurchaseLot[]
+  expenses   PurchaseExpense[]
+
+  @@index([collectionId])
+  @@index([contactId])
+  @@map("purchase")
+}
+
+// Inventory line of a purchase (ADR-0009 §1): a priced lot that resolves into one or
+// more `Item`s over time. Intake lifecycle `status`: open | closed. Cascade-deleted
+// with its purchase.
+model PurchaseLot {
+  id         String @id @default(cuid())
+  purchaseId String
+  // Line price in the purchase's transaction currency.
+  price      Decimal @db.Decimal(10, 2)
+  // Intake status: open (items still being identified, cost pending) | closed
+  // (pool allocated to items, cost-basis frozen). See ADR-0009 §3/§5.
+  status     String  @default("open")
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  items    Item[]
+
+  @@index([purchaseId])
+  @@map("purchase_lot")
+}
+
+// Non-inventory line of a purchase (ADR-0009 §1), e.g. a magnifier bought alongside
+// the stamps: a label and a price, with no lifecycle and no items. It absorbs its
+// fair share of the shared cost so it does not inflate the stamps. Separate table
+// from `PurchaseLot` on purpose (ADR-0009 §1). Cascade-deleted with its purchase.
+model PurchaseExpense {
+  id         String  @id @default(cuid())
+  purchaseId String
+  label      String
+  // Line price in the purchase's transaction currency.
+  price      Decimal @db.Decimal(10, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@map("purchase_expense")
+}
+
 model Contact {
   id               String   @id @default(cuid())
   collectionId     String
@@ -308,9 +386,10 @@ model Contact {
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  // Items acquired from this contact. `onDelete: Restrict` on the FK (from `Item`)
-  // means a referenced contact cannot be deleted without first detaching it (ADR-0008).
-  items      Item[]
+  // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
+  // (from `Purchase`) means a referenced contact cannot be deleted without first
+  // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
+  purchases  Purchase[]
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

@@ -161,7 +161,7 @@ describe("contact name uniqueness scope", () => {
   });
 });
 
-describe("contact referenced by an item (onDelete: Restrict)", () => {
+describe("contact referenced by a purchase (onDelete: Restrict)", () => {
   let userId: string;
   let collectionId: string;
 
@@ -172,20 +172,18 @@ describe("contact referenced by an item (onDelete: Restrict)", () => {
   });
 
   after(async () => {
-    // Detach items before the collection cascade so the Restrict FK doesn't block cleanup.
-    await prisma.item.deleteMany({ where: { collectionId } });
+    // Detach purchases before the collection cascade so the Restrict FK doesn't block cleanup.
+    await prisma.purchase.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("blocks deleting a contact still referenced by an item (ADR-0008 §4)", async () => {
+  it("blocks deleting a contact still referenced by a purchase (ADR-0008 §4, ADR-0009)", async () => {
+    // Supplier links moved from Item to Purchase (ADR-0009); the Restrict invariant
+    // now protects a contact referenced as a purchase supplier.
     const contact = await createContact(userId, collectionId, { name: "Cornerstone Auctions" });
-    const condition = await prisma.stampCondition.create({
-      data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
-    });
-    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Sourced" } });
-    await prisma.item.create({
-      data: { collectionId, stampId: stamp.id, conditionId: condition.id, contactId: contact.id },
+    await prisma.purchase.create({
+      data: { collectionId, contactId: contact.id, purchasedAt: new Date("2024-05-01"), currency: "EUR" },
     });
 
     // The Restrict FK rejects the delete at the database level.

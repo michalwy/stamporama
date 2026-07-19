@@ -74,17 +74,6 @@ async function assertCertificateStatusInCollection(
   if (!cert) throw new Error("Certificate status not found in this collection.");
 }
 
-async function assertContactInCollection(
-  collectionId: string,
-  contactId: string
-): Promise<void> {
-  const contact = await prisma.contact.findFirst({
-    where: { id: contactId, collectionId },
-    select: { id: true },
-  });
-  if (!contact) throw new Error("Contact not found in this collection.");
-}
-
 /** A copy can only be filed in a location that lives in the same collection and is
  * marked `assignable` (grouping-only nodes cannot hold copies, #56). */
 async function assertLocationAssignable(
@@ -142,13 +131,13 @@ export interface ItemData {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  /** Acquisition source, referencing a `Contact` (ADR-0007 §5, #108). Null when
-   * not recorded. */
-  contactId: string | null;
-  /** Full acquisition date as `YYYY-MM-DD` (ADR-0007 §5). Null when not recorded. */
-  acquiredDate: string | null;
-  purchasePrice: string | null;
-  purchaseCurrency: string | null;
+  /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null when
+   * the copy entered via another channel. */
+  lotId: string | null;
+  /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
+  deliveryState: string;
+  /** Base-currency cost-basis snapshot (ADR-0009). Null = pending. */
+  costBasis: string | null;
   notes: string | null;
   /** Assignable storage location this copy is filed in (#56), or null. */
   locationId: string | null;
@@ -190,17 +179,16 @@ const ITEM_SELECT = {
   inCollection: true,
   forSale: true,
   forTrade: true,
-  contactId: true,
-  acquiredDate: true,
-  purchasePrice: true,
-  purchaseCurrency: true,
+  lotId: true,
+  deliveryState: true,
+  costBasis: true,
   notes: true,
   locationId: true,
   locationRef: true,
   createdAt: true,
 } as const;
 
-/** Prisma row → ItemData, normalizing the Decimal purchase price to a string so it
+/** Prisma row → ItemData, normalizing the Decimal cost-basis to a string so it
  * crosses the server/client boundary cleanly (mirrors catalog-price handling). */
 function toItemData(row: {
   id: string;
@@ -211,10 +199,9 @@ function toItemData(row: {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  contactId: string | null;
-  acquiredDate: Date | null;
-  purchasePrice: { toString(): string } | null;
-  purchaseCurrency: string | null;
+  lotId: string | null;
+  deliveryState: string;
+  costBasis: { toString(): string } | null;
   notes: string | null;
   locationId: string | null;
   locationRef: string | null;
@@ -222,20 +209,8 @@ function toItemData(row: {
 }): ItemData {
   return {
     ...row,
-    acquiredDate: toDateString(row.acquiredDate),
-    purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
+    costBasis: row.costBasis == null ? null : row.costBasis.toString(),
   };
-}
-
-/** Prisma `@db.Date` → `YYYY-MM-DD` string for a clean server/client boundary. */
-function toDateString(value: Date | null): string | null {
-  return value == null ? null : value.toISOString().slice(0, 10);
-}
-
-/** `YYYY-MM-DD` (or null) → a UTC-midnight Date for a `@db.Date` column. */
-function fromDateString(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  return new Date(`${value}T00:00:00.000Z`);
 }
 
 export interface ItemCreateInput {
@@ -245,12 +220,6 @@ export interface ItemCreateInput {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
-  /** Acquisition source contact id (ADR-0007 §5, #108). */
-  contactId?: string | null;
-  /** Full acquisition date as `YYYY-MM-DD`. */
-  acquiredDate?: string | null;
-  purchasePrice?: string | null;
-  purchaseCurrency?: string | null;
   notes?: string | null;
   /** Assignable storage location id (#56). Must be `assignable = true`. */
   locationId?: string | null;
@@ -264,12 +233,6 @@ export interface ItemUpdateInput {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
-  /** Acquisition source contact id (ADR-0007 §5, #108). */
-  contactId?: string | null;
-  /** Full acquisition date as `YYYY-MM-DD`. */
-  acquiredDate?: string | null;
-  purchasePrice?: string | null;
-  purchaseCurrency?: string | null;
   notes?: string | null;
   /** Assignable storage location id (#56). Must be `assignable = true`. */
   locationId?: string | null;
@@ -296,9 +259,6 @@ export async function createItem(
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
-  if (data.contactId) {
-    await assertContactInCollection(collectionId, data.contactId);
-  }
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
@@ -311,10 +271,6 @@ export async function createItem(
       inCollection: data.inCollection ?? true,
       forSale: data.forSale ?? false,
       forTrade: data.forTrade ?? false,
-      contactId: data.contactId ?? null,
-      acquiredDate: fromDateString(data.acquiredDate),
-      purchasePrice: data.purchasePrice ?? null,
-      purchaseCurrency: data.purchaseCurrency ?? null,
       notes: data.notes ?? null,
       locationId: data.locationId ?? null,
       // A ref only makes sense with a location; drop it when none is set.
@@ -377,9 +333,6 @@ export async function updateItem(
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
-  if (data.contactId) {
-    await assertContactInCollection(collectionId, data.contactId);
-  }
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
@@ -397,14 +350,6 @@ export async function updateItem(
     ...(fields.inCollection !== undefined ? { inCollection: fields.inCollection } : {}),
     ...(fields.forSale !== undefined ? { forSale: fields.forSale } : {}),
     ...(fields.forTrade !== undefined ? { forTrade: fields.forTrade } : {}),
-    ...(fields.contactId !== undefined ? { contactId: fields.contactId } : {}),
-    ...(fields.acquiredDate !== undefined
-      ? { acquiredDate: fromDateString(fields.acquiredDate) }
-      : {}),
-    ...(fields.purchasePrice !== undefined ? { purchasePrice: fields.purchasePrice } : {}),
-    ...(fields.purchaseCurrency !== undefined
-      ? { purchaseCurrency: fields.purchaseCurrency }
-      : {}),
     ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
     ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
     // A ref only makes sense with a location; clear it whenever the location is
@@ -437,7 +382,7 @@ export async function updateItem(
   return toItemData(item);
 }
 
-export type ItemSortBy = "created" | "acquired";
+export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
   certificateStatusId?: string;
@@ -482,13 +427,12 @@ export interface ItemListItem {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  /** Acquisition source contact, or null. */
-  contactId: string | null;
-  contactName: string | null;
-  /** Full acquisition date as `YYYY-MM-DD`, or null. */
-  acquiredDate: string | null;
-  purchasePrice: string | null;
-  purchaseCurrency: string | null;
+  /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null. */
+  lotId: string | null;
+  /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
+  deliveryState: string;
+  /** Base-currency cost-basis snapshot (ADR-0009), or null when pending. */
+  costBasis: string | null;
   notes: string | null;
   /** Assignable storage location this copy is filed in (#56), or null. The display
    * name/path is resolved client-side from the collection's locations list. */
@@ -517,10 +461,7 @@ export async function listItemsPaginated(
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
   const dir = filters.sortDir ?? "asc";
-  const orderBy =
-    filters.sortBy === "acquired"
-      ? [{ acquiredDate: dir }, { createdAt: dir }]
-      : [{ createdAt: dir }];
+  const orderBy = [{ createdAt: dir }];
 
   // A location filter matches the location and all its descendants (subtree, #56).
   const locationIds = filters.locationId
@@ -552,10 +493,9 @@ export async function listItemsPaginated(
       inCollection: true,
       forSale: true,
       forTrade: true,
-      contactId: true,
-      acquiredDate: true,
-      purchasePrice: true,
-      purchaseCurrency: true,
+      lotId: true,
+      deliveryState: true,
+      costBasis: true,
       notes: true,
       locationId: true,
       locationRef: true,
@@ -563,7 +503,6 @@ export async function listItemsPaginated(
       _count: { select: { variantHistory: true } },
       condition: { select: { id: true, name: true, abbreviation: true } },
       certificateStatus: { select: { id: true, name: true } },
-      contact: { select: { name: true } },
       stamp: {
         select: {
           parentId: true,
@@ -626,11 +565,9 @@ export async function listItemsPaginated(
       inCollection: row.inCollection,
       forSale: row.forSale,
       forTrade: row.forTrade,
-      contactId: row.contactId,
-      contactName: row.contact?.name ?? null,
-      acquiredDate: toDateString(row.acquiredDate),
-      purchasePrice: row.purchasePrice == null ? null : row.purchasePrice.toString(),
-      purchaseCurrency: row.purchaseCurrency,
+      lotId: row.lotId,
+      deliveryState: row.deliveryState,
+      costBasis: row.costBasis == null ? null : row.costBasis.toString(),
       notes: row.notes,
       locationId: row.locationId,
       locationRef: row.locationRef,

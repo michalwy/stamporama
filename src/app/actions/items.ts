@@ -31,10 +31,6 @@ interface ItemFields {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
-  contactId: string | null;
-  acquiredDate: string | null;
-  purchasePrice: string | null;
-  purchaseCurrency: string | null;
   notes: string | null;
   locationId: string | null;
   locationRef: string | null;
@@ -46,14 +42,12 @@ interface ParsedItemFields {
 }
 
 /** Parse and validate the shared add/edit copy form. Disposition flags, condition and
- * certificate are hidden inputs carrying selected ids; date/money mirror the stamp form. */
+ * certificate are hidden inputs carrying selected ids. Acquisition/cost now live on the
+ * purchase model (ADR-0009), so the copy form no longer captures them. */
 function parseItemFields(formData: FormData): ParsedItemFields {
   const stampId = str(formData, "stampId");
   const conditionId = str(formData, "conditionId");
   const certRaw = str(formData, "certificateStatusId");
-  const priceRaw = str(formData, "purchasePrice");
-  const currencyRaw = str(formData, "purchaseCurrency");
-  const acquiredRaw = str(formData, "acquiredDate");
 
   const data: ItemFields = {
     stampId,
@@ -62,10 +56,6 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     inCollection: bool(formData, "inCollection"),
     forSale: bool(formData, "forSale"),
     forTrade: bool(formData, "forTrade"),
-    contactId: str(formData, "contactId") || null,
-    acquiredDate: acquiredRaw || null,
-    purchasePrice: priceRaw || null,
-    purchaseCurrency: currencyRaw || null,
     notes: str(formData, "notes") || null,
     locationId: str(formData, "locationId") || null,
     // A ref without a location is meaningless; drop it unless a location is set.
@@ -76,16 +66,6 @@ function parseItemFields(formData: FormData): ParsedItemFields {
 
   if (!stampId) return { data, error: "A stamp must be selected." };
   if (!conditionId) return { data, error: "A condition must be selected." };
-  // A date control submits `YYYY-MM-DD`; reject anything else.
-  if (acquiredRaw && !/^\d{4}-\d{2}-\d{2}$/.test(acquiredRaw)) {
-    return { data, error: "Acquired date must be a valid date." };
-  }
-  if (priceRaw && isNaN(Number(priceRaw))) {
-    return { data, error: "Purchase price must be a number." };
-  }
-  if (priceRaw && !currencyRaw) {
-    return { data, error: "Currency is required when a purchase price is set." };
-  }
   return { data };
 }
 

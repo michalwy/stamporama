@@ -37,7 +37,6 @@ const DISPOSITION_FILTERS = [
 
 const SORT_OPTIONS: { value: ItemSortBy; label: string }[] = [
   { value: "created", label: "Date added" },
-  { value: "acquired", label: "Acquired date" },
 ];
 
 const CONTROL_STYLE: React.CSSProperties = {
@@ -300,7 +299,6 @@ export function InventoryListPanel({
           locations={locations}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
-          baseCurrency={baseCurrency}
           item={dialog.kind === "edit" ? dialog.item : undefined}
           isPending={isPending}
           error={actionError}

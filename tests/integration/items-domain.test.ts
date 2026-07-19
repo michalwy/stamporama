@@ -63,45 +63,22 @@ describe("createItem", () => {
   });
   after(() => cleanup(f.userId));
 
-  it("creates a copy with disposition defaults, a decimal purchase price, and a source contact", async () => {
-    const contact = await prisma.contact.create({
-      data: { collectionId: f.collectionId, name: "eBay" },
-    });
+  it("creates a copy with disposition defaults, a null cost-basis, and default delivery state", async () => {
     const item = await createItem(f.userId, f.collectionId, {
       stampId: f.baseStamp.id,
       conditionId: f.condition.id,
-      purchasePrice: "12.50",
-      purchaseCurrency: "EUR",
-      contactId: contact.id,
-      acquiredDate: "2024-05-01",
       notes: "commemorative postmark",
     });
     assert.equal(item.stampId, f.baseStamp.id);
     assert.equal(item.inCollection, true);
     assert.equal(item.forSale, false);
     assert.equal(item.forTrade, false);
-    assert.equal(item.purchasePrice, "12.5");
-    assert.equal(item.purchaseCurrency, "EUR");
-    assert.equal(item.contactId, contact.id);
-    assert.equal(item.acquiredDate, "2024-05-01");
+    // Acquisition/cost now live on the purchase model (ADR-0009): a freshly created
+    // copy has no lot, a pending (null) cost-basis, and the default delivery state.
+    assert.equal(item.lotId, null);
+    assert.equal(item.costBasis, null);
+    assert.equal(item.deliveryState, "delivered");
     assert.equal(item.notes, "commemorative postmark");
-  });
-
-  it("rejects a contact from another collection", async () => {
-    const other = await seedFixtures(`othercontact-${Date.now()}`);
-    const otherContact = await prisma.contact.create({
-      data: { collectionId: other.collectionId, name: "Foreign dealer" },
-    });
-    await assert.rejects(
-      () =>
-        createItem(f.userId, f.collectionId, {
-          stampId: f.baseStamp.id,
-          conditionId: f.condition.id,
-          contactId: otherContact.id,
-        }),
-      /contact not found in this collection/i
-    );
-    await cleanup(other.userId);
   });
 
   it("accepts a certificate status and explicit disposition flags", async () => {
@@ -220,11 +197,9 @@ describe("updateItem", () => {
     const updated = await updateItem(f.userId, item.id, {
       forSale: true,
       notes: "updated note",
-      purchasePrice: "9.99",
     });
     assert.equal(updated.forSale, true);
     assert.equal(updated.notes, "updated note");
-    assert.equal(updated.purchasePrice, "9.99");
     assert.equal(updated.stampId, f.baseStamp.id);
     const history = await getItemVariantHistory(f.userId, item.id);
     assert.equal(history.length, 0);

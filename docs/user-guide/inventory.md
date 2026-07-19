@@ -2,7 +2,7 @@
 
 Your **inventory** is the physical copies you own. A **copy** is a single physical stamp:
 each copy is its own record, so two copies of the same stamp can differ in condition,
-certificate, disposition, purchase details, and notes. There is no "quantity" — three
+certificate, disposition, storage, and notes. There is no "quantity" — three
 copies of the same stamp are three rows.
 
 Open the **Inventory** screen from the **Collection** section of the sidebar.
@@ -18,7 +18,6 @@ Each row shows:
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
-- The **purchase price** and **acquired date**, when recorded.
 - A notes indicator when the copy has notes (hover to read them).
 
 If a copy is linked to a base stamp whose specific variant is unknown, it is flagged
@@ -44,12 +43,12 @@ page URL, so you can bookmark or share a filtered view.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once.
-- **Sort** — by date added or acquired date, ascending or descending.
+- **Sort** — by date added, ascending or descending.
 
 ## Copy value and holdings total
 
 Each copy is valued from your **catalog prices** — this is independent of what you paid
-(the purchase price). A copy's value is the price for its **own condition and certificate
+for it. A copy's value is the price for its **own condition and certificate
 status**, taken from the **primary catalog of the stamp's area** at that catalog's
 **latest recorded edition**:
 
@@ -88,7 +87,7 @@ actions as a menu. On the **Stamps** list and the **Issues** list, that menu inc
   action for the copies of just that stamp.
 
 The popup shows the same copy details as the Inventory list (condition, disposition,
-value, purchase and acquisition details), but is **read-only** — it's for looking, not
+value, storage), but is **read-only** — it's for looking, not
 editing. Close it to return to the list exactly where you were; nothing navigates away.
 To edit or delete existing copies, use the **Inventory** screen.
 
@@ -133,15 +132,15 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection*.
-5. Optionally record the **acquisition source**, **acquired date**, **purchase price and
-   currency**, and free-form **notes**. The **source** is a contact: start typing to
-   search your existing contacts, or type a new name and choose **Create** to add it —
-   a new contact is created and linked to the copy. (You can fill in that contact's
-   roles and details later from your contacts.)
-6. Optionally file the copy into a **storage location** and add an in-location **ref**
+5. Optionally file the copy into a **storage location** and add an in-location **ref**
    (e.g. a page or pocket). Only locations that can hold copies are selectable — see
    [Locations](locations.md).
+6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
 7. Click **Add copy**. Everything is saved together in one step.
+
+> **Acquisition and cost** — supplier, date, and what you paid — are recorded on a
+> **purchase**, not on the copy. Purchase tracking is being built; until it lands, the
+> copy form captures identity, condition, disposition, storage, and notes only.
 
 ## Editing a copy
 

@@ -87,10 +87,6 @@ const META_INLINE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-function acquiredText(item: ItemListItem): string | null {
-  return item.acquiredDate ? `Acquired ${item.acquiredDate}` : null;
-}
-
 /** Catalog valuation of a copy (ADR-0007 §7). Uncertain values (unknown variant, valued
  * at the lowest child price) are prefixed `~` and muted; unpriced copies show `—`;
  * a price in a currency with no base rate falls back to its own currency. */
@@ -173,12 +169,6 @@ export function InventoryItemRow({
   const areaPath = buildAreaPath(areas, item.areaId);
   const dateStr = formatIssuedDate(item.issuedDay, item.issuedMonth, item.issuedYear);
   const hasIssue = !!(item.issueName || item.issueYear);
-
-  const acquired = acquiredText(item);
-  const price =
-    item.purchasePrice != null
-      ? `${item.purchasePrice}${item.purchaseCurrency ? ` ${item.purchaseCurrency}` : ""}`
-      : null;
 
   const dispositions = DISPOSITIONS.filter((d) => item[d.key]);
 
@@ -305,7 +295,7 @@ export function InventoryItemRow({
           </span>
         </div>
 
-        {/* Line 4: condition, disposition, certificate, source, price, acquired, notes */}
+        {/* Line 4: condition, disposition, certificate, location, notes */}
         <div
           style={{
             display: "flex",
@@ -337,13 +327,6 @@ export function InventoryItemRow({
               {d.label}
             </span>
           ))}
-          {item.contactName && (
-            <span style={META} title="Acquisition source">
-              From {item.contactName}
-            </span>
-          )}
-          {price && <span style={META}>{price}</span>}
-          {acquired && <span style={META}>{acquired}</span>}
           {item.notes && (
             <span style={META} title={item.notes}>
               📝 notes

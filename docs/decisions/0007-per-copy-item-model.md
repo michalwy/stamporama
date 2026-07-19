@@ -62,6 +62,13 @@ and profit/loss therefore belong to that future lot/listing layer, **not** to `I
 
 ### 5. Acquisition & purchase fields live on the `Item` (manual now, automated later)
 
+> **Superseded by [ADR-0009](0009-purchase-record-model.md) (#118).** The flat
+> acquisition/cost fields below (`contactId`, `acquiredDate`, `purchasePrice`,
+> `purchaseCurrency`) have been **removed** from `Item`. Supplier, date, and price now
+> live on the `Purchase`/`PurchaseLot` model; cost-basis is a base-currency snapshot
+> (`Item.costBasis`) written by whichever acquisition channel produced the copy. The
+> rest of this section is retained as the original record.
+
 - Acquisition source — `contactId` `String?`, a nullable FK to a **`Contact`**
   (ADR-0008, #108), `onDelete: Restrict`. (Revised from the original free-form
   `acquisitionSource String?`: the same sellers/dealers/platforms recur, so the

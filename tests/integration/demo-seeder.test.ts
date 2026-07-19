@@ -260,7 +260,7 @@ describe("seedDemoData", () => {
     assert.ok(parents.length >= 5, `Expected >=5 stamps with variants, got ${parents.length}`);
   });
 
-  it("seeds acquisition source contacts", async () => {
+  it("seeds contacts (address book)", async () => {
     const count = await prisma.contact.count({ where: { collectionId } });
     assert.ok(count >= 5, `Expected >=5 contacts, got ${count}`);
   });
@@ -275,18 +275,12 @@ describe("seedDemoData", () => {
     assert.ok(count >= 1000, `Expected >=1000 items, got ${count}`);
   });
 
-  it("links some inventory copies to conditions, contacts and prices", async () => {
-    const withContact = await prisma.item.count({
-      where: { collectionId, contactId: { not: null } },
-    });
-    const withPrice = await prisma.item.count({
-      where: { collectionId, purchasePrice: { not: null } },
-    });
+  it("links some inventory copies to certificate statuses", async () => {
+    // Acquisition/cost fields moved to the purchase model (ADR-0009); demo copies no
+    // longer carry a source contact or purchase price. Certificate linkage remains.
     const withCert = await prisma.item.count({
       where: { collectionId, certificateStatusId: { not: null } },
     });
-    assert.ok(withContact > 0, "Expected some items with a source contact");
-    assert.ok(withPrice > 0, "Expected some items with a purchase price");
     assert.ok(withCert > 0, "Expected some items with a certificate status");
   });
 

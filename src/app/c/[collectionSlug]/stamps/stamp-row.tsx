@@ -71,7 +71,6 @@ export function StampRow({
   const addCopy = useInventoryAddAction({
     collectionId,
     areas,
-    baseCurrency,
     target: {
       kind: "stamp",
       stampId: stamp.id,
