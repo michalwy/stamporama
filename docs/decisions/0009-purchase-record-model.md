@@ -92,18 +92,37 @@ moment money was spent), reusing the `ExchangeRate` mechanism from the currency 
 
 **Physical delivery** is a separate axis. `Purchase.status` is
 `preparing | in_transit | arrived` at the header, and each `Item` carries an
-independent **`deliveryState`** = `ordered | in_transit | delivered | not_delivered | damaged`.
+independent **`deliveryState`** =
+`ordered | to_sort | in_transit | delivered | not_delivered | damaged`.
 This axis is orthogonal to `inCollection` and `forSale`/`forTrade` (a copy can be
 `in_transit` and already `forSale`). A lot may be **closed before the shipment
 physically arrives**.
 
-Intake (#121) creates copies as **`ordered`** and **not** `inCollection` — a purchased
-copy is not a holding until it arrives. `ordered` behaves like `in_transit` for
-allocation (it stays in the lot and receives a cost-basis on close); it only distinguishes
-"placed the order" from "shipped" for the collector. Intake accepts either a single stamp
-or a whole issue, fanning the issue out to its **required-for-completeness** members, all
-sharing one condition/certificate. Removing such a copy from its lot **deletes** it, since
-it exists only to populate the lot.
+The lifecycle of a purchased copy (#121) is **`ordered → to_sort → delivered`**, with
+`not_delivered` and `damaged` as outcomes discovered while sorting:
+
+- **`ordered`** — intake default before arrival; purchased, not yet in hand, **not**
+  `inCollection`. Copies identified *after* the order is marked arrived skip straight to
+  `to_sort` (they were found during the sort pass).
+- **`to_sort`** — the order arrived but this copy is not yet sorted (still **not**
+  `inCollection`). Set in bulk by **"Mark arrived"** at the purchase level, which flips
+  `Purchase.status` to `arrived`, moves every `ordered` copy to `to_sort`, and can file the
+  whole order into one location (e.g. an "incoming box") in one step.
+- **`delivered`** — sorted and in hand: the collector filed the copy (proper location,
+  corrected condition/variant if needed). The **bulk "Mark sorted"** action (per lot / per
+  issue) sets `delivered` **and** the collector-chosen disposition (defaulting to
+  `inCollection`). Setting `delivered` on a single copy inline
+  deliberately **leaves disposition to the collector** (a delivered copy may go straight to
+  sale/trade rather than the collection), prompting them to pick `inCollection` / `forSale` /
+  `forTrade`. Moving a copy *back* to a pre-arrival state clears `inCollection`.
+
+`ordered`, `to_sort`, and `in_transit` all behave the same for allocation — they **stay** in
+the lot and receive a cost-basis on close (only `not_delivered` is dropped). Closing a lot
+with copies still in one of these states is **allowed but warned** (sorting first is
+recommended), separate from the hard missing-price block. Intake accepts either a single
+stamp or a whole issue, fanning the issue out to its **required-for-completeness** members,
+all sharing one condition/certificate/location. Removing such a copy from its lot
+**deletes** it, since it exists only to populate the lot; deleting a lot deletes its copies.
 
 - **Not-delivered** → the item is removed from its lot and its share **redistributes**
   to the survivors (typically a refund or a copy that never came).
@@ -161,7 +180,7 @@ PurchaseExpense                                  -- table "purchase_expense"
 
 Item  (additions to ADR-0007)                    -- table "item"
   lotId         String?  → PurchaseLot  (onDelete: Restrict)   -- optional acquisition link
-  deliveryState String   @default("delivered")   -- ordered | in_transit | delivered | not_delivered | damaged
+  deliveryState String   @default("delivered")   -- ordered | to_sort | in_transit | delivered | not_delivered | damaged
   costBasis     Decimal? @db.Decimal(10, 2)       -- base-currency snapshot, null = pending
 ```
 

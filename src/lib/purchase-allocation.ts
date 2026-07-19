@@ -63,6 +63,7 @@ export interface LotPool {
 
 export type DeliveryState =
   | "ordered"
+  | "to_sort"
   | "in_transit"
   | "delivered"
   | "not_delivered"

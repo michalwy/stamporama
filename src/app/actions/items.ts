@@ -34,6 +34,7 @@ interface ItemFields {
   notes: string | null;
   locationId: string | null;
   locationRef: string | null;
+  deliveryState: string | null;
 }
 
 interface ParsedItemFields {
@@ -62,6 +63,7 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     locationRef: str(formData, "locationId")
       ? str(formData, "locationRef") || null
       : null,
+    deliveryState: str(formData, "deliveryState") || null,
   };
 
   if (!stampId) return { data, error: "A stamp must be selected." };

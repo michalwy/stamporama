@@ -234,11 +234,14 @@ export interface ItemCreateInput {
   deliveryState?: string | null;
 }
 
-/** The delivery axis values a copy may carry (ADR-0009 §5). `ordered` is the intake
- * default (#121): a purchased copy that is not yet in hand — like `in_transit` for
- * allocation (it stays in the lot), but flagged as merely ordered, not shipped. */
+/** The delivery axis values a copy may carry (ADR-0009 §5). Lifecycle for a purchased copy:
+ * `ordered` (intake default, #121) → `to_sort` (arrived, awaiting sorting) → `delivered`
+ * (sorted / in hand / in collection), with `not_delivered` and `damaged` as outcomes found
+ * while sorting. Both `ordered` and `to_sort` stay in the lot for allocation (only
+ * `not_delivered` is dropped) and keep the copy out of the collection until it is sorted. */
 const VALID_DELIVERY_STATES = new Set([
   "ordered",
+  "to_sort",
   "in_transit",
   "delivered",
   "not_delivered",
@@ -273,6 +276,9 @@ export interface ItemUpdateInput {
   /** Assignable storage location id (#56). Must be `assignable = true`. */
   locationId?: string | null;
   locationRef?: string | null;
+  /** Physical delivery axis (ADR-0009 §5): ordered | to_sort | in_transit | delivered |
+   * not_delivered | damaged. Ignored when not one of those. */
+  deliveryState?: string | null;
   /** Optional reason recorded on the ItemVariantHistory row when `stampId` changes. */
   variantChangeNote?: string | null;
 }
@@ -395,6 +401,9 @@ export async function updateItem(
     ...(fields.inCollection !== undefined ? { inCollection: fields.inCollection } : {}),
     ...(fields.forSale !== undefined ? { forSale: fields.forSale } : {}),
     ...(fields.forTrade !== undefined ? { forTrade: fields.forTrade } : {}),
+    ...(fields.deliveryState && VALID_DELIVERY_STATES.has(fields.deliveryState)
+      ? { deliveryState: fields.deliveryState }
+      : {}),
     ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
     ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
     // A ref only makes sense with a location; clear it whenever the location is

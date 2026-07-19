@@ -84,7 +84,18 @@ where you build up the order's lots and identify copies into them over time.
 
 ### Lots
 
-Use **Add lot** to add a priced inventory line. A lot can carry an optional **title** (e.g.
+There are two ways to add a lot:
+
+- **Add lot** creates an empty priced inventory line straight away; you then identify copies
+  into it over time (see *Identifying stamps* below). Best when you know a lot exists but
+  haven't sorted its contents yet.
+- **Add lot with stamps** works the other way round: you pick a **stamp or a whole issue**
+  first, set its **condition / certificate / location**, then give the new lot its **title
+  and price** — the lot is created together with those copies in one step. Best when a lot is
+  a single identified item (or issue). Nothing is created until the final step, so backing
+  out beforehand leaves no empty lot behind.
+
+A lot can carry an optional **title** (e.g.
 *Album Polska 1950s* or *Box lot*) so you can tell lots apart. Leave the title blank and the
 lot is labelled automatically from its copies' **catalog numbers** (with the usual vendor
 prefixes) — up to three, with *+N more* beyond that — falling back to *Lot 1*, *Lot 2*, …
@@ -100,25 +111,27 @@ while it is still empty. Each lot shows:
   gets split across the lot's copies when you close it.
 
 A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reopen** it, or
-**Delete** it. A
-lot can only be deleted once it holds no copies, and its price can only be edited while it is
-open.
+**Delete** it. Deleting a lot also deletes **all of its copies** — they exist only to
+populate the lot, so they are removed with it (you are warned how many when confirming). A
+lot's price can only be edited while it is open.
 
 ### Identifying stamps (intake)
 
 A large lot is rarely sorted in one sitting — you identify stamps into it as you work through
-the parcel, often long after the money changed hands. Open a lot's **⋮** menu and choose
-**Add stamps**. This opens the same **browse popup** used across the app: navigate areas and
-issues, and either
+the parcel, often long after the money changed hands. Click the lot's **＋ Add stamps** button
+(in its header, while the lot is open). This opens the same **browse popup** used across the
+app: navigate areas and issues, and either
 
 - pick a **single stamp** (creating the issue/stamp first if needed), or
 - add a **whole issue** with the **+ Whole issue** button on the issue row — this creates a
   copy for every stamp in that issue marked *required for completeness*.
 
-You are then asked once for the **condition** and (optional) **certificate**; they apply to
-every copy created in that step. The copies are linked to the lot and marked **Ordered** —
-purchased but not yet in hand, so they are deliberately **not** counted as *in collection*
-yet. (They become part of your collection later, once received.)
+You are then asked once for the **condition**, an optional **certificate**, and an optional
+**storage location**; they apply to every copy created in that step. Your last choices are
+remembered and pre-filled for the next stamp, so sorting a parcel into the same box and
+condition is quick. The copies are linked to the lot and marked **Ordered** — purchased but
+not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
+become part of your collection later, once received.)
 
 While the lot is **open**, each copy shows a **live estimated cost-basis** (prefixed with
 `~`) — the share of the lot's pool it would receive if you closed the lot right now, computed
@@ -127,10 +140,20 @@ copies, and is **not** saved; the real cost-basis is frozen only when the lot cl
 with no catalog price (or a purchase with no base-currency rate) shows `cost —` until that is
 resolved.
 
-The copies list can be shown **Flat** or grouped **By issue** using the toggle above the
-list — handy when a lot spans several issues. In the grouped view each issue appears as a
-header that reads like a row on the Issues screen (area, title, catalog numbers, and its
-required/total stamp count) and can be collapsed or expanded.
+**Grouping the copies view.** Above the lots, a **Group by** control has two toggles —
+**Lot** and **Issue** — that shape how the whole order's copies are shown:
+
+- **Lot + Issue** (the default) — each lot is a card, its copies grouped by issue inside.
+- **Lot** only — each lot is a card with a flat copy list.
+- **Issue** only — no lot cards; every copy in the order grouped by issue across all lots.
+- **neither** — a single **flat list** of every copy in the order.
+
+Your choice is remembered per collection, and which issue groups you've collapsed is
+remembered too, so the view stays the way you left it. In a grouped-by-issue view each issue
+appears as a header that reads like a row on the Issues screen (area, title, catalog numbers,
+required/total stamp count) and can be collapsed or expanded. **Lot management** (add stamps,
+edit price, close/reopen, delete, whole-lot move/mark-sorted) lives only in a **by-lot** view —
+the issue-only and flat views are for sweeping through copies and sorting them.
 
 Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
 disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
@@ -140,12 +163,75 @@ lot.
 To remove a stamp from a lot, use its **⋮** menu → **Remove from lot**. Because these copies
 exist only to populate the lot, removing one **deletes** it.
 
+### The delivery lifecycle: ordered → to sort → delivered
+
+Each copy carries a **delivery status** shown as a chip on its row, separate from its
+disposition (in collection / for sale / for trade). A purchased copy moves through:
+
+- **Ordered** — added during intake; bought but not yet in hand, so it is **not** in your
+  collection yet.
+- **To sort** — the order arrived but this copy still needs sorting; still **not** in the
+  collection.
+- **Delivered** — sorted and filed; now counted **in your collection**.
+
+with **Not delivered** and **Damaged** as outcomes you may discover while sorting.
+
+### Marking an order arrived
+
+When the parcel lands, open the purchase and click **Mark arrived** (top-right of the
+header). This flips the order's status to **Arrived**, moves every **Ordered** copy to **To
+sort**, and — optionally — files the whole order into one location in a single step (e.g. an
+*Incoming box*), so nothing is loose while you work through it. You refine each copy's real
+location later, during sorting.
+
+### Sorting copies
+
+Sorting is where **To sort** copies become **Delivered** (in your collection). Work at
+whatever granularity suits the parcel:
+
+- **A whole lot** — its **⋮** menu → **Move all copies to location…** or **Mark all copies
+  sorted**.
+- **A whole issue** — in the **By issue** view, each issue header has a **📍** (move to
+  location) and a **✓** (mark sorted) button acting on that issue's copies.
+- **A single copy** — edit it right on the row: its **delivery chip** is a dropdown for
+  setting the status (Ordered, In transit, To sort, Delivered, …), its **disposition chip**
+  expands to toggle **In collection / For sale / For trade**, and its **location chip** (or the
+  **📍 Set location** button when it has none) opens the location tree-select. Setting a copy
+  **Delivered** pops the disposition editor open so you choose where it lands — it is **not**
+  auto-filed into your collection, since a delivered copy might be headed straight for sale or
+  trade. For condition or certificate changes use its **⋮** menu → **Edit copy** — e.g. if the
+  seller shipped a different condition than expected (MH instead of MNH), correct it there.
+
+To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
+just the unsorted copies; click it again (or the **To sort only ✕** button) to show all. As
+you sort each copy it drops out of the filtered list.
+
+**Mark sorted** (whole lot or whole issue) moves *not-yet-sorted* copies (ordered / to sort /
+in transit) to **Delivered** and asks which **disposition** to file them under — In collection
+(the default), For sale, and/or For trade — so a batch headed for sale doesn't have to be
+un-filed afterwards. The same dialog also lets you file the copies into a **location** in one
+step (pre-filled with the last one you used; leave it *as-is* to skip). Copies already sorted,
+damaged, or not delivered keep their delivery status, but a chosen location still applies.
+
+When you file copies into a **location** (moving a lot/issue, or a single copy), the picker
+remembers the last location you used and pre-selects it, so filing copy after copy into the
+same box is one click. New copies can still be identified into a lot at any time while it is
+open — handy for a mixed album bought sight-unseen.
+
+If a copy turns out to be a **different variant** than expected, its **⋮** menu →
+**Identify variant** re-points it to the right one (available when the copy is linked to a
+base stamp with variants).
+
 ### Closing a lot
 
 When a lot is fully sorted, **Close lot** runs the cost allocation: the lot's pool is
 distributed across its copies in proportion to each copy's **primary-catalog price** for its
 condition (and certificate), and each copy's share is **frozen** as its cost-basis. Closing
 works even if the shipment has not physically arrived yet.
+
+If any copies are still unsorted (ordered / to sort / in transit), the confirm dialog **warns
+you** and the lot header shows a **N to sort** chip — but you can still close (sorting first is
+just recommended, not required).
 
 Closing is **blocked** if any copy lacks a primary-catalog price for its condition — there is
 no weight to split the pool by. The screen highlights the copies that need a price and shows

@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   DialogShell,
@@ -13,6 +22,7 @@ import { type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
+import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
@@ -22,6 +32,7 @@ import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
+import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -62,11 +73,40 @@ const INPUT_STYLE: React.CSSProperties = {
 
 const DELIVERY: Record<string, { label: string; token: string }> = {
   ordered: { label: "Ordered", token: "accent" },
+  to_sort: { label: "To sort", token: "warning" },
   in_transit: { label: "In transit", token: "accent" },
   delivered: { label: "Delivered", token: "success" },
   not_delivered: { label: "Not delivered", token: "error" },
   damaged: { label: "Damaged", token: "error" },
 };
+
+const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
+  preparing: { label: "Preparing", token: "muted" },
+  in_transit: { label: "In transit", token: "accent" },
+  arrived: { label: "Arrived", token: "success" },
+};
+
+// Delivery states that count as "not yet sorted": still awaiting the sort pass, so they keep
+// a copy out of the collection and are what the arrival/close flows act on (#121).
+const UNSORTED_STATES = new Set(["ordered", "to_sort", "in_transit"]);
+
+// Order the delivery states appear in the inline row dropdown — by lifecycle progression,
+// then the exception outcomes last (#121).
+const DELIVERY_ORDER = [
+  "ordered",
+  "in_transit",
+  "to_sort",
+  "delivered",
+  "not_delivered",
+  "damaged",
+];
+
+/** The disposition flags a lot copy can carry, in display order. */
+const DISPOSITION_FLAGS = [
+  { key: "inCollection", label: "In collection" },
+  { key: "forSale", label: "For sale" },
+  { key: "forTrade", label: "For trade" },
+] as const;
 
 function tintChip(token: string, label: string): { style: React.CSSProperties; label: string } {
   if (token === "muted") return { style: CHIP, label };
@@ -79,6 +119,115 @@ function tintChip(token: string, label: string): { style: React.CSSProperties; l
       background: `var(--color-${token}-soft, var(--color-bg-page))`,
     },
   };
+}
+
+// --- localStorage-backed UI preferences (SSR-safe: read after mount) ----------------------
+function lsGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function lsSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* ignore quota / disabled storage */
+  }
+}
+function lsRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Lot-view preferences are read via useSyncExternalStore (mirroring `useDisplayCondition`):
+// getServerSnapshot returns null so SSR and the first client render agree (no hydration
+// mismatch), and every write dispatches an event so all lot cards re-render in sync.
+const LOT_PREF_EVENT = "stamporama:lotPref";
+
+function subscribeLotPref(callback: () => void): () => void {
+  window.addEventListener("storage", callback);
+  window.addEventListener(LOT_PREF_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(LOT_PREF_EVENT, callback);
+  };
+}
+
+function useRawStored(key: string): string | null {
+  return useSyncExternalStore(
+    subscribeLotPref,
+    () => lsGet(key),
+    () => null
+  );
+}
+
+/** False on the server and during the first client render (so it matches the SSR output),
+ * then true. Lets preference-dependent UI wait for the localStorage-backed value instead of
+ * flashing the fallback first. Uses useSyncExternalStore (no setState-in-effect). */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
+
+function writeLotPref(key: string, value: string): void {
+  lsSet(key, value);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(LOT_PREF_EVENT));
+}
+
+function parseStringSet(raw: string | null): Set<string> {
+  if (!raw) return new Set();
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? new Set(arr.filter((x): x is string => typeof x === "string"))
+      : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+/** A boolean UI preference persisted under `key`, defaulting to `fallback` when unset. */
+function usePersistentToggle(
+  key: string,
+  fallback: boolean
+): [boolean, (value: boolean) => void] {
+  const stored = useRawStored(key);
+  const value = stored === "1" ? true : stored === "0" ? false : fallback;
+  const set = useCallback(
+    (next: boolean) => writeLotPref(key, next ? "1" : "0"),
+    [key]
+  );
+  return [value, set];
+}
+
+/** A set of string keys persisted under `key` as a JSON array. */
+function usePersistentStringSet(
+  key: string
+): [Set<string>, (updater: (prev: Set<string>) => Set<string>) => void] {
+  const stored = useRawStored(key);
+  const value = useMemo(() => parseStringSet(stored), [stored]);
+  const update = useCallback(
+    (updater: (prev: Set<string>) => Set<string>) => {
+      // Re-read the authoritative value at write time so concurrent lot cards don't clobber
+      // each other's collapse state (each uses a distinct key, but this stays correct if
+      // that ever changes).
+      const next = updater(parseStringSet(lsGet(key)));
+      writeLotPref(key, JSON.stringify([...next]));
+    },
+    [key]
+  );
+  return [value, update];
 }
 
 interface PurchaseDetailPanelProps {
@@ -105,7 +254,30 @@ export function PurchaseDetailPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [addingLot, setAddingLot] = useState(false);
+  const [arriving, setArriving] = useState(false);
   const [error, setError] = useState<string | undefined>();
+
+  // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
+  // a flat list of every copy in the order. Persisted per collection; default groups by both.
+  const [byLot, setByLot] = usePersistentToggle(`${LS_GROUP_BY_LOT}:${collectionId}`, true);
+  const [byIssue, setByIssue] = usePersistentToggle(`${LS_GROUP_BY_ISSUE}:${collectionId}`, true);
+
+  // "Add lot with stamps" flow (#121): pick a stamp/issue → set condition/certificate/location
+  // → set the lot's title/price, then create the lot with its copies in one step. The lot is
+  // only created at the final step, so backing out earlier creates nothing.
+  const [wsStep, setWsStep] = useState<"none" | "picker" | "condition" | "lot">("none");
+  const [wsSelection, setWsSelection] = useState<PendingSelection | null>(null);
+  const [wsIntake, setWsIntake] = useState<{
+    conditionId: string;
+    certificateStatusId: string;
+    locationId: string;
+  } | null>(null);
+  function resetWithStamps() {
+    setWsStep("none");
+    setWsSelection(null);
+    setWsIntake(null);
+    setError(undefined);
+  }
 
   function run(fn: () => Promise<{ status: string; message?: string }>, onDone?: () => void) {
     setError(undefined);
@@ -131,7 +303,7 @@ export function PurchaseDetailPanel({
           padding: "1.25rem 1.5rem",
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
             {purchase.contactName ?? "No supplier"}
           </h2>
@@ -140,6 +312,36 @@ export function PurchaseDetailPanel({
               via {purchase.platformName}
             </span>
           )}
+          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {(() => {
+              const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
+              return <span style={tintChip(s.token, s.label).style}>{s.label}</span>;
+            })()}
+            {purchase.status !== "arrived" && (
+              <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(undefined);
+                    setArriving(true);
+                  }}
+                  disabled={isPending}
+                  style={{
+                    ...INPUT_STYLE,
+                    width: "auto",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    color: "#fff",
+                    background: "var(--color-action-primary)",
+                    border: "none",
+                    padding: "0.375rem 0.875rem",
+                  }}
+                >
+                  Mark arrived
+                </button>
+              </Tooltip>
+            )}
+          </span>
         </div>
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
           <span style={CHIP}>{purchase.purchasedAt}</span>
@@ -168,24 +370,87 @@ export function PurchaseDetailPanel({
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           Lots
         </h3>
-        <button
-          type="button"
-          onClick={() => setAddingLot(true)}
-          disabled={isPending}
-          style={{
-            ...INPUT_STYLE,
-            width: "auto",
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "#fff",
-            background: "var(--color-action-primary)",
-            border: "none",
-            padding: "0.375rem 0.875rem",
-          }}
-        >
-          Add lot
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <Tooltip content="Create an empty priced lot, then identify copies into it">
+            <button
+              type="button"
+              onClick={() => setAddingLot(true)}
+              disabled={isPending}
+              style={{
+                ...INPUT_STYLE,
+                width: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-strong)",
+                padding: "0.375rem 0.875rem",
+              }}
+            >
+              Add lot
+            </button>
+          </Tooltip>
+          <Tooltip content="Pick a stamp or issue first, then create the lot around it">
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setWsStep("picker");
+              }}
+              disabled={isPending}
+              style={{
+                ...INPUT_STYLE,
+                width: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--color-action-primary)",
+                border: "none",
+                padding: "0.375rem 0.875rem",
+              }}
+            >
+              Add lot with stamps
+            </button>
+          </Tooltip>
+        </div>
       </div>
+
+      {/* Order-level grouping: by lot and/or by issue; both off = flat list. Only lot-level
+          management (add stamps, close, price…) lives in the by-lot view (#121). */}
+      {purchase.lots.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Group by
+          </span>
+          {(
+            [
+              { on: byLot, set: setByLot, label: "Lot" },
+              { on: byIssue, set: setByIssue, label: "Issue" },
+            ] as const
+          ).map(({ on, set, label }) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={on}
+              onClick={() => set(!on)}
+              style={{
+                ...CHIP,
+                cursor: "pointer",
+                fontWeight: on ? 600 : 500,
+                color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+              }}
+            >
+              {on ? "✓ " : ""}
+              {label}
+            </button>
+          ))}
+          {!byLot && !byIssue && (
+            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Flat list</span>
+          )}
+        </div>
+      )}
 
       {error && (
         <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>
@@ -195,7 +460,7 @@ export function PurchaseDetailPanel({
         <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
           No lots yet. Add a priced lot, then identify copies into it.
         </p>
-      ) : (
+      ) : byLot ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {purchase.lots.map((lot, idx) => (
             <LotCard
@@ -212,10 +477,26 @@ export function PurchaseDetailPanel({
               conditions={conditions}
               certificateStatuses={certificateStatuses}
               isPending={isPending}
+              groupByIssue={byIssue}
               onRun={run}
             />
           ))}
         </div>
+      ) : (
+        <OrderCopiesView
+          collectionId={collectionId}
+          lots={purchase.lots}
+          itemsByLot={itemsByLot}
+          issueHeaderById={issueHeaderById}
+          baseCurrency={purchase.baseCurrency}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          byIssue={byIssue}
+          isPending={isPending}
+          run={run}
+        />
       )}
 
       {addingLot && (
@@ -241,6 +522,123 @@ export function PurchaseDetailPanel({
           }
         />
       )}
+
+      {/* Mark order arrived: status → arrived, ordered copies → to sort, optional bulk location */}
+      {arriving && (
+        <LocationPickerDialog
+          title="Mark order arrived"
+          message={
+            <>
+              Marks the whole order arrived and moves its <strong>ordered</strong> copies to{" "}
+              <strong>to sort</strong>. Optionally file every copy into one location now (e.g. an
+              incoming box) — you can refine each copy later while sorting.
+            </>
+          }
+          actionLabel="Mark arrived"
+          locations={locations}
+          allowNone
+          rememberForCollectionId={collectionId}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setArriving(false);
+              setError(undefined);
+            }
+          }}
+          onConfirm={(locationId) => {
+            const fd = new FormData();
+            if (locationId) fd.set("locationId", locationId);
+            run(
+              async () => {
+                const { markPurchaseArrivedAction } = await import("@/app/actions/purchases");
+                return markPurchaseArrivedAction(purchase.id, fd);
+              },
+              () => setArriving(false)
+            );
+          }}
+        />
+      )}
+
+      {/* Add lot with stamps — step 1: pick a stamp or a whole issue */}
+      {wsStep === "picker" && (
+        <StampPickerBrowser
+          collectionId={collectionId}
+          areas={areas}
+          onPick={(picked: PickedStamp) => {
+            setWsSelection({ kind: "stamp", stampId: picked.stampId, label: picked.primary });
+            setError(undefined);
+            setWsStep("condition");
+          }}
+          onPickIssue={(picked: PickedIssue) => {
+            setWsSelection({
+              kind: "issue",
+              issueId: picked.issueId,
+              label: picked.label,
+              requiredCount: picked.requiredCount,
+            });
+            setError(undefined);
+            setWsStep("condition");
+          }}
+          onClose={resetWithStamps}
+        />
+      )}
+
+      {/* Add lot with stamps — step 2: condition + certificate + location for the copies */}
+      {wsStep === "condition" && wsSelection && (
+        <IntakeConditionDialog
+          selection={wsSelection}
+          collectionId={collectionId}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          locations={locations}
+          isPending={isPending}
+          error={error}
+          submitLabel="Continue"
+          onBack={() => {
+            setError(undefined);
+            setWsStep("picker");
+          }}
+          onClose={resetWithStamps}
+          onSubmit={(fd) => {
+            // Capture the intake choice; the lot is created only at the final price step.
+            setWsIntake({
+              conditionId: (fd.get("conditionId") as string) ?? "",
+              certificateStatusId: (fd.get("certificateStatusId") as string) ?? "",
+              locationId: (fd.get("locationId") as string) ?? "",
+            });
+            setError(undefined);
+            setWsStep("lot");
+          }}
+        />
+      )}
+
+      {/* Add lot with stamps — step 3: title + price, then create the lot with its copies */}
+      {wsStep === "lot" && wsSelection && wsIntake && (
+        <LotDialog
+          title="Add lot with stamps"
+          actionLabel="Create lot"
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) resetWithStamps();
+          }}
+          onSubmit={(fd) => {
+            if (wsSelection.kind === "stamp") fd.set("stampId", wsSelection.stampId);
+            else fd.set("issueId", wsSelection.issueId);
+            fd.set("conditionId", wsIntake.conditionId);
+            fd.set("certificateStatusId", wsIntake.certificateStatusId);
+            fd.set("locationId", wsIntake.locationId);
+            run(
+              async () => {
+                const { createLotWithStampsAction } = await import("@/app/actions/purchases");
+                return createLotWithStampsAction(purchase.id, fd);
+              },
+              resetWithStamps
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -258,6 +656,8 @@ interface LotCardProps {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   isPending: boolean;
+  /** Group this lot's copies by issue (the order-level "By issue" toggle, #121). */
+  groupByIssue: boolean;
   onRun: (
     fn: () => Promise<{ status: string; message?: string }>,
     onDone?: () => void
@@ -269,6 +669,369 @@ interface LotCardProps {
 type PendingSelection =
   | { kind: "stamp"; stampId: string; label: string }
   | { kind: "issue"; issueId: string; label: string; requiredCount: number };
+
+type RunFn = (
+  fn: () => Promise<{ status: string; message?: string }>,
+  onDone?: () => void
+) => void;
+
+interface BulkChanges {
+  locationId?: string | null;
+  deliveryState?: string;
+  inCollection?: boolean;
+  forSale?: boolean;
+  forTrade?: boolean;
+  markSorted?: boolean;
+}
+
+/** Shared copy-editing machinery (#121) used by both the by-lot cards and the order-level
+ * flat / by-issue views: the per-copy dialogs (edit copy, edit stamp, identify variant, quick
+ * catalog price), the bulk move / mark-sorted dialogs, and `runBulk`. Returns the openers, the
+ * shared error, and a `dialogs` node the caller renders once. Keeping this in one place means
+ * the two groupings drive identical editing behaviour. */
+function useCopyEditing(ctx: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  conditions: StampConditionData[];
+  certificateStatuses: CertificateStatusData[];
+  isPending: boolean;
+  run: RunFn;
+}) {
+  const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
+  const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
+  const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
+  const [identifyItem, setIdentifyItem] = useState<ItemListItem | null>(null);
+  const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  const [copyError, setCopyError] = useState<string | undefined>();
+  const [bulkMove, setBulkMove] = useState<string[] | null>(null);
+  const [bulkSort, setBulkSort] = useState<string[] | null>(null);
+
+  function runBulk(itemIds: string[], changes: BulkChanges) {
+    setCopyError(undefined);
+    run(
+      async () => {
+        const fd = new FormData();
+        fd.set("itemIds", itemIds.join(","));
+        if (changes.locationId !== undefined) fd.set("locationId", changes.locationId ?? "");
+        if (changes.deliveryState) fd.set("deliveryState", changes.deliveryState);
+        if (changes.inCollection !== undefined) fd.set("inCollection", String(changes.inCollection));
+        if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
+        if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
+        if (changes.markSorted) fd.set("markSorted", "true");
+        const { bulkUpdateLotItemsAction } = await import("@/app/actions/purchases");
+        const r = await bulkUpdateLotItemsAction(fd);
+        if (r.status === "error") setCopyError(r.message);
+        return r;
+      },
+      () => {
+        setBulkMove(null);
+        setBulkSort(null);
+      }
+    );
+  }
+
+  function removeCopy(itemId: string) {
+    run(async () => {
+      const { removeLotItemAction } = await import("@/app/actions/purchases");
+      return removeLotItemAction(itemId);
+    });
+  }
+
+  const dialogs = (
+    <>
+      {quickPriceItem && (
+        <QuickPriceDialog
+          item={quickPriceItem}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setQuickPriceItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(amount) => {
+            const it = quickPriceItem;
+            setCopyError(undefined);
+            run(
+              async () => {
+                const { quickSetCatalogPriceAction } = await import("@/app/actions/stamps");
+                const r = await quickSetCatalogPriceAction(
+                  it.stampId,
+                  it.conditionId,
+                  it.certificateStatusId,
+                  amount
+                );
+                if (r.status === "error") setCopyError(r.message);
+                return r;
+              },
+              () => setQuickPriceItem(null)
+            );
+          }}
+        />
+      )}
+
+      {editCopyItem && (
+        <InventoryItemFormDialog
+          mode="edit"
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          item={editCopyItem}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setEditCopyItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(fd) => {
+            const itemId = editCopyItem.id;
+            setCopyError(undefined);
+            run(
+              async () => {
+                const { updateItemAction } = await import("@/app/actions/items");
+                const r = await updateItemAction(itemId, fd);
+                if (r.status === "error") setCopyError(r.message);
+                return r;
+              },
+              () => setEditCopyItem(null)
+            );
+          }}
+        />
+      )}
+
+      {editStampItem && (
+        <StampFormDialog
+          mode="edit"
+          stampId={editStampItem.stampId}
+          collectionId={collectionId}
+          stamp={{
+            name: editStampItem.stampName,
+            issuedDay: editStampItem.issuedDay,
+            issuedMonth: editStampItem.issuedMonth,
+            issuedYear: editStampItem.issuedYear,
+            catalogNumbers: editStampItem.catalogNumbers,
+          }}
+          areaVendors={
+            editStampItem.areaId ? effectiveVendorsForArea(areas, editStampItem.areaId) : []
+          }
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setEditStampItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(fd) => {
+            const stampId = editStampItem.stampId;
+            setCopyError(undefined);
+            run(
+              async () => {
+                const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
+                const r = await updateStampWithCatalogAction(stampId, fd);
+                if (r.status === "error") setCopyError(r.message);
+                return r;
+              },
+              () => setEditStampItem(null)
+            );
+          }}
+        />
+      )}
+
+      {identifyItem && (
+        <IdentifyVariantDialog
+          collectionId={collectionId}
+          item={identifyItem}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setIdentifyItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(fd) => {
+            const itemId = identifyItem.id;
+            setCopyError(undefined);
+            run(
+              async () => {
+                const { resolveItemVariantAction } = await import("@/app/actions/items");
+                const r = await resolveItemVariantAction(itemId, fd);
+                if (r.status === "error") setCopyError(r.message);
+                return r;
+              },
+              () => setIdentifyItem(null)
+            );
+          }}
+        />
+      )}
+
+      {bulkMove && (
+        <LocationPickerDialog
+          title="Move copies to location"
+          message={
+            <>
+              File {bulkMove.length} cop{bulkMove.length === 1 ? "y" : "ies"} into one location.
+              Choose <em>None</em> to clear their location instead.
+            </>
+          }
+          actionLabel="Move here"
+          locations={locations}
+          allowNone
+          rememberForCollectionId={collectionId}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setBulkMove(null);
+              setCopyError(undefined);
+            }
+          }}
+          onConfirm={(locationId) => runBulk(bulkMove, { locationId: locationId || null })}
+        />
+      )}
+
+      {bulkSort && (
+        <MarkSortedDialog
+          count={bulkSort.length}
+          locations={locations}
+          collectionId={collectionId}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setBulkSort(null);
+              setCopyError(undefined);
+            }
+          }}
+          onConfirm={({ locationId, ...flags }) =>
+            runBulk(bulkSort, {
+              markSorted: true,
+              ...flags,
+              ...(locationId ? { locationId } : {}),
+            })
+          }
+        />
+      )}
+    </>
+  );
+
+  return {
+    copyError,
+    setCopyError,
+    runBulk,
+    removeCopy,
+    setBulkMove,
+    setBulkSort,
+    setEditCopyItem,
+    setEditStampItem,
+    setIdentifyItem,
+    setQuickPriceItem,
+    dialogs,
+  };
+}
+
+type CopyEditing = ReturnType<typeof useCopyEditing>;
+
+/** One copy row, shared by the by-lot and order-level views (#121): the inventory row plus
+ * the lot-specific delivery/disposition/cost chips and the per-copy action menu, all wired to
+ * the shared `copy` editing machinery. Inline editing is enabled only when `open` (its lot is
+ * still open). */
+function CopyRow({
+  item,
+  open,
+  estimate,
+  highlight,
+  baseCurrency,
+  areas,
+  locations,
+  primaryVendorByArea,
+  vendorMapByArea,
+  copy,
+}: {
+  item: ItemListItem;
+  open: boolean;
+  estimate: number | null;
+  highlight: boolean;
+  baseCurrency: string;
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  primaryVendorByArea: Map<string, string | null>;
+  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  copy: CopyEditing;
+}) {
+  const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
+  const vendorMap = item.areaId
+    ? (vendorMapByArea.get(item.areaId) ?? EMPTY_VENDOR_MAP)
+    : EMPTY_VENDOR_MAP;
+  return (
+    <InventoryItemRow
+      item={item}
+      areas={areas}
+      locations={locations}
+      baseCurrency={baseCurrency}
+      primaryVendorId={primaryVendorId}
+      vendorMap={vendorMap}
+      isLast={false}
+      readOnly={!open}
+      highlight={highlight}
+      onSetCatalogPrice={open ? () => copy.setQuickPriceItem(item) : undefined}
+      onSetLocation={open ? () => copy.setBulkMove([item.id]) : undefined}
+      hideDispositions
+      trailingChips={
+        <LotCopyChips
+          item={item}
+          baseCurrency={baseCurrency}
+          estimate={estimate}
+          onSetDeliveryState={
+            open ? (state) => copy.runBulk([item.id], { deliveryState: state }) : undefined
+          }
+          onSetDisposition={
+            open ? (flag, value) => copy.runBulk([item.id], { [flag]: value }) : undefined
+          }
+        />
+      }
+      actionsOverride={[
+        {
+          key: "edit-copy",
+          label: "Edit copy",
+          icon: "✎",
+          onSelect: () => copy.setEditCopyItem(item),
+        },
+        ...(item.unknownVariant
+          ? [
+              {
+                key: "identify",
+                label: "Identify variant",
+                icon: "◈",
+                onSelect: () => copy.setIdentifyItem(item),
+              },
+            ]
+          : []),
+        {
+          key: "edit-stamp",
+          label: "Edit stamp (prices…)",
+          icon: "◈",
+          onSelect: () => copy.setEditStampItem(item),
+        },
+        {
+          key: "remove",
+          label: "Remove from lot",
+          icon: "✕",
+          danger: true,
+          separatorBefore: true,
+          onSelect: () => copy.removeCopy(item.id),
+        },
+      ]}
+    />
+  );
+}
 
 function LotCard({
   index,
@@ -283,6 +1046,7 @@ function LotCard({
   conditions,
   certificateStatuses,
   isPending,
+  groupByIssue,
   onRun,
 }: LotCardProps) {
   const [expanded, setExpanded] = useState(true);
@@ -290,20 +1054,39 @@ function LotCard({
     "none" | "picker" | "intake-condition" | "edit-price" | "delete" | "close" | "reopen"
   >("none");
   const [pending, setPending] = useState<PendingSelection | null>(null);
-  const [groupByIssue, setGroupByIssue] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [onlyUnpriced, setOnlyUnpriced] = useState(false);
-  const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
-  const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
-  const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
-  const [copyError, setCopyError] = useState<string | undefined>();
+  // Collapsed issue groups are remembered per lot; the grouping mode itself is an order-level
+  // toggle passed in as `groupByIssue` (#121).
+  const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
+    `${LS_COLLAPSED_GROUPS}:${collectionId}:${lot.id}`
+  );
+  // Hold the copies list until the persisted view prefs are read, so grouping/collapse don't
+  // flash from their defaults to the stored values for a returning user (#121).
+  const hydrated = useHydrated();
+  // Optional filter narrowing the copies list to just the blockers ("unpriced") or just the
+  // not-yet-sorted copies ("to-sort"), toggled by the matching header chip (#121).
+  const [filterMode, setFilterMode] = useState<"none" | "unpriced" | "to-sort">("none");
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+
+  const copy = useCopyEditing({
+    collectionId,
+    areas,
+    locations,
+    conditions,
+    certificateStatuses,
+    isPending,
+    run: onRun,
+  });
+  const { copyError, setCopyError, setBulkMove, setBulkSort } = copy;
 
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
 
   const open = lot.status === "open";
+
+  // Copies still awaiting the sort pass (ordered / to sort / in transit) — surfaced on the
+  // lot header and used to warn before closing (#121).
+  const unsortedCount = items.filter((i) => UNSORTED_STATES.has(i.deliveryState)).length;
 
   // Live cost-basis estimate for an open lot (never persisted; the real snapshot is frozen
   // on close). Needs the base-currency pool, so it is unavailable when no FX rate is known.
@@ -331,73 +1114,65 @@ function LotCard({
   const isBlocking = (i: ItemListItem) =>
     i.deliveryState !== "not_delivered" && i.value.baseAmount == null;
   const blockingCount = items.filter(isBlocking).length;
+  const isToSort = (i: ItemListItem) => UNSORTED_STATES.has(i.deliveryState);
 
-  // Clicking the "N unpriced" chip narrows the copies list to just the blockers.
-  const visibleItems = onlyUnpriced && open ? items.filter(isBlocking) : items;
+  // The header filter chips narrow the copies list to just the blockers or just the
+  // not-yet-sorted copies (only while the lot is open).
+  const visibleItems =
+    !open || filterMode === "none"
+      ? items
+      : filterMode === "unpriced"
+        ? items.filter(isBlocking)
+        : items.filter(isToSort);
 
-  /** Render one copy with the shared inventory row, plus lot-specific chips (delivery,
-   * cost-basis) and a "Remove from lot" action while the lot is open. */
   function renderRow(it: ItemListItem) {
-    const primaryVendorId = it.areaId ? (primaryVendorByArea.get(it.areaId) ?? null) : null;
-    const vendorMap = it.areaId
-      ? (vendorMapByArea.get(it.areaId) ?? EMPTY_VENDOR_MAP)
-      : EMPTY_VENDOR_MAP;
     return (
-      <InventoryItemRow
+      <CopyRow
         key={it.id}
         item={it}
+        open={open}
+        estimate={estimateById.get(it.id) ?? null}
+        highlight={blockedIds.has(it.id)}
+        baseCurrency={baseCurrency}
         areas={areas}
         locations={locations}
-        baseCurrency={baseCurrency}
-        primaryVendorId={primaryVendorId}
-        vendorMap={vendorMap}
-        isLast={false}
-        readOnly={!open}
-        highlight={blockedIds.has(it.id)}
-        onSetCatalogPrice={open ? () => setQuickPriceItem(it) : undefined}
-        trailingChips={
-          <LotCopyChips
-            item={it}
-            baseCurrency={baseCurrency}
-            estimate={estimateById.get(it.id) ?? null}
-          />
-        }
-        actionsOverride={[
-          {
-            key: "edit-copy",
-            label: "Edit copy",
-            icon: "✎",
-            onSelect: () => setEditCopyItem(it),
-          },
-          {
-            key: "edit-stamp",
-            label: "Edit stamp (prices…)",
-            icon: "◈",
-            onSelect: () => setEditStampItem(it),
-          },
-          {
-            key: "remove",
-            label: "Remove from lot",
-            icon: "✕",
-            danger: true,
-            separatorBefore: true,
-            onSelect: () =>
-              onRun(async () => {
-                const { removeLotItemAction } = await import("@/app/actions/purchases");
-                return removeLotItemAction(it.id);
-              }),
-          },
-        ]}
+        primaryVendorByArea={primaryVendorByArea}
+        vendorMapByArea={vendorMapByArea}
+        copy={copy}
       />
     );
   }
 
+  const allItemIds = items.map((it) => it.id);
   const actions: RowAction[] = [
     ...(open
       ? [
-          { key: "add", label: "Add stamps", icon: "＋", onSelect: () => setDialog("picker") },
+          // "Add stamps" is surfaced as a standalone quick-access button in the header, not here.
           { key: "price", label: "Edit lot", icon: "✎", onSelect: () => setDialog("edit-price") },
-          { key: "close", label: "Close lot", icon: "🔒", onSelect: () => setDialog("close") },
+          ...(items.length > 0
+            ? [
+                {
+                  key: "bulk-move",
+                  label: "Move all copies to location…",
+                  icon: "📍",
+                  separatorBefore: true,
+                  onSelect: () => setBulkMove(allItemIds),
+                },
+                {
+                  key: "bulk-sort",
+                  label: "Mark all copies sorted",
+                  icon: "✓",
+                  onSelect: () => setBulkSort(allItemIds),
+                },
+              ]
+            : []),
+          {
+            key: "close",
+            label: "Close lot",
+            icon: "🔒",
+            separatorBefore: true,
+            onSelect: () => setDialog("close"),
+          },
           {
             key: "delete",
             label: "Delete lot",
@@ -463,22 +1238,48 @@ function LotCard({
         <span style={CHIP}>
           {lot.itemCount} cop{lot.itemCount === 1 ? "y" : "ies"}
         </span>
+        {unsortedCount > 0 && open && (
+          <Tooltip
+            content={
+              filterMode === "to-sort"
+                ? "Showing only copies still to sort — click to show all"
+                : "Copies still awaiting sorting — click to show only them"
+            }
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setFilterMode((m) => (m === "to-sort" ? "none" : "to-sort"))
+              }
+              style={{
+                ...tintChip("warning", "").style,
+                cursor: "pointer",
+                fontWeight: filterMode === "to-sort" ? 700 : 500,
+                boxShadow: filterMode === "to-sort" ? "0 0 0 1px var(--color-warning)" : undefined,
+              }}
+            >
+              {unsortedCount} to sort
+            </button>
+          </Tooltip>
+        )}
         {blockingCount > 0 && open && (
           <Tooltip
             content={
-              onlyUnpriced
+              filterMode === "unpriced"
                 ? "Showing only copies without a catalog price — click to show all"
                 : "These copies would block a close — click to show only them"
             }
           >
             <button
               type="button"
-              onClick={() => setOnlyUnpriced((v) => !v)}
+              onClick={() =>
+                setFilterMode((m) => (m === "unpriced" ? "none" : "unpriced"))
+              }
               style={{
                 ...tintChip("error", `${blockingCount} unpriced`).style,
                 cursor: "pointer",
-                fontWeight: onlyUnpriced ? 700 : 500,
-                boxShadow: onlyUnpriced ? "0 0 0 1px var(--color-error)" : undefined,
+                fontWeight: filterMode === "unpriced" ? 700 : 500,
+                boxShadow: filterMode === "unpriced" ? "0 0 0 1px var(--color-error)" : undefined,
               }}
             >
               ⚠ {blockingCount} unpriced
@@ -493,6 +1294,28 @@ function LotCard({
             {lot.price} {currency}
           </span>
         </Tooltip>
+        {open && (
+          <Tooltip content="Identify stamps into this lot">
+            <button
+              type="button"
+              onClick={() => setDialog("picker")}
+              disabled={isPending}
+              style={{
+                ...INPUT_STYLE,
+                width: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--color-action-primary)",
+                border: "none",
+                padding: "0.3125rem 0.75rem",
+                whiteSpace: "nowrap",
+              }}
+            >
+              ＋ Add stamps
+            </button>
+          </Tooltip>
+        )}
         <RowActionsMenu actions={actions} ariaLabel={`Lot ${index + 1} actions`} />
       </div>
 
@@ -535,67 +1358,43 @@ function LotCard({
             <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               No stamps identified into this lot yet.
             </div>
+          ) : !hydrated ? (
+            // Placeholder shown for the initial render (matching SSR) until the persisted
+            // grouping/collapse prefs are read, so the list doesn't flash its defaults first.
+            <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              Loading copies…
+            </div>
           ) : (
             <>
-              {/* View toggle */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: "0.375rem",
-                  padding: "0.5rem 1.25rem",
-                  borderBottom: "1px solid var(--color-border)",
-                }}
-              >
-                {onlyUnpriced && open && (
+              {/* Active-filter toolbar (grouping is now controlled at the order level) */}
+              {filterMode !== "none" && open && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.5rem 1.25rem",
+                    borderBottom: "1px solid var(--color-border)",
+                  }}
+                >
                   <button
                     type="button"
-                    onClick={() => setOnlyUnpriced(false)}
+                    onClick={() => setFilterMode("none")}
                     title="Clear filter"
                     style={{
-                      ...tintChip("error", "").style,
-                      marginRight: "auto",
+                      ...tintChip(filterMode === "unpriced" ? "error" : "warning", "").style,
                       cursor: "pointer",
                       fontWeight: 600,
                     }}
                   >
-                    Unpriced only ✕
+                    {filterMode === "unpriced" ? "Unpriced only" : "To sort only"} ✕
                   </button>
-                )}
-                <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginRight: "0.125rem" }}>
-                  View
-                </span>
-                {(
-                  [
-                    { key: false, label: "Flat" },
-                    { key: true, label: "By issue" },
-                  ] as const
-                ).map(({ key, label }) => {
-                  const active = groupByIssue === key;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setGroupByIssue(key)}
-                      style={{
-                        ...CHIP,
-                        cursor: "pointer",
-                        fontWeight: active ? 600 : 500,
-                        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                        borderColor: active ? "var(--color-accent)" : "var(--color-border)",
-                        background: active ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+                </div>
+              )}
 
               {visibleItems.length === 0 ? (
                 <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                  No unpriced copies.
+                  {filterMode === "unpriced" ? "No unpriced copies." : "Nothing left to sort."}
                 </div>
               ) : groupByIssue
                 ? groupByIssueList(visibleItems).map((group) => {
@@ -621,6 +1420,12 @@ function LotCard({
                               else next.add(group.key);
                               return next;
                             })
+                          }
+                          onMove={
+                            open ? () => setBulkMove(group.items.map((i) => i.id)) : undefined
+                          }
+                          onMarkSorted={
+                            open ? () => setBulkSort(group.items.map((i) => i.id)) : undefined
                           }
                         />
                         {!collapsed && (
@@ -675,6 +1480,7 @@ function LotCard({
           collectionId={collectionId}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
+          locations={locations}
           isPending={isPending}
           error={copyError}
           onBack={() => {
@@ -704,113 +1510,8 @@ function LotCard({
         />
       )}
 
-      {/* Quick catalog value: set the price for this copy's condition × certificate on the
-          stamp's primary catalog, inline (#121). */}
-      {quickPriceItem && (
-        <QuickPriceDialog
-          item={quickPriceItem}
-          isPending={isPending}
-          error={copyError}
-          onClose={() => {
-            if (!isPending) {
-              setQuickPriceItem(null);
-              setCopyError(undefined);
-            }
-          }}
-          onSubmit={(amount) => {
-            const it = quickPriceItem;
-            setCopyError(undefined);
-            onRun(
-              async () => {
-                const { quickSetCatalogPriceAction } = await import("@/app/actions/stamps");
-                const r = await quickSetCatalogPriceAction(
-                  it.stampId,
-                  it.conditionId,
-                  it.certificateStatusId,
-                  amount
-                );
-                if (r.status === "error") setCopyError(r.message);
-                return r;
-              },
-              () => setQuickPriceItem(null)
-            );
-          }}
-        />
-      )}
-
-      {/* Edit this copy (condition, certificate, storage, disposition) */}
-      {editCopyItem && (
-        <InventoryItemFormDialog
-          mode="edit"
-          collectionId={collectionId}
-          areas={areas}
-          locations={locations}
-          conditions={conditions}
-          certificateStatuses={certificateStatuses}
-          item={editCopyItem}
-          isPending={isPending}
-          error={copyError}
-          onClose={() => {
-            if (!isPending) {
-              setEditCopyItem(null);
-              setCopyError(undefined);
-            }
-          }}
-          onSubmit={(fd) => {
-            const itemId = editCopyItem.id;
-            setCopyError(undefined);
-            onRun(
-              async () => {
-                const { updateItemAction } = await import("@/app/actions/items");
-                const r = await updateItemAction(itemId, fd);
-                if (r.status === "error") setCopyError(r.message);
-                return r;
-              },
-              () => setEditCopyItem(null)
-            );
-          }}
-        />
-      )}
-
-      {/* Edit the underlying stamp (e.g. fill in catalog prices to unblock a close) */}
-      {editStampItem && (
-        <StampFormDialog
-          mode="edit"
-          stampId={editStampItem.stampId}
-          collectionId={collectionId}
-          stamp={{
-            name: editStampItem.stampName,
-            issuedDay: editStampItem.issuedDay,
-            issuedMonth: editStampItem.issuedMonth,
-            issuedYear: editStampItem.issuedYear,
-            catalogNumbers: editStampItem.catalogNumbers,
-          }}
-          areaVendors={
-            editStampItem.areaId ? effectiveVendorsForArea(areas, editStampItem.areaId) : []
-          }
-          isPending={isPending}
-          error={copyError}
-          onClose={() => {
-            if (!isPending) {
-              setEditStampItem(null);
-              setCopyError(undefined);
-            }
-          }}
-          onSubmit={(fd) => {
-            const stampId = editStampItem.stampId;
-            setCopyError(undefined);
-            onRun(
-              async () => {
-                const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-                const r = await updateStampWithCatalogAction(stampId, fd);
-                if (r.status === "error") setCopyError(r.message);
-                return r;
-              },
-              () => setEditStampItem(null)
-            );
-          }}
-        />
-      )}
+      {/* Per-copy + bulk editing dialogs (shared with the order-level view) */}
+      {copy.dialogs}
 
       {/* Edit lot (title + price) */}
       {dialog === "edit-price" && (
@@ -840,7 +1541,13 @@ function LotCard({
       {dialog === "delete" && (
         <ConfirmDialog
           title="Delete lot"
-          message="This removes this lot line from the purchase. Detach any copies first."
+          message={
+            lot.itemCount > 0
+              ? `This removes this lot line and its ${lot.itemCount} cop${
+                  lot.itemCount === 1 ? "y" : "ies"
+                } from the purchase. This cannot be undone.`
+              : "This removes this lot line from the purchase."
+          }
           actionLabel="Delete lot"
           pendingLabel="Deleting…"
           variant="destructive"
@@ -865,7 +1572,13 @@ function LotCard({
       {dialog === "close" && (
         <ConfirmDialog
           title="Close lot"
-          message="Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."
+          message={
+            unsortedCount > 0
+              ? `${unsortedCount} cop${
+                  unsortedCount === 1 ? "y is" : "ies are"
+                } still unsorted (ordered / to sort / in transit). You can still close — closing runs the cost allocation and freezes each copy's cost-basis — but sorting first is recommended. Closing is blocked only if a copy lacks a primary-catalog price for its condition.`
+              : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."
+          }
           actionLabel="Close lot"
           pendingLabel="Closing…"
           isPending={isPending}
@@ -929,6 +1642,169 @@ function LotCard({
       () => setDialog("none")
     );
   }
+}
+
+/** The order-level copies view (#121), shown when "By lot" grouping is off: every copy in the
+ * purchase in one place — flat, or grouped by issue across all lots — with the same inline
+ * delivery / disposition / location editing and per-copy menu as the lot cards. Lot-level
+ * management (add stamps, close, price…) has no home here; switch to the by-lot view for that.
+ * Each copy stays editable only while its own lot is open. */
+function OrderCopiesView({
+  collectionId,
+  lots,
+  itemsByLot,
+  issueHeaderById,
+  baseCurrency,
+  areas,
+  locations,
+  conditions,
+  certificateStatuses,
+  byIssue,
+  isPending,
+  run,
+}: {
+  collectionId: string;
+  lots: LotSummary[];
+  itemsByLot: Record<string, ItemListItem[]>;
+  issueHeaderById: Record<string, IssueHeader>;
+  baseCurrency: string;
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  conditions: StampConditionData[];
+  certificateStatuses: CertificateStatusData[];
+  byIssue: boolean;
+  isPending: boolean;
+  run: RunFn;
+}) {
+  const copy = useCopyEditing({
+    collectionId,
+    areas,
+    locations,
+    conditions,
+    certificateStatuses,
+    isPending,
+    run,
+  });
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
+  const hydrated = useHydrated();
+  const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
+    `${LS_COLLAPSED_GROUPS}:${collectionId}:order`
+  );
+
+  // Flatten every copy in the order (in lot order), remembering per copy whether its lot is
+  // open (drives editability) and its live cost-basis estimate (per-lot pool).
+  const allCopies: ItemListItem[] = [];
+  const openByItem = new Map<string, boolean>();
+  const estimateByItem = new Map<string, number | null>();
+  for (const lot of lots) {
+    const its = itemsByLot[lot.id] ?? [];
+    const open = lot.status === "open";
+    const poolBaseNum = lot.poolBase != null ? Number(lot.poolBase) : null;
+    const est = new Map<string, number | null>();
+    if (open && poolBaseNum != null) {
+      for (const e of estimateLot(
+        poolBaseNum,
+        its.map((it) => ({
+          id: it.id,
+          catalogPrice: it.value.baseAmount,
+          deliveryState: it.deliveryState as DeliveryState,
+        }))
+      )) {
+        est.set(e.itemId, e.costBasis);
+      }
+    }
+    for (const it of its) {
+      allCopies.push(it);
+      openByItem.set(it.id, open);
+      estimateByItem.set(it.id, est.get(it.id) ?? null);
+    }
+  }
+
+  const renderRow = (it: ItemListItem) => (
+    <CopyRow
+      key={it.id}
+      item={it}
+      open={openByItem.get(it.id) ?? false}
+      estimate={estimateByItem.get(it.id) ?? null}
+      highlight={false}
+      baseCurrency={baseCurrency}
+      areas={areas}
+      locations={locations}
+      primaryVendorByArea={primaryVendorByArea}
+      vendorMapByArea={vendorMapByArea}
+      copy={copy}
+    />
+  );
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        background: "var(--color-bg-elevated)",
+        overflow: "clip",
+      }}
+    >
+      {!hydrated ? (
+        <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+          Loading copies…
+        </div>
+      ) : allCopies.length === 0 ? (
+        <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+          No copies identified into this order yet.
+        </div>
+      ) : byIssue ? (
+        groupByIssueList(allCopies).map((group) => {
+          const collapsed = collapsedGroups.has(group.key);
+          const header = group.key === "__none__" ? null : issueHeaderById[group.key];
+          const areaId = header?.collectionAreaId ?? null;
+          // Bulk actions target this issue's copies whose lot is still open.
+          const openIds = group.items.filter((i) => openByItem.get(i.id)).map((i) => i.id);
+          return (
+            <div key={group.key} style={{ borderBottom: "1px solid var(--color-border)" }}>
+              <LotIssueGroupHeader
+                header={header}
+                fallbackLabel={group.label}
+                copyCount={group.items.length}
+                areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
+                primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
+                vendorMap={
+                  areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
+                }
+                collapsed={collapsed}
+                onToggle={() =>
+                  setCollapsedGroups((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(group.key)) next.delete(group.key);
+                    else next.add(group.key);
+                    return next;
+                  })
+                }
+                onMove={openIds.length > 0 ? () => copy.setBulkMove(openIds) : undefined}
+                onMarkSorted={openIds.length > 0 ? () => copy.setBulkSort(openIds) : undefined}
+              />
+              {!collapsed && (
+                <div
+                  style={{
+                    background: "var(--color-bg-elevated)",
+                    borderTop: "1px solid var(--color-border)",
+                    marginLeft: "1.25rem",
+                    borderLeft: "2px solid var(--color-border)",
+                  }}
+                >
+                  {group.items.map(renderRow)}
+                </div>
+              )}
+            </div>
+          );
+        })
+      ) : (
+        allCopies.map(renderRow)
+      )}
+      {copy.dialogs}
+    </div>
+  );
 }
 
 interface LotDialogProps {
@@ -997,6 +1873,198 @@ function LotDialog({
 }
 
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
+
+/** A small dialog that picks one storage location (tree-select) and confirms — reused by the
+ * arrival flow (optional "incoming box") and the bulk "move copies to location" actions
+ * (#121). With `allowNone` the confirm is enabled with no location chosen (arrival / clearing);
+ * otherwise a location must be selected. When `rememberForCollectionId` is set, the picker
+ * pre-fills with the last location used in that collection and stores the chosen one on
+ * confirm, so repeated filing defaults to where you just filed. */
+function LocationPickerDialog({
+  title,
+  message,
+  actionLabel,
+  locations,
+  initialLocationId,
+  allowNone = false,
+  rememberForCollectionId,
+  isPending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  message: React.ReactNode;
+  actionLabel: string;
+  locations: LocationData[];
+  initialLocationId?: string;
+  allowNone?: boolean;
+  rememberForCollectionId?: string;
+  isPending: boolean;
+  error?: string;
+  onClose: () => void;
+  onConfirm: (locationId: string) => void;
+}) {
+  const [locationId, setLocationId] = useState(() => {
+    if (initialLocationId) return initialLocationId;
+    if (!rememberForCollectionId) return "";
+    // Restore the last-used location, but only if it still exists and can hold copies.
+    const last = readLast(LS_LAST_LOCATION, rememberForCollectionId);
+    return locations.some((l) => l.id === last && l.assignable) ? last : "";
+  });
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+  const canConfirm = !isPending && (allowNone || locationId !== "");
+  return (
+    <DialogShell title={title} onClose={onClose} maxWidth="26rem">
+      <form
+        style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (rememberForCollectionId && locationId) {
+            writeLast(LS_LAST_LOCATION, rememberForCollectionId, locationId);
+          }
+          onConfirm(locationId);
+        }}
+      >
+        <DialogBody>
+          <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+            {message}
+          </p>
+          <LabelWithError htmlFor="loc-picker-button">Location</LabelWithError>
+          {locations.length === 0 ? (
+            <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+              No locations defined yet. Add some on the Locations screen first.
+            </p>
+          ) : (
+            <LocationTreeSelect
+              locations={locations}
+              locationTree={locationTree}
+              name="locationId"
+              selectedId={locationId}
+              onSelectedIdChange={setLocationId}
+              onlyAssignableSelectable
+              disabled={isPending}
+              noneOptionLabel="— None"
+            />
+          )}
+        </DialogBody>
+        <DialogActions
+          actionLabel={isPending ? "Working…" : actionLabel}
+          onCancel={onClose}
+          disabled={!canConfirm}
+          error={error}
+        />
+      </form>
+    </DialogShell>
+  );
+}
+
+/** Confirm dialog for the bulk "Mark sorted" action (lot / issue): choose the disposition
+ * applied to the sorted copies (rather than defaulting to in-collection) and, optionally, a
+ * location to file them into in the same step — pre-filled with the last location used, like
+ * the standalone move picker (#121). Only not-yet-sorted copies are transitioned to
+ * `delivered`; the location applies to every selected copy. */
+function MarkSortedDialog({
+  count,
+  locations,
+  collectionId,
+  isPending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  count: number;
+  locations: LocationData[];
+  collectionId: string;
+  isPending: boolean;
+  error?: string;
+  onClose: () => void;
+  onConfirm: (result: {
+    inCollection: boolean;
+    forSale: boolean;
+    forTrade: boolean;
+    locationId: string;
+  }) => void;
+}) {
+  const [flags, setFlags] = useState({ inCollection: true, forSale: false, forTrade: false });
+  const [locationId, setLocationId] = useState(() => {
+    const last = readLast(LS_LAST_LOCATION, collectionId);
+    return locations.some((l) => l.id === last && l.assignable) ? last : "";
+  });
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+  return (
+    <DialogShell title="Mark copies sorted" onClose={onClose} maxWidth="26rem">
+      <form
+        style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (locationId) writeLast(LS_LAST_LOCATION, collectionId, locationId);
+          onConfirm({ ...flags, locationId });
+        }}
+      >
+        <DialogBody>
+          <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+            Marks {count} cop{count === 1 ? "y" : "ies"} as <strong>delivered</strong> and files
+            {count === 1 ? " it" : " them"} with the disposition below. Copies already sorted,
+            damaged, or not delivered keep their delivery status (the location still applies).
+          </p>
+          <LabelWithError htmlFor="mark-sorted-disposition">Disposition</LabelWithError>
+          <div id="mark-sorted-disposition" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {DISPOSITION_FLAGS.map((d) => {
+              const on = flags[d.key];
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={isPending}
+                  onClick={() => setFlags((f) => ({ ...f, [d.key]: !f[d.key] }))}
+                  style={{
+                    ...CHIP,
+                    cursor: isPending ? "not-allowed" : "pointer",
+                    fontWeight: on ? 600 : 500,
+                    color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                    background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                  }}
+                >
+                  {on ? "✓ " : "+ "}
+                  {d.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: "1rem" }}>
+            <LabelWithError htmlFor="mark-sorted-locationId-button">Location (optional)</LabelWithError>
+            {locations.length === 0 ? (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                No locations defined yet. Add some on the Locations screen first.
+              </p>
+            ) : (
+              <LocationTreeSelect
+                locations={locations}
+                locationTree={locationTree}
+                name="locationId"
+                selectedId={locationId}
+                onSelectedIdChange={setLocationId}
+                onlyAssignableSelectable
+                disabled={isPending}
+                noneOptionLabel="— Leave as-is"
+              />
+            )}
+          </div>
+        </DialogBody>
+        <DialogActions
+          actionLabel={isPending ? "Marking…" : "Mark sorted"}
+          onCancel={onClose}
+          disabled={isPending}
+          error={error}
+        />
+      </form>
+    </DialogShell>
+  );
+}
 
 interface LotItemGroup {
   key: string;
@@ -1080,6 +2148,8 @@ function LotIssueGroupHeader({
   vendorMap,
   collapsed,
   onToggle,
+  onMove,
+  onMarkSorted,
 }: {
   header: IssueHeader | null | undefined;
   fallbackLabel: string;
@@ -1089,6 +2159,9 @@ function LotIssueGroupHeader({
   vendorMap: Map<string, AreaCatalogEntry>;
   collapsed: boolean;
   onToggle: () => void;
+  /** Bulk actions over this issue's copies in the lot (open lots only, #121). */
+  onMove?: () => void;
+  onMarkSorted?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -1157,6 +2230,37 @@ function LotIssueGroupHeader({
         <Tooltip content="Copies from this issue in the lot" align="end">
           <span style={{ ...CHIP, flexShrink: 0 }}>{copyCount} in lot</span>
         </Tooltip>
+
+        {onMove && (
+          <Tooltip content="Move this issue's copies to a location" align="end">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove();
+              }}
+              aria-label="Move this issue's copies to a location"
+              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
+            >
+              📍
+            </button>
+          </Tooltip>
+        )}
+        {onMarkSorted && (
+          <Tooltip content="Mark this issue's copies sorted" align="end">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkSorted();
+              }}
+              aria-label="Mark this issue's copies sorted"
+              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
+            >
+              ✓
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       {header && (header.catalogNumbers.length > 0 || header.memberCount > 0) && (
@@ -1184,22 +2288,74 @@ function LotIssueGroupHeader({
   );
 }
 
-/** Lot-specific chips appended to a copy's inventory row: its delivery state and its
- * cost-basis — the frozen snapshot once the lot is closed, otherwise a live estimate
- * computed from the current pool and catalog weights (never persisted; frozen on close). */
+/** Lot-specific chips appended to a copy's inventory row (#121), in lifecycle order:
+ * **delivery status** → **disposition** → **cost-basis**. On an open lot the delivery chip is
+ * an inline dropdown and the disposition chip expands to toggles (both edit the copy in place,
+ * the fast path for sorting); moving delivery to `delivered` auto-expands the disposition
+ * editor so the collector picks in-collection / for-sale / for-trade. Cost-basis is the frozen
+ * snapshot once the lot is closed, otherwise a live estimate (never persisted). */
 function LotCopyChips({
   item,
   baseCurrency,
   estimate,
+  onSetDeliveryState,
+  onSetDisposition,
 }: {
   item: ItemListItem;
   baseCurrency: string;
   estimate: number | null;
+  onSetDeliveryState?: (state: string) => void;
+  onSetDisposition?: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
 }) {
   const delivery = DELIVERY[item.deliveryState] ?? { label: item.deliveryState, token: "muted" };
+  const chipStyle = tintChip(delivery.token, delivery.label).style;
+  const [dispExpanded, setDispExpanded] = useState(false);
   return (
     <>
-      <span style={tintChip(delivery.token, delivery.label).style}>{delivery.label}</span>
+      {onSetDeliveryState ? (
+        <Tooltip content="Set this copy's delivery status">
+          <select
+            aria-label="Delivery status"
+            value={item.deliveryState}
+            onChange={(e) => {
+              onSetDeliveryState(e.target.value);
+              // Delivered leaves disposition to the collector — pop the editor open for them.
+              if (e.target.value === "delivered") setDispExpanded(true);
+            }}
+            style={{
+              ...chipStyle,
+              cursor: "pointer",
+              paddingRight: "1.25rem",
+              // A native select for keyboard/click reliability, tinted like the chip.
+              appearance: "auto",
+            }}
+          >
+            {DELIVERY_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {DELIVERY[s]?.label ?? s}
+              </option>
+            ))}
+          </select>
+        </Tooltip>
+      ) : (
+        <span style={chipStyle}>{delivery.label}</span>
+      )}
+
+      {onSetDisposition ? (
+        <DispositionInline
+          item={item}
+          expanded={dispExpanded}
+          onToggleExpanded={() => setDispExpanded((v) => !v)}
+          onSet={onSetDisposition}
+        />
+      ) : (
+        DISPOSITION_FLAGS.filter((d) => item[d.key]).map((d) => (
+          <span key={d.key} style={CHIP}>
+            {d.label}
+          </span>
+        ))
+      )}
+
       {item.costBasis != null ? (
         <Tooltip content="Frozen cost-basis (base currency)">
           <span style={{ ...CHIP, fontVariantNumeric: "tabular-nums" }}>
@@ -1228,38 +2384,113 @@ function LotCopyChips({
   );
 }
 
+/** Inline disposition editor for a lot copy (#121): collapsed it shows the active flags (or a
+ * "Set disposition" prompt); expanded it shows the three flags as toggles that persist on
+ * click. Auto-expands when the delivery status is set to `delivered`. */
+function DispositionInline({
+  item,
+  expanded,
+  onToggleExpanded,
+  onSet,
+}: {
+  item: ItemListItem;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onSet: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
+}) {
+  const active = DISPOSITION_FLAGS.filter((d) => item[d.key]);
+
+  if (!expanded) {
+    return (
+      <Tooltip content="Disposition — click to change">
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          style={{ ...CHIP, cursor: "pointer" }}
+        >
+          🏷 {active.length > 0 ? active.map((d) => d.label).join(" · ") : "Set disposition"}
+        </button>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+      {DISPOSITION_FLAGS.map((d) => {
+        const on = item[d.key];
+        return (
+          <button
+            key={d.key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onSet(d.key, !on)}
+            style={{
+              ...CHIP,
+              cursor: "pointer",
+              fontWeight: on ? 600 : 500,
+              color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+              borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+              background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+            }}
+          >
+            {on ? "✓ " : "+ "}
+            {d.label}
+          </button>
+        );
+      })}
+      <Tooltip content="Changes save as you toggle — click when you're done">
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-label="Done editing disposition"
+          style={{
+            ...CHIP,
+            cursor: "pointer",
+            fontWeight: 600,
+            color: "var(--color-success, var(--color-text-secondary))",
+          }}
+        >
+          ✓
+        </button>
+      </Tooltip>
+    </span>
+  );
+}
+
 interface IntakeConditionDialogProps {
   selection: PendingSelection;
   collectionId: string;
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
+  locations: LocationData[];
   isPending: boolean;
   error?: string;
+  /** Overrides the confirm-button label. Used by the "add lot with stamps" flow where this
+   * dialog only captures the choice and advances to the price step (so "Continue", not
+   * "Add copy"). Defaults to the copy-count label. */
+  submitLabel?: string;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
 
-// Remember the last condition/certificate chosen during intake so the next stamp preselects
-// them (#121). Scoped per collection since ids are collection-specific.
+// Remember the last condition/certificate/location chosen during intake so the next stamp
+// preselects them (#121). Scoped per collection since ids are collection-specific.
 const LS_LAST_CONDITION = "stamporama:intake:conditionId";
 const LS_LAST_CERT = "stamporama:intake:certId";
+const LS_LAST_LOCATION = "stamporama:intake:locationId";
+// Persisted order-level view preferences (#121): whether copies group by lot and/or by issue
+// (per collection), and which issue groups are collapsed (per collection + lot/scope).
+// Suffixed with the ids by the caller.
+const LS_GROUP_BY_LOT = "stamporama:lot:groupByLot";
+const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
+const LS_COLLAPSED_GROUPS = "stamporama:lot:collapsedGroups";
 function readLast(key: string, collectionId: string): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(`${key}:${collectionId}`) ?? "";
-  } catch {
-    return "";
-  }
+  return lsGet(`${key}:${collectionId}`) ?? "";
 }
 function writeLast(key: string, collectionId: string, value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (value) window.localStorage.setItem(`${key}:${collectionId}`, value);
-    else window.localStorage.removeItem(`${key}:${collectionId}`);
-  } catch {
-    /* ignore quota / disabled storage */
-  }
+  if (value) lsSet(`${key}:${collectionId}`, value);
+  else lsRemove(`${key}:${collectionId}`);
 }
 
 /** After a stamp or whole issue is picked, capture the condition (required) and certificate
@@ -1270,8 +2501,10 @@ function IntakeConditionDialog({
   collectionId,
   conditions,
   certificateStatuses,
+  locations,
   isPending,
   error,
+  submitLabel,
   onBack,
   onClose,
   onSubmit,
@@ -1285,10 +2518,18 @@ function IntakeConditionDialog({
     const last = readLast(LS_LAST_CERT, collectionId);
     return certificateStatuses.some((c) => c.id === last) ? last : "";
   });
+  const [locationId, setLocationId] = useState(() => {
+    const last = readLast(LS_LAST_LOCATION, collectionId);
+    // Only restore an assignable location that still exists (grouping-only nodes and
+    // deleted ones fall back to none).
+    return locations.some((l) => l.id === last && l.assignable) ? last : "";
+  });
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
+    writeLast(LS_LAST_LOCATION, collectionId, locationId);
     onSubmit(new FormData(e.currentTarget));
   }
   const count = selection.kind === "issue" ? selection.requiredCount : 1;
@@ -1297,10 +2538,13 @@ function IntakeConditionDialog({
       ? `Whole issue: ${selection.label} — ${count} required stamp${count === 1 ? "" : "s"}`
       : selection.label;
   const actionLabel = isPending
-    ? "Adding…"
-    : selection.kind === "issue"
-      ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
-      : "Add copy";
+    ? submitLabel
+      ? "Working…"
+      : "Adding…"
+    : (submitLabel ??
+      (selection.kind === "issue"
+        ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
+        : "Add copy"));
 
   return (
     <DialogShell title="Set condition" onClose={onClose} maxWidth="26rem">
@@ -1358,9 +2602,32 @@ function IntakeConditionDialog({
               </select>
             </div>
           </div>
+
+          {/* Storage location (#56/#121): optional at intake, shared by every created copy. */}
+          <div style={{ marginTop: "0.75rem" }}>
+            <LabelWithError htmlFor="intake-locationId-button">Location (optional)</LabelWithError>
+            {locations.length === 0 ? (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                No locations defined yet. Add some on the Locations screen to file copies away.
+              </p>
+            ) : (
+              <LocationTreeSelect
+                locations={locations}
+                locationTree={locationTree}
+                name="locationId"
+                selectedId={locationId}
+                onSelectedIdChange={setLocationId}
+                onlyAssignableSelectable
+                disabled={isPending}
+                noneOptionLabel="— None"
+              />
+            )}
+          </div>
+
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-            Copies are added as <strong>ordered</strong> (not yet in your collection). Cost-basis
-            stays pending until the lot is closed.
+            Copies are added <strong>not yet in your collection</strong> (
+            <strong>to sort</strong> once the order has arrived, otherwise <strong>ordered</strong>).
+            Cost-basis stays pending until the lot is closed.
           </p>
         </DialogBody>
         <DialogActions

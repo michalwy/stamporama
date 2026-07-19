@@ -201,6 +201,12 @@ interface InventoryItemRowProps {
   highlight?: boolean;
   /** When provided, the catalog-value area becomes an inline price editor (#121). */
   onSetCatalogPrice?: () => void;
+  /** When provided, the location chip becomes a button (with an "＋ location" affordance when
+   * none is set) that opens a location picker — inline filing during lot sorting (#121). */
+  onSetLocation?: () => void;
+  /** Suppress the built-in disposition chips — the lot view renders its own interactive
+   * disposition editor in `trailingChips` instead (#121). */
+  hideDispositions?: boolean;
   onEdit?: (item: ItemListItem) => void;
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
@@ -220,6 +226,8 @@ export function InventoryItemRow({
   trailingChips,
   highlight = false,
   onSetCatalogPrice,
+  onSetLocation,
+  hideDispositions = false,
   onEdit,
   onIdentify,
   onViewHistory,
@@ -387,21 +395,48 @@ export function InventoryItemRow({
               <span style={CHIP}>{item.certificateStatusName}</span>
             </Tooltip>
           )}
-          {locationPath && (
+          {onSetLocation ? (
             <Tooltip
-              content={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
+              content={
+                locationPath
+                  ? `Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""} — click to change`
+                  : "Click to file this copy in a location"
+              }
             >
-              <span style={LOCATION_CHIP}>
-                📍 {locationPath}
-                {item.locationRef ? ` · ${item.locationRef}` : ""}
-              </span>
+              <button
+                type="button"
+                onClick={onSetLocation}
+                style={{ ...LOCATION_CHIP, cursor: "pointer" }}
+              >
+                📍{" "}
+                {locationPath ? (
+                  <>
+                    {locationPath}
+                    {item.locationRef ? ` · ${item.locationRef}` : ""}
+                  </>
+                ) : (
+                  "Set location"
+                )}
+              </button>
             </Tooltip>
+          ) : (
+            locationPath && (
+              <Tooltip
+                content={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
+              >
+                <span style={LOCATION_CHIP}>
+                  📍 {locationPath}
+                  {item.locationRef ? ` · ${item.locationRef}` : ""}
+                </span>
+              </Tooltip>
+            )
           )}
-          {dispositions.map((d) => (
-            <span key={d.key} style={dispositionChip(d.token)}>
-              {d.label}
-            </span>
-          ))}
+          {!hideDispositions &&
+            dispositions.map((d) => (
+              <span key={d.key} style={dispositionChip(d.token)}>
+                {d.label}
+              </span>
+            ))}
           {item.notes && (
             <Tooltip content={item.notes}>
               <span style={META}>📝 notes</span>

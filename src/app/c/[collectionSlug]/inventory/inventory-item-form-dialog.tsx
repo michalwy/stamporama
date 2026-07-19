@@ -55,6 +55,16 @@ const DISPOSITIONS = [
 
 type DispositionKey = (typeof DISPOSITIONS)[number]["key"];
 
+/** Physical delivery axis (ADR-0009 §5, #121), orthogonal to disposition. */
+const DELIVERY_STATES = [
+  { value: "ordered", label: "Ordered" },
+  { value: "to_sort", label: "To sort" },
+  { value: "in_transit", label: "In transit" },
+  { value: "delivered", label: "Delivered (sorted / in collection)" },
+  { value: "not_delivered", label: "Not delivered" },
+  { value: "damaged", label: "Damaged" },
+];
+
 export interface InventoryItemFormDialogProps {
   mode: "add" | "edit";
   collectionId: string;
@@ -97,6 +107,7 @@ export function InventoryItemFormDialog({
 }: InventoryItemFormDialogProps) {
   const [stampId, setStampId] = useState(item?.stampId ?? initialStampId ?? "");
   const [locationId, setLocationId] = useState(item?.locationId ?? "");
+  const [deliveryState, setDeliveryState] = useState(item?.deliveryState ?? "delivered");
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>({
     inCollection: item ? item.inCollection : true,
@@ -237,6 +248,24 @@ export function InventoryItemFormDialog({
             {DISPOSITIONS.map(({ key }) => (
               <input key={key} type="hidden" name={key} value={disposition[key] ? "true" : "false"} />
             ))}
+          </div>
+
+          {/* Delivery status (ADR-0009 §5, #121): physical arrival/sort state of the copy. */}
+          <div style={FIELD_GAP}>
+            <div style={SECTION_LABEL}>Delivery</div>
+            <select
+              name="deliveryState"
+              value={deliveryState}
+              onChange={(e) => setDeliveryState(e.target.value)}
+              disabled={isPending}
+              style={INPUT_STYLE}
+            >
+              {DELIVERY_STATES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Storage location (#56) */}

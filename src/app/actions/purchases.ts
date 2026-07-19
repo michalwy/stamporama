@@ -12,12 +12,15 @@ import {
 } from "@/lib/purchases";
 import {
   createLot,
+  createLotWithStamps,
   updateLot,
   deleteLot,
   removeLotItem,
   intakeStamps,
   closeLot,
   reopenLot,
+  markPurchaseArrived,
+  bulkUpdateLotItems,
 } from "@/lib/lots";
 
 export type PurchaseActionState =
@@ -153,6 +156,42 @@ export async function createLotAction(
   }
 }
 
+/** Create a lot and identify stamps into it in one step (the "add lot with stamps" flow,
+ * #121). Expects the combined form: title/price plus the intake selection (stampId or
+ * issueId) and condition/certificate/location. */
+export async function createLotWithStampsAction(
+  purchaseId: string,
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  const price = parseMoney(str(formData, "price"));
+  if (price == null) return { status: "error", message: "A valid lot price is required." };
+  const conditionId = str(formData, "conditionId");
+  if (!conditionId) return { status: "error", message: "A condition must be selected." };
+  const stampId = optionalStr(formData, "stampId");
+  const issueId = optionalStr(formData, "issueId");
+  if (!stampId && !issueId) {
+    return { status: "error", message: "Select a stamp or an issue to add." };
+  }
+  try {
+    await createLotWithStamps(session.user.id, purchaseId, {
+      price,
+      title: optionalStr(formData, "title"),
+      stampId,
+      issueId,
+      conditionId,
+      certificateStatusId: optionalStr(formData, "certificateStatusId"),
+      locationId: optionalStr(formData, "locationId"),
+    });
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add lot. Please try again.",
+    };
+  }
+}
+
 export async function updateLotAction(
   lotId: string,
   formData: FormData
@@ -219,6 +258,7 @@ export async function intakeStampsAction(
       issueId,
       conditionId,
       certificateStatusId: optionalStr(formData, "certificateStatusId"),
+      locationId: optionalStr(formData, "locationId"),
     });
     return { status: "success" };
   } catch (e) {
@@ -258,6 +298,68 @@ export async function reopenLotAction(lotId: string): Promise<PurchaseActionStat
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to reopen lot. Please try again.",
+    };
+  }
+}
+
+/** Mark a purchase arrived: status → arrived, its `ordered` copies → `to_sort`, and (when a
+ * location is chosen) file every order copy into it (#121). */
+export async function markPurchaseArrivedAction(
+  purchaseId: string,
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await markPurchaseArrived(session.user.id, purchaseId, {
+      locationId: optionalStr(formData, "locationId"),
+    });
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to mark arrived. Please try again.",
+    };
+  }
+}
+
+/** Bulk sorting change over a set of copies (#121): file them into a location and/or mark
+ * them sorted. `itemIds` is a comma-separated list; `locationId` present (even blank = clear)
+ * applies a location change; `markSorted=true` moves not-yet-sorted copies to delivered. */
+export async function bulkUpdateLotItemsAction(
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  const itemIds = str(formData, "itemIds")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (itemIds.length === 0) {
+    return { status: "error", message: "No copies selected." };
+  }
+  const changes: {
+    locationId?: string | null;
+    deliveryState?: string;
+    inCollection?: boolean;
+    forSale?: boolean;
+    forTrade?: boolean;
+    markSorted?: boolean;
+  } = {};
+  // A present `locationId` field (even empty) signals a location change; absent means leave it.
+  if (formData.has("locationId")) changes.locationId = optionalStr(formData, "locationId");
+  const deliveryState = optionalStr(formData, "deliveryState");
+  if (deliveryState) changes.deliveryState = deliveryState;
+  // A present disposition field (value "true"/"false") signals a flag change; absent leaves it.
+  if (formData.has("inCollection")) changes.inCollection = str(formData, "inCollection") === "true";
+  if (formData.has("forSale")) changes.forSale = str(formData, "forSale") === "true";
+  if (formData.has("forTrade")) changes.forTrade = str(formData, "forTrade") === "true";
+  if (str(formData, "markSorted") === "true") changes.markSorted = true;
+  try {
+    await bulkUpdateLotItems(session.user.id, itemIds, changes);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to update copies. Please try again.",
     };
   }
 }

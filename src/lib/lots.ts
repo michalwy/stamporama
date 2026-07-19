@@ -18,8 +18,9 @@ import {
 //   - lot close (run the pure allocation engine, freeze per-item cost-basis snapshots)
 //     and reopen (return items to pending);
 //   - the purchase-detail read model that the intake screen renders.
-// Item intake itself (creating the `Item` linked to a lot) reuses `createItem` (items.ts)
-// with `lotId` + `deliveryState = in_transit`. All access is collection-owner-scoped.
+// Item intake itself (`intakeStamps`) bulk-creates the `Item`s linked to a lot, marked
+// `ordered` and not yet in the collection (a purchased copy is a holding only once it
+// arrives). All access is collection-owner-scoped.
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const col = await prisma.collection.findUnique({
@@ -233,6 +234,41 @@ export async function createLot(
   return lot.id;
 }
 
+/** Create a new open lot and immediately identify stamps into it (the "add lot with stamps"
+ * intake flow, #121) — the inverse of creating an empty lot and filling it later. Reuses
+ * `createLot` + `intakeStamps`; if the intake fails (e.g. a bad condition or an issue with no
+ * required members) the just-created lot is removed so no empty lot is left behind. Returns
+ * the new lot id and how many copies were created. */
+export async function createLotWithStamps(
+  ownerId: string,
+  purchaseId: string,
+  input: {
+    price: number;
+    title?: string | null;
+    stampId?: string | null;
+    issueId?: string | null;
+    conditionId: string;
+    certificateStatusId?: string | null;
+    locationId?: string | null;
+  }
+): Promise<{ lotId: string; count: number }> {
+  const lotId = await createLot(ownerId, purchaseId, input.price, input.title);
+  try {
+    const count = await intakeStamps(ownerId, lotId, {
+      stampId: input.stampId,
+      issueId: input.issueId,
+      conditionId: input.conditionId,
+      certificateStatusId: input.certificateStatusId,
+      locationId: input.locationId,
+    });
+    return { lotId, count };
+  } catch (err) {
+    // Compensate: drop the empty lot we created so a failed intake doesn't strand it.
+    await prisma.purchaseLot.delete({ where: { id: lotId } }).catch(() => {});
+    throw err;
+  }
+}
+
 /** Edit a lot's price while it is still open. A closed lot's price is frozen into the
  * cost-basis snapshots; changing it is a structural recompute (ADR-0009 §3.5, #122), so
  * it is rejected here — reopen the lot first. */
@@ -251,18 +287,16 @@ export async function updateLot(
   });
 }
 
-/** Delete a lot. Blocked when it still has copies (detach them first) — the DB enforces
- * this via `Item.lotId onDelete: Restrict`; surfaced as a friendly error. */
+/** Delete a lot **and all of its copies** (#121). A lot's copies exist only to populate it
+ * (they are created `ordered`, not in the collection — see `intakeStamps` / `removeLotItem`),
+ * so deleting the lot deletes them too rather than stranding them; `Item.lotId onDelete:
+ * Restrict` would otherwise block the delete. Done in one transaction. */
 export async function deleteLot(ownerId: string, lotId: string): Promise<void> {
-  await assertLotOwner(ownerId, lotId);
-  try {
-    await prisma.purchaseLot.delete({ where: { id: lotId } });
-  } catch (err) {
-    if (isRestrictViolation(err)) {
-      throw new Error("Cannot delete a lot that has copies. Detach the copies first.");
-    }
-    throw err;
-  }
+  const { collectionId } = await assertLotOwner(ownerId, lotId);
+  await prisma.$transaction(async (tx) => {
+    await tx.item.deleteMany({ where: { lotId, collectionId } });
+    await tx.purchaseLot.delete({ where: { id: lotId } });
+  });
 }
 
 /** Remove a copy from its lot. Copies are created by intake purely to populate the lot
@@ -280,9 +314,10 @@ export async function removeLotItem(ownerId: string, itemId: string): Promise<vo
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single
  * `stampId` or an `issueId` (which fans out to every **required-for-completeness** member
- * of that issue). Every created copy shares the given condition and certificate, is linked
- * to the lot, and is marked `ordered` and **not** in the collection — a purchased copy is
- * not a holding until it arrives. Returns how many copies were created. */
+ * of that issue). Every created copy shares the given condition, certificate, and storage
+ * location, is linked to the lot, and is **not** in the collection — a purchased copy is not a
+ * holding until it is sorted. New copies enter as `ordered`, or `to_sort` when the order has
+ * already arrived (they were identified during the sort pass). Returns how many were created. */
 export async function intakeStamps(
   ownerId: string,
   lotId: string,
@@ -291,12 +326,21 @@ export async function intakeStamps(
     issueId?: string | null;
     conditionId: string;
     certificateStatusId?: string | null;
+    locationId?: string | null;
   }
 ): Promise<number> {
-  const { collectionId, status } = await assertLotOwner(ownerId, lotId);
+  const { collectionId, purchaseId, status } = await assertLotOwner(ownerId, lotId);
   if (status !== "open") {
     throw new Error("This lot is closed. Reopen it before identifying more copies.");
   }
+
+  // Once the order has arrived, copies identified during the sort pass skip `ordered` and
+  // land straight in `to_sort` — they are already in hand, just not filed yet (#121).
+  const purchase = await prisma.purchase.findUniqueOrThrow({
+    where: { id: purchaseId },
+    select: { status: true },
+  });
+  const deliveryState = purchase.status === "arrived" ? "to_sort" : "ordered";
 
   const conditionId = input.conditionId?.trim();
   if (!conditionId) throw new Error("A condition is required.");
@@ -313,6 +357,20 @@ export async function intakeStamps(
       select: { id: true },
     });
     if (!cert) throw new Error("Certificate status not found in this collection.");
+  }
+
+  // Storage location is optional at intake; when set it must be an assignable node of this
+  // collection (grouping-only nodes cannot hold copies, #56).
+  const locationId = input.locationId?.trim() || null;
+  if (locationId) {
+    const location = await prisma.location.findFirst({
+      where: { id: locationId, collectionId },
+      select: { assignable: true },
+    });
+    if (!location) throw new Error("Location not found in this collection.");
+    if (!location.assignable) {
+      throw new Error("This location cannot hold copies. Pick an assignable location.");
+    }
   }
 
   // Resolve the target stamp ids: a whole issue expands to its required members.
@@ -349,11 +407,12 @@ export async function intakeStamps(
       stampId,
       conditionId,
       certificateStatusId,
+      locationId,
       inCollection: false,
       forSale: false,
       forTrade: false,
       lotId,
-      deliveryState: "ordered",
+      deliveryState,
     })),
   });
   return stampIds.length;
@@ -380,67 +439,93 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
     return { ok: true, snapshotCount: 0 };
   }
 
-  const purchase = await prisma.purchase.findUniqueOrThrow({
-    where: { id: purchaseId },
-    select: {
-      shippingCost: true,
-      fxRateToBase: true,
-      lots: { select: { id: true, price: true } },
-      expenses: { select: { id: true, price: true } },
-    },
-  });
-
-  const items = await prisma.item.findMany({
+  // Value the lot's copies from reference data (catalog prices, FX rates) — data the close
+  // itself never mutates, so it stays outside the write transaction. Copies added or removed
+  // between here and the txn are reconciled below: a copy present in the txn but absent from
+  // `valuations` resolves to a null weight and blocks the close (never a wrong snapshot).
+  const valuationItems = await prisma.item.findMany({
     where: { lotId, collectionId },
-    select: { id: true, deliveryState: true },
+    select: { id: true },
   });
-  if (items.length === 0) {
+  // Empty-lot guard up front, so we can return the friendly `empty` block without opening a
+  // transaction (the authoritative re-read inside the txn still guards concurrent emptying).
+  if (valuationItems.length === 0) {
     return { ok: false, reason: "empty", itemIds: [] };
   }
-
-  const costs: PurchaseCosts = {
-    shippingCost: purchase.shippingCost != null ? Number(purchase.shippingCost) : 0,
-    lots: purchase.lots.map((l) => ({ id: l.id, price: Number(l.price) })),
-    expenses: purchase.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
-    fxRateToBase: purchase.fxRateToBase != null ? Number(purchase.fxRateToBase) : null,
-  };
-  const poolBase = computeLotPool(costs, lotId).poolBase;
-
   const valuations = await valuateItemsByIds(
     collectionId,
-    items.map((it) => it.id)
+    valuationItems.map((it) => it.id)
   );
-  const lotItems: LotItem[] = items.map((it) => ({
-    id: it.id,
-    catalogPrice: valuations.get(it.id)?.baseAmount ?? null,
-    deliveryState: it.deliveryState as DeliveryState,
-  }));
 
-  let allocation;
   try {
-    allocation = allocateLot(poolBase, lotItems);
+    return await prisma.$transaction(async (tx) => {
+      // Re-read the authoritative state inside the transaction so the snapshot we freeze is
+      // consistent with the purchase costs, item set, and lifecycle status at write time —
+      // and two concurrent closes cannot both write.
+      const lot = await tx.purchaseLot.findUnique({
+        where: { id: lotId },
+        select: { status: true },
+      });
+      if (!lot) throw new Error("Lot not found or access denied.");
+      if (lot.status !== "open") {
+        throw new Error("This lot was already closed. Refresh and try again.");
+      }
+
+      const purchase = await tx.purchase.findUniqueOrThrow({
+        where: { id: purchaseId },
+        select: {
+          shippingCost: true,
+          fxRateToBase: true,
+          lots: { select: { id: true, price: true } },
+          expenses: { select: { id: true, price: true } },
+        },
+      });
+      const items = await tx.item.findMany({
+        where: { lotId, collectionId },
+        select: { id: true, deliveryState: true },
+      });
+      if (items.length === 0) {
+        throw new Error("The lot became empty during close. Refresh and try again.");
+      }
+
+      const costs: PurchaseCosts = {
+        shippingCost: purchase.shippingCost != null ? Number(purchase.shippingCost) : 0,
+        lots: purchase.lots.map((l) => ({ id: l.id, price: Number(l.price) })),
+        expenses: purchase.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
+        fxRateToBase: purchase.fxRateToBase != null ? Number(purchase.fxRateToBase) : null,
+      };
+      const poolBase = computeLotPool(costs, lotId).poolBase;
+
+      const lotItems: LotItem[] = items.map((it) => ({
+        id: it.id,
+        catalogPrice: valuations.get(it.id)?.baseAmount ?? null,
+        deliveryState: it.deliveryState as DeliveryState,
+      }));
+
+      // A block throws `LotCloseBlockedError`, which rolls the transaction back (no partial
+      // writes) and is converted to a structured result by the catch below.
+      const allocation = allocateLot(poolBase, lotItems);
+
+      for (const snap of allocation.snapshots) {
+        await tx.item.update({
+          where: { id: snap.itemId },
+          data: { costBasis: money(snap.costBasis) },
+        });
+      }
+      // Not-delivered copies stay attached but keep a pending (null) cost-basis.
+      for (const id of allocation.notDeliveredItemIds) {
+        await tx.item.update({ where: { id }, data: { costBasis: null } });
+      }
+      await tx.purchaseLot.update({ where: { id: lotId }, data: { status: "closed" } });
+
+      return { ok: true, snapshotCount: allocation.snapshots.length };
+    });
   } catch (err) {
     if (err instanceof LotCloseBlockedError) {
       return { ok: false, reason: err.reason, itemIds: err.itemIds };
     }
     throw err;
   }
-
-  await prisma.$transaction(async (tx) => {
-    for (const snap of allocation.snapshots) {
-      await tx.item.update({
-        where: { id: snap.itemId },
-        data: { costBasis: money(snap.costBasis) },
-      });
-    }
-    // Not-delivered copies stay attached but keep a pending (null) cost-basis.
-    for (const id of allocation.notDeliveredItemIds) {
-      await tx.item.update({ where: { id }, data: { costBasis: null } });
-    }
-    await tx.purchaseLot.update({ where: { id: lotId }, data: { status: "closed" } });
-  });
-
-  return { ok: true, snapshotCount: allocation.snapshots.length };
 }
 
 /** Reopen a closed lot for corrections (ADR-0009 §5): flip it back to `open` and return
@@ -457,13 +542,169 @@ export async function reopenLot(ownerId: string, lotId: string): Promise<void> {
   });
 }
 
-/** Prisma FK-restrict violation (P2003) / required-relation guard (P2014). */
-function isRestrictViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    ((err as { code?: string }).code === "P2003" ||
-      (err as { code?: string }).code === "P2014")
-  );
+// ---------------------------------------------------------------------------
+// Arrival & sorting (ADR-0009 §5, #121)
+// ---------------------------------------------------------------------------
+
+/** A copy is only assignable to a location that lives in this collection and can hold
+ * copies (grouping-only nodes are rejected, #56). Shared by arrival + bulk sorting. */
+async function assertLocationAssignable(collectionId: string, locationId: string): Promise<void> {
+  const location = await prisma.location.findFirst({
+    where: { id: locationId, collectionId },
+    select: { assignable: true },
+  });
+  if (!location) throw new Error("Location not found in this collection.");
+  if (!location.assignable) {
+    throw new Error("This location cannot hold copies. Pick an assignable location.");
+  }
+}
+
+/** Mark a whole purchase as arrived (#121): flip its status to `arrived`, transition every
+ * `ordered` copy across its lots to `to_sort` (arrived, awaiting sorting), and — when a
+ * location is given — file every not-yet-sorted order copy (`ordered`/`to_sort`) into it
+ * (e.g. an "Incoming box"). One transaction, owner-scoped. Returns how many copies moved. */
+export async function markPurchaseArrived(
+  ownerId: string,
+  purchaseId: string,
+  opts: { locationId?: string | null } = {}
+): Promise<{ toSortCount: number }> {
+  const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
+
+  const locationId = opts.locationId?.trim() || null;
+  if (locationId) await assertLocationAssignable(collectionId, locationId);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.purchase.update({ where: { id: purchaseId }, data: { status: "arrived" } });
+    const moved = await tx.item.updateMany({
+      where: { collectionId, lot: { purchaseId }, deliveryState: "ordered" },
+      data: { deliveryState: "to_sort" },
+    });
+    if (locationId) {
+      await tx.item.updateMany({
+        where: {
+          collectionId,
+          lot: { purchaseId },
+          deliveryState: { in: ["ordered", "to_sort"] },
+        },
+        data: { locationId },
+      });
+    }
+    return { toSortCount: moved.count };
+  });
+}
+
+/** The delivery states a copy may carry (mirrors `VALID_DELIVERY_STATES` in items.ts). */
+const DELIVERY_STATES = new Set([
+  "ordered",
+  "to_sort",
+  "in_transit",
+  "delivered",
+  "not_delivered",
+  "damaged",
+]);
+
+/** How setting a delivery state affects collection membership (#121): the pre-arrival states
+ * (`ordered`/`to_sort`/`in_transit`) are never a holding → not in collection. `delivered`
+ * deliberately leaves membership **untouched** — the collector picks the disposition (in
+ * collection / for sale / for trade) themselves. `damaged`/`not_delivered` also leave it as-is. */
+function inCollectionForDelivery(state: string): boolean | undefined {
+  if (state === "ordered" || state === "to_sort" || state === "in_transit") return false;
+  return undefined;
+}
+
+/** Apply a bulk change to a set of lot copies during sorting (#121). `itemIds` is assembled
+ * by the client — a free selection, one copy, or every copy of a lot/issue. Every id must be
+ * an owner copy in a single collection; unknown/foreign ids are rejected. Changes (any
+ * combination):
+ *  - `locationId` defined → file the copies there (null clears location + ref);
+ *  - `deliveryState` → set that exact state (and couple `inCollection`, see above);
+ *  - `inCollection` / `forSale` / `forTrade` defined → set that disposition flag (applied
+ *    after `deliveryState`, so an explicit flag always wins);
+ *  - `markSorted` → move to `delivered` + `inCollection`, but only from a not-yet-sorted
+ *    state (already-sorted / damaged / not-delivered copies are left untouched).
+ * Returns the number of targeted copies. One transaction. */
+export async function bulkUpdateLotItems(
+  ownerId: string,
+  itemIds: string[],
+  changes: {
+    locationId?: string | null;
+    deliveryState?: string;
+    inCollection?: boolean;
+    forSale?: boolean;
+    forTrade?: boolean;
+    markSorted?: boolean;
+  }
+): Promise<number> {
+  const ids = [...new Set(itemIds.filter((id) => id))];
+  if (ids.length === 0) return 0;
+  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
+    throw new Error("Unknown delivery state.");
+  }
+  const hasDisposition =
+    changes.inCollection !== undefined ||
+    changes.forSale !== undefined ||
+    changes.forTrade !== undefined;
+  if (
+    changes.locationId === undefined &&
+    !changes.deliveryState &&
+    !hasDisposition &&
+    !changes.markSorted
+  ) {
+    return 0;
+  }
+
+  const rows = await prisma.item.findMany({
+    where: { id: { in: ids } },
+    select: { collectionId: true, collection: { select: { ownerId: true } } },
+  });
+  if (rows.length !== ids.length || rows.some((r) => r.collection.ownerId !== ownerId)) {
+    throw new Error("One or more copies were not found or access denied.");
+  }
+  const collectionIds = new Set(rows.map((r) => r.collectionId));
+  if (collectionIds.size !== 1) {
+    throw new Error("Copies must belong to a single collection.");
+  }
+  const collectionId = [...collectionIds][0];
+
+  const { locationId } = changes;
+  if (locationId) await assertLocationAssignable(collectionId, locationId);
+
+  await prisma.$transaction(async (tx) => {
+    if (locationId !== undefined) {
+      await tx.item.updateMany({
+        where: { id: { in: ids } },
+        data: locationId ? { locationId } : { locationId: null, locationRef: null },
+      });
+    }
+    if (changes.deliveryState) {
+      const inCollection = inCollectionForDelivery(changes.deliveryState);
+      await tx.item.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          deliveryState: changes.deliveryState,
+          ...(inCollection !== undefined ? { inCollection } : {}),
+        },
+      });
+    }
+    const dispositionData = {
+      ...(changes.inCollection !== undefined ? { inCollection: changes.inCollection } : {}),
+      ...(changes.forSale !== undefined ? { forSale: changes.forSale } : {}),
+      ...(changes.forTrade !== undefined ? { forTrade: changes.forTrade } : {}),
+    };
+    if (changes.markSorted) {
+      // Mark-sorted transitions only the not-yet-sorted copies to `delivered`, and files them
+      // with the chosen disposition — or `inCollection` by default when none was given. The
+      // disposition rides along here (same filtered set) rather than in the block below.
+      await tx.item.updateMany({
+        where: { id: { in: ids }, deliveryState: { in: ["ordered", "to_sort", "in_transit"] } },
+        data: {
+          deliveryState: "delivered",
+          ...(hasDisposition ? dispositionData : { inCollection: true }),
+        },
+      });
+    } else if (hasDisposition) {
+      await tx.item.updateMany({ where: { id: { in: ids } }, data: dispositionData });
+    }
+  });
+  return ids.length;
 }
