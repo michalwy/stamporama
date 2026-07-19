@@ -4,7 +4,7 @@ A **purchase** records one acquisition — a single event where money changed ha
 where your **cost** lives: what you paid a dealer, an auction house, or a private seller,
 including shipping. A purchase groups together everything bought in that transaction.
 
-Open the **Purchases** screen from the **Collection** section of the sidebar.
+Open the **Purchases** screen from the **Trading** section of the sidebar.
 
 ## What a purchase holds
 
