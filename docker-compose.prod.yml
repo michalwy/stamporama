@@ -16,6 +16,12 @@ services:
       - .env
     ports:
       - "${STAMPORAMA_HTTP_PORT:-3000}:3000"
+    # Persistent storage for uploaded photos (#112). The app writes image bytes under
+    # STAMPORAMA_DATA_DIR (default /data); this named volume keeps them across container
+    # restarts and image updates. Back it up alongside your database — losing it loses the
+    # images.
+    volumes:
+      - stamporama-data:/data
     restart: unless-stopped
     labels:
       com.centurylinklabs.watchtower.enable: "true"
@@ -45,3 +51,7 @@ services:
       WATCHTOWER_POLL_INTERVAL: ${STAMPORAMA_UPDATE_INTERVAL:-3600}
       DOCKER_API_VERSION: ${STAMPORAMA_DOCKER_API_VERSION:-1.44}
     restart: unless-stopped
+
+volumes:
+  # Uploaded photo bytes (#112). Persists across restarts and image updates.
+  stamporama-data:

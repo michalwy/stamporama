@@ -7,7 +7,7 @@ Stamporama helps you manage your stamp collection, track trades and purchases, h
 ## Features (planned)
 
 - **Catalog** — stamps you own, by catalog number, series, topic, and country
-- **Collection** — condition, acquisition details, storage locations, duplicates for trade or sale
+- **Collection** — condition, acquisition details, storage locations, photos, duplicates for trade or sale
 - **Trading** — agree on scope, track progress with other collectors
 - **Purchases & Sales** — what you bought and sold, prices, profit/loss
 - **Stamp hunting** — want list, auction tracking, price history
@@ -37,6 +37,8 @@ Optional auto-update via [Watchtower](https://containrrr.dev/watchtower/):
 ```sh
 docker compose --profile autoupdate up -d
 ```
+
+Uploaded photos are stored in the `stamporama-data` Docker volume (mounted at `/data`). Back it up alongside your database — losing the volume loses the images.
 
 ## Development
 

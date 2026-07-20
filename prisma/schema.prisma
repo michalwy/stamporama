@@ -274,6 +274,7 @@ model Item {
   lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
+  photos            Photo[]
 
   @@index([collectionId])
   @@index([stampId])
@@ -281,6 +282,63 @@ model Item {
   @@index([lotId])
   @@index([locationId])
   @@map("item")
+}
+
+// A photo attached to an inventory copy (#112). One `Item` has many `Photo`s.
+// `role` reserves two singleton slots — `front` / `back` — each holding at most one image
+// (enforced by the partial-null unique on `[itemId, role]`; multiple NULLs stay distinct in
+// Postgres, so titled extras are unlimited). Extras (role = null) carry a free-text `title`
+// and are drag-orderable via `sortOrder`; front/back are fixed slots outside the ordering.
+//
+// `storageBackend` records which storage binding holds this photo's bytes. Only `filesystem`
+// exists today (defaulted); it is the per-photo read seam that lets #138 add GCS with no forced
+// migration (write-one-read-many). Bytes live at `<collectionId>/<photoId>/{full,thumb}.<ext>`
+// via the storage interface (ADR-0011) — Prisma cascade removes this row but the domain must
+// delete the stored bytes explicitly (no orphaned files).
+//
+// Owner-agnostic by design (#137): today the only owner is `itemId`; #137 makes `Photo`
+// polymorphic to also hang off `Stamp` without reworking callers.
+model Photo {
+  id             String   @id @default(cuid())
+  itemId         String
+  role           String?
+  title          String?
+  storageBackend String   @default("filesystem")
+  storageKey     String
+  mime           String
+  width          Int
+  height         Int
+  sizeBytes      Int
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, role])
+  @@index([itemId])
+  @@map("photo")
+}
+
+// Staging row for an eager, pre-Save photo upload (#112). On drop, the file is processed by
+// `sharp` and its `full` + `thumb` bytes are written to the active storage backend under a
+// staging key *before* any `Photo` row exists; this row records the pending bytes. On Save,
+// the dialog's change-set promotes selected uploads into `Photo` rows (bytes moved to the
+// permanent key). On Cancel, rows are simply left unreferenced. An hourly orphan-GC sweep
+// (instrumentation `register()`) deletes rows older than a TTL plus their bytes — the only
+// cleanup path for abandoned drops. Owner-agnostic, so #137 reuses it for stamp uploads.
+model PhotoUpload {
+  id             String   @id @default(cuid())
+  collectionId   String
+  storageBackend String   @default("filesystem")
+  storageKey     String
+  mime           String
+  width          Int
+  height         Int
+  sizeBytes      Int
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("photo_upload")
 }
 
 model ItemVariantHistory {

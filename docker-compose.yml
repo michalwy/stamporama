@@ -27,9 +27,16 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
     command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
+    # Persist uploaded photo bytes (#112) written under STAMPORAMA_DATA_DIR (default /data)
+    # so they survive container rebuilds, matching the production stack. The hot-reload dev
+    # overlay runs with NODE_ENV=development and writes to ./.data on the bind-mounted repo
+    # instead, so this volume only applies to the built-image local stack.
+    volumes:
+      - stamporama-data:/data
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   db_data:
+  stamporama-data:

@@ -406,6 +406,9 @@ print_summary() {
   echo "  View logs:   docker compose logs -f" >/dev/tty
   echo "  Update:      docker compose pull && docker compose up -d" >/dev/tty
   echo "  Stop:        docker compose down" >/dev/tty
+  echo >/dev/tty
+  echo "Uploaded photos are stored in the 'stamporama-data' Docker volume." >/dev/tty
+  echo "Back it up alongside your database — losing it loses the images." >/dev/tty
 }
 
 main "$@"

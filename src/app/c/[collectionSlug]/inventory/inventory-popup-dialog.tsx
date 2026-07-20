@@ -81,6 +81,7 @@ export function InventoryPopupDialog({
             }}
           >
             <InventoryCopyList
+              collectionId={collectionId}
               copies={copies}
               areas={areas}
               locations={locations}

@@ -944,6 +944,7 @@ type CopyEditing = ReturnType<typeof useCopyEditing>;
  * the shared `copy` editing machinery. Inline editing is enabled only when `open` (its lot is
  * still open). */
 function CopyRow({
+  collectionId,
   item,
   open,
   estimate,
@@ -955,6 +956,7 @@ function CopyRow({
   vendorMapByArea,
   copy,
 }: {
+  collectionId: string;
   item: ItemListItem;
   open: boolean;
   estimate: number | null;
@@ -972,6 +974,7 @@ function CopyRow({
     : EMPTY_VENDOR_MAP;
   return (
     <InventoryItemRow
+      collectionId={collectionId}
       item={item}
       areas={areas}
       locations={locations}
@@ -1129,6 +1132,7 @@ function LotCard({
     return (
       <CopyRow
         key={it.id}
+        collectionId={collectionId}
         item={it}
         open={open}
         estimate={estimateById.get(it.id) ?? null}
@@ -1724,6 +1728,7 @@ function OrderCopiesView({
   const renderRow = (it: ItemListItem) => (
     <CopyRow
       key={it.id}
+      collectionId={collectionId}
       item={it}
       open={openByItem.get(it.id) ?? false}
       estimate={estimateByItem.get(it.id) ?? null}

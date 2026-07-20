@@ -21,6 +21,9 @@ Each row shows:
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
 - A notes indicator when the copy has notes (hover to read them).
+- **Photo thumbnails**, when the copy has any — the **front** and **back** are outlined and
+  badged (**F** / **B**) to set them apart from extra photos; click any thumbnail to view it
+  full-size. See [Photos](#photos).
 
 If a copy is linked to a base stamp whose specific variant is unknown, it is flagged
 **unknown variant**. Such a copy is valued cautiously and its uncertainty stays visible;
@@ -119,7 +122,7 @@ actions as a menu. On the **Stamps** list and the **Issues** list, that menu inc
   action for the copies of just that stamp.
 
 The popup shows the same copy details as the Inventory list (condition, disposition,
-value, storage), but is **read-only** — it's for looking, not
+value, storage, and any [photos](#photos)), but is **read-only** — it's for looking, not
 editing. Close it to return to the list exactly where you were; nothing navigates away.
 To edit or delete existing copies, use the **Inventory** screen.
 
@@ -168,7 +171,8 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    (e.g. a page or pocket). Only locations that can hold copies are selectable — see
    [Locations](locations.md).
 6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
-7. Click **Add copy**. Everything is saved together in one step.
+7. Optionally attach **photos** — front, back, and titled extras. See [Photos](#photos).
+8. Click **Add copy**. Everything is saved together in one step.
 
 > **Acquisition and cost** — supplier, date, and what you paid — are recorded on a
 > [purchase](purchases.md), not on the copy: the copy form captures identity, condition,
@@ -180,6 +184,33 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the copy's
 current values. Changing the stamp to a more specific variant re-points the copy and
 records the change in its refinement history.
+
+## Photos
+
+Attach photos to a copy from the **Photos** section at the bottom of the add-copy and
+edit-copy dialog. Because purchase-order intake uses the same dialog to identify copies into
+a lot, you can photograph stamps as you receive them — see
+[Purchases](purchases.md).
+
+There are two kinds of slot:
+
+- **Front** and **Back** are dedicated single-image slots. Drop a file on a slot or click it
+  to pick one. Re-uploading **replaces** the current image; the **✕** on a slot clears it.
+- **Additional photos** are unlimited extras, each with an optional **title**. Add them by
+  dropping files on the **＋ Add photos** area or clicking it. Drag the **⠿** handle to
+  reorder them, edit a title inline, and use **✕** to remove one.
+
+Accepted formats are **JPEG, PNG, and WebP**, up to **15 MB** each. Each photo is
+automatically downscaled for storage and given a thumbnail for the list and slot views.
+
+Photos upload **as soon as you drop them** — you see the thumbnail and progress right away —
+but nothing is attached to the copy until you **Save** the dialog. The Save button waits
+while an upload is still in progress. If you **Cancel** or close the dialog instead, the
+staged uploads are discarded and never attached.
+
+Saved photos appear as thumbnails on the copy's row and in the read-only
+[View copies](#viewing-copies-from-the-catalog) popup, with front and back distinguished from
+extras. Click any thumbnail to view the photo full-size.
 
 ## Identifying a variant
 
@@ -209,4 +240,4 @@ variant is settled.
 ## Deleting a copy
 
 Open the row's **⋮** menu and choose **Delete**, then confirm. This permanently removes
-that physical copy record and cannot be undone.
+that physical copy record, along with any photos attached to it, and cannot be undone.

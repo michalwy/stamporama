@@ -14,6 +14,7 @@ import {
 } from "./valuation";
 import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -501,6 +502,9 @@ export interface ItemListItem {
   /** Free-text identifier within the location (e.g. `A234`), or null. */
   locationRef: string | null;
   createdAt: Date;
+  /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
+   * the collection-scoped serving route addresses variant bytes by photo id. */
+  photos: PhotoSummary[];
   /** Catalog valuation of this copy (ADR-0007 §7). Uncertain for unknown variants. */
   value: CopyValuation;
 }
@@ -564,6 +568,7 @@ export async function listItemsPaginated(
       locationRef: true,
       createdAt: true,
       _count: { select: { variantHistory: true } },
+      photos: { select: { id: true, role: true, title: true, sortOrder: true } },
       condition: { select: { id: true, name: true, abbreviation: true } },
       certificateStatus: { select: { id: true, name: true } },
       stamp: {
@@ -636,6 +641,17 @@ export async function listItemsPaginated(
       locationId: row.locationId,
       locationRef: row.locationRef,
       createdAt: row.createdAt,
+      photos: row.photos
+        .map((p) => ({
+          id: p.id,
+          role: (p.role === "front" || p.role === "back" ? p.role : null) as
+            | "front"
+            | "back"
+            | null,
+          title: p.title,
+          sortOrder: p.sortOrder,
+        }))
+        .sort(sortPhotos),
       value: valuations.get(row.id)!,
     };
   });
@@ -663,6 +679,9 @@ export async function listLotCopies(
 export async function deleteItem(ownerId: string, itemId: string): Promise<void> {
   const collectionId = await resolveItemCollection(itemId);
   await assertCollectionOwner(ownerId, collectionId);
+  // Prisma cascade removes the copy's `Photo` rows, but not their stored bytes. Delete the
+  // files first so no orphans are left behind (#112).
+  await deletePhotoBytesForItem(itemId);
   await prisma.item.delete({ where: { id: itemId } });
 }
 

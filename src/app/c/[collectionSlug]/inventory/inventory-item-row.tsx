@@ -15,6 +15,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
+import { PhotoStrip } from "./photo-strip";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -211,6 +212,8 @@ function CostBasisChip({ item, baseCurrency }: { item: ItemListItem; baseCurrenc
 }
 
 interface InventoryItemRowProps {
+  /** Owning collection, for building collection-scoped photo URLs (#112). */
+  collectionId: string;
   item: ItemListItem;
   areas: CollectionAreaData[];
   locations: LocationData[];
@@ -247,6 +250,7 @@ interface InventoryItemRowProps {
 }
 
 export function InventoryItemRow({
+  collectionId,
   item,
   areas,
   locations,
@@ -479,6 +483,9 @@ export function InventoryItemRow({
           )}
           {trailingChips}
         </div>
+
+        {/* Attached photos (#112): thumbnails with front/back distinguished, full-size on click. */}
+        <PhotoStrip collectionId={collectionId} photos={item.photos} />
       </div>
     </div>
   );

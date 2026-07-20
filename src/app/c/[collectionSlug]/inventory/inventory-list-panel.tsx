@@ -274,6 +274,7 @@ export function InventoryListPanel({
         {allCopies.length > 0 && (
           <div>
             <InventoryCopyList
+              collectionId={collectionId}
               copies={allCopies}
               areas={areas}
               locations={locations}

@@ -11,6 +11,8 @@ const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 const EMPTY_LOCATIONS: LocationData[] = [];
 
 interface InventoryCopyListProps {
+  /** Owning collection, for building each row's collection-scoped photo URLs (#112). */
+  collectionId: string;
   copies: ItemListItem[];
   areas: CollectionAreaData[];
   /** Storage locations, for resolving each copy's location path (#56). Defaults to
@@ -35,6 +37,7 @@ interface InventoryCopyListProps {
  * Callers own the surrounding container and the loading / empty states.
  */
 export function InventoryCopyList({
+  collectionId,
   copies,
   areas,
   locations = EMPTY_LOCATIONS,
@@ -63,6 +66,7 @@ export function InventoryCopyList({
         return (
           <InventoryItemRow
             key={item.id}
+            collectionId={collectionId}
             item={item}
             areas={areas}
             locations={locations}

@@ -164,6 +164,18 @@ The purchase model (see [ADR-0009](../decisions/0009-purchase-record-model.md), 
 - Filtering the inventory by a location includes the whole **subtree** (a parent selection shows copies in its descendants), resolved server-side in `src/lib/items.ts`.
 - Domain module `src/lib/locations.ts` (server-only) exposes `getLocations` / `createLocation` / `updateLocation` / `deleteLocation`, all collection-owner-authorized, with the cycle, assignable, and delete guards.
 
+### Photos (`Photo` / `PhotoUpload`)
+
+Copies can carry photos (see [ADR-0011](../decisions/0011-photo-storage-interface.md), #112). `Photo` is a one-to-many child of `Item`; `PhotoUpload` is a short-lived staging row for eager, pre-Save uploads. Both are built **owner-agnostic** so #137 can make `Photo` polymorphic (add `stampId`) without reworking callers.
+
+- `Photo` fields: `id`, `itemId` (`onDelete: Cascade`), `role?` (`front | back | null`), `title?`, `storageBackend` (default `filesystem`), `storageKey`, `mime`, `width`, `height`, `sizeBytes`, `sortOrder`, `createdAt`. A partial-null unique on `[itemId, role]` makes front/back **singleton slots** (Postgres keeps NULLs distinct, so titled extras are unlimited). `sortOrder` orders the extras.
+- `PhotoUpload` fields: `id`, `collectionId`, `storageBackend`, `storageKey`, `mime`, `width`, `height`, `sizeBytes`, `createdAt` (indexed for the GC cutoff scan).
+- **Storage interface** (`src/lib/storage/`): `put` / `get` / `delete` / `move` / `resolveUrl`, async + streaming. `FilesystemStorage` is the only binding, rooted at `STAMPORAMA_DATA_DIR` (default `/data`; `./.data` in dev). `resolveUrl` returns a discriminated `{kind:"stream"} | {kind:"redirect"}` result so a future GCS binding can 302 to a signed URL. Writes go to the active backend (`getActiveStorage`); reads dispatch per-photo by `storageBackend` (`getStorage`) — write-one, read-many. A `storageKey` is a **prefix**; the two variants hang under it as `<prefix>/{full,thumb}.<ext>` (permanent `<collectionId>/<photoId>`, staging `staging/<uploadId>`).
+- **Processing** (`src/lib/photos/process.ts`): `sharp` decodes once and emits a **2500px** full derivative plus a **320px** thumbnail eagerly. Accepts JPEG/PNG/WebP up to ~15 MB.
+- **Domain** (`src/lib/photos.ts`, server-only): `stageUpload`, `applyPhotoChangeSet` (atomic Save of the dialog's pending change-set — adds/removals/role-changes/reorders), `listItemPhotos`, `getPhotoForServing`, `deletePhotoBytesForItem` (called by `deleteItem`), and `gcStaleUploads`. All collection-owner-authorized.
+- **Transport & serving**: multipart uploads go through the route handler `POST /api/collections/[collectionId]/photos/uploads` (not a server action); bytes are served by `GET /api/collections/[collectionId]/photos/[photoId]/[variant]`, authorized by the photo's owning collection + owner. Files never sit under `public/`.
+- **Cleanup**: deleting a photo or its `Item` deletes the stored bytes (cascade drops rows only). Abandoned staging uploads are swept hourly by an idempotent in-process GC started from `src/instrumentation.ts` `register()` (TTL `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS`, default 3h) — no separate compose service.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:
@@ -200,3 +212,5 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 | `POSTGRES_PASSWORD` | yes (db) | Password for the `stamporama` database user |
 | `TAG` | prod only | Image tag to pull (default: `latest`) |
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |
+| `STAMPORAMA_DATA_DIR` | no | Directory for uploaded photo bytes (default `/data` in prod, `./.data` in dev). Backed by the `stamporama-data` Docker volume (#112) |
+| `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS` | no | Hours a staged, unsaved photo upload survives before the orphan-GC sweep (default `3`) |

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createItem, updateItem, deleteItem, resolveItemVariant } from "@/lib/items";
+import { applyPhotoChangeSet, type PhotoChangeSet } from "@/lib/photos";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -71,6 +72,25 @@ function parseItemFields(formData: FormData): ParsedItemFields {
   return { data };
 }
 
+/** Parse the dialog's pending photo change-set (#112), a JSON blob in the `photoChangeSet`
+ * field. Absent/blank means no photo edits. Malformed input degrades to an empty change-set
+ * rather than failing the whole save; the domain re-validates every referenced id. */
+function parsePhotoChangeSet(formData: FormData): PhotoChangeSet | null {
+  const raw = str(formData, "photoChangeSet");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PhotoChangeSet>;
+    const cs: PhotoChangeSet = {
+      add: Array.isArray(parsed.add) ? parsed.add : [],
+      update: Array.isArray(parsed.update) ? parsed.update : [],
+      remove: Array.isArray(parsed.remove) ? parsed.remove : [],
+    };
+    return cs.add.length || cs.update.length || cs.remove.length ? cs : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createItemAction(
   collectionId: string,
   formData: FormData
@@ -78,8 +98,12 @@ export async function createItemAction(
   const session = await getSession();
   const { data, error } = parseItemFields(formData);
   if (error) return { status: "error", message: error };
+  const changeSet = parsePhotoChangeSet(formData);
   try {
-    await createItem(session.user.id, collectionId, data);
+    const item = await createItem(session.user.id, collectionId, data);
+    if (changeSet) {
+      await applyPhotoChangeSet(session.user.id, item.id, changeSet);
+    }
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to add copy. Please try again." };
@@ -93,12 +117,16 @@ export async function updateItemAction(
   const session = await getSession();
   const { data, error } = parseItemFields(formData);
   if (error) return { status: "error", message: error };
+  const changeSet = parsePhotoChangeSet(formData);
   try {
     // Re-pointing stampId is handled by the domain (appends ItemVariantHistory).
     await updateItem(session.user.id, itemId, {
       ...data,
       variantChangeNote: str(formData, "variantChangeNote") || null,
     });
+    if (changeSet) {
+      await applyPhotoChangeSet(session.user.id, itemId, changeSet);
+    }
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update copy. Please try again." };
