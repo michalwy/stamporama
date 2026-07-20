@@ -205,6 +205,8 @@ export function PhotoEditor({
 
   const addFiles = useCallback(
     (files: File[]) => {
+      // Side effects (object URLs, uploads) happen here; role assignment is done purely in the
+      // state updater so it sees the real current entries.
       const fresh: Entry[] = files.map((file) => {
         const localId = nextLocalId();
         const previewUrl = URL.createObjectURL(file);
@@ -220,7 +222,24 @@ export function PhotoEditor({
           status: "uploading" as const,
         };
       });
-      setEntries((es) => [...es, ...fresh]);
+      setEntries((es) => {
+        // Auto-fill the reserved slots: the first added photo takes front, the next takes back
+        // (only while those slots are still empty), the rest are extras.
+        let front = es.some((e) => e.role === "front");
+        let back = es.some((e) => e.role === "back");
+        const withRoles = fresh.map((e) => {
+          if (!front) {
+            front = true;
+            return { ...e, role: "front" as const };
+          }
+          if (!back) {
+            back = true;
+            return { ...e, role: "back" as const };
+          }
+          return e;
+        });
+        return [...es, ...withRoles];
+      });
     },
     [markPreviewUrl, uploadFile]
   );
