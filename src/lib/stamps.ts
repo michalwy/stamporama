@@ -978,6 +978,10 @@ export interface QuickCatalogPriceContext {
   /** Every recorded price for this stamp across editions/conditions/certificates, newest
    * edition first, for reference. Empty when nothing is on file yet. */
   otherPrices: QuickCatalogPriceReference[];
+  /** Photos on the catalog stamp, front→back→extras, for a visual reference while pricing
+   * (#147). Empty when the stamp has none. Thumbnails serve from
+   * `/api/collections/{collectionId}/photos/{id}/{thumb|full}`. */
+  photos: PhotoSummary[];
 }
 
 export async function getQuickCatalogPriceContext(
@@ -1017,12 +1021,27 @@ export async function getQuickCatalogPriceContext(
 
   const areaName = await resolvePrimaryAreaName(stampId);
 
+  const photoRows = await prisma.photo.findMany({
+    where: { stampId },
+    select: { id: true, role: true, title: true, sortOrder: true },
+  });
+  const photos: PhotoSummary[] = photoRows
+    .map((p) => ({
+      id: p.id,
+      // Stored role is always one of front/back/main/null (validated on write).
+      role: p.role as PhotoSummary["role"],
+      title: p.title,
+      sortOrder: p.sortOrder,
+    }))
+    .sort(sortPhotos);
+
   return {
     catalogLabel: target.catalogLabel,
     currency: target.currency,
     editionYear: target.editionYear,
     amount: existing ? existing.price.toFixed(2) : null,
     areaName,
+    photos,
     otherPrices: prices.map((p) => ({
       catalogLabel: p.catalogEdition.catalogName.name,
       editionYear: p.catalogEdition.year,
