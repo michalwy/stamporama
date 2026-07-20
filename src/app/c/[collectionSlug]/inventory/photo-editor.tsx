@@ -3,11 +3,13 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type DragEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 import {
   SLOT_ROLE_META as ROLE_META,
@@ -406,6 +408,7 @@ function PhotoCard({
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
+  const promoteBtnRef = useRef<HTMLButtonElement>(null);
   const hasRole = isSlotRole(entry.role);
   // Delicate, distinct tints per slot (theme-aware): front = blue, back = violet, main = accent.
   const roleColor = hasRole ? ROLE_META[entry.role as SlotRole].color : null;
@@ -428,7 +431,7 @@ function PhotoCard({
         borderRadius: "0.5rem",
         border: `1px solid ${roleColor ?? "var(--color-border)"}`,
         background: "var(--color-bg-elevated)",
-        overflow: promoteOpen ? "visible" : "hidden",
+        overflow: "hidden",
         cursor: dragLocked ? "default" : "grab",
       }}
     >
@@ -488,6 +491,7 @@ function PhotoCard({
           >
             {onPromote && (
               <button
+                ref={promoteBtnRef}
                 type="button"
                 aria-label="Promote photo to stamp"
                 title="Promote to stamp"
@@ -539,6 +543,7 @@ function PhotoCard({
 
         {onPromote && promoteOpen && (
           <PromotePopover
+            anchorRef={promoteBtnRef}
             onClose={() => setPromoteOpen(false)}
             onPromote={onPromote}
           />
@@ -617,13 +622,21 @@ function PhotoCard({
   );
 }
 
+const PROMOTE_POPOVER_WIDTH = 192; // 12rem
+
 /** Small popover to promote a copy photo to its stamp (#137): pick where it lands on the stamp
  * — the single `main` slot (replaces any incumbent) or an extra with an optional title — then
- * apply immediately. The copy's own photo is never touched. */
+ * apply immediately. The copy's own photo is never touched.
+ *
+ * Rendered in a portal with `position: fixed`, anchored to the trigger button, so the
+ * horizontally-scrolling photo strip (`overflow-x: auto`, which also clips vertically) can't
+ * crop it. Repositions on scroll/resize; closes on Escape or an outside click. */
 function PromotePopover({
+  anchorRef,
   onClose,
   onPromote,
 }: {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onPromote: (target: {
     role: PhotoRole;
@@ -634,6 +647,47 @@ function PromotePopover({
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  // Anchor under the trigger button, right edge aligned, clamped to the viewport.
+  useLayoutEffect(() => {
+    function place() {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const r = anchor.getBoundingClientRect();
+      const left = Math.max(
+        8,
+        Math.min(r.right - PROMOTE_POPOVER_WIDTH, window.innerWidth - PROMOTE_POPOVER_WIDTH - 8)
+      );
+      setPos({ top: r.bottom + 6, left });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [anchorRef]);
+
+  // Close on Escape or a click outside the popover / its trigger.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (popRef.current?.contains(t) || anchorRef.current?.contains(t)) return;
+      onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown, true);
+    };
+  }, [anchorRef, onClose]);
 
   async function submit() {
     setBusy(true);
@@ -653,18 +707,17 @@ function PromotePopover({
     { value: null, label: "Extra" },
   ];
 
-  return (
+  return createPortal(
     <div
-      // Stop drag/click bubbling to the card underneath.
-      draggable={false}
-      onDragStart={(e) => e.stopPropagation()}
+      ref={popRef}
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: "absolute",
-        top: "2rem",
-        right: "0.3rem",
-        zIndex: 5,
-        width: "12rem",
+        position: "fixed",
+        top: pos?.top ?? -9999,
+        left: pos?.left ?? -9999,
+        visibility: pos ? "visible" : "hidden",
+        zIndex: 2000,
+        width: `${PROMOTE_POPOVER_WIDTH}px`,
         padding: "0.625rem",
         borderRadius: "0.5rem",
         border: "1px solid var(--color-border-strong)",
@@ -770,7 +823,8 @@ function PromotePopover({
           {busy ? "Promoting…" : "Promote"}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
