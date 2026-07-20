@@ -66,7 +66,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Keep domain logic out of UI components. Keep authorization server-side.
 - Explicit module boundaries under `src/`.
 - Self-hosted deployment: CI pushes multi-arch image to `ghcr.io/michalwy/stamporama` for release tags only. `docker-compose.prod.yml` + `.env` for production. `scripts/install.sh` is the curl-able installer. Version baked via `STAMPORAMA_VERSION` build arg, shown through `getAppVersion()` in `src/lib/version.ts`.
-- Binary assets (photos, #112) sit behind the `src/lib/storage/` interface (filesystem now, GCS planned; ADR-0011) — async/streaming, `resolveUrl` returns stream-or-redirect, write-one/read-many by per-row `storageBackend`. Bytes live under `STAMPORAMA_DATA_DIR` (the `stamporama-data` volume), never in `public/`; serve them through collection-scoped route handlers. Multipart uploads use route handlers, not server actions. Periodic in-process jobs start from `src/instrumentation.ts` `register()` (no extra compose service).
+- Binary assets (photos, #112) sit behind the `src/lib/storage/` interface (filesystem + GCS, #138; ADR-0011; active write backend via `STAMPORAMA_STORAGE_BACKEND`, per-photo reads) — async/streaming, `resolveUrl` returns stream-or-redirect, write-one/read-many by per-row `storageBackend`. Bytes live under `STAMPORAMA_DATA_DIR` (the `stamporama-data` volume), never in `public/`; serve them through collection-scoped route handlers. Multipart uploads use route handlers, not server actions. Periodic in-process jobs start from `src/instrumentation.ts` `register()` (no extra compose service).
 
 ## UI Direction
 

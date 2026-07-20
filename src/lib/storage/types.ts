@@ -15,7 +15,7 @@ import type { Readable } from "node:stream";
 export type PhotoVariant = "full" | "thumb";
 
 /** Identifier of a storage binding, persisted per-photo in `storageBackend`. */
-export type StorageBackend = "filesystem";
+export type StorageBackend = "filesystem" | "gcs";
 
 /** Bytes to write, as a stream or a materialized buffer. */
 export type StorageInput = Buffer | Readable;
@@ -34,8 +34,8 @@ export type ResolveResult =
   | { kind: "stream"; object: StorageObject }
   | { kind: "redirect"; url: string };
 
-/** A storage binding. Filesystem is the only implementation today; GCS is the planned second
- * binding (#138) and must slot in without touching callers. */
+/** A storage binding. Two implementations: filesystem and GCS (#138); reads dispatch per-photo
+ * so both coexist, and either can be the active write backend. */
 export interface Storage {
   readonly backend: StorageBackend;
   /** Write bytes at `key`, creating any intermediate structure. Overwrites if present. */
@@ -49,4 +49,9 @@ export interface Storage {
   move(fromKey: string, toKey: string): Promise<void>;
   /** Resolve how the serving route should hand `key` to a client. */
   resolveUrl(key: string, mime: string): Promise<ResolveResult>;
+  /** One-line, non-secret summary of this binding's effective config, for the startup log. */
+  describe(): string;
+  /** Quick connectivity/writability probe run at boot. Resolves if the backend looks usable;
+   * throws (with a human-readable reason) otherwise. Must be cheap — no full object round-trip. */
+  healthCheck(): Promise<void>;
 }

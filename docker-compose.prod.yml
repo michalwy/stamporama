@@ -22,6 +22,10 @@ services:
     # images.
     volumes:
       - stamporama-data:/data
+      # Google Cloud Storage backend (#138, optional): mount your service-account key read-only
+      # and set GOOGLE_APPLICATION_CREDENTIALS + STAMPORAMA_GCS_* in .env. The stamporama-data
+      # volume above can be dropped once all photos are migrated (pnpm photos:migrate:gcs).
+      # - /secrets/gcs-key.json:/secrets/gcs-key.json:ro
     restart: unless-stopped
     labels:
       com.centurylinklabs.watchtower.enable: "true"

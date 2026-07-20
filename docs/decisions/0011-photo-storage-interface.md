@@ -107,6 +107,33 @@ through per-owner wrappers. A copy photo can also be **promoted** to its stamp: 
 duplicated to a fresh permanent key and an independent `Photo` row is created on the `Stamp`,
 so the copy and stamp photos have fully independent lifecycles.
 
+### 7. GCS binding — realised in #138
+
+The planned `GcsStorage` binding (`src/lib/storage/gcs.ts`) landed exactly as the seams
+anticipated — no schema change, no caller edits:
+
+- **Selection.** `STAMPORAMA_STORAGE_BACKEND` (`filesystem` default, or `gcs`) chooses the
+  active write backend via `getActiveStorage`. Reads still dispatch per-photo on the recorded
+  `storageBackend`, so a deployment can flip to GCS and old filesystem photos keep serving.
+- **Serving.** `resolveUrl` returns `{ kind: "redirect", url }` with a **v4 signed URL** (short
+  TTL, `STAMPORAMA_GCS_SIGNED_URL_TTL_SECONDS`, default 300s). Collection-scoped auth runs in
+  the serving route when the URL is minted; bytes then bypass the app.
+- **Credentials.** Application Default Credentials — `GOOGLE_APPLICATION_CREDENTIALS` points at a
+  mounted service-account key, which also signs the read URLs. Config: `STAMPORAMA_GCS_BUCKET`,
+  optional `STAMPORAMA_GCS_KEY_PREFIX`. The GCS client is constructed lazily so a filesystem-only
+  deployment never needs any of it.
+- **Keys unchanged.** GCS object names are the same backend-agnostic keys (optionally under the
+  prefix), so migration is a byte copy under the identical key plus a column flip.
+- **Boot visibility.** `instrumentation.ts` logs the active backend's non-secret config
+  (`Storage.describe()`) and runs a cheap `healthCheck()` probe at startup — a probe write for
+  filesystem, a `bucket.exists()` + credentials check for GCS — so a missing volume or an
+  unreachable/misconfigured bucket surfaces in the logs immediately, not on the first upload. The
+  probe is non-fatal: a failure is logged loudly but never aborts startup.
+- **Optional migration.** `pnpm photos:migrate:gcs` (`scripts/migrate-photos-to-gcs.ts`) copies
+  each filesystem photo to the bucket, flips its `storageBackend`, and — with `--delete-source` —
+  removes the disk bytes so the `stamporama-data` volume can eventually be retired. Idempotent
+  (selects only rows still on `filesystem`); not required to enable GCS.
+
 ## Consequences
 
 - Self-hosted deployments must mount a writable volume at `STAMPORAMA_DATA_DIR`
@@ -115,6 +142,6 @@ so the copy and stamp photos have fully independent lifecycles.
 - The upload transport is a **route handler** (`api/collections/[collectionId]/photos/…`),
   not a server action, consistent with the app's existing binary/multipart boundaries;
   `src/app/actions/` stays JSON-shaped.
-- Adding GCS (#138) is a new `Storage` implementation plus a registry entry and a config
+- Adding GCS (#138) was a new `Storage` implementation plus a registry entry and a config
   switch for the active write backend — no schema change, no data migration, no caller
-  edits.
+  edits, exactly as the seams intended (see decision 7).

@@ -16,6 +16,11 @@ export async function register(): Promise<void> {
   // Imported lazily so the Edge runtime never pulls in server-only modules (Prisma, fs).
   const { gcStaleUploads } = await import("@/lib/photos");
 
+  // Report the configured photo-storage backend and probe it once at boot, so a misconfigured
+  // volume or bucket surfaces in the logs immediately rather than on the first upload (#138).
+  const { logStorageStartup } = await import("@/lib/storage");
+  await logStorageStartup();
+
   const sweep = async () => {
     try {
       const swept = await gcStaleUploads();

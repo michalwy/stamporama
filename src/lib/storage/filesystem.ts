@@ -94,6 +94,20 @@ export class FilesystemStorage implements Storage {
   async resolveUrl(key: string, mime: string): Promise<ResolveResult> {
     return { kind: "stream", object: await this.get(key, mime) };
   }
+
+  describe(): string {
+    return `filesystem (dataDir=${dataDir()})`;
+  }
+
+  async healthCheck(): Promise<void> {
+    // Prove the photos root is creatable and writable — the actual failure operators hit is a
+    // volume that isn't mounted or is read-only. Write and delete a tiny probe file.
+    const root = photosRoot();
+    await mkdir(root, { recursive: true });
+    const probe = path.join(root, ".health-probe");
+    await writeFile(probe, "ok");
+    await rm(probe, { force: true });
+  }
 }
 
 /** Bridge a Node `Readable` to a web `ReadableStream` for a Next route `Response` body. */
