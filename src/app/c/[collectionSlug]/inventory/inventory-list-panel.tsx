@@ -9,6 +9,10 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
+import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
+import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import {
   useInventoryItemsInfinite,
   useHoldingsValuation,
@@ -35,7 +39,7 @@ const DISPOSITION_FILTERS = [
   { key: "forTrade", label: "For trade" },
 ] as const;
 
-const SORT_OPTIONS: { value: ItemSortBy; label: string }[] = [
+const SORT_OPTIONS: SortOption[] = [
   { value: "created", label: "Date added" },
 ];
 
@@ -57,6 +61,10 @@ interface InventoryListPanelProps {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
+  /** Currently selected area (URL `areaId`), or null for "All areas". */
+  filterAreaId: string | null;
+  /** The selected area plus its descendant ids, resolved server-side (#106). */
+  filterAreaIds: string[] | undefined;
 }
 
 export function InventoryListPanel({
@@ -67,6 +75,8 @@ export function InventoryListPanel({
   conditions,
   certificateStatuses,
   baseCurrency,
+  filterAreaId,
+  filterAreaIds,
 }: InventoryListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,10 +85,16 @@ export function InventoryListPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
 
+  const search = searchParams.get("search") ?? "";
   const conditionId = searchParams.get("conditionId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
-  const sortBy = (searchParams.get("sortBy") as ItemSortBy) || "created";
-  const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "asc";
+  const issueId = searchParams.get("issueId") ?? "";
+  const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
+    "inventory", "created", "asc",
+    searchParams.get("sortBy"),
+    searchParams.get("sortDir"),
+    ["created"]
+  );
   const activeDispositions = useMemo(() => {
     const set = new Set<string>();
     for (const { key } of DISPOSITION_FILTERS) {
@@ -89,15 +105,18 @@ export function InventoryListPanel({
 
   const filters: InventoryItemFilters = useMemo(
     () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
       conditionId: conditionId || undefined,
       locationId: locationId || undefined,
+      issueId: issueId || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       sortBy,
       sortDir,
     }),
-    [conditionId, locationId, activeDispositions, sortBy, sortDir]
+    [filterAreaIds, search, conditionId, locationId, issueId, activeDispositions, sortBy, sortDir]
   );
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
@@ -114,6 +133,14 @@ export function InventoryListPanel({
     },
     [router, collectionSlug, searchParams]
   );
+
+  function handleNavigateFilter(areaId: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (areaId) params.set("areaId", areaId);
+    else params.delete("areaId");
+    const qs = params.toString();
+    router.push(`/c/${collectionSlug}/inventory${qs ? `?${qs}` : ""}`);
+  }
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useInventoryItemsInfinite(collectionId, filters);
@@ -138,94 +165,24 @@ export function InventoryListPanel({
   }
 
   const hasActiveFilters =
-    !!conditionId || !!locationId || activeDispositions.size > 0;
+    !!search ||
+    !!issueId ||
+    !!conditionId ||
+    !!locationId ||
+    activeDispositions.size > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
-      {/* Toolbar */}
+      {/* Header: holdings total (left) + Add copy (right) */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "1rem",
         }}
       >
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-          {DISPOSITION_FILTERS.map(({ key, label }) => {
-            const active = activeDispositions.has(key);
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => updateParams({ [key]: active ? "" : "true" })}
-                style={{
-                  ...CONTROL_STYLE,
-                  cursor: "pointer",
-                  fontWeight: active ? 600 : 400,
-                  color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                  borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
-                  background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        <select
-          value={conditionId}
-          onChange={(e) => updateParams({ conditionId: e.target.value })}
-          style={CONTROL_STYLE}
-          aria-label="Filter by condition"
-        >
-          <option value="">All conditions</option>
-          {conditions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-
-        {locations.length > 0 && (
-          <div style={{ width: "14rem" }}>
-            <LocationTreeSelect
-              locations={locations}
-              locationTree={locationTree}
-              name="location-filter"
-              selectedId={locationId}
-              onSelectedIdChange={(id) => updateParams({ locationId: id })}
-              noneOptionLabel="All locations"
-            />
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", marginLeft: "auto" }}>
-          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Sort
-          </span>
-          <select
-            value={sortBy}
-            onChange={(e) => updateParams({ sortBy: e.target.value })}
-            style={CONTROL_STYLE}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => updateParams({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
-            style={{ ...CONTROL_STYLE, cursor: "pointer", padding: "0.375rem 0.5rem" }}
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-          >
-            {sortDir === "asc" ? "↑" : "↓"}
-          </button>
-        </div>
-
+        <HoldingsSummaryBar total={holdingsTotal} />
         <button
           type="button"
           onClick={() => setDialog({ kind: "add" })}
@@ -237,58 +194,158 @@ export function InventoryListPanel({
             background: "var(--color-action-primary)",
             border: "none",
             padding: "0.375rem 0.875rem",
+            marginLeft: "auto",
+            flexShrink: 0,
           }}
         >
           Add copy
         </button>
       </div>
 
-      {/* Holdings valuation total */}
-      <HoldingsSummaryBar total={holdingsTotal} />
-
-      {/* List */}
+      {/* Sidebar + list, mirroring the stamps list layout (#106) */}
       <div
         style={{
+          display: "flex",
+          gap: 0,
           border: "1px solid var(--color-border)",
           borderRadius: "0.75rem",
           overflow: "clip",
           flex: 1,
-          minHeight: "20rem",
+          minHeight: "24rem",
           background: "var(--color-bg-elevated)",
         }}
       >
-        {isLoading && (
-          <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            Loading copies…
-          </div>
-        )}
+        <AreaFilterSidebar
+          areas={areas}
+          filterAreaId={filterAreaId}
+          onNavigate={handleNavigateFilter}
+        />
 
-        {!isLoading && allCopies.length === 0 && (
-          <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {hasActiveFilters
-              ? "No copies match these filters."
-              : "No copies yet. Add your first physical copy."}
-          </div>
-        )}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            borderLeft: "1px solid var(--color-border)",
+          }}
+        >
+          {/* Toolbar: shared search + sort, inventory-specific filters as children */}
+          <ListToolbar
+            search={search}
+            onSearchChange={(v) => updateParams({ search: v })}
+            sortBy={sortBy}
+            sortDir={sortDir}
+            onSortChange={(sb, sd) => {
+              persistSort(sb as ItemSortBy, sd);
+              updateParams({ sortBy: sb, sortDir: sd });
+            }}
+            sortOptions={SORT_OPTIONS}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "0.5rem",
+                flex: 1,
+              }}
+            >
+              <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                {DISPOSITION_FILTERS.map(({ key, label }) => {
+                  const active = activeDispositions.has(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => updateParams({ [key]: active ? "" : "true" })}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: active ? 600 : 400,
+                        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
 
-        {allCopies.length > 0 && (
-          <div>
-            <InventoryCopyList
-              collectionId={collectionId}
-              copies={allCopies}
-              areas={areas}
-              locations={locations}
-              baseCurrency={baseCurrency}
-              hasNextPage={!!hasNextPage}
-              isFetchingNextPage={isFetchingNextPage}
-              onLoadMore={fetchNextPage}
-              onEdit={(it) => setDialog({ kind: "edit", item: it })}
-              onIdentify={(it) => setDialog({ kind: "identify", item: it })}
-              onViewHistory={(it) => setDialog({ kind: "history", item: it })}
-              onDelete={(it) => setDialog({ kind: "delete", item: it })}
-            />
-          </div>
-        )}
+              <select
+                value={conditionId}
+                onChange={(e) => updateParams({ conditionId: e.target.value })}
+                style={CONTROL_STYLE}
+                aria-label="Filter by condition"
+              >
+                <option value="">All conditions</option>
+                {conditions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              {locations.length > 0 && (
+                <div style={{ width: "12rem" }}>
+                  <LocationTreeSelect
+                    locations={locations}
+                    locationTree={locationTree}
+                    name="location-filter"
+                    selectedId={locationId}
+                    onSelectedIdChange={(id) => updateParams({ locationId: id })}
+                    noneOptionLabel="All locations"
+                  />
+                </div>
+              )}
+
+              <IssueFilterAutocomplete
+                collectionId={collectionId}
+                areaIds={filterAreaIds}
+                selectedIssueId={issueId}
+                onSelect={(id) => updateParams({ issueId: id })}
+              />
+            </div>
+          </ListToolbar>
+
+          {/* List */}
+          {isLoading && (
+            <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+              Loading copies…
+            </div>
+          )}
+
+          {!isLoading && allCopies.length === 0 && (
+            <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+              {hasActiveFilters
+                ? "No copies match these filters."
+                : filterAreaId
+                  ? "No copies in this area."
+                  : "No copies yet. Add your first physical copy."}
+            </div>
+          )}
+
+          {allCopies.length > 0 && (
+            <div style={{ flex: 1 }}>
+              <InventoryCopyList
+                collectionId={collectionId}
+                copies={allCopies}
+                areas={areas}
+                locations={locations}
+                baseCurrency={baseCurrency}
+                hasNextPage={!!hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={fetchNextPage}
+                onEdit={(it) => setDialog({ kind: "edit", item: it })}
+                onIdentify={(it) => setDialog({ kind: "identify", item: it })}
+                onViewHistory={(it) => setDialog({ kind: "history", item: it })}
+                onDelete={(it) => setDialog({ kind: "delete", item: it })}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add / Edit dialog */}

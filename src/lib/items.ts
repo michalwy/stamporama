@@ -442,6 +442,13 @@ export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
   certificateStatusId?: string;
+  /** Restrict to copies whose linked stamp belongs to any of these areas (the selected
+   * area plus its descendants, resolved by the caller). Mirrors the stamps list area
+   * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
+  areaIds?: string[];
+  /** Free-text search over the linked stamp's name, its issue name, and catalog numbers
+   * (case-insensitive substring). Mirrors the stamps list search (#106). */
+  search?: string;
   /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
@@ -454,6 +461,50 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   sortDir?: "asc" | "desc";
   offset?: number;
   pageSize?: number;
+}
+
+/** Build the Prisma `where` shared by `listItemsPaginated` and `getHoldingsValuation`, so
+ * the list and its holdings total filter over exactly the same copies. `locationIds` is
+ * the pre-resolved location subtree (or null when no location filter is set) since it
+ * needs an async lookup the caller already did. */
+function buildItemWhere(
+  collectionId: string,
+  filters: ItemListFiltersPaginated,
+  locationIds: string[] | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any {
+  // Constraints on the linked stamp (issue membership, area membership, text search) live
+  // under a single `stamp` relation filter so they compose without clobbering each other.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stampWhere: any = {};
+  if (filters.issueId) {
+    stampWhere.issueMemberships = { some: { issueId: filters.issueId } };
+  }
+  if (filters.areaIds && filters.areaIds.length > 0) {
+    stampWhere.stampAreaLinks = { some: { collectionAreaId: { in: filters.areaIds } } };
+  }
+  if (filters.search) {
+    const s = filters.search;
+    stampWhere.OR = [
+      { name: { contains: s, mode: "insensitive" } },
+      { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
+      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
+    ];
+  }
+  return {
+    collectionId,
+    ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
+    ...(filters.certificateStatusId
+      ? { certificateStatusId: filters.certificateStatusId }
+      : {}),
+    ...(filters.stampId ? { stampId: filters.stampId } : {}),
+    ...(Object.keys(stampWhere).length > 0 ? { stamp: stampWhere } : {}),
+    ...(locationIds ? { locationId: { in: locationIds } } : {}),
+    ...(filters.lotId ? { lotId: filters.lotId } : {}),
+    ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
+    ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
+    ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
+  };
 }
 
 /** A copy enriched with the display data the list screen needs: the linked stamp's
@@ -534,22 +585,7 @@ export async function listItemsPaginated(
     : null;
 
   const rows = await prisma.item.findMany({
-    where: {
-      collectionId,
-      ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
-      ...(filters.certificateStatusId
-        ? { certificateStatusId: filters.certificateStatusId }
-        : {}),
-      ...(filters.stampId ? { stampId: filters.stampId } : {}),
-      ...(filters.issueId
-        ? { stamp: { issueMemberships: { some: { issueId: filters.issueId } } } }
-        : {}),
-      ...(locationIds ? { locationId: { in: locationIds } } : {}),
-      ...(filters.lotId ? { lotId: filters.lotId } : {}),
-      ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
-      ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
-      ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
-    },
+    where: buildItemWhere(collectionId, filters, locationIds),
     orderBy,
     take: pageSize + 1,
     skip: offset,
@@ -969,18 +1005,7 @@ export async function getHoldingsValuation(
     : null;
 
   const rows = await prisma.item.findMany({
-    where: {
-      collectionId,
-      ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
-      ...(filters.certificateStatusId
-        ? { certificateStatusId: filters.certificateStatusId }
-        : {}),
-      ...(locationIds ? { locationId: { in: locationIds } } : {}),
-      ...(filters.lotId ? { lotId: filters.lotId } : {}),
-      ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
-      ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
-      ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
-    },
+    where: buildItemWhere(collectionId, filters, locationIds),
     select: {
       id: true,
       stampId: true,

@@ -21,6 +21,11 @@ interface InventoryItemsPage {
 export interface InventoryItemFilters {
   conditionId?: string;
   certificateStatusId?: string;
+  /** Restrict to copies whose linked stamp belongs to any of these areas (selected area
+   * plus descendants). Mirrors the stamps list area sidebar (#106). */
+  areaIds?: string[];
+  /** Free-text search over the linked stamp's name, issue name, and catalog numbers (#106). */
+  search?: string;
   /** Restrict to copies of a single stamp (stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
@@ -52,6 +57,9 @@ export function useInventoryItemsInfinite(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
@@ -82,6 +90,9 @@ export function useHoldingsValuation(
     queryKey: ["inventory", collectionId, "valuation", {
       conditionId: filters.conditionId,
       certificateStatusId: filters.certificateStatusId,
+      areaIds: filters.areaIds,
+      search: filters.search,
+      issueId: filters.issueId,
       locationId: filters.locationId,
       inCollection: filters.inCollection,
       forSale: filters.forSale,
@@ -92,6 +103,10 @@ export function useHoldingsValuation(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
+      if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");

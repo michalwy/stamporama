@@ -43,6 +43,16 @@ page URL, so you can bookmark or share a filtered view.
 
 ### Filters and sorting
 
+The inventory list filters the same way the [Stamps](collections.md) list does: a left
+**area panel** plus a toolbar of filters, all kept in the page URL.
+
+- **Area** — the panel on the left lists your collection's [areas](collections.md) as a
+  tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
+  area includes its nested sub-areas. Choose **All areas** to clear it.
+- **Search** — type in the search box to match copies by the linked stamp's **name**, its
+  **issue name**, or a **catalog number** (case-insensitive).
+- **Issue** — filter to copies of stamps in a single issue. Start typing to pick one; the
+  suggestions are scoped to the area selected on the left.
 - **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none
   selected, all copies are shown. Selecting several narrows to copies matching every
   chosen marker.
@@ -51,6 +61,9 @@ page URL, so you can bookmark or share a filtered view.
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once.
 - **Sort** — by date added, ascending or descending.
+
+The holdings summary totals follow whatever the filters are showing, so a filtered view
+tells you the catalog value and purchase cost of just those copies.
 
 ## Copy value and holdings total
 

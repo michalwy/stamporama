@@ -10,10 +10,15 @@ import { InventoryListPanel } from "./inventory-list-panel";
 
 interface InventoryPageProps {
   params: Promise<{ collectionSlug: string }>;
+  searchParams: Promise<{ areaId?: string }>;
 }
 
-export default async function InventoryPage({ params }: InventoryPageProps) {
+export default async function InventoryPage({
+  params,
+  searchParams,
+}: InventoryPageProps) {
   const { collectionSlug } = await params;
+  const { areaId: filterAreaId } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
@@ -27,6 +32,18 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
   ]);
+
+  function collectDescendantIds(rootId: string): string[] {
+    const ids: string[] = [rootId];
+    for (const a of areas) {
+      if (a.parentId === rootId) ids.push(...collectDescendantIds(a.id));
+    }
+    return ids;
+  }
+
+  const filterAreaIds = filterAreaId
+    ? collectDescendantIds(filterAreaId)
+    : undefined;
 
   return (
     <div
@@ -55,6 +72,8 @@ export default async function InventoryPage({ params }: InventoryPageProps) {
         conditions={conditions}
         certificateStatuses={certificateStatuses}
         baseCurrency={collection.baseCurrency}
+        filterAreaId={filterAreaId ?? null}
+        filterAreaIds={filterAreaIds}
       />
     </div>
   );
