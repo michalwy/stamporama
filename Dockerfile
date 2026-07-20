@@ -52,6 +52,9 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/src ./src
+# Maintenance scripts run in the container via `docker compose exec` (e.g. the fs->GCS photo
+# migration, #138: `pnpm photos:migrate:gcs`). tsx is present because node_modules ships devDeps.
+COPY --from=builder /app/scripts ./scripts
 
 EXPOSE 3000
 
