@@ -23,6 +23,7 @@ import {
   markPurchaseArrived,
   bulkUpdateLotItems,
 } from "@/lib/lots";
+import { parsePhotoChangeSet } from "@/lib/photos";
 
 export type PurchaseActionState =
   | { status: "idle" }
@@ -211,6 +212,8 @@ export async function createLotWithStampsAction(
       conditionId,
       certificateStatusId: optionalStr(formData, "certificateStatusId"),
       locationId: optionalStr(formData, "locationId"),
+      locationRef: optionalStr(formData, "locationRef"),
+      photoChangeSet: parsePhotoChangeSet(formData),
     });
     return { status: "success" };
   } catch (e) {
@@ -288,6 +291,8 @@ export async function intakeStampsAction(
       conditionId,
       certificateStatusId: optionalStr(formData, "certificateStatusId"),
       locationId: optionalStr(formData, "locationId"),
+      locationRef: optionalStr(formData, "locationRef"),
+      photoChangeSet: parsePhotoChangeSet(formData),
     });
     return { status: "success" };
   } catch (e) {

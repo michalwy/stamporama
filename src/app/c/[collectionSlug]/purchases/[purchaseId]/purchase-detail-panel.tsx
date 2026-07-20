@@ -23,6 +23,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
+import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
@@ -32,6 +33,7 @@ import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
+import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -70,6 +72,13 @@ const INPUT_STYLE: React.CSSProperties = {
   background: "var(--color-bg-elevated)",
   boxSizing: "border-box",
 };
+
+// The tree-select trigger defaults to a compact toolbar height (min-h-8). In the intake dialog
+// it sits beside an INPUT_STYLE ref field, so bump its min-height + vertical padding to line the
+// two controls up (mirrors the inventory copy form).
+const LOCATION_SELECT_BUTTON_CLASS = defaultTreeSelectButtonClassName
+  .replace("min-h-8", "min-h-9")
+  .replace("py-1", "py-2");
 
 const DELIVERY: Record<string, { label: string; token: string }> = {
   ordered: { label: "Ordered", token: "accent" },
@@ -274,6 +283,11 @@ export function PurchaseDetailPanel({
     conditionId: string;
     certificateStatusId: string;
     locationId: string;
+    locationRef: string;
+    // Serialized photo change-set (#148), carried forward to the final create step. Staged
+    // uploads persist server-side until the create promotes them (or the orphan-GC sweeps them
+    // if the wizard is abandoned).
+    photoChangeSet: string;
   } | null>(null);
   function resetWithStamps() {
     setWsStep("none");
@@ -657,6 +671,8 @@ export function PurchaseDetailPanel({
               conditionId: (fd.get("conditionId") as string) ?? "",
               certificateStatusId: (fd.get("certificateStatusId") as string) ?? "",
               locationId: (fd.get("locationId") as string) ?? "",
+              locationRef: (fd.get("locationRef") as string) ?? "",
+              photoChangeSet: (fd.get("photoChangeSet") as string) ?? "",
             });
             setError(undefined);
             setWsStep("lot");
@@ -680,6 +696,8 @@ export function PurchaseDetailPanel({
             fd.set("conditionId", wsIntake.conditionId);
             fd.set("certificateStatusId", wsIntake.certificateStatusId);
             fd.set("locationId", wsIntake.locationId);
+            fd.set("locationRef", wsIntake.locationRef);
+            if (wsIntake.photoChangeSet) fd.set("photoChangeSet", wsIntake.photoChangeSet);
             run(
               async () => {
                 const { createLotWithStampsAction } = await import("@/app/actions/purchases");
@@ -2598,12 +2616,32 @@ function IntakeConditionDialog({
     return locations.some((l) => l.id === last && l.assignable) ? last : "";
   });
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+
+  // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
+  // into several distinct copies, so shared photos would be meaningless. The pending change-set
+  // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
+  // onto the FormData on submit; Save waits while any staged upload is still in flight.
+  const singleStamp = selection.kind === "stamp";
+  const photoValueRef = useRef<PhotoEditorValue>({
+    changeSet: { add: [], update: [], remove: [] },
+    uploading: false,
+  });
+  const [photosUploading, setPhotosUploading] = useState(false);
+  const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
+    photoValueRef.current = value;
+    setPhotosUploading(value.uploading);
+  }, []);
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
     writeLast(LS_LAST_LOCATION, collectionId, locationId);
-    onSubmit(new FormData(e.currentTarget));
+    const fd = new FormData(e.currentTarget);
+    if (singleStamp) {
+      fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
+    }
+    onSubmit(fd);
   }
   const count = selection.kind === "issue" ? selection.requiredCount : 1;
   const summary =
@@ -2614,13 +2652,15 @@ function IntakeConditionDialog({
     ? submitLabel
       ? "Working…"
       : "Adding…"
-    : (submitLabel ??
-      (selection.kind === "issue"
-        ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
-        : "Add copy"));
+    : photosUploading
+      ? "Uploading photos…"
+      : (submitLabel ??
+        (selection.kind === "issue"
+          ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
+          : "Add copy"));
 
   return (
-    <DialogShell title="Set condition" onClose={onClose} maxWidth="26rem">
+    <DialogShell title="Set condition" onClose={onClose} maxWidth="36rem">
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
           <div
@@ -2676,7 +2716,8 @@ function IntakeConditionDialog({
             </div>
           </div>
 
-          {/* Storage location (#56/#121): optional at intake, shared by every created copy. */}
+          {/* Storage location (#56/#121): optional at intake, shared by every created copy.
+              An in-location ref (#148) sits beside it, disabled until a location is chosen. */}
           <div style={{ marginTop: "0.75rem" }}>
             <LabelWithError htmlFor="intake-locationId-button">Location (optional)</LabelWithError>
             {locations.length === 0 ? (
@@ -2684,18 +2725,48 @@ function IntakeConditionDialog({
                 No locations defined yet. Add some on the Locations screen to file copies away.
               </p>
             ) : (
-              <LocationTreeSelect
-                locations={locations}
-                locationTree={locationTree}
-                name="locationId"
-                selectedId={locationId}
-                onSelectedIdChange={setLocationId}
-                onlyAssignableSelectable
-                disabled={isPending}
-                noneOptionLabel="— None"
-              />
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <div style={{ flex: 3 }}>
+                  <LocationTreeSelect
+                    locations={locations}
+                    locationTree={locationTree}
+                    name="locationId"
+                    selectedId={locationId}
+                    onSelectedIdChange={setLocationId}
+                    onlyAssignableSelectable
+                    disabled={isPending}
+                    noneOptionLabel="— None"
+                    buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input
+                    id="intake-locationRef"
+                    name="locationRef"
+                    type="text"
+                    placeholder="Ref, e.g. A234"
+                    disabled={isPending || !locationId}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
             )}
           </div>
+
+          {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
+              distinct copies, so shared photos would be ambiguous. Eager staged uploads; the
+              pending change-set applies to the created copy on submit. */}
+          {singleStamp && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <LabelWithError htmlFor="">Photos (optional)</LabelWithError>
+              <PhotoEditor
+                collectionId={collectionId}
+                initialPhotos={[]}
+                disabled={isPending}
+                onChange={handlePhotoChange}
+              />
+            </div>
+          )}
 
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
             Copies are added <strong>not yet in your collection</strong> (
@@ -2707,7 +2778,7 @@ function IntakeConditionDialog({
           actionLabel={actionLabel}
           cancelLabel="Back"
           onCancel={onBack}
-          disabled={isPending || !conditionId}
+          disabled={isPending || !conditionId || photosUploading}
           error={error}
         />
       </form>

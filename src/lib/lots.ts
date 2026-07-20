@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { valuateItemsByIds } from "./items";
+import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import {
   computeLotPool,
   allocateLot,
@@ -250,6 +251,8 @@ export async function createLotWithStamps(
     conditionId: string;
     certificateStatusId?: string | null;
     locationId?: string | null;
+    locationRef?: string | null;
+    photoChangeSet?: PhotoChangeSet | null;
   }
 ): Promise<{ lotId: string; count: number }> {
   const lotId = await createLot(ownerId, purchaseId, input.price, input.title);
@@ -260,6 +263,8 @@ export async function createLotWithStamps(
       conditionId: input.conditionId,
       certificateStatusId: input.certificateStatusId,
       locationId: input.locationId,
+      locationRef: input.locationRef,
+      photoChangeSet: input.photoChangeSet,
     });
     return { lotId, count };
   } catch (err) {
@@ -327,6 +332,10 @@ export async function intakeStamps(
     conditionId: string;
     certificateStatusId?: string | null;
     locationId?: string | null;
+    locationRef?: string | null;
+    // Only honoured for a single-stamp intake (#148); a whole-issue intake creates several
+    // distinct copies, so the client never sends photos for it.
+    photoChangeSet?: PhotoChangeSet | null;
   }
 ): Promise<number> {
   const { collectionId, purchaseId, status } = await assertLotOwner(ownerId, lotId);
@@ -401,20 +410,36 @@ export async function intakeStamps(
     throw new Error("Nothing selected to add.");
   }
 
-  await prisma.item.createMany({
-    data: stampIds.map((stampId) => ({
-      collectionId,
-      stampId,
-      conditionId,
-      certificateStatusId,
-      locationId,
-      inCollection: false,
-      forSale: false,
-      forTrade: false,
-      lotId,
-      deliveryState,
-    })),
+  // A ref is meaningless without a location, so drop it unless a location is set (mirrors the
+  // inventory copy form).
+  const locationRef = locationId ? input.locationRef?.trim() || null : null;
+  const copyData = (stampId: string) => ({
+    collectionId,
+    stampId,
+    conditionId,
+    certificateStatusId,
+    locationId,
+    locationRef,
+    inCollection: false,
+    forSale: false,
+    forTrade: false,
+    lotId,
+    deliveryState,
   });
+
+  // A single-stamp intake may carry photos for the one created copy (#148). Create that copy
+  // individually so we have its id to attach the photos to; whole-issue intake fans out into
+  // several distinct copies and never carries photos, so it keeps the bulk `createMany`.
+  const singleStamp = !!input.stampId && !input.issueId;
+  if (singleStamp && input.photoChangeSet) {
+    const item = await prisma.item.create({
+      data: copyData(stampIds[0]),
+      select: { id: true },
+    });
+    await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
+  } else {
+    await prisma.item.createMany({ data: stampIds.map(copyData) });
+  }
   return stampIds.length;
 }
 

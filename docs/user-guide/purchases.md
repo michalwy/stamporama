@@ -95,7 +95,9 @@ There are two ways to add a lot:
   into it over time (see *Identifying stamps* below). Best when you know a lot exists but
   haven't sorted its contents yet.
 - **Add lot with stamps** works the other way round: you pick a **stamp or a whole issue**
-  first, set its **condition / certificate / location**, then give the new lot its **title
+  first, set its **condition / certificate / location** (with the same optional in-location
+  ref and, for a single stamp, photos as ordinary intake — see *Identifying stamps* below),
+  then give the new lot its **title
   and price** — the lot is created together with those copies in one step. Best when a lot is
   a single identified item (or issue). Nothing is created until the final step, so backing
   out beforehand leaves no empty lot behind.
@@ -132,9 +134,13 @@ app: navigate areas and issues, and either
   copy for every stamp in that issue marked *required for completeness*.
 
 You are then asked once for the **condition**, an optional **certificate**, and an optional
-**storage location**; they apply to every copy created in that step. Your last choices are
-remembered and pre-filled for the next stamp, so sorting a parcel into the same box and
-condition is quick. The copies are linked to the lot and marked **Ordered** — purchased but
+**storage location** — with an optional **in-location ref** (e.g. a page or pocket like
+`A234`) once a location is chosen; they apply to every copy created in that step. Your last
+choices are remembered and pre-filled for the next stamp, so sorting a parcel into the same
+box and condition is quick. When you are adding a **single stamp** you can also **attach
+photos** to that copy right here (front/back plus extra images); a whole-issue intake creates
+several distinct copies, so photos are offered only for single-stamp intake. The copies are
+linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
 become part of your collection later, once received.)
 
