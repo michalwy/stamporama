@@ -49,6 +49,31 @@ export function catalogMatchKey(
 }
 
 /**
+ * One endpoint of an auto-generate catalog range: an optional leading non-digit
+ * prefix plus its trailing numeric value, e.g. `"BL120"` → `{ prefix: "BL", value: 120 }`.
+ */
+export interface CatalogRangeEndpoint {
+  prefix: string;
+  value: number;
+}
+
+/**
+ * Split a range endpoint into a leading non-digit prefix and a trailing positive
+ * integer, so prefixed souvenir-sheet numbers ("BL120") and bare numbers ("120")
+ * both parse. Returns null when there's no valid trailing positive integer
+ * (empty, non-numeric, or a value < 1) — the caller treats that as invalid input.
+ * A value with a trailing non-digit ("BL120a") does not parse: ranges only span a
+ * numeric suffix.
+ */
+export function parseCatalogRangeEndpoint(input: string): CatalogRangeEndpoint | null {
+  const match = input.trim().match(/^(\D*)(\d+)$/);
+  if (!match) return null;
+  const value = parseInt(match[2], 10);
+  if (isNaN(value) || value < 1) return null;
+  return { prefix: match[1], value };
+}
+
+/**
  * Does the (normalized) query appear in any of a stamp's catalog keys? A query
  * like `"200"` matches `"mipl200"` (bare number), `"mipl200"` matches it exactly,
  * and `"pl200"` matches the prefix+number tail — all via substring containment,

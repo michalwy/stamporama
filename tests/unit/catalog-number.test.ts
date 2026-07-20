@@ -6,6 +6,7 @@ import {
   formatCatalogNumber,
   catalogMatchKey,
   catalogKeyMatches,
+  parseCatalogRangeEndpoint,
 } from "../../src/lib/catalog-number";
 
 describe("normalizeCatalogKey", () => {
@@ -46,6 +47,30 @@ describe("catalogMatchKey", () => {
   it("builds a normalized abbr+prefix+number key", () => {
     assert.equal(catalogMatchKey("Mi", "PL", "200"), "mipl200");
     assert.equal(catalogMatchKey("Sc", null, "45"), "sc45");
+  });
+});
+
+describe("parseCatalogRangeEndpoint", () => {
+  it("parses a bare number with an empty prefix", () => {
+    assert.deepEqual(parseCatalogRangeEndpoint("120"), { prefix: "", value: 120 });
+  });
+
+  it("splits a leading non-digit prefix from its numeric part", () => {
+    assert.deepEqual(parseCatalogRangeEndpoint("BL120"), { prefix: "BL", value: 120 });
+  });
+
+  it("ignores surrounding whitespace", () => {
+    assert.deepEqual(parseCatalogRangeEndpoint("  BL123 "), { prefix: "BL", value: 123 });
+  });
+
+  it("drops leading zeros in the numeric value", () => {
+    assert.deepEqual(parseCatalogRangeEndpoint("BL007"), { prefix: "BL", value: 7 });
+  });
+
+  it("rejects a trailing non-digit, empty, non-numeric, or zero input", () => {
+    for (const bad of ["BL120a", "", "  ", "BL", "0", "BL0"]) {
+      assert.equal(parseCatalogRangeEndpoint(bad), null, bad);
+    }
   });
 });
 

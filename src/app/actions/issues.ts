@@ -20,6 +20,7 @@ import type {
   IssuePriceDetails,
 } from "@/lib/issues";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
+import { parseCatalogRangeEndpoint } from "@/lib/catalog-number";
 
 export async function getIssuePriceDetailsAction(
   collectionId: string,
@@ -85,27 +86,30 @@ export async function createIssueAction(
     // Each selected vendor generates catalog numbers from its own range. Stamps
     // are matched across vendors by position, so every explicit range must span
     // the same number of stamps.
-    const vendors: { catalogVendorId: string; rangeFrom: number }[] = [];
+    const vendors: { catalogVendorId: string; rangeFrom: number; prefix: string }[] = [];
     let count: number | null = null;
     for (const vendorId of vendorIds) {
       const cn = catalogNumbers.find((c) => c.catalogVendorId === vendorId);
       if (!cn || !cn.firstNumber) {
         return { status: "error", message: "Enter a First catalog number for each selected vendor." };
       }
-      const rangeFrom = parseInt(cn.firstNumber, 10);
-      if (isNaN(rangeFrom) || rangeFrom < 1) {
-        return { status: "error", message: "First catalog number must be a positive integer for auto-create." };
+      const from = parseCatalogRangeEndpoint(cn.firstNumber);
+      if (!from) {
+        return { status: "error", message: "First catalog number must end in a positive integer for auto-create." };
       }
-      vendors.push({ catalogVendorId: vendorId, rangeFrom });
+      vendors.push({ catalogVendorId: vendorId, rangeFrom: from.value, prefix: from.prefix });
       if (cn.lastNumber) {
-        const rangeTo = parseInt(cn.lastNumber, 10);
-        if (isNaN(rangeTo) || rangeTo < 1) {
-          return { status: "error", message: "Last catalog number must be a positive integer for auto-create." };
+        const to = parseCatalogRangeEndpoint(cn.lastNumber);
+        if (!to) {
+          return { status: "error", message: "Last catalog number must end in a positive integer for auto-create." };
         }
-        if (rangeFrom > rangeTo) {
+        if (to.prefix !== from.prefix) {
+          return { status: "error", message: "First and Last catalog numbers must share the same prefix." };
+        }
+        if (from.value > to.value) {
           return { status: "error", message: "First catalog number must be ≤ Last." };
         }
-        const vendorCount = rangeTo - rangeFrom + 1;
+        const vendorCount = to.value - from.value + 1;
         if (count === null) {
           count = vendorCount;
         } else if (count !== vendorCount) {

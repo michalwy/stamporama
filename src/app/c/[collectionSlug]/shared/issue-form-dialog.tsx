@@ -9,6 +9,7 @@ import {
 } from "@/app/dialog-shell";
 import type { IssueListItem, IssueCatalogNumberData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import { parseCatalogRangeEndpoint } from "@/lib/catalog-number";
 import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
@@ -50,14 +51,15 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
 
 // Number of stamps a vendor's entered range spans, mirroring the auto-create
 // generation logic in src/app/actions/issues.ts. Returns null when the range is
-// unusable for comparison (no/invalid first number, or first > last).
+// unusable for comparison (no/invalid first number, mismatched prefix, or
+// first > last). Prefixed ranges like "BL120"–"BL123" count by their numeric part.
 function rangeCount(first: string, last: string): number | null {
-  const from = parseInt(first.trim(), 10);
-  if (isNaN(from) || from < 1) return null;
+  const from = parseCatalogRangeEndpoint(first);
+  if (!from) return null;
   if (!last.trim()) return 1;
-  const to = parseInt(last.trim(), 10);
-  if (isNaN(to) || to < 1 || from > to) return null;
-  return to - from + 1;
+  const to = parseCatalogRangeEndpoint(last);
+  if (!to || to.prefix !== from.prefix || from.value > to.value) return null;
+  return to.value - from.value + 1;
 }
 
 // Reads a vendor's current range inputs straight from the form DOM (the inputs

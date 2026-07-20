@@ -1041,6 +1041,8 @@ export async function getIssuePriceDetails(
 export interface AutoCreateVendorRange {
   catalogVendorId: string;
   rangeFrom: number;
+  /** Leading non-digit prefix reapplied to each generated number, e.g. "BL". */
+  prefix: string;
 }
 
 export interface AutoCreateStampsInput {
@@ -1136,7 +1138,7 @@ export async function createIssue(
           catalogNumberRows.push({
             stampId: stampIds[i],
             catalogVendorId: v.catalogVendorId,
-            number: String(v.rangeFrom + i),
+            number: v.prefix + String(v.rangeFrom + i),
           });
         }
       }
