@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 
@@ -57,30 +58,11 @@ export function PhotoThumb({
   // A photo can be removed elsewhere; keep the shown index in range.
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
 
-  const close = useCallback(() => setLightbox(false), []);
   // Cyclic prev/next so navigation never dead-ends at the edges.
   const step = useCallback(
     (delta: number) => setIndex((i) => (total === 0 ? 0 : (i + delta + total) % total)),
     [total]
   );
-
-  useEffect(() => {
-    if (!lightbox) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        step(-1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        step(1);
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [lightbox, close, step]);
 
   if (total === 0) {
     if (!reserveWhenEmpty) return null;
@@ -202,76 +184,223 @@ export function PhotoThumb({
       </div>
 
       {lightbox && (
-        <div
-          onClick={close}
-          role="dialog"
-          aria-modal="true"
-          aria-label={roleLabel(current)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1000,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "0.75rem",
-            padding: "2rem",
-            background: "rgba(0,0,0,0.8)",
-            cursor: "zoom-out",
-          }}
-        >
-          {/* Close — top-right */}
-          <LightboxButton
-            label="✕"
-            ariaLabel="Close preview"
-            onClick={close}
-            style={{ position: "absolute", top: "1rem", right: "1rem" }}
-          />
-
-          {/* Prev / next — only when there's more than one photo */}
-          {total > 1 && (
-            <>
-              <LightboxButton
-                label="‹"
-                ariaLabel="Previous photo"
-                onClick={() => step(-1)}
-                style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)" }}
-              />
-              <LightboxButton
-                label="›"
-                ariaLabel="Next photo"
-                onClick={() => step(1)}
-                style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)" }}
-              />
-            </>
-          )}
-
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fullUrl(collectionId, current.id)}
-            alt={roleLabel(current)}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: "88vw",
-              maxHeight: "80vh",
-              objectFit: "contain",
-              borderRadius: "0.5rem",
-              cursor: "default",
-              boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
-            }}
-          />
-          <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 500 }}>
-            {roleLabel(current)}
-            {total > 1 && (
-              <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "0.5rem" }}>
-                {safeIndex + 1} / {total}
-              </span>
-            )}
-          </span>
-        </div>
+        <PhotoLightbox
+          collectionId={collectionId}
+          photos={photos}
+          index={safeIndex}
+          onIndex={setIndex}
+          onClose={() => setLightbox(false)}
+        />
       )}
     </div>
+  );
+}
+
+/** Read-only strip of all of an owner's photos (#147). Unlike `PhotoThumb` (one thumbnail with an
+ * in-place carousel), this lays every photo out as a row of thumbnails — the same shape as the
+ * copy editor's photo strip, but with no editing controls. Clicking a thumbnail opens the shared
+ * lightbox at that photo. Meant for read-only contexts (e.g. the quick catalog-value dialog). */
+export function PhotoStrip({
+  collectionId,
+  photos,
+  size = "4.5rem",
+}: {
+  collectionId: string;
+  photos: PhotoSummary[];
+  /** Edge length of each (square) thumbnail. */
+  size?: string;
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  if (photos.length === 0) return null;
+  return (
+    <div style={{ display: "flex", gap: "0.375rem", overflowX: "auto", paddingBottom: "0.125rem" }}>
+      {photos.map((p, i) => {
+        const slotMeta = isSlotRole(p.role) ? SLOT_ROLE_META[p.role] : null;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setLightboxIndex(i)}
+            title={roleLabel(p)}
+            aria-label={`View ${roleLabel(p)}`}
+            style={{
+              position: "relative",
+              flexShrink: 0,
+              width: size,
+              height: size,
+              padding: 0,
+              borderRadius: "0.375rem",
+              overflow: "hidden",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-page)",
+              cursor: "pointer",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumbUrl(collectionId, p.id)}
+              alt={roleLabel(p)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            {slotMeta && (
+              <span
+                aria-hidden="true"
+                title={roleLabel(p)}
+                style={{
+                  position: "absolute",
+                  top: "0.15rem",
+                  left: "0.15rem",
+                  minWidth: "0.95rem",
+                  height: "0.95rem",
+                  padding: "0 0.2rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.5625rem",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: "#fff",
+                  background: slotMeta.color,
+                  borderRadius: "0.25rem",
+                  boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
+                }}
+              >
+                {slotMeta.short}
+              </span>
+            )}
+          </button>
+        );
+      })}
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          collectionId={collectionId}
+          photos={photos}
+          index={Math.min(lightboxIndex, photos.length - 1)}
+          onIndex={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Full-size photo overlay with prev/next + Esc, shared by `PhotoThumb` and `PhotoStrip`.
+ * Rendered through a portal to `document.body` so it fills the viewport instead of being clipped
+ * by an ancestor that establishes a containing block (e.g. a transformed/`overflow:hidden` dialog
+ * shell), which would otherwise crop a plain `position: fixed` overlay. */
+function PhotoLightbox({
+  collectionId,
+  photos,
+  index,
+  onIndex,
+  onClose,
+}: {
+  collectionId: string;
+  photos: PhotoSummary[];
+  index: number;
+  onIndex: (index: number) => void;
+  onClose: () => void;
+}) {
+  const total = photos.length;
+  const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
+  const current = photos[safeIndex];
+  const step = useCallback(
+    (delta: number) => {
+      if (total === 0) return;
+      onIndex((safeIndex + delta + total) % total);
+    },
+    [safeIndex, total, onIndex]
+  );
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        step(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        step(1);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [step, onClose]);
+
+  if (typeof document === "undefined" || !current) return null;
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={roleLabel(current)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.75rem",
+        padding: "2rem",
+        background: "rgba(0,0,0,0.8)",
+        cursor: "zoom-out",
+      }}
+    >
+      {/* Close — top-right */}
+      <LightboxButton
+        label="✕"
+        ariaLabel="Close preview"
+        onClick={onClose}
+        style={{ position: "absolute", top: "1rem", right: "1rem" }}
+      />
+
+      {/* Prev / next — only when there's more than one photo */}
+      {total > 1 && (
+        <>
+          <LightboxButton
+            label="‹"
+            ariaLabel="Previous photo"
+            onClick={() => step(-1)}
+            style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)" }}
+          />
+          <LightboxButton
+            label="›"
+            ariaLabel="Next photo"
+            onClick={() => step(1)}
+            style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)" }}
+          />
+        </>
+      )}
+
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={fullUrl(collectionId, current.id)}
+        alt={roleLabel(current)}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "88vw",
+          maxHeight: "80vh",
+          objectFit: "contain",
+          borderRadius: "0.5rem",
+          cursor: "default",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+        }}
+      />
+      <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 500 }}>
+        {roleLabel(current)}
+        {total > 1 && (
+          <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "0.5rem" }}>
+            {safeIndex + 1} / {total}
+          </span>
+        )}
+      </span>
+    </div>,
+    document.body
   );
 }
 

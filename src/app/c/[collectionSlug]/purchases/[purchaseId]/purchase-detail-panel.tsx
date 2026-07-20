@@ -34,7 +34,7 @@ import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
-import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -2913,11 +2913,12 @@ function QuickPriceDialog({
                 Primary catalog: {context.catalogLabel} {context.editionYear} · {context.currency}
               </div>
             )}
-            {/* Copy photos (#147): a visual reference of this copy while pricing. Click a
-                thumbnail to open the lightbox (prev/next, Esc); reserved slots carry a badge. */}
+            {/* Copy photos (#147): a read-only strip of this copy's photos as a visual reference
+                while pricing. Click a thumbnail to open the lightbox (prev/next, Esc); reserved
+                slots carry a badge. */}
             {item.photos.length > 0 && (
               <div style={{ marginTop: "0.25rem" }}>
-                <PhotoThumb collectionId={collectionId} photos={item.photos} size="4rem" />
+                <PhotoStrip collectionId={collectionId} photos={item.photos} />
               </div>
             )}
           </div>
