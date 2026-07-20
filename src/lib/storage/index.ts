@@ -15,10 +15,17 @@ const filesystem = new FilesystemStorage();
 
 // The GCS binding is created on first use so a filesystem-only deployment never constructs a
 // GCS client or needs bucket config. It's still a stable singleton once made.
-let gcs: GcsStorage | null = null;
+//
+// Pinned to `globalThis` (same pattern as the Prisma client in `db.ts`) so the instance
+// survives Turbopack HMR module invalidation under `next dev`. A plain module-level `let`
+// resets on every hot reload, so each recompile would build a fresh `GcsClient` — each one
+// carrying its own auth client and keep-alive HTTP agents whose live sockets keep the old
+// instance reachable. Over a dev session those accumulate and the heap climbs until OOM.
+// In production this is just a per-process singleton, unchanged.
+const globalForStorage = globalThis as unknown as { gcs?: GcsStorage };
 function gcsBinding(): GcsStorage {
-  if (!gcs) gcs = new GcsStorage();
-  return gcs;
+  if (!globalForStorage.gcs) globalForStorage.gcs = new GcsStorage();
+  return globalForStorage.gcs;
 }
 
 /** All known storage bindings, keyed by the identifier persisted in `storageBackend`. GCS is

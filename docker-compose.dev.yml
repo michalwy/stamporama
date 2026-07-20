@@ -10,11 +10,19 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
+      # Keep photo bytes (#112) OUTSIDE the bind-mounted repo. Without this the storage
+      # layer falls back to ./.data (= /app/.data), which sits inside the tree `next dev`
+      # watches — every uploaded image gets ingested by the Turbopack file watcher and the
+      # heap climbs until the container OOMs. Point it at a dedicated volume instead, so
+      # dev photos live off the watched path and survive container rebuilds.
+      STAMPORAMA_DATA_DIR: /data
     volumes:
       - .:/app
       - pnpm-store:/root/.local/share/pnpm/store
       - node-modules:/app/node_modules
+      - stamporama-dev-data:/data
 
 volumes:
   pnpm-store:
   node-modules:
+  stamporama-dev-data:
