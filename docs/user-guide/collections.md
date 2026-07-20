@@ -89,9 +89,9 @@ Alongside the photos you attach to an individual owned **copy** (see [Inventory 
 
 Open a stamp's **Add** or **Edit** dialog; the photo editor sits at the bottom of the first tab. Unlike a copy — which has separate **front** and **back** slots — a stamp has a single **main** photo slot (★), plus unlimited **titled extras** that you can drag to reorder. Mark a photo as main with the **★** button on its card; only one photo can be main at a time. Drop files on the **＋ Add photos** area or click to browse; the first photo you add becomes the main one automatically. Accepted formats are **JPEG, PNG, and WebP**, up to **15 MB** each.
 
-Saved stamp photos appear as thumbnails on the stamp's row, with the **main** photo outlined and badged (**★**) to set it apart from extras. Click any thumbnail to view it full-size.
+Saved stamp photos appear as a single thumbnail at the left of the stamp's row. When a stamp has more than one photo, a counter and **‹ / ›** controls step through them in place, and the **main** photo carries a **★** corner badge to set it apart from extras. Click the thumbnail to view it full-size.
 
-They also show up on the **Issues** list: expand an issue to see each stamp's photos under its row, and the collapsed issue row shows a gallery of the **main photos of its required-for-completeness stamps** — a quick visual summary of the issue. Click any thumbnail to view it full-size.
+They also show up on the **Issues** list: expand an issue to see each stamp's photos under its row, and the collapsed issue row shows the **main photos of its required-for-completeness stamps** — a quick visual summary of the issue. Where there is more than one, the counter and **‹ / ›** controls step through them. Click the thumbnail to view it full-size.
 
 ### Promoting a copy photo to its stamp
 

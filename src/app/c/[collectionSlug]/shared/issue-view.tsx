@@ -169,7 +169,6 @@ export function StampDetailLine({
         alignItems: "center",
         gap: "0.3rem",
         marginTop: "0.45rem",
-        paddingLeft: "1.375rem",
         flexWrap: "wrap",
       }}
     >

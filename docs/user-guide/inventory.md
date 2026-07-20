@@ -21,9 +21,11 @@ Each row shows:
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
 - A notes indicator when the copy has notes (hover to read them).
-- **Photo thumbnails**, when the copy has any — the **front** and **back** are outlined and
-  badged (**F** / **B**) to set them apart from extra photos; click any thumbnail to view it
-  full-size. See [Photos](#photos).
+- A **photo thumbnail** at the left of the row, when the copy has any — a single larger
+  preview of the first photo. If the copy has more than one photo, a counter (e.g. **1/3**)
+  appears and **‹ / ›** controls step through them in place. The **front** and **back** carry
+  a corner badge (**F** / **B**) to set them apart from extra photos; click the thumbnail to
+  view it full-size. See [Photos](#photos).
 
 If a copy is linked to a base stamp whose specific variant is unknown, it is flagged
 **unknown variant**. Such a copy is valued cautiously and its uncertainty stays visible;
@@ -208,9 +210,11 @@ but nothing is attached to the copy until you **Save** the dialog. The Save butt
 while an upload is still in progress. If you **Cancel** or close the dialog instead, the
 staged uploads are discarded and never attached.
 
-Saved photos appear as thumbnails on the copy's row and in the read-only
-[View copies](#viewing-copies-from-the-catalog) popup, with front and back distinguished from
-extras. Click any thumbnail to view the photo full-size.
+Saved photos appear as a single thumbnail at the left of the copy's row and in the read-only
+[View copies](#viewing-copies-from-the-catalog) popup. When there is more than one photo, a
+counter and **‹ / ›** controls let you step through them without leaving the list; front and
+back are marked with an **F** / **B** corner badge. Click the thumbnail to view the photo
+full-size.
 
 You can also **promote** a saved copy photo to the copy's stamp, reusing it as a catalog-level
 reference image (an independent duplicate — the copy keeps its own). See

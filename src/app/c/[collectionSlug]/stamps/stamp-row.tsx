@@ -24,7 +24,7 @@ import {
   primaryLabel,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-strip";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 interface StampRowProps {
   stamp: StampListItem;
@@ -139,8 +139,15 @@ export function StampRow({
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "0.75rem",
         }}
       >
+        {/* First photo as a fixed left column (#112); the rest of the row sits beside it. */}
+        <PhotoThumb collectionId={collectionId} photos={stamp.photos} reserveWhenEmpty />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
         {/* Line 1: name + actions (only if name exists) */}
         {stamp.name && (
           <div
@@ -258,9 +265,7 @@ export function StampRow({
           )}
         </div>
         )}
-
-        {/* Catalog-level photos (#137): front/back distinguished from extras, full-size on click. */}
-        <PhotoStrip collectionId={collectionId} photos={stamp.photos} />
+        </div>
       </div>
     </div>
   );

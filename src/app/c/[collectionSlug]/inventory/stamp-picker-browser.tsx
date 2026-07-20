@@ -30,7 +30,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
-import { PhotoStrip } from "./photo-strip";
+import { PhotoThumb } from "./photo-thumb";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, or a new stamp / variant (parent set) in an issue. */
@@ -520,30 +520,43 @@ function PickIssueRow({
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           cursor: "pointer",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "0.75rem",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded((v) => !v);
-            }}
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              fontSize: "0.75rem",
-              padding: "0.25rem",
-              flexShrink: 0,
-              lineHeight: 1,
-            }}
-          >
-            {isExpanded ? "▼" : "▶"}
-          </button>
+        {/* Expand/collapse toggle sits first, before the photo. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded((v) => !v);
+          }}
+          aria-label={isExpanded ? "Collapse" : "Expand"}
+          style={{
+            alignSelf: "center",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-muted)",
+            fontSize: "0.75rem",
+            padding: "0.25rem",
+            flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          {isExpanded ? "▼" : "▶"}
+        </button>
 
+        {/* Issue-level gallery as a left column, matching the inventory list. Reserved even when
+            empty for alignment. Stop propagation so opening a thumbnail's lightbox doesn't toggle
+            the issue row. */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <PhotoThumb collectionId={issue.collectionId} photos={issuePhotos} plain reserveWhenEmpty />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {showArea && areaName && (
             <span
               style={{
@@ -606,7 +619,6 @@ function PickIssueRow({
               display: "flex",
               alignItems: "center",
               gap: "0.375rem",
-              paddingLeft: "1.75rem",
               marginTop: "0.3rem",
               flexWrap: "wrap",
             }}
@@ -621,14 +633,7 @@ function PickIssueRow({
             )}
           </div>
         )}
-
-        {/* Issue-level gallery: main photos of the required stamps. Stop propagation so opening a
-            thumbnail's lightbox doesn't toggle the issue row. */}
-        {issuePhotos.length > 0 && (
-          <div style={{ paddingLeft: "1.75rem" }} onClick={(e) => e.stopPropagation()}>
-            <PhotoStrip collectionId={issue.collectionId} photos={issuePhotos} plain />
-          </div>
-        )}
+        </div>
       </div>
 
       {isExpanded && (

@@ -9,7 +9,7 @@ import {
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
-import { PhotoStrip } from "./photo-strip";
+import { PhotoThumb } from "./photo-thumb";
 
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
  * the "— unknown variant" marker on a base stamp that still has variants). Shared by the
@@ -71,7 +71,8 @@ export function SelectableStampNode({
           cursor: "pointer",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+          {/* Expand/collapse toggle sits first, before the photo. */}
           {hasChildren ? (
             <button
               type="button"
@@ -81,6 +82,7 @@ export function SelectableStampNode({
               }}
               aria-label={collapsed ? "Expand" : "Collapse"}
               style={{
+                alignSelf: "center",
                 background: "none",
                 border: "none",
                 cursor: "pointer",
@@ -99,48 +101,48 @@ export function SelectableStampNode({
             <span style={{ width: "0.875rem", flexShrink: 0 }} />
           )}
 
-          <span
-            style={{
-              flex: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <StampTitle node={node} />
-            {isUnknownVariant && (
-              <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
-            )}
-          </span>
-
-          {/* Only base stamps take variants (ADR-0007 §2). */}
-          {depth === 0 && onNewVariant && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewVariant(node.stampId);
-              }}
-              title="Add a variant under this stamp"
-              style={{ ...CREATE_LINK_STYLE, flexShrink: 0, padding: "0.15rem 0.45rem" }}
-            >
-              + variant
-            </button>
-          )}
-        </div>
-
-        <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
-
-        {/* Catalog-level photos (#137), indented to line up with the catalog chips. Stop click
-            propagation so opening a thumbnail's lightbox doesn't also select the row. */}
-        {node.photos.length > 0 && (
-          <div
-            style={{ paddingLeft: "1.375rem" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <PhotoStrip collectionId={collectionId} photos={node.photos} />
+          {/* Catalog-level photo (#137) as a left column, matching the inventory list. Reserved
+              even when empty for alignment. Stop click propagation so opening a thumbnail's
+              lightbox doesn't also select the row. */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <PhotoThumb collectionId={collectionId} photos={node.photos} reserveWhenEmpty />
           </div>
-        )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span
+                style={{
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <StampTitle node={node} />
+                {isUnknownVariant && (
+                  <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
+                )}
+              </span>
+
+              {/* Only base stamps take variants (ADR-0007 §2). */}
+              {depth === 0 && onNewVariant && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNewVariant(node.stampId);
+                  }}
+                  title="Add a variant under this stamp"
+                  style={{ ...CREATE_LINK_STYLE, flexShrink: 0, padding: "0.15rem 0.45rem" }}
+                >
+                  + variant
+                </button>
+              )}
+            </div>
+
+            <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
+          </div>
+        </div>
       </div>
       {!collapsed &&
         children.map((child, i) => (

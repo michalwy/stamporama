@@ -15,7 +15,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
-import { PhotoStrip } from "./photo-strip";
+import { PhotoThumb } from "./photo-thumb";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -334,8 +334,15 @@ export function InventoryItemRow({
               ? "var(--color-error-soft, var(--color-bg-page))"
               : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "0.75rem",
         }}
       >
+        {/* First photo as a fixed left column (#112); the rest of the row sits beside it. */}
+        <PhotoThumb collectionId={collectionId} photos={item.photos} reserveWhenEmpty size="5.5rem" />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
         {/* Line 1: stamp name + actions (only when the copy's stamp is named) */}
         {item.stampName && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -483,9 +490,7 @@ export function InventoryItemRow({
           )}
           {trailingChips}
         </div>
-
-        {/* Attached photos (#112): thumbnails with front/back distinguished, full-size on click. */}
-        <PhotoStrip collectionId={collectionId} photos={item.photos} />
+        </div>
       </div>
     </div>
   );

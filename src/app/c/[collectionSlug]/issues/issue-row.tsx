@@ -27,7 +27,7 @@ import {
   useInventoryAddAction,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
-import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-strip";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -129,13 +129,15 @@ function StampTreeNode({
           borderBottom: isLast ? undefined : "1px solid var(--color-border)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+          {/* Expand/collapse toggle sits first, before the photo. */}
           {hasChildren ? (
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               aria-label={collapsed ? "Expand" : "Collapse"}
               style={{
+                alignSelf: "center",
                 background: "none",
                 border: "none",
                 cursor: "pointer",
@@ -154,36 +156,36 @@ function StampTreeNode({
             <span style={{ width: "0.875rem", flexShrink: 0 }} />
           )}
 
-          <span
-            style={{
-              flex: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <StampTitle node={node} />
-          </span>
+          {/* Catalog-level photo of this stamp (#137) as a left column, so the row reads as
+              [arrow][photo][text] like the inventory list. Reserved even when empty for alignment. */}
+          <PhotoThumb collectionId={collectionId} photos={node.photos} reserveWhenEmpty />
 
-          <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
-          {addCopy.dialog}
-          {copies.dialog}
-          {prices.dialog}
-        </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span
+                style={{
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <StampTitle node={node} />
+              </span>
 
-        <StampDetailLine
-          node={node}
-          vendorMap={vendorMap}
-          primaryVendorId={primaryVendorId}
-        />
+              <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
+              {addCopy.dialog}
+              {copies.dialog}
+              {prices.dialog}
+            </div>
 
-        {/* Catalog-level photos of this stamp (#137): main distinguished from extras. Indented
-            by the expand-arrow width (1.375rem) to line up with the catalog chips above. */}
-        {node.photos.length > 0 && (
-          <div style={{ paddingLeft: "1.375rem" }}>
-            <PhotoStrip collectionId={collectionId} photos={node.photos} />
+            <StampDetailLine
+              node={node}
+              vendorMap={vendorMap}
+              primaryVendorId={primaryVendorId}
+            />
           </div>
-        )}
+        </div>
       </div>
       {!collapsed &&
         children.map((child, i) => (
@@ -316,29 +318,40 @@ export function IssueRow({
           padding: "0.875rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "0.75rem",
         }}
       >
+        {/* Expand/collapse toggle sits first, before the photo. */}
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          aria-label={isExpanded ? "Collapse" : "Expand"}
+          style={{
+            alignSelf: "center",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-muted)",
+            fontSize: "0.75rem",
+            padding: "0.25rem",
+            flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          {isExpanded ? "▼" : "▶"}
+        </button>
+
+        {/* Issue-level gallery (#137): the main photos of the required-for-completeness stamps,
+            shown as a left column so the issue reads as [arrow][photo][text] like inventory. The
+            column is reserved even when empty so every issue's text lines up. */}
+        <PhotoThumb collectionId={collectionId} photos={issue.photos} plain reserveWhenEmpty />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
         >
-          <button
-            type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              fontSize: "0.75rem",
-              padding: "0.25rem",
-              flexShrink: 0,
-              lineHeight: 1,
-            }}
-          >
-            {isExpanded ? "▼" : "▶"}
-          </button>
-
           {showAreaChip && areaName && (
             <button
               type="button"
@@ -384,7 +397,6 @@ export function IssueRow({
               display: "flex",
               alignItems: "center",
               gap: "0.375rem",
-              paddingLeft: "1.75rem",
               marginTop: "0.3rem",
               flexWrap: "wrap",
             }}
@@ -461,13 +473,7 @@ export function IssueRow({
             })()}
           </div>
         )}
-
-        {/* Issue-level gallery (#137): the main photos of the required-for-completeness stamps. */}
-        {issue.photos.length > 0 && (
-          <div style={{ paddingLeft: "1.75rem" }}>
-            <PhotoStrip collectionId={collectionId} photos={issue.photos} plain />
-          </div>
-        )}
+        </div>
       </div>
 
       {isExpanded && (
