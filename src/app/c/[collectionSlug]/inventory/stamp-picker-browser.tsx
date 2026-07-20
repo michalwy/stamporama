@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { createPortal } from "react-dom";
 import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
+import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import type { IssueData, IssueListItem, StampNodeData } from "@/lib/issues";
 import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
@@ -436,11 +437,19 @@ function IssueBrowser({
     return issues.filter((issue) => {
       if ((issue.name ?? "").toLowerCase().includes(q)) return true;
       if (issue.year && String(issue.year).includes(q)) return true;
-      return issue.members.some((m) =>
-        m.catalogNumbers.some((cn) => cn.number.toLowerCase().includes(q))
+      // Match catalog numbers on their normalized key (vendor abbreviation + area
+      // prefix + number) so a prefixed query resolves in any spacing — "Mi PL 200",
+      // "MiPL200", "PL200", or bare "200" all hit the same stamp (#146).
+      const vm = vendorMapByArea.get(issue.collectionAreaId);
+      const keys = issue.members.flatMap((m) =>
+        m.catalogNumbers.map((cn) => {
+          const v = vm?.get(cn.catalogVendorId);
+          return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
+        })
       );
+      return catalogKeyMatches(filter, keys);
     });
-  }, [issues, filter]);
+  }, [issues, filter, vendorMapByArea]);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueData) {
     const vm = vendorMapByArea.get(issue.collectionAreaId);
