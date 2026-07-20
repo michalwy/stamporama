@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { StampListItem, StampSortBy } from "@/lib/stamps";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
   useStampsInfinite,
@@ -34,8 +35,6 @@ interface StampsListPanelProps {
   collectionSlug: string;
   areas: CollectionAreaData[];
   baseCurrency: string;
-  filterAreaId: string | null;
-  filterAreaIds: string[] | undefined;
 }
 
 const STAMP_SORT_OPTIONS: SortOption[] = [
@@ -50,11 +49,32 @@ export function StampsListPanel({
   collectionSlug,
   areas,
   baseCurrency,
-  filterAreaId,
-  filterAreaIds,
 }: StampsListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
+  // an explicit "all"); absent param falls back to the per-collection store. The
+  // effective selection is mirrored back into the store below.
+  const { storedAreaId, storedYear, writeStore } =
+    useCollectionFilterStore(collectionId);
+  const urlAreaId = searchParams.get("areaId");
+  const urlYear = searchParams.get("year");
+  const filterAreaId =
+    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
+  const year =
+    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
+
+  useEffect(() => {
+    writeStore({ areaId: filterAreaId, year: year || null });
+  }, [filterAreaId, year, writeStore]);
+
+  const filterAreaIds = useMemo(() => {
+    if (!filterAreaId) return undefined;
+    const ids = getDescendantIds(areas, filterAreaId);
+    ids.add(filterAreaId);
+    return [...ids];
+  }, [filterAreaId, areas]);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
@@ -70,7 +90,6 @@ export function StampsListPanel({
   const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
-  const year = searchParams.get("year") ?? "";
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
@@ -152,8 +171,9 @@ export function StampsListPanel({
 
   function handleNavigateFilter(areaId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
-    if (areaId) params.set("areaId", areaId);
-    else params.delete("areaId");
+    // "all" sentinel (not delete) so an explicit "all areas" is distinguishable
+    // from an absent param that falls back to the store (#143).
+    params.set("areaId", areaId ?? "all");
     const qs = params.toString();
     router.push(`/c/${collectionSlug}/stamps${qs ? `?${qs}` : ""}`);
   }
@@ -193,7 +213,7 @@ export function StampsListPanel({
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year || null}
-        onSelectYear={(y) => updateParams({ year: y ?? "" })}
+        onSelectYear={(y) => updateParams({ year: y ?? "all" })}
       />
 
       <div

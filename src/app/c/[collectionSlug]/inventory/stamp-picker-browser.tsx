@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueData, IssueListItem, StampNodeData } from "@/lib/issues";
 import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import {
@@ -152,11 +153,22 @@ export function StampPickerBrowser({
   onPickIssue?: (picked: PickedIssue) => void;
   onClose: () => void;
 }) {
-  const [areaId, setAreaId] = useState<string | null>(null);
-  // Year filter (#142): "none" for the no-year bucket, a numeric string for a year,
-  // or null for "all". Filtering is client-side here — the picker already has every
-  // issue in scope loaded (useIssuesByArea) and filters by text the same way.
-  const [year, setYear] = useState<string | null>(null);
+  // Area + year come from the shared per-collection store (#143), so the picker
+  // opens on the same filter as the lists and changes here carry back to them.
+  // Year values: "none" = no-year bucket, a numeric string = a year, null = all.
+  // Filtering is client-side — the picker already loads every in-scope issue.
+  const { storedAreaId, storedYear, writeStore } =
+    useCollectionFilterStore(collectionId);
+  const areaId = storedAreaId;
+  const year = storedYear;
+  const setAreaId = useCallback(
+    (id: string | null) => writeStore({ areaId: id, year: storedYear }),
+    [writeStore, storedYear]
+  );
+  const setYear = useCallback(
+    (y: string | null) => writeStore({ areaId: storedAreaId, year: y }),
+    [writeStore, storedAreaId]
+  );
   const [create, setCreate] = useState<CreateState | null>(null);
   const [createError, setCreateError] = useState<string>();
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);

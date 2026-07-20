@@ -7,15 +7,10 @@ import { IssuesListPanel } from "./issues-list-panel";
 
 interface IssuesPageProps {
   params: Promise<{ collectionSlug: string }>;
-  searchParams: Promise<{ areaId?: string }>;
 }
 
-export default async function IssuesPage({
-  params,
-  searchParams,
-}: IssuesPageProps) {
+export default async function IssuesPage({ params }: IssuesPageProps) {
   const { collectionSlug } = await params;
-  const { areaId: filterAreaId } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
@@ -24,18 +19,6 @@ export default async function IssuesPage({
   if (!collection) notFound();
 
   const areas = await getCollectionAreas(session.user.id, collection.id);
-
-  function collectDescendantIds(rootId: string): string[] {
-    const ids: string[] = [rootId];
-    for (const a of areas) {
-      if (a.parentId === rootId) ids.push(...collectDescendantIds(a.id));
-    }
-    return ids;
-  }
-
-  const filterAreaIds = filterAreaId
-    ? collectDescendantIds(filterAreaId)
-    : undefined;
 
   return (
     <div
@@ -61,8 +44,6 @@ export default async function IssuesPage({
         collectionSlug={collectionSlug}
         areas={areas}
         baseCurrency={collection.baseCurrency}
-        filterAreaId={filterAreaId ?? null}
-        filterAreaIds={filterAreaIds}
       />
     </div>
   );

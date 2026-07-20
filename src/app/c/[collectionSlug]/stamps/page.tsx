@@ -7,15 +7,10 @@ import { StampsListPanel } from "./stamps-list-panel";
 
 interface StampsPageProps {
   params: Promise<{ collectionSlug: string }>;
-  searchParams: Promise<{ areaId?: string }>;
 }
 
-export default async function StampsPage({
-  params,
-  searchParams,
-}: StampsPageProps) {
+export default async function StampsPage({ params }: StampsPageProps) {
   const { collectionSlug } = await params;
-  const { areaId: filterAreaId } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
@@ -24,18 +19,6 @@ export default async function StampsPage({
   if (!collection) notFound();
 
   const areas = await getCollectionAreas(session.user.id, collection.id);
-
-  function collectDescendantIds(rootId: string): string[] {
-    const ids: string[] = [rootId];
-    for (const a of areas) {
-      if (a.parentId === rootId) ids.push(...collectDescendantIds(a.id));
-    }
-    return ids;
-  }
-
-  const filterAreaIds = filterAreaId
-    ? collectDescendantIds(filterAreaId)
-    : undefined;
 
   return (
     <div
@@ -61,8 +44,6 @@ export default async function StampsPage({
         collectionSlug={collectionSlug}
         areas={areas}
         baseCurrency={collection.baseCurrency}
-        filterAreaId={filterAreaId ?? null}
-        filterAreaIds={filterAreaIds}
       />
     </div>
   );

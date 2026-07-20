@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -10,6 +10,8 @@ import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
@@ -63,10 +65,6 @@ interface InventoryListPanelProps {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
-  /** Currently selected area (URL `areaId`), or null for "All areas". */
-  filterAreaId: string | null;
-  /** The selected area plus its descendant ids, resolved server-side (#106). */
-  filterAreaIds: string[] | undefined;
 }
 
 export function InventoryListPanel({
@@ -77,8 +75,6 @@ export function InventoryListPanel({
   conditions,
   certificateStatuses,
   baseCurrency,
-  filterAreaId,
-  filterAreaIds,
 }: InventoryListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -87,11 +83,33 @@ export function InventoryListPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
 
+  // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
+  // an explicit "all"); absent param falls back to the per-collection store. The
+  // effective selection is mirrored back into the store below.
+  const { storedAreaId, storedYear, writeStore } =
+    useCollectionFilterStore(collectionId);
+  const urlAreaId = searchParams.get("areaId");
+  const urlYear = searchParams.get("year");
+  const filterAreaId =
+    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
+  const year =
+    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
+
+  useEffect(() => {
+    writeStore({ areaId: filterAreaId, year: year || null });
+  }, [filterAreaId, year, writeStore]);
+
+  const filterAreaIds = useMemo(() => {
+    if (!filterAreaId) return undefined;
+    const ids = getDescendantIds(areas, filterAreaId);
+    ids.add(filterAreaId);
+    return [...ids];
+  }, [filterAreaId, areas]);
+
   const search = searchParams.get("search") ?? "";
   const conditionId = searchParams.get("conditionId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
-  const year = searchParams.get("year") ?? "";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -159,8 +177,9 @@ export function InventoryListPanel({
 
   function handleNavigateFilter(areaId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
-    if (areaId) params.set("areaId", areaId);
-    else params.delete("areaId");
+    // "all" sentinel (not delete) so an explicit "all areas" is distinguishable
+    // from an absent param that falls back to the store (#143).
+    params.set("areaId", areaId ?? "all");
     const qs = params.toString();
     router.push(`/c/${collectionSlug}/inventory${qs ? `?${qs}` : ""}`);
   }
@@ -246,7 +265,7 @@ export function InventoryListPanel({
           yearFacets={yearFacets}
           yearsLoading={yearsLoading}
           selectedYear={year || null}
-          onSelectYear={(y) => updateParams({ year: y ?? "" })}
+          onSelectYear={(y) => updateParams({ year: y ?? "all" })}
         />
 
         <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DialogShell,
@@ -32,11 +32,12 @@ import {
 } from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -89,8 +90,6 @@ interface IssuesListPanelProps {
   collectionSlug: string;
   areas: CollectionAreaData[];
   baseCurrency: string;
-  filterAreaId: string | null;
-  filterAreaIds: string[] | undefined;
 }
 
 const ISSUE_SORT_OPTIONS: SortOption[] = [
@@ -104,11 +103,34 @@ export function IssuesListPanel({
   collectionSlug,
   areas,
   baseCurrency,
-  filterAreaId,
-  filterAreaIds,
 }: IssuesListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Area + year are shared across the lists (#143). The URL keeps priority: when
+  // the `areaId` / `year` param is present it wins (an explicit "all" is carried
+  // as the `all` sentinel so it is distinguishable from an absent param); when
+  // absent — a fresh navigation to this list — we fall back to the per-collection
+  // store. The effective selection is mirrored back into the store below.
+  const { storedAreaId, storedYear, writeStore } =
+    useCollectionFilterStore(collectionId);
+  const urlAreaId = searchParams.get("areaId");
+  const urlYear = searchParams.get("year");
+  const filterAreaId =
+    urlAreaId !== null ? (urlAreaId === "all" ? null : urlAreaId) : storedAreaId;
+  const year =
+    urlYear !== null ? (urlYear === "all" ? "" : urlYear) : (storedYear ?? "");
+
+  useEffect(() => {
+    writeStore({ areaId: filterAreaId, year: year || null });
+  }, [filterAreaId, year, writeStore]);
+
+  const filterAreaIds = useMemo(() => {
+    if (!filterAreaId) return undefined;
+    const ids = getDescendantIds(areas, filterAreaId);
+    ids.add(filterAreaId);
+    return [...ids];
+  }, [filterAreaId, areas]);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<IssueActionState>({
     status: "idle",
@@ -126,7 +148,6 @@ export function IssuesListPanel({
   );
   const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
-  const year = searchParams.get("year") ?? "";
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
@@ -267,8 +288,9 @@ export function IssuesListPanel({
 
   function handleNavigateFilter(areaId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
-    if (areaId) params.set("areaId", areaId);
-    else params.delete("areaId");
+    // Set the `all` sentinel (not delete) so an explicit "all areas" on this list
+    // is distinguishable from an absent param that falls back to the store (#143).
+    params.set("areaId", areaId ?? "all");
     const qs = params.toString();
     router.push(`/c/${collectionSlug}/issues${qs ? `?${qs}` : ""}`);
   }
@@ -325,7 +347,7 @@ export function IssuesListPanel({
         yearFacets={yearFacets}
         yearsLoading={yearsLoading}
         selectedYear={year || null}
-        onSelectYear={(y) => updateParams({ year: y ?? "" })}
+        onSelectYear={(y) => updateParams({ year: y ?? "all" })}
       />
 
       <div
