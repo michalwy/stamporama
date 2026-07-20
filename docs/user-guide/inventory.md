@@ -220,9 +220,10 @@ There are two kinds of slot:
 Accepted formats are **JPEG, PNG, and WebP**, up to **15 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
 
-Photos upload **as soon as you drop them** — you see the thumbnail and progress right away —
-but nothing is attached to the copy until you **Save** the dialog. The Save button waits
-while an upload is still in progress. If you **Cancel** or close the dialog instead, the
+Photos upload **as soon as you drop them** — each thumbnail shows its own upload progress bar,
+and an overall bar above the strip tracks all in-flight uploads together — but nothing is
+attached to the copy until you **Save** the dialog. The Save button waits while an upload is
+still in progress. If you **Cancel** or close the dialog instead, the
 staged uploads are discarded and never attached.
 
 Saved photos appear as a single thumbnail at the left of the copy's row and in the read-only

@@ -57,6 +57,10 @@ interface Entry {
   title: string;
   status: EntryStatus;
   errorMsg?: string;
+  /** Upload progress 0..1 (staged uploads only; committed photos are always 1). */
+  progress: number;
+  /** File size in bytes — weights this upload's share of the aggregate bar. */
+  size: number;
 }
 
 export interface PhotoEditorValue {
@@ -112,6 +116,8 @@ function committedToEntry(
     role: isSlotRole(p.role) && slots.includes(p.role) ? p.role : null,
     title: p.title ?? "",
     status: "done",
+    progress: 1,
+    size: 0,
   };
 }
 
@@ -207,41 +213,72 @@ export function PhotoEditor({
     objectUrls.current.add(url);
   }, []);
 
-  // --- Upload a file; patches the matching entry's status when it resolves ---
+  // --- Upload a file; patches the matching entry's progress/status as it goes ---
+  // Uses XMLHttpRequest (not fetch) because only XHR exposes upload progress events in the
+  // browser, which drive both the per-card bar and the aggregate bar.
   const uploadFile = useCallback(
-    async (file: File, localId: string) => {
+    (file: File, localId: string) => {
       const form = new FormData();
       form.append("file", file);
-      try {
-        const res = await fetch(
-          `/api/collections/${collectionId}/photos/uploads`,
-          { method: "POST", body: form }
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/collections/${collectionId}/photos/uploads`);
+
+      xhr.upload.addEventListener("progress", (ev) => {
+        if (!ev.lengthComputable) return;
+        const fraction = ev.total > 0 ? ev.loaded / ev.total : 0;
+        setEntries((es) =>
+          es.map((e) =>
+            e.localId === localId && e.status === "uploading"
+              ? { ...e, progress: Math.min(fraction, 1) }
+              : e
+          )
         );
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error || "Upload failed.");
+      });
+
+      const fail = (message: string) => {
+        setEntries((es) =>
+          es.map((e) =>
+            e.localId === localId
+              ? { ...e, status: "error", errorMsg: message }
+              : e
+          )
+        );
+      };
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          let staged: { id?: string } = {};
+          try {
+            staged = JSON.parse(xhr.responseText) as { id?: string };
+          } catch {
+            /* fall through to the missing-id error below */
+          }
+          if (!staged.id) {
+            fail("Upload failed.");
+            return;
+          }
+          setEntries((es) =>
+            es.map((e) =>
+              e.localId === localId
+                ? { ...e, uploadId: staged.id, status: "done", progress: 1 }
+                : e
+            )
+          );
+        } else {
+          let body: { error?: string } = {};
+          try {
+            body = JSON.parse(xhr.responseText) as { error?: string };
+          } catch {
+            /* keep the default message */
+          }
+          fail(body.error || "Upload failed.");
         }
-        const staged = (await res.json()) as { id: string };
-        setEntries((es) =>
-          es.map((e) =>
-            e.localId === localId
-              ? { ...e, uploadId: staged.id, status: "done" }
-              : e
-          )
-        );
-      } catch (err) {
-        setEntries((es) =>
-          es.map((e) =>
-            e.localId === localId
-              ? {
-                  ...e,
-                  status: "error",
-                  errorMsg: err instanceof Error ? err.message : "Upload failed.",
-                }
-              : e
-          )
-        );
-      }
+      });
+
+      xhr.addEventListener("error", () => fail("Upload failed."));
+      xhr.addEventListener("abort", () => fail("Upload cancelled."));
+
+      xhr.send(form);
     },
     [collectionId]
   );
@@ -254,7 +291,7 @@ export function PhotoEditor({
         const localId = nextLocalId();
         const previewUrl = URL.createObjectURL(file);
         markPreviewUrl(previewUrl);
-        void uploadFile(file, localId);
+        uploadFile(file, localId);
         return {
           localId,
           source: "staged" as const,
@@ -263,6 +300,8 @@ export function PhotoEditor({
           role: null,
           title: "",
           status: "uploading" as const,
+          progress: 0,
+          size: file.size,
         };
       });
       setEntries((es) => {
@@ -321,9 +360,48 @@ export function PhotoEditor({
     });
   }, []);
 
+  // Aggregate upload progress across everything still in flight, weighted by file size so a big
+  // photo doesn't get the same say as a tiny one. Falls back to a plain average if sizes are
+  // unknown (0). The bar shows only while at least one upload is running.
+  const uploadingEntries = entries.filter((e) => e.status === "uploading");
+  const totalBytes = uploadingEntries.reduce((s, e) => s + e.size, 0);
+  const aggregateFraction =
+    uploadingEntries.length === 0
+      ? 0
+      : totalBytes > 0
+        ? uploadingEntries.reduce((s, e) => s + e.size * e.progress, 0) / totalBytes
+        : uploadingEntries.reduce((s, e) => s + e.progress, 0) / uploadingEntries.length;
+
   return (
     <div>
       <div style={SECTION_LABEL}>Photos</div>
+
+      {/* Always rendered (only its visibility toggles) so the dialog height stays put whether or
+          not an upload is in flight — otherwise the bar appearing/vanishing makes it jump. */}
+      <div
+        style={{
+          marginBottom: "0.75rem",
+          visibility: uploadingEntries.length > 0 ? "visible" : "hidden",
+        }}
+        aria-hidden={uploadingEntries.length === 0}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: "0.75rem",
+            color: "var(--color-text-secondary)",
+            marginBottom: "0.25rem",
+          }}
+        >
+          <span>
+            Uploading {uploadingEntries.length}{" "}
+            {uploadingEntries.length === 1 ? "photo" : "photos"}…
+          </span>
+          <span>{Math.round(aggregateFraction * 100)}%</span>
+        </div>
+        <ProgressBar fraction={aggregateFraction} />
+      </div>
 
       {/* Space for the strip is reserved even when empty (minHeight matches a card) so adding
           the first photo doesn't grow the dialog and make it jump. */}
@@ -455,7 +533,14 @@ function PhotoCard({
             opacity: entry.status === "uploading" ? 0.5 : 1,
           }}
         />
-        {entry.status === "uploading" && <div style={STATUS_OVERLAY}>Uploading…</div>}
+        {entry.status === "uploading" && (
+          <>
+            <div style={STATUS_OVERLAY}>{Math.round(entry.progress * 100)}%</div>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+              <ProgressBar fraction={entry.progress} rounded={false} />
+            </div>
+          </>
+        )}
         {entry.status === "error" && (
           <div style={{ ...STATUS_OVERLAY, color: "var(--color-error)" }}>
             {entry.errorMsg ?? "Failed"}
@@ -874,6 +959,43 @@ function RoleButton({
     >
       {label}
     </button>
+  );
+}
+
+// --- Progress bar (aggregate strip + per-card overlay) ---
+
+/** A slim determinate progress bar. `rounded` off gives square corners for the card-bottom
+ * variant that sits flush against the thumbnail edges. */
+function ProgressBar({
+  fraction,
+  rounded = true,
+}: {
+  fraction: number;
+  rounded?: boolean;
+}) {
+  const pct = Math.max(0, Math.min(1, fraction)) * 100;
+  return (
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+      style={{
+        height: rounded ? "0.375rem" : "0.25rem",
+        borderRadius: rounded ? "999px" : 0,
+        background: "var(--color-bg-page)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: `${pct}%`,
+          background: "var(--color-accent)",
+          transition: "width 0.15s ease-out",
+        }}
+      />
+    </div>
   );
 }
 
