@@ -34,6 +34,7 @@ import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -2912,55 +2913,11 @@ function QuickPriceDialog({
                 Primary catalog: {context.catalogLabel} {context.editionYear} · {context.currency}
               </div>
             )}
-            {/* Stamp photos (#147): a visual reference of the catalog stamp while pricing.
-                Thumbnails open the full image in a new tab; the reserved slot carries an
-                F / B / M badge. */}
-            {context && context.photos.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginTop: "0.25rem" }}>
-                {context.photos.map((p) => (
-                  <a
-                    key={p.id}
-                    href={`/api/collections/${collectionId}/photos/${p.id}/full`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={p.title ?? undefined}
-                    style={{
-                      position: "relative",
-                      display: "block",
-                      width: "3.25rem",
-                      height: "3.25rem",
-                      borderRadius: "0.375rem",
-                      overflow: "hidden",
-                      border: "1px solid var(--color-border)",
-                      background: "var(--color-bg-elevated)",
-                    }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`/api/collections/${collectionId}/photos/${p.id}/thumb`}
-                      alt={p.title || item.stampName || "Stamp photo"}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                    />
-                    {p.role && (
-                      <span
-                        style={{
-                          position: "absolute",
-                          bottom: 0,
-                          right: 0,
-                          padding: "0 0.25rem",
-                          fontSize: "0.625rem",
-                          fontWeight: 700,
-                          lineHeight: "0.9375rem",
-                          color: "#fff",
-                          background: "rgba(0,0,0,0.6)",
-                          borderTopLeftRadius: "0.25rem",
-                        }}
-                      >
-                        {p.role === "front" ? "F" : p.role === "back" ? "B" : "M"}
-                      </span>
-                    )}
-                  </a>
-                ))}
+            {/* Copy photos (#147): a visual reference of this copy while pricing. Click a
+                thumbnail to open the lightbox (prev/next, Esc); reserved slots carry a badge. */}
+            {item.photos.length > 0 && (
+              <div style={{ marginTop: "0.25rem" }}>
+                <PhotoThumb collectionId={collectionId} photos={item.photos} size="4rem" />
               </div>
             )}
           </div>

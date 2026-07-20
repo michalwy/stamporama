@@ -250,9 +250,10 @@ how many are unpriced; click the **⚠ N unpriced** chip to filter the list down
 copies. To price them without leaving the screen, click the **+ catalog value** link in the
 copy's catalog-value column — a small dialog sets that value on the stamp's **primary catalog**
 (latest edition) for the copy's condition × certificate. The dialog shows the stamp's issue,
-catalog numbers, area, and any **photos** on the stamp (click a thumbnail to open it full-size),
-plus any prices already recorded for it (across editions, conditions, and certificates) so you
-can price consistently — the target row is marked with an arrow. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the **Prices** tab.) Then
+catalog numbers, area, and this **copy's photos** (click a thumbnail to open the lightbox, with
+prev/next and Esc to close), plus any prices already recorded for it (across editions,
+conditions, and certificates) so you can price consistently — the target row is marked with an
+arrow. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the **Prices** tab.) Then
 try the close again.
 
 ### Reopening for corrections
