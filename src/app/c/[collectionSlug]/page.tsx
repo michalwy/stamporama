@@ -1,3 +1,5 @@
+export const metadata = { title: "Overview" };
+
 interface CollectionPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

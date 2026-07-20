@@ -5,6 +5,8 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getLocations } from "@/lib/locations";
 import { LocationsPanel } from "./locations-panel";
 
+export const metadata = { title: "Locations" };
+
 interface LocationsPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

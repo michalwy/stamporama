@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { PurchasesListPanel } from "./purchases-list-panel";
 
+export const metadata = { title: "Purchases" };
+
 interface PurchasesPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

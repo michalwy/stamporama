@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -14,6 +15,20 @@ import { PurchaseDetailPanel } from "./purchase-detail-panel";
 
 interface PurchaseDetailPageProps {
   params: Promise<{ collectionSlug: string; purchaseId: string }>;
+}
+
+export async function generateMetadata({
+  params,
+}: PurchaseDetailPageProps): Promise<Metadata> {
+  const { purchaseId } = await params;
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return {};
+
+  const purchase = await getPurchaseDetail(session.user.id, purchaseId);
+  if (!purchase) return {};
+
+  return { title: `Purchase — ${purchase.contactName ?? purchase.purchasedAt}` };
 }
 
 export default async function PurchaseDetailPage({ params }: PurchaseDetailPageProps) {

@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { ContactsListPanel } from "./contacts-list-panel";
 
+export const metadata = { title: "Contacts" };
+
 interface ContactsPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

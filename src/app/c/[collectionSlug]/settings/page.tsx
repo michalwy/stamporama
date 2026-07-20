@@ -12,6 +12,8 @@ import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppVersionLabel } from "@/lib/version";
 import { SettingsTabs } from "./settings-tabs";
 
+export const metadata = { title: "Settings" };
+
 interface SettingsPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

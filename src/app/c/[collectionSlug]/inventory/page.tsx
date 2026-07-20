@@ -8,6 +8,8 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { InventoryListPanel } from "./inventory-list-panel";
 
+export const metadata = { title: "Inventory" };
+
 interface InventoryPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

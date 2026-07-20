@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -9,6 +10,29 @@ import { CollectionSidebar } from "./collection-sidebar";
 interface CollectionLayoutProps {
   children: React.ReactNode;
   params: Promise<{ collectionSlug: string }>;
+}
+
+// Scope browser tab titles to the current collection: child views set their own
+// short title (e.g. "Purchases") and it renders as "Purchases — <Collection>" (#140).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ collectionSlug: string }>;
+}): Promise<Metadata> {
+  const { collectionSlug } = await params;
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return {};
+
+  const collection = await getCollectionBySlug(session.user.id, collectionSlug);
+  if (!collection) return {};
+
+  return {
+    title: {
+      default: `${collection.name} — Stamporama`,
+      template: `%s — ${collection.name} — Stamporama`,
+    },
+  };
 }
 
 export default async function CollectionLayout({

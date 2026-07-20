@@ -5,6 +5,8 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { IssuesListPanel } from "./issues-list-panel";
 
+export const metadata = { title: "Issues" };
+
 interface IssuesPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

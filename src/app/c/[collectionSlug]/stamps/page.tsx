@@ -5,6 +5,8 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { StampsListPanel } from "./stamps-list-panel";
 
+export const metadata = { title: "Stamps" };
+
 interface StampsPageProps {
   params: Promise<{ collectionSlug: string }>;
 }

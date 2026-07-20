@@ -7,6 +7,8 @@ import { CollectionsList } from "./collections-list";
 import { CreateCollectionForm } from "./create-collection-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+export const metadata = { title: "Collections" };
+
 export default async function CollectionsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
