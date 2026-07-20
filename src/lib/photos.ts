@@ -433,6 +433,40 @@ async function applyPhotoChangeSetForOwner(
   await Promise.all(
     bytesToDelete.map((b) => deleteVariants(b.backend, b.storageKey, b.mime))
   );
+
+  // Auto-seed the stamp's representative image (#149): when a copy gets a **newly uploaded**
+  // front photo and its stamp has no photo yet, promote that front to the stamp as its `main`
+  // image — so the first copy photographed also identifies the catalog stamp without a manual
+  // promote. Best-effort and only for the first one (a second copy sees a non-empty stamp and
+  // skips); a failure here must not fail the copy's own photo save, which already committed.
+  if (isItemOwner(owner)) {
+    const newFront = prepared.find((p) => p.role === "front");
+    if (newFront) {
+      await autoSeedStampMainFromFront(ownerId, owner.itemId, newFront.photoId).catch(
+        (err) => {
+          console.error("Auto-promote copy front → stamp main failed", err);
+        }
+      );
+    }
+  }
+}
+
+/** Seed a stamp's `main` image from a copy's front photo when the stamp has none yet (#149).
+ * A no-op when the copy isn't identified to a stamp or the stamp already has any photo. Reuses
+ * `promoteCopyPhotoToStamp`, so the stamp photo is an independent duplicate with its own bytes. */
+async function autoSeedStampMainFromFront(
+  ownerId: string,
+  itemId: string,
+  frontPhotoId: string
+): Promise<void> {
+  const item = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { stampId: true },
+  });
+  if (!item?.stampId) return;
+  const stampPhotoCount = await prisma.photo.count({ where: { stampId: item.stampId } });
+  if (stampPhotoCount > 0) return;
+  await promoteCopyPhotoToStamp(ownerId, frontPhotoId, { role: "main", title: null });
 }
 
 const ROLE_ORDER: Record<string, number> = { main: 0, front: 0, back: 1 };

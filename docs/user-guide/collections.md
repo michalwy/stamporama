@@ -109,6 +109,8 @@ If you have already photographed one of your copies and want to reuse that image
 
 Promotion makes an **independent copy** of the photo on the stamp: the image bytes are duplicated, so the new stamp photo and the original copy photo have completely separate lives. Deleting or replacing one never affects the other. (A copy must be identified to a stamp for its photos to be promotable.)
 
+The **first** promotion happens on its own: when a copy gets its **front** photo and its stamp has no photo yet, that front is promoted automatically as the stamp's **Main** image. So a stamp usually gets its reference picture from the first copy you photograph, and you only reach for the **⬆** button to add more or override it.
+
 ### Photo storage used
 
 **Settings → General** shows the **total space used by all photos in the collection** — both copy photos and stamp photos, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.

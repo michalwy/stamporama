@@ -232,8 +232,11 @@ counter and **‹ / ›** controls let you step through them without leaving the
 back are marked with an **F** / **B** corner badge. Click the thumbnail to view the photo
 full-size.
 
-You can also **promote** a saved copy photo to the copy's stamp, reusing it as a catalog-level
-reference image (an independent duplicate — the copy keeps its own). See
+When a copy gets its **front** photo and its linked stamp has **no photo yet**, that front is
+**automatically promoted** to the stamp as its `main` reference image (an independent duplicate
+— the copy keeps its own). This seeds the catalog stamp's picture from the first copy you
+photograph; the next copy of the same stamp sees a picture already there and is left alone. You
+can also **promote** any saved copy photo to the copy's stamp by hand. See
 [Collections → Stamp photos](collections.md#stamp-photos).
 
 ## Identifying a variant
