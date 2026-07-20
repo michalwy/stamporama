@@ -9,6 +9,11 @@ import {
   type DragEvent,
 } from "react";
 import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
+import {
+  SLOT_ROLE_META as ROLE_META,
+  isSlotRole,
+  type SlotRole,
+} from "./photo-slot-meta";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -22,8 +27,7 @@ import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 /** Photo the copy already has, when editing (add mode passes none). */
 export type CommittedPhoto = PhotoSummary;
 
-type PhotoRole = "front" | "back" | "main" | null;
-type SlotRole = "front" | "back" | "main";
+type PhotoRole = SlotRole | null;
 type EntryStatus = "uploading" | "done" | "error";
 
 /** Which role-mode a photo editor runs in: copies get front/back reserved slots; stamps (#137)
@@ -35,34 +39,6 @@ const SLOT_ROLES: Record<RoleMode, SlotRole[]> = {
   main: ["main"],
 };
 
-/** Per-slot visual + label metadata (theme-aware): front = blue, back = violet, main = accent. */
-const ROLE_META: Record<
-  SlotRole,
-  { short: string; title: string; color: string; soft: string }
-> = {
-  front: {
-    short: "F",
-    title: "Mark as front",
-    color: "var(--color-disposition-sale)",
-    soft: "var(--color-disposition-sale-soft)",
-  },
-  back: {
-    short: "B",
-    title: "Mark as back",
-    color: "var(--color-disposition-trade)",
-    soft: "var(--color-disposition-trade-soft)",
-  },
-  main: {
-    short: "★",
-    title: "Mark as main",
-    color: "var(--color-accent)",
-    soft: "var(--color-accent-soft)",
-  },
-};
-
-function isSlotRole(role: PhotoRole): role is SlotRole {
-  return role === "front" || role === "back" || role === "main";
-}
 
 interface Entry {
   /** Stable React key + local identity. */

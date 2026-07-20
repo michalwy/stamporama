@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PhotoSummary } from "@/lib/photos";
+import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 
 // Read-only photo display for a copy row / inventory popup (#112). Renders thumbnails with
 // front/back visually distinguished from titled extras; clicking one opens a full-size
@@ -20,13 +21,6 @@ function roleLabel(photo: PhotoSummary): string {
   if (photo.role === "back") return "Back";
   if (photo.role === "main") return "Main";
   return photo.title || "Photo";
-}
-
-/** Short badge shown on a reserved-slot thumbnail. */
-function slotBadge(role: PhotoSummary["role"]): string {
-  if (role === "front") return "F";
-  if (role === "back") return "B";
-  return "★"; // main
 }
 
 export function PhotoStrip({
@@ -85,9 +79,9 @@ export function PhotoStrip({
       }}
     >
       {photos.map((photo, index) => {
-        const isSlot =
-          !plain &&
-          (photo.role === "front" || photo.role === "back" || photo.role === "main");
+        // Reserved slots share their colour + badge with the editor (front = blue, back =
+        // violet, main = accent); `plain` galleries (#137) suppress the marker entirely.
+        const slotMeta = !plain && isSlotRole(photo.role) ? SLOT_ROLE_META[photo.role] : null;
         return (
           <button
             key={photo.id}
@@ -104,9 +98,9 @@ export function PhotoStrip({
               overflow: "hidden",
               cursor: "pointer",
               background: "var(--color-bg-page)",
-              // Front/back get an accent border so they read as reserved slots; extras a plain one.
-              border: isSlot
-                ? "2px solid var(--color-accent)"
+              // Reserved slots take their role colour; extras a plain border.
+              border: slotMeta
+                ? `2px solid ${slotMeta.color}`
                 : "1px solid var(--color-border)",
             }}
           >
@@ -116,7 +110,7 @@ export function PhotoStrip({
               alt={roleLabel(photo)}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-            {isSlot && (
+            {slotMeta && (
               <span
                 aria-hidden="true"
                 style={{
@@ -130,11 +124,11 @@ export function PhotoStrip({
                   letterSpacing: "0.03em",
                   textAlign: "center",
                   color: "#fff",
-                  background: "var(--color-accent)",
+                  background: slotMeta.color,
                   lineHeight: 1.4,
                 }}
               >
-                {slotBadge(photo.role)}
+                {slotMeta.short}
               </span>
             )}
           </button>
