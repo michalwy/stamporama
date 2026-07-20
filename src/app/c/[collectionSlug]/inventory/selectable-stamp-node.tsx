@@ -9,6 +9,7 @@ import {
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { PhotoStrip } from "./photo-strip";
 
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
  * the "— unknown variant" marker on a base stamp that still has variants). Shared by the
@@ -20,6 +21,7 @@ import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 export function SelectableStampNode({
   treeNode,
   depth,
+  collectionId,
   vendorMap,
   primaryVendorId,
   isLast,
@@ -28,6 +30,7 @@ export function SelectableStampNode({
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
+  collectionId: string;
   vendorMap: VendorMap;
   primaryVendorId: string | null;
   isLast: boolean;
@@ -127,6 +130,17 @@ export function SelectableStampNode({
         </div>
 
         <StampDetailLine node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
+
+        {/* Catalog-level photos (#137), indented to line up with the catalog chips. Stop click
+            propagation so opening a thumbnail's lightbox doesn't also select the row. */}
+        {node.photos.length > 0 && (
+          <div
+            style={{ paddingLeft: "1.375rem" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PhotoStrip collectionId={collectionId} photos={node.photos} />
+          </div>
+        )}
       </div>
       {!collapsed &&
         children.map((child, i) => (
@@ -134,6 +148,7 @@ export function SelectableStampNode({
             key={child.node.stampId}
             treeNode={child}
             depth={depth + 1}
+            collectionId={collectionId}
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}
             isLast={isLast && i === children.length - 1}

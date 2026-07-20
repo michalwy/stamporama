@@ -212,6 +212,10 @@ Saved photos appear as thumbnails on the copy's row and in the read-only
 [View copies](#viewing-copies-from-the-catalog) popup, with front and back distinguished from
 extras. Click any thumbnail to view the photo full-size.
 
+You can also **promote** a saved copy photo to the copy's stamp, reusing it as a catalog-level
+reference image (an independent duplicate — the copy keeps its own). See
+[Collections → Stamp photos](collections.md#stamp-photos).
+
 ## Identifying a variant
 
 When you record a copy against a **base stamp** because you don't yet know its exact

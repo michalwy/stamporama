@@ -21,6 +21,7 @@ import {
   resolveDisplayConditionId,
 } from "./pricing";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -136,16 +137,18 @@ export async function updateStamp(
 
 async function deleteStampTreeTx(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  stampId: string
+  stampId: string,
+  deletedIds: string[]
 ): Promise<void> {
   const children = await tx.stamp.findMany({
     where: { parentId: stampId },
     select: { id: true },
   });
   for (const child of children) {
-    await deleteStampTreeTx(tx, child.id);
+    await deleteStampTreeTx(tx, child.id, deletedIds);
   }
   await tx.stamp.delete({ where: { id: stampId } });
+  deletedIds.push(stampId);
 }
 
 export async function deleteStamp(
@@ -155,6 +158,11 @@ export async function deleteStamp(
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
+
+  // Ids of every stamp actually removed, so their photo bytes are cleaned up post-commit
+  // (Prisma cascade drops the `Photo` rows, but not the stored files — #137). Reparent removes
+  // only the target; cascade removes the whole subtree.
+  const deletedIds: string[] = [];
 
   if (mode === "reparent") {
     await prisma.$transaction(async (tx) => {
@@ -167,12 +175,15 @@ export async function deleteStamp(
         data: { parentId: stamp.parentId },
       });
       await tx.stamp.delete({ where: { id: stampId } });
+      deletedIds.push(stampId);
     });
   } else {
     await prisma.$transaction(async (tx) => {
-      await deleteStampTreeTx(tx, stampId);
+      await deleteStampTreeTx(tx, stampId, deletedIds);
     });
   }
+
+  await Promise.all(deletedIds.map((id) => deletePhotoBytesForStamp(id)));
 }
 
 export async function getStampChildCount(
@@ -261,6 +272,9 @@ export interface StampListItem {
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
+  /** Catalog-level photos (#137), ordered front, back, then extras by sortOrder. Metadata only —
+   * the collection-scoped serving route addresses variant bytes by photo id. */
+  photos: PhotoSummary[];
 }
 
 export interface PaginatedStampsResult {
@@ -299,6 +313,7 @@ const STAMP_LIST_SELECT = {
       issue: { select: { name: true, year: true } },
     },
   },
+  photos: { select: { id: true, role: true, title: true, sortOrder: true } },
 } as const;
 
 function toStampListItem(
@@ -321,6 +336,7 @@ function toStampListItem(
       requiredForCompleteness: boolean;
       issue: { name: string | null; year: number | null };
     }[];
+    photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
@@ -358,6 +374,17 @@ function toStampListItem(
       ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency }
       : null,
     mainCatalogPriceStale,
+    photos: stamp.photos
+      .map((p) => ({
+        id: p.id,
+        // Stamps use the single `main` slot (#137); keep any known slot role, else it's an extra.
+        role: (p.role === "main" || p.role === "front" || p.role === "back"
+          ? p.role
+          : null) as "front" | "back" | "main" | null,
+        title: p.title,
+        sortOrder: p.sortOrder,
+      }))
+      .sort(sortPhotos),
   };
 }
 

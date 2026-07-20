@@ -27,6 +27,7 @@ import {
   useInventoryAddAction,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-strip";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -175,6 +176,14 @@ function StampTreeNode({
           vendorMap={vendorMap}
           primaryVendorId={primaryVendorId}
         />
+
+        {/* Catalog-level photos of this stamp (#137): main distinguished from extras. Indented
+            by the expand-arrow width (1.375rem) to line up with the catalog chips above. */}
+        {node.photos.length > 0 && (
+          <div style={{ paddingLeft: "1.375rem" }}>
+            <PhotoStrip collectionId={collectionId} photos={node.photos} />
+          </div>
+        )}
       </div>
       {!collapsed &&
         children.map((child, i) => (
@@ -450,6 +459,13 @@ export function IssueRow({
                 </span>
               );
             })()}
+          </div>
+        )}
+
+        {/* Issue-level gallery (#137): the main photos of the required-for-completeness stamps. */}
+        {issue.photos.length > 0 && (
+          <div style={{ paddingLeft: "1.75rem" }}>
+            <PhotoStrip collectionId={collectionId} photos={issue.photos} plain />
           </div>
         )}
       </div>

@@ -19,6 +19,7 @@ import type {
   IssueDeletionPreview,
   IssuePriceDetails,
 } from "@/lib/issues";
+import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 
 export async function getIssuePriceDetailsAction(
   collectionId: string,
@@ -256,6 +257,12 @@ export async function addStampToIssueAction(
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
     });
+    // Direct photo upload in add mode (#137): apply the dialog's staged change-set to the
+    // freshly created stamp, mirroring how `createItemAction` attaches copy photos on add.
+    const photoChangeSet = parsePhotoChangeSet(formData);
+    if (photoChangeSet) {
+      await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
+    }
     return { status: "success", stampId };
   } catch {
     return { status: "error", message: "Failed to add stamp. Please try again." };

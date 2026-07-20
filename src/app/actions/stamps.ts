@@ -19,6 +19,14 @@ import {
   quickSetCatalogPrice,
 } from "@/lib/stamps";
 import type { StampSubtypeAssignment, QuickCatalogPriceContext } from "@/lib/stamps";
+import {
+  applyStampPhotoChangeSet,
+  listStampPhotos,
+  parsePhotoChangeSet,
+  promoteCopyPhotoToStamp,
+  type PhotoRole,
+  type PhotoSummary,
+} from "@/lib/photos";
 import type {
   CatalogPriceInput,
   StampCatalogPriceDisplay,
@@ -243,6 +251,8 @@ export async function updateStampWithCatalogAction(
           ? false
           : null;
 
+  const photoChangeSet = parsePhotoChangeSet(formData);
+
   try {
     await updateStampWithCatalog(session.user.id, stampId, {
       name,
@@ -255,9 +265,43 @@ export async function updateStampWithCatalogAction(
       subtypeId,
       actsAsVariantOverride,
     });
+    if (photoChangeSet) {
+      await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
+    }
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update stamp. Please try again." };
+  }
+}
+
+/** Load a stamp's committed photos for the edit dialog's photo tab (#137). Metadata only — the
+ * collection-scoped serving route addresses variant bytes by photo id. */
+export async function listStampPhotosAction(
+  stampId: string
+): Promise<PhotoSummary[]> {
+  const session = await getSession();
+  const photos = await listStampPhotos(session.user.id, stampId);
+  return photos.map((p) => ({
+    id: p.id,
+    role: p.role,
+    title: p.title,
+    sortOrder: p.sortOrder,
+  }));
+}
+
+/** Promote a copy photo to its stamp (#137): create an independent duplicated `Photo` on the
+ * stamp the copy is identified to. The copy keeps its own photo unchanged. */
+export async function promoteCopyPhotoAction(
+  photoId: string,
+  role: PhotoRole,
+  title: string | null
+): Promise<StampActionState> {
+  const session = await getSession();
+  try {
+    await promoteCopyPhotoToStamp(session.user.id, photoId, { role, title });
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to promote photo. Please try again." };
   }
 }
 

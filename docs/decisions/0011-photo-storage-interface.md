@@ -96,6 +96,17 @@ are built owner-agnostic so #137 can add a second owner (`stampId`) — making `
 polymorphic — without reworking callers. The staging mechanism is likewise owner-agnostic
 and is reused for stamp uploads.
 
+**Realised in #137.** `Photo.itemId` became nullable and a nullable `stampId` was added, with
+a DB `CHECK ((itemId IS NOT NULL) <> (stampId IS NOT NULL))` enforcing exactly one owner. The
+old plain `(itemId, role)` unique was replaced by two *partial* unique indexes
+(`WHERE itemId IS NOT NULL` / `WHERE stampId IS NOT NULL`) so each reserved role stays a
+singleton per owner (a plain unique would let every stamp photo collide on `(NULL, ...)`).
+Which slots an owner uses is a UI concern — copies use `front`/`back`, stamps use a single
+`main`. The change-set apply / list / byte-cleanup logic is written once over a `PhotoOwner` and exposed
+through per-owner wrappers. A copy photo can also be **promoted** to its stamp: the bytes are
+duplicated to a fresh permanent key and an independent `Photo` row is created on the `Stamp`,
+so the copy and stamp photos have fully independent lifecycles.
+
 ## Consequences
 
 - Self-hosted deployments must mount a writable volume at `STAMPORAMA_DATA_DIR`

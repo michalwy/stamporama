@@ -339,12 +339,37 @@ export function InventoryItemFormDialog({
             </div>
 
             {/* Row 6: photos (#112) — front/back slots + reorderable titled extras. Eager
-                staged uploads; the pending change-set applies on Save with the copy fields. */}
+                staged uploads; the pending change-set applies on Save with the copy fields.
+                In edit mode each committed photo can be promoted to this copy's stamp (#137):
+                an independent duplicated stamp photo; the copy's own photo is untouched. */}
             <PhotoEditor
               collectionId={collectionId}
               initialPhotos={item?.photos ?? []}
               disabled={isPending}
               onChange={handlePhotoChange}
+              onPromotePhoto={
+                mode === "edit"
+                  ? async (photoId, target) => {
+                      const { promoteCopyPhotoAction } = await import(
+                        "@/app/actions/stamps"
+                      );
+                      const result = await promoteCopyPhotoAction(
+                        photoId,
+                        target.role,
+                        target.title
+                      );
+                      return result.status === "success"
+                        ? { ok: true }
+                        : {
+                            ok: false,
+                            error:
+                              result.status === "error"
+                                ? result.message
+                                : undefined,
+                          };
+                    }
+                  : undefined
+              }
             />
           </div>
         </DialogBody>

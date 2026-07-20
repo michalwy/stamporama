@@ -30,6 +30,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
+import { PhotoStrip } from "./photo-strip";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, or a new stamp / variant (parent set) in an issue. */
@@ -54,6 +55,7 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     requiredCount: issue.completeness.required,
     requiredPriceTotal: null,
     requiredPriceStale: false,
+    photos: [],
   };
 }
 
@@ -497,6 +499,15 @@ function PickIssueRow({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [hovered, setHovered] = useState(false);
   const tree = useMemo<StampTreeNodeData[]>(() => buildStampTree(issue.members), [issue.members]);
+  // Issue-level gallery (#137): the main photos of the required-for-completeness stamps —
+  // computed client-side from the members the picker already loaded.
+  const issuePhotos = useMemo(
+    () =>
+      issue.members
+        .filter((m) => m.requiredForCompleteness)
+        .flatMap((m) => m.photos.filter((p) => p.role === "main")),
+    [issue.members]
+  );
 
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
@@ -610,6 +621,14 @@ function PickIssueRow({
             )}
           </div>
         )}
+
+        {/* Issue-level gallery: main photos of the required stamps. Stop propagation so opening a
+            thumbnail's lightbox doesn't toggle the issue row. */}
+        {issuePhotos.length > 0 && (
+          <div style={{ paddingLeft: "1.75rem" }} onClick={(e) => e.stopPropagation()}>
+            <PhotoStrip collectionId={issue.collectionId} photos={issuePhotos} plain />
+          </div>
+        )}
       </div>
 
       {isExpanded && (
@@ -638,6 +657,7 @@ function PickIssueRow({
                 key={treeNode.node.stampId}
                 treeNode={treeNode}
                 depth={0}
+                collectionId={issue.collectionId}
                 vendorMap={vendorMap}
                 primaryVendorId={primaryVendorId}
                 isLast={i === tree.length - 1}

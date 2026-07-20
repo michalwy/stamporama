@@ -120,6 +120,7 @@ export function IssueStampPickerDialog({
               key={treeNode.node.stampId}
               treeNode={treeNode}
               depth={0}
+              collectionId={collectionId}
               vendorMap={vendorMap}
               primaryVendorId={primaryVendorId}
               isLast={i === tree.length - 1}

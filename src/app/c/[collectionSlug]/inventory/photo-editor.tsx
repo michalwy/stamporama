@@ -10,10 +10,11 @@ import {
 } from "react";
 import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 
-// Inline photo editor for the inventory copy dialog (#112). One flat, horizontally-scrolling
-// strip of photo cards sits above a single full-width dropzone. Each card carries its own
-// controls: a Front/Back role toggle (both are singleton slots — assigning one clears any
-// previous holder), an optional free-text title, remove, and drag-to-reorder. Files upload
+// Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
+// horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
+// carries its own controls: reserved-slot toggles (copies: Front/Back; stamps: a single Main —
+// each a singleton, assigning one clears any previous holder), an optional free-text title,
+// remove, and drag-to-reorder. The slot layout is chosen by the `roleMode` prop. Files upload
 // eagerly on drop to a staging area; the editor keeps a pending change-set (adds of staged
 // uploads + removals/role-changes/reorders/retitles of committed photos) and reports it upward
 // so Save applies it in one action. Nothing is persisted until Save; Cancel discards.
@@ -21,8 +22,47 @@ import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 /** Photo the copy already has, when editing (add mode passes none). */
 export type CommittedPhoto = PhotoSummary;
 
-type PhotoRole = "front" | "back" | null;
+type PhotoRole = "front" | "back" | "main" | null;
+type SlotRole = "front" | "back" | "main";
 type EntryStatus = "uploading" | "done" | "error";
+
+/** Which role-mode a photo editor runs in: copies get front/back reserved slots; stamps (#137)
+ * get a single `main` slot. Drives the auto-assign order, the per-card toggles, and labels. */
+export type RoleMode = "front-back" | "main";
+
+const SLOT_ROLES: Record<RoleMode, SlotRole[]> = {
+  "front-back": ["front", "back"],
+  main: ["main"],
+};
+
+/** Per-slot visual + label metadata (theme-aware): front = blue, back = violet, main = accent. */
+const ROLE_META: Record<
+  SlotRole,
+  { short: string; title: string; color: string; soft: string }
+> = {
+  front: {
+    short: "F",
+    title: "Mark as front",
+    color: "var(--color-disposition-sale)",
+    soft: "var(--color-disposition-sale-soft)",
+  },
+  back: {
+    short: "B",
+    title: "Mark as back",
+    color: "var(--color-disposition-trade)",
+    soft: "var(--color-disposition-trade-soft)",
+  },
+  main: {
+    short: "★",
+    title: "Mark as main",
+    color: "var(--color-accent)",
+    soft: "var(--color-accent-soft)",
+  },
+};
+
+function isSlotRole(role: PhotoRole): role is SlotRole {
+  return role === "front" || role === "back" || role === "main";
+}
 
 interface Entry {
   /** Stable React key + local identity. */
@@ -47,11 +87,26 @@ export interface PhotoEditorValue {
   uploading: boolean;
 }
 
+/** Result of a promote-to-stamp attempt (#137). */
+export interface PromoteResult {
+  ok: boolean;
+  error?: string;
+}
+
 interface PhotoEditorProps {
   collectionId: string;
   initialPhotos: CommittedPhoto[];
   disabled?: boolean;
+  /** Reserved-slot layout: `front-back` (copies, default) or `main` (stamps, #137). */
+  roleMode?: RoleMode;
   onChange: (value: PhotoEditorValue) => void;
+  /** When provided (copy editor, #137), each already-committed photo can be *promoted* to its
+   * copy's stamp — creating an independent duplicated stamp photo. Applies immediately (not part
+   * of the Save change-set), so the copy's own photo is untouched regardless of Save/Cancel. */
+  onPromotePhoto?: (
+    photoId: string,
+    target: { role: PhotoRole; title: string | null }
+  ) => Promise<PromoteResult>;
 }
 
 let localSeq = 0;
@@ -64,34 +119,40 @@ function thumbUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/thumb`;
 }
 
-function committedToEntry(collectionId: string, p: CommittedPhoto): Entry {
+function committedToEntry(
+  collectionId: string,
+  p: CommittedPhoto,
+  slots: SlotRole[]
+): Entry {
   return {
     localId: `committed-${p.id}`,
     source: "committed",
     photoId: p.id,
     previewUrl: thumbUrl(collectionId, p.id),
     ownsPreviewUrl: false,
-    role: p.role === "front" || p.role === "back" ? p.role : null,
+    // Keep the role only if it's a reserved slot for this mode; anything else is an extra.
+    role: isSlotRole(p.role) && slots.includes(p.role) ? p.role : null,
     title: p.title ?? "",
     status: "done",
   };
 }
 
-/** Initial strip order: front, back, then extras by sortOrder — matches the read-side order. */
+/** Initial strip order: reserved slots (in mode order), then extras by sortOrder — matches the
+ * read-side order. */
 function buildInitialEntries(
   collectionId: string,
-  photos: CommittedPhoto[]
+  photos: CommittedPhoto[],
+  slots: SlotRole[]
 ): Entry[] {
-  const front = photos.find((p) => p.role === "front");
-  const back = photos.find((p) => p.role === "back");
+  const slotPhotos = slots
+    .map((r) => photos.find((p) => p.role === r))
+    .filter((p): p is CommittedPhoto => !!p);
   const extras = photos
-    .filter((p) => p.role !== "front" && p.role !== "back")
+    .filter((p) => !(isSlotRole(p.role) && slots.includes(p.role)))
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  return [
-    ...(front ? [front] : []),
-    ...(back ? [back] : []),
-    ...extras,
-  ].map((p) => committedToEntry(collectionId, p));
+  return [...slotPhotos, ...extras].map((p) =>
+    committedToEntry(collectionId, p, slots)
+  );
 }
 
 const ACCEPT = "image/jpeg,image/png,image/webp";
@@ -104,10 +165,13 @@ export function PhotoEditor({
   collectionId,
   initialPhotos,
   disabled = false,
+  roleMode = "front-back",
   onChange,
+  onPromotePhoto,
 }: PhotoEditorProps) {
+  const slots = SLOT_ROLES[roleMode];
   const [entries, setEntries] = useState<Entry[]>(() =>
-    buildInitialEntries(collectionId, initialPhotos)
+    buildInitialEntries(collectionId, initialPhotos, slots)
   );
   const initialIds = useMemo(
     () => new Set(initialPhotos.map((p) => p.id)),
@@ -149,7 +213,8 @@ export function PhotoEditor({
       }
       const orig = initialById.get(e.photoId!);
       if (!orig) return;
-      const origRole = orig.role === "front" || orig.role === "back" ? orig.role : null;
+      const origRole =
+        isSlotRole(orig.role) && slots.includes(orig.role) ? orig.role : null;
       const origTitle = origRole === null ? (orig.title?.trim() || null) : null;
       if (origRole !== role || origTitle !== title || orig.sortOrder !== sortOrder) {
         update.push({ photoId: e.photoId!, role, title, sortOrder });
@@ -158,7 +223,7 @@ export function PhotoEditor({
 
     const uploading = entries.some((e) => e.status === "uploading");
     onChange({ changeSet: { add, update, remove }, uploading });
-  }, [entries, initialIds, initialById, onChange]);
+  }, [entries, initialIds, initialById, onChange, slots]);
 
   const markPreviewUrl = useCallback((url: string) => {
     objectUrls.current.add(url);
@@ -223,25 +288,21 @@ export function PhotoEditor({
         };
       });
       setEntries((es) => {
-        // Auto-fill the reserved slots: the first added photo takes front, the next takes back
-        // (only while those slots are still empty), the rest are extras.
-        let front = es.some((e) => e.role === "front");
-        let back = es.some((e) => e.role === "back");
+        // Auto-fill the reserved slots in order (front→back, or just main): each fresh photo
+        // takes the next still-empty slot; the rest are extras.
+        const filled = new Set(es.map((e) => e.role).filter(isSlotRole));
         const withRoles = fresh.map((e) => {
-          if (!front) {
-            front = true;
-            return { ...e, role: "front" as const };
-          }
-          if (!back) {
-            back = true;
-            return { ...e, role: "back" as const };
+          const free = slots.find((r) => !filled.has(r));
+          if (free) {
+            filled.add(free);
+            return { ...e, role: free };
           }
           return e;
         });
         return [...es, ...withRoles];
       });
     },
-    [markPreviewUrl, uploadFile]
+    [markPreviewUrl, uploadFile, slots]
   );
 
   const removeEntry = useCallback((localId: string) => {
@@ -254,9 +315,9 @@ export function PhotoEditor({
     );
   }, []);
 
-  /** Toggle a front/back role on a card. Assigning a role clears any previous holder, so
-   * front and back stay singletons; clicking the active role again clears it. */
-  const toggleRole = useCallback((localId: string, role: "front" | "back") => {
+  /** Toggle a reserved-slot role on a card. Assigning a role clears any previous holder, so each
+   * slot stays a singleton; clicking the active role again clears it. */
+  const toggleRole = useCallback((localId: string, role: SlotRole) => {
     setEntries((es) => {
       const target = es.find((e) => e.localId === localId);
       if (!target) return es;
@@ -311,9 +372,17 @@ export function PhotoEditor({
               key={entry.localId}
               entry={entry}
               disabled={disabled}
+              slots={slots}
               onToggleRole={(role) => toggleRole(entry.localId, role)}
               onSetTitle={(title) => setTitle(entry.localId, title)}
               onRemove={() => removeEntry(entry.localId)}
+              // Promotion is only for already-committed copy photos, and only when a handler is
+              // wired (the copy editor, not the stamp editor). Staged uploads must Save first.
+              onPromote={
+                onPromotePhoto && entry.source === "committed" && entry.photoId
+                  ? (target) => onPromotePhoto(entry.photoId!, target)
+                  : undefined
+              }
               onDragStart={() => {
                 dragIndex.current = index;
               }}
@@ -338,28 +407,38 @@ export function PhotoEditor({
 function PhotoCard({
   entry,
   disabled,
+  slots,
   onToggleRole,
   onSetTitle,
   onRemove,
+  onPromote,
   onDragStart,
   onDropOn,
 }: {
   entry: Entry;
   disabled: boolean;
-  onToggleRole: (role: "front" | "back") => void;
+  slots: SlotRole[];
+  onToggleRole: (role: SlotRole) => void;
   onSetTitle: (title: string) => void;
   onRemove: () => void;
+  onPromote?: (target: {
+    role: PhotoRole;
+    title: string | null;
+  }) => Promise<{ ok: boolean; error?: string }>;
   onDragStart: () => void;
   onDropOn: () => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
-  const hasRole = entry.role === "front" || entry.role === "back";
-  // Delicate, distinct tints per role (theme-aware): front = blue, back = violet.
-  const roleColor = hasRole ? `var(--color-disposition-${ROLE_TONE[entry.role!]})` : null;
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const hasRole = isSlotRole(entry.role);
+  // Delicate, distinct tints per slot (theme-aware): front = blue, back = violet, main = accent.
+  const roleColor = hasRole ? ROLE_META[entry.role as SlotRole].color : null;
+
+  const dragLocked = disabled || editingTitle || promoteOpen;
 
   return (
     <div
-      draggable={!disabled && !editingTitle}
+      draggable={!dragLocked}
       onDragStart={onDragStart}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -367,13 +446,14 @@ function PhotoCard({
         onDropOn();
       }}
       style={{
+        position: "relative",
         width: "8.5rem",
         flexShrink: 0,
         borderRadius: "0.5rem",
         border: `1px solid ${roleColor ?? "var(--color-border)"}`,
         background: "var(--color-bg-elevated)",
-        overflow: "hidden",
-        cursor: disabled || editingTitle ? "default" : "grab",
+        overflow: promoteOpen ? "visible" : "hidden",
+        cursor: dragLocked ? "default" : "grab",
       }}
     >
       {/* Thumbnail + overlay controls */}
@@ -403,53 +483,89 @@ function PhotoCard({
           </div>
         )}
 
-        {/* Role toggle — top-left */}
+        {/* Role toggle — top-left: one button per reserved slot (front/back, or just main) */}
         <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", display: "flex", gap: "0.25rem" }}>
-          <RoleButton
-            label="F"
-            title="Mark as front"
-            tone={ROLE_TONE.front}
-            active={entry.role === "front"}
-            disabled={disabled}
-            onClick={() => onToggleRole("front")}
-          />
-          <RoleButton
-            label="B"
-            title="Mark as back"
-            tone={ROLE_TONE.back}
-            active={entry.role === "back"}
-            disabled={disabled}
-            onClick={() => onToggleRole("back")}
-          />
+          {slots.map((slot) => (
+            <RoleButton
+              key={slot}
+              label={ROLE_META[slot].short}
+              title={ROLE_META[slot].title}
+              color={ROLE_META[slot].color}
+              soft={ROLE_META[slot].soft}
+              active={entry.role === slot}
+              disabled={disabled}
+              onClick={() => onToggleRole(slot)}
+            />
+          ))}
         </div>
 
-        {/* Remove — top-right */}
+        {/* Actions — top-right: promote-to-stamp (committed copy photos only) then remove */}
         {!disabled && (
-          <button
-            type="button"
-            aria-label="Remove photo"
-            onClick={onRemove}
+          <div
             style={{
               position: "absolute",
               top: "0.3rem",
               right: "0.3rem",
-              width: "1.375rem",
-              height: "1.375rem",
-              borderRadius: "999px",
-              border: "none",
-              background: "var(--color-bg-elevated)",
-              color: "var(--color-text-secondary)",
-              fontSize: "0.75rem",
-              lineHeight: 1,
-              cursor: "pointer",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+              gap: "0.25rem",
             }}
           >
-            ✕
-          </button>
+            {onPromote && (
+              <button
+                type="button"
+                aria-label="Promote photo to stamp"
+                title="Promote to stamp"
+                aria-pressed={promoteOpen}
+                onClick={() => setPromoteOpen((o) => !o)}
+                style={{
+                  width: "1.375rem",
+                  height: "1.375rem",
+                  borderRadius: "999px",
+                  border: "none",
+                  background: "var(--color-bg-elevated)",
+                  color: "var(--color-text-secondary)",
+                  fontSize: "0.75rem",
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                }}
+              >
+                ⬆
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Remove photo"
+              onClick={onRemove}
+              style={{
+                width: "1.375rem",
+                height: "1.375rem",
+                borderRadius: "999px",
+                border: "none",
+                background: "var(--color-bg-elevated)",
+                color: "var(--color-text-secondary)",
+                fontSize: "0.75rem",
+                lineHeight: 1,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {onPromote && promoteOpen && (
+          <PromotePopover
+            onClose={() => setPromoteOpen(false)}
+            onPromote={onPromote}
+          />
         )}
       </div>
 
@@ -525,30 +641,182 @@ function PhotoCard({
   );
 }
 
-/** Which disposition tint each role borrows (theme-aware): front = blue, back = violet. */
-const ROLE_TONE: Record<"front" | "back", "sale" | "trade"> = {
-  front: "sale",
-  back: "trade",
-};
+/** Small popover to promote a copy photo to its stamp (#137): pick where it lands on the stamp
+ * — the single `main` slot (replaces any incumbent) or an extra with an optional title — then
+ * apply immediately. The copy's own photo is never touched. */
+function PromotePopover({
+  onClose,
+  onPromote,
+}: {
+  onClose: () => void;
+  onPromote: (target: {
+    role: PhotoRole;
+    title: string | null;
+  }) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [role, setRole] = useState<PhotoRole>("main");
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const result = await onPromote({
+      role,
+      title: role === null ? title.trim() || null : null,
+    });
+    setBusy(false);
+    if (result.ok) onClose();
+    else setError(result.error ?? "Failed to promote photo.");
+  }
+
+  // Stamps use a single `main` slot (#137), so promotion targets Main or an Extra.
+  const roleOptions: { value: PhotoRole; label: string }[] = [
+    { value: "main", label: "Main" },
+    { value: null, label: "Extra" },
+  ];
+
+  return (
+    <div
+      // Stop drag/click bubbling to the card underneath.
+      draggable={false}
+      onDragStart={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: "absolute",
+        top: "2rem",
+        right: "0.3rem",
+        zIndex: 5,
+        width: "12rem",
+        padding: "0.625rem",
+        borderRadius: "0.5rem",
+        border: "1px solid var(--color-border-strong)",
+        background: "var(--color-bg-elevated)",
+        boxShadow: "0 6px 24px rgba(0,0,0,0.25)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.5rem",
+        cursor: "default",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "0.6875rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        Promote to stamp
+      </div>
+      <div style={{ display: "flex", gap: "0.25rem" }}>
+        {roleOptions.map((opt) => {
+          const active = role === opt.value;
+          return (
+            <button
+              key={opt.label}
+              type="button"
+              disabled={busy}
+              onClick={() => setRole(opt.value)}
+              style={{
+                flex: 1,
+                padding: "0.3rem 0",
+                borderRadius: "0.3rem",
+                border: `1px solid ${active ? "var(--color-accent)" : "var(--color-border-strong)"}`,
+                background: active ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                fontSize: "0.6875rem",
+                fontWeight: 600,
+                cursor: busy ? "default" : "pointer",
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {role === null && (
+        <input
+          type="text"
+          value={title}
+          placeholder="Title (optional)"
+          disabled={busy}
+          onChange={(e) => setTitle(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "0.3rem 0.4rem",
+            border: "1px solid var(--color-border-strong)",
+            borderRadius: "0.3rem",
+            background: "var(--color-bg-page)",
+            color: "var(--color-text-primary)",
+            fontSize: "0.75rem",
+            boxSizing: "border-box",
+          }}
+        />
+      )}
+      {error && (
+        <div style={{ fontSize: "0.6875rem", color: "var(--color-error)" }}>{error}</div>
+      )}
+      <div style={{ display: "flex", gap: "0.375rem", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onClose}
+          style={{
+            padding: "0.3rem 0.6rem",
+            borderRadius: "0.3rem",
+            border: "1px solid var(--color-border-strong)",
+            background: "var(--color-bg-page)",
+            color: "var(--color-text-secondary)",
+            fontSize: "0.75rem",
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={submit}
+          style={{
+            padding: "0.3rem 0.6rem",
+            borderRadius: "0.3rem",
+            border: "none",
+            background: "var(--color-accent)",
+            color: "#fff",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          {busy ? "Promoting…" : "Promote"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function RoleButton({
   label,
   title,
-  tone,
+  color,
+  soft,
   active,
   disabled,
   onClick,
 }: {
   label: string;
   title: string;
-  tone: "sale" | "trade";
+  color: string;
+  soft: string;
   active: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
   // Active reads as a delicate soft-tinted chip (coloured text + border on a pale fill),
   // not a loud solid fill; inactive stays neutral.
-  const base = `var(--color-disposition-${tone})`;
   return (
     <button
       type="button"
@@ -561,11 +829,9 @@ function RoleButton({
         width: "1.375rem",
         height: "1.375rem",
         borderRadius: "0.3rem",
-        border: `1px solid ${active ? base : "var(--color-border-strong)"}`,
-        background: active
-          ? `var(--color-disposition-${tone}-soft)`
-          : "var(--color-bg-elevated)",
-        color: active ? base : "var(--color-text-secondary)",
+        border: `1px solid ${active ? color : "var(--color-border-strong)"}`,
+        background: active ? soft : "var(--color-bg-elevated)",
+        color: active ? color : "var(--color-text-secondary)",
         fontSize: "0.6875rem",
         fontWeight: 700,
         lineHeight: 1,

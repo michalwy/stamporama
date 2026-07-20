@@ -24,6 +24,7 @@ import {
   primaryLabel,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-strip";
 
 interface StampRowProps {
   stamp: StampListItem;
@@ -257,6 +258,9 @@ export function StampRow({
           )}
         </div>
         )}
+
+        {/* Catalog-level photos (#137): front/back distinguished from extras, full-size on click. */}
+        <PhotoStrip collectionId={collectionId} photos={stamp.photos} />
       </div>
     </div>
   );

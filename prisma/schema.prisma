@@ -197,6 +197,7 @@ model Stamp {
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
+  photos             Photo[]
 
   @@index([subtypeId])
   @@map("stamp")
@@ -296,11 +297,17 @@ model Item {
 // via the storage interface (ADR-0011) — Prisma cascade removes this row but the domain must
 // delete the stored bytes explicitly (no orphaned files).
 //
-// Owner-agnostic by design (#137): today the only owner is `itemId`; #137 makes `Photo`
-// polymorphic to also hang off `Stamp` without reworking callers.
+// **Polymorphic owner** (#137): exactly one of `itemId` / `stampId` is set (raw CHECK in the
+// migration). A copy photo documents a specific owned piece; a stamp photo is a
+// representative/reference image of the catalog stamp or variant. Front/back are singleton
+// slots *per owner*, enforced by two raw *partial* unique `(*, role)` indexes — a plain unique
+// on the nullable `itemId` would let every stamp photo collide on `(NULL, 'front')`. NULL role
+// (titled extras) stays unlimited. A copy photo promoted to its stamp is an independent row
+// with its own duplicated bytes and lifecycle.
 model Photo {
   id             String   @id @default(cuid())
-  itemId         String
+  itemId         String?
+  stampId        String?
   role           String?
   title          String?
   storageBackend String   @default("filesystem")
@@ -312,10 +319,13 @@ model Photo {
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
 
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item  Item?  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  stamp Stamp? @relation(fields: [stampId], references: [id], onDelete: Cascade)
 
-  @@unique([itemId, role])
+  // Owner XOR (CHECK) and the two per-owner partial unique `(*, role)` indexes are declared
+  // in the migration SQL — Prisma cannot express partial unique indexes or check constraints.
   @@index([itemId])
+  @@index([stampId])
   @@map("photo")
 }
 

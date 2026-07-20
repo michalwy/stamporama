@@ -3,6 +3,31 @@ import { prisma } from "./db";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
+
+/** Prisma select for a photo summary carried on a stamp node/issue row (#137). */
+const PHOTO_SUMMARY_SELECT = {
+  id: true,
+  role: true,
+  title: true,
+  sortOrder: true,
+} as const;
+
+/** Map raw photo rows to sorted `PhotoSummary`s (front→back→main→extras by sortOrder). */
+function toPhotoSummaries(
+  rows: { id: string; role: string | null; title: string | null; sortOrder: number }[]
+): PhotoSummary[] {
+  return rows
+    .map((p) => ({
+      id: p.id,
+      role: (p.role === "main" || p.role === "front" || p.role === "back"
+        ? p.role
+        : null) as PhotoRole,
+      title: p.title,
+      sortOrder: p.sortOrder,
+    }))
+    .sort(sortPhotos);
+}
 import {
   type IssuePriceTotal,
   type MoneyDisplay,
@@ -55,6 +80,8 @@ export interface StampNodeData {
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
+  /** Catalog-level photos (#137), ordered main then extras — shown under the expanded row. */
+  photos: PhotoSummary[];
 }
 
 export interface IssueCatalogNumberData {
@@ -96,6 +123,7 @@ const MEMBER_SELECT = {
           catalogEdition: { select: { year: true, catalogNameId: true } },
         },
       },
+      photos: { select: PHOTO_SUMMARY_SELECT },
       ...VARIANT_FLAG_SELECT,
     },
   },
@@ -113,6 +141,7 @@ function toStampNode(
       issuedYear: number | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
+      photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
       subtype: { actsAsVariant: boolean } | null;
     };
@@ -147,6 +176,7 @@ function toStampNode(
         : null,
     mainCatalogPriceStale,
     actsAsVariant: childIsVariant(m.stamp),
+    photos: toPhotoSummaries(m.stamp.photos),
   };
 }
 
@@ -181,6 +211,7 @@ function toIssueData(issue: {
       issuedYear: number | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
+      photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
       subtype: { actsAsVariant: boolean } | null;
     };
@@ -296,6 +327,9 @@ export interface IssueListItem {
   requiredPriceTotal: IssuePriceTotal | null;
   /** True when at least one required member's counted price is on a non-latest edition. */
   requiredPriceStale: boolean;
+  /** Main photos of the required-for-completeness stamps (#137), shown on the collapsed issue
+   * row as a representative gallery of the issue. */
+  photos: PhotoSummary[];
 }
 
 export interface PaginatedIssuesResult {
@@ -326,6 +360,8 @@ const ISSUE_LIST_SELECT = {
               catalogEdition: { select: { year: true, catalogNameId: true } },
             },
           },
+          // Only the main photo represents the stamp on the issue-level gallery (#137).
+          photos: { where: { role: "main" }, select: PHOTO_SUMMARY_SELECT },
         },
       },
     },
@@ -404,7 +440,10 @@ function toIssueListItem(
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
     members: {
       requiredForCompleteness: boolean;
-      stamp: { catalogPrices: RawCatalogPrice[] };
+      stamp: {
+        catalogPrices: RawCatalogPrice[];
+        photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
+      };
     }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
@@ -414,6 +453,8 @@ function toIssueListItem(
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
+  // One representative main photo per required stamp (already filtered to role="main").
+  const photos = toPhotoSummaries(requiredMembers.flatMap((m) => m.stamp.photos));
 
   // convertedAmount filled after rates are fetched (see buildIssueListItems).
   const requiredPriceTotal = computeRequiredPriceTotal(
@@ -437,6 +478,7 @@ function toIssueListItem(
     requiredCount: requiredMembers.length,
     requiredPriceTotal,
     requiredPriceStale: requiredPriceTotal?.usesOlderEdition ?? false,
+    photos,
   };
 }
 

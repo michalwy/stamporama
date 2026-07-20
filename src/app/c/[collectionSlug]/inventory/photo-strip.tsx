@@ -18,15 +18,27 @@ function fullUrl(collectionId: string, photoId: string): string {
 function roleLabel(photo: PhotoSummary): string {
   if (photo.role === "front") return "Front";
   if (photo.role === "back") return "Back";
+  if (photo.role === "main") return "Main";
   return photo.title || "Photo";
+}
+
+/** Short badge shown on a reserved-slot thumbnail. */
+function slotBadge(role: PhotoSummary["role"]): string {
+  if (role === "front") return "F";
+  if (role === "back") return "B";
+  return "★"; // main
 }
 
 export function PhotoStrip({
   collectionId,
   photos,
+  plain = false,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
+  /** Aggregate galleries (e.g. an issue's main photos, #137) suppress the reserved-slot border
+   * and badge — every thumbnail is a main photo, so the ★ marker would just be noise. */
+  plain?: boolean;
 }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const total = photos.length;
@@ -73,7 +85,9 @@ export function PhotoStrip({
       }}
     >
       {photos.map((photo, index) => {
-        const isSlot = photo.role === "front" || photo.role === "back";
+        const isSlot =
+          !plain &&
+          (photo.role === "front" || photo.role === "back" || photo.role === "main");
         return (
           <button
             key={photo.id}
@@ -120,7 +134,7 @@ export function PhotoStrip({
                   lineHeight: 1.4,
                 }}
               >
-                {photo.role === "front" ? "F" : "B"}
+                {slotBadge(photo.role)}
               </span>
             )}
           </button>

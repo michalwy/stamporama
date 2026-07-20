@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DialogShell,
   DialogBody,
   DialogActions,
   LabelWithError,
 } from "@/app/dialog-shell";
+import {
+  PhotoEditor,
+  type PhotoEditorValue,
+} from "@/app/c/[collectionSlug]/inventory/photo-editor";
+import type { PhotoSummary } from "@/lib/photos";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/issues/use-issues-query";
 import type { IssueListItem } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -96,6 +101,23 @@ export function StampFormDialog(props: StampFormDialogProps) {
   // grid doesn't jump around as the user types.
   const [pricedCells, setPricedCells] = useState<Set<string>>(new Set());
   const [pricesLoaded, setPricesLoaded] = useState(false);
+
+  // ── Photos (#137): direct stamp-photo upload, add + edit modes ──
+  // Pending change-set held in a ref so PhotoEditor's derive-on-change loop never re-renders
+  // this dialog; serialized into the form on Save (one logical action), applied server-side
+  // (edit: updateStampWithCatalog; add: addStampToIssue) after the stamp exists.
+  const photoValueRef = useRef<PhotoEditorValue>({
+    changeSet: { add: [], update: [], remove: [] },
+    uploading: false,
+  });
+  const [photosUploading, setPhotosUploading] = useState(false);
+  const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
+    photoValueRef.current = value;
+    setPhotosUploading(value.uploading);
+  }, []);
+  // Existing stamp photos (edit only); add mode starts empty.
+  const [initialPhotos, setInitialPhotos] = useState<PhotoSummary[]>([]);
+  const [photosLoaded, setPhotosLoaded] = useState(props.mode === "add");
 
   const vendors = Array.from(
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
@@ -225,6 +247,20 @@ export function StampFormDialog(props: StampFormDialogProps) {
     return () => { cancelled = true; };
   }, [collectionId, editStampId]);
 
+  // Load the stamp's committed photos for the edit dialog's Photos tab.
+  useEffect(() => {
+    if (!editStampId) return;
+    let cancelled = false;
+    import("@/app/actions/stamps")
+      .then((m) => m.listStampPhotosAction(editStampId))
+      .then((photos) => {
+        if (cancelled) return;
+        setInitialPhotos(photos);
+        setPhotosLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [editStampId]);
+
   const needsMembers =
     !!addProps && !!selectedIssueId && !autoCreateIssue && !addProps.prefilledParentStampId;
   const { data: members } = useIssueMembers(collectionId, selectedIssueId || "", needsMembers);
@@ -246,6 +282,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+
+    // Photo change-set (#137): applied server-side after the stamp is created/updated.
+    fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
 
     if (pricesLoaded) {
       for (const [cellKey, price] of priceEdits) {
@@ -287,15 +326,20 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const title = props.mode === "edit" ? "Edit stamp" : "Add stamp";
   const actionLabel = isPending
     ? "Saving…"
-    : props.mode === "edit"
-      ? "Save"
-      : "Add stamp";
+    : photosUploading
+      ? "Uploading photos…"
+      : props.mode === "edit"
+        ? "Save"
+        : "Add stamp";
   const actionDisabled =
-    isPending || (props.mode === "add" && !autoCreateIssue && !selectedIssueId);
+    isPending ||
+    photosUploading ||
+    (props.mode === "add" && !autoCreateIssue && !selectedIssueId);
 
   return (
-    <DialogShell title={title} onClose={onClose} minHeight="22rem">
-      {/* Tab bar (only when the area has catalogs to price) */}
+    <DialogShell title={title} onClose={onClose} minHeight="22rem" maxWidth="52rem">
+      {/* Tab bar only when the area has catalogs to price. Photos are inline on the Details
+          tab (like the copy dialog), not a separate tab. */}
       {hasPricesTab && (
         <div
           style={{
@@ -430,9 +474,15 @@ export function StampFormDialog(props: StampFormDialogProps) {
             {vendors.length > 0 && (
               <div style={{ marginBottom: "0.875rem" }}>
                 <LabelWithError>Catalog numbers</LabelWithError>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: "0.375rem 0.75rem",
+                  }}
+                >
                   {vendors.map((v, i) => (
-                    <div key={v.catalogVendorId} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <div key={v.catalogVendorId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
                       <span style={{ width: "4rem", flexShrink: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
                         {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
                       </span>
@@ -466,63 +516,66 @@ export function StampFormDialog(props: StampFormDialogProps) {
               </div>
             )}
 
-            {/* Name */}
-            <div style={{ marginBottom: "0.875rem" }}>
-              <LabelWithError htmlFor="f-stamp-name">Name (optional)</LabelWithError>
-              <input
-                id="f-stamp-name"
-                name="name"
-                type="text"
-                disabled={isPending}
-                defaultValue={editProps?.stamp.name ?? ""}
-                placeholder="e.g. 5 kr blue"
-                data-autofocus={
-                  props.mode === "edit"
-                    ? true
-                    : (skipToFields && vendors.length === 0) || undefined
-                }
-                style={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Issued date */}
-            <div>
-              <LabelWithError>Issued date (optional — any part)</LabelWithError>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+            {/* Name + issued date on one row */}
+            <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+              {/* Name */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <LabelWithError htmlFor="f-stamp-name">Name (optional)</LabelWithError>
                 <input
-                  name="issuedDay"
-                  type="number"
+                  id="f-stamp-name"
+                  name="name"
+                  type="text"
                   disabled={isPending}
-                  placeholder="Day"
-                  defaultValue={editProps?.stamp.issuedDay ?? ""}
-                  min={1}
-                  max={31}
-                  style={{ ...INPUT_STYLE, width: "4.5rem", flex: "none" }}
-                />
-                <input
-                  name="issuedMonth"
-                  type="number"
-                  disabled={isPending}
-                  placeholder="Month"
-                  defaultValue={editProps?.stamp.issuedMonth ?? ""}
-                  min={1}
-                  max={12}
-                  style={{ ...INPUT_STYLE, width: "5rem", flex: "none" }}
-                />
-                <input
-                  name="issuedYear"
-                  type="number"
-                  disabled={isPending}
-                  placeholder="Year"
-                  defaultValue={
-                    editProps
-                      ? (editProps.stamp.issuedYear ?? "")
-                      : (addProps?.issues.find((i) => i.id === selectedIssueId)?.year ?? undefined)
+                  defaultValue={editProps?.stamp.name ?? ""}
+                  placeholder="e.g. 5 kr blue"
+                  data-autofocus={
+                    props.mode === "edit"
+                      ? true
+                      : (skipToFields && vendors.length === 0) || undefined
                   }
-                  min={1840}
-                  max={2100}
-                  style={{ ...INPUT_STYLE, flex: 1 }}
+                  style={INPUT_STYLE}
                 />
+              </div>
+
+              {/* Issued date */}
+              <div style={{ flexShrink: 0 }}>
+                <LabelWithError>Issued date (optional)</LabelWithError>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <input
+                    name="issuedDay"
+                    type="number"
+                    disabled={isPending}
+                    placeholder="Day"
+                    defaultValue={editProps?.stamp.issuedDay ?? ""}
+                    min={1}
+                    max={31}
+                    style={{ ...INPUT_STYLE, width: "4.5rem", flex: "none" }}
+                  />
+                  <input
+                    name="issuedMonth"
+                    type="number"
+                    disabled={isPending}
+                    placeholder="Month"
+                    defaultValue={editProps?.stamp.issuedMonth ?? ""}
+                    min={1}
+                    max={12}
+                    style={{ ...INPUT_STYLE, width: "5rem", flex: "none" }}
+                  />
+                  <input
+                    name="issuedYear"
+                    type="number"
+                    disabled={isPending}
+                    placeholder="Year"
+                    defaultValue={
+                      editProps
+                        ? (editProps.stamp.issuedYear ?? "")
+                        : (addProps?.issues.find((i) => i.id === selectedIssueId)?.year ?? undefined)
+                    }
+                    min={1840}
+                    max={2100}
+                    style={{ ...INPUT_STYLE, width: "5.5rem", flex: "none" }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -567,6 +620,38 @@ export function StampFormDialog(props: StampFormDialogProps) {
                 />
               </div>
             )}
+
+            {/* Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted
+                only once the stamp's existing photos have loaded (edit mode); PhotoEditor seeds
+                its state from initialPhotos once on mount, so it must not mount before they arrive. */}
+            <div
+              style={{
+                marginTop: "1.25rem",
+                paddingTop: "1.25rem",
+                borderTop: "1px solid var(--color-border)",
+              }}
+            >
+              {!photosLoaded ? (
+                // Reserve roughly the editor's height so the dialog doesn't jump on load.
+                <div
+                  style={{
+                    minHeight: "12rem",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  Loading photos…
+                </div>
+              ) : (
+                <PhotoEditor
+                  collectionId={collectionId}
+                  initialPhotos={initialPhotos}
+                  disabled={isPending}
+                  roleMode="main"
+                  onChange={handlePhotoChange}
+                />
+              )}
+            </div>
           </div>
 
           {/* ── Prices tab (overlays Details; own scroll if taller) ── */}

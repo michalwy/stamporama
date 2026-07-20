@@ -16,26 +16,40 @@ import {
   UnsupportedImageError,
 } from "./photos/process";
 
-// Server-side photo domain for inventory copies (#112, ADR-0011). Collection-scoped
-// throughout; owner checks live here, never in UI. Bytes are handled via the storage
-// interface — this module is the only place that reconciles `Photo`/`PhotoUpload` rows with
-// stored bytes so there are never orphaned files.
+// Server-side photo domain for inventory copies (#112) and catalog stamps (#137, ADR-0011).
+// Collection-scoped throughout; owner checks live here, never in UI. Bytes are handled via the
+// storage interface — this module is the only place that reconciles `Photo`/`PhotoUpload` rows
+// with stored bytes so there are never orphaned files.
+//
+// A `Photo` is **polymorphic**: it hangs off exactly one owner, an `Item` or a `Stamp`. The
+// change-set apply / list / byte-cleanup logic is written once over a `PhotoOwner` and exposed
+// through thin per-owner wrappers so callers stay explicit about what they own.
 
-/** Reserved single-image slots plus the null "extra" role. */
-export type PhotoRole = "front" | "back" | null;
+/** The single owner a photo belongs to. Exactly one field is set (DB CHECK enforces XOR). */
+export type PhotoOwner = { itemId: string } | { stampId: string };
 
-const VALID_ROLES = new Set(["front", "back"]);
+function isItemOwner(o: PhotoOwner): o is { itemId: string } {
+  return "itemId" in o;
+}
+
+/** Reserved single-image slots plus the null "extra" role. Copies use `front` / `back`; stamps
+ * (#137) use a single `main` slot instead. Each is a singleton per owner (partial-unique on
+ * `(owner, role)`); which slots an owner actually uses is a UI concern. */
+export type PhotoRole = "front" | "back" | "main" | null;
+
+const VALID_ROLES = new Set(["front", "back", "main"]);
 
 function normalizeRole(role: unknown): PhotoRole {
   return typeof role === "string" && VALID_ROLES.has(role)
-    ? (role as "front" | "back")
+    ? (role as PhotoRole)
     : null;
 }
 
 /** Display-facing photo metadata (no bytes). The serving route addresses variants by id. */
 export interface PhotoData {
   id: string;
-  itemId: string;
+  itemId: string | null;
+  stampId: string | null;
   role: PhotoRole;
   title: string | null;
   mime: string;
@@ -86,6 +100,26 @@ export interface PhotoChangeSet {
 export class PhotoAuthError extends Error {}
 export class PhotoValidationError extends Error {}
 
+/** Parse the photo dialog's pending change-set from a form's `photoChangeSet` JSON blob
+ * (#112/#137). Absent/blank/malformed input degrades to `null` (no photo edits) rather than
+ * failing the whole save; the domain re-validates every referenced id on apply. Shared by the
+ * copy and stamp save actions. */
+export function parsePhotoChangeSet(formData: FormData): PhotoChangeSet | null {
+  const raw = ((formData.get("photoChangeSet") as string | null) ?? "").trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PhotoChangeSet>;
+    const cs: PhotoChangeSet = {
+      add: Array.isArray(parsed.add) ? parsed.add : [],
+      update: Array.isArray(parsed.update) ? parsed.update : [],
+      remove: Array.isArray(parsed.remove) ? parsed.remove : [],
+    };
+    return cs.add.length || cs.update.length || cs.remove.length ? cs : null;
+  } catch {
+    return null;
+  }
+}
+
 async function assertCollectionOwner(
   ownerId: string,
   collectionId: string
@@ -106,6 +140,22 @@ async function resolveItemCollection(itemId: string): Promise<string> {
   });
   if (!item) throw new PhotoAuthError("Item not found.");
   return item.collectionId;
+}
+
+async function resolveStampCollection(stampId: string): Promise<string> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { collectionId: true },
+  });
+  if (!stamp) throw new PhotoAuthError("Stamp not found.");
+  return stamp.collectionId;
+}
+
+/** The collection that owns a photo owner (item or stamp). */
+async function resolveOwnerCollection(owner: PhotoOwner): Promise<string> {
+  return isItemOwner(owner)
+    ? resolveItemCollection(owner.itemId)
+    : resolveStampCollection(owner.stampId);
 }
 
 /** Delete both stored variants under a photo/upload prefix, best-effort. Never throws — byte
@@ -204,21 +254,39 @@ export async function stageUpload(
   };
 }
 
-/** Apply the dialog's pending change-set to an item in one logical Save (#112). Removals and
- * updates are validated against the item's own photos; adds consume staged uploads from the
- * same collection. Front/back stay singletons: an add into an occupied slot replaces the
- * incumbent. Staged bytes are moved to the permanent `<collectionId>/<photoId>` prefix before
- * the DB writes commit, so committed rows always reference existing bytes. */
+/** Apply the dialog's pending change-set to an inventory copy in one logical Save (#112). */
 export async function applyPhotoChangeSet(
   ownerId: string,
   itemId: string,
   changeSet: PhotoChangeSet
 ): Promise<void> {
-  const collectionId = await resolveItemCollection(itemId);
+  return applyPhotoChangeSetForOwner(ownerId, { itemId }, changeSet);
+}
+
+/** Apply the dialog's pending change-set to a catalog stamp in one logical Save (#137). */
+export async function applyStampPhotoChangeSet(
+  ownerId: string,
+  stampId: string,
+  changeSet: PhotoChangeSet
+): Promise<void> {
+  return applyPhotoChangeSetForOwner(ownerId, { stampId }, changeSet);
+}
+
+/** Apply a pending change-set to one photo owner (item or stamp) in one logical Save. Removals
+ * and updates are validated against the owner's own photos; adds consume staged uploads from
+ * the same collection. Front/back stay singletons: an add into an occupied slot replaces the
+ * incumbent. Staged bytes are moved to the permanent `<collectionId>/<photoId>` prefix before
+ * the DB writes commit, so committed rows always reference existing bytes. */
+async function applyPhotoChangeSetForOwner(
+  ownerId: string,
+  owner: PhotoOwner,
+  changeSet: PhotoChangeSet
+): Promise<void> {
+  const collectionId = await resolveOwnerCollection(owner);
   await assertCollectionOwner(ownerId, collectionId);
 
   const existing = await prisma.photo.findMany({
-    where: { itemId },
+    where: owner,
     select: {
       id: true,
       role: true,
@@ -232,12 +300,12 @@ export async function applyPhotoChangeSet(
   // --- Validate references up front (fail before touching bytes) ---
   for (const photoId of changeSet.remove) {
     if (!existingById.has(photoId)) {
-      throw new PhotoValidationError("Photo not found on this item.");
+      throw new PhotoValidationError("Photo not found on this owner.");
     }
   }
   for (const u of changeSet.update) {
     if (!existingById.has(u.photoId)) {
-      throw new PhotoValidationError("Photo not found on this item.");
+      throw new PhotoValidationError("Photo not found on this owner.");
     }
   }
   const uploads =
@@ -341,7 +409,7 @@ export async function applyPhotoChangeSet(
       await tx.photo.create({
         data: {
           id: p.photoId,
-          itemId,
+          ...owner,
           role: p.role,
           title: p.role === null ? p.add.title : null,
           storageBackend: p.upload.storageBackend,
@@ -367,20 +435,124 @@ export async function applyPhotoChangeSet(
   );
 }
 
-const ROLE_ORDER: Record<string, number> = { front: 0, back: 1 };
+const ROLE_ORDER: Record<string, number> = { main: 0, front: 0, back: 1 };
+
+/** Promote a copy photo to its stamp (#137). The source photo is a copy photo whose copy is
+ * identified to a `Stamp`; a **new, independent** `Photo` is created on that stamp with its own
+ * duplicated bytes (own `storageKey`) and lifecycle — deleting either never affects the other.
+ * The caller chooses the target role: front/back replace any incumbent in that slot on the
+ * stamp; an extra is appended after the stamp's existing extras and may carry a title. */
+export async function promoteCopyPhotoToStamp(
+  ownerId: string,
+  photoId: string,
+  target: { role: PhotoRole; title: string | null }
+): Promise<void> {
+  const source = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      storageBackend: true,
+      storageKey: true,
+      mime: true,
+      width: true,
+      height: true,
+      sizeBytes: true,
+      item: { select: { collectionId: true, stampId: true } },
+    },
+  });
+  if (!source || !source.item) {
+    throw new PhotoValidationError("Photo is not a copy photo.");
+  }
+  const { collectionId, stampId } = source.item;
+  if (!stampId) {
+    throw new PhotoValidationError(
+      "This copy isn't identified to a stamp, so its photo can't be promoted."
+    );
+  }
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const role = normalizeRole(target.role);
+
+  // Duplicate the bytes to a fresh permanent key on the active backend (write-one/read-many).
+  const newPhotoId = randomUUID();
+  const toPrefix = permanentPrefix(collectionId, newPhotoId);
+  const srcStorage = getStorage(source.storageBackend);
+  const dstStorage = getActiveStorage();
+  for (const v of ["full", "thumb"] as PhotoVariant[]) {
+    const obj = await srcStorage.get(
+      variantKey(source.storageKey, v, source.mime),
+      source.mime
+    );
+    await dstStorage.put(variantKey(toPrefix, v, source.mime), obj.stream, source.mime);
+  }
+
+  // Where the new photo lands on the stamp: singleton front/back displaces an incumbent;
+  // an extra is appended after the stamp's current extras.
+  const stampPhotos = await prisma.photo.findMany({
+    where: { stampId },
+    select: { id: true, role: true, sortOrder: true, storageBackend: true, storageKey: true, mime: true },
+  });
+  const displaced =
+    role !== null ? stampPhotos.find((p) => normalizeRole(p.role) === role) : undefined;
+  const sortOrder =
+    role === null
+      ? stampPhotos.reduce((max, p) => Math.max(max, p.sortOrder), -1) + 1
+      : 0;
+
+  await prisma.$transaction(async (tx) => {
+    if (displaced) {
+      await tx.photo.delete({ where: { id: displaced.id } });
+    }
+    await tx.photo.create({
+      data: {
+        id: newPhotoId,
+        stampId,
+        role,
+        title: role === null ? target.title : null,
+        storageBackend: dstStorage.backend,
+        storageKey: toPrefix,
+        mime: source.mime,
+        width: source.width,
+        height: source.height,
+        sizeBytes: source.sizeBytes,
+        sortOrder,
+      },
+    });
+  });
+
+  // Post-commit: clean up the displaced incumbent's bytes (its row is already gone).
+  if (displaced) {
+    await deleteVariants(displaced.storageBackend, displaced.storageKey, displaced.mime);
+  }
+}
 
 /** All photos on a copy, ordered front, back, then extras by `sortOrder` (#112 display). */
 export async function listItemPhotos(
   ownerId: string,
   itemId: string
 ): Promise<PhotoData[]> {
-  const collectionId = await resolveItemCollection(itemId);
+  return listOwnerPhotos(ownerId, { itemId });
+}
+
+/** All photos on a catalog stamp, ordered front, back, then extras by `sortOrder` (#137). */
+export async function listStampPhotos(
+  ownerId: string,
+  stampId: string
+): Promise<PhotoData[]> {
+  return listOwnerPhotos(ownerId, { stampId });
+}
+
+async function listOwnerPhotos(
+  ownerId: string,
+  owner: PhotoOwner
+): Promise<PhotoData[]> {
+  const collectionId = await resolveOwnerCollection(owner);
   await assertCollectionOwner(ownerId, collectionId);
-  const rows = await prisma.photo.findMany({ where: { itemId } });
+  const rows = await prisma.photo.findMany({ where: owner });
   return rows
     .map((r) => ({
       id: r.id,
       itemId: r.itemId,
+      stampId: r.stampId,
       role: normalizeRole(r.role),
       title: r.title,
       mime: r.mime,
@@ -419,13 +591,18 @@ export async function getPhotoForServing(photoId: string): Promise<{
       storageBackend: true,
       storageKey: true,
       mime: true,
+      // Polymorphic owner (#137): exactly one of item/stamp is set — resolve the owning
+      // collection + owner from whichever it is.
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
     },
   });
   if (!photo) return null;
+  const owner = photo.item ?? photo.stamp;
+  if (!owner) return null;
   return {
-    collectionId: photo.item.collectionId,
-    ownerId: photo.item.collection.ownerId,
+    collectionId: owner.collectionId,
+    ownerId: owner.collection.ownerId,
     storageBackend: photo.storageBackend,
     storageKey: photo.storageKey,
     mime: photo.mime,
@@ -435,8 +612,18 @@ export async function getPhotoForServing(photoId: string): Promise<{
 /** Delete all stored bytes for an item's photos. Called before deleting the `Item` — Prisma
  * cascade drops the `Photo` rows, but not the files (#112 byte cleanup on delete). */
 export async function deletePhotoBytesForItem(itemId: string): Promise<void> {
+  await deletePhotoBytesForOwner({ itemId });
+}
+
+/** Delete all stored bytes for a stamp's photos. Called before deleting the `Stamp` — Prisma
+ * cascade drops the `Photo` rows, but not the files (#137 byte cleanup on delete). */
+export async function deletePhotoBytesForStamp(stampId: string): Promise<void> {
+  await deletePhotoBytesForOwner({ stampId });
+}
+
+async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
   const rows = await prisma.photo.findMany({
-    where: { itemId },
+    where: owner,
     select: { storageBackend: true, storageKey: true, mime: true },
   });
   await Promise.all(
