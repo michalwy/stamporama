@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import {
   createPurchase,
   updatePurchase,
+  setPurchaseStatus,
   deletePurchase,
   type PurchaseCreateInput,
   type PurchaseStatus,
@@ -123,6 +124,28 @@ export async function updatePurchaseAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to update purchase. Please try again.",
+    };
+  }
+}
+
+/** Set a purchase's delivery status inline from the detail view (#141). Only handles the
+ * `preparing` / `in_transit` transitions; marking arrived has copy side-effects and goes
+ * through `markPurchaseArrivedAction`. */
+export async function setPurchaseStatusAction(
+  purchaseId: string,
+  status: PurchaseStatus
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  if (status === "arrived") {
+    return { status: "error", message: "Use “Mark arrived” to mark a purchase arrived." };
+  }
+  try {
+    await setPurchaseStatus(session.user.id, purchaseId, status);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to update status. Please try again.",
     };
   }
 }

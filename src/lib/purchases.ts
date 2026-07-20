@@ -397,6 +397,22 @@ export async function updatePurchase(
   return (await getPurchase(ownerId, purchaseId))!;
 }
 
+/** Set only a purchase's delivery status (#141) — a single-field update for the inline
+ * control on the detail view, with none of the contact/currency/FX handling of a full edit.
+ * Marking a purchase `arrived` has copy side-effects, so that transition goes through
+ * `markPurchaseArrived` instead; this path is for `preparing` / `in_transit`. */
+export async function setPurchaseStatus(
+  ownerId: string,
+  purchaseId: string,
+  status: PurchaseStatus
+): Promise<void> {
+  await assertPurchaseOwner(ownerId, purchaseId);
+  await prisma.purchase.update({
+    where: { id: purchaseId },
+    data: { status: normalizeStatus(status) },
+  });
+}
+
 /** Delete a purchase and its lines (cascade). Blocked by the DB if any lot still has
  * `Item`s attached (`onDelete: Restrict`); surfaced as a friendly error. */
 export async function deletePurchase(

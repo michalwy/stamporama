@@ -86,6 +86,9 @@ const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
   arrived: { label: "Arrived", token: "success" },
 };
 
+// Purchase delivery status in lifecycle order, for the inline status select (#141).
+const PURCHASE_STATUS_ORDER = ["preparing", "in_transit", "arrived"];
+
 // Delivery states that count as "not yet sorted": still awaiting the sort pass, so they keep
 // a copy out of the collection and are what the arrival/close flows act on (#121).
 const UNSORTED_STATES = new Set(["ordered", "to_sort", "in_transit"]);
@@ -315,7 +318,55 @@ export function PurchaseDetailPanel({
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {(() => {
               const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
-              return <span style={tintChip(s.token, s.label).style}>{s.label}</span>;
+              return (
+                <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow.">
+                  <select
+                    aria-label="Purchase status"
+                    value={purchase.status}
+                    disabled={isPending}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === purchase.status) return;
+                      setError(undefined);
+                      // Arriving moves copies to "to sort" and can bulk-file them — route it
+                      // through the dedicated dialog rather than a bare status write (#141).
+                      if (next === "arrived") {
+                        setArriving(true);
+                        return;
+                      }
+                      run(async () => {
+                        const { setPurchaseStatusAction } = await import("@/app/actions/purchases");
+                        return setPurchaseStatusAction(
+                          purchase.id,
+                          next as "preparing" | "in_transit"
+                        );
+                      });
+                    }}
+                    style={{
+                      ...tintChip(s.token, s.label).style,
+                      // Use longhand border props so toggling between muted (no borderColor)
+                      // and tinted (borderColor set) statuses doesn't mix the `border`
+                      // shorthand with `borderColor` and trip React's rerender warning.
+                      border: undefined,
+                      borderWidth: "1px",
+                      borderStyle: "solid",
+                      borderColor:
+                        s.token === "muted"
+                          ? "var(--color-border)"
+                          : `var(--color-${s.token}-border, var(--color-border))`,
+                      cursor: "pointer",
+                      paddingRight: "1.25rem",
+                      appearance: "auto",
+                    }}
+                  >
+                    {PURCHASE_STATUS_ORDER.map((v) => (
+                      <option key={v} value={v}>
+                        {PURCHASE_STATUS[v]?.label ?? v}
+                      </option>
+                    ))}
+                  </select>
+                </Tooltip>
+              );
             })()}
             {purchase.status !== "arrived" && (
               <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">

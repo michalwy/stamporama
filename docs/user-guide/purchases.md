@@ -82,6 +82,11 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
 Click a purchase row (or **Open** in its **⋮** menu) to open its **detail** screen. This is
 where you build up the order's lots and identify copies into them over time.
 
+The header carries a **status** dropdown (top-right). Switch between **Preparing** and **In
+transit** and it saves immediately — no need to open the edit dialog. Choosing **Arrived**
+opens the **Mark arrived** flow (see *Marking an order arrived* below) rather than a bare
+status change, because arriving also moves the order's copies to *To sort*.
+
 ### Lots
 
 There are two ways to add a lot:
