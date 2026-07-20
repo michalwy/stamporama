@@ -178,7 +178,7 @@ jobs:
 
       - name: Compute image labels and version
         id: meta
-        uses: docker/metadata-action@v5.10.0
+        uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
@@ -249,7 +249,7 @@ jobs:
 
       - name: Compute image tags and labels
         id: meta
-        uses: docker/metadata-action@v5.10.0
+        uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ env.IMAGE_NAME }}
           flavor: latest=true
