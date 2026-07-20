@@ -240,8 +240,13 @@ export function PurchasesListPanel({
               if (dialog.kind === "add") {
                 const { createPurchaseAction } = await import("@/app/actions/purchases");
                 const result = await createPurchaseAction(collectionId, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                if (result.status === "success") {
+                  // Take the user straight to the new purchase's detail view (#139).
+                  // Refresh the list/contacts caches so they're current when the user returns.
+                  invalidateList(collectionId);
+                  invalidateContacts(collectionId);
+                  router.push(`/c/${collectionSlug}/purchases/${result.id}`);
+                } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updatePurchaseAction } = await import("@/app/actions/purchases");
                 const result = await updatePurchaseAction(dialog.purchase.id, fd);

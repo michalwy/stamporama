@@ -28,6 +28,12 @@ export type PurchaseActionState =
   | { status: "success" }
   | { status: "error"; message: string };
 
+/** Create returns the new purchase's id so the caller can navigate straight to its
+ * detail view (#139). */
+export type CreatePurchaseActionState =
+  | { status: "success"; id: string }
+  | { status: "error"; message: string };
+
 /** Result of a lot-close attempt exposed to the client: success, a friendly error, or a
  * structured block naming the copies that must be fixed before the lot can close. */
 export type CloseLotActionState =
@@ -88,13 +94,13 @@ function parseFields(formData: FormData): { data: PurchaseCreateInput; error?: s
 export async function createPurchaseAction(
   collectionId: string,
   formData: FormData
-): Promise<PurchaseActionState> {
+): Promise<CreatePurchaseActionState> {
   const session = await getSession();
   const { data, error } = parseFields(formData);
   if (error) return { status: "error", message: error };
   try {
-    await createPurchase(session.user.id, collectionId, data);
-    return { status: "success" };
+    const purchase = await createPurchase(session.user.id, collectionId, data);
+    return { status: "success", id: purchase.id };
   } catch (e) {
     return {
       status: "error",
