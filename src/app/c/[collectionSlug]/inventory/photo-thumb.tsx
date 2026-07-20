@@ -51,6 +51,8 @@ export function PhotoThumb({
   // Index of the photo shown in the thumbnail; also the lightbox's starting photo.
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
+  // In-place carousel arrows stay hidden until the thumbnail is hovered, to reduce clutter (#153).
+  const [hovered, setHovered] = useState(false);
   const total = photos.length;
   // A photo can be removed elsewhere; keep the shown index in range.
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
@@ -110,6 +112,8 @@ export function PhotoThumb({
   return (
     <div style={{ flexShrink: 0, width: size }}>
       <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           position: "relative",
           width: size,
@@ -174,8 +178,8 @@ export function PhotoThumb({
         {/* More-than-one signal + in-place navigation. */}
         {total > 1 && (
           <>
-            <ThumbNavButton side="left" onClick={() => step(-1)} />
-            <ThumbNavButton side="right" onClick={() => step(1)} />
+            <ThumbNavButton side="left" visible={hovered} onClick={() => step(-1)} />
+            <ThumbNavButton side="right" visible={hovered} onClick={() => step(1)} />
             <span
               aria-hidden="true"
               style={{
@@ -296,8 +300,17 @@ function NoPhotoGlyph() {
 
 /** Small round chevron overlaid on the thumbnail that cycles the shown photo without opening the
  * lightbox. A circular puck keeps most of the stamp visible (unlike a full-height bar). Stops
- * propagation so it never triggers the image's open-lightbox click. */
-function ThumbNavButton({ side, onClick }: { side: "left" | "right"; onClick: () => void }) {
+ * propagation so it never triggers the image's open-lightbox click. Hidden until the thumbnail is
+ * hovered (#153); `pointer-events` follow visibility so the invisible control isn't clickable. */
+function ThumbNavButton({
+  side,
+  visible,
+  onClick,
+}: {
+  side: "left" | "right";
+  visible: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -324,6 +337,9 @@ function ThumbNavButton({ side, onClick }: { side: "left" | "right"; onClick: ()
         color: "#fff",
         background: "rgba(0,0,0,0.55)",
         cursor: "pointer",
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? "auto" : "none",
+        transition: "opacity 120ms ease",
       }}
     >
       {side === "left" ? "‹" : "›"}
