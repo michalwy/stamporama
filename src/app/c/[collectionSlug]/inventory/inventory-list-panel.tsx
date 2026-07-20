@@ -13,6 +13,7 @@ import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-s
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { parseCatalogSearch } from "@/lib/catalog-number";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import {
@@ -124,10 +125,36 @@ export function InventoryListPanel({
     return set;
   }, [searchParams]);
 
+  // Prefixed catalog search (#146): the inventory list has no dedicated vendor
+  // dropdown, so its single search box doubles as the catalog input. Parse a leading
+  // vendor abbreviation ("Mi PL 200") against the collection's vendors and pass the
+  // bare number + resolved vendor alongside the raw text, so the query matches
+  // catalog numbers even when the typed prefix isn't a substring of the stored value.
+  const catalogVendors = useMemo(() => {
+    const seen = new Map<string, { id: string; abbreviation: string }>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [areas]);
+  const parsedCatalog = useMemo(
+    () => parseCatalogSearch(search, catalogVendors),
+    [search, catalogVendors]
+  );
+
   const filters: InventoryItemFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      catalogVendorId: parsedCatalog.vendorId ?? undefined,
+      catalogNumber: parsedCatalog.number || undefined,
       conditionId: conditionId || undefined,
       locationId: locationId || undefined,
       issueId: issueId || undefined,
@@ -138,13 +165,15 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, conditionId, locationId, issueId, year, activeDispositions, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      catalogVendorId: parsedCatalog.vendorId ?? undefined,
+      catalogNumber: parsedCatalog.number || undefined,
       conditionId: conditionId || undefined,
       locationId: locationId || undefined,
       issueId: issueId || undefined,
@@ -152,7 +181,7 @@ export function InventoryListPanel({
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
     }),
-    [filterAreaIds, search, conditionId, locationId, issueId, activeDispositions]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(

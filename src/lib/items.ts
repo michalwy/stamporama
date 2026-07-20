@@ -449,6 +449,12 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   /** Free-text search over the linked stamp's name, its issue name, and catalog numbers
    * (case-insensitive substring). Mirrors the stamps list search (#106). */
   search?: string;
+  /** Parsed from the search box when it reads as a prefixed catalog number (#146):
+   * the bare number, optionally narrowed to a vendor resolved from a leading
+   * abbreviation. Matched in addition to `search` so "Mi PL 200" finds vendor Mi's
+   * #200 even though the raw string isn't a substring of the stored number. */
+  catalogVendorId?: string;
+  catalogNumber?: string;
   /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
@@ -492,11 +498,26 @@ function buildItemWhere(
   }
   if (filters.search) {
     const s = filters.search;
-    stampWhere.OR = [
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const or: any[] = [
       { name: { contains: s, mode: "insensitive" } },
       { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
       { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
     ];
+    // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
+    // when one was recognized) so "Mi PL 200" resolves even though the raw text
+    // isn't a substring of the stored "200".
+    if (filters.catalogNumber) {
+      or.push({
+        catalogNumbers: {
+          some: {
+            number: { contains: filters.catalogNumber, mode: "insensitive" },
+            ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
+          },
+        },
+      });
+    }
+    stampWhere.OR = or;
   }
   return {
     collectionId,

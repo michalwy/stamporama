@@ -180,15 +180,17 @@ export function ListToolbar({
               </option>
             ))}
           </select>
+          {/* Accepts a bare number or a prefixed one ("Mi PL 200", "MiPL200"); a
+              recognized vendor prefix overrides the dropdown (#146). Always enabled
+              so a number can be searched across all vendors without picking one. */}
           <input
             type="text"
-            placeholder="Catalog number"
+            placeholder="e.g. 200 or Mi PL 200"
             value={catalogNumber ?? ""}
             onChange={(e) =>
               onCatalogSearchChange(catalogVendorId ?? "", e.target.value)
             }
-            style={{ ...INPUT_STYLE, width: "8rem" }}
-            disabled={!catalogVendorId}
+            style={{ ...INPUT_STYLE, width: "10rem" }}
           />
           {(catalogVendorId || catalogNumber) && (
             <button

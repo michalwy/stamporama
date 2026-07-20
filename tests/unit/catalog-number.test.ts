@@ -7,6 +7,7 @@ import {
   catalogMatchKey,
   catalogKeyMatches,
   parseCatalogNumberParts,
+  parseCatalogSearch,
   resolveCatalogRange,
   generateCatalogNumbers,
 } from "../../src/lib/catalog-number";
@@ -143,5 +144,39 @@ describe("catalogKeyMatches", () => {
   it("never matches an empty query", () => {
     assert.equal(catalogKeyMatches("", keys), false);
     assert.equal(catalogKeyMatches("  ", keys), false);
+  });
+});
+
+describe("parseCatalogSearch", () => {
+  const vendors = [
+    { id: "mi", abbreviation: "Mi" },
+    { id: "sc", abbreviation: "Sc" },
+  ];
+
+  it("resolves a vendor abbreviation and area code regardless of spacing", () => {
+    for (const q of ["Mi PL 200", "Mi PL200", "MiPL200", "mi pl 200"]) {
+      assert.deepEqual(parseCatalogSearch(q, vendors), { vendorId: "mi", number: "200" }, q);
+    }
+  });
+
+  it("resolves a vendor with no area code", () => {
+    assert.deepEqual(parseCatalogSearch("Mi 200", vendors), { vendorId: "mi", number: "200" });
+  });
+
+  it("keeps a bare number vendorless", () => {
+    assert.deepEqual(parseCatalogSearch("200", vendors), { vendorId: null, number: "200" });
+  });
+
+  it("treats an unknown leading prefix as an area code, not a vendor", () => {
+    assert.deepEqual(parseCatalogSearch("PL200", vendors), { vendorId: null, number: "200" });
+  });
+
+  it("preserves a suffix on the number", () => {
+    assert.deepEqual(parseCatalogSearch("Mi 200a", vendors), { vendorId: "mi", number: "200a" });
+  });
+
+  it("returns an empty number when there is no digit run", () => {
+    assert.deepEqual(parseCatalogSearch("Mi", vendors), { vendorId: null, number: "" });
+    assert.deepEqual(parseCatalogSearch("", vendors), { vendorId: null, number: "" });
   });
 });

@@ -27,6 +27,10 @@ export interface InventoryItemFilters {
   areaIds?: string[];
   /** Free-text search over the linked stamp's name, issue name, and catalog numbers (#106). */
   search?: string;
+  /** Parsed catalog number + optional vendor when the search box reads as a prefixed
+   * catalog number ("Mi PL 200", #146). */
+  catalogVendorId?: string;
+  catalogNumber?: string;
   /** Restrict to copies of a single stamp (stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
@@ -49,6 +53,8 @@ export interface InventoryYearFacetFilters {
   certificateStatusId?: string;
   areaIds?: string[];
   search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
   stampId?: string;
   issueId?: string;
   locationId?: string;
@@ -80,6 +86,8 @@ export function useInventoryItemsInfinite(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
@@ -113,6 +121,8 @@ export function useHoldingsValuation(
       certificateStatusId: filters.certificateStatusId,
       areaIds: filters.areaIds,
       search: filters.search,
+      catalogVendorId: filters.catalogVendorId,
+      catalogNumber: filters.catalogNumber,
       issueId: filters.issueId,
       locationId: filters.locationId,
       year: filters.year,
@@ -128,6 +138,8 @@ export function useHoldingsValuation(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
       if (filters.year) params.set("year", filters.year);
@@ -160,6 +172,8 @@ export function useItemYears(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);

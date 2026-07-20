@@ -32,6 +32,8 @@ export async function GET(
       certificateStatusId: sp.get("certificateStatusId") || undefined,
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
+      catalogVendorId: sp.get("catalogVendorId") || undefined,
+      catalogNumber: sp.get("catalogNumber") || undefined,
       issueId: sp.get("issueId") || undefined,
       locationId: sp.get("locationId") || undefined,
       year,

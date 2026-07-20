@@ -466,9 +466,17 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
     });
   }
 
-  if (opts.catalogVendorId && opts.catalogNumber) {
+  // Catalog filter (#146): a number narrows to a vendor when one is set, else it
+  // matches that number across every vendor. A vendor without a number does not
+  // filter on its own.
+  if (opts.catalogNumber) {
     conditions.push({
-      catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, number: opts.catalogNumber } },
+      catalogNumbers: {
+        some: {
+          number: opts.catalogNumber,
+          ...(opts.catalogVendorId ? { catalogVendorId: opts.catalogVendorId } : {}),
+        },
+      },
     });
   }
 

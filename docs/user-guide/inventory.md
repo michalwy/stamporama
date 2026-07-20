@@ -50,7 +50,9 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
   area includes its nested sub-areas. Choose **All areas** to clear it.
 - **Search** — type in the search box to match copies by the linked stamp's **name**, its
-  **issue name**, or a **catalog number** (case-insensitive).
+  **issue name**, or a **catalog number** (case-insensitive). A catalog number can be typed
+  bare (`200`) or with its full prefix and any spacing (`Mi PL 200`, `MiPL200`); when the
+  text starts with a known vendor abbreviation the match is narrowed to that vendor.
 - **Issue** — filter to copies of stamps in a single issue. Start typing to pick one; the
   suggestions are scoped to the area selected on the left.
 - **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none

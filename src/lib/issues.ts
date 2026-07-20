@@ -555,12 +555,16 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
     });
   }
 
-  if (opts.catalogVendorId && opts.catalogNumber) {
+  // Catalog filter (#146): a number narrows to a vendor when one is set, else it
+  // matches across every vendor. Matches the issue's own first/last range numbers
+  // or any member stamp's number. A vendor without a number does not filter alone.
+  if (opts.catalogNumber) {
+    const vendorClause = opts.catalogVendorId ? { catalogVendorId: opts.catalogVendorId } : {};
     conditions.push({
       OR: [
-        { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, firstNumber: opts.catalogNumber } } },
-        { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, lastNumber: opts.catalogNumber } } },
-        { members: { some: { stamp: { catalogNumbers: { some: { catalogVendorId: opts.catalogVendorId, number: opts.catalogNumber } } } } } },
+        { catalogNumbers: { some: { ...vendorClause, firstNumber: opts.catalogNumber } } },
+        { catalogNumbers: { some: { ...vendorClause, lastNumber: opts.catalogNumber } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { ...vendorClause, number: opts.catalogNumber } } } } } },
       ],
     });
   }

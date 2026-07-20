@@ -13,6 +13,7 @@ import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
   useStampsInfinite,
@@ -94,30 +95,56 @@ export function StampsListPanel({
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
 
+  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
+    const seen = new Map<string, CatalogVendorOption>();
+    for (const area of areas) {
+      for (const entry of area.catalogEntries) {
+        if (!seen.has(entry.catalogVendorId)) {
+          seen.set(entry.catalogVendorId, {
+            id: entry.catalogVendorId,
+            name: entry.vendorName,
+            abbreviation: entry.vendorAbbreviation,
+          });
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [areas]);
+
+  // Prefixed catalog search (#146): a vendor abbreviation typed into the number box
+  // ("Mi PL 200") resolves and overrides the dropdown; a bare number falls back to
+  // the dropdown vendor, or searches across all vendors when none is selected.
+  const parsedCatalog = useMemo(
+    () => parseCatalogSearch(catalogNumber, catalogVendors),
+    [catalogNumber, catalogVendors]
+  );
+  const effectiveCatalogVendorId = parsedCatalog.vendorId ?? catalogVendorId;
+  const effectiveCatalogNumber = parsedCatalog.number;
+
   const filters: StampListFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
-      catalogVendorId: catalogVendorId || undefined,
-      catalogNumber: catalogNumber || undefined,
+      catalogVendorId: effectiveCatalogVendorId || undefined,
+      catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, year, displayConditionId, sortBy, sortDir]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, displayConditionId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
-      catalogVendorId: catalogVendorId || undefined,
-      catalogNumber: catalogNumber || undefined,
+      catalogVendorId: effectiveCatalogVendorId || undefined,
+      catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
@@ -137,22 +164,6 @@ export function StampsListPanel({
     },
     [router, collectionSlug, searchParams]
   );
-
-  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
-    const seen = new Map<string, CatalogVendorOption>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            name: entry.vendorName,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
 
   const {
     data,

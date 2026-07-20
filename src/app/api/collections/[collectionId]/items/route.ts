@@ -25,6 +25,8 @@ export async function GET(
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
   const search = sp.get("search") || undefined;
+  const catalogVendorId = sp.get("catalogVendorId") || undefined;
+  const catalogNumber = sp.get("catalogNumber") || undefined;
   const stampId = sp.get("stampId") || undefined;
   const issueId = sp.get("issueId") || undefined;
   const locationId = sp.get("locationId") || undefined;
@@ -53,6 +55,8 @@ export async function GET(
       certificateStatusId,
       areaIds,
       search,
+      catalogVendorId,
+      catalogNumber,
       stampId,
       issueId,
       locationId,

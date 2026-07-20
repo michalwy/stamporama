@@ -48,6 +48,64 @@ export function catalogMatchKey(
   return normalizeCatalogKey(`${vendorAbbreviation}${areaPrefix ?? ""}${number}`);
 }
 
+// ── Prefixed catalog-number search (#146) ────────────────────────────────────
+//
+// Catalog search/filter boxes accept a full catalog identity, not just the bare
+// stored number: a vendor abbreviation, an optional country/area code, and the
+// number, in any spacing — "Mi PL 200", "Mi PL200", "MiPL200", "PL200", "200".
+// Parsing splits that into the vendor (when its abbreviation leads the input) and
+// the numeric part; the area code, which isn't part of the stored `number`, is
+// tolerated and dropped. A bare number leaves the vendor unresolved so the caller
+// can fall back to a selected vendor filter (or search across all vendors).
+
+export interface ParsedCatalogSearch {
+  /** Resolved vendor id when the input led with a known vendor abbreviation; null
+   *  otherwise (bare number, unknown prefix, or vendor-only input). */
+  vendorId: string | null;
+  /** The number part (base digits + any suffix), spacing and prefixes stripped.
+   *  Empty when the input carries no number. */
+  number: string;
+}
+
+/**
+ * Parse a catalog search box's raw text into an optional vendor and a bare number,
+ * resolving a leading vendor abbreviation against the collection's vendors. Spacing
+ * and any area/country code between the vendor and the number are ignored. Examples,
+ * with a Michel (`Mi`) vendor known: `"Mi PL 200"`, `"MiPL200"`, `"Mi 200"` →
+ * `{ vendorId: <Mi>, number: "200" }`; `"PL200"`, `"200"` →
+ * `{ vendorId: null, number: "200" }` (bare number, vendor unresolved).
+ */
+export function parseCatalogSearch(
+  raw: string,
+  vendors: readonly { id: string; abbreviation: string }[]
+): ParsedCatalogSearch {
+  const key = normalizeCatalogKey(raw);
+  if (!key) return { vendorId: null, number: "" };
+
+  // Strip a known vendor abbreviation prefix, longest first so a vendor whose
+  // abbreviation is a prefix of another's ("S" vs "Sc") doesn't win spuriously.
+  // Require something after the abbreviation so "Mi" alone isn't consumed to empty.
+  let vendorId: string | null = null;
+  let rest = key;
+  const byLength = [...vendors].sort(
+    (a, b) => b.abbreviation.length - a.abbreviation.length
+  );
+  for (const v of byLength) {
+    const abbr = normalizeCatalogKey(v.abbreviation);
+    if (abbr && key.length > abbr.length && key.startsWith(abbr)) {
+      vendorId = v.id;
+      rest = key.slice(abbr.length);
+      break;
+    }
+  }
+
+  // Whatever leads the remainder (an area code like "pl") is dropped; the number is
+  // the digit run plus any trailing suffix.
+  const parts = parseCatalogNumberParts(rest);
+  const number = parts ? `${parts.base}${parts.suffix}` : "";
+  return { vendorId, number };
+}
+
 // ── Auto-generate range parsing (#70, #148, #149, #150) ──────────────────────
 //
 // A catalog number entered in the auto-generate First/Last fields is split into
