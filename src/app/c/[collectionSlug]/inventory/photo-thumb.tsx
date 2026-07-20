@@ -312,21 +312,28 @@ function PhotoLightbox({
     [safeIndex, total, onIndex]
   );
 
+  // Capture-phase + stopPropagation so the lightbox swallows the key before an enclosing
+  // DialogShell's own document-level Escape handler runs — otherwise Esc would close both the
+  // lightbox and the dialog behind it. Capture listeners fire ahead of bubble listeners
+  // regardless of registration order, so this wins even though the dialog registered first.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
+        e.stopPropagation();
         step(-1);
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        e.stopPropagation();
         step(1);
       }
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [step, onClose]);
 
   if (typeof document === "undefined" || !current) return null;
