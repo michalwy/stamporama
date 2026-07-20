@@ -28,6 +28,10 @@ src/generated/prisma/
 # photo storage data dir (local dev default, #112)
 .data/
 
+# local GCS storage overlay + service-account key (#138) — never commit
+docker-compose.gcs.yml
+secrets/
+
 # logs
 *.log
 npm-debug.log*
