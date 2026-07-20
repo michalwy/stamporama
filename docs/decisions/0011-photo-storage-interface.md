@@ -124,6 +124,10 @@ anticipated — no schema change, no caller edits:
   deployment never needs any of it.
 - **Keys unchanged.** GCS object names are the same backend-agnostic keys (optionally under the
   prefix), so migration is a byte copy under the identical key plus a column flip.
+- **Installer support.** `scripts/install.sh` has a photo-storage step: choosing GCS prompts for
+  the bucket and host key path, writes the `STAMPORAMA_GCS_*` / credentials keys, and generates a
+  `docker-compose.gcs.yml` overlay (added to `COMPOSE_FILE`) that bind-mounts the key read-only —
+  so operators never hand-edit the managed compose files.
 - **Boot visibility.** `instrumentation.ts` logs the active backend's non-secret config
   (`Storage.describe()`) and runs a cheap `healthCheck()` probe at startup — a probe write for
   filesystem, a `bucket.exists()` + credentials check for GCS — so a missing volume or an
