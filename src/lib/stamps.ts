@@ -950,14 +950,34 @@ async function resolvePrimaryCatalogTarget(
   };
 }
 
+/** One already-recorded catalog price shown for reference in the quick editor, so the user
+ * can price a new (condition × certificate × edition) consistently with what's on file. */
+export interface QuickCatalogPriceReference {
+  catalogLabel: string;
+  editionYear: number;
+  conditionAbbreviation: string;
+  certificateStatusName: string | null;
+  price: string;
+  currency: string;
+  /** True for the exact target the field writes to (primary catalog's latest edition ×
+   * this condition × this certificate) — the value the amount field prefills from. */
+  isTarget: boolean;
+}
+
 /** Context for the quick catalog-price editor: which catalog/edition/currency the value
- * will land in, and the amount already recorded there for this condition × certificate (if
- * any) so the field can prefill. */
+ * will land in, the amount already recorded there for this condition × certificate (if
+ * any) so the field can prefill, and read-only context (area + any other recorded prices)
+ * so the user can price confidently without leaving the dialog (#147). */
 export interface QuickCatalogPriceContext {
   catalogLabel: string;
   currency: string;
   editionYear: number;
   amount: string | null;
+  /** Area whose effective primary catalog the value resolves through, for orientation. */
+  areaName: string | null;
+  /** Every recorded price for this stamp across editions/conditions/certificates, newest
+   * edition first, for reference. Empty when nothing is on file yet. */
+  otherPrices: QuickCatalogPriceReference[];
 }
 
 export async function getQuickCatalogPriceContext(
@@ -969,21 +989,69 @@ export async function getQuickCatalogPriceContext(
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   const target = await resolvePrimaryCatalogTarget(collectionId, stampId);
-  const existing = await prisma.stampCatalogPrice.findFirst({
-    where: {
-      stampId,
-      catalogEditionId: target.editionId,
-      conditionId,
-      certificateStatusId: certificateStatusId ?? null,
+  const certId = certificateStatusId ?? null;
+
+  const prices = await prisma.stampCatalogPrice.findMany({
+    where: { stampId },
+    select: {
+      catalogEditionId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      price: true,
+      currency: true,
+      condition: { select: { abbreviation: true } },
+      certificateStatus: { select: { name: true } },
+      catalogEdition: {
+        select: { year: true, catalogName: { select: { name: true } } },
+      },
     },
-    select: { price: true },
+    orderBy: { catalogEdition: { year: "desc" } },
   });
+
+  const existing = prices.find(
+    (p) =>
+      p.catalogEditionId === target.editionId &&
+      p.conditionId === conditionId &&
+      p.certificateStatusId === certId
+  );
+
+  const areaName = await resolvePrimaryAreaName(stampId);
+
   return {
     catalogLabel: target.catalogLabel,
     currency: target.currency,
     editionYear: target.editionYear,
     amount: existing ? existing.price.toFixed(2) : null,
+    areaName,
+    otherPrices: prices.map((p) => ({
+      catalogLabel: p.catalogEdition.catalogName.name,
+      editionYear: p.catalogEdition.year,
+      conditionAbbreviation: p.condition.abbreviation,
+      certificateStatusName: p.certificateStatus?.name ?? null,
+      price: p.price.toFixed(2),
+      currency: p.currency,
+      isTarget:
+        p.catalogEditionId === target.editionId &&
+        p.conditionId === conditionId &&
+        p.certificateStatusId === certId,
+    })),
   };
+}
+
+/** Name of the stamp's primary (or first) area, for read-only orientation in the quick
+ * catalog-price editor. Null when the stamp isn't linked to any area. */
+async function resolvePrimaryAreaName(stampId: string): Promise<string | null> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: {
+      stampAreaLinks: {
+        select: { isPrimary: true, collectionArea: { select: { name: true } } },
+      },
+    },
+  });
+  const link =
+    stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0];
+  return link?.collectionArea.name ?? null;
 }
 
 /** Quickly set (or overwrite) a single catalog value: the given amount for this stamp at

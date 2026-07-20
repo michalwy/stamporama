@@ -750,6 +750,10 @@ function useCopyEditing(ctx: {
   run: RunFn;
 }) {
   const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
+  // Catalog-number rendering context for the quick-price dialog (#147): reuse the same
+  // per-area vendor maps the copy rows use so numbers format identically.
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
   const [identifyItem, setIdentifyItem] = useState<ItemListItem | null>(null);
@@ -794,6 +798,19 @@ function useCopyEditing(ctx: {
       {quickPriceItem && (
         <QuickPriceDialog
           item={quickPriceItem}
+          areaName={
+            quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null
+          }
+          primaryVendorId={
+            quickPriceItem.areaId
+              ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null)
+              : null
+          }
+          vendorMap={
+            quickPriceItem.areaId
+              ? (vendorMapByArea.get(quickPriceItem.areaId) ?? EMPTY_VENDOR_MAP)
+              : EMPTY_VENDOR_MAP
+          }
           isPending={isPending}
           error={copyError}
           onClose={() => {
@@ -2703,12 +2720,18 @@ function IntakeConditionDialog({
  * catalog / currency / existing amount on open so the user knows exactly where it lands. */
 function QuickPriceDialog({
   item,
+  areaName,
+  primaryVendorId,
+  vendorMap,
   isPending,
   error,
   onClose,
   onSubmit,
 }: {
   item: ItemListItem;
+  areaName: string | null;
+  primaryVendorId: string | null;
+  vendorMap: Map<string, AreaCatalogEntry>;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -2759,6 +2782,18 @@ function QuickPriceDialog({
   }`;
   const canSave = !isPending && !loading && !loadError && amount.trim() !== "";
 
+  // Issue + catalog-number context (#147): issue name/year and the stamp's catalog numbers
+  // across vendors, primary vendor first (mirroring the copy rows), so the user can confirm
+  // they're pricing the right stamp without leaving the dialog.
+  const issueLabel = item.issueName
+    ? `${item.issueName}${item.issueYear ? ` (${item.issueYear})` : ""}`
+    : null;
+  const catalogNumbers = [...item.catalogNumbers].sort((a, b) => {
+    const ap = a.catalogVendorId === primaryVendorId ? 0 : 1;
+    const bp = b.catalogVendorId === primaryVendorId ? 0 : 1;
+    return ap - bp;
+  });
+
   return (
     <DialogShell title="Set catalog value" onClose={onClose} maxWidth="24rem">
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
@@ -2780,13 +2815,84 @@ function QuickPriceDialog({
             <div style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
               {item.stampName || "This stamp"}
             </div>
+            {issueLabel && (
+              <div style={{ color: "var(--color-text-muted)" }}>Issue: {issueLabel}</div>
+            )}
+            {catalogNumbers.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
+                {catalogNumbers.map((cn) => (
+                  <span key={cn.catalogVendorId} style={CHIP}>
+                    {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
+                  </span>
+                ))}
+              </div>
+            )}
             <div>Condition: {condLabel}</div>
+            {(context?.areaName ?? areaName) && (
+              <div style={{ color: "var(--color-text-muted)" }}>
+                Area: {context?.areaName ?? areaName}
+              </div>
+            )}
             {context && (
               <div style={{ color: "var(--color-text-muted)" }}>
                 Primary catalog: {context.catalogLabel} {context.editionYear} · {context.currency}
               </div>
             )}
           </div>
+
+          {/* Existing recorded prices for reference (#147): other editions/conditions the user
+              may want to price consistently against. The target row is marked. */}
+          {context && context.otherPrices.length > 0 && (
+            <div style={{ marginBottom: "1rem" }}>
+              <div
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  color: "var(--color-text-muted)",
+                  marginBottom: "0.375rem",
+                }}
+              >
+                Recorded prices
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+                {context.otherPrices.map((p, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "0.5rem",
+                      fontSize: "0.8125rem",
+                      color: p.isTarget
+                        ? "var(--color-text-primary)"
+                        : "var(--color-text-secondary)",
+                      fontWeight: p.isTarget ? 600 : 400,
+                    }}
+                  >
+                    <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                      {p.catalogLabel} {p.editionYear}
+                    </span>
+                    <span style={{ whiteSpace: "nowrap" }}>
+                      {p.conditionAbbreviation}
+                      {p.certificateStatusName ? ` · ${p.certificateStatusName}` : ""}
+                    </span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        fontVariantNumeric: "tabular-nums",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.price} {p.currency}
+                      {p.isTarget ? " ←" : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loadError ? (
             <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-error)" }}>{loadError}</p>
