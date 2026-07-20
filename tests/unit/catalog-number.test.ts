@@ -6,7 +6,9 @@ import {
   formatCatalogNumber,
   catalogMatchKey,
   catalogKeyMatches,
-  parseCatalogRangeEndpoint,
+  parseCatalogNumberParts,
+  resolveCatalogRange,
+  generateCatalogNumbers,
 } from "../../src/lib/catalog-number";
 
 describe("normalizeCatalogKey", () => {
@@ -50,27 +52,73 @@ describe("catalogMatchKey", () => {
   });
 });
 
-describe("parseCatalogRangeEndpoint", () => {
-  it("parses a bare number with an empty prefix", () => {
-    assert.deepEqual(parseCatalogRangeEndpoint("120"), { prefix: "", value: 120 });
+describe("parseCatalogNumberParts", () => {
+  it("splits prefix, base, and suffix", () => {
+    assert.deepEqual(parseCatalogNumberParts("BL120a"), { prefix: "BL", base: "120", suffix: "a" });
+    assert.deepEqual(parseCatalogNumberParts("120"), { prefix: "", base: "120", suffix: "" });
+    assert.deepEqual(parseCatalogNumberParts("12II"), { prefix: "", base: "12", suffix: "II" });
   });
 
-  it("splits a leading non-digit prefix from its numeric part", () => {
-    assert.deepEqual(parseCatalogRangeEndpoint("BL120"), { prefix: "BL", value: 120 });
+  it("ignores surrounding whitespace and keeps leading zeros in the base", () => {
+    assert.deepEqual(parseCatalogNumberParts("  007a "), { prefix: "", base: "007", suffix: "a" });
   });
 
-  it("ignores surrounding whitespace", () => {
-    assert.deepEqual(parseCatalogRangeEndpoint("  BL123 "), { prefix: "BL", value: 123 });
-  });
-
-  it("drops leading zeros in the numeric value", () => {
-    assert.deepEqual(parseCatalogRangeEndpoint("BL007"), { prefix: "BL", value: 7 });
-  });
-
-  it("rejects a trailing non-digit, empty, non-numeric, or zero input", () => {
-    for (const bad of ["BL120a", "", "  ", "BL", "0", "BL0"]) {
-      assert.equal(parseCatalogRangeEndpoint(bad), null, bad);
+  it("rejects input with no digit run", () => {
+    for (const bad of ["", "  ", "BL"]) {
+      assert.equal(parseCatalogNumberParts(bad), null, bad);
     }
+  });
+});
+
+describe("resolveCatalogRange + generateCatalogNumbers", () => {
+  function expand(first: string, last: string | null): string[] | string {
+    const r = resolveCatalogRange(first, last);
+    if ("error" in r) return r.error;
+    return generateCatalogNumbers(r.scheme, r.span ?? 1);
+  }
+
+  it("expands a numeric range", () => {
+    assert.deepEqual(expand("100", "103"), ["100", "101", "102", "103"]);
+  });
+
+  it("expands a prefixed range (#149)", () => {
+    assert.deepEqual(expand("BL120", "BL123"), ["BL120", "BL121", "BL122", "BL123"]);
+  });
+
+  it("expands a lowercase-letter suffix range", () => {
+    assert.deepEqual(expand("423a", "423c"), ["423a", "423b", "423c"]);
+  });
+
+  it("expands a Roman-numeral suffix range", () => {
+    assert.deepEqual(expand("12I", "12III"), ["12I", "12II", "12III"]);
+  });
+
+  it("varies the base while keeping a constant letter suffix", () => {
+    assert.deepEqual(expand("40A", "50A").slice(0, 3), ["40A", "41A", "42A"]);
+    assert.equal((expand("40A", "50A") as string[]).length, 11);
+  });
+
+  it("treats a lone First as a single stamp", () => {
+    assert.deepEqual(expand("423a", null), ["423a"]);
+    assert.deepEqual(expand("BL7", ""), ["BL7"]);
+  });
+
+  it("rejects mismatched prefixes", () => {
+    assert.match(expand("BL120", "SS123") as string, /prefix/);
+  });
+
+  it("rejects a range that varies both number and suffix", () => {
+    assert.match(expand("40a", "50c") as string, /only the number or only the suffix/);
+  });
+
+  it("rejects an unrecognized suffix sequence", () => {
+    assert.match(expand("12x", "12z9") as string, /number/);
+    assert.match(expand("100!", "100@") as string, /suffix sequence/);
+  });
+
+  it("rejects a descending range", () => {
+    assert.match(expand("105", "100") as string, /≤/);
+    assert.match(expand("100c", "100a") as string, /≤/);
   });
 });
 

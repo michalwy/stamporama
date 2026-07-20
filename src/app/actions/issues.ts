@@ -20,7 +20,11 @@ import type {
   IssuePriceDetails,
 } from "@/lib/issues";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
-import { parseCatalogRangeEndpoint } from "@/lib/catalog-number";
+import {
+  resolveCatalogRange,
+  generateCatalogNumbers,
+  type CatalogRangeScheme,
+} from "@/lib/catalog-number";
 
 export async function getIssuePriceDetailsAction(
   collectionId: string,
@@ -83,36 +87,25 @@ export async function createIssueAction(
       return { status: "error", message: "Select at least one catalog vendor for auto-create." };
     }
 
-    // Each selected vendor generates catalog numbers from its own range. Stamps
-    // are matched across vendors by position, so every explicit range must span
-    // the same number of stamps.
-    const vendors: { catalogVendorId: string; rangeFrom: number; prefix: string }[] = [];
+    // Each selected vendor generates catalog numbers from its own range (numeric,
+    // prefixed, or suffix-sequence). Stamps are matched across vendors by
+    // position, so every explicit range must span the same number of stamps.
+    const resolved: { catalogVendorId: string; scheme: CatalogRangeScheme }[] = [];
     let count: number | null = null;
     for (const vendorId of vendorIds) {
       const cn = catalogNumbers.find((c) => c.catalogVendorId === vendorId);
       if (!cn || !cn.firstNumber) {
         return { status: "error", message: "Enter a First catalog number for each selected vendor." };
       }
-      const from = parseCatalogRangeEndpoint(cn.firstNumber);
-      if (!from) {
-        return { status: "error", message: "First catalog number must end in a positive integer for auto-create." };
+      const range = resolveCatalogRange(cn.firstNumber, cn.lastNumber ?? null);
+      if ("error" in range) {
+        return { status: "error", message: range.error };
       }
-      vendors.push({ catalogVendorId: vendorId, rangeFrom: from.value, prefix: from.prefix });
-      if (cn.lastNumber) {
-        const to = parseCatalogRangeEndpoint(cn.lastNumber);
-        if (!to) {
-          return { status: "error", message: "Last catalog number must end in a positive integer for auto-create." };
-        }
-        if (to.prefix !== from.prefix) {
-          return { status: "error", message: "First and Last catalog numbers must share the same prefix." };
-        }
-        if (from.value > to.value) {
-          return { status: "error", message: "First catalog number must be ≤ Last." };
-        }
-        const vendorCount = to.value - from.value + 1;
+      resolved.push({ catalogVendorId: vendorId, scheme: range.scheme });
+      if (range.span !== null) {
         if (count === null) {
-          count = vendorCount;
-        } else if (count !== vendorCount) {
+          count = range.span;
+        } else if (count !== range.span) {
           return { status: "error", message: "Selected vendors must span the same number of stamps." };
         }
       }
@@ -121,6 +114,10 @@ export async function createIssueAction(
     if (count > 50) {
       return { status: "error", message: "Range cannot exceed 50 stamps." };
     }
+    const vendors = resolved.map((r) => ({
+      catalogVendorId: r.catalogVendorId,
+      numbers: generateCatalogNumbers(r.scheme, count!),
+    }));
     autoCreateStamps = { count, vendors };
   }
 

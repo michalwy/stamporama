@@ -1040,15 +1040,14 @@ export async function getIssuePriceDetails(
 
 export interface AutoCreateVendorRange {
   catalogVendorId: string;
-  rangeFrom: number;
-  /** Leading non-digit prefix reapplied to each generated number, e.g. "BL". */
-  prefix: string;
+  /** Pre-generated catalog numbers, one per stamp position (length === count). */
+  numbers: string[];
 }
 
 export interface AutoCreateStampsInput {
   /** Number of stamps to create; every vendor's numbering spans this many positions. */
   count: number;
-  /** Each selected vendor with the first catalog number of its own range. */
+  /** Each selected vendor with its generated catalog number for each position. */
   vendors: AutoCreateVendorRange[];
 }
 
@@ -1077,6 +1076,9 @@ export async function createIssue(
     if (count < 1) throw new Error("Range must include at least one stamp.");
     if (count > 50) throw new Error("Range cannot exceed 50 stamps.");
     if (vendors.length === 0) throw new Error("At least one catalog vendor must be selected.");
+    if (vendors.some((v) => v.numbers.length !== count)) {
+      throw new Error("Each vendor must supply one catalog number per stamp.");
+    }
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -1138,7 +1140,7 @@ export async function createIssue(
           catalogNumberRows.push({
             stampId: stampIds[i],
             catalogVendorId: v.catalogVendorId,
-            number: v.prefix + String(v.rangeFrom + i),
+            number: v.numbers[i],
           });
         }
       }
