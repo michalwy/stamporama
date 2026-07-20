@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { StampListItem, StampSortBy } from "@/lib/stamps";
-import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -13,7 +13,13 @@ import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/conditio
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import { useStampsInfinite, useInvalidateStamps, type StampListFilters } from "./use-stamps-query";
+import {
+  useStampsInfinite,
+  useStampYears,
+  useInvalidateStamps,
+  type StampListFilters,
+  type StampYearFacetFilters,
+} from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
@@ -64,6 +70,7 @@ export function StampsListPanel({
   const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
+  const year = searchParams.get("year") ?? "";
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
@@ -75,11 +82,28 @@ export function StampsListPanel({
       catalogVendorId: catalogVendorId || undefined,
       catalogNumber: catalogNumber || undefined,
       issueId: issueId || undefined,
+      year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, displayConditionId, sortBy, sortDir]
+    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId, year, displayConditionId, sortBy, sortDir]
+  );
+
+  const yearFacetFilters: StampYearFacetFilters = useMemo(
+    () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
+      catalogVendorId: catalogVendorId || undefined,
+      catalogNumber: catalogNumber || undefined,
+      issueId: issueId || undefined,
+    }),
+    [filterAreaIds, search, catalogVendorId, catalogNumber, issueId]
+  );
+
+  const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
+    collectionId,
+    yearFacetFilters
   );
 
   const updateParams = useCallback(
@@ -147,7 +171,7 @@ export function StampsListPanel({
     invalidateList(collectionId);
   }
 
-  const hasActiveFilters = !!(search || catalogNumber || issueId);
+  const hasActiveFilters = !!(search || catalogNumber || issueId || year);
 
   return (
     <div
@@ -162,10 +186,14 @@ export function StampsListPanel({
         background: "var(--color-bg-elevated)",
       }}
     >
-      <AreaFilterSidebar
+      <ListFilterSidebar
         areas={areas}
         filterAreaId={filterAreaId}
-        onNavigate={handleNavigateFilter}
+        onNavigateArea={handleNavigateFilter}
+        yearFacets={yearFacets}
+        yearsLoading={yearsLoading}
+        selectedYear={year || null}
+        onSelectYear={(y) => updateParams({ year: y ?? "" })}
       />
 
       <div

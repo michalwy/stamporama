@@ -3,6 +3,7 @@
 import { useMemo, useCallback, useSyncExternalStore } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import { getDescendantIds, flattenAreaTree } from "./area-helpers";
+import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
 
@@ -122,39 +123,12 @@ export function AreaFilterSidebar({
   }, [areas, filterAreaId]);
 
   return (
-    <aside
-      style={{
-        width: "22rem",
-        flexShrink: 0,
-        alignSelf: "flex-start",
-        position: "sticky",
-        top: 0,
-        maxHeight: "100vh",
-        background: "var(--color-bg-elevated)",
-        display: "flex",
-        flexDirection: "column",
-      }}
+    <CollapsibleFilterPanel
+      title="Filter by area"
+      collapsedLabel="Areas"
+      storageKey="stamporama:area-filter-panel-collapsed"
+      expandedWidth="22rem"
     >
-      <div
-        style={{
-          padding: "0.75rem 1rem",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            color: "var(--color-text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
-          Filter by area
-        </span>
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         <button
           type="button"
           onClick={() => onNavigate(null)}
@@ -311,7 +285,6 @@ export function AreaFilterSidebar({
             </button>
           );
         })}
-      </div>
-    </aside>
+    </CollapsibleFilterPanel>
   );
 }

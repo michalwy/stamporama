@@ -28,6 +28,13 @@ export async function GET(
   const stampId = sp.get("stampId") || undefined;
   const issueId = sp.get("issueId") || undefined;
   const locationId = sp.get("locationId") || undefined;
+  const yearParam = sp.get("year");
+  const year =
+    yearParam === "none"
+      ? ("none" as const)
+      : yearParam && /^\d+$/.test(yearParam)
+        ? parseInt(yearParam, 10)
+        : undefined;
   const inCollection = boolParam(sp.get("inCollection"));
   const forSale = boolParam(sp.get("forSale"));
   const forTrade = boolParam(sp.get("forTrade"));
@@ -49,6 +56,7 @@ export async function GET(
       stampId,
       issueId,
       locationId,
+      year,
       inCollection,
       forSale,
       forTrade,

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getHoldingsValuation } from "@/lib/items";
+import { listItemYearFacets } from "@/lib/items";
 
-/** Holdings valuation total over every copy matching the current filters (whole set,
- * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
- * so the Copies screen total tracks what is being shown. */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -17,36 +14,28 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
+  const areaIdsParam = sp.get("areaIds");
 
   try {
-    const areaIdsParam = sp.get("areaIds");
-    const yearParam = sp.get("year");
-    const year =
-      yearParam === "none"
-        ? ("none" as const)
-        : yearParam && /^\d+$/.test(yearParam)
-          ? parseInt(yearParam, 10)
-          : undefined;
-    const total = await getHoldingsValuation(session.user.id, collectionId, {
+    const years = await listItemYearFacets(session.user.id, collectionId, {
       conditionId: sp.get("conditionId") || undefined,
       certificateStatusId: sp.get("certificateStatusId") || undefined,
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
+      stampId: sp.get("stampId") || undefined,
       issueId: sp.get("issueId") || undefined,
       locationId: sp.get("locationId") || undefined,
-      year,
       inCollection: boolParam(sp.get("inCollection")),
       forSale: boolParam(sp.get("forSale")),
       forTrade: boolParam(sp.get("forTrade")),
     });
-    return NextResponse.json(total);
+    return NextResponse.json({ years });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 }
 
-/** Only an explicit "true" narrows to that disposition; absence / any other value
- * means the filter is off (show all), matching the list endpoint. */
+/** Only an explicit "true" narrows to that disposition; mirrors the list endpoint. */
 function boolParam(value: string | null): boolean | undefined {
   return value === "true" ? true : undefined;
 }

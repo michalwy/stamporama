@@ -423,6 +423,9 @@ export interface StampListFilterOpts {
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
+  /** Restrict to a single year. A number matches `stamp.issuedYear`; `"none"`
+   *  matches stamps with no issued year. Omitted means no year filter. */
+  year?: number | "none";
   sortBy?: StampSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the list price column. When omitted, defaults
@@ -436,21 +439,11 @@ function parseNumericCatalog(val: string | null | undefined): number {
   return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
 }
 
-export async function listStampsPaginated(
-  ownerId: string,
-  collectionId: string,
-  opts: StampListFilterOpts
-): Promise<PaginatedStampsResult> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const pageSize = opts.pageSize ?? 50;
-  const offset = opts.offset ?? 0;
-  const dir = opts.sortDir ?? "asc";
-  const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
-    buildEffectivePrimaryCatalogMap(collectionId),
-    getCollectionBaseCurrency(collectionId),
-    resolveDisplayConditionId(collectionId, opts.displayConditionId),
-  ]);
-
+/** Build the Prisma `where` for the stamp list from the active filters.
+ *  Reused by the paginated list and the year-facet aggregation; the latter
+ *  omits `opts.year` so the year counts stay stable while a year is selected. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const conditions: any[] = [];
 
@@ -479,11 +472,62 @@ export async function listStampsPaginated(
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {
+  if (opts.year !== undefined) {
+    conditions.push({ issuedYear: opts.year === "none" ? null : opts.year });
+  }
+
+  return {
     collectionId,
     ...(conditions.length === 1 ? conditions[0] : conditions.length > 1 ? { AND: conditions } : {}),
   };
+}
+
+export interface StampYearFacet {
+  /** null represents the "No year" bucket. */
+  year: number | null;
+  count: number;
+}
+
+/** Distinct issued years present in the stamp list for the given filters (year
+ *  filter itself is ignored), each with a count. Sorted descending, null
+ *  ("No year") last. */
+export async function listStampYearFacets(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<StampListFilterOpts, "year" | "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId">
+): Promise<StampYearFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = buildStampListWhere(collectionId, opts);
+  const groups = await prisma.stamp.groupBy({
+    by: ["issuedYear"],
+    where,
+    _count: { _all: true },
+  });
+  return groups
+    .map((g) => ({ year: g.issuedYear, count: g._count._all }))
+    .sort((a, b) => {
+      if (a.year === null) return 1;
+      if (b.year === null) return -1;
+      return b.year - a.year;
+    });
+}
+
+export async function listStampsPaginated(
+  ownerId: string,
+  collectionId: string,
+  opts: StampListFilterOpts
+): Promise<PaginatedStampsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = opts.pageSize ?? 50;
+  const offset = opts.offset ?? 0;
+  const dir = opts.sortDir ?? "asc";
+  const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts.displayConditionId),
+  ]);
+
+  const where = buildStampListWhere(collectionId, opts);
 
   if (opts.sortBy === "catalogNumber" || opts.sortBy === "issueName") {
     const selectForSort =

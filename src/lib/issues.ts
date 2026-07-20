@@ -520,6 +520,9 @@ export interface IssueListFilterOpts {
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** Restrict to a single year. A number matches `issue.year`; `"none"`
+   *  matches issues with no year. Omitted means no year filter. */
+  year?: number | "none";
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the list price column / issue totals. When
@@ -527,21 +530,11 @@ export interface IssueListFilterOpts {
   displayConditionId?: string | null;
 }
 
-export async function listIssuesPaginated(
-  ownerId: string,
-  collectionId: string,
-  opts: IssueListFilterOpts
-): Promise<PaginatedIssuesResult> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const pageSize = opts.pageSize ?? 50;
-  const offset = opts.offset ?? 0;
-  const dir = opts.sortDir ?? "asc";
-  const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
-    buildEffectivePrimaryCatalogMap(collectionId),
-    getCollectionBaseCurrency(collectionId),
-    resolveDisplayConditionId(collectionId, opts.displayConditionId),
-  ]);
-
+/** Build the Prisma `where` for the issue list from the active filters.
+ *  Reused by the paginated list and the year-facet aggregation; the latter
+ *  omits `opts.year` so the year counts stay stable while a year is selected. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const conditions: any[] = [];
 
@@ -572,11 +565,62 @@ export async function listIssuesPaginated(
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {
+  if (opts.year !== undefined) {
+    conditions.push({ year: opts.year === "none" ? null : opts.year });
+  }
+
+  return {
     collectionId,
     ...(conditions.length === 1 ? conditions[0] : conditions.length > 1 ? { AND: conditions } : {}),
   };
+}
+
+export interface YearFacet {
+  /** null represents the "No year" bucket. */
+  year: number | null;
+  count: number;
+}
+
+/** Distinct years present in the issue list for the given filters (year filter
+ *  itself is ignored), each with a count. Sorted descending, null ("No year")
+ *  last. */
+export async function listIssueYearFacets(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<IssueListFilterOpts, "year" | "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId">
+): Promise<YearFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = buildIssueListWhere(collectionId, opts);
+  const groups = await prisma.issue.groupBy({
+    by: ["year"],
+    where,
+    _count: { _all: true },
+  });
+  return groups
+    .map((g) => ({ year: g.year, count: g._count._all }))
+    .sort((a, b) => {
+      if (a.year === null) return 1;
+      if (b.year === null) return -1;
+      return b.year - a.year;
+    });
+}
+
+export async function listIssuesPaginated(
+  ownerId: string,
+  collectionId: string,
+  opts: IssueListFilterOpts
+): Promise<PaginatedIssuesResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = opts.pageSize ?? 50;
+  const offset = opts.offset ?? 0;
+  const dir = opts.sortDir ?? "asc";
+  const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts.displayConditionId),
+  ]);
+
+  const where = buildIssueListWhere(collectionId, opts);
 
   if (opts.sortBy === "catalogNumber") {
     const allIds = await prisma.issue.findMany({

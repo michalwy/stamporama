@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { IssueListItem, IssueSortBy, StampNodeData } from "@/lib/issues";
+import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
 
 interface IssuesPage {
   items: IssueListItem[];
@@ -17,16 +17,28 @@ export interface IssueListFilters {
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** "none" for the no-year bucket, otherwise a numeric year string. */
+  year?: string;
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the price column / issue totals. */
   displayConditionId?: string | null;
 }
 
+/** Filters that affect the year facet counts (everything except year itself). */
+export interface IssueYearFacetFilters {
+  areaIds?: string[];
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+}
+
 export const issueKeys = {
   all: (collectionId: string) => ["issues", collectionId] as const,
   list: (collectionId: string, filters: IssueListFilters) =>
     ["issues", collectionId, "list", filters] as const,
+  years: (collectionId: string, filters: IssueYearFacetFilters) =>
+    ["issues", collectionId, "years", filters] as const,
   members: (collectionId: string, issueId: string) =>
     ["issues", collectionId, "members", issueId] as const,
 };
@@ -45,6 +57,7 @@ export function useIssuesInfinite(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
@@ -56,6 +69,29 @@ export function useIssuesInfinite(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+export function useIssueYears(
+  collectionId: string,
+  filters: IssueYearFacetFilters
+) {
+  return useQuery<YearFacet[]>({
+    queryKey: issueKeys.years(collectionId, filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      const res = await fetch(
+        `/api/collections/${collectionId}/issues/years?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch issue years");
+      const data = await res.json();
+      return data.years;
+    },
   });
 }
 

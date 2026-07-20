@@ -457,6 +457,10 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   locationId?: string;
   /** Restrict to copies identified into a single purchase lot (intake view, #121). */
   lotId?: string;
+  /** Restrict to copies whose linked stamp has this issued year. A number matches
+   * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
+   * stamps list year filter (#142). */
+  year?: number | "none";
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -482,6 +486,9 @@ function buildItemWhere(
   }
   if (filters.areaIds && filters.areaIds.length > 0) {
     stampWhere.stampAreaLinks = { some: { collectionAreaId: { in: filters.areaIds } } };
+  }
+  if (filters.year !== undefined) {
+    stampWhere.issuedYear = filters.year === "none" ? null : filters.year;
   }
   if (filters.search) {
     const s = filters.search;
@@ -1041,4 +1048,42 @@ export async function getHoldingsValuation(
     ...aggregateHoldings([...valuations.values()], baseCurrency),
     cost: aggregateCostBasis(costInputs, baseCurrency),
   };
+}
+
+export interface ItemYearFacet {
+  /** null represents the "No year" bucket. */
+  year: number | null;
+  count: number;
+}
+
+/** Distinct issued years (of the linked stamps) present in the copy list for the
+ * given filters (year filter itself is ignored), each with a count of matching
+ * copies. Sorted descending, null ("No year") last. Mirrors the stamps list year
+ * facets (#142); the year lives on the related stamp so counts are aggregated in
+ * memory rather than via `groupBy` (which cannot group by a relation field). */
+export async function listItemYearFacets(
+  ownerId: string,
+  collectionId: string,
+  filters: Omit<ItemListFiltersPaginated, "year" | "offset" | "pageSize" | "sortBy" | "sortDir">
+): Promise<ItemYearFacet[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = filters.locationId
+    ? await resolveLocationSubtree(collectionId, filters.locationId)
+    : null;
+  const rows = await prisma.item.findMany({
+    where: buildItemWhere(collectionId, filters, locationIds),
+    select: { stamp: { select: { issuedYear: true } } },
+  });
+  const counts = new Map<number | null, number>();
+  for (const row of rows) {
+    const y = row.stamp.issuedYear;
+    counts.set(y, (counts.get(y) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([year, count]) => ({ year, count }))
+    .sort((a, b) => {
+      if (a.year === null) return 1;
+      if (b.year === null) return -1;
+      return b.year - a.year;
+    });
 }

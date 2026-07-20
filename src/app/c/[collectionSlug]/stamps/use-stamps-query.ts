@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { StampListItem, StampSortBy } from "@/lib/stamps";
+import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
 
 interface StampsPage {
@@ -15,16 +15,29 @@ export interface StampListFilters {
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
+  /** "none" for the no-year bucket, otherwise a numeric year string. */
+  year?: string;
   sortBy?: StampSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the price column. */
   displayConditionId?: string | null;
 }
 
+/** Filters that affect the year facet counts (everything except year itself). */
+export interface StampYearFacetFilters {
+  areaIds?: string[];
+  search?: string;
+  catalogVendorId?: string;
+  catalogNumber?: string;
+  issueId?: string;
+}
+
 export const stampKeys = {
   all: (collectionId: string) => ["stamps", collectionId] as const,
   list: (collectionId: string, filters: StampListFilters) =>
     ["stamps", collectionId, "list", filters] as const,
+  years: (collectionId: string, filters: StampYearFacetFilters) =>
+    ["stamps", collectionId, "years", filters] as const,
   issueSearch: (collectionId: string, query: string, areaIds?: string[]) =>
     ["stamps", collectionId, "issueSearch", query, areaIds ?? "all"] as const,
 };
@@ -44,6 +57,7 @@ export function useStampsInfinite(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
+      if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
@@ -55,6 +69,30 @@ export function useStampsInfinite(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+export function useStampYears(
+  collectionId: string,
+  filters: StampYearFacetFilters
+) {
+  return useQuery<StampYearFacet[]>({
+    queryKey: stampKeys.years(collectionId, filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
+      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.issueId) params.set("issueId", filters.issueId);
+      const res = await fetch(
+        `/api/collections/${collectionId}/stamps/years?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch stamp years");
+      const data = await res.json();
+      return data.years;
+    },
   });
 }
 

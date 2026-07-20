@@ -5,6 +5,7 @@ import type {
   ItemListItem,
   ItemSortBy,
   ItemVariantHistoryData,
+  ItemYearFacet,
 } from "@/lib/items";
 import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
@@ -32,6 +33,9 @@ export interface InventoryItemFilters {
   issueId?: string;
   /** Restrict to copies stored in a location or its descendants (subtree, #56). */
   locationId?: string;
+  /** Restrict to copies whose linked stamp has this issued year. "none" for the
+   * no-year bucket, otherwise a numeric year string (#142). */
+  year?: string;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -39,10 +43,26 @@ export interface InventoryItemFilters {
   sortDir?: "asc" | "desc";
 }
 
+/** Filters that affect the year facet counts (everything except year itself). */
+export interface InventoryYearFacetFilters {
+  conditionId?: string;
+  certificateStatusId?: string;
+  areaIds?: string[];
+  search?: string;
+  stampId?: string;
+  issueId?: string;
+  locationId?: string;
+  inCollection?: boolean;
+  forSale?: boolean;
+  forTrade?: boolean;
+}
+
 export const inventoryKeys = {
   all: (collectionId: string) => ["inventory", collectionId] as const,
   list: (collectionId: string, filters: InventoryItemFilters) =>
     ["inventory", collectionId, "list", filters] as const,
+  years: (collectionId: string, filters: InventoryYearFacetFilters) =>
+    ["inventory", collectionId, "years", filters] as const,
 };
 
 export function useInventoryItemsInfinite(
@@ -63,6 +83,7 @@ export function useInventoryItemsInfinite(
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
+      if (filters.year) params.set("year", filters.year);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
@@ -94,6 +115,7 @@ export function useHoldingsValuation(
       search: filters.search,
       issueId: filters.issueId,
       locationId: filters.locationId,
+      year: filters.year,
       inCollection: filters.inCollection,
       forSale: filters.forSale,
       forTrade: filters.forTrade,
@@ -108,6 +130,7 @@ export function useHoldingsValuation(
       if (filters.search) params.set("search", filters.search);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
+      if (filters.year) params.set("year", filters.year);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
@@ -116,6 +139,39 @@ export function useHoldingsValuation(
       );
       if (!res.ok) throw new Error("Failed to fetch holdings valuation");
       return res.json();
+    },
+  });
+}
+
+/** Distinct issued years present in the current copy set, with counts (#142).
+ * Respects every active filter except the year selection itself, so the panel
+ * stays stable while a year is selected. */
+export function useItemYears(
+  collectionId: string,
+  filters: InventoryYearFacetFilters
+) {
+  return useQuery<ItemYearFacet[]>({
+    queryKey: inventoryKeys.years(collectionId, filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.conditionId) params.set("conditionId", filters.conditionId);
+      if (filters.certificateStatusId)
+        params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.areaIds && filters.areaIds.length > 0)
+        params.set("areaIds", filters.areaIds.join(","));
+      if (filters.search) params.set("search", filters.search);
+      if (filters.stampId) params.set("stampId", filters.stampId);
+      if (filters.issueId) params.set("issueId", filters.issueId);
+      if (filters.locationId) params.set("locationId", filters.locationId);
+      if (filters.inCollection) params.set("inCollection", "true");
+      if (filters.forSale) params.set("forSale", "true");
+      if (filters.forTrade) params.set("forTrade", "true");
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/years?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch inventory years");
+      const data = await res.json();
+      return data.years;
     },
   });
 }

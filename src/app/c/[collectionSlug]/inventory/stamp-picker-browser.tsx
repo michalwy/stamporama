@@ -6,7 +6,7 @@ import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueData, IssueListItem, StampNodeData } from "@/lib/issues";
 import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
-import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import {
@@ -153,6 +153,10 @@ export function StampPickerBrowser({
   onClose: () => void;
 }) {
   const [areaId, setAreaId] = useState<string | null>(null);
+  // Year filter (#142): "none" for the no-year bucket, a numeric string for a year,
+  // or null for "all". Filtering is client-side here — the picker already has every
+  // issue in scope loaded (useIssuesByArea) and filters by text the same way.
+  const [year, setYear] = useState<string | null>(null);
   const [create, setCreate] = useState<CreateState | null>(null);
   const [createError, setCreateError] = useState<string>();
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
@@ -160,6 +164,41 @@ export function StampPickerBrowser({
   const { invalidatePickerData } = useInvalidateInventory();
 
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
+
+  // Selecting a parent area includes its descendants, so their issues surface too.
+  const areaIds = useMemo(() => {
+    if (!areaId) return null;
+    const ids = getDescendantIds(areas, areaId);
+    ids.add(areaId);
+    return [...ids];
+  }, [areas, areaId]);
+
+  const { data: issues = [], isLoading } = useIssuesByArea(collectionId, areaIds);
+
+  // Year facets from the full in-scope issue set (before the year filter), so the
+  // counts stay stable while a year is selected. null → the "No year" bucket.
+  const yearFacets = useMemo(() => {
+    const counts = new Map<number | null, number>();
+    for (const issue of issues) {
+      counts.set(issue.year, (counts.get(issue.year) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([y, count]) => ({ year: y, count }))
+      .sort((a, b) => {
+        if (a.year === null) return 1;
+        if (b.year === null) return -1;
+        return b.year - a.year;
+      });
+  }, [issues]);
+
+  const yearFilteredIssues = useMemo(() => {
+    if (!year) return issues;
+    if (year === "none") return issues.filter((i) => i.year === null);
+    const y = Number(year);
+    return issues.filter((i) => i.year === y);
+  }, [issues, year]);
+
+  const selectedYearNumber = year && year !== "none" ? Number(year) : undefined;
 
   // Keep the capture-phase Escape handler stable while still reacting to whether a
   // nested create dialog is currently open (synced via effect, not during render).
@@ -247,9 +286,16 @@ export function StampPickerBrowser({
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
           {/* The sidebar is authored for the page layout (max-height: 100vh, sticky);
               wrap it so a long area tree scrolls within the dialog instead. */}
-          <div style={{ height: "100%", overflowY: "auto", flexShrink: 0 }}>
-            <AreaFilterSidebar areas={areas} filterAreaId={areaId} onNavigate={setAreaId} />
-          </div>
+          <ListFilterSidebar
+            variant="dialog"
+            areas={areas}
+            filterAreaId={areaId}
+            onNavigateArea={setAreaId}
+            yearFacets={yearFacets}
+            yearsLoading={isLoading}
+            selectedYear={year}
+            onSelectYear={setYear}
+          />
           <div
             style={{
               flex: 1,
@@ -261,9 +307,10 @@ export function StampPickerBrowser({
             }}
           >
             <IssueBrowser
-              collectionId={collectionId}
               areas={areas}
               selectedAreaId={areaId}
+              issues={yearFilteredIssues}
+              isLoading={isLoading}
               justCreatedIssueId={justCreatedIssueId}
               onPick={onPick}
               onPickIssue={onPickIssue}
@@ -289,6 +336,7 @@ export function StampPickerBrowser({
               mode="create"
               areas={areas}
               defaultAreaId={create.areaId ?? undefined}
+              defaultYear={selectedYearNumber}
               isPending={isPending}
               error={createError}
               onClose={closeCreate}
@@ -326,9 +374,10 @@ export function StampPickerBrowser({
 }
 
 function IssueBrowser({
-  collectionId,
   areas,
   selectedAreaId,
+  issues,
+  isLoading,
   justCreatedIssueId,
   onPick,
   onPickIssue,
@@ -336,9 +385,11 @@ function IssueBrowser({
   onNewStamp,
   onNewVariant,
 }: {
-  collectionId: string;
   areas: CollectionAreaData[];
   selectedAreaId: string | null;
+  /** Issues in scope, already filtered by the year panel (#142). */
+  issues: IssueData[];
+  isLoading: boolean;
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
@@ -347,16 +398,6 @@ function IssueBrowser({
   onNewVariant: (issue: IssueData, parentStampId: string) => void;
 }) {
   const [filter, setFilter] = useState("");
-
-  // Selecting a parent area includes its descendants, so its issues surface too.
-  const areaIds = useMemo(() => {
-    if (!selectedAreaId) return null;
-    const ids = getDescendantIds(areas, selectedAreaId);
-    ids.add(selectedAreaId);
-    return [...ids];
-  }, [areas, selectedAreaId]);
-
-  const { data: issues = [], isLoading } = useIssuesByArea(collectionId, areaIds);
 
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 

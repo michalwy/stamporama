@@ -23,9 +23,15 @@ import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dial
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
-import { useIssuesInfinite, useInvalidateIssues, type IssueListFilters } from "./use-issues-query";
+import {
+  useIssuesInfinite,
+  useIssueYears,
+  useInvalidateIssues,
+  type IssueListFilters,
+  type IssueYearFacetFilters,
+} from "./use-issues-query";
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
-import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
@@ -120,6 +126,7 @@ export function IssuesListPanel({
   );
   const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
+  const year = searchParams.get("year") ?? "";
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
@@ -130,11 +137,27 @@ export function IssuesListPanel({
       search: search || undefined,
       catalogVendorId: catalogVendorId || undefined,
       catalogNumber: catalogNumber || undefined,
+      year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, catalogVendorId, catalogNumber, displayConditionId, sortBy, sortDir]
+    [filterAreaIds, search, catalogVendorId, catalogNumber, year, displayConditionId, sortBy, sortDir]
+  );
+
+  const yearFacetFilters: IssueYearFacetFilters = useMemo(
+    () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
+      catalogVendorId: catalogVendorId || undefined,
+      catalogNumber: catalogNumber || undefined,
+    }),
+    [filterAreaIds, search, catalogVendorId, catalogNumber]
+  );
+
+  const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(
+    collectionId,
+    yearFacetFilters
   );
 
   const updateParams = useCallback(
@@ -295,10 +318,14 @@ export function IssuesListPanel({
         background: "var(--color-bg-elevated)",
       }}
     >
-      <AreaFilterSidebar
+      <ListFilterSidebar
         areas={areas}
         filterAreaId={filterAreaId}
-        onNavigate={handleNavigateFilter}
+        onNavigateArea={handleNavigateFilter}
+        yearFacets={yearFacets}
+        yearsLoading={yearsLoading}
+        selectedYear={year || null}
+        onSelectYear={(y) => updateParams({ year: y ?? "" })}
       />
 
       <div
@@ -370,7 +397,7 @@ export function IssuesListPanel({
               fontSize: "0.9375rem",
             }}
           >
-            {search || catalogNumber
+            {search || catalogNumber || year
               ? "No issues match your search."
               : filterAreaId
                 ? "No issues in this area."
@@ -422,6 +449,7 @@ export function IssuesListPanel({
           mode="create"
           areas={areas}
           defaultAreaId={filterAreaId ?? undefined}
+          defaultYear={year && year !== "none" ? Number(year) : undefined}
           isPending={isPending}
           error={error}
           onClose={closeDialog}

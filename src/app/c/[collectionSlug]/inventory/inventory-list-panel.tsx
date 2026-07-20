@@ -9,15 +9,17 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
-import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
+import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import {
   useInventoryItemsInfinite,
   useHoldingsValuation,
+  useItemYears,
   useInvalidateInventory,
   type InventoryItemFilters,
+  type InventoryYearFacetFilters,
 } from "./use-inventory-query";
 import { HoldingsSummaryBar } from "./holdings-summary-bar";
 import { InventoryCopyList } from "./inventory-copy-list";
@@ -89,6 +91,7 @@ export function InventoryListPanel({
   const conditionId = searchParams.get("conditionId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
+  const year = searchParams.get("year") ?? "";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -110,13 +113,33 @@ export function InventoryListPanel({
       conditionId: conditionId || undefined,
       locationId: locationId || undefined,
       issueId: issueId || undefined,
+      year: year || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, conditionId, locationId, issueId, activeDispositions, sortBy, sortDir]
+    [filterAreaIds, search, conditionId, locationId, issueId, year, activeDispositions, sortBy, sortDir]
+  );
+
+  const yearFacetFilters: InventoryYearFacetFilters = useMemo(
+    () => ({
+      areaIds: filterAreaIds,
+      search: search || undefined,
+      conditionId: conditionId || undefined,
+      locationId: locationId || undefined,
+      issueId: issueId || undefined,
+      inCollection: activeDispositions.has("inCollection") || undefined,
+      forSale: activeDispositions.has("forSale") || undefined,
+      forTrade: activeDispositions.has("forTrade") || undefined,
+    }),
+    [filterAreaIds, search, conditionId, locationId, issueId, activeDispositions]
+  );
+
+  const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
+    collectionId,
+    yearFacetFilters
   );
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
@@ -169,6 +192,7 @@ export function InventoryListPanel({
     !!issueId ||
     !!conditionId ||
     !!locationId ||
+    !!year ||
     activeDispositions.size > 0;
 
   return (
@@ -215,10 +239,14 @@ export function InventoryListPanel({
           background: "var(--color-bg-elevated)",
         }}
       >
-        <AreaFilterSidebar
+        <ListFilterSidebar
           areas={areas}
           filterAreaId={filterAreaId}
-          onNavigate={handleNavigateFilter}
+          onNavigateArea={handleNavigateFilter}
+          yearFacets={yearFacets}
+          yearsLoading={yearsLoading}
+          selectedYear={year || null}
+          onSelectYear={(y) => updateParams({ year: y ?? "" })}
         />
 
         <div

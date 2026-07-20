@@ -286,6 +286,8 @@ type IssueDialogProps =
       mode: "create";
       areas: CollectionAreaData[];
       defaultAreaId?: string;
+      /** Prefill the year field, e.g. from an active year filter (#142). */
+      defaultYear?: number;
       isPending: boolean;
       error?: string;
       onClose: () => void;
@@ -399,7 +401,7 @@ export function IssueDialog(props: IssueDialogProps) {
             vendors={vendors}
             primaryVendorId={primaryVendorId}
             defaultName={isCreate ? undefined : (props.issue.name ?? "")}
-            defaultYear={isCreate ? undefined : (props.issue.year ?? undefined)}
+            defaultYear={isCreate ? props.defaultYear : (props.issue.year ?? undefined)}
             defaultCatalogNumbers={isCreate ? undefined : props.issue.catalogNumbers}
             isPending={isPending}
             autoFocusName={isCreate}

@@ -26,6 +26,13 @@ export async function GET(
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
   const displayConditionId = sp.get("displayConditionId") || undefined;
+  const yearParam = sp.get("year");
+  const year =
+    yearParam === "none"
+      ? ("none" as const)
+      : yearParam && /^\d+$/.test(yearParam)
+        ? parseInt(yearParam, 10)
+        : undefined;
   const sortByParam = sp.get("sortBy") as StampSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -39,6 +46,7 @@ export async function GET(
       catalogVendorId,
       catalogNumber,
       issueId,
+      year,
       displayConditionId,
       sortBy,
       sortDir,
