@@ -631,6 +631,28 @@ async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
   );
 }
 
+/** Total bytes of all committed photos in a collection (#144). Photos are polymorphic — each
+ * hangs off an `Item` or a `Stamp`, both collection-scoped — so we sum `sizeBytes` across both
+ * owners. Staged `PhotoUpload` rows are transient (orphan-GC sweeps them) and excluded. Only the
+ * `full` variant size is tracked on the row; thumbnails are not counted. Owner-checked. */
+export async function getCollectionPhotoStorageBytes(
+  ownerId: string,
+  collectionId: string
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [copyPhotos, stampPhotos] = await Promise.all([
+    prisma.photo.aggregate({
+      where: { item: { collectionId } },
+      _sum: { sizeBytes: true },
+    }),
+    prisma.photo.aggregate({
+      where: { stamp: { collectionId } },
+      _sum: { sizeBytes: true },
+    }),
+  ]);
+  return (copyPhotos._sum.sizeBytes ?? 0) + (stampPhotos._sum.sizeBytes ?? 0);
+}
+
 /** Default orphan-GC TTL: staged uploads not attached within this window are swept. A few
  * hours by default, overridable via `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS`. */
 export function uploadTtlMs(): number {

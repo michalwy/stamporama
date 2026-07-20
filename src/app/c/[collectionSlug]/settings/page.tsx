@@ -8,6 +8,7 @@ import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
+import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppVersionLabel } from "@/lib/version";
 import { SettingsTabs } from "./settings-tabs";
 
@@ -24,15 +25,23 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [areas, catalogNames, catalogTree, conditions, certificateStatuses, subtypes] =
-    await Promise.all([
-      getCollectionAreas(session.user.id, collection.id),
-      getCatalogNames(session.user.id, collection.id),
-      getCatalogTree(session.user.id, collection.id),
-      getStampConditions(session.user.id, collection.id),
-      getCertificateStatuses(session.user.id, collection.id),
-      getStampSubtypes(session.user.id, collection.id),
-    ]);
+  const [
+    areas,
+    catalogNames,
+    catalogTree,
+    conditions,
+    certificateStatuses,
+    subtypes,
+    photoStorageBytes,
+  ] = await Promise.all([
+    getCollectionAreas(session.user.id, collection.id),
+    getCatalogNames(session.user.id, collection.id),
+    getCatalogTree(session.user.id, collection.id),
+    getStampConditions(session.user.id, collection.id),
+    getCertificateStatuses(session.user.id, collection.id),
+    getStampSubtypes(session.user.id, collection.id),
+    getCollectionPhotoStorageBytes(session.user.id, collection.id),
+  ]);
 
   return (
     <div style={{ padding: "2rem", maxWidth: "56rem" }}>
@@ -48,6 +57,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialConditions={conditions}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
+          photoStorageBytes={photoStorageBytes}
           appVersion={getAppVersionLabel()}
         />
       </Suspense>

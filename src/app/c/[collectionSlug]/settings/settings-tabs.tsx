@@ -24,6 +24,7 @@ interface SettingsTabsProps {
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  photoStorageBytes: number;
   appVersion: string;
 }
 
@@ -55,6 +56,7 @@ export function SettingsTabs({
   initialConditions,
   initialCertificateStatuses,
   initialSubtypes,
+  photoStorageBytes,
   appVersion,
 }: SettingsTabsProps) {
   const searchParams = useSearchParams();
@@ -123,6 +125,7 @@ export function SettingsTabs({
           collectionId={collectionId}
           collectionName={collectionName}
           baseCurrency={baseCurrency}
+          photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
         />
       )}
