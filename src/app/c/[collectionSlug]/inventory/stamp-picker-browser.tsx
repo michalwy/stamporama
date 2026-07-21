@@ -9,6 +9,7 @@ import type { IssueData, IssueListItem, StampNodeData } from "@/lib/issues";
 import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import {
@@ -320,6 +321,7 @@ export function StampPickerBrowser({
             }}
           >
             <IssueBrowser
+              collectionId={collectionId}
               areas={areas}
               selectedAreaId={areaId}
               issues={yearFilteredIssues}
@@ -387,6 +389,7 @@ export function StampPickerBrowser({
 }
 
 function IssueBrowser({
+  collectionId,
   areas,
   selectedAreaId,
   issues,
@@ -398,6 +401,7 @@ function IssueBrowser({
   onNewStamp,
   onNewVariant,
 }: {
+  collectionId: string;
   areas: CollectionAreaData[];
   selectedAreaId: string | null;
   /** Issues in scope, already filtered by the year panel (#142). */
@@ -410,7 +414,7 @@ function IssueBrowser({
   onNewStamp: (issue: IssueData) => void;
   onNewVariant: (issue: IssueData, parentStampId: string) => void;
 }) {
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistedSearch(`${collectionId}:issues`);
 
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 

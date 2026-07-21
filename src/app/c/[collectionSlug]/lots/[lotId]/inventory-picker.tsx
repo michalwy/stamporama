@@ -14,6 +14,7 @@ import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -97,7 +98,7 @@ export function InventoryPicker({
     [writeStore, storedAreaId]
   );
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = usePersistedSearch(`${collectionId}:copies`);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {

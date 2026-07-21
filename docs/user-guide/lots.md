@@ -32,7 +32,8 @@ inventory or from other lots.
    on the left and a **flat, searchable list** of copies on the right. Only copies flagged
    **For sale** and physically **delivered** (in hand — a copy still in transit can't be
    packaged), that are unsold and not already in this lot, appear. Tick the copies you want — or the
-   **All** checkbox to take everything currently shown — and **Add**.
+   **All** checkbox to take everything currently shown — and **Add**. The picker remembers its
+   area, year, and search text, so it reopens on the same filter you left it on.
 
    A **quantity lot** is built from two sources, via two buttons on its detail screen:
    - **Add copies** — the same inventory picker; each copy you tick becomes its own

@@ -169,7 +169,8 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
      same stamp. Each suggestion shows its catalog number, name, issue, year, and area so
      you can tell similar stamps apart.
    - **Browse…** opens a larger picker: pick an **area** on the left, filter its **issues**
-     on the right, then expand an issue to choose a stamp or one of its variants.
+     on the right, then expand an issue to choose a stamp or one of its variants. The picker
+     remembers its area, year, and search text, so it reopens on the same filter you left it on.
 
    Choose a specific variant if you know it, or the **base stamp** if the variant is
    unknown. The chosen stamp appears as a summary with a **Change** link to reselect.
