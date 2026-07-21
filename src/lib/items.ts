@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
   buildEffectivePrimaryCatalogMap,
@@ -15,6 +16,9 @@ import {
 import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
+import { getCollectionAreas } from "./areas";
+import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
+import { sortCopies } from "./copy-sort";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -616,6 +620,121 @@ export interface PaginatedItemsResult {
   nextCursor: string | null;
 }
 
+/** Prisma select producing every field {@link toItemListItem} needs to build an
+ * `ItemListItem`. Shared by the Copies list and the lot-intake reads (#172) so every
+ * screen enriches copies identically. */
+const ITEM_LIST_SELECT = {
+  id: true,
+  stampId: true,
+  inCollection: true,
+  forSale: true,
+  forTrade: true,
+  lotId: true,
+  lot: { select: { status: true } },
+  deliveryState: true,
+  costBasis: true,
+  notes: true,
+  locationId: true,
+  locationRef: true,
+  createdAt: true,
+  _count: { select: { variantHistory: true } },
+  photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  condition: { select: { id: true, name: true, abbreviation: true } },
+  certificateStatus: { select: { id: true, name: true } },
+  stamp: {
+    select: {
+      parentId: true,
+      name: true,
+      issuedDay: true,
+      issuedMonth: true,
+      issuedYear: true,
+      catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      variants: { select: VARIANT_FLAG_SELECT },
+      issueMemberships: {
+        select: { issue: { select: { id: true, name: true, year: true } } },
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.ItemSelect;
+
+type ItemListRow = Prisma.ItemGetPayload<{ select: typeof ITEM_LIST_SELECT }>;
+
+/** The valuation input for one enriched copy row — its stamp/condition/certificate plus the
+ * unknown-variant flag — as consumed by {@link valuateItemRows}. */
+function valuationInputFromRow(row: ItemListRow): ValuationRow {
+  return {
+    id: row.id,
+    stampId: row.stampId,
+    conditionId: row.condition.id,
+    certificateStatusId: row.certificateStatus?.id ?? null,
+    unknownVariant:
+      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+  };
+}
+
+/** Map an enriched copy row plus its resolved catalog valuation into the list-item shape. */
+function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListItem {
+  const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
+  const primaryLink = row.stamp.stampAreaLinks.find((l) => l.isPrimary);
+  const areaId =
+    primaryLink?.collectionAreaId ?? row.stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
+  return {
+    id: row.id,
+    stampId: row.stampId,
+    stampName: row.stamp.name,
+    unknownVariant:
+      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+    hasHistory: row._count.variantHistory > 0,
+    issuedDay: row.stamp.issuedDay,
+    issuedMonth: row.stamp.issuedMonth,
+    issuedYear: row.stamp.issuedYear,
+    catalogNumbers: row.stamp.catalogNumbers,
+    areaId,
+    issueId: firstIssue?.id ?? null,
+    issueName: firstIssue?.name ?? null,
+    issueYear: firstIssue?.year ?? null,
+    conditionId: row.condition.id,
+    conditionName: row.condition.name,
+    conditionAbbreviation: row.condition.abbreviation,
+    certificateStatusId: row.certificateStatus?.id ?? null,
+    certificateStatusName: row.certificateStatus?.name ?? null,
+    inCollection: row.inCollection,
+    forSale: row.forSale,
+    forTrade: row.forTrade,
+    lotId: row.lotId,
+    lotStatus: row.lot?.status ?? null,
+    deliveryState: row.deliveryState,
+    costBasis: row.costBasis == null ? null : row.costBasis.toString(),
+    notes: row.notes,
+    locationId: row.locationId,
+    locationRef: row.locationRef,
+    createdAt: row.createdAt,
+    photos: row.photos
+      .map((p) => ({
+        id: p.id,
+        role: (p.role === "front" || p.role === "back" ? p.role : null) as
+          | "front"
+          | "back"
+          | null,
+        title: p.title,
+        sortOrder: p.sortOrder,
+      }))
+      .sort(sortPhotos),
+    value: valuation,
+  };
+}
+
+/** Valuate a set of enriched copy rows and map them to list items, preserving row order. */
+async function enrichItemRows(
+  collectionId: string,
+  rows: ItemListRow[]
+): Promise<ItemListItem[]> {
+  const valuations = await valuateItemRows(collectionId, rows.map(valuationInputFromRow));
+  return rows.map((row) => toItemListItem(row, valuations.get(row.id)!));
+}
+
 /** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
  * condition, and certificate status; sorts by added or acquired date; offset-paginated
  * to feed the shared infinite-scroll primitive (mirrors `listStampsPaginated`). */
@@ -640,127 +759,281 @@ export async function listItemsPaginated(
     orderBy,
     take: pageSize + 1,
     skip: offset,
-    select: {
-      id: true,
-      stampId: true,
-      inCollection: true,
-      forSale: true,
-      forTrade: true,
-      lotId: true,
-      lot: { select: { status: true } },
-      deliveryState: true,
-      costBasis: true,
-      notes: true,
-      locationId: true,
-      locationRef: true,
-      createdAt: true,
-      _count: { select: { variantHistory: true } },
-      photos: { select: { id: true, role: true, title: true, sortOrder: true } },
-      condition: { select: { id: true, name: true, abbreviation: true } },
-      certificateStatus: { select: { id: true, name: true } },
-      stamp: {
-        select: {
-          parentId: true,
-          name: true,
-          issuedDay: true,
-          issuedMonth: true,
-          issuedYear: true,
-          catalogNumbers: { select: { catalogVendorId: true, number: true } },
-          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-          variants: { select: VARIANT_FLAG_SELECT },
-          issueMemberships: {
-            select: { issue: { select: { id: true, name: true, year: true } } },
-            take: 1,
-          },
-        },
-      },
-    },
+    select: ITEM_LIST_SELECT,
   });
 
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
-
-  const valuations = await valuateItemRows(
-    collectionId,
-    page.map((row) => ({
-      id: row.id,
-      stampId: row.stampId,
-      conditionId: row.condition.id,
-      certificateStatusId: row.certificateStatus?.id ?? null,
-      unknownVariant:
-        row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
-    }))
-  );
-
-  const items: ItemListItem[] = page.map((row) => {
-    const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
-    const primaryLink = row.stamp.stampAreaLinks.find((l) => l.isPrimary);
-    const areaId =
-      primaryLink?.collectionAreaId ?? row.stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
-    return {
-      id: row.id,
-      stampId: row.stampId,
-      stampName: row.stamp.name,
-      unknownVariant:
-        row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
-      hasHistory: row._count.variantHistory > 0,
-      issuedDay: row.stamp.issuedDay,
-      issuedMonth: row.stamp.issuedMonth,
-      issuedYear: row.stamp.issuedYear,
-      catalogNumbers: row.stamp.catalogNumbers,
-      areaId,
-      issueId: firstIssue?.id ?? null,
-      issueName: firstIssue?.name ?? null,
-      issueYear: firstIssue?.year ?? null,
-      conditionId: row.condition.id,
-      conditionName: row.condition.name,
-      conditionAbbreviation: row.condition.abbreviation,
-      certificateStatusId: row.certificateStatus?.id ?? null,
-      certificateStatusName: row.certificateStatus?.name ?? null,
-      inCollection: row.inCollection,
-      forSale: row.forSale,
-      forTrade: row.forTrade,
-      lotId: row.lotId,
-      lotStatus: row.lot?.status ?? null,
-      deliveryState: row.deliveryState,
-      costBasis: row.costBasis == null ? null : row.costBasis.toString(),
-      notes: row.notes,
-      locationId: row.locationId,
-      locationRef: row.locationRef,
-      createdAt: row.createdAt,
-      photos: row.photos
-        .map((p) => ({
-          id: p.id,
-          role: (p.role === "front" || p.role === "back" ? p.role : null) as
-            | "front"
-            | "back"
-            | null,
-          title: p.title,
-          sortOrder: p.sortOrder,
-        }))
-        .sort(sortPhotos),
-      value: valuations.get(row.id)!,
-    };
-  });
+  const items = await enrichItemRows(collectionId, page);
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
 }
 
-/** Every copy identified into a single lot, fully enriched (same shape and catalog-vendor
- * valuation as the Copies screen), oldest first — for the lot intake view (#121). A lot
- * holds a bounded set of copies, so this returns them all rather than paginating. */
-export async function listLotCopies(
+// Delivery states that still await the sort pass — surfaced on the lot header and used by the
+// "to-sort" intake filter (mirrors the client `UNSORTED_STATES`, #121).
+const UNSORTED_DELIVERY_STATES = new Set(["ordered", "to_sort", "in_transit"]);
+
+/** A staying copy that blocks a lot close: it is not excluded from the allocation
+ * (delivery ≠ not_delivered) yet carries no base-currency catalog weight (#121). */
+function isBlockingCopy(item: ItemListItem): boolean {
+  return item.deliveryState !== "not_delivered" && item.value.baseAmount == null;
+}
+
+export type LotCopySort = "added" | "year" | "catalog" | "price" | "name";
+export type LotCopyFilter = "none" | "unpriced" | "to-sort";
+
+export interface LotIntakePageOptions {
+  sort?: LotCopySort;
+  sortDir?: "asc" | "desc";
+  filter?: LotCopyFilter;
+  /** Restrict to a single issue group: an issue id, or `"__none__"` for copies with no issue.
+   * Feeds the grouped-by-issue lot view's per-group pagination (#172). */
+  issueKey?: string;
+  offset?: number;
+  pageSize?: number;
+}
+
+/** Prisma `where` fragment narrowing intake reads to a single lot or a whole purchase's lots. */
+function issueKeyWhere(issueKey: string | undefined): Prisma.ItemWhereInput {
+  if (!issueKey) return {};
+  return issueKey === "__none__"
+    ? { stamp: { issueMemberships: { none: {} } } }
+    : { stamp: { issueMemberships: { some: { issueId: issueKey } } } };
+}
+
+/** One page of copies within a scope (a lot, or a whole purchase's lots), ordered/filtered
+ * server-side so pagination is correct at any size (#172). `scopeWhere` is the collection-scoped
+ * base (`{ lotId }` or `{ lot: { purchaseId } }`). `nextCursor` is the next offset or null. */
+async function getIntakePage(
+  ownerId: string,
+  collectionId: string,
+  scopeWhere: Prisma.ItemWhereInput,
+  opts: LotIntakePageOptions
+): Promise<PaginatedItemsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const sort = opts.sort ?? "added";
+  const sortDir = opts.sortDir ?? "asc";
+  const filter = opts.filter ?? "none";
+  const pageSize = opts.pageSize ?? 50;
+  const offset = opts.offset ?? 0;
+  const issueWhere = issueKeyWhere(opts.issueKey);
+
+  // Fast path: the natural "added" order plus column-expressible filters page directly in SQL,
+  // valuating only the returned page. Sorting by catalog/price or filtering "unpriced" depends
+  // on each copy's derived valuation, which no single column carries, so those fall back to
+  // enriching the whole scope and applying the shared `sortCopies` before slicing — byte-for-byte
+  // identical to the client ordering, at the cost of valuing the scope per page fetch.
+  const needsWholeSet = sort !== "added" || filter === "unpriced";
+
+  if (!needsWholeSet) {
+    const rows = await prisma.item.findMany({
+      where: {
+        collectionId,
+        ...scopeWhere,
+        ...issueWhere,
+        ...(filter === "to-sort"
+          ? { deliveryState: { in: [...UNSORTED_DELIVERY_STATES] } }
+          : {}),
+      },
+      // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
+      // intake can stamp many copies with near-identical timestamps (#172).
+      orderBy: [{ createdAt: sortDir }, { id: sortDir }],
+      take: pageSize + 1,
+      skip: offset,
+      select: ITEM_LIST_SELECT,
+    });
+    const hasMore = rows.length > pageSize;
+    const page = hasMore ? rows.slice(0, pageSize) : rows;
+    const items = await enrichItemRows(collectionId, page);
+    return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
+  }
+
+  const rows = await prisma.item.findMany({
+    where: { collectionId, ...scopeWhere, ...issueWhere },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: ITEM_LIST_SELECT,
+  });
+  const all = await enrichItemRows(collectionId, rows);
+  const areas = await getCollectionAreas(ownerId, collectionId);
+  const { primaryVendorByArea } = buildAreaVendorMaps(areas);
+
+  const filtered =
+    filter === "unpriced"
+      ? all.filter(isBlockingCopy)
+      : filter === "to-sort"
+        ? all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState))
+        : all;
+  const sorted = sortCopies(filtered, sort, sortDir, primaryVendorByArea);
+  const slice = sorted.slice(offset, offset + pageSize);
+  const hasMore = offset + pageSize < sorted.length;
+  return { items: slice, nextCursor: hasMore ? String(offset + pageSize) : null };
+}
+
+/** One page of a lot's copies, ordered/filtered server-side so pagination is correct at any
+ * lot size (#172), replacing the old 1000-copy cap. */
+export async function getLotIntakePage(
+  ownerId: string,
+  collectionId: string,
+  lotId: string,
+  opts: LotIntakePageOptions = {}
+): Promise<PaginatedItemsResult> {
+  return getIntakePage(ownerId, collectionId, { lotId }, opts);
+}
+
+/** One page of a whole purchase's copies (across all its lots), for the order-level intake view
+ * with "By lot" grouping off — a single globally-ordered flat/by-issue stream (#172). */
+export async function getPurchaseIntakePage(
+  ownerId: string,
+  collectionId: string,
+  purchaseId: string,
+  opts: LotIntakePageOptions = {}
+): Promise<PaginatedItemsResult> {
+  return getIntakePage(ownerId, collectionId, { lot: { purchaseId } }, opts);
+}
+
+/** One issue group within a lot, for the grouped-by-issue view's headers (#121/#172). */
+export interface LotIssueGroupSummary {
+  /** Issue id, or `"__none__"` for copies with no issue. */
+  key: string;
+  label: string;
+  /** Copies in this lot under this issue. */
+  count: number;
+  /** Of those, copies whose owning lot is still open (bulk-action target scope). */
+  openCount: number;
+}
+
+/** Whole-lot aggregates the paginated intake views need but can no longer compute client-side
+ * once copies stream in pages (#172): header counts, the live cost-estimate denominator, the
+ * derived lot label, and the issue-group headers. Computed by enriching the whole lot once. */
+export interface LotIntakeSummary {
+  totalCount: number;
+  /** Copies still awaiting the sort pass (ordered / to sort / in transit). */
+  unsortedCount: number;
+  /** Staying copies with no base-currency catalog weight — these block a close. */
+  blockingCount: number;
+  /** Σ positive base-currency catalog weight over staying copies; the denominator for the
+   * per-copy live cost estimate (`poolBase * weight / estimateWeightBase`). */
+  estimateWeightBase: number;
+  /** Label derived from the lot's copies' catalog numbers, or null for an empty lot. The UI
+   * still prefers a stored lot title over this. */
+  derivedLabel: string | null;
+  /** Issue groups in first-added order, for the grouped-by-issue view headers. */
+  issueGroups: LotIssueGroupSummary[];
+}
+
+export async function getLotIntakeSummary(
   ownerId: string,
   collectionId: string,
   lotId: string
-): Promise<ItemListItem[]> {
-  const { items } = await listItemsPaginated(ownerId, collectionId, {
-    lotId,
-    sortDir: "asc",
-    pageSize: 1000,
+): Promise<LotIntakeSummary> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.item.findMany({
+    where: { collectionId, lotId },
+    orderBy: { createdAt: "asc" },
+    select: ITEM_LIST_SELECT,
   });
-  return items;
+  const all = await enrichItemRows(collectionId, rows);
+  const areas = await getCollectionAreas(ownerId, collectionId);
+  const maps = buildAreaVendorMaps(areas);
+
+  const staying = all.filter((i) => i.deliveryState !== "not_delivered");
+  const estimateWeightBase = staying.reduce(
+    (sum, i) =>
+      sum + (i.value.baseAmount != null && i.value.baseAmount > 0 ? i.value.baseAmount : 0),
+    0
+  );
+
+  const order: string[] = [];
+  const byKey = new Map<string, LotIssueGroupSummary>();
+  for (const it of all) {
+    const key = it.issueId ?? "__none__";
+    let group = byKey.get(key);
+    if (!group) {
+      const label =
+        it.issueId == null
+          ? "No issue"
+          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
+              .filter(Boolean)
+              .join(" ") || "Untitled issue";
+      group = { key, label, count: 0, openCount: 0 };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.count += 1;
+    if (it.lotStatus === "open") group.openCount += 1;
+  }
+
+  return {
+    totalCount: all.length,
+    unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
+    blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
+    estimateWeightBase,
+    derivedLabel: deriveLotLabel(all, maps),
+    issueGroups: order.map((k) => byKey.get(k)!),
+  };
+}
+
+/** Whole-purchase aggregates for the order-level intake view with "By lot" grouping off (#172):
+ * the per-copy cost-estimate denominator **per lot** (each copy's estimate uses its own lot's
+ * pool and weight base), and the issue groups merged across every lot of the purchase. */
+export interface PurchaseIntakeSummary {
+  totalCount: number;
+  /** lot id → Σ positive base-currency catalog weight over that lot's staying copies. The
+   * client computes a copy's estimate as `poolBase(lot) * weight / lotWeightBase[lotId]`. */
+  lotWeightBase: Record<string, number>;
+  /** Issue groups merged across all the purchase's lots, in first-added order. `openCount` is
+   * copies whose owning lot is still open (the bulk-action target across the order). */
+  issueGroups: LotIssueGroupSummary[];
+}
+
+export async function getPurchaseIntakeSummary(
+  ownerId: string,
+  collectionId: string,
+  purchaseId: string
+): Promise<PurchaseIntakeSummary> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.item.findMany({
+    where: { collectionId, lot: { purchaseId } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: ITEM_LIST_SELECT,
+  });
+  const all = await enrichItemRows(collectionId, rows);
+
+  const lotWeightBase: Record<string, number> = {};
+  const order: string[] = [];
+  const byKey = new Map<string, LotIssueGroupSummary>();
+  for (const it of all) {
+    if (
+      it.lotId &&
+      it.deliveryState !== "not_delivered" &&
+      it.value.baseAmount != null &&
+      it.value.baseAmount > 0
+    ) {
+      lotWeightBase[it.lotId] = (lotWeightBase[it.lotId] ?? 0) + it.value.baseAmount;
+    }
+    const key = it.issueId ?? "__none__";
+    let group = byKey.get(key);
+    if (!group) {
+      const label =
+        it.issueId == null
+          ? "No issue"
+          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
+              .filter(Boolean)
+              .join(" ") || "Untitled issue";
+      group = { key, label, count: 0, openCount: 0 };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.count += 1;
+    if (it.lotStatus === "open") group.openCount += 1;
+  }
+
+  return {
+    totalCount: all.length,
+    lotWeightBase,
+    issueGroups: order.map((k) => byKey.get(k)!),
+  };
 }
 
 export async function deleteItem(ownerId: string, itemId: string): Promise<void> {

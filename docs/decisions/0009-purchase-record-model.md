@@ -209,3 +209,39 @@ lives in a pure module unit-tested without Prisma (#119).
 - Implementation is tracked in #118 (schema + this ADR), #119 (allocation engine),
   #120 (CRUD), #121 (intake/lifecycle), #122 (delivery/write-off/recompute), #123
   (cost-basis surfacing + P/L hook), #124 (demo data).
+
+## Addendum: paginated lot-intake reads (#172)
+
+The intake screen originally loaded a lot's copies in full (a single read capped at 1000)
+and did every whole-lot computation — the live cost estimate, header counts, derived label,
+issue grouping, sorting, filtering, and bulk-action targeting — client-side over that set.
+The cap **silently truncated** lots larger than 1000 copies (the realistic "stockbook = one
+lot with thousands of positions" case): the extra copies vanished from the copies list, the
+estimate, and bulk actions. It was a **read-model** defect only — `closeLot` re-reads all of
+a lot's items directly inside its transaction, so cost-basis snapshots always covered every
+copy.
+
+Fix: a lot's copies are now read **page by page** (cursor infinite-scroll, `getLotIntakePage`,
+`src/lib/items.ts`), and the whole-lot aggregates the paginated views can no longer derive
+client-side come from a single server summary (`getLotIntakeSummary`): total / unsorted /
+blocking counts, the cost-estimate **denominator** (Σ positive base-currency weight over
+staying copies — the per-page estimate is `poolBase × weight / denominator`), the derived
+label, and the issue-group headers. Bulk "mark all sorted" / "move all" resolve their target
+**server-side by scope** (lot, or lot + issue) via `bulkUpdateLotItemsScoped`, so they cover
+copies beyond the loaded page.
+
+Sort/label/vendor logic that both the client and server must agree on moved into pure `src/lib`
+modules (`copy-sort.ts`, `area-vendor.ts`), re-exported from their former app locations. The
+paging engine (`getIntakePage`) pages column-native sorts (the default "added" order) directly
+in SQL and valuates only the returned page; the valuation-derived cases (sort by catalog /
+price, filter "unpriced") enrich the whole scope once and sort-then-slice, since no single
+column carries those. Acceptable for the "few lots, many copies" target; revisit with a
+denormalized weight/sort column only if profiling shows it is needed.
+
+The same engine is scoped two ways: **per lot** (`getLotIntakePage`, `{ lotId }`) for the
+by-lot cards, and **per purchase** (`getPurchaseIntakePage`, `{ lot: { purchaseId } }`) for the
+order-level view (the "By lot" toggle off), so that view is one globally-ordered flat/by-issue
+stream across every lot — not a stack of per-lot sections. Its estimate denominator is per lot
+(`getPurchaseIntakeSummary.lotWeightBase[lotId]`) since each copy's estimate uses its own lot's
+pool; issue groups are merged across the purchase's lots, and per-issue bulk actions scope to
+`{ purchaseId, issueKey, onlyOpenLots }`.

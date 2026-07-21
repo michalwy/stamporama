@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,10 +25,18 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import type { ItemListItem } from "@/lib/items";
+import type { ItemListItem, LotCopyFilter, LotCopySort } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
-import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
+import {
+  useLotCopiesInfinite,
+  usePurchaseCopiesInfinite,
+  useLotSummary,
+  usePurchaseSummary,
+  useInvalidateLotCopies,
+  type LotCopiesParams,
+} from "./use-lot-copies-query";
+import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
@@ -35,10 +44,8 @@ import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identi
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { formatStampCN } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
-import { sortCopies } from "@/app/c/[collectionSlug]/shared/copy-sort";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import {
   lsGet,
@@ -103,10 +110,6 @@ const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
 // Purchase delivery status in lifecycle order, for the inline status select (#141).
 const PURCHASE_STATUS_ORDER = ["preparing", "in_transit", "arrived"];
 
-// Delivery states that count as "not yet sorted": still awaiting the sort pass, so they keep
-// a copy out of the collection and are what the arrival/close flows act on (#121).
-const UNSORTED_STATES = new Set(["ordered", "to_sort", "in_transit"]);
-
 // Order the delivery states appear in the inline row dropdown — by lifecycle progression,
 // then the exception outcomes last (#121).
 const DELIVERY_ORDER = [
@@ -147,7 +150,6 @@ function tintChip(token: string, label: string): { style: React.CSSProperties; l
 interface PurchaseDetailPanelProps {
   collectionId: string;
   purchase: PurchaseDetail;
-  itemsByLot: Record<string, ItemListItem[]>;
   issueHeaderById: Record<string, IssueHeader>;
   areas: CollectionAreaData[];
   locations: LocationData[];
@@ -158,7 +160,6 @@ interface PurchaseDetailPanelProps {
 export function PurchaseDetailPanel({
   collectionId,
   purchase,
-  itemsByLot,
   issueHeaderById,
   areas,
   locations,
@@ -166,6 +167,7 @@ export function PurchaseDetailPanel({
   certificateStatuses,
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
+  const { invalidateLotCopies } = useInvalidateLotCopies();
   const [isPending, startTransition] = useTransition();
   const [addingLot, setAddingLot] = useState(false);
   const [arriving, setArriving] = useState(false);
@@ -222,6 +224,9 @@ export function PurchaseDetailPanel({
       const result = await fn();
       if (result.status === "success") {
         router.refresh();
+        // Copies stream in via paginated client queries (#172), so a server refresh alone
+        // won't reflect copy/lot mutations — invalidate the lot-copies pages and summaries too.
+        invalidateLotCopies(collectionId);
         onDone?.(result);
       } else if (result.status === "error") {
         setError(result.message);
@@ -521,7 +526,6 @@ export function PurchaseDetailPanel({
               index={idx}
               lot={lot}
               justAdded={lot.id === justAddedLotId}
-              items={itemsByLot[lot.id] ?? []}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
               currency={purchase.currency}
@@ -541,8 +545,8 @@ export function PurchaseDetailPanel({
       ) : (
         <OrderCopiesView
           collectionId={collectionId}
+          purchaseId={purchase.id}
           lots={purchase.lots}
-          itemsByLot={itemsByLot}
           issueHeaderById={issueHeaderById}
           baseCurrency={purchase.baseCurrency}
           areas={areas}
@@ -722,7 +726,6 @@ interface LotCardProps {
   lot: LotSummary;
   /** Flash the card once right after this lot is created (#158). */
   justAdded: boolean;
-  items: ItemListItem[];
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
   currency: string;
@@ -761,6 +764,37 @@ interface BulkChanges {
   markSorted?: boolean;
 }
 
+/** A server-resolved bulk scope (#172): a whole lot, an issue group within a lot, or an issue
+ * across a purchase's open lots. Mirrors the server `LotBulkScope` minus the collection id. */
+interface BulkScopeClient {
+  lotId?: string;
+  purchaseId?: string;
+  issueKey?: string;
+  onlyOpenLots?: boolean;
+}
+
+/** A bulk-action target: either an explicit id list (a single copy from its row menu) or a
+ * server-resolved scope with its copy count (a whole lot/issue, which may exceed one page and
+ * so can no longer be enumerated client-side, #172). */
+type BulkTarget =
+  | { kind: "ids"; ids: string[] }
+  | { kind: "scope"; scope: BulkScopeClient; count: number };
+
+function bulkTargetCount(t: BulkTarget): number {
+  return t.kind === "ids" ? t.ids.length : t.count;
+}
+
+/** Serialize the shared bulk-change fields onto a form (location / delivery / disposition /
+ * mark-sorted), used by both the id-list and scoped bulk requests. */
+function appendBulkChanges(fd: FormData, changes: BulkChanges): void {
+  if (changes.locationId !== undefined) fd.set("locationId", changes.locationId ?? "");
+  if (changes.deliveryState) fd.set("deliveryState", changes.deliveryState);
+  if (changes.inCollection !== undefined) fd.set("inCollection", String(changes.inCollection));
+  if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
+  if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
+  if (changes.markSorted) fd.set("markSorted", "true");
+}
+
 /** Shared copy-editing machinery (#121) used by both the by-lot cards and the order-level
  * flat / by-issue views: the per-copy dialogs (edit copy, edit stamp, identify variant, quick
  * catalog price), the bulk move / mark-sorted dialogs, and `runBulk`. Returns the openers, the
@@ -785,21 +819,17 @@ function useCopyEditing(ctx: {
   const [identifyItem, setIdentifyItem] = useState<ItemListItem | null>(null);
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
   const [copyError, setCopyError] = useState<string | undefined>();
-  const [bulkMove, setBulkMove] = useState<string[] | null>(null);
-  const [bulkSort, setBulkSort] = useState<string[] | null>(null);
+  const [bulkMove, setBulkMove] = useState<BulkTarget | null>(null);
+  const [bulkSort, setBulkSort] = useState<BulkTarget | null>(null);
 
+  /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
   function runBulk(itemIds: string[], changes: BulkChanges) {
     setCopyError(undefined);
     run(
       async () => {
         const fd = new FormData();
         fd.set("itemIds", itemIds.join(","));
-        if (changes.locationId !== undefined) fd.set("locationId", changes.locationId ?? "");
-        if (changes.deliveryState) fd.set("deliveryState", changes.deliveryState);
-        if (changes.inCollection !== undefined) fd.set("inCollection", String(changes.inCollection));
-        if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
-        if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
-        if (changes.markSorted) fd.set("markSorted", "true");
+        appendBulkChanges(fd, changes);
         const { bulkUpdateLotItemsAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsAction(fd);
         if (r.status === "error") setCopyError(r.message);
@@ -810,6 +840,37 @@ function useCopyEditing(ctx: {
         setBulkSort(null);
       }
     );
+  }
+
+  /** Apply a bulk change to a server-resolved scope (a whole lot/issue), so it covers copies
+   * beyond the loaded page (#172). */
+  function runScopedBulk(scope: BulkScopeClient, changes: BulkChanges) {
+    setCopyError(undefined);
+    run(
+      async () => {
+        const fd = new FormData();
+        fd.set("collectionId", collectionId);
+        if (scope.lotId) fd.set("lotId", scope.lotId);
+        if (scope.purchaseId) fd.set("purchaseId", scope.purchaseId);
+        if (scope.issueKey) fd.set("issueKey", scope.issueKey);
+        if (scope.onlyOpenLots) fd.set("onlyOpenLots", "true");
+        appendBulkChanges(fd, changes);
+        const { bulkUpdateLotItemsScopedAction } = await import("@/app/actions/purchases");
+        const r = await bulkUpdateLotItemsScopedAction(fd);
+        if (r.status === "error") setCopyError(r.message);
+        return r;
+      },
+      () => {
+        setBulkMove(null);
+        setBulkSort(null);
+      }
+    );
+  }
+
+  /** Dispatch a bulk change to whichever target kind was opened. */
+  function applyBulk(target: BulkTarget, changes: BulkChanges) {
+    if (target.kind === "ids") runBulk(target.ids, changes);
+    else runScopedBulk(target.scope, changes);
   }
 
   function removeCopy(itemId: string) {
@@ -972,8 +1033,8 @@ function useCopyEditing(ctx: {
           title="Move copies to location"
           message={
             <>
-              File {bulkMove.length} cop{bulkMove.length === 1 ? "y" : "ies"} into one location.
-              Choose <em>None</em> to clear their location instead.
+              File {bulkTargetCount(bulkMove)} cop{bulkTargetCount(bulkMove) === 1 ? "y" : "ies"}{" "}
+              into one location. Choose <em>None</em> to clear their location instead.
             </>
           }
           actionLabel="Move here"
@@ -988,13 +1049,13 @@ function useCopyEditing(ctx: {
               setCopyError(undefined);
             }
           }}
-          onConfirm={(locationId) => runBulk(bulkMove, { locationId: locationId || null })}
+          onConfirm={(locationId) => applyBulk(bulkMove, { locationId: locationId || null })}
         />
       )}
 
       {bulkSort && (
         <MarkSortedDialog
-          count={bulkSort.length}
+          count={bulkTargetCount(bulkSort)}
           locations={locations}
           collectionId={collectionId}
           isPending={isPending}
@@ -1006,7 +1067,7 @@ function useCopyEditing(ctx: {
             }
           }}
           onConfirm={({ locationId, ...flags }) =>
-            runBulk(bulkSort, {
+            applyBulk(bulkSort, {
               markSorted: true,
               ...flags,
               ...(locationId ? { locationId } : {}),
@@ -1080,7 +1141,7 @@ function CopyRow({
       readOnly={!open}
       highlight={highlight}
       onSetCatalogPrice={open ? () => copy.setQuickPriceItem(item) : undefined}
-      onSetLocation={open ? () => copy.setBulkMove([item.id]) : undefined}
+      onSetLocation={open ? () => copy.setBulkMove({ kind: "ids", ids: [item.id] }) : undefined}
       hideDispositions
       trailingChips={
         <LotCopyChips
@@ -1131,11 +1192,219 @@ function CopyRow({
   );
 }
 
+// Drop shadow shown under a sticky header once it is pinned (not at rest), so it reads as
+// floating above the copies scrolling beneath it (#172). Downward-only so `overflow: clip` on
+// the card doesn't cut it and it doesn't bleed over the row above.
+const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
+
+/** Track whether a sticky header is currently pinned. A zero-height sentinel is rendered just
+ * above the sticky element; once it scrolls past the pin line (`topOffset` from the viewport
+ * top) the header is stuck. Returns the sentinel ref to place and the `stuck` flag. */
+function useStuck(topOffset: number) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setStuck(!entry.isIntersecting),
+      { rootMargin: `-${Math.max(0, Math.round(topOffset))}px 0px 0px 0px`, threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [topOffset]);
+  return { sentinelRef, stuck };
+}
+
+/** Measure an element's rendered height (kept current across resizes/content changes), so a
+ * nested sticky header can pin right below the one above it (#172). */
+function useMeasuredHeight<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setHeight(el.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, height] as const;
+}
+
+/** A copy's live cost-basis estimate for an open lot: its share of the base-currency pool by
+ * catalog-price weight, using the whole-lot weight denominator from the summary (#172). Never
+ * persisted — the real snapshot is frozen on close. Null when the lot is closed, no FX rate is
+ * known, or the copy carries no positive weight / was not delivered. */
+function estimateFor(
+  item: ItemListItem,
+  poolBase: number | null,
+  weightBase: number,
+  open: boolean
+): number | null {
+  if (!open || poolBase == null || weightBase <= 0) return null;
+  if (item.deliveryState === "not_delivered") return null;
+  const w = item.value.baseAmount;
+  if (w == null || w <= 0) return null;
+  return Math.round(((poolBase * w) / weightBase) * 100) / 100;
+}
+
+const COPIES_MUTED_STYLE: React.CSSProperties = {
+  padding: "0.875rem 1.25rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-muted)",
+};
+
+/** Presentational paginated copy list: renders the flattened pages of a copies infinite-query
+ * plus the shared infinite-scroll sentinel. The query is passed in so the same rendering serves
+ * the lot-scoped and purchase-scoped sources (#172). */
+function CopyPageList({
+  query,
+  renderRow,
+  emptyText,
+}: {
+  query: ReturnType<typeof useLotCopiesInfinite>;
+  renderRow: (item: ItemListItem) => React.ReactNode;
+  emptyText: string;
+}) {
+  const items = (query.data?.pages ?? []).flatMap((p) => p.items);
+
+  if (query.isLoading) {
+    return <div style={COPIES_MUTED_STYLE}>Loading copies…</div>;
+  }
+  if (query.isError) {
+    return (
+      <div style={{ ...COPIES_MUTED_STYLE, color: "var(--color-error)" }}>
+        Failed to load copies.
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return <div style={COPIES_MUTED_STYLE}>{emptyText}</div>;
+  }
+  return (
+    <>
+      {items.map(renderRow)}
+      <InfiniteScrollSentinel
+        onLoadMore={() => query.fetchNextPage()}
+        hasMore={!!query.hasNextPage}
+        isLoading={query.isFetchingNextPage}
+      />
+    </>
+  );
+}
+
+/** A lot-scoped paginated copy list (optionally narrowed to one issue group). */
+function LotCopyFlatList({
+  collectionId,
+  lotId,
+  params,
+  renderRow,
+  emptyText,
+}: {
+  collectionId: string;
+  lotId: string;
+  params: LotCopiesParams;
+  renderRow: (item: ItemListItem) => React.ReactNode;
+  emptyText: string;
+}) {
+  const query = useLotCopiesInfinite(collectionId, lotId, params);
+  return <CopyPageList query={query} renderRow={renderRow} emptyText={emptyText} />;
+}
+
+/** A purchase-scoped paginated copy list (across every lot), for the order-level view (#172). */
+function PurchaseCopyFlatList({
+  collectionId,
+  purchaseId,
+  params,
+  renderRow,
+  emptyText,
+}: {
+  collectionId: string;
+  purchaseId: string;
+  params: LotCopiesParams;
+  renderRow: (item: ItemListItem) => React.ReactNode;
+  emptyText: string;
+}) {
+  const query = usePurchaseCopiesInfinite(collectionId, purchaseId, params);
+  return <CopyPageList query={query} renderRow={renderRow} emptyText={emptyText} />;
+}
+
+/** A collapsible issue-group section (grouped-by-issue view): a sticky header (built from the
+ * summary group + issue header) over the group's copies, supplied as `children` so the copy
+ * list can be lot-scoped (by-lot view) or purchase-scoped (order view) (#172). */
+function IssueGroupSection({
+  group,
+  header,
+  areaName,
+  primaryVendorId,
+  vendorMap,
+  collapsed,
+  stickyTop,
+  onToggle,
+  onMove,
+  onMarkSorted,
+  children,
+}: {
+  group: { key: string; label: string; count: number };
+  header: IssueHeader | null;
+  areaName: string | null;
+  primaryVendorId: string | null;
+  vendorMap: Map<string, AreaCatalogEntry>;
+  collapsed: boolean;
+  /** Where this issue header pins — just below the pinned lot header/label above it. */
+  stickyTop: number;
+  onToggle: () => void;
+  onMove?: () => void;
+  onMarkSorted?: () => void;
+  children: React.ReactNode;
+}) {
+  const { sentinelRef, stuck } = useStuck(stickyTop);
+  return (
+    <div style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div ref={sentinelRef} style={{ height: 0 }} />
+      <div
+        style={{
+          position: "sticky",
+          top: stickyTop,
+          zIndex: 2,
+          boxShadow: stuck ? STUCK_SHADOW : undefined,
+        }}
+      >
+        <LotIssueGroupHeader
+          header={header}
+          fallbackLabel={group.label}
+          copyCount={group.count}
+          areaName={areaName}
+          primaryVendorId={primaryVendorId}
+          vendorMap={vendorMap}
+          collapsed={collapsed}
+          onToggle={onToggle}
+          onMove={onMove}
+          onMarkSorted={onMarkSorted}
+        />
+      </div>
+      {!collapsed && (
+        <div
+          style={{
+            background: "var(--color-bg-elevated)",
+            borderTop: "1px solid var(--color-border)",
+            marginLeft: "1.25rem",
+            borderLeft: "2px solid var(--color-border)",
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LotCard({
   index,
   lot,
   justAdded,
-  items,
   issueHeaderById,
   collectionId,
   currency,
@@ -1168,6 +1437,11 @@ function LotCard({
   const [filterMode, setFilterMode] = useState<"none" | "unpriced" | "to-sort">("none");
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
+  // copies scroll, show a drop shadow once pinned, and measure its height so issue-group
+  // headers can pin just beneath it.
+  const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(0);
+  const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
 
   const copy = useCopyEditing({
     collectionId,
@@ -1185,49 +1459,33 @@ function LotCard({
 
   const open = lot.status === "open";
 
-  // Copies still awaiting the sort pass (ordered / to sort / in transit) — surfaced on the
-  // lot header and used to warn before closing (#121).
-  const unsortedCount = items.filter((i) => UNSORTED_STATES.has(i.deliveryState)).length;
+  // Whole-lot aggregates (counts, cost-estimate denominator, derived label, issue groups) that
+  // the paginated copy list can no longer compute client-side (#172). Fetched once per lot.
+  const summaryQuery = useLotSummary(collectionId, lot.id);
+  const summary = summaryQuery.data;
+  const totalCount = summary?.totalCount ?? lot.itemCount;
+  // Copies still awaiting the sort pass (ordered / to sort / in transit) — surfaced on the lot
+  // header and used to warn before closing (#121).
+  const unsortedCount = summary?.unsortedCount ?? 0;
+  // A copy blocks a close when it stays in the allocation but has no usable catalog weight.
+  const blockingCount = summary?.blockingCount ?? 0;
+  // Denominator for the live per-copy cost estimate (Σ positive base weight over staying copies).
+  const weightBase = summary?.estimateWeightBase ?? 0;
+  const issueGroups = summary?.issueGroups ?? [];
 
-  // Live cost-basis estimate for an open lot (never persisted; the real snapshot is frozen
-  // on close). Needs the base-currency pool, so it is unavailable when no FX rate is known.
+  // Live cost-basis estimate for an open lot needs the base-currency pool, so it is unavailable
+  // when no FX rate is known.
   const poolBaseNum = lot.poolBase != null ? Number(lot.poolBase) : null;
-  const estimateById = new Map<string, number | null>();
-  if (open && poolBaseNum != null) {
-    for (const e of estimateLot(
-      poolBaseNum,
-      items.map((it) => ({
-        id: it.id,
-        catalogPrice: it.value.baseAmount,
-        deliveryState: it.deliveryState as DeliveryState,
-      }))
-    )) {
-      estimateById.set(e.itemId, e.costBasis);
-    }
-  }
-  const lotName =
-    lot.title ??
-    deriveLotLabel(items, primaryVendorByArea, vendorMapByArea) ??
-    `Lot ${index + 1}`;
+  const lotName = lot.title ?? summary?.derivedLabel ?? `Lot ${index + 1}`;
   const statusChip = open ? tintChip("accent", "Open") : tintChip("success", "Closed");
 
-  // A copy blocks a close when it stays in the allocation but has no usable catalog weight.
-  const isBlocking = (i: ItemListItem) =>
-    i.deliveryState !== "not_delivered" && i.value.baseAmount == null;
-  const blockingCount = items.filter(isBlocking).length;
-  const isToSort = (i: ItemListItem) => UNSORTED_STATES.has(i.deliveryState);
-
-  // The header filter chips narrow the copies list to just the blockers or just the
-  // not-yet-sorted copies (only while the lot is open).
-  const filteredItems =
-    !open || filterMode === "none"
-      ? items
-      : filterMode === "unpriced"
-        ? items.filter(isBlocking)
-        : items.filter(isToSort);
-  // Apply the order-level copy sort (#157). Sorting before grouping keeps each issue group's
-  // copies in the chosen order too (groupByIssueList preserves input order within a group).
-  const visibleItems = sortCopies(filteredItems, sortKey, sortDir, primaryVendorByArea);
+  // Server-side filter for the copy page query, driven by the header chips (only while open).
+  const filter: LotCopyFilter = !open || filterMode === "none" ? "none" : filterMode;
+  const listParams: LotCopiesParams = {
+    sort: sortKey as LotCopySort,
+    sortDir: sortDir as "asc" | "desc",
+    filter,
+  };
 
   function renderRow(it: ItemListItem) {
     return (
@@ -1236,7 +1494,7 @@ function LotCard({
         collectionId={collectionId}
         item={it}
         open={open}
-        estimate={estimateById.get(it.id) ?? null}
+        estimate={estimateFor(it, poolBaseNum, weightBase, open)}
         highlight={blockedIds.has(it.id)}
         baseCurrency={baseCurrency}
         areas={areas}
@@ -1248,26 +1506,32 @@ function LotCard({
     );
   }
 
-  const allItemIds = items.map((it) => it.id);
+  // Whole-lot bulk target (move all / mark all): resolved server-side by lot id, so it covers
+  // every copy — not just a loaded page (#172).
+  const lotBulkTarget: BulkTarget = {
+    kind: "scope",
+    scope: { lotId: lot.id },
+    count: totalCount,
+  };
   const actions: RowAction[] = [
     ...(open
       ? [
           // "Add stamps" is surfaced as a standalone quick-access button in the header, not here.
           { key: "price", label: "Edit lot", icon: "✎", onSelect: () => setDialog("edit-price") },
-          ...(items.length > 0
+          ...(totalCount > 0
             ? [
                 {
                   key: "bulk-move",
                   label: "Move all copies to location…",
                   icon: "📍",
                   separatorBefore: true,
-                  onSelect: () => setBulkMove(allItemIds),
+                  onSelect: () => setBulkMove(lotBulkTarget),
                 },
                 {
                   key: "bulk-sort",
                   label: "Mark all copies sorted",
                   icon: "✓",
-                  onSelect: () => setBulkSort(allItemIds),
+                  onSelect: () => setBulkSort(lotBulkTarget),
                 },
               ]
             : []),
@@ -1309,7 +1573,22 @@ function LotCard({
         overflow: "clip",
       }}
     >
-      {/* Lot header */}
+      {/* Lot header + pool line — pinned to the top while scrolling through this lot's copies
+          (#172), so the lot name / counts / pool / actions stay in view; released at the card's
+          bottom, where the next lot's header takes over. A drop shadow appears once pinned.
+          `overflow: clip` on the card (unlike `hidden`) does not trap the sticky, so this
+          degrades to a normal header if a browser disagrees. */}
+      <div ref={headerSentinelRef} style={{ height: 0 }} />
+      <div
+        ref={headerRef}
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 3,
+          background: "var(--color-bg-elevated)",
+          boxShadow: headerStuck ? STUCK_SHADOW : undefined,
+        }}
+      >
       <div style={{ padding: "0.875rem 1.25rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
         <button
           type="button"
@@ -1342,7 +1621,7 @@ function LotCard({
         </span>
         <span style={statusChip.style}>{statusChip.label}</span>
         <span style={CHIP}>
-          {lot.itemCount} cop{lot.itemCount === 1 ? "y" : "ies"}
+          {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
         {unsortedCount > 0 && open && (
           <Tooltip
@@ -1425,7 +1704,7 @@ function LotCard({
         <RowActionsMenu actions={actions} ariaLabel={`Lot ${index + 1} actions`} />
       </div>
 
-      {/* Pool line */}
+      {/* Pool line — part of the pinned header block */}
       <div style={{ padding: "0 1.25rem 0.625rem 2.35rem", display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
         <Tooltip content="Pool = price + share of shipping (transaction currency)">
           <span style={CHIP}>
@@ -1439,6 +1718,7 @@ function LotCard({
             </span>
           </Tooltip>
         )}
+      </div>
       </div>
 
       {blockMessage && (
@@ -1460,16 +1740,12 @@ function LotCard({
       {/* Copies */}
       {expanded && (
         <div style={{ borderTop: "1px solid var(--color-border)" }}>
-          {items.length === 0 ? (
-            <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              No stamps identified into this lot yet.
-            </div>
+          {totalCount === 0 ? (
+            <div style={COPIES_MUTED_STYLE}>No stamps identified into this lot yet.</div>
           ) : !hydrated ? (
             // Placeholder shown for the initial render (matching SSR) until the persisted
             // grouping/collapse prefs are read, so the list doesn't flash its defaults first.
-            <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              Loading copies…
-            </div>
+            <div style={COPIES_MUTED_STYLE}>Loading copies…</div>
           ) : (
             <>
               {/* Active-filter toolbar (grouping is now controlled at the order level) */}
@@ -1498,58 +1774,77 @@ function LotCard({
                 </div>
               )}
 
-              {visibleItems.length === 0 ? (
-                <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                  {filterMode === "unpriced" ? "No unpriced copies." : "Nothing left to sort."}
-                </div>
-              ) : groupByIssue
-                ? groupByIssueList(visibleItems).map((group) => {
-                    const collapsed = collapsedGroups.has(group.key);
-                    const header = group.key === "__none__" ? null : issueHeaderById[group.key];
-                    const areaId = header?.collectionAreaId ?? null;
-                    return (
-                      <div key={group.key} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                        <LotIssueGroupHeader
-                          header={header}
-                          fallbackLabel={group.label}
-                          copyCount={group.items.length}
-                          areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
-                          primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-                          vendorMap={
-                            areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
-                          }
-                          collapsed={collapsed}
-                          onToggle={() =>
-                            setCollapsedGroups((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(group.key)) next.delete(group.key);
-                              else next.add(group.key);
-                              return next;
-                            })
-                          }
-                          onMove={
-                            open ? () => setBulkMove(group.items.map((i) => i.id)) : undefined
-                          }
-                          onMarkSorted={
-                            open ? () => setBulkSort(group.items.map((i) => i.id)) : undefined
-                          }
-                        />
-                        {!collapsed && (
-                          <div
-                            style={{
-                              background: "var(--color-bg-elevated)",
-                              borderTop: "1px solid var(--color-border)",
-                              marginLeft: "1.25rem",
-                              borderLeft: "2px solid var(--color-border)",
-                            }}
-                          >
-                            {group.items.map(renderRow)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                : visibleItems.map(renderRow)}
+              {groupByIssue ? (
+                issueGroups.map((group) => {
+                  const collapsed = collapsedGroups.has(group.key);
+                  const header = group.key === "__none__" ? null : issueHeaderById[group.key];
+                  const areaId = header?.collectionAreaId ?? null;
+                  return (
+                    <IssueGroupSection
+                      key={group.key}
+                      group={group}
+                      header={header ?? null}
+                      areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
+                      primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
+                      vendorMap={
+                        areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
+                      }
+                      collapsed={collapsed}
+                      stickyTop={headerHeight}
+                      onToggle={() =>
+                        setCollapsedGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(group.key)) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        })
+                      }
+                      onMove={
+                        open
+                          ? () =>
+                              setBulkMove({
+                                kind: "scope",
+                                scope: { lotId: lot.id, issueKey: group.key },
+                                count: group.count,
+                              })
+                          : undefined
+                      }
+                      onMarkSorted={
+                        open
+                          ? () =>
+                              setBulkSort({
+                                kind: "scope",
+                                scope: { lotId: lot.id, issueKey: group.key },
+                                count: group.count,
+                              })
+                          : undefined
+                      }
+                    >
+                      <LotCopyFlatList
+                        collectionId={collectionId}
+                        lotId={lot.id}
+                        params={{ ...listParams, issueKey: group.key }}
+                        renderRow={renderRow}
+                        emptyText="No copies."
+                      />
+                    </IssueGroupSection>
+                  );
+                })
+              ) : (
+                <LotCopyFlatList
+                  collectionId={collectionId}
+                  lotId={lot.id}
+                  params={listParams}
+                  renderRow={renderRow}
+                  emptyText={
+                    filterMode === "unpriced"
+                      ? "No unpriced copies."
+                      : filterMode === "to-sort"
+                        ? "Nothing left to sort."
+                        : "No stamps identified into this lot yet."
+                  }
+                />
+              )}
             </>
           )}
         </div>
@@ -1751,14 +2046,16 @@ function LotCard({
 }
 
 /** The order-level copies view (#121), shown when "By lot" grouping is off: every copy in the
- * purchase in one place — flat, or grouped by issue across all lots — with the same inline
- * delivery / disposition / location editing and per-copy menu as the lot cards. Lot-level
- * management (add stamps, close, price…) has no home here; switch to the by-lot view for that.
- * Each copy stays editable only while its own lot is open. */
+ * purchase in one place — a single flat, globally-ordered list, or grouped by issue **across all
+ * lots** — with the same inline delivery / disposition / location editing and per-copy menu as
+ * the lot cards. Copies stream from one purchase-wide paginated endpoint (#172), so there are no
+ * per-lot boundaries here. Lot-level management (add stamps, close, price…) has no home in this
+ * view; switch to the by-lot view for that. Each copy stays editable only while its own lot is
+ * open, and its estimate uses its own lot's pool + weight base. */
 function OrderCopiesView({
   collectionId,
+  purchaseId,
   lots,
-  itemsByLot,
   issueHeaderById,
   baseCurrency,
   areas,
@@ -1772,8 +2069,8 @@ function OrderCopiesView({
   run,
 }: {
   collectionId: string;
+  purchaseId: string;
   lots: LotSummary[];
-  itemsByLot: Record<string, ItemListItem[]>;
   issueHeaderById: Record<string, IssueHeader>;
   baseCurrency: string;
   areas: CollectionAreaData[];
@@ -1796,61 +2093,52 @@ function OrderCopiesView({
     run,
   });
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
-  const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const hydrated = useHydrated();
   const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
     `${LS_COLLAPSED_GROUPS}:${collectionId}:order`
   );
 
-  // Flatten every copy in the order (in lot order), remembering per copy whether its lot is
-  // open (drives editability) and its live cost-basis estimate (per-lot pool).
-  const allCopies: ItemListItem[] = [];
-  const openByItem = new Map<string, boolean>();
-  const estimateByItem = new Map<string, number | null>();
-  for (const lot of lots) {
-    const its = itemsByLot[lot.id] ?? [];
-    const open = lot.status === "open";
-    const poolBaseNum = lot.poolBase != null ? Number(lot.poolBase) : null;
-    const est = new Map<string, number | null>();
-    if (open && poolBaseNum != null) {
-      for (const e of estimateLot(
-        poolBaseNum,
-        its.map((it) => ({
-          id: it.id,
-          catalogPrice: it.value.baseAmount,
-          deliveryState: it.deliveryState as DeliveryState,
-        }))
-      )) {
-        est.set(e.itemId, e.costBasis);
-      }
-    }
-    for (const it of its) {
-      allCopies.push(it);
-      openByItem.set(it.id, open);
-      estimateByItem.set(it.id, est.get(it.id) ?? null);
-    }
-  }
+  // Each copy's lot drives its editability (its lot must be open) and its estimate (its lot's
+  // pool + weight base). Pool + status come from the purchase's lots; the per-lot weight base
+  // (Σ catalog weight) comes from the purchase summary.
+  const poolBaseByLot = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const l of lots) m.set(l.id, l.poolBase != null ? Number(l.poolBase) : null);
+    return m;
+  }, [lots]);
+  const lotStatusByLot = useMemo(() => new Map(lots.map((l) => [l.id, l.status])), [lots]);
+  const summary = usePurchaseSummary(collectionId, purchaseId).data;
+  const issueGroups = summary?.issueGroups ?? [];
 
-  // Apply the order-level copy sort (#157). The open/estimate maps are keyed by id, so sorting
-  // a shallow copy for display doesn't disturb them.
-  const sortedCopies = sortCopies(allCopies, sortKey, sortDir, primaryVendorByArea);
+  const listParams: LotCopiesParams = {
+    sort: sortKey as LotCopySort,
+    sortDir: sortDir as "asc" | "desc",
+    filter: "none",
+  };
 
-  const renderRow = (it: ItemListItem) => (
-    <CopyRow
-      key={it.id}
-      collectionId={collectionId}
-      item={it}
-      open={openByItem.get(it.id) ?? false}
-      estimate={estimateByItem.get(it.id) ?? null}
-      highlight={false}
-      baseCurrency={baseCurrency}
-      areas={areas}
-      locations={locations}
-      primaryVendorByArea={primaryVendorByArea}
-      vendorMapByArea={vendorMapByArea}
-      copy={copy}
-    />
-  );
+  const renderRow = (it: ItemListItem) => {
+    const lotId = it.lotId ?? "";
+    const open = lotStatusByLot.get(lotId) === "open";
+    const poolBase = poolBaseByLot.get(lotId) ?? null;
+    const weightBase = summary?.lotWeightBase[lotId] ?? 0;
+    return (
+      <CopyRow
+        key={it.id}
+        collectionId={collectionId}
+        item={it}
+        open={open}
+        estimate={estimateFor(it, poolBase, weightBase, open)}
+        highlight={false}
+        baseCurrency={baseCurrency}
+        areas={areas}
+        locations={locations}
+        primaryVendorByArea={primaryVendorByArea}
+        vendorMapByArea={vendorMapByArea}
+        copy={copy}
+      />
+    );
+  };
 
   return (
     <div
@@ -1862,60 +2150,62 @@ function OrderCopiesView({
       }}
     >
       {!hydrated ? (
-        <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          Loading copies…
-        </div>
-      ) : sortedCopies.length === 0 ? (
-        <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          No copies identified into this order yet.
-        </div>
+        <div style={COPIES_MUTED_STYLE}>Loading copies…</div>
+      ) : lots.length === 0 ? (
+        <div style={COPIES_MUTED_STYLE}>No copies identified into this order yet.</div>
       ) : byIssue ? (
-        groupByIssueList(sortedCopies).map((group) => {
+        issueGroups.map((group) => {
           const collapsed = collapsedGroups.has(group.key);
           const header = group.key === "__none__" ? null : issueHeaderById[group.key];
           const areaId = header?.collectionAreaId ?? null;
-          // Bulk actions target this issue's copies whose lot is still open.
-          const openIds = group.items.filter((i) => openByItem.get(i.id)).map((i) => i.id);
+          // Per-issue bulk targets this issue's copies across the purchase's **open** lots.
+          const canBulk = group.openCount > 0;
+          const issueScope = {
+            kind: "scope" as const,
+            scope: { purchaseId, issueKey: group.key, onlyOpenLots: true },
+            count: group.openCount,
+          };
           return (
-            <div key={group.key} style={{ borderBottom: "1px solid var(--color-border)" }}>
-              <LotIssueGroupHeader
-                header={header}
-                fallbackLabel={group.label}
-                copyCount={group.items.length}
-                areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
-                primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-                vendorMap={
-                  areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
-                }
-                collapsed={collapsed}
-                onToggle={() =>
-                  setCollapsedGroups((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(group.key)) next.delete(group.key);
-                    else next.add(group.key);
-                    return next;
-                  })
-                }
-                onMove={openIds.length > 0 ? () => copy.setBulkMove(openIds) : undefined}
-                onMarkSorted={openIds.length > 0 ? () => copy.setBulkSort(openIds) : undefined}
+            <IssueGroupSection
+              key={group.key}
+              group={group}
+              header={header ?? null}
+              areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
+              primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
+              vendorMap={
+                areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
+              }
+              collapsed={collapsed}
+              stickyTop={0}
+              onToggle={() =>
+                setCollapsedGroups((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(group.key)) next.delete(group.key);
+                  else next.add(group.key);
+                  return next;
+                })
+              }
+              onMove={canBulk ? () => copy.setBulkMove(issueScope) : undefined}
+              onMarkSorted={canBulk ? () => copy.setBulkSort(issueScope) : undefined}
+            >
+              <PurchaseCopyFlatList
+                collectionId={collectionId}
+                purchaseId={purchaseId}
+                params={{ ...listParams, issueKey: group.key }}
+                renderRow={renderRow}
+                emptyText="No copies."
               />
-              {!collapsed && (
-                <div
-                  style={{
-                    background: "var(--color-bg-elevated)",
-                    borderTop: "1px solid var(--color-border)",
-                    marginLeft: "1.25rem",
-                    borderLeft: "2px solid var(--color-border)",
-                  }}
-                >
-                  {group.items.map(renderRow)}
-                </div>
-              )}
-            </div>
+            </IssueGroupSection>
           );
         })
       ) : (
-        sortedCopies.map(renderRow)
+        <PurchaseCopyFlatList
+          collectionId={collectionId}
+          purchaseId={purchaseId}
+          params={listParams}
+          renderRow={renderRow}
+          emptyText="No copies identified into this order yet."
+        />
       )}
       {copy.dialogs}
     </div>
@@ -2179,78 +2469,6 @@ function MarkSortedDialog({
       </form>
     </DialogShell>
   );
-}
-
-interface LotItemGroup {
-  key: string;
-  label: string;
-  items: ItemListItem[];
-}
-
-/** Group a lot's copies by their owning issue, preserving first-seen order for both the
- * groups and the copies within them. Copies with no issue fall into a trailing group. */
-function groupByIssueList(items: ItemListItem[]): LotItemGroup[] {
-  const order: string[] = [];
-  const byKey = new Map<string, LotItemGroup>();
-  for (const it of items) {
-    const key = it.issueId ?? "__none__";
-    let group = byKey.get(key);
-    if (!group) {
-      const label =
-        it.issueId == null
-          ? "No issue"
-          : [it.issueName || null, it.issueYear ? `(${it.issueYear})` : null]
-              .filter(Boolean)
-              .join(" ") || "Untitled issue";
-      group = { key, label, items: [] };
-      byKey.set(key, group);
-      order.push(key);
-    }
-    group.items.push(it);
-  }
-  return order.map((k) => byKey.get(k)!);
-}
-
-/** The catalog-number label of one copy, using the area's primary vendor with its prefix
- * (falling back to any catalog number, then the stamp name). Mirrors the inventory row. */
-/** The catalog number shown for a copy: its primary-vendor number when the area has one, else
- * the first recorded. Raw digits (no vendor prefix) — used as the "by catalog number" sort key
- * (#157). Null when the copy carries no catalog number. */
-function copyCatalogLabel(
-  item: ItemListItem,
-  primaryVendorByArea: Map<string, string | null>,
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>
-): string {
-  const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
-  const vendorMap = (item.areaId ? vendorMapByArea.get(item.areaId) : undefined) ?? EMPTY_VENDOR_MAP;
-  const cn =
-    item.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
-    item.catalogNumbers[0] ??
-    null;
-  if (cn) return formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId));
-  return item.stampName || "(stamp)";
-}
-
-/** Derive a lot's display label from its copies' catalog numbers (with vendor prefixes),
- * de-duplicated, showing up to three plus a "+N more" tail. Null for an empty lot. */
-function deriveLotLabel(
-  items: ItemListItem[],
-  primaryVendorByArea: Map<string, string | null>,
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>
-): string | null {
-  if (items.length === 0) return null;
-  const labels: string[] = [];
-  const seen = new Set<string>();
-  for (const it of items) {
-    const label = copyCatalogLabel(it, primaryVendorByArea, vendorMapByArea);
-    if (!seen.has(label)) {
-      seen.add(label);
-      labels.push(label);
-    }
-  }
-  const shown = labels.slice(0, 3).join(", ");
-  const extra = labels.length - Math.min(3, labels.length);
-  return extra > 0 ? `${shown} +${extra} more` : shown;
 }
 
 /** A collapsible issue header for the grouped-by-issue lot view, rendered to read like a

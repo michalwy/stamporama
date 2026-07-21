@@ -8,9 +8,8 @@ import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
-import { listLotCopies, type ItemListItem } from "@/lib/items";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
-import { getPurchaseDetail } from "@/lib/lots";
+import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
 
 interface PurchaseDetailPageProps {
@@ -50,25 +49,10 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
     getLocations(session.user.id, collection.id),
   ]);
 
-  // Copies identified into each lot, keyed by lot id, for the intake screen. Enriched with
-  // the same shape/valuation as the Copies screen so lot rows render identically (#121).
-  const itemsByLot: Record<string, ItemListItem[]> = {};
-  await Promise.all(
-    purchase.lots.map(async (lot) => {
-      itemsByLot[lot.id] = await listLotCopies(session.user.id, collection.id, lot.id);
-    })
-  );
-
-  // Issue headers for the grouped-by-issue lot view, so its issue rows read like the
-  // issues list (#121).
-  const issueIds = [
-    ...new Set(
-      Object.values(itemsByLot)
-        .flat()
-        .map((it) => it.issueId)
-        .filter((id): id is string => id != null)
-    ),
-  ];
+  // Copies now stream into each lot card via paginated client queries (#172), so the page no
+  // longer preloads them. Issue headers for the grouped-by-issue view are still loaded here
+  // (from the purchase's distinct issue ids) so the group headers read like the issues list.
+  const issueIds = await getPurchaseIssueIds(purchase.id);
   const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
@@ -96,7 +80,6 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
       <PurchaseDetailPanel
         collectionId={collection.id}
         purchase={purchase}
-        itemsByLot={itemsByLot}
         issueHeaderById={issueHeaderById}
         areas={areas}
         locations={locations}

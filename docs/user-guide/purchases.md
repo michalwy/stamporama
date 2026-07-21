@@ -156,15 +156,22 @@ While the lot is **open**, each copy shows a **live estimated cost-basis** (pref
 from the current copies and their catalog prices. It updates as you add, remove, or price
 copies, and is **not** saved; the real cost-basis is frozen only when the lot closes. A copy
 with no catalog price (or a purchase with no base-currency rate) shows `cost —` until that is
-resolved.
+resolved. The estimate is always computed over the **whole lot**, so it stays accurate no
+matter how many copies the lot holds or how far you have scrolled.
+
+**Large lots.** A lot's copies **stream in as you scroll** — the list loads more rows when you
+reach the bottom, and the header counts (*to sort*, *unpriced*, the copy total) and the live
+estimate are figured over the whole lot on the server. There is no cap: a "stockbook" lot with
+thousands of positions shows every copy, and **Mark all copies sorted** / **Move all copies to
+a location** act on the entire lot (or issue group), not just the rows you have loaded.
 
 **Grouping the copies view.** Above the lots, a **Group by** control has two toggles —
 **Lot** and **Issue** — that shape how the whole order's copies are shown:
 
 - **Lot + Issue** (the default) — each lot is a card, its copies grouped by issue inside.
 - **Lot** only — each lot is a card with a flat copy list.
-- **Issue** only — no lot cards; every copy in the order grouped by issue across all lots.
-- **neither** — a single **flat list** of every copy in the order.
+- **Issue** only — no lot cards; every copy in the order grouped by issue **across all lots**.
+- **neither** — a single **flat list** of every copy in the order, with no lot boundaries.
 
 **Sorting the copies.** A **Sort copies** control next to *Group by* orders the stamps *within*
 each lot by **Order added** (the default), **Year**, **Catalog no.**, **Price**, or **Name**,

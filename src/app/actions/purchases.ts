@@ -22,6 +22,9 @@ import {
   reopenLot,
   markPurchaseArrived,
   bulkUpdateLotItems,
+  bulkUpdateLotItemsScoped,
+  type LotBulkChanges,
+  type LotBulkScope,
 } from "@/lib/lots";
 import { parsePhotoChangeSet } from "@/lib/photos";
 
@@ -380,6 +383,22 @@ export async function markPurchaseArrivedAction(
 /** Bulk sorting change over a set of copies (#121): file them into a location and/or mark
  * them sorted. `itemIds` is a comma-separated list; `locationId` present (even blank = clear)
  * applies a location change; `markSorted=true` moves not-yet-sorted copies to delivered. */
+/** Parse the shared bulk-change fields (location / delivery / disposition / mark-sorted) off a
+ * form, present in both the id-list and scoped bulk actions. */
+function parseBulkChanges(formData: FormData): LotBulkChanges {
+  const changes: LotBulkChanges = {};
+  // A present `locationId` field (even empty) signals a location change; absent means leave it.
+  if (formData.has("locationId")) changes.locationId = optionalStr(formData, "locationId");
+  const deliveryState = optionalStr(formData, "deliveryState");
+  if (deliveryState) changes.deliveryState = deliveryState;
+  // A present disposition field (value "true"/"false") signals a flag change; absent leaves it.
+  if (formData.has("inCollection")) changes.inCollection = str(formData, "inCollection") === "true";
+  if (formData.has("forSale")) changes.forSale = str(formData, "forSale") === "true";
+  if (formData.has("forTrade")) changes.forTrade = str(formData, "forTrade") === "true";
+  if (str(formData, "markSorted") === "true") changes.markSorted = true;
+  return changes;
+}
+
 export async function bulkUpdateLotItemsAction(
   formData: FormData
 ): Promise<PurchaseActionState> {
@@ -391,25 +410,43 @@ export async function bulkUpdateLotItemsAction(
   if (itemIds.length === 0) {
     return { status: "error", message: "No copies selected." };
   }
-  const changes: {
-    locationId?: string | null;
-    deliveryState?: string;
-    inCollection?: boolean;
-    forSale?: boolean;
-    forTrade?: boolean;
-    markSorted?: boolean;
-  } = {};
-  // A present `locationId` field (even empty) signals a location change; absent means leave it.
-  if (formData.has("locationId")) changes.locationId = optionalStr(formData, "locationId");
-  const deliveryState = optionalStr(formData, "deliveryState");
-  if (deliveryState) changes.deliveryState = deliveryState;
-  // A present disposition field (value "true"/"false") signals a flag change; absent leaves it.
-  if (formData.has("inCollection")) changes.inCollection = str(formData, "inCollection") === "true";
-  if (formData.has("forSale")) changes.forSale = str(formData, "forSale") === "true";
-  if (formData.has("forTrade")) changes.forTrade = str(formData, "forTrade") === "true";
-  if (str(formData, "markSorted") === "true") changes.markSorted = true;
   try {
-    await bulkUpdateLotItems(session.user.id, itemIds, changes);
+    await bulkUpdateLotItems(session.user.id, itemIds, parseBulkChanges(formData));
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to update copies. Please try again.",
+    };
+  }
+}
+
+/** Bulk-update every copy matching a server-resolved scope (a whole lot, an issue group within
+ * a lot, or an issue across a purchase's open lots), so "mark all sorted" / "move all" are
+ * correct for lots with more copies than one loaded page (#172). The scope is read from the
+ * form: `collectionId` (required) plus `lotId` or `purchaseId`, optional `issueKey`, and
+ * `onlyOpenLots=true`. Change fields are the same as {@link bulkUpdateLotItemsAction}. */
+export async function bulkUpdateLotItemsScopedAction(
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  const collectionId = str(formData, "collectionId");
+  if (!collectionId) {
+    return { status: "error", message: "Missing collection." };
+  }
+  const scope: LotBulkScope = {};
+  const lotId = optionalStr(formData, "lotId");
+  if (lotId) scope.lotId = lotId;
+  const purchaseId = optionalStr(formData, "purchaseId");
+  if (purchaseId) scope.purchaseId = purchaseId;
+  const issueKey = optionalStr(formData, "issueKey");
+  if (issueKey) scope.issueKey = issueKey;
+  if (str(formData, "onlyOpenLots") === "true") scope.onlyOpenLots = true;
+  if (!scope.lotId && !scope.purchaseId) {
+    return { status: "error", message: "No lot selected." };
+  }
+  try {
+    await bulkUpdateLotItemsScoped(session.user.id, collectionId, scope, parseBulkChanges(formData));
     return { status: "success" };
   } catch (e) {
     return {

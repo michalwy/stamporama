@@ -1,4 +1,8 @@
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
+
+// The per-area catalog-vendor resolution now lives in `@/lib/area-vendor` so the server-side
+// lot-intake reads (#172) can share it; re-exported here for existing importers.
+export { effectiveVendorsForArea, effectivePrimaryVendorId } from "@/lib/area-vendor";
 
 export function getDescendantIds(
   areas: CollectionAreaData[],
@@ -34,48 +38,6 @@ export function buildAreaPath(
     depth++;
   }
   return path.length > 0 ? path.join(" › ") : null;
-}
-
-export function effectiveVendorsForArea(
-  areas: CollectionAreaData[],
-  areaId: string
-): AreaCatalogEntry[] {
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  const result = new Map<string, AreaCatalogEntry>();
-  const ancestors: CollectionAreaData[] = [];
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    ancestors.push(current);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  for (const a of ancestors.reverse()) {
-    for (const e of a.catalogEntries) {
-      result.set(e.catalogVendorId, e);
-    }
-  }
-  return Array.from(result.values());
-}
-
-export function effectivePrimaryVendorId(
-  areas: CollectionAreaData[],
-  areaId: string
-): string | null {
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    if (current.primaryCatalogNameId) {
-      const entry = effectiveVendorsForArea(areas, areaId).find(
-        (e) => e.catalogNameId === current!.primaryCatalogNameId
-      );
-      return entry?.catalogVendorId ?? null;
-    }
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return null;
 }
 
 export interface AreaTreeItem {

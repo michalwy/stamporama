@@ -1,5 +1,3 @@
-import type { AreaCatalogEntry } from "@/lib/areas";
-
 /** Dashed "create inline" affordance (+ New stamp / + variant) used in the stamp pickers. */
 export const CREATE_LINK_STYLE: React.CSSProperties = {
   background: "none",
@@ -91,9 +89,6 @@ export const PRICE_STALE_ICON: React.CSSProperties = {
   flexShrink: 0,
 };
 
-export function formatStampCN(number: string, v?: AreaCatalogEntry): string {
-  if (!v) return number;
-  return v.prefix
-    ? `${v.vendorAbbreviation}·${v.prefix} ${number}`
-    : `${v.vendorAbbreviation} ${number}`;
-}
+// `formatStampCN` now lives in `@/lib/area-vendor` (shared with the server lot-intake reads,
+// #172); re-exported here for existing importers.
+export { formatStampCN } from "@/lib/area-vendor";

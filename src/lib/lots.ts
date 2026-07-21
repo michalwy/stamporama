@@ -123,6 +123,18 @@ function dateToIso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Distinct issue ids across every copy identified into any of a purchase's lots (#172).
+ * Lets the intake page load issue headers for the grouped-by-issue view without first
+ * loading every copy — the copies themselves now stream in paginated pages. */
+export async function getPurchaseIssueIds(purchaseId: string): Promise<string[]> {
+  const rows = await prisma.issueMember.findMany({
+    where: { stamp: { items: { some: { lot: { purchaseId } } } } },
+    select: { issueId: true },
+    distinct: ["issueId"],
+  });
+  return rows.map((r) => r.issueId);
+}
+
 /** Full purchase with its lots (each carrying an item count and resolved pool) for the
  * intake screen. Returns null if not found / not owned. */
 export async function getPurchaseDetail(
@@ -655,74 +667,53 @@ function inCollectionForDelivery(state: string): boolean | undefined {
   return undefined;
 }
 
-/** Apply a bulk change to a set of lot copies during sorting (#121). `itemIds` is assembled
- * by the client — a free selection, one copy, or every copy of a lot/issue. Every id must be
- * an owner copy in a single collection; unknown/foreign ids are rejected. Changes (any
- * combination):
- *  - `locationId` defined → file the copies there (null clears location + ref);
- *  - `deliveryState` → set that exact state (and couple `inCollection`, see above);
- *  - `inCollection` / `forSale` / `forTrade` defined → set that disposition flag (applied
- *    after `deliveryState`, so an explicit flag always wins);
- *  - `markSorted` → move to `delivered` + `inCollection`, but only from a not-yet-sorted
- *    state (already-sorted / damaged / not-delivered copies are left untouched).
- * Returns the number of targeted copies. One transaction. */
-export async function bulkUpdateLotItems(
-  ownerId: string,
-  itemIds: string[],
-  changes: {
-    locationId?: string | null;
-    deliveryState?: string;
-    inCollection?: boolean;
-    forSale?: boolean;
-    forTrade?: boolean;
-    markSorted?: boolean;
-  }
-): Promise<number> {
-  const ids = [...new Set(itemIds.filter((id) => id))];
-  if (ids.length === 0) return 0;
-  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
-    throw new Error("Unknown delivery state.");
-  }
+export interface LotBulkChanges {
+  locationId?: string | null;
+  deliveryState?: string;
+  inCollection?: boolean;
+  forSale?: boolean;
+  forTrade?: boolean;
+  markSorted?: boolean;
+}
+
+/** True when `changes` would touch nothing (used to short-circuit a no-op bulk update). */
+function isNoopBulk(changes: LotBulkChanges): boolean {
   const hasDisposition =
     changes.inCollection !== undefined ||
     changes.forSale !== undefined ||
     changes.forTrade !== undefined;
-  if (
+  return (
     changes.locationId === undefined &&
     !changes.deliveryState &&
     !hasDisposition &&
     !changes.markSorted
-  ) {
-    return 0;
-  }
+  );
+}
 
-  const rows = await prisma.item.findMany({
-    where: { id: { in: ids } },
-    select: { collectionId: true, collection: { select: { ownerId: true } } },
-  });
-  if (rows.length !== ids.length || rows.some((r) => r.collection.ownerId !== ownerId)) {
-    throw new Error("One or more copies were not found or access denied.");
-  }
-  const collectionIds = new Set(rows.map((r) => r.collectionId));
-  if (collectionIds.size !== 1) {
-    throw new Error("Copies must belong to a single collection.");
-  }
-  const collectionId = [...collectionIds][0];
-
-  const { locationId } = changes;
-  if (locationId) await assertLocationAssignable(collectionId, locationId);
-
+/** Apply the bulk `changes` to every copy matching `baseWhere`, in one transaction. The
+ * `baseWhere` is trusted to already scope to owner copies in a single collection (the callers
+ * assert that). Shared by the id-list and server-scoped bulk entry points (#121/#172). */
+async function applyLotBulkChanges(
+  baseWhere: Prisma.ItemWhereInput,
+  changes: LotBulkChanges
+): Promise<void> {
+  const hasDisposition =
+    changes.inCollection !== undefined ||
+    changes.forSale !== undefined ||
+    changes.forTrade !== undefined;
   await prisma.$transaction(async (tx) => {
-    if (locationId !== undefined) {
+    if (changes.locationId !== undefined) {
       await tx.item.updateMany({
-        where: { id: { in: ids } },
-        data: locationId ? { locationId } : { locationId: null, locationRef: null },
+        where: baseWhere,
+        data: changes.locationId
+          ? { locationId: changes.locationId }
+          : { locationId: null, locationRef: null },
       });
     }
     if (changes.deliveryState) {
       const inCollection = inCollectionForDelivery(changes.deliveryState);
       await tx.item.updateMany({
-        where: { id: { in: ids } },
+        where: baseWhere,
         data: {
           deliveryState: changes.deliveryState,
           ...(inCollection !== undefined ? { inCollection } : {}),
@@ -739,15 +730,115 @@ export async function bulkUpdateLotItems(
       // with the chosen disposition — or `inCollection` by default when none was given. The
       // disposition rides along here (same filtered set) rather than in the block below.
       await tx.item.updateMany({
-        where: { id: { in: ids }, deliveryState: { in: ["ordered", "to_sort", "in_transit"] } },
+        where: { AND: [baseWhere, { deliveryState: { in: ["ordered", "to_sort", "in_transit"] } }] },
         data: {
           deliveryState: "delivered",
           ...(hasDisposition ? dispositionData : { inCollection: true }),
         },
       });
     } else if (hasDisposition) {
-      await tx.item.updateMany({ where: { id: { in: ids } }, data: dispositionData });
+      await tx.item.updateMany({ where: baseWhere, data: dispositionData });
     }
   });
+}
+
+/** Apply a bulk change to a set of lot copies during sorting (#121). `itemIds` is assembled
+ * by the client — a free selection or one copy. Every id must be an owner copy in a single
+ * collection; unknown/foreign ids are rejected. Changes (any combination):
+ *  - `locationId` defined → file the copies there (null clears location + ref);
+ *  - `deliveryState` → set that exact state (and couple `inCollection`, see above);
+ *  - `inCollection` / `forSale` / `forTrade` defined → set that disposition flag (applied
+ *    after `deliveryState`, so an explicit flag always wins);
+ *  - `markSorted` → move to `delivered` + `inCollection`, but only from a not-yet-sorted
+ *    state (already-sorted / damaged / not-delivered copies are left untouched).
+ * Returns the number of targeted copies. One transaction. For whole-lot/issue bulk actions
+ * over a set too large to enumerate client-side, use {@link bulkUpdateLotItemsScoped}. */
+export async function bulkUpdateLotItems(
+  ownerId: string,
+  itemIds: string[],
+  changes: LotBulkChanges
+): Promise<number> {
+  const ids = [...new Set(itemIds.filter((id) => id))];
+  if (ids.length === 0) return 0;
+  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
+    throw new Error("Unknown delivery state.");
+  }
+  if (isNoopBulk(changes)) return 0;
+
+  const rows = await prisma.item.findMany({
+    where: { id: { in: ids } },
+    select: { collectionId: true, collection: { select: { ownerId: true } } },
+  });
+  if (rows.length !== ids.length || rows.some((r) => r.collection.ownerId !== ownerId)) {
+    throw new Error("One or more copies were not found or access denied.");
+  }
+  const collectionIds = new Set(rows.map((r) => r.collectionId));
+  if (collectionIds.size !== 1) {
+    throw new Error("Copies must belong to a single collection.");
+  }
+  const collectionId = [...collectionIds][0];
+
+  if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
+
+  await applyLotBulkChanges({ id: { in: ids } }, changes);
   return ids.length;
+}
+
+/** A server-resolved bulk target — every copy matching the scope is updated, so "mark all
+ * copies sorted" / "move all copies to a location" cover an entire lot (or an issue group
+ * within it, or an issue across a purchase's open lots) without the client enumerating ids.
+ * This is what makes bulk actions correct for lots larger than one loaded page (#172). */
+export interface LotBulkScope {
+  /** All copies identified into this purchase lot. */
+  lotId?: string;
+  /** All copies identified into any lot of this purchase (order-level view). */
+  purchaseId?: string;
+  /** Narrow to a single issue group: an issue id, or `"__none__"` for copies with no issue. */
+  issueKey?: string;
+  /** Only copies whose owning lot is still open (skips already-closed lots). */
+  onlyOpenLots?: boolean;
+}
+
+/** Build the collection-scoped Prisma `where` for a {@link LotBulkScope}. */
+function lotBulkScopeWhere(collectionId: string, scope: LotBulkScope): Prisma.ItemWhereInput {
+  const lotRelation: Prisma.PurchaseLotWhereInput = {};
+  if (scope.purchaseId) lotRelation.purchaseId = scope.purchaseId;
+  if (scope.onlyOpenLots) lotRelation.status = "open";
+  return {
+    collectionId,
+    ...(scope.lotId ? { lotId: scope.lotId } : {}),
+    ...(Object.keys(lotRelation).length > 0 ? { lot: lotRelation } : {}),
+    ...(scope.issueKey
+      ? scope.issueKey === "__none__"
+        ? { stamp: { issueMemberships: { none: {} } } }
+        : { stamp: { issueMemberships: { some: { issueId: scope.issueKey } } } }
+      : {}),
+  };
+}
+
+/** Apply a bulk change to every copy matching a server-resolved {@link LotBulkScope} (#172).
+ * Mirrors {@link bulkUpdateLotItems}'s change semantics but targets by scope instead of an id
+ * list, so it is correct for lots with more copies than a single page. Returns the number of
+ * copies in the scope. */
+export async function bulkUpdateLotItemsScoped(
+  ownerId: string,
+  collectionId: string,
+  scope: LotBulkScope,
+  changes: LotBulkChanges
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (!scope.lotId && !scope.purchaseId) {
+    throw new Error("A lot or purchase must be given for a scoped bulk update.");
+  }
+  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
+    throw new Error("Unknown delivery state.");
+  }
+  if (isNoopBulk(changes)) return 0;
+  if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
+
+  const where = lotBulkScopeWhere(collectionId, scope);
+  const count = await prisma.item.count({ where });
+  if (count === 0) return 0;
+  await applyLotBulkChanges(where, changes);
+  return count;
 }
