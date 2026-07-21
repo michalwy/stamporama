@@ -15,8 +15,10 @@ import {
   deleteIssueAction,
   addStampToIssueAction,
   moveStampNodeAction,
+  moveIssueToAreaAction,
   type IssueActionState,
 } from "@/app/actions/issues";
+import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
 import type { IssueListItem, IssueSortBy, StampNodeData } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -83,6 +85,7 @@ type DialogState =
       parentCatalogNumbers?: { catalogVendorId: string; number: string }[];
     }
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
+  | { kind: "move-issue-area"; issue: IssueListItem }
   | { kind: "move-stamp"; issueId: string; stampId: string }
   | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
 
@@ -323,6 +326,7 @@ export function IssuesListPanel({
   const callbacks: IssueRowCallbacks = {
     onEdit: (issue) => openDialog({ kind: "edit-issue", issue }),
     onDelete: (issue) => openDialog({ kind: "delete-issue", issue }),
+    onMoveIssueArea: (issue) => openDialog({ kind: "move-issue-area", issue }),
     onAddStamp: (issueId, parentStampId, parentCatalogNumbers) =>
       openDialog({
         kind: "add-stamp",
@@ -629,6 +633,30 @@ export function IssuesListPanel({
           error={error}
           onClose={closeDialog}
           onSubmit={handleAddStampSubmit}
+        />
+      )}
+
+      {dialog.kind === "move-issue-area" && (
+        <MoveIssueAreaDialog
+          collectionId={collectionId}
+          issue={dialog.issue}
+          areas={areas}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(fd) =>
+            startTransition(async () => {
+              const result = await moveIssueToAreaAction(
+                collectionId,
+                dialog.issue.id,
+                fd
+              );
+              setActionState(result);
+              if (result.status === "success") {
+                handleStampSuccess(dialog.issue.id);
+              }
+            })
+          }
         />
       )}
 

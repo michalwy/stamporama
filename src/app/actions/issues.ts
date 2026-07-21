@@ -12,12 +12,15 @@ import {
   toggleIssueMemberRequired,
   removeStampFromIssue,
   moveStampNode,
+  moveIssueToArea,
+  listIssueReferencedVendors,
   getIssuePriceDetails,
 } from "@/lib/issues";
 import type {
   AutoCreateStampsInput,
   IssueDeletionPreview,
   IssuePriceDetails,
+  IssueReferencedVendor,
 } from "@/lib/issues";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import {
@@ -296,6 +299,36 @@ export async function removeStampFromIssueAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to remove stamp. Please try again." };
+  }
+}
+
+export async function listIssueReferencedVendorsAction(
+  collectionId: string,
+  issueId: string
+): Promise<IssueReferencedVendor[] | { error: string }> {
+  const session = await getSession();
+  try {
+    return await listIssueReferencedVendors(session.user.id, collectionId, issueId);
+  } catch {
+    return { error: "Failed to load issue catalog vendors." };
+  }
+}
+
+export async function moveIssueToAreaAction(
+  collectionId: string,
+  issueId: string,
+  formData: FormData
+): Promise<IssueActionState> {
+  const session = await getSession();
+  const targetAreaId = (formData.get("targetAreaId") as string | null) ?? "";
+  if (!targetAreaId) {
+    return { status: "error", message: "Please select a target area." };
+  }
+  try {
+    await moveIssueToArea(session.user.id, collectionId, issueId, targetAreaId);
+    return { status: "success", issueId };
+  } catch {
+    return { status: "error", message: "Failed to move issue. Please try again." };
   }
 }
 

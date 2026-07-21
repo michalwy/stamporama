@@ -214,6 +214,7 @@ function StampTreeNode({
 export interface IssueRowCallbacks {
   onEdit: (issue: IssueListItem) => void;
   onDelete: (issue: IssueListItem) => void;
+  onMoveIssueArea: (issue: IssueListItem) => void;
   onAddStamp: (
     issueId: string,
     parentStampId?: string,
@@ -294,6 +295,7 @@ export function IssueRow({
     addCopy.action,
     copies.action,
     ...(issue.requiredPriceTotal ? [prices.action] : []),
+    { key: "move-area", label: "Move to another area…", icon: "⇄", onSelect: () => callbacks.onMoveIssueArea(issue) },
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => callbacks.onEdit(issue) },
     {
       key: "delete",

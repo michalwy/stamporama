@@ -1491,3 +1491,140 @@ export async function moveStampNode(
     )
   );
 }
+
+export interface IssueReferencedVendor {
+  catalogVendorId: string;
+  name: string;
+  abbreviation: string;
+}
+
+/**
+ * Distinct catalog vendors referenced by an issue — its own catalog numbers plus
+ * every member stamp's catalog numbers. Used to warn, before moving the issue to a
+ * different area, which vendors the target area does not surface (#156). Vendors are
+ * collection-scoped, so the numbers stay valid after a move; this only drives the UI
+ * warning about display coverage.
+ */
+export async function listIssueReferencedVendors(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<IssueReferencedVendor[]> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const [issueNumbers, memberNumbers] = await Promise.all([
+    prisma.issueCatalogNumber.findMany({
+      where: { issueId },
+      select: { catalogVendorId: true },
+    }),
+    prisma.stampCatalogNumber.findMany({
+      where: { stamp: { issueMemberships: { some: { issueId } } } },
+      select: { catalogVendorId: true },
+    }),
+  ]);
+
+  const vendorIds = new Set<string>([
+    ...issueNumbers.map((n) => n.catalogVendorId),
+    ...memberNumbers.map((n) => n.catalogVendorId),
+  ]);
+  if (vendorIds.size === 0) return [];
+
+  const vendors = await prisma.catalogVendor.findMany({
+    where: { id: { in: [...vendorIds] }, collectionId },
+    select: { id: true, name: true, abbreviation: true },
+    orderBy: { name: "asc" },
+  });
+  return vendors.map((v) => ({
+    catalogVendorId: v.id,
+    name: v.name,
+    abbreviation: v.abbreviation,
+  }));
+}
+
+/**
+ * Move an issue (with its stamp tree) to a different collecting area (#156).
+ *
+ * The issue's `collectionAreaId` is updated and each member stamp's area tag
+ * (`StampCollectionArea`) is re-pointed from the old area to the target: the target
+ * link is upserted (carrying `isPrimary` from the old link) and the old-area link is
+ * removed only when the stamp is not a member of another issue that stays in the old
+ * area — so stamps shared across issues keep resolving in both places. Catalog numbers
+ * are untouched (vendors are collection-scoped); the UI warns separately about vendors
+ * the target area does not surface. No-ops when the issue is already in the target area.
+ */
+export async function moveIssueToArea(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  targetAreaId: string
+): Promise<void> {
+  const { collectionId: issueCollection, collectionAreaId: currentAreaId } =
+    await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  if (targetAreaId === currentAreaId) return;
+
+  const targetArea = await prisma.collectionArea.findUnique({
+    where: { id: targetAreaId },
+    select: { collectionId: true },
+  });
+  if (!targetArea || targetArea.collectionId !== collectionId) {
+    throw new Error("Target area not found.");
+  }
+
+  const members = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: {
+      stampId: true,
+      stamp: {
+        select: {
+          stampAreaLinks: {
+            where: { collectionAreaId: currentAreaId },
+            select: { isPrimary: true },
+          },
+        },
+      },
+    },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.issue.update({
+      where: { id: issueId },
+      data: { collectionAreaId: targetAreaId },
+    });
+
+    for (const m of members) {
+      const oldLink = m.stamp.stampAreaLinks[0];
+      const isPrimary = oldLink?.isPrimary ?? false;
+
+      await tx.stampCollectionArea.upsert({
+        where: {
+          stampId_collectionAreaId: {
+            stampId: m.stampId,
+            collectionAreaId: targetAreaId,
+          },
+        },
+        create: { stampId: m.stampId, collectionAreaId: targetAreaId, isPrimary },
+        update: isPrimary ? { isPrimary: true } : {},
+      });
+
+      // Keep the old-area link if another issue that stays in the old area still
+      // contains this stamp; otherwise the stamp fully follows the issue.
+      const stillInOldArea = await tx.issueMember.count({
+        where: {
+          stampId: m.stampId,
+          issueId: { not: issueId },
+          issue: { collectionAreaId: currentAreaId },
+        },
+      });
+      if (stillInOldArea === 0) {
+        await tx.stampCollectionArea.deleteMany({
+          where: { stampId: m.stampId, collectionAreaId: currentAreaId },
+        });
+      }
+    }
+  });
+}
