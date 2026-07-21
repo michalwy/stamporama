@@ -318,6 +318,10 @@ export function PurchaseDetailPanel({
     // uploads persist server-side until the create promotes them (or the orphan-GC sweeps them
     // if the wizard is abandoned).
     photoChangeSet: string;
+    // Disposition flags chosen at the condition step (#160), carried to the final create step.
+    inCollection: string;
+    forSale: string;
+    forTrade: string;
   } | null>(null);
   function resetWithStamps() {
     setWsStep("none");
@@ -782,6 +786,9 @@ export function PurchaseDetailPanel({
               locationId: (fd.get("locationId") as string) ?? "",
               locationRef: (fd.get("locationRef") as string) ?? "",
               photoChangeSet: (fd.get("photoChangeSet") as string) ?? "",
+              inCollection: (fd.get("inCollection") as string) ?? "false",
+              forSale: (fd.get("forSale") as string) ?? "false",
+              forTrade: (fd.get("forTrade") as string) ?? "false",
             });
             setError(undefined);
             setWsStep("lot");
@@ -806,6 +813,9 @@ export function PurchaseDetailPanel({
             fd.set("certificateStatusId", wsIntake.certificateStatusId);
             fd.set("locationId", wsIntake.locationId);
             fd.set("locationRef", wsIntake.locationRef);
+            fd.set("inCollection", wsIntake.inCollection);
+            fd.set("forSale", wsIntake.forSale);
+            fd.set("forTrade", wsIntake.forTrade);
             if (wsIntake.photoChangeSet) fd.set("photoChangeSet", wsIntake.photoChangeSet);
             run(
               async () => {
@@ -2594,7 +2604,6 @@ function LotCopyChips({
 }) {
   const delivery = DELIVERY[item.deliveryState] ?? { label: item.deliveryState, token: "muted" };
   const chipStyle = tintChip(delivery.token, delivery.label).style;
-  const [dispExpanded, setDispExpanded] = useState(false);
 
   // Next step along the happy-path progression, for the per-copy quick-advance button (#159).
   // Null at "delivered" and on the exception outcomes, where the button is hidden.
@@ -2604,13 +2613,6 @@ function LotCopyChips({
       ? DELIVERY_ADVANCE_ORDER[advIdx + 1]
       : null;
 
-  function advanceDelivery(next: string) {
-    onSetDeliveryState?.(next);
-    // Delivered leaves disposition to the collector — pop the editor open for them (mirrors the
-    // dropdown's behaviour).
-    if (next === "delivered") setDispExpanded(true);
-  }
-
   return (
     <>
       {onSetDeliveryState ? (
@@ -2618,7 +2620,7 @@ function LotCopyChips({
           <select
             aria-label="Delivery status"
             value={item.deliveryState}
-            onChange={(e) => advanceDelivery(e.target.value)}
+            onChange={(e) => onSetDeliveryState(e.target.value)}
             style={{
               ...chipStyle,
               cursor: "pointer",
@@ -2645,7 +2647,7 @@ function LotCopyChips({
           <button
             type="button"
             aria-label={`Advance delivery status to ${DELIVERY[nextDelivery]?.label ?? nextDelivery}`}
-            onClick={() => advanceDelivery(nextDelivery)}
+            onClick={() => onSetDeliveryState(nextDelivery)}
             style={{
               ...CHIP,
               display: "inline-flex",
@@ -2664,12 +2666,7 @@ function LotCopyChips({
       )}
 
       {onSetDisposition ? (
-        <DispositionInline
-          item={item}
-          expanded={dispExpanded}
-          onToggleExpanded={() => setDispExpanded((v) => !v)}
-          onSet={onSetDisposition}
-        />
+        <DispositionInline item={item} onSet={onSetDisposition} />
       ) : (
         DISPOSITION_FLAGS.filter((d) => item[d.key]).map((d) => (
           <span key={d.key} style={CHIP}>
@@ -2706,49 +2703,54 @@ function LotCopyChips({
   );
 }
 
-/** Inline disposition editor for a lot copy (#121): collapsed it shows the active flags (or a
- * "Set disposition" prompt); expanded it shows the three flags as toggles that persist on
- * click. Auto-expands when the delivery status is set to `delivered`. */
+/** Inline disposition editor for a lot copy (#121, #160): always shows the three flags as
+ * toggle chips that persist instantly on click — no expand or confirm step. */
 function DispositionInline({
   item,
-  expanded,
-  onToggleExpanded,
   onSet,
 }: {
   item: ItemListItem;
-  expanded: boolean;
-  onToggleExpanded: () => void;
   onSet: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
 }) {
-  const active = DISPOSITION_FLAGS.filter((d) => item[d.key]);
+  return (
+    <DispositionChips
+      values={{
+        inCollection: item.inCollection,
+        forSale: item.forSale,
+        forTrade: item.forTrade,
+      }}
+      onToggle={(flag, value) => onSet(flag, value)}
+    />
+  );
+}
 
-  if (!expanded) {
-    return (
-      <Tooltip content="Disposition — click to change">
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          style={{ ...CHIP, cursor: "pointer" }}
-        >
-          🏷 {active.length > 0 ? active.map((d) => d.label).join(" · ") : "Set disposition"}
-        </button>
-      </Tooltip>
-    );
-  }
-
+/** The three disposition flags rendered as instant-toggle chips (#160). Shared by the per-copy
+ * inline editor and the intake dialog: `values` holds the current on/off of each flag and
+ * `onToggle` flips one. Purely presentational — the caller decides whether a toggle persists
+ * immediately (per-copy) or updates form state (intake). */
+function DispositionChips({
+  values,
+  onToggle,
+  disabled,
+}: {
+  values: { inCollection: boolean; forSale: boolean; forTrade: boolean };
+  onToggle: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
       {DISPOSITION_FLAGS.map((d) => {
-        const on = item[d.key];
+        const on = values[d.key];
         return (
           <button
             key={d.key}
             type="button"
             aria-pressed={on}
-            onClick={() => onSet(d.key, !on)}
+            disabled={disabled}
+            onClick={() => onToggle(d.key, !on)}
             style={{
               ...CHIP,
-              cursor: "pointer",
+              cursor: disabled ? "default" : "pointer",
               fontWeight: on ? 600 : 500,
               color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
               borderColor: on ? "var(--color-accent)" : "var(--color-border)",
@@ -2760,21 +2762,6 @@ function DispositionInline({
           </button>
         );
       })}
-      <Tooltip content="Changes save as you toggle — click when you're done">
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          aria-label="Done editing disposition"
-          style={{
-            ...CHIP,
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "var(--color-success, var(--color-text-secondary))",
-          }}
-        >
-          ✓
-        </button>
-      </Tooltip>
     </span>
   );
 }
@@ -2801,6 +2788,9 @@ interface IntakeConditionDialogProps {
 const LS_LAST_CONDITION = "stamporama:intake:conditionId";
 const LS_LAST_CERT = "stamporama:intake:certId";
 const LS_LAST_LOCATION = "stamporama:intake:locationId";
+// Last disposition chosen during intake (#160), stored as a comma-joined list of active flag
+// keys so the next stamp preselects the same chips.
+const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
 // Persisted order-level view preferences (#121): whether copies group by lot and/or by issue
 // (per collection), and which issue groups are collapsed (per collection + lot/scope).
 // Suffixed with the ids by the caller.
@@ -2848,6 +2838,17 @@ function IntakeConditionDialog({
     // deleted ones fall back to none).
     return locations.some((l) => l.id === last && l.assignable) ? last : "";
   });
+  // Disposition preset for the copies this intake creates (#160): toggled instantly as chips,
+  // carried into the created copies on submit. Remembered per collection like the other
+  // choices, to speed up bulk intake.
+  const [disposition, setDisposition] = useState(() => {
+    const active = new Set(readLast(LS_LAST_DISPOSITION, collectionId).split(",").filter(Boolean));
+    return {
+      inCollection: active.has("inCollection"),
+      forSale: active.has("forSale"),
+      forTrade: active.has("forTrade"),
+    };
+  });
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
@@ -2870,7 +2871,15 @@ function IntakeConditionDialog({
     writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
     writeLast(LS_LAST_LOCATION, collectionId, locationId);
+    writeLast(
+      LS_LAST_DISPOSITION,
+      collectionId,
+      DISPOSITION_FLAGS.filter((d) => disposition[d.key]).map((d) => d.key).join(",")
+    );
     const fd = new FormData(e.currentTarget);
+    fd.set("inCollection", String(disposition.inCollection));
+    fd.set("forSale", String(disposition.forSale));
+    fd.set("forTrade", String(disposition.forTrade));
     if (singleStamp) {
       fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
     }
@@ -2984,6 +2993,19 @@ function IntakeConditionDialog({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Disposition (#160): preset where the copies land once sorted. Instant-toggle chips
+              — no separate save; the choice rides along on the intake submit. */}
+          <div style={{ marginTop: "0.75rem" }}>
+            <LabelWithError htmlFor="">Disposition (optional)</LabelWithError>
+            <div style={{ marginTop: "0.25rem" }}>
+              <DispositionChips
+                values={disposition}
+                disabled={isPending}
+                onToggle={(flag, value) => setDisposition((d) => ({ ...d, [flag]: value }))}
+              />
+            </div>
           </div>
 
           {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several

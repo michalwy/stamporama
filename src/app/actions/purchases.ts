@@ -58,6 +58,20 @@ function optionalStr(formData: FormData, key: string): string | null {
   return v || null;
 }
 
+/** The three disposition flags an intake form can preset on its copies (#160). A flag counts
+ * as on only when its field is the string "true"; absent fields default off. */
+function parseDisposition(formData: FormData): {
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
+} {
+  return {
+    inCollection: str(formData, "inCollection") === "true",
+    forSale: str(formData, "forSale") === "true",
+    forTrade: str(formData, "forTrade") === "true",
+  };
+}
+
 /** A price string → number in whole cents precision, or `null` when blank/invalid. */
 function parseMoney(raw: string): number | null {
   if (!raw) return null;
@@ -219,6 +233,7 @@ export async function createLotWithStampsAction(
       locationId: optionalStr(formData, "locationId"),
       locationRef: optionalStr(formData, "locationRef"),
       photoChangeSet: parsePhotoChangeSet(formData),
+      ...parseDisposition(formData),
     });
     return { status: "success", id: lotId };
   } catch (e) {
@@ -298,6 +313,7 @@ export async function intakeStampsAction(
       locationId: optionalStr(formData, "locationId"),
       locationRef: optionalStr(formData, "locationRef"),
       photoChangeSet: parsePhotoChangeSet(formData),
+      ...parseDisposition(formData),
     });
     return { status: "success" };
   } catch (e) {

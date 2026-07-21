@@ -137,11 +137,14 @@ app: navigate areas and issues, and either
 - add a **whole issue** with the **+ Whole issue** button on the issue row — this creates a
   copy for every stamp in that issue marked *required for completeness*.
 
-You are then asked once for the **condition**, an optional **certificate**, and an optional
+You are then asked once for the **condition**, an optional **certificate**, an optional
 **storage location** — with an optional **in-location ref** (e.g. a page or pocket like
-`A234`) once a location is chosen; they apply to every copy created in that step. Your last
-choices are remembered and pre-filled for the next stamp, so sorting a parcel into the same
-box and condition is quick. When you are adding a **single stamp** you can also **attach
+`A234`) once a location is chosen — and an optional **disposition**. Disposition shows the
+three flags (**In collection / For sale / For trade**) as chips you click to toggle on the
+spot; they preset where each created copy is headed and can be combined. All of these apply to
+every copy created in that step. Your last choices — disposition included — are remembered and
+pre-filled for the next stamp, so sorting a parcel into the same box, condition, and
+disposition is quick. When you are adding a **single stamp** you can also **attach
 photos** to that copy right here (front/back plus extra images); a whole-issue intake creates
 several distinct copies, so photos are offered only for single-stamp intake. The copies are
 linked to the lot and marked **Ordered** — purchased but
@@ -221,13 +224,13 @@ whatever granularity suits the parcel:
 - **A whole issue** — in the **By issue** view, each issue header has a **📍** (move to
   location) and a **✓** (mark sorted) button acting on that issue's copies.
 - **A single copy** — edit it right on the row: its **delivery chip** is a dropdown for
-  setting the status (Ordered, In transit, To sort, Delivered, …), its **disposition chip**
-  expands to toggle **In collection / For sale / For trade**, and its **location chip** (or the
-  **📍 Set location** button when it has none) opens the location tree-select. Setting a copy
-  **Delivered** pops the disposition editor open so you choose where it lands — it is **not**
-  auto-filed into your collection, since a delivered copy might be headed straight for sale or
-  trade. For condition or certificate changes use its **⋮** menu → **Edit copy** — e.g. if the
-  seller shipped a different condition than expected (MH instead of MNH), correct it there.
+  setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it
+  to advance one step, and its **disposition** shows all three flags — **In collection / For
+  sale / For trade** — as chips you click to toggle instantly (no expand or confirm step). Its
+  **location chip** (or the **📍 Set location** button when it has none) opens the location
+  tree-select. For condition or certificate changes use its **⋮** menu → **Edit copy** — e.g.
+  if the seller shipped a different condition than expected (MH instead of MNH), correct it
+  there.
 
 To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
 just the unsorted copies; click it again (or the **To sort only ✕** button) to show all. As

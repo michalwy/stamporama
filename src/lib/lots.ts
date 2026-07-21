@@ -253,6 +253,10 @@ export async function createLotWithStamps(
     locationId?: string | null;
     locationRef?: string | null;
     photoChangeSet?: PhotoChangeSet | null;
+    // Disposition flags chosen during intake (#160); default off when omitted.
+    inCollection?: boolean;
+    forSale?: boolean;
+    forTrade?: boolean;
   }
 ): Promise<{ lotId: string; count: number }> {
   const lotId = await createLot(ownerId, purchaseId, input.price, input.title);
@@ -265,6 +269,9 @@ export async function createLotWithStamps(
       locationId: input.locationId,
       locationRef: input.locationRef,
       photoChangeSet: input.photoChangeSet,
+      inCollection: input.inCollection,
+      forSale: input.forSale,
+      forTrade: input.forTrade,
     });
     return { lotId, count };
   } catch (err) {
@@ -336,6 +343,11 @@ export async function intakeStamps(
     // Only honoured for a single-stamp intake (#148); a whole-issue intake creates several
     // distinct copies, so the client never sends photos for it.
     photoChangeSet?: PhotoChangeSet | null;
+    // Disposition flags chosen during intake (#160). Copies are still created not-yet-sorted
+    // (ordered / to_sort); these only preset where the copy will land once sorted. Default off.
+    inCollection?: boolean;
+    forSale?: boolean;
+    forTrade?: boolean;
   }
 ): Promise<number> {
   const { collectionId, purchaseId, status } = await assertLotOwner(ownerId, lotId);
@@ -420,9 +432,9 @@ export async function intakeStamps(
     certificateStatusId,
     locationId,
     locationRef,
-    inCollection: false,
-    forSale: false,
-    forTrade: false,
+    inCollection: input.inCollection ?? false,
+    forSale: input.forSale ?? false,
+    forTrade: input.forTrade ?? false,
     lotId,
     deliveryState,
   });
