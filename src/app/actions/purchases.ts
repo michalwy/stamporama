@@ -27,7 +27,7 @@ import { parsePhotoChangeSet } from "@/lib/photos";
 
 export type PurchaseActionState =
   | { status: "idle" }
-  | { status: "success" }
+  | { status: "success"; id?: string }
   | { status: "error"; message: string };
 
 /** Create returns the new purchase's id so the caller can navigate straight to its
@@ -176,8 +176,13 @@ export async function createLotAction(
   const price = parseMoney(str(formData, "price"));
   if (price == null) return { status: "error", message: "A valid lot price is required." };
   try {
-    await createLot(session.user.id, purchaseId, price, optionalStr(formData, "title"));
-    return { status: "success" };
+    const lotId = await createLot(
+      session.user.id,
+      purchaseId,
+      price,
+      optionalStr(formData, "title")
+    );
+    return { status: "success", id: lotId };
   } catch (e) {
     return {
       status: "error",
@@ -204,7 +209,7 @@ export async function createLotWithStampsAction(
     return { status: "error", message: "Select a stamp or an issue to add." };
   }
   try {
-    await createLotWithStamps(session.user.id, purchaseId, {
+    const { lotId } = await createLotWithStamps(session.user.id, purchaseId, {
       price,
       title: optionalStr(formData, "title"),
       stampId,
@@ -215,7 +220,7 @@ export async function createLotWithStampsAction(
       locationRef: optionalStr(formData, "locationRef"),
       photoChangeSet: parsePhotoChangeSet(formData),
     });
-    return { status: "success" };
+    return { status: "success", id: lotId };
   } catch (e) {
     return {
       status: "error",

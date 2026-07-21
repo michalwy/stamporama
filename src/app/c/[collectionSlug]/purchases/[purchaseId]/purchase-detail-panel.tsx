@@ -51,6 +51,7 @@ import {
   type PickedIssue,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
 import type { PickedStamp } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -280,6 +281,9 @@ export function PurchaseDetailPanel({
   const [addingLot, setAddingLot] = useState(false);
   const [arriving, setArriving] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // Briefly highlight a lot right after it is created, so the new card is easy to spot once
+  // the panel refreshes with it (#158).
+  const [justAddedLotId, markLotAdded] = useJustAdded();
 
   // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
   // a flat list of every copy in the order. Persisted per collection; default groups by both.
@@ -316,13 +320,16 @@ export function PurchaseDetailPanel({
     setError(undefined);
   }
 
-  function run(fn: () => Promise<{ status: string; message?: string }>, onDone?: () => void) {
+  function run(
+    fn: () => Promise<{ status: string; message?: string; id?: string }>,
+    onDone?: (result: { status: string; message?: string; id?: string }) => void
+  ) {
     setError(undefined);
     startTransition(async () => {
       const result = await fn();
       if (result.status === "success") {
         router.refresh();
-        onDone?.();
+        onDone?.(result);
       } else if (result.status === "error") {
         setError(result.message);
       }
@@ -584,6 +591,7 @@ export function PurchaseDetailPanel({
               key={lot.id}
               index={idx}
               lot={lot}
+              justAdded={lot.id === justAddedLotId}
               items={itemsByLot[lot.id] ?? []}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
@@ -638,7 +646,10 @@ export function PurchaseDetailPanel({
                 const { createLotAction } = await import("@/app/actions/purchases");
                 return createLotAction(purchase.id, fd);
               },
-              () => setAddingLot(false)
+              (result) => {
+                setAddingLot(false);
+                if (result.id) markLotAdded(result.id);
+              }
             )
           }
         />
@@ -759,7 +770,10 @@ export function PurchaseDetailPanel({
                 const { createLotWithStampsAction } = await import("@/app/actions/purchases");
                 return createLotWithStampsAction(purchase.id, fd);
               },
-              resetWithStamps
+              (result) => {
+                resetWithStamps();
+                if (result.id) markLotAdded(result.id);
+              }
             );
           }}
         />
@@ -771,6 +785,8 @@ export function PurchaseDetailPanel({
 interface LotCardProps {
   index: number;
   lot: LotSummary;
+  /** Flash the card once right after this lot is created (#158). */
+  justAdded: boolean;
   items: ItemListItem[];
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
@@ -787,10 +803,7 @@ interface LotCardProps {
    * copies by before rendering. */
   sortKey: string;
   sortDir: string;
-  onRun: (
-    fn: () => Promise<{ status: string; message?: string }>,
-    onDone?: () => void
-  ) => void;
+  onRun: RunFn;
 }
 
 /** A stamp or a whole issue chosen in the picker, awaiting a condition/certificate before
@@ -800,8 +813,8 @@ type PendingSelection =
   | { kind: "issue"; issueId: string; label: string; requiredCount: number };
 
 type RunFn = (
-  fn: () => Promise<{ status: string; message?: string }>,
-  onDone?: () => void
+  fn: () => Promise<{ status: string; message?: string; id?: string }>,
+  onDone?: (result: { status: string; message?: string; id?: string }) => void
 ) => void;
 
 interface BulkChanges {
@@ -1186,6 +1199,7 @@ function CopyRow({
 function LotCard({
   index,
   lot,
+  justAdded,
   items,
   issueHeaderById,
   collectionId,
@@ -1352,6 +1366,7 @@ function LotCard({
 
   return (
     <div
+      className={justAdded ? "just-added-flash" : undefined}
       style={{
         border: `1px solid ${blockMessage ? "var(--color-error)" : "var(--color-border)"}`,
         borderRadius: "0.75rem",

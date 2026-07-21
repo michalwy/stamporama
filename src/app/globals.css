@@ -35,6 +35,8 @@
   --color-bg-muted: #f1f5f9;
   --color-bg-strong: #e2e8f0;
   --color-bg-row-hover: #f1f5f9;
+  /* Transient "just added" highlight (#158): a warm tint that fades out */
+  --color-bg-highlight-flash: #fde68a;
   /* Text tokens */
   --color-text-primary: #020617;
   --color-text-secondary: #334155;
@@ -83,6 +85,8 @@
   --color-bg-muted: #334155;
   --color-bg-strong: #475569;
   --color-bg-row-hover: #334155;
+  /* Transient "just added" highlight (#158): a warm tint that fades out */
+  --color-bg-highlight-flash: #4d3a10;
   /* Text tokens */
   --color-text-primary: #f1f5f9;
   --color-text-secondary: #cbd5e1;
@@ -109,4 +113,28 @@ body {
 body {
   margin: 0;
   background: var(--color-bg-page);
+}
+
+/* One-shot highlight applied to a row/card right after it is added (#158), so the user can
+   confirm the action landed without scanning the list. Fades from a warm tint back to the
+   surface colour. Suppressed under reduced-motion, where the tint simply isn't shown. */
+@keyframes just-added-flash {
+  0% {
+    background-color: var(--color-bg-highlight-flash);
+  }
+  100% {
+    /* End on the surface colour the flashed elements rest on so the fade finishes seamlessly
+       (both the lot card and the picker's issue rows sit on --color-bg-elevated). */
+    background-color: var(--color-bg-elevated);
+  }
+}
+
+.just-added-flash {
+  animation: just-added-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .just-added-flash {
+    animation: none;
+  }
 }

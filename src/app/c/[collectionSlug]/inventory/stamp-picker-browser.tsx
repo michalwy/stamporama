@@ -511,6 +511,7 @@ function IssueBrowser({
               primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
               isLast={i === filtered.length - 1}
               defaultExpanded={issue.id === justCreatedIssueId}
+              justAdded={issue.id === justCreatedIssueId}
               onPick={handlePick}
               onPickIssue={
                 onPickIssue
@@ -540,6 +541,7 @@ function PickIssueRow({
   primaryVendorId,
   isLast,
   defaultExpanded,
+  justAdded,
   onPick,
   onPickIssue,
   onNewStamp,
@@ -552,6 +554,8 @@ function PickIssueRow({
   primaryVendorId: string | null;
   isLast: boolean;
   defaultExpanded: boolean;
+  /** Flash this row once right after the issue is created inline (#158). */
+  justAdded: boolean;
   onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueData) => void;
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   onPickIssue?: () => void;
@@ -574,6 +578,7 @@ function PickIssueRow({
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
       <div
+        className={justAdded ? "just-added-flash" : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => setIsExpanded((v) => !v)}
