@@ -59,6 +59,23 @@ The kind invariants (unit lots hold items and no sub-lots; quantity lots hold su
 items) are **domain guards**, not DB constraints — they span the two join tables and cannot be
 expressed as a single check.
 
+**Shape / interchangeability (#164).** A sub-lot's *shape* is the sorted multiset of its copies'
+**stamp × condition** components. Every sub-lot of one quantity lot must share the same shape —
+the first added sub-lot fixes it. **Condition must match** (part of the shape, enforced);
+**certificate is not** — a certificate difference is a non-blocking **warning** surfaced in the
+picker, since certs don't change interchangeability enough to forbid grouping. A **physical copy
+appears in at most one sub-lot** of a quantity lot (you can't sell the same copy twice as two
+interchangeable units) — a domain guard on both add paths, spanning the sub-lots' `lot_item`
+rows. The composition UI
+builds a quantity lot two ways: **add copies** (each selected copy becomes its own `ready`
+single-stamp unit sub-lot — the fast path for a stock of duplicates, so all picked copies must
+be the same stamp) and **add lots** (attach existing unit lots whose shape matches). Copies
+must be *For sale* and *delivered* to be packaged. A grouped unit lot **still lists** on the
+top-level Lots screen (flagged "in quantity lot", with a "Hide grouped" toggle) — it can be
+offered standalone, and the no-double-sale guard means whichever sale lands first takes the
+copy. Auto-created single-copy sub-lots are cleaned up when ungrouped **unless** they've since
+gained a title, another parent, an offer, or a sale.
+
 ### 3. Explicit lifecycles
 
 **`Lot.state`: `draft ↔ ready ↔ dissolved`.** `dissolved` = unpacked back into inventory

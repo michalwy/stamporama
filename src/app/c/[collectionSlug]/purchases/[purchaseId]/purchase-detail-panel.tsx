@@ -2,11 +2,9 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   useTransition,
   type FormEvent,
 } from "react";
@@ -28,24 +26,29 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
-import type { QuickCatalogPriceContext } from "@/lib/stamps";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import { estimateLot, type DeliveryState } from "@/lib/purchase-allocation";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
-import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { formatStampCN } from "@/app/c/[collectionSlug]/shared/chip-styles";
-import {
-  IssueTitle,
-  IssueCatalogChips,
-  StampCountBadge,
-} from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
+import { sortCopies } from "@/app/c/[collectionSlug]/shared/copy-sort";
+import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import {
+  lsGet,
+  lsSet,
+  lsRemove,
+  useHydrated,
+  usePersistentToggle,
+  usePersistentString,
+  usePersistentStringSet,
+} from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import {
   StampPickerBrowser,
   type PickedIssue,
@@ -139,126 +142,6 @@ function tintChip(token: string, label: string): { style: React.CSSProperties; l
       background: `var(--color-${token}-soft, var(--color-bg-page))`,
     },
   };
-}
-
-// --- localStorage-backed UI preferences (SSR-safe: read after mount) ----------------------
-function lsGet(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function lsSet(key: string, value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* ignore quota / disabled storage */
-  }
-}
-function lsRemove(key: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    /* ignore */
-  }
-}
-
-// Lot-view preferences are read via useSyncExternalStore (mirroring `useDisplayCondition`):
-// getServerSnapshot returns null so SSR and the first client render agree (no hydration
-// mismatch), and every write dispatches an event so all lot cards re-render in sync.
-const LOT_PREF_EVENT = "stamporama:lotPref";
-
-function subscribeLotPref(callback: () => void): () => void {
-  window.addEventListener("storage", callback);
-  window.addEventListener(LOT_PREF_EVENT, callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(LOT_PREF_EVENT, callback);
-  };
-}
-
-function useRawStored(key: string): string | null {
-  return useSyncExternalStore(
-    subscribeLotPref,
-    () => lsGet(key),
-    () => null
-  );
-}
-
-/** False on the server and during the first client render (so it matches the SSR output),
- * then true. Lets preference-dependent UI wait for the localStorage-backed value instead of
- * flashing the fallback first. Uses useSyncExternalStore (no setState-in-effect). */
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-}
-
-function writeLotPref(key: string, value: string): void {
-  lsSet(key, value);
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(LOT_PREF_EVENT));
-}
-
-function parseStringSet(raw: string | null): Set<string> {
-  if (!raw) return new Set();
-  try {
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr)
-      ? new Set(arr.filter((x): x is string => typeof x === "string"))
-      : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-/** A boolean UI preference persisted under `key`, defaulting to `fallback` when unset. */
-function usePersistentToggle(
-  key: string,
-  fallback: boolean
-): [boolean, (value: boolean) => void] {
-  const stored = useRawStored(key);
-  const value = stored === "1" ? true : stored === "0" ? false : fallback;
-  const set = useCallback(
-    (next: boolean) => writeLotPref(key, next ? "1" : "0"),
-    [key]
-  );
-  return [value, set];
-}
-
-/** A string UI preference persisted under `key`, defaulting to `fallback` when unset. */
-function usePersistentString(
-  key: string,
-  fallback: string
-): [string, (value: string) => void] {
-  const stored = useRawStored(key);
-  const value = stored ?? fallback;
-  const set = useCallback((next: string) => writeLotPref(key, next), [key]);
-  return [value, set];
-}
-
-/** A set of string keys persisted under `key` as a JSON array. */
-function usePersistentStringSet(
-  key: string
-): [Set<string>, (updater: (prev: Set<string>) => Set<string>) => void] {
-  const stored = useRawStored(key);
-  const value = useMemo(() => parseStringSet(stored), [stored]);
-  const update = useCallback(
-    (updater: (prev: Set<string>) => Set<string>) => {
-      // Re-read the authoritative value at write time so concurrent lot cards don't clobber
-      // each other's collapse state (each uses a distinct key, but this stays correct if
-      // that ever changes).
-      const next = updater(parseStringSet(lsGet(key)));
-      writeLotPref(key, JSON.stringify([...next]));
-    },
-    [key]
-  );
-  return [value, update];
 }
 
 interface PurchaseDetailPanelProps {
@@ -2333,66 +2216,6 @@ function groupByIssueList(items: ItemListItem[]): LotItemGroup[] {
 /** The catalog number shown for a copy: its primary-vendor number when the area has one, else
  * the first recorded. Raw digits (no vendor prefix) — used as the "by catalog number" sort key
  * (#157). Null when the copy carries no catalog number. */
-function primaryCatalogNumber(
-  item: ItemListItem,
-  primaryVendorByArea: Map<string, string | null>
-): string | null {
-  const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
-  const cn =
-    item.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
-    item.catalogNumbers[0] ??
-    null;
-  return cn ? cn.number : null;
-}
-
-// Natural (numeric-aware) collation so catalog numbers order 1, 2, 10 — not 1, 10, 2 (#157).
-const COPY_SORT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
-/** Sort a lot's copies for display (#157). "added" keeps the incoming (creation) order; the
- * other keys sort on the same fields the rows show — year, catalog number, catalog value, or
- * stamp name. Copies missing the sort field (no year / no catalog number / uncertain value /
- * no name) always sort last, regardless of direction, so blanks never lead. Stable: equal keys
- * keep their incoming order. */
-function sortCopies(
-  items: ItemListItem[],
-  sortKey: string,
-  sortDir: string,
-  primaryVendorByArea: Map<string, string | null>
-): ItemListItem[] {
-  if (sortKey === "added") return sortDir === "desc" ? [...items].reverse() : items;
-  const dir = sortDir === "desc" ? -1 : 1;
-  const yearOf = (it: ItemListItem) => it.issuedYear ?? it.issueYear ?? null;
-  const nameOf = (it: ItemListItem) => it.stampName ?? it.issueName ?? "";
-  const numCmp = (a: number | null, b: number | null) => {
-    if (a == null && b == null) return 0;
-    if (a == null) return 1; // blanks last, both directions
-    if (b == null) return -1;
-    return (a - b) * dir;
-  };
-  const strCmp = (a: string, b: string) => {
-    if (!a && !b) return 0;
-    if (!a) return 1;
-    if (!b) return -1;
-    return COPY_SORT_COLLATOR.compare(a, b) * dir;
-  };
-  return items
-    .map((it, i) => ({ it, i }))
-    .sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "year") cmp = numCmp(yearOf(a.it), yearOf(b.it));
-      else if (sortKey === "price") cmp = numCmp(a.it.value.baseAmount, b.it.value.baseAmount);
-      else if (sortKey === "name") cmp = strCmp(nameOf(a.it), nameOf(b.it));
-      else if (sortKey === "catalog")
-        cmp = strCmp(
-          primaryCatalogNumber(a.it, primaryVendorByArea) ?? "",
-          primaryCatalogNumber(b.it, primaryVendorByArea) ?? ""
-        );
-      if (cmp === 0) cmp = a.i - b.i; // stable tiebreak on incoming order
-      return cmp;
-    })
-    .map((d) => d.it);
-}
-
 function copyCatalogLabel(
   item: ItemListItem,
   primaryVendorByArea: Map<string, string | null>,
@@ -2434,155 +2257,6 @@ function deriveLotLabel(
  * row on the issues list (area chip · title · catalog chips · required/total badge), plus a
  * count of how many of the lot's copies fall under it. Falls back to a plain label for
  * copies with no issue. */
-function LotIssueGroupHeader({
-  header,
-  fallbackLabel,
-  copyCount,
-  areaName,
-  primaryVendorId,
-  vendorMap,
-  collapsed,
-  onToggle,
-  onMove,
-  onMarkSorted,
-}: {
-  header: IssueHeader | null | undefined;
-  fallbackLabel: string;
-  copyCount: number;
-  areaName: string | null;
-  primaryVendorId: string | null;
-  vendorMap: Map<string, AreaCatalogEntry>;
-  collapsed: boolean;
-  onToggle: () => void;
-  /** Bulk actions over this issue's copies in the lot (open lots only, #121). */
-  onMove?: () => void;
-  onMarkSorted?: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onToggle}
-      style={{
-        padding: "0.75rem 1.25rem",
-        background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
-        transition: "background 0.1s ease",
-        cursor: "pointer",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          aria-label={collapsed ? "Expand" : "Collapse"}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: "0.25rem",
-            flexShrink: 0,
-            lineHeight: 1,
-          }}
-        >
-          {collapsed ? "▶" : "▼"}
-        </button>
-
-        {areaName && (
-          <span
-            style={{
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              background: "var(--color-bg-page)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.25rem",
-              padding: "0.1rem 0.4rem",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            {areaName}
-          </span>
-        )}
-
-        <span
-          style={{
-            flex: 1,
-            fontSize: "0.9375rem",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {header ? <IssueTitle name={header.name} year={header.year} /> : fallbackLabel}
-        </span>
-
-        <Tooltip content="Copies from this issue in the lot" align="end">
-          <span style={{ ...CHIP, flexShrink: 0 }}>{copyCount} in lot</span>
-        </Tooltip>
-
-        {onMove && (
-          <Tooltip content="Move this issue's copies to a location" align="end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMove();
-              }}
-              aria-label="Move this issue's copies to a location"
-              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
-            >
-              📍
-            </button>
-          </Tooltip>
-        )}
-        {onMarkSorted && (
-          <Tooltip content="Mark this issue's copies sorted" align="end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkSorted();
-              }}
-              aria-label="Mark this issue's copies sorted"
-              style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
-            >
-              ✓
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      {header && (header.catalogNumbers.length > 0 || header.memberCount > 0) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            paddingLeft: "1.75rem",
-            marginTop: "0.3rem",
-            flexWrap: "wrap",
-          }}
-        >
-          <IssueCatalogChips
-            catalogNumbers={header.catalogNumbers}
-            vendorMap={vendorMap}
-            primaryVendorId={primaryVendorId}
-          />
-          {header.memberCount > 0 && (
-            <StampCountBadge required={header.requiredCount} total={header.memberCount} />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Lot-specific chips appended to a copy's inventory row (#121), in lifecycle order:
  * **delivery status** → **disposition** → **cost-basis**. On an open lot the delivery chip is
  * an inline dropdown and the disposition chip expands to toggles (both edit the copy in place,
@@ -3044,227 +2718,3 @@ function IntakeConditionDialog({
 /** Quick inline catalog-price editor: one amount field that writes to the stamp's primary
  * catalog (latest edition) for the copy's condition × certificate (#121). Loads the target
  * catalog / currency / existing amount on open so the user knows exactly where it lands. */
-function QuickPriceDialog({
-  item,
-  collectionId,
-  areaName,
-  primaryVendorId,
-  vendorMap,
-  isPending,
-  error,
-  onClose,
-  onSubmit,
-}: {
-  item: ItemListItem;
-  collectionId: string;
-  areaName: string | null;
-  primaryVendorId: string | null;
-  vendorMap: Map<string, AreaCatalogEntry>;
-  isPending: boolean;
-  error?: string;
-  onClose: () => void;
-  onSubmit: (amount: string) => void;
-}) {
-  const [amount, setAmount] = useState("");
-  const [context, setContext] = useState<QuickCatalogPriceContext | null>(null);
-  const [loadError, setLoadError] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Focus the amount field once it is enabled (autoFocus can't fire while it is disabled
-  // during the context load).
-  useEffect(() => {
-    if (!loading && !loadError) inputRef.current?.focus();
-  }, [loading, loadError]);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { getQuickCatalogPriceContextAction } = await import("@/app/actions/stamps");
-      const r = await getQuickCatalogPriceContextAction(
-        item.stampId,
-        item.conditionId,
-        item.certificateStatusId
-      );
-      if (!active) return;
-      if (r.status === "success") {
-        setContext(r.context);
-        if (r.context.amount != null) setAmount(r.context.amount);
-      } else {
-        setLoadError(r.message);
-      }
-      setLoading(false);
-    })();
-    return () => {
-      active = false;
-    };
-  }, [item]);
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onSubmit(amount.trim());
-  }
-
-  const condLabel = `${item.conditionAbbreviation}${
-    item.certificateStatusName ? ` · ${item.certificateStatusName}` : ""
-  }`;
-  const canSave = !isPending && !loading && !loadError && amount.trim() !== "";
-
-  // Issue + catalog-number context (#147): issue name/year and the stamp's catalog numbers
-  // across vendors, primary vendor first (mirroring the copy rows), so the user can confirm
-  // they're pricing the right stamp without leaving the dialog.
-  const issueLabel = item.issueName
-    ? `${item.issueName}${item.issueYear ? ` (${item.issueYear})` : ""}`
-    : null;
-  const catalogNumbers = [...item.catalogNumbers].sort((a, b) => {
-    const ap = a.catalogVendorId === primaryVendorId ? 0 : 1;
-    const bp = b.catalogVendorId === primaryVendorId ? 0 : 1;
-    return ap - bp;
-  });
-
-  return (
-    <DialogShell title="Set catalog value" onClose={onClose} maxWidth="24rem">
-      <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
-        <DialogBody>
-          <div
-            style={{
-              marginBottom: "1rem",
-              padding: "0.625rem 0.75rem",
-              borderRadius: "0.5rem",
-              background: "var(--color-bg-page)",
-              border: "1px solid var(--color-border)",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.25rem",
-            }}
-          >
-            <div style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
-              {item.stampName || "This stamp"}
-            </div>
-            {issueLabel && (
-              <div style={{ color: "var(--color-text-muted)" }}>Issue: {issueLabel}</div>
-            )}
-            {catalogNumbers.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
-                {catalogNumbers.map((cn) => (
-                  <span key={cn.catalogVendorId} style={CHIP}>
-                    {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div>Condition: {condLabel}</div>
-            {(context?.areaName ?? areaName) && (
-              <div style={{ color: "var(--color-text-muted)" }}>
-                Area: {context?.areaName ?? areaName}
-              </div>
-            )}
-            {context && (
-              <div style={{ color: "var(--color-text-muted)" }}>
-                Primary catalog: {context.catalogLabel} {context.editionYear} · {context.currency}
-              </div>
-            )}
-            {/* Copy photos (#147): a read-only strip of this copy's photos as a visual reference
-                while pricing. Click a thumbnail to open the lightbox (prev/next, Esc); reserved
-                slots carry a badge. */}
-            {item.photos.length > 0 && (
-              <div style={{ marginTop: "0.25rem" }}>
-                <PhotoStrip collectionId={collectionId} photos={item.photos} />
-              </div>
-            )}
-          </div>
-
-          {/* Existing recorded prices for reference (#147): other editions/conditions the user
-              may want to price consistently against. The target row is marked. */}
-          {context && context.otherPrices.length > 0 && (
-            <div style={{ marginBottom: "1rem" }}>
-              <div
-                style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                  color: "var(--color-text-muted)",
-                  marginBottom: "0.375rem",
-                }}
-              >
-                Recorded prices
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
-                {context.otherPrices.map((p, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "0.5rem",
-                      fontSize: "0.8125rem",
-                      color: p.isTarget
-                        ? "var(--color-text-primary)"
-                        : "var(--color-text-secondary)",
-                      fontWeight: p.isTarget ? 600 : 400,
-                    }}
-                  >
-                    <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-                      {p.catalogLabel} {p.editionYear}
-                    </span>
-                    <span style={{ whiteSpace: "nowrap" }}>
-                      {p.conditionAbbreviation}
-                      {p.certificateStatusName ? ` · ${p.certificateStatusName}` : ""}
-                    </span>
-                    <span
-                      style={{
-                        marginLeft: "auto",
-                        fontVariantNumeric: "tabular-nums",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {p.price} {p.currency}
-                      {p.isTarget ? " ←" : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {loadError ? (
-            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-error)" }}>{loadError}</p>
-          ) : (
-            <>
-              <LabelWithError htmlFor="quick-price">
-                Catalog value {context ? `(${context.currency})` : ""}
-              </LabelWithError>
-              <input
-                id="quick-price"
-                ref={inputRef}
-                name="amount"
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                disabled={isPending || loading}
-                placeholder={loading ? "Loading…" : "0.00"}
-                style={INPUT_STYLE}
-              />
-              <p style={{ margin: "0.375rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                Saved on the latest edition of the primary catalog for this condition ×
-                certificate.
-              </p>
-            </>
-          )}
-        </DialogBody>
-        <DialogActions
-          actionLabel={isPending ? "Saving…" : "Save"}
-          onCancel={onClose}
-          disabled={!canSave}
-          error={error}
-        />
-      </form>
-    </DialogShell>
-  );
-}

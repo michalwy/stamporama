@@ -14,7 +14,7 @@ Each row shows:
 - The linked stamp's **catalog number**, **name**, and **issue**.
 - The **condition** and any **certificate status**.
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
-  any combination at once.
+  any combination at once. Copies you intend to sell are packaged into [lots](lots.md).
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
 - Its **cost-basis** — what the copy actually cost you — when it came from a
   [purchase](purchases.md) (see [Cost-basis](#cost-basis)).

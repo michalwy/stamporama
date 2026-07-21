@@ -463,6 +463,20 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   locationId?: string;
   /** Restrict to copies identified into a single purchase lot (intake view, #121). */
   lotId?: string;
+  /** Restrict to a fixed set of copy ids (e.g. the members of a sale lot, #164). */
+  ids?: string[];
+  /** Exclude a fixed set of copy ids (e.g. copies already represented in a quantity lot's
+   * sub-lots, #164). */
+  excludeIds?: string[];
+  /** Restrict to copies in this physical delivery state (ADR-0009 §5), e.g. `"delivered"`
+   * for copies actually in hand — the sale-lot composition picker only offers those (#164). */
+  deliveryState?: string;
+  /** Exclude copies that have already left on a sale line (the no-double-sale guard,
+   * ADR-0012 §5). Used by the sale-lot composition picker (#164). */
+  excludeSold?: boolean;
+  /** Exclude copies already packaged into this sale `Lot` (#164), so the picker only
+   * offers copies not yet in the lot being composed. */
+  notInSaleLotId?: string;
   /** Restrict to copies whose linked stamp has this issued year. A number matches
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
@@ -526,9 +540,18 @@ function buildItemWhere(
       ? { certificateStatusId: filters.certificateStatusId }
       : {}),
     ...(filters.stampId ? { stampId: filters.stampId } : {}),
+    ...(filters.ids ? { id: { in: filters.ids } } : {}),
+    ...(filters.excludeIds && filters.excludeIds.length > 0
+      ? { id: { notIn: filters.excludeIds } }
+      : {}),
     ...(Object.keys(stampWhere).length > 0 ? { stamp: stampWhere } : {}),
     ...(locationIds ? { locationId: { in: locationIds } } : {}),
     ...(filters.lotId ? { lotId: filters.lotId } : {}),
+    ...(filters.deliveryState ? { deliveryState: filters.deliveryState } : {}),
+    ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
+    ...(filters.notInSaleLotId
+      ? { lotMemberships: { none: { lotId: filters.notInSaleLotId } } }
+      : {}),
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
     ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
