@@ -45,6 +45,7 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import {
@@ -188,6 +189,11 @@ export function PurchaseDetailPanel({
   // rendered (LotCard / OrderCopiesView), which already hold the per-area vendor maps.
   const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
   const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
+
+  // Order-level catalog-value-vs-cost figure (#179): the same holdings summary as the Copies
+  // screen (#134), aggregated over every copy in the purchase. Undefined until it loads (the
+  // bar renders a fixed-height skeleton so nothing shifts).
+  const purchaseHoldings = usePurchaseSummary(collectionId, purchase.id).data?.holdings;
 
   // "Add lot with stamps" flow (#121): pick a stamp/issue → set condition/certificate/location
   // → set the lot's title/price, then create the lot with its copies in one step. The lot is
@@ -390,6 +396,9 @@ export function PurchaseDetailPanel({
           </p>
         )}
       </div>
+
+      {/* Catalog value vs. actual purchase cost across the whole order (#179) */}
+      <HoldingsSummaryBar total={purchaseHoldings} />
 
       {/* Lots */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1787,6 +1796,11 @@ function LotCard({
             <div style={COPIES_MUTED_STYLE}>Loading copies…</div>
           ) : (
             <>
+              {/* Catalog value vs. actual purchase cost for this lot (#179) */}
+              <div style={{ padding: "0.75rem 1.25rem" }}>
+                <HoldingsSummaryBar total={summary?.holdings} />
+              </div>
+
               {/* Active-filter toolbar (grouping is now controlled at the order level) */}
               {filterMode !== "none" && (open || filterMode === "no-photos") && (
                 <div

@@ -910,6 +910,23 @@ export interface LotIssueGroupSummary {
   openCount: number;
 }
 
+/** Bundle catalog value + actual purchase cost over a set of already-enriched copies into a
+ * `HoldingsSummary` (#179), reusing the same pure aggregators as the holdings bar (#134) so the
+ * lot/PO summaries compare paid-vs-catalog exactly the way the Copies screen does. No extra
+ * query — every enriched copy already carries its `value`, `costBasis`, and `lotStatus`. */
+function summarizeHoldings(items: ItemListItem[], baseCurrency: string): HoldingsSummary {
+  return {
+    ...aggregateHoldings(
+      items.map((i) => i.value),
+      baseCurrency
+    ),
+    cost: aggregateCostBasis(
+      items.map((i) => ({ costBasis: i.costBasis, lotId: i.lotId, lotStatus: i.lotStatus })),
+      baseCurrency
+    ),
+  };
+}
+
 /** Whole-lot aggregates the paginated intake views need but can no longer compute client-side
  * once copies stream in pages (#172): header counts, the live cost-estimate denominator, the
  * derived lot label, and the issue-group headers. Computed by enriching the whole lot once. */
@@ -929,6 +946,9 @@ export interface LotIntakeSummary {
   derivedLabel: string | null;
   /** Issue groups in first-added order, for the grouped-by-issue view headers. */
   issueGroups: LotIssueGroupSummary[];
+  /** Catalog value vs. actual purchase cost over the lot's copies (#179), for the CV-vs-cost
+   * bar. Same shape/aggregators as the holdings bar (#134). */
+  holdings: HoldingsSummary;
 }
 
 export async function getLotIntakeSummary(
@@ -945,6 +965,7 @@ export async function getLotIntakeSummary(
   const all = await enrichItemRows(collectionId, rows);
   const areas = await getCollectionAreas(ownerId, collectionId);
   const maps = buildAreaVendorMaps(areas);
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
 
   const staying = all.filter((i) => i.deliveryState !== "not_delivered");
   const estimateWeightBase = staying.reduce(
@@ -981,6 +1002,7 @@ export async function getLotIntakeSummary(
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
     issueGroups: order.map((k) => byKey.get(k)!),
+    holdings: summarizeHoldings(all, baseCurrency),
   };
 }
 
@@ -995,6 +1017,9 @@ export interface PurchaseIntakeSummary {
   /** Issue groups merged across all the purchase's lots, in first-added order. `openCount` is
    * copies whose owning lot is still open (the bulk-action target across the order). */
   issueGroups: LotIssueGroupSummary[];
+  /** Catalog value vs. actual purchase cost over the whole order's copies (#179), for the
+   * order-level CV-vs-cost bar. Same shape/aggregators as the holdings bar (#134). */
+  holdings: HoldingsSummary;
 }
 
 export async function getPurchaseIntakeSummary(
@@ -1009,6 +1034,7 @@ export async function getPurchaseIntakeSummary(
     select: ITEM_LIST_SELECT,
   });
   const all = await enrichItemRows(collectionId, rows);
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
 
   const lotWeightBase: Record<string, number> = {};
   const order: string[] = [];
@@ -1043,6 +1069,7 @@ export async function getPurchaseIntakeSummary(
     totalCount: all.length,
     lotWeightBase,
     issueGroups: order.map((k) => byKey.get(k)!),
+    holdings: summarizeHoldings(all, baseCurrency),
   };
 }
 

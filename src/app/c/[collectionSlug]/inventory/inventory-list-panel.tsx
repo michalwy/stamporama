@@ -24,7 +24,7 @@ import {
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
 } from "./use-inventory-query";
-import { HoldingsSummaryBar } from "./holdings-summary-bar";
+import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { InventoryCopyList } from "./inventory-copy-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";

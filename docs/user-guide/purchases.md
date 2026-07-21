@@ -126,6 +126,15 @@ A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reo
 populate the lot, so they are removed with it (you are warned how many when confirming). A
 lot's price can only be edited while it is open.
 
+**Catalog value vs. cost.** The whole-order summary at the top of the page, and each lot's
+expanded copies, show the same two-line **catalog value / purchase cost** bar as the
+[inventory holdings summary](inventory.md) — the summed catalog value (in your base currency,
+using each copy's default display condition) next to what was actually paid, so you can compare
+paid-against-catalog at a glance. Both lines call out copies that don't fully count: *unpriced*
+copies (no catalog price for their condition) and *pending* cost (a copy whose lot is still
+open, so its cost-basis is not frozen yet). The order-level bar totals every copy across all
+lots; each lot's bar totals just that lot.
+
 ### Identifying stamps (intake)
 
 A large lot is rarely sorted in one sitting — you identify stamps into it as you work through
