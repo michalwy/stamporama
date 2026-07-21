@@ -88,6 +88,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Write migration SQL manually. Create directory and `migration.sql` by hand under `prisma/migrations/`. Then `pnpm exec prisma generate`.
 - Never run `prisma migrate dev`, `prisma migrate reset`, or `prisma db push` directly. Exception: `pnpm e2e:db:reset` is safe.
 - When starting a local dev server for verification, use `pnpm exec next dev --webpack -p 3002` and stop it before finishing.
+- Always run the dev server on **webpack** (`next dev --webpack`), never the default Turbopack: Turbopack's dev/HMR leaks memory until the container OOMs (an open, idle browser tab grows the server heap unbounded; webpack plateaus). The `docker-compose.dev.yml` overlay is pinned to `--webpack` for this reason. See issue #161; re-test Turbopack after Next.js upgrades and revert once fixed upstream.
 - The user tests the app through Docker Compose. Do not leave dev servers running.
 
 ## Before Implementing Features

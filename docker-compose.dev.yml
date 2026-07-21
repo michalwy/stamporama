@@ -5,7 +5,11 @@ services:
     build:
       context: .
       target: dev
-    command: sh -c "pnpm install && pnpm exec prisma migrate deploy && pnpm exec prisma generate && pnpm dev"
+    # Run the dev server on webpack, NOT the default Turbopack: Turbopack's dev/HMR leaks memory
+    # until this container OOMs (an open, idle browser tab grows the server heap unbounded). Under
+    # webpack the heap plateaus. See issue #161 — revert to `pnpm dev` (Turbopack) once the upstream
+    # leak is fixed; periodically re-test after Next.js upgrades.
+    command: sh -c "pnpm install && pnpm exec prisma migrate deploy && pnpm exec prisma generate && pnpm exec next dev --webpack"
     ports:
       - "3000:3000"
     environment:
