@@ -555,15 +555,29 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
       // writes) and is converted to a structured result by the catch below.
       const allocation = allocateLot(poolBase, lotItems);
 
+      // Cost-basis is money in cents, so a lot has a bounded number of distinct values.
+      // Group by the stored (2-decimal) value and issue one updateMany per value, plus one
+      // for the not-delivered set, collapsing thousands of sequential UPDATEs into a handful
+      // and shortening how long the transaction holds row locks (#173).
+      const idsByBasis = new Map<string, string[]>();
       for (const snap of allocation.snapshots) {
-        await tx.item.update({
-          where: { id: snap.itemId },
-          data: { costBasis: money(snap.costBasis) },
+        const key = snap.costBasis.toFixed(2);
+        const ids = idsByBasis.get(key);
+        if (ids) ids.push(snap.itemId);
+        else idsByBasis.set(key, [snap.itemId]);
+      }
+      for (const [basis, ids] of idsByBasis) {
+        await tx.item.updateMany({
+          where: { id: { in: ids } },
+          data: { costBasis: money(Number(basis)) },
         });
       }
       // Not-delivered copies stay attached but keep a pending (null) cost-basis.
-      for (const id of allocation.notDeliveredItemIds) {
-        await tx.item.update({ where: { id }, data: { costBasis: null } });
+      if (allocation.notDeliveredItemIds.length > 0) {
+        await tx.item.updateMany({
+          where: { id: { in: allocation.notDeliveredItemIds } },
+          data: { costBasis: null },
+        });
       }
       await tx.purchaseLot.update({ where: { id: lotId }, data: { status: "closed" } });
 
