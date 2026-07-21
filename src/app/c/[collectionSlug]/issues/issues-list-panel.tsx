@@ -484,6 +484,7 @@ export function IssuesListPanel({
       {dialog.kind === "create-issue" && (
         <IssueDialog
           mode="create"
+          collectionId={collectionId}
           areas={areas}
           defaultAreaId={filterAreaId ?? undefined}
           defaultYear={year && year !== "none" ? Number(year) : undefined}
@@ -497,6 +498,7 @@ export function IssuesListPanel({
       {dialog.kind === "edit-issue" && (
         <IssueDialog
           mode="edit"
+          collectionId={collectionId}
           areas={areas}
           issue={dialog.issue}
           isPending={isPending}

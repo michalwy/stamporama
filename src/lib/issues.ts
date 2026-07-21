@@ -247,6 +247,38 @@ export async function listIssuesForArea(
   return issues.map(toIssueData);
 }
 
+/** A lightweight reference to an existing issue that shares a proposed name, for the
+ * create-issue duplicate warning (#178). */
+export interface DuplicateIssueMatch {
+  id: string;
+  name: string | null;
+  year: number | null;
+}
+
+/** Existing issues in `areaId` whose name equals `name` (trimmed, case-insensitive) — the
+ * source for the non-blocking "duplicate name" warning shown while creating an issue (#178).
+ * Scoped **per area** (a name may legitimately repeat across areas, e.g. different countries).
+ * Returns `[]` for a blank name (an unnamed issue can't collide) or when nothing matches. */
+export async function findDuplicateIssuesByName(
+  ownerId: string,
+  collectionId: string,
+  areaId: string,
+  name: string
+): Promise<DuplicateIssueMatch[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+  return prisma.issue.findMany({
+    where: {
+      collectionId,
+      collectionAreaId: areaId,
+      name: { equals: trimmed, mode: "insensitive" },
+    },
+    orderBy: [{ year: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, year: true },
+  });
+}
+
 export async function listAllIssues(
   ownerId: string,
   collectionId: string,

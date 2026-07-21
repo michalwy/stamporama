@@ -349,6 +349,7 @@ export function StampPickerBrowser({
           {create.kind === "issue" && (
             <IssueDialog
               mode="create"
+              collectionId={collectionId}
               areas={areas}
               defaultAreaId={create.areaId ?? undefined}
               defaultYear={selectedYearNumber}
