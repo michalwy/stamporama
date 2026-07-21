@@ -1166,35 +1166,44 @@ const VALUATION_PRICE_SELECT = {
 } as const;
 
 /** For each ancestor stamp id, the set of all descendant stamp ids (children,
- * grandchildren, …). Built from one flat read of the collection's variant tree so
- * unknown-variant valuation can gather every child's prices. Empty when no ancestors. */
+ * grandchildren, …), so unknown-variant valuation can gather every child's prices.
+ * Empty when no ancestors.
+ *
+ * Scoped to the subtrees under `ancestorIds` via a recursive CTE rather than a flat
+ * read of the whole collection, so the cost scales with the descendants actually
+ * valued, not the size of the collection (#171). */
 async function buildDescendantMap(
   collectionId: string,
   ancestorIds: Set<string>
 ): Promise<Map<string, Set<string>>> {
   const result = new Map<string, Set<string>>();
   if (ancestorIds.size === 0) return result;
-  const all = await prisma.stamp.findMany({
-    where: { collectionId },
-    select: { id: true, parentId: true },
-  });
-  const childrenByParent = new Map<string, string[]>();
-  for (const s of all) {
-    if (!s.parentId) continue;
-    const arr = childrenByParent.get(s.parentId) ?? [];
-    arr.push(s.id);
-    childrenByParent.set(s.parentId, arr);
-  }
-  for (const ancestor of ancestorIds) {
-    const acc = new Set<string>();
-    const queue = [...(childrenByParent.get(ancestor) ?? [])];
-    while (queue.length > 0) {
-      const id = queue.pop()!;
-      if (acc.has(id)) continue;
-      acc.add(id);
-      for (const child of childrenByParent.get(id) ?? []) queue.push(child);
+
+  // Walk each root's subtree, carrying the originating root id down every edge so a
+  // single CTE resolves all ancestors at once. `collectionId` guards the tenancy
+  // boundary; the parentId join keeps the walk inside it regardless.
+  const rows = await prisma.$queryRaw<Array<{ root: string; id: string }>>`
+    WITH RECURSIVE subtree AS (
+      SELECT s."id" AS root, s."id" AS id
+      FROM "stamp" s
+      WHERE s."id" IN (${Prisma.join([...ancestorIds])})
+        AND s."collectionId" = ${collectionId}
+      UNION ALL
+      SELECT st.root, c."id"
+      FROM "stamp" c
+      JOIN subtree st ON c."parentId" = st.id
+      WHERE c."collectionId" = ${collectionId}
+    )
+    SELECT root, id FROM subtree WHERE id <> root
+  `;
+
+  for (const { root, id } of rows) {
+    let set = result.get(root);
+    if (!set) {
+      set = new Set<string>();
+      result.set(root, set);
     }
-    result.set(ancestor, acc);
+    set.add(id);
   }
   return result;
 }
