@@ -111,6 +111,7 @@ export function InventoryListPanel({
   const conditionId = searchParams.get("conditionId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
+  const noPhotos = searchParams.get("noPhotos") === "true";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -162,10 +163,11 @@ export function InventoryListPanel({
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
+      noPhotos: noPhotos || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -180,8 +182,9 @@ export function InventoryListPanel({
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
+      noPhotos: noPhotos || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -241,6 +244,7 @@ export function InventoryListPanel({
     !!conditionId ||
     !!locationId ||
     !!year ||
+    noPhotos ||
     activeDispositions.size > 0;
 
   return (
@@ -348,6 +352,21 @@ export function InventoryListPanel({
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => updateParams({ noPhotos: noPhotos ? "" : "true" })}
+                  title="Show only copies with no attached photos"
+                  style={{
+                    ...CONTROL_STYLE,
+                    cursor: "pointer",
+                    fontWeight: noPhotos ? 600 : 400,
+                    color: noPhotos ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: noPhotos ? "var(--color-accent)" : "var(--color-border-strong)",
+                    background: noPhotos ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                  }}
+                >
+                  No photos
+                </button>
               </div>
 
               <select

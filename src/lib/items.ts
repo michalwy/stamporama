@@ -485,6 +485,9 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
   year?: number | "none";
+  /** Restrict to copies with no attached photos (#177), so users can find pieces that
+   * still need photographing (#112). */
+  noPhotos?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -559,6 +562,7 @@ function buildItemWhere(
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
     ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
+    ...(filters.noPhotos ? { photos: { none: {} } } : {}),
   };
 }
 
@@ -781,7 +785,7 @@ function isBlockingCopy(item: ItemListItem): boolean {
 }
 
 export type LotCopySort = "added" | "year" | "catalog" | "price" | "name";
-export type LotCopyFilter = "none" | "unpriced" | "to-sort";
+export type LotCopyFilter = "none" | "unpriced" | "to-sort" | "no-photos";
 
 export interface LotIntakePageOptions {
   sort?: LotCopySort;
@@ -835,6 +839,7 @@ async function getIntakePage(
         ...(filter === "to-sort"
           ? { deliveryState: { in: [...UNSORTED_DELIVERY_STATES] } }
           : {}),
+        ...(filter === "no-photos" ? { photos: { none: {} } } : {}),
       },
       // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
       // intake can stamp many copies with near-identical timestamps (#172).
@@ -863,7 +868,9 @@ async function getIntakePage(
       ? all.filter(isBlockingCopy)
       : filter === "to-sort"
         ? all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState))
-        : all;
+        : filter === "no-photos"
+          ? all.filter((i) => i.photos.length === 0)
+          : all;
   const sorted = sortCopies(filtered, sort, sortDir, primaryVendorByArea);
   const slice = sorted.slice(offset, offset + pageSize);
   const hasMore = offset + pageSize < sorted.length;
@@ -912,6 +919,8 @@ export interface LotIntakeSummary {
   unsortedCount: number;
   /** Staying copies with no base-currency catalog weight — these block a close. */
   blockingCount: number;
+  /** Copies with no attached photos (#177) — the "no photos" filter's target count. */
+  noPhotoCount: number;
   /** Σ positive base-currency catalog weight over staying copies; the denominator for the
    * per-copy live cost estimate (`poolBase * weight / estimateWeightBase`). */
   estimateWeightBase: number;
@@ -968,6 +977,7 @@ export async function getLotIntakeSummary(
     totalCount: all.length,
     unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
+    noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
     issueGroups: order.map((k) => byKey.get(k)!),

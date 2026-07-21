@@ -1432,9 +1432,12 @@ function LotCard({
   // Hold the copies list until the persisted view prefs are read, so grouping/collapse don't
   // flash from their defaults to the stored values for a returning user (#121).
   const hydrated = useHydrated();
-  // Optional filter narrowing the copies list to just the blockers ("unpriced") or just the
-  // not-yet-sorted copies ("to-sort"), toggled by the matching header chip (#121).
-  const [filterMode, setFilterMode] = useState<"none" | "unpriced" | "to-sort">("none");
+  // Optional filter narrowing the copies list to just the blockers ("unpriced"), the not-yet-sorted
+  // copies ("to-sort"), or copies still needing a photo ("no-photos", #177), toggled by the matching
+  // header chip (#121).
+  const [filterMode, setFilterMode] = useState<
+    "none" | "unpriced" | "to-sort" | "no-photos"
+  >("none");
   const [blockMessage, setBlockMessage] = useState<string | undefined>();
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // Sticky lot header (#172): pin the name/counts/pool block to the viewport top while its
@@ -1469,6 +1472,9 @@ function LotCard({
   const unsortedCount = summary?.unsortedCount ?? 0;
   // A copy blocks a close when it stays in the allocation but has no usable catalog weight.
   const blockingCount = summary?.blockingCount ?? 0;
+  // Copies with no attached photo yet — surfaced so the collector can find what still needs
+  // photographing (#177). Relevant on open and closed lots alike.
+  const noPhotoCount = summary?.noPhotoCount ?? 0;
   // Denominator for the live per-copy cost estimate (Σ positive base weight over staying copies).
   const weightBase = summary?.estimateWeightBase ?? 0;
   const issueGroups = summary?.issueGroups ?? [];
@@ -1479,8 +1485,17 @@ function LotCard({
   const lotName = lot.title ?? summary?.derivedLabel ?? `Lot ${index + 1}`;
   const statusChip = open ? tintChip("accent", "Open") : tintChip("success", "Closed");
 
-  // Server-side filter for the copy page query, driven by the header chips (only while open).
-  const filter: LotCopyFilter = !open || filterMode === "none" ? "none" : filterMode;
+  // Server-side filter for the copy page query, driven by the header chips. The "unpriced" and
+  // "to-sort" chips only show while open, so they collapse to "none" on a closed lot; "no-photos"
+  // (#177) stays available regardless of lot status.
+  const filter: LotCopyFilter =
+    filterMode === "none"
+      ? "none"
+      : filterMode === "no-photos"
+        ? "no-photos"
+        : open
+          ? filterMode
+          : "none";
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
@@ -1671,6 +1686,30 @@ function LotCard({
             </button>
           </Tooltip>
         )}
+        {noPhotoCount > 0 && (
+          <Tooltip
+            content={
+              filterMode === "no-photos"
+                ? "Showing only copies with no photo — click to show all"
+                : "Copies with no photo attached — click to show only them"
+            }
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setFilterMode((m) => (m === "no-photos" ? "none" : "no-photos"))
+              }
+              style={{
+                ...tintChip("accent", "").style,
+                cursor: "pointer",
+                fontWeight: filterMode === "no-photos" ? 700 : 500,
+                boxShadow: filterMode === "no-photos" ? "0 0 0 1px var(--color-accent)" : undefined,
+              }}
+            >
+              {noPhotoCount} no photos
+            </button>
+          </Tooltip>
+        )}
         <span style={{ flex: 1 }} />
         <Tooltip content="Lot price">
           <span
@@ -1749,7 +1788,7 @@ function LotCard({
           ) : (
             <>
               {/* Active-filter toolbar (grouping is now controlled at the order level) */}
-              {filterMode !== "none" && open && (
+              {filterMode !== "none" && (open || filterMode === "no-photos") && (
                 <div
                   style={{
                     display: "flex",
@@ -1764,12 +1803,24 @@ function LotCard({
                     onClick={() => setFilterMode("none")}
                     title="Clear filter"
                     style={{
-                      ...tintChip(filterMode === "unpriced" ? "error" : "warning", "").style,
+                      ...tintChip(
+                        filterMode === "unpriced"
+                          ? "error"
+                          : filterMode === "no-photos"
+                            ? "accent"
+                            : "warning",
+                        ""
+                      ).style,
                       cursor: "pointer",
                       fontWeight: 600,
                     }}
                   >
-                    {filterMode === "unpriced" ? "Unpriced only" : "To sort only"} ✕
+                    {filterMode === "unpriced"
+                      ? "Unpriced only"
+                      : filterMode === "no-photos"
+                        ? "No photos only"
+                        : "To sort only"}{" "}
+                    ✕
                   </button>
                 </div>
               )}
@@ -1841,7 +1892,9 @@ function LotCard({
                       ? "No unpriced copies."
                       : filterMode === "to-sort"
                         ? "Nothing left to sort."
-                        : "No stamps identified into this lot yet."
+                        : filterMode === "no-photos"
+                          ? "Every copy has a photo."
+                          : "No stamps identified into this lot yet."
                   }
                 />
               )}

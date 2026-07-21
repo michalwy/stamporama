@@ -8,7 +8,7 @@ import {
 } from "@/lib/items";
 
 const VALID_SORT = new Set<LotCopySort>(["added", "year", "catalog", "price", "name"]);
-const VALID_FILTER = new Set<LotCopyFilter>(["none", "unpriced", "to-sort"]);
+const VALID_FILTER = new Set<LotCopyFilter>(["none", "unpriced", "to-sort", "no-photos"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
 
 /** One page of a lot's copies for the paginated intake view (#172). Ordered/filtered

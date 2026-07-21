@@ -58,6 +58,8 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 - **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none
   selected, all copies are shown. Selecting several narrows to copies matching every
   chosen marker.
+- **No photos** — toggle to show only copies that have no [photo](#photos) attached, so
+  you can quickly find the pieces still waiting to be photographed.
 - **Condition** — show only copies of one condition.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet

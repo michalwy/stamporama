@@ -40,6 +40,7 @@ export async function GET(
   const inCollection = boolParam(sp.get("inCollection"));
   const forSale = boolParam(sp.get("forSale"));
   const forTrade = boolParam(sp.get("forTrade"));
+  const noPhotos = boolParam(sp.get("noPhotos"));
   const sortByParam = sp.get("sortBy") as ItemSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -64,6 +65,7 @@ export async function GET(
       inCollection,
       forSale,
       forTrade,
+      noPhotos,
       sortBy,
       sortDir,
       pageSize: 50,

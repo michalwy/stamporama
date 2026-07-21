@@ -160,7 +160,7 @@ resolved. The estimate is always computed over the **whole lot**, so it stays ac
 matter how many copies the lot holds or how far you have scrolled.
 
 **Large lots.** A lot's copies **stream in as you scroll** — the list loads more rows when you
-reach the bottom, and the header counts (*to sort*, *unpriced*, the copy total) and the live
+reach the bottom, and the header counts (*to sort*, *unpriced*, *no photos*, the copy total) and the live
 estimate are figured over the whole lot on the server. There is no cap: a "stockbook" lot with
 thousands of positions shows every copy, and **Mark all copies sorted** / **Move all copies to
 a location** act on the entire lot (or issue group), not just the rows you have loaded.
@@ -242,6 +242,12 @@ whatever granularity suits the parcel:
 To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
 just the unsorted copies; click it again (or the **To sort only ✕** button) to show all. As
 you sort each copy it drops out of the filtered list.
+
+The lot header also carries a **N no photos** chip whenever some of the lot's copies have no
+[photo](inventory.md#photos) attached — click it to filter the list down to just those copies
+so you can see what still needs photographing, and click it again (or **No photos only ✕**) to
+show all. Unlike the *to sort* and *unpriced* chips, this one stays available after the lot is
+closed, since photographing usually happens once the stamps are in hand.
 
 **Mark sorted** (whole lot or whole issue) moves *not-yet-sorted* copies (ordered / to sort /
 in transit) to **Delivered** and asks which **disposition** to file them under — In collection

@@ -40,6 +40,7 @@ export async function GET(
       inCollection: boolParam(sp.get("inCollection")),
       forSale: boolParam(sp.get("forSale")),
       forTrade: boolParam(sp.get("forTrade")),
+      noPhotos: boolParam(sp.get("noPhotos")),
     });
     return NextResponse.json(total);
   } catch {

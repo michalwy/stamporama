@@ -43,6 +43,8 @@ export interface InventoryItemFilters {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
+  /** Restrict to copies with no attached photos (#177). */
+  noPhotos?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -61,6 +63,7 @@ export interface InventoryYearFacetFilters {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
+  noPhotos?: boolean;
 }
 
 export const inventoryKeys = {
@@ -95,6 +98,7 @@ export function useInventoryItemsInfinite(
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
+      if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -129,6 +133,7 @@ export function useHoldingsValuation(
       inCollection: filters.inCollection,
       forSale: filters.forSale,
       forTrade: filters.forTrade,
+      noPhotos: filters.noPhotos,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -146,6 +151,7 @@ export function useHoldingsValuation(
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
+      if (filters.noPhotos) params.set("noPhotos", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -180,6 +186,7 @@ export function useItemYears(
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
+      if (filters.noPhotos) params.set("noPhotos", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );
