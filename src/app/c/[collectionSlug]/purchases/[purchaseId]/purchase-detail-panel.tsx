@@ -224,6 +224,17 @@ function usePersistentToggle(
   return [value, set];
 }
 
+/** A string UI preference persisted under `key`, defaulting to `fallback` when unset. */
+function usePersistentString(
+  key: string,
+  fallback: string
+): [string, (value: string) => void] {
+  const stored = useRawStored(key);
+  const value = stored ?? fallback;
+  const set = useCallback((next: string) => writeLotPref(key, next), [key]);
+  return [value, set];
+}
+
 /** A set of string keys persisted under `key` as a JSON array. */
 function usePersistentStringSet(
   key: string
@@ -274,6 +285,14 @@ export function PurchaseDetailPanel({
   // a flat list of every copy in the order. Persisted per collection; default groups by both.
   const [byLot, setByLot] = usePersistentToggle(`${LS_GROUP_BY_LOT}:${collectionId}`, true);
   const [byIssue, setByIssue] = usePersistentToggle(`${LS_GROUP_BY_ISSUE}:${collectionId}`, true);
+
+  // Sort order for the copies shown inside each lot (and inside the flat / by-issue copy
+  // views) (#157). "added" preserves creation order (the historic default); the other keys
+  // sort copies by year, catalog number, catalog value, or stamp name. Persisted per
+  // collection, alongside the grouping toggles. The actual sort happens where the copies are
+  // rendered (LotCard / OrderCopiesView), which already hold the per-area vendor maps.
+  const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
+  const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
 
   // "Add lot with stamps" flow (#121): pick a stamp/issue → set condition/certificate/location
   // → set the lot's title/price, then create the lot with its copies in one step. The lot is
@@ -518,6 +537,38 @@ export function PurchaseDetailPanel({
         </div>
       )}
 
+      {/* Sort order for the copies inside each lot (also the flat / by-issue copy views) (#157).
+          Sorts the stamps within a lot, not the lot cards themselves. */}
+      {purchase.lots.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Sort copies
+          </span>
+          <select
+            aria-label="Sort copies by"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            style={{ ...CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
+          >
+            <option value="added">Order added</option>
+            <option value="year">Year</option>
+            <option value="catalog">Catalog no.</option>
+            <option value="price">Price</option>
+            <option value="name">Name</option>
+          </select>
+          <Tooltip content={sortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}>
+            <button
+              type="button"
+              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+              aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+              style={{ ...CHIP, cursor: "pointer", fontWeight: 600 }}
+            >
+              {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+            </button>
+          </Tooltip>
+        </div>
+      )}
+
       {error && (
         <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>
       )}
@@ -544,6 +595,8 @@ export function PurchaseDetailPanel({
               certificateStatuses={certificateStatuses}
               isPending={isPending}
               groupByIssue={byIssue}
+              sortKey={sortKey}
+              sortDir={sortDir}
               onRun={run}
             />
           ))}
@@ -560,6 +613,8 @@ export function PurchaseDetailPanel({
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           byIssue={byIssue}
+          sortKey={sortKey}
+          sortDir={sortDir}
           isPending={isPending}
           run={run}
         />
@@ -728,6 +783,10 @@ interface LotCardProps {
   isPending: boolean;
   /** Group this lot's copies by issue (the order-level "By issue" toggle, #121). */
   groupByIssue: boolean;
+  /** Copy sort order (order-level control, #157): the field and direction to sort this lot's
+   * copies by before rendering. */
+  sortKey: string;
+  sortDir: string;
   onRun: (
     fn: () => Promise<{ status: string; message?: string }>,
     onDone?: () => void
@@ -1138,6 +1197,8 @@ function LotCard({
   certificateStatuses,
   isPending,
   groupByIssue,
+  sortKey,
+  sortDir,
   onRun,
 }: LotCardProps) {
   const [expanded, setExpanded] = useState(true);
@@ -1209,12 +1270,15 @@ function LotCard({
 
   // The header filter chips narrow the copies list to just the blockers or just the
   // not-yet-sorted copies (only while the lot is open).
-  const visibleItems =
+  const filteredItems =
     !open || filterMode === "none"
       ? items
       : filterMode === "unpriced"
         ? items.filter(isBlocking)
         : items.filter(isToSort);
+  // Apply the order-level copy sort (#157). Sorting before grouping keeps each issue group's
+  // copies in the chosen order too (groupByIssueList preserves input order within a group).
+  const visibleItems = sortCopies(filteredItems, sortKey, sortDir, primaryVendorByArea);
 
   function renderRow(it: ItemListItem) {
     return (
@@ -1752,6 +1816,8 @@ function OrderCopiesView({
   conditions,
   certificateStatuses,
   byIssue,
+  sortKey,
+  sortDir,
   isPending,
   run,
 }: {
@@ -1765,6 +1831,8 @@ function OrderCopiesView({
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   byIssue: boolean;
+  sortKey: string;
+  sortDir: string;
   isPending: boolean;
   run: RunFn;
 }) {
@@ -1813,6 +1881,10 @@ function OrderCopiesView({
     }
   }
 
+  // Apply the order-level copy sort (#157). The open/estimate maps are keyed by id, so sorting
+  // a shallow copy for display doesn't disturb them.
+  const sortedCopies = sortCopies(allCopies, sortKey, sortDir, primaryVendorByArea);
+
   const renderRow = (it: ItemListItem) => (
     <CopyRow
       key={it.id}
@@ -1843,12 +1915,12 @@ function OrderCopiesView({
         <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           Loading copies…
         </div>
-      ) : allCopies.length === 0 ? (
+      ) : sortedCopies.length === 0 ? (
         <div style={{ padding: "0.875rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           No copies identified into this order yet.
         </div>
       ) : byIssue ? (
-        groupByIssueList(allCopies).map((group) => {
+        groupByIssueList(sortedCopies).map((group) => {
           const collapsed = collapsedGroups.has(group.key);
           const header = group.key === "__none__" ? null : issueHeaderById[group.key];
           const areaId = header?.collectionAreaId ?? null;
@@ -1893,7 +1965,7 @@ function OrderCopiesView({
           );
         })
       ) : (
-        allCopies.map(renderRow)
+        sortedCopies.map(renderRow)
       )}
       {copy.dialogs}
     </div>
@@ -2191,6 +2263,69 @@ function groupByIssueList(items: ItemListItem[]): LotItemGroup[] {
 
 /** The catalog-number label of one copy, using the area's primary vendor with its prefix
  * (falling back to any catalog number, then the stamp name). Mirrors the inventory row. */
+/** The catalog number shown for a copy: its primary-vendor number when the area has one, else
+ * the first recorded. Raw digits (no vendor prefix) — used as the "by catalog number" sort key
+ * (#157). Null when the copy carries no catalog number. */
+function primaryCatalogNumber(
+  item: ItemListItem,
+  primaryVendorByArea: Map<string, string | null>
+): string | null {
+  const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
+  const cn =
+    item.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
+    item.catalogNumbers[0] ??
+    null;
+  return cn ? cn.number : null;
+}
+
+// Natural (numeric-aware) collation so catalog numbers order 1, 2, 10 — not 1, 10, 2 (#157).
+const COPY_SORT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/** Sort a lot's copies for display (#157). "added" keeps the incoming (creation) order; the
+ * other keys sort on the same fields the rows show — year, catalog number, catalog value, or
+ * stamp name. Copies missing the sort field (no year / no catalog number / uncertain value /
+ * no name) always sort last, regardless of direction, so blanks never lead. Stable: equal keys
+ * keep their incoming order. */
+function sortCopies(
+  items: ItemListItem[],
+  sortKey: string,
+  sortDir: string,
+  primaryVendorByArea: Map<string, string | null>
+): ItemListItem[] {
+  if (sortKey === "added") return sortDir === "desc" ? [...items].reverse() : items;
+  const dir = sortDir === "desc" ? -1 : 1;
+  const yearOf = (it: ItemListItem) => it.issuedYear ?? it.issueYear ?? null;
+  const nameOf = (it: ItemListItem) => it.stampName ?? it.issueName ?? "";
+  const numCmp = (a: number | null, b: number | null) => {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1; // blanks last, both directions
+    if (b == null) return -1;
+    return (a - b) * dir;
+  };
+  const strCmp = (a: string, b: string) => {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    return COPY_SORT_COLLATOR.compare(a, b) * dir;
+  };
+  return items
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "year") cmp = numCmp(yearOf(a.it), yearOf(b.it));
+      else if (sortKey === "price") cmp = numCmp(a.it.value.baseAmount, b.it.value.baseAmount);
+      else if (sortKey === "name") cmp = strCmp(nameOf(a.it), nameOf(b.it));
+      else if (sortKey === "catalog")
+        cmp = strCmp(
+          primaryCatalogNumber(a.it, primaryVendorByArea) ?? "",
+          primaryCatalogNumber(b.it, primaryVendorByArea) ?? ""
+        );
+      if (cmp === 0) cmp = a.i - b.i; // stable tiebreak on incoming order
+      return cmp;
+    })
+    .map((d) => d.it);
+}
+
 function copyCatalogLabel(
   item: ItemListItem,
   primaryVendorByArea: Map<string, string | null>,
@@ -2578,6 +2713,8 @@ const LS_LAST_LOCATION = "stamporama:intake:locationId";
 const LS_GROUP_BY_LOT = "stamporama:lot:groupByLot";
 const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
 const LS_COLLAPSED_GROUPS = "stamporama:lot:collapsedGroups";
+const LS_SORT_KEY = "stamporama:lot:sortKey";
+const LS_SORT_DIR = "stamporama:lot:sortDir";
 function readLast(key: string, collectionId: string): string {
   return lsGet(`${key}:${collectionId}`) ?? "";
 }

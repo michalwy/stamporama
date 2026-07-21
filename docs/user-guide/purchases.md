@@ -159,6 +159,13 @@ resolved.
 - **Issue** only — no lot cards; every copy in the order grouped by issue across all lots.
 - **neither** — a single **flat list** of every copy in the order.
 
+**Sorting the copies.** A **Sort copies** control next to *Group by* orders the stamps *within*
+each lot by **Order added** (the default), **Year**, **Catalog no.**, **Price**, or **Name**,
+with an **↑ Asc / ↓ Desc** toggle to flip the direction. It sorts the copies inside a lot (and
+inside each issue group, and in the flat / by-issue copy views) — not the lot cards themselves.
+Copies missing the chosen field (no year, no catalog number, an uncertain value, no name) always
+sort last. Catalog numbers sort naturally (1, 2, 10 — not 1, 10, 2).
+
 Your choice is remembered per collection, and which issue groups you've collapsed is
 remembered too, so the view stays the way you left it. In a grouped-by-issue view each issue
 appears as a header that reads like a row on the Issues screen (area, title, catalog numbers,
