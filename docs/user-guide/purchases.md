@@ -87,6 +87,10 @@ transit** and it saves immediately — no need to open the edit dialog. Choosing
 opens the **Mark arrived** flow (see *Marking an order arrived* below) rather than a bare
 status change, because arriving also moves the order's copies to *To sort*.
 
+Next to the dropdown, a small **→** button advances the status one step along the fixed
+progression (*Preparing → In transit → Arrived*) with a single click. It disappears once the
+order has **Arrived**.
+
 ### Lots
 
 There are two ways to add a lot:
@@ -193,6 +197,11 @@ disposition (in collection / for sale / for trade). A purchased copy moves throu
 - **Delivered** — sorted and filed; now counted **in your collection**.
 
 with **Not delivered** and **Damaged** as outcomes you may discover while sorting.
+
+While a lot is open, each copy's delivery-status chip is a dropdown, and a small **→** button
+beside it advances the copy one step along the happy path (*ordered → in transit → to sort →
+delivered*) with a single click. The button is hidden once the copy is **Delivered** and on
+the exception outcomes.
 
 ### Marking an order arrived
 

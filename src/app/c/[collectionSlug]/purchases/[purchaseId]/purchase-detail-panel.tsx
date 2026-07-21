@@ -115,6 +115,12 @@ const DELIVERY_ORDER = [
   "damaged",
 ];
 
+// The happy-path copy progression for the per-copy quick-advance button (#159): each step
+// advances one state along this line. "delivered" is terminal (no button), and the exception
+// outcomes (not_delivered, damaged) are off this path, so a copy in one shows no advance
+// button either.
+const DELIVERY_ADVANCE_ORDER = ["ordered", "in_transit", "to_sort", "delivered"];
+
 /** The disposition flags a lot copy can carry, in display order. */
 const DISPOSITION_FLAGS = [
   { key: "inCollection", label: "In collection" },
@@ -336,6 +342,30 @@ export function PurchaseDetailPanel({
     });
   }
 
+  // Apply a delivery-status transition, shared by the inline select and the quick-advance
+  // button (#159). Arriving moves copies to "to sort" and can bulk-file them, so it routes
+  // through the dedicated dialog rather than a bare status write (#141).
+  function applyStatus(next: string) {
+    if (next === purchase.status) return;
+    setError(undefined);
+    if (next === "arrived") {
+      setArriving(true);
+      return;
+    }
+    run(async () => {
+      const { setPurchaseStatusAction } = await import("@/app/actions/purchases");
+      return setPurchaseStatusAction(purchase.id, next as "preparing" | "in_transit");
+    });
+  }
+
+  // The next status in the fixed progression, for the one-click advance button (#159). Null at
+  // the terminal "arrived" state (or an unrecognized status), where the button is hidden.
+  const statusIdx = PURCHASE_STATUS_ORDER.indexOf(purchase.status);
+  const nextStatus =
+    statusIdx >= 0 && statusIdx < PURCHASE_STATUS_ORDER.length - 1
+      ? PURCHASE_STATUS_ORDER[statusIdx + 1]
+      : null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       {/* Header summary */}
@@ -360,29 +390,13 @@ export function PurchaseDetailPanel({
             {(() => {
               const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
               return (
+                <>
                 <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow.">
                   <select
                     aria-label="Purchase status"
                     value={purchase.status}
                     disabled={isPending}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      if (next === purchase.status) return;
-                      setError(undefined);
-                      // Arriving moves copies to "to sort" and can bulk-file them — route it
-                      // through the dedicated dialog rather than a bare status write (#141).
-                      if (next === "arrived") {
-                        setArriving(true);
-                        return;
-                      }
-                      run(async () => {
-                        const { setPurchaseStatusAction } = await import("@/app/actions/purchases");
-                        return setPurchaseStatusAction(
-                          purchase.id,
-                          next as "preparing" | "in_transit"
-                        );
-                      });
-                    }}
+                    onChange={(e) => applyStatus(e.target.value)}
                     style={{
                       ...tintChip(s.token, s.label).style,
                       // Use longhand border props so toggling between muted (no borderColor)
@@ -407,6 +421,34 @@ export function PurchaseDetailPanel({
                     ))}
                   </select>
                 </Tooltip>
+                {/* One-click advance to the next step in the fixed progression (#159). Hidden at
+                    the terminal "arrived" status. */}
+                {nextStatus && (
+                  <Tooltip
+                    content={`Advance to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
+                  >
+                    <button
+                      type="button"
+                      aria-label={`Advance status to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
+                      onClick={() => applyStatus(nextStatus)}
+                      disabled={isPending}
+                      style={{
+                        ...CHIP,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: isPending ? "default" : "pointer",
+                        fontWeight: 600,
+                        lineHeight: 1,
+                        padding: "0.25rem 0.5rem",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      →
+                    </button>
+                  </Tooltip>
+                )}
+                </>
               );
             })()}
             {purchase.status !== "arrived" && (
@@ -2553,6 +2595,22 @@ function LotCopyChips({
   const delivery = DELIVERY[item.deliveryState] ?? { label: item.deliveryState, token: "muted" };
   const chipStyle = tintChip(delivery.token, delivery.label).style;
   const [dispExpanded, setDispExpanded] = useState(false);
+
+  // Next step along the happy-path progression, for the per-copy quick-advance button (#159).
+  // Null at "delivered" and on the exception outcomes, where the button is hidden.
+  const advIdx = DELIVERY_ADVANCE_ORDER.indexOf(item.deliveryState);
+  const nextDelivery =
+    advIdx >= 0 && advIdx < DELIVERY_ADVANCE_ORDER.length - 1
+      ? DELIVERY_ADVANCE_ORDER[advIdx + 1]
+      : null;
+
+  function advanceDelivery(next: string) {
+    onSetDeliveryState?.(next);
+    // Delivered leaves disposition to the collector — pop the editor open for them (mirrors the
+    // dropdown's behaviour).
+    if (next === "delivered") setDispExpanded(true);
+  }
+
   return (
     <>
       {onSetDeliveryState ? (
@@ -2560,11 +2618,7 @@ function LotCopyChips({
           <select
             aria-label="Delivery status"
             value={item.deliveryState}
-            onChange={(e) => {
-              onSetDeliveryState(e.target.value);
-              // Delivered leaves disposition to the collector — pop the editor open for them.
-              if (e.target.value === "delivered") setDispExpanded(true);
-            }}
+            onChange={(e) => advanceDelivery(e.target.value)}
             style={{
               ...chipStyle,
               cursor: "pointer",
@@ -2582,6 +2636,31 @@ function LotCopyChips({
         </Tooltip>
       ) : (
         <span style={chipStyle}>{delivery.label}</span>
+      )}
+
+      {/* One-click advance to the next step in the happy-path progression (#159). Only while
+          the copy is editable (lot open) and not at a terminal/exception state. */}
+      {onSetDeliveryState && nextDelivery && (
+        <Tooltip content={`Advance to ${DELIVERY[nextDelivery]?.label ?? nextDelivery}`}>
+          <button
+            type="button"
+            aria-label={`Advance delivery status to ${DELIVERY[nextDelivery]?.label ?? nextDelivery}`}
+            onClick={() => advanceDelivery(nextDelivery)}
+            style={{
+              ...CHIP,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontWeight: 600,
+              lineHeight: 1,
+              padding: "0.125rem 0.375rem",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            →
+          </button>
+        </Tooltip>
       )}
 
       {onSetDisposition ? (
