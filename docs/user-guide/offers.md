@@ -25,7 +25,8 @@ sets". A plain single-stamp offer is just the one-set case.
    is shown locked and applies to every offer and sale there. The first time you list or sell on a
    platform that has no currency yet, you pick one inline and it is saved to the platform. That's
    all you need — you usually don't know the asking price yet (it follows from the copies you add)
-   and there's no listing URL until the auction is up. Creating the offer opens its detail screen.
+   and there's no listing URL until the auction is up. A new offer starts as **Preparing** (still
+   being composed, not yet live). Creating the offer opens its detail screen.
 2. On the detail screen, use **Add set** to pick copies from your inventory. When you pick more
    than one copy you choose how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
@@ -35,6 +36,9 @@ sets". A plain single-stamp offer is just the one-set case.
    offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu.
+5. When the listing is up on the platform, **Activate** the offer (in the header's **⋮** menu) to
+   move it from **Preparing** to **Active**. An offer needs at least one set before it can be
+   activated.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
@@ -43,6 +47,12 @@ set** (converted to the **offer's currency**), since an offer's price is per one
 Only copies that are **For sale**, **delivered**, **unsold**, and **not already in this offer**
 can be added. To list the same package on another marketplace, just create a second offer and
 compose it the same way.
+
+You can also add a single copy to an existing offer straight from the [Inventory](inventory.md)
+list — the copy's **⋮** menu carries an **Add to offer** action. Its picker lists your offers (with
+state filters and search), and you choose where the copy lands: as a **new set**, or dropped into
+an **existing set** to build a series. That's the quick path for listing one copy; use **Add set**
+here when composing several copies at once.
 
 The offer's sets render like a [purchase order](purchases.md): each set is a **collapsible card**
 showing its copies as full inventory rows. Group by **Set** or **Location**, optionally sub-group
@@ -81,23 +91,29 @@ from what has sold, so it clears the moment the offer no longer holds a sold cop
 
 ## Offer lifecycle
 
-- **Active** — live on the platform. A new offer starts here.
+- **Preparing** — composed but not yet published. A new offer starts here. **Activate** it (in the
+  **⋮** menu) once the listing is live on the platform.
+- **Active** — live on the platform.
 - **Paused** — temporarily suspended; the copies stay committed. Resume any time.
 - **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
 - **Sold** — set automatically when a [sale](sales.md) sells every set through the offer. You do
   not mark an offer sold by hand.
 
+The states are **orientational** — they help you sort and filter your listings. They don't restrict
+composing: you can add sets or copies to a Preparing, Active, or Paused offer alike; only Withdrawn
+and Sold offers are frozen.
+
 Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
 currency it was created with as a permanent record; only new offers and sales use the new currency.
 
-From the row's **⋮** menu you can **edit** the price / platform / URL, **pause** / **resume**,
-**withdraw**, open the live listing, or **delete** the offer. Deleting removes the offer and its
+From the row's **⋮** menu you can **edit** the price / platform / URL, **activate** a preparing
+offer, **pause** / **resume**, **withdraw**, open the live listing, or **delete** the offer. Deleting removes the offer and its
 sets; the copies stay in your inventory. An offer with a sold set can't be deleted — withdraw it.
 
 ## Filtering
 
-The toolbar filters offers by **platform**, by **state** (Active / Paused / Sold / Withdrawn), and
-by **Needs action** (the derived overlay above). The state filters and **Needs action** are
+The toolbar filters offers by **platform**, by **state** (Preparing / Active / Paused / Sold /
+Withdrawn), and by **Needs action** (the derived overlay above). The state filters and **Needs action** are
 mutually exclusive.
 
 ## Related

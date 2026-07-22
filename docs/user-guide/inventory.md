@@ -205,6 +205,27 @@ Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the 
 current values. Changing the stamp to a more specific variant re-points the copy and
 records the change in its refinement history.
 
+## Adding a copy to an offer
+
+You can list a copy for sale without leaving the Inventory screen. On a copy that is
+marked **For sale** and has been **delivered** (in hand), the row's **⋮** menu shows an
+**Add to offer** action. It opens a picker of your [offers](offers.md):
+
+- A **state** panel on the left filters by **Preparing / Active / Paused** (with counts) — the
+  offers you're still composing come first.
+- The search box matches by offer, platform, set, or **catalog number**.
+- Each offer expands to its existing sets; **Show contents** reveals the exact copies a set holds.
+
+Choose where the copy lands: **＋ New set** on an offer (a fresh single-item set), or an
+**existing set** — dropping it in turns that set into a series sold together. Confirm with
+**Add to offer**. Only the offer you pick is affected.
+
+An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
+same offer. A copy that has already **sold** elsewhere can't be added at all.
+
+To compose an offer from several copies at once, use **Add set** on the offer detail screen
+instead — see [Offers](offers.md).
+
 ## Photos
 
 Attach photos to a copy from the **Photos** section at the bottom of the add-copy and

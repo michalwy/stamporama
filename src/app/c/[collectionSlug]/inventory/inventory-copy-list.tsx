@@ -28,6 +28,7 @@ interface InventoryCopyListProps {
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
   onDelete?: (item: ItemListItem) => void;
+  onAddToOffer?: (item: ItemListItem) => void;
 }
 
 /**
@@ -50,6 +51,7 @@ export function InventoryCopyList({
   onIdentify,
   onViewHistory,
   onDelete,
+  onAddToOffer,
 }: InventoryCopyListProps) {
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
@@ -80,6 +82,7 @@ export function InventoryCopyList({
             onIdentify={onIdentify}
             onViewHistory={onViewHistory}
             onDelete={onDelete}
+            onAddToOffer={onAddToOffer}
           />
         );
       })}

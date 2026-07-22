@@ -247,6 +247,9 @@ interface InventoryItemRowProps {
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
   onDelete?: (item: ItemListItem) => void;
+  /** When provided, adds an "Add to offer" menu entry — shown only for a *for sale*, delivered
+   * copy (the copies eligible to list, mirroring the compose picker's eligibility) (#188). */
+  onAddToOffer?: (item: ItemListItem) => void;
 }
 
 export function InventoryItemRow({
@@ -270,6 +273,7 @@ export function InventoryItemRow({
   onIdentify,
   onViewHistory,
   onDelete,
+  onAddToOffer,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -295,6 +299,11 @@ export function InventoryItemRow({
       : []),
     ...(item.hasHistory
       ? [{ key: "history", label: "View history", icon: "↻", onSelect: () => onViewHistory?.(item) }]
+      : []),
+    // Only a for-sale, in-hand copy is listable — matches the offer compose picker's eligibility
+    // (For sale + delivered + unsold); the sold guard is enforced server-side (#188, ADR-0013 §4).
+    ...(onAddToOffer && item.forSale && item.deliveryState === "delivered"
+      ? [{ key: "add-to-offer", label: "Add to offer", icon: "🏷", onSelect: () => onAddToOffer(item) }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
     {

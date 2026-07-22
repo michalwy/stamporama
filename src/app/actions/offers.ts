@@ -11,6 +11,7 @@ import {
   patchOffer,
   addOfferSet,
   addOfferSetsPerCopy,
+  addItemToOfferSet,
   updateOfferSet,
   removeOfferSet,
   OfferActionBlockedError,
@@ -121,6 +122,21 @@ export async function addOfferSetAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the set.");
+  }
+}
+
+/** Add a single copy to an existing set (turns a single into a series). Used by the inventory
+ * "Add to offer" picker when the collector drops a copy into an already-composed set (#188). */
+export async function addItemToOfferSetAction(
+  setId: string,
+  itemId: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await addItemToOfferSet(session.user.id, setId, itemId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to add the copy to the set.");
   }
 }
 

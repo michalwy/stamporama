@@ -29,6 +29,7 @@ import { InventoryCopyList } from "./inventory-copy-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
+import { AddToOfferDialog } from "./add-to-offer-dialog";
 
 type DialogState =
   | { kind: "none" }
@@ -36,7 +37,8 @@ type DialogState =
   | { kind: "edit"; item: ItemListItem }
   | { kind: "identify"; item: ItemListItem }
   | { kind: "history"; item: ItemListItem }
-  | { kind: "delete"; item: ItemListItem };
+  | { kind: "delete"; item: ItemListItem }
+  | { kind: "addToOffer"; item: ItemListItem };
 
 const DISPOSITION_FILTERS = [
   { key: "inCollection", label: "In collection" },
@@ -437,6 +439,7 @@ export function InventoryListPanel({
                 onIdentify={(it) => setDialog({ kind: "identify", item: it })}
                 onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
+                onAddToOffer={(it) => setDialog({ kind: "addToOffer", item: it })}
               />
             </div>
           )}
@@ -499,6 +502,19 @@ export function InventoryListPanel({
           collectionId={collectionId}
           item={dialog.item}
           onClose={closeDialog}
+        />
+      )}
+
+      {/* Add copy to an existing offer (#188) */}
+      {dialog.kind === "addToOffer" && (
+        <AddToOfferDialog
+          collectionId={collectionId}
+          item={dialog.item}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          onClose={closeDialog}
+          onDone={handleSuccess}
         />
       )}
 

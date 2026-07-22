@@ -43,13 +43,17 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
     .filter((s): s is "active" | "paused" | "withdrawn" => s !== "sold")
-    .map((s) => ({
-      key: s,
-      label: TRANSITION_LABEL[s].label,
-      icon: TRANSITION_LABEL[s].icon,
-      danger: s === "withdrawn",
-      onSelect: () => onSetState(offer, s),
-    }));
+    .map((s) => {
+      // Publishing a preparing offer reads "Activate"; resuming a paused one keeps "Resume".
+      const activating = offer.state === "preparing" && s === "active";
+      return {
+        key: s,
+        label: activating ? "Activate" : TRANSITION_LABEL[s].label,
+        icon: activating ? "▲" : TRANSITION_LABEL[s].icon,
+        danger: s === "withdrawn",
+        onSelect: () => onSetState(offer, s),
+      };
+    });
 
   const menuActions: RowAction[] = [
     { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },

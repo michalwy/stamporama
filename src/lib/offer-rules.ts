@@ -3,32 +3,49 @@
 // small validation helpers, so they can be unit-tested without a DB and reused verbatim by the
 // server domain module (`offers.ts`). No side effects.
 
-export type OfferState = "active" | "paused" | "sold" | "withdrawn";
+export type OfferState = "preparing" | "active" | "paused" | "sold" | "withdrawn";
 
-export const OFFER_STATES: readonly OfferState[] = ["active", "paused", "sold", "withdrawn"];
+export const OFFER_STATES: readonly OfferState[] = [
+  "preparing",
+  "active",
+  "paused",
+  "sold",
+  "withdrawn",
+];
 
 export function isOfferState(value: unknown): value is OfferState {
-  return value === "active" || value === "paused" || value === "sold" || value === "withdrawn";
+  return (
+    value === "preparing" ||
+    value === "active" ||
+    value === "paused" ||
+    value === "sold" ||
+    value === "withdrawn"
+  );
 }
 
 /** Only an `active` offer competes for its copies, so only `active` offers can collide (at most
- * one active offer per Item × platform). Paused / sold / withdrawn offers hold no live claim. */
+ * one active offer per Item × platform). `preparing` (still being composed), paused, sold, and
+ * withdrawn offers hold no live claim. */
 export function isLiveState(state: OfferState): boolean {
   return state === "active";
 }
 
 /**
- * The offer state machine (ADR-0012): `active ↔ paused → sold / withdrawn`.
+ * The offer state machine (ADR-0012): `preparing → active ↔ paused → sold / withdrawn`.
  *
+ *   preparing→ active | withdrawn        (still being composed; publish via Activate, #188)
  *   active   → paused | withdrawn        (and → sold, but only via the sale flow, #166)
  *   paused   → active | withdrawn        (and → sold, via #166)
  *   sold     → (terminal)
  *   withdrawn→ (terminal — relist = a new offer)
  *
- * `sold` is reachable only by recording a sale, never by a manual toggle, so it is excluded
- * from the manual-transition map below. Returns the states a user may move to by hand.
+ * `preparing`, `active`, and `paused` are all composable (the states are orientational — they
+ * scope filtering, not composition mechanics — #188); only terminal states freeze a listing.
+ * `sold` is reachable only by recording a sale, never by a manual toggle, so it is excluded from
+ * the manual-transition map below. Returns the states a user may move to by hand.
  */
 const MANUAL_TRANSITIONS: Record<OfferState, readonly OfferState[]> = {
+  preparing: ["active", "withdrawn"],
   active: ["paused", "withdrawn"],
   paused: ["active", "withdrawn"],
   sold: [],
@@ -52,6 +69,7 @@ export function isTerminalState(state: OfferState): boolean {
 }
 
 export const OFFER_STATE_LABEL: Record<OfferState, string> = {
+  preparing: "Preparing",
   active: "Active",
   paused: "Paused",
   sold: "Sold",

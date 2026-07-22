@@ -16,6 +16,9 @@
   --color-warning: #a16207;
   --color-warning-soft: #fef3c7;
   --color-warning-border: #fde68a;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+  --color-info-border: #bfdbfe;
   /* Inventory disposition chips (distinct hues, soft tint) */
   --color-disposition-collection: #15803d;
   --color-disposition-collection-soft: #dcfce7;
@@ -66,6 +69,9 @@
   --color-warning: #fbbf24;
   --color-warning-soft: #451a03;
   --color-warning-border: #92400e;
+  --color-info: #93c5fd;
+  --color-info-soft: #172554;
+  --color-info-border: #1e40af;
   /* Inventory disposition chips (distinct hues, soft tint) */
   --color-disposition-collection: #6bbf8a;
   --color-disposition-collection-soft: #122a1c;

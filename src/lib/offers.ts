@@ -630,6 +630,87 @@ export async function listComposableCopies(
   return items;
 }
 
+export interface ComposeTargetSet {
+  offerSetId: string;
+  label: string;
+  itemIds: string[];
+  itemLabels: string[];
+  /** The copy being added is already in this set — the picker disables it (no double-listing). */
+  containsItem: boolean;
+}
+
+export interface ComposeTargetOffer {
+  offerId: string;
+  platformId: string;
+  platformName: string;
+  label: string;
+  price: string;
+  currency: string;
+  state: OfferState;
+  sets: ComposeTargetSet[];
+  /** The copy is already listed somewhere in this offer (any set) — no new set may hold it either. */
+  containsItem: boolean;
+}
+
+export interface ComposeTargets {
+  offers: ComposeTargetOffer[];
+  /** Enriched copies across the target offers' sets, for the picker's expandable set details. */
+  copies: ItemListItem[];
+}
+
+const COMPOSE_TARGET_STATES = ["preparing", "active", "paused"] as const;
+const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, active: 1, paused: 2 };
+
+/** Offers a copy can be added to from the inventory list (#188): the collection's non-terminal
+ * offers (preparing / active / paused, all platforms), each with its sets, ordered preparing →
+ * active → paused then newest first. When `itemId` is given, the sets and offers already holding
+ * that copy are flagged so the picker can disable them (an offer never lists a copy twice).
+ * Enriched copies for every listed set ride along for the picker's expandable set details. */
+export async function listComposeTargets(
+  ownerId: string,
+  collectionId: string,
+  itemId?: string
+): Promise<ComposeTargets> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.offer.findMany({
+    where: { collectionId, state: { in: [...COMPOSE_TARGET_STATES] } },
+    orderBy: { createdAt: "desc" },
+    select: OFFER_SELECT,
+  });
+
+  const offers: ComposeTargetOffer[] = rows
+    .map((r) => {
+      const sets: ComposeTargetSet[] = r.sets.map((s) => ({
+        offerSetId: s.id,
+        label: setLabel(s),
+        itemIds: s.items.map((li) => li.itemId),
+        itemLabels: s.items.map((li) => copyLabel(li.item.stamp)),
+        containsItem: !!itemId && s.items.some((li) => li.itemId === itemId),
+      }));
+      return {
+        offerId: r.id,
+        platformId: r.platformId,
+        platformName: r.platform.name,
+        label: offerLabel(r.sets),
+        price: String(r.price),
+        currency: r.currency,
+        state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+        sets,
+        containsItem: sets.some((s) => s.containsItem),
+      };
+    })
+    .sort(
+      (a, b) => (COMPOSE_STATE_RANK[a.state] ?? 9) - (COMPOSE_STATE_RANK[b.state] ?? 9)
+    );
+
+  const ids = [...new Set(rows.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId))))];
+  const copies = ids.length
+    ? (await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })).items
+    : [];
+
+  return { offers, copies };
+}
+
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 export interface OfferInput {
@@ -641,7 +722,8 @@ export interface OfferInput {
   currency: string;
 }
 
-/** Create an `active` offer on a platform (ADR-0013). Its currency is inherited from the platform
+/** Create a `preparing` offer on a platform (ADR-0013, #188): composed but not yet published — the
+ * collector activates it by hand once its sets are in. Its currency is inherited from the platform
  * (#196) — locked to the platform's currency, or, on the first offer/sale, set from `input.currency`
  * and stored as this offer's snapshot. Its sets are composed afterwards on the offer detail screen. */
 export async function createOffer(
@@ -659,7 +741,7 @@ export async function createOffer(
       url: input.url,
       price: input.price,
       currency,
-      state: "active",
+      state: "preparing",
     },
     select: { id: true },
   });
@@ -726,6 +808,13 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   if (!canTransition(ref.state, to)) {
     throw new OfferActionBlockedError("bad-transition", `Cannot move an offer from ${ref.state} to ${to}.`);
   }
+  // Publishing a preparing offer (Activate, #188): it must actually list something.
+  if (ref.state === "preparing" && to === "active") {
+    const setCount = await prisma.offerSet.count({ where: { offerId } });
+    if (setCount === 0) {
+      throw new OfferActionBlockedError("empty", "Add at least one set before activating this offer.");
+    }
+  }
   await prisma.offer.update({ where: { id: offerId }, data: { state: to } });
 }
 
@@ -743,9 +832,14 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
   await prisma.offer.delete({ where: { id: offerId } });
 }
 
-/** Verify copies are addable to a set: they belong to the collection and have not already sold.
- * Returns the valid, addable ids. */
-async function assertAddableCopies(collectionId: string, itemIds: string[]): Promise<string[]> {
+/** Verify copies are addable to a set: they belong to the collection, have not already sold, and —
+ * when `excludeOfferId` is given — are not already listed elsewhere in that same offer (an offer
+ * never lists the same copy twice). Returns the valid, addable ids. */
+async function assertAddableCopies(
+  collectionId: string,
+  itemIds: string[],
+  excludeOfferId?: string
+): Promise<string[]> {
   if (itemIds.length === 0) return [];
   const valid = await prisma.item.findMany({
     where: { id: { in: itemIds }, collectionId },
@@ -757,7 +851,19 @@ async function assertAddableCopies(collectionId: string, itemIds: string[]): Pro
     select: { itemId: true },
   });
   const soldIds = new Set(sold.map((r) => r.itemId));
-  return [...validIds].filter((id) => !soldIds.has(id));
+  const inOffer = excludeOfferId ? await itemsInOffer(excludeOfferId, [...validIds]) : new Set<string>();
+  return [...validIds].filter((id) => !soldIds.has(id) && !inOffer.has(id));
+}
+
+/** Which of `itemIds` are already held by some set of `offerId` (an offer never lists a copy
+ * twice). */
+async function itemsInOffer(offerId: string, itemIds: string[]): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const rows = await prisma.offerSetItem.findMany({
+    where: { itemId: { in: itemIds }, offerSet: { offerId } },
+    select: { itemId: true },
+  });
+  return new Set(rows.map((r) => r.itemId));
 }
 
 /** Add one set (holding `itemIds`, sold together) to an offer. A single copy makes a single-item
@@ -772,7 +878,7 @@ export async function addOfferSet(
   if (isTerminalState(ref.state)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only.`);
   }
-  const addable = await assertAddableCopies(ref.collectionId, itemIds);
+  const addable = await assertAddableCopies(ref.collectionId, itemIds, offerId);
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy to the set.");
   }
@@ -798,7 +904,7 @@ export async function addOfferSetsPerCopy(
   if (isTerminalState(ref.state)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only.`);
   }
-  const addable = await assertAddableCopies(ref.collectionId, itemIds);
+  const addable = await assertAddableCopies(ref.collectionId, itemIds, offerId);
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy.");
   }
@@ -813,6 +919,24 @@ export async function addOfferSetsPerCopy(
     }
   });
   return ids;
+}
+
+/** Add a single copy to an **existing** set, turning a single into a series / komplet (#188). The
+ * owning offer must be non-terminal; the copy must belong to the collection, be unsold, and not
+ * already listed anywhere in that offer. */
+export async function addItemToOfferSet(ownerId: string, setId: string, itemId: string): Promise<void> {
+  const ref = await assertOfferSetOwner(ownerId, setId);
+  if (isTerminalState(ref.offerState)) {
+    throw new OfferActionBlockedError("terminal", `A ${ref.offerState} offer is read-only.`);
+  }
+  const addable = await assertAddableCopies(ref.collectionId, [itemId], ref.offerId);
+  if (addable.length === 0) {
+    throw new OfferActionBlockedError(
+      "empty",
+      "That copy can't be added — it may have sold or already be in this offer."
+    );
+  }
+  await prisma.offerSetItem.create({ data: { offerSetId: setId, itemId: addable[0] } });
 }
 
 /** Rename a set (its label falls back to its copies when blank). */

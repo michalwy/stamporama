@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { OfferListItem, OfferCollision, OfferDetail } from "@/lib/offers";
+import type { OfferListItem, OfferCollision, OfferDetail, ComposeTargets } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 // (offer copies for the rich sets view)
 import type { OfferState } from "@/lib/offer-rules";
@@ -122,6 +122,23 @@ export function useComposableCopies(
       );
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;
+    },
+    enabled,
+  });
+}
+
+/** Offers a copy can be added to (#188): non-terminal offers with their sets + the copies each set
+ * holds, and flags for sets/offers already holding this copy. Disabled until the picker opens. */
+export function useComposeTargets(collectionId: string, itemId: string, enabled: boolean) {
+  return useQuery<ComposeTargets>({
+    queryKey: ["offers", collectionId, "compose-targets", itemId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ itemId });
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/compose-targets?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to load offers");
+      return res.json();
     },
     enabled,
   });

@@ -119,13 +119,17 @@ export function OfferDetailPanel({
   const menuActions: RowAction[] = [
     ...manualTransitions(offer.state)
       .filter((s): s is "active" | "paused" | "withdrawn" => s !== "sold")
-      .map((s) => ({
-        key: s,
-        label: TRANSITION_LABEL[s].label,
-        icon: TRANSITION_LABEL[s].icon,
-        danger: s === "withdrawn",
-        onSelect: () => setState(s),
-      })),
+      .map((s) => {
+        // Publishing a preparing offer reads "Activate"; resuming a paused one keeps "Resume".
+        const activating = offer.state === "preparing" && s === "active";
+        return {
+          key: s,
+          label: activating ? "Activate" : TRANSITION_LABEL[s].label,
+          icon: activating ? "▲" : TRANSITION_LABEL[s].icon,
+          danger: s === "withdrawn",
+          onSelect: () => setState(s),
+        };
+      }),
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
 

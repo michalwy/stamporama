@@ -14,8 +14,9 @@ import {
 // Type guard ----------------------------------------------------------------
 
 describe("isOfferState", () => {
-  it("accepts the four states and rejects everything else", () => {
+  it("accepts the five states and rejects everything else", () => {
     for (const s of OFFER_STATES) assert.equal(isOfferState(s), true);
+    assert.equal(isOfferState("preparing"), true);
     assert.equal(isOfferState("draft"), false);
     assert.equal(isOfferState(undefined), false);
     assert.equal(isOfferState(""), false);
@@ -27,6 +28,7 @@ describe("isOfferState", () => {
 describe("isLiveState", () => {
   it("only active offers hold a live claim (collide)", () => {
     assert.equal(isLiveState("active"), true);
+    assert.equal(isLiveState("preparing"), false);
     assert.equal(isLiveState("paused"), false);
     assert.equal(isLiveState("sold"), false);
     assert.equal(isLiveState("withdrawn"), false);
@@ -45,6 +47,13 @@ describe("isTerminalState", () => {
 // State machine -------------------------------------------------------------
 
 describe("canTransition", () => {
+  it("publishes a preparing offer (→ active) or drops it (→ withdrawn)", () => {
+    assert.equal(canTransition("preparing", "active"), true);
+    assert.equal(canTransition("preparing", "withdrawn"), true);
+    assert.equal(canTransition("preparing", "paused"), false);
+    assert.equal(canTransition("preparing", "sold"), false);
+  });
+
   it("allows active ↔ paused and → withdrawn", () => {
     assert.equal(canTransition("active", "paused"), true);
     assert.equal(canTransition("active", "withdrawn"), true);
@@ -72,6 +81,7 @@ describe("canTransition", () => {
 
 describe("manualTransitions", () => {
   it("lists exactly the hand-reachable targets", () => {
+    assert.deepEqual([...manualTransitions("preparing")], ["active", "withdrawn"]);
     assert.deepEqual([...manualTransitions("active")], ["paused", "withdrawn"]);
     assert.deepEqual([...manualTransitions("paused")], ["active", "withdrawn"]);
     assert.deepEqual([...manualTransitions("sold")], []);

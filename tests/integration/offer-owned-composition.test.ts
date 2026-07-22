@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, addOfferSet, listOffersPaginated, getOfferDetail } from "../../src/lib/offers";
+import { createOffer, addOfferSet, setOfferState, listOffersPaginated, getOfferDetail } from "../../src/lib/offers";
 import { createSale, addSaleLines, listSellableOffers, SaleActionBlockedError } from "../../src/lib/sales";
 
 // Offer-owned composition + cross-platform coordination (ADR-0013, #198). An offer owns its sets;
@@ -70,6 +70,10 @@ describe("offer-owned composition + coordination", () => {
     offerQA = await createOffer(userId, collectionId, { platformId: allegroId, url: null, price: "11.00", currency: "EUR" });
     setQAy = await addOfferSet(userId, offerQA, [y]);
     await addOfferSet(userId, offerQA, [z]);
+
+    // These are live listings (#188): a new offer starts `preparing`, so publish each once its sets
+    // are composed. Only `active` offers hold a live claim (needs-action / sellable derivations).
+    for (const id of [offerA, offerB, offerQD, offerQA]) await setOfferState(userId, id, "active");
   });
 
   after(async () => {

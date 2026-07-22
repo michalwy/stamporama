@@ -86,14 +86,19 @@ because it did not sell. **`sold` / `partially-sold` are derived**, never stored
 computed from sub-lot and item state, so there is no duplicated source of truth (symmetric to
 purchases deriving lot totals rather than storing them).
 
-**`Offer.state`: `active ↔ paused → sold / withdrawn`.** `paused` = temporarily suspended on
-the platform, with the copies still committed to the lot. No `reserved`/negotiation states in
-v1. A **derived "to-close" flag** overlays `active` (§5).
+**`Offer.state`: `preparing → active ↔ paused → sold / withdrawn`.** `preparing` = composed but
+not yet published (added #188); `paused` = temporarily suspended on the platform, with the copies
+still committed. No `reserved`/negotiation states in v1. A **derived "to-close" flag** overlays
+`active` (§5).
 
-**Offer management (#165).** New offers start `active`. The manual transitions are
-`active↔paused` and `→withdrawn` (both `withdrawn` and `sold` are terminal; relisting is a new
-offer). `sold` is reached **only** by recording a sale (#166), never by a hand toggle, so the
-offers UI never exposes a "mark sold". The state machine and validation are pure
+**Offer management (#165, #188).** New offers start `preparing` and are published by hand
+(**Activate**, `preparing → active`, requiring ≥1 set). The manual transitions are
+`preparing→active`, `active↔paused`, and `→withdrawn` (both `withdrawn` and `sold` are terminal;
+relisting is a new offer). The states are **orientational** — they scope filtering and reading,
+they do **not** gate composition: adding sets/copies is allowed in `preparing`, `active`, and
+`paused` alike (only terminal states freeze a listing). Only `active` offers hold a live claim
+(collisions, §5). `sold` is reached **only** by recording a sale (#166), never by a hand toggle, so
+the offers UI never exposes a "mark sold". The state machine and validation are pure
 (`offer-rules.ts`, unit-tested); the domain module (`offers.ts`) owns CRUD, the paginated list,
 the eligible-lot picker, and the collision lookup. The "at most one active offer per
 (`Item` × platform)" rule is enforced as a **non-blocking warning** surfaced live in the offer
@@ -198,7 +203,7 @@ Offer                                            -- table "offer"
   url           String?
   price         Decimal  @db.Decimal(10, 2)
   currency      String
-  state         String   @default("active")      -- active | paused | sold | withdrawn
+  state         String   @default("preparing")   -- preparing | active | paused | sold | withdrawn
   createdAt     DateTime @default(now())
 
 Sale                                             -- table "sale"

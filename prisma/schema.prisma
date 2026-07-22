@@ -458,8 +458,9 @@ model PurchaseExpense {
 // A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its
 // composition** directly (mirroring `Purchase ⊃ PurchaseLot ⊃ Item`): it holds N `OfferSet`s,
 // each an atomic sellable unit. `platformId` is a `Contact` carrying the `platform` role. Price +
-// currency are per-offer (platforms price independently). Lifecycle `state`: active | paused |
-// sold | withdrawn. Nothing is shared between offers — the same copy listed elsewhere is a
+// currency are per-offer (platforms price independently). Lifecycle `state`: preparing | active |
+// paused | sold | withdrawn — a new offer starts `preparing` (composed but not yet published) and
+// is activated by hand (#188). Nothing is shared between offers — the same copy listed elsewhere is a
 // separate offer with its own sets. The derived "needs action" overlay (an active offer holding a
 // set whose copy has already sold) is computed, never stored.
 model Offer {
@@ -471,7 +472,7 @@ model Offer {
   // Asking price in `currency` (the offer's own transaction currency).
   price        Decimal  @db.Decimal(10, 2)
   currency     String
-  state        String   @default("active")
+  state        String   @default("preparing")
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
