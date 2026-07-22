@@ -316,6 +316,9 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           collectionId={collectionId}
           platformId={sale.platformId}
           currency={sale.currency}
+          baseCurrency={sale.baseCurrency}
+          areas={areas}
+          locations={locations}
           isPending={isPending}
           error={error}
           onClose={() => {

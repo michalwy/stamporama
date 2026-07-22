@@ -69,6 +69,22 @@ export function useSellableOffers(
   });
 }
 
+/** Enriched copies across the platform's sellable offers, for the add-sold-sets picker's set
+ * details. Loaded once when the dialog opens; grouped by set client-side. */
+export function useSellableCopies(collectionId: string, platformId: string | undefined, enabled: boolean) {
+  return useQuery<ItemListItem[]>({
+    queryKey: ["sales", collectionId, "sellable-copies", platformId ?? ""] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (platformId) params.set("platformId", platformId);
+      const res = await fetch(`/api/collections/${collectionId}/sales/sellable-copies?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to load copies");
+      return (await res.json()).items;
+    },
+    enabled,
+  });
+}
+
 /** The copies that left on one sale line (packing view). Lazily fetched when its sold-unit card
  * is expanded; cached by React Query so re-expanding is instant. */
 export function useSaleLineCopies(collectionId: string, lineId: string, enabled: boolean) {

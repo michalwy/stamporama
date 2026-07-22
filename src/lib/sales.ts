@@ -211,6 +211,29 @@ export async function listSellableOffers(
   return offers;
 }
 
+/** Every enriched copy across the platform's sellable offers, for the picker's expandable set
+ * details (so the collector sees exactly what each set contains). Bounded by what's listed on the
+ * platform; loaded in one query and grouped by set client-side. */
+export async function listSellableCopies(
+  ownerId: string,
+  collectionId: string,
+  opts: { platformId?: string } = {}
+): Promise<ItemListItem[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const offers = await prisma.offer.findMany({
+    where: {
+      collectionId,
+      state: { in: [...(["active", "paused"] as const)] },
+      ...(opts.platformId ? { platformId: opts.platformId } : {}),
+    },
+    select: { sets: { select: { items: { select: { itemId: true } } } } },
+  });
+  const ids = [...new Set(offers.flatMap((o) => o.sets.flatMap((s) => s.items.map((i) => i.itemId))))];
+  if (ids.length === 0) return [];
+  const { items } = await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length });
+  return items;
+}
+
 // ── Header create / update ────────────────────────────────────────────────
 
 export interface SaleHeaderInput {
