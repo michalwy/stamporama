@@ -74,6 +74,20 @@ const FACET_LABEL: React.CSSProperties = {
 
 const MUTED = "var(--color-text-muted)";
 
+/** Flag for an offer left on an old currency after the platform's currency changed (#197). Mirrors
+ * the `NeedsActionChip` error styling so a "re-list" cue reads consistently across trading. */
+const STALE_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.375rem",
+  color: "var(--color-error)",
+  background: "var(--color-error-soft, var(--color-bg-page))",
+  border: "1px solid var(--color-error-border, var(--color-border))",
+};
+
 /** A group's "type" facet: an offer with one set (a single) vs several sets (a quantity). */
 type OfferType = "single" | "quantity";
 
@@ -93,6 +107,10 @@ interface Group {
   offerPrice: string;
   offerCurrency: string;
   type: OfferType;
+  /** The offer's currency differs from the sale's (#197). Left on an old currency after the
+   * platform's currency changed — surfaced but flagged and not selectable, since a sale is
+   * single-currency. */
+  stale: boolean;
   sets: SetRow[];
 }
 
@@ -103,7 +121,7 @@ interface Picked {
   price: string;
 }
 
-function buildGroups(offers: SellableOffer[]): Group[] {
+function buildGroups(offers: SellableOffer[], saleCurrency: string): Group[] {
   return offers
     .map((offer) => ({
       offerId: offer.offerId,
@@ -111,6 +129,7 @@ function buildGroups(offers: SellableOffer[]): Group[] {
       offerPrice: offer.price,
       offerCurrency: offer.currency,
       type: (offer.sets.length === 1 ? "single" : "quantity") as OfferType,
+      stale: offer.currency !== saleCurrency,
       sets: offer.sets.map((s) => ({
         offerId: offer.offerId,
         offerSetId: s.offerSetId,
@@ -217,7 +236,7 @@ export function AddSaleLineDialog({
     });
   }
 
-  const groups = useMemo(() => buildGroups(offers), [offers]);
+  const groups = useMemo(() => buildGroups(offers, currency), [offers, currency]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -372,6 +391,7 @@ export function AddSaleLineDialog({
                       askingPrice={group.offerPrice}
                       askingCurrency={group.offerCurrency}
                       currency={currency}
+                      stale={group.stale}
                       checked={!!picked[s.offerSetId]}
                       price={picked[s.offerSetId]?.price ?? ""}
                       isLast={isLast}
@@ -391,6 +411,7 @@ export function AddSaleLineDialog({
                     group={group}
                     visibleSets={sets}
                     currency={currency}
+                    stale={group.stale}
                     open={open}
                     selectedCount={selectedCount}
                     isLast={isLast}
@@ -469,6 +490,7 @@ function QuantityGroup({
   group,
   visibleSets,
   currency,
+  stale,
   open,
   selectedCount,
   isLast,
@@ -483,6 +505,7 @@ function QuantityGroup({
   group: Group;
   visibleSets: SetRow[];
   currency: string;
+  stale: boolean;
   open: boolean;
   selectedCount: number;
   isLast: boolean;
@@ -509,12 +532,18 @@ function QuantityGroup({
           </div>
           <div style={{ fontSize: "0.75rem", color: MUTED, marginTop: "0.3rem" }}>
             {group.sets.length} set{group.sets.length === 1 ? "" : "s"}
-            {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+            {!stale && selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
           </div>
         </div>
-        <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap", flexShrink: 0 }}>
-          asking {group.offerPrice} {group.offerCurrency}
-        </span>
+        {stale ? (
+          <span style={STALE_CHIP} title={`Listed in ${group.offerCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}>
+            ⚠ {group.offerCurrency} — re-list
+          </span>
+        ) : (
+          <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap", flexShrink: 0 }}>
+            asking {group.offerPrice} {group.offerCurrency}
+          </span>
+        )}
       </div>
 
       {open && (
@@ -526,6 +555,7 @@ function QuantityGroup({
               askingPrice={group.offerPrice}
               askingCurrency={group.offerCurrency}
               currency={currency}
+              stale={stale}
               checked={!!picked[s.offerSetId]}
               price={picked[s.offerSetId]?.price ?? ""}
               isLast={i === visibleSets.length - 1}
@@ -548,6 +578,7 @@ function SetPickRow({
   askingPrice,
   askingCurrency,
   currency,
+  stale,
   checked,
   price,
   isLast,
@@ -562,6 +593,8 @@ function SetPickRow({
   askingPrice: string;
   askingCurrency: string;
   currency: string;
+  /** The offer's currency differs from the sale's (#197): the set is flagged and not selectable. */
+  stale: boolean;
   checked: boolean;
   price: string;
   isLast: boolean;
@@ -576,7 +609,7 @@ function SetPickRow({
   return (
     <div style={{ borderBottom: isLast && !detailsShown ? undefined : "1px solid var(--color-border)" }}>
       <div
-        onClick={onToggle}
+        onClick={stale ? undefined : onToggle}
         style={{
           display: "flex",
           alignItems: "center",
@@ -584,10 +617,18 @@ function SetPickRow({
           padding: "0.5rem 1rem",
           paddingLeft: indent ? "2.5rem" : "1rem",
           background: checked ? "var(--color-accent-soft)" : undefined,
-          cursor: "pointer",
+          cursor: stale ? "default" : "pointer",
+          opacity: stale ? 0.7 : undefined,
         }}
       >
-        <input type="checkbox" checked={checked} onChange={onToggle} onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }} />
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={stale}
+          onChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          style={{ flexShrink: 0 }}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: "0.875rem", fontWeight: indent ? 500 : 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {set.label}
@@ -611,7 +652,11 @@ function SetPickRow({
           </div>
         </div>
 
-        {checked ? (
+        {stale ? (
+          <span style={STALE_CHIP} title={`Listed in ${askingCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}>
+            ⚠ {askingCurrency} — re-list
+          </span>
+        ) : checked ? (
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
             <input type="number" min="0" step="0.01" placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
             <span style={{ fontSize: "0.75rem", color: MUTED }}>{currency}</span>

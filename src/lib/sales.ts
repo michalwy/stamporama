@@ -28,6 +28,7 @@ import { listItemsPaginated, type ItemListItem } from "./items";
 export type SaleBlockReason =
   | "no-platform"
   | "no-currency"
+  | "currency-mismatch"
   | "empty"
   | "bad-offer"
   | "bad-set"
@@ -465,7 +466,7 @@ export async function addSaleLines(
   const offerIds = [...new Set(drafts.map((d) => d.offerId))];
   const offers = await prisma.offer.findMany({
     where: { id: { in: offerIds }, collectionId: ref.collectionId },
-    select: { id: true, platformId: true, state: true, sets: { select: { id: true } } },
+    select: { id: true, platformId: true, currency: true, state: true, sets: { select: { id: true } } },
   });
   const offerById = new Map(offers.map((o) => [o.id, o]));
 
@@ -476,6 +477,15 @@ export async function addSaleLines(
     }
     if (offer.platformId !== ref.platformId) {
       throw new SaleActionBlockedError("bad-offer", "That offer is on a different platform than this sale.");
+    }
+    // A sale is single-currency (#196/#197): every offer it pulls in must match the sale's currency.
+    // An offer left on an old currency after the platform's currency changed is excluded — re-list
+    // it in the platform's current currency first.
+    if (offer.currency !== ref.currency) {
+      throw new SaleActionBlockedError(
+        "currency-mismatch",
+        `This offer is in ${offer.currency}, but the sale is in ${ref.currency}. Re-list it in the platform's current currency first.`
+      );
     }
     const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
     if (!isSellableOfferState(state)) {

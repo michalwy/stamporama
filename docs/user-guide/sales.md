@@ -47,6 +47,10 @@ Tick every set that sold and set each one's **sale price** in the sale currency 
 asking price pre-fills, since the offer and the sale share the platform's currency). **Add** records
 them all at once. You can come back and add more sets later, or **Remove** one from its row menu.
 
+A sale is **single-currency**, so only offers in the sale's currency can be added. If you changed
+the platform's currency after listing, any offer still on the **old** currency is shown flagged
+**⚠ CUR — re-list** and can't be selected — re-list it in the platform's current currency first.
+
 ### Step 3 — amounts
 
 The **Amounts** section shows the proceeds breakdown: the gross of the line prices, the three
