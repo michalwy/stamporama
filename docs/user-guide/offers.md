@@ -46,8 +46,8 @@ An offer moves through these states:
   committed to the lot. Resume it back to active any time.
 - **Withdrawn** — taken down for good. This is **final**: to sell there again, list the lot as a
   new offer.
-- **Sold** — set automatically when you record a sale through the offer (that flow comes with the
-  sales module). You do not mark an offer sold by hand.
+- **Sold** — set automatically when you [record a sale](sales.md) through the offer. You do not
+  mark an offer sold by hand.
 
 From the row's **⋮** menu you can **edit** the price / platform / URL, **pause** or **resume**,
 **withdraw**, open the live listing, or **delete** the offer. Deleting an offer never touches the
@@ -61,5 +61,6 @@ so you can, for example, see everything still live on one marketplace at a glanc
 ## Related
 
 - [Lots](lots.md) — the packages you list.
+- [Sales](sales.md) — record a sale when an offer sells.
 - [Contacts](contacts.md) — mark a contact as a **platform** to list on it.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used later for profit/loss.

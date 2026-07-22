@@ -14,12 +14,18 @@ export async function GET(
 
   const { collectionId } = await params;
   const query = request.nextUrl.searchParams.get("q") ?? "";
-  // Role-filtering for the purchase pickers (#120): `seller` for the supplier field,
-  // `platform` for the platform field. Any other value is ignored so the endpoint stays a
-  // plain name search for its other callers.
+  // Role-filtering for the trading pickers: `seller` for the supplier field, `platform` for the
+  // platform field (#120), `buyer` for the sale buyer field (#166). Any other value is ignored so
+  // the endpoint stays a plain name search for its other callers.
   const roleParam = request.nextUrl.searchParams.get("role");
   const role =
-    roleParam === "platform" ? "platform" : roleParam === "seller" ? "seller" : undefined;
+    roleParam === "platform"
+      ? "platform"
+      : roleParam === "seller"
+        ? "seller"
+        : roleParam === "buyer"
+          ? "buyer"
+          : undefined;
 
   try {
     const items = await searchContacts(session.user.id, collectionId, query, role);

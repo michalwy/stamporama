@@ -1,0 +1,1024 @@
+import "server-only";
+import { Prisma } from "@/generated/prisma/client";
+import { prisma } from "./db";
+import { getOrFetchRate } from "./exchange-rates";
+import { type LotKind, isLotKind, deriveLotLabel } from "./sale-lot-rules";
+import { type OfferState, isOfferState } from "./offer-rules";
+import { isSellableOfferState } from "./sale-rules";
+import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
+import { listItemsPaginated, type ItemListItem } from "./items";
+
+// Server-side domain logic for the **sale transaction flow** (ADR-0012 §4/§5, #166). A `Sale`
+// records that one or more `Offer`s sold on a single platform, in a single currency, on one
+// date (the FX-freeze date). Each `SaleLine` is a **whole sellable unit** that left — a unit lot
+// or one sub-lot of a quantity lot — carrying the exact physical `Item`s via `SaleLineItem`.
+//
+// Only `Offer.state → sold` is a stored side effect. "Item unavailable" and "lot sold" are
+// **derived** from the `sale_line_item` join (ADR-0012 — no Item columns), so recording the
+// sale is all it takes to retire the copies. The pure allocation engine (`sale-allocation.ts`,
+// #163) is fed here: `getSaleDetail` distributes the shared amounts to per-line nets.
+//
+// This module owns: the sellable-offer picker, create / delete a sale, and the paginated list
+// + detail read models. Whole-unit integrity — a series never breaks apart — is enforced by
+// requiring a line's items to be the full current copy set of its unit; the DB-level unique on
+// `sale_line_item.itemId` is the no-double-sale backstop. All access is owner-scoped.
+
+// ── Errors ────────────────────────────────────────────────────────────────
+
+export type SaleBlockReason =
+  | "no-platform"
+  | "empty"
+  | "bad-offer"
+  | "bad-unit"
+  | "already-sold";
+
+/** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
+ * action maps it to an `{ status: "error" }` response. */
+export class SaleActionBlockedError extends Error {
+  readonly reason: SaleBlockReason;
+  constructor(reason: SaleBlockReason, message: string) {
+    super(message);
+    this.name = "SaleActionBlockedError";
+    this.reason = reason;
+  }
+}
+
+// ── Ownership helpers ───────────────────────────────────────────────────────
+
+/** Verify collection ownership and return its base currency (needed to freeze the FX rate). */
+async function assertCollectionOwner(
+  ownerId: string,
+  collectionId: string
+): Promise<{ baseCurrency: string }> {
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true, baseCurrency: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  return { baseCurrency: col.baseCurrency };
+}
+
+async function assertPlatform(collectionId: string, platformId: string): Promise<void> {
+  const contact = await prisma.contact.findFirst({
+    where: { id: platformId, collectionId, platform: true },
+    select: { id: true },
+  });
+  if (!contact) {
+    throw new SaleActionBlockedError("no-platform", "Choose a platform this sale happened on.");
+  }
+}
+
+/** Verify an optional buyer contact exists in the collection and carries the `buyer` role. A
+ * null buyer (unknown/anonymous) is allowed. */
+async function assertBuyer(collectionId: string, buyerId: string | null): Promise<void> {
+  if (!buyerId) return;
+  const contact = await prisma.contact.findFirst({
+    where: { id: buyerId, collectionId, buyer: true },
+    select: { id: true },
+  });
+  if (!contact) {
+    throw new SaleActionBlockedError("no-platform", "That buyer is not a contact in this collection.");
+  }
+}
+
+// ── Labels ────────────────────────────────────────────────────────────────
+
+/** Short copy label from a stamp select — primary catalog number, else name. */
+function copyLabel(stamp: {
+  name: string | null;
+  catalogNumbers: { number: string }[];
+}): string {
+  return stamp.catalogNumbers[0]?.number ?? stamp.name ?? "Copy";
+}
+
+const STAMP_LABEL_SELECT = {
+  stamp: { select: { name: true, catalogNumbers: { select: { number: true }, take: 1 } } },
+} as const;
+
+type StampLabelRow = { stamp: { name: string | null; catalogNumbers: { number: string }[] } };
+
+/** Item ids already retired on a sale line, from a candidate set (no-double-sale). */
+async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const rows = await prisma.saleLineItem.findMany({
+    where: { itemId: { in: itemIds } },
+    select: { itemId: true },
+  });
+  return new Set(rows.map((r) => r.itemId));
+}
+
+// ── Sellable-offer picker ───────────────────────────────────────────────────
+
+/** One whole sellable unit inside an offer: a unit lot, or one sub-lot of a quantity lot. The
+ * unit sells atomically — all its copies leave together (a series never breaks apart). */
+export interface SaleUnitOption {
+  /** The unit lot / sub-lot id; becomes `SaleLine.lotId`. */
+  lotId: string;
+  label: string;
+  /** Every physical copy that leaves when this unit sells (whole-unit integrity). */
+  itemIds: string[];
+  itemLabels: string[];
+}
+
+export interface SellableOffer {
+  offerId: string;
+  platformId: string;
+  platformName: string;
+  /** The offered package (unit or quantity lot). */
+  lotId: string;
+  lotLabel: string;
+  lotKind: LotKind;
+  /** Asking price + currency, used to pre-fill line prices when the sale is in that currency. */
+  price: string;
+  currency: string;
+  state: OfferState;
+  /** The units still available to sell (fully-sold units are dropped). Always ≥ 1. */
+  units: SaleUnitOption[];
+}
+
+const SELLABLE_OFFER_SELECT = {
+  id: true,
+  platformId: true,
+  lotId: true,
+  price: true,
+  currency: true,
+  state: true,
+  createdAt: true,
+  platform: { select: { name: true } },
+  lot: {
+    select: {
+      kind: true,
+      title: true,
+      items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+      subLots: {
+        select: {
+          child: {
+            select: {
+              id: true,
+              kind: true,
+              title: true,
+              items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+/**
+ * Offers that can be recorded as sold (ADR-0012, #166): `active` or `paused` offers in the
+ * collection, optionally on one `platformId`, each expanded into its still-available units. A
+ * unit lot contributes one unit (itself); a quantity lot contributes one unit per sub-lot. Units
+ * whose copies have already left on an earlier sale are dropped, and an offer with no available
+ * unit is omitted entirely. Newest offer first.
+ */
+export async function listSellableOffers(
+  ownerId: string,
+  collectionId: string,
+  opts: { platformId?: string } = {}
+): Promise<SellableOffer[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const rows = await prisma.offer.findMany({
+    where: {
+      collectionId,
+      state: { in: [...(["active", "paused"] as const)] },
+      ...(opts.platformId ? { platformId: opts.platformId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: SELLABLE_OFFER_SELECT,
+  });
+
+  // Batch the sold-copy lookup across every candidate copy in one query.
+  const allItemIds = rows.flatMap((r) =>
+    r.lot.kind === "quantity"
+      ? r.lot.subLots.flatMap((s) => s.child.items.map((li) => li.itemId))
+      : r.lot.items.map((li) => li.itemId)
+  );
+  const sold = await soldItemIds([...new Set(allItemIds)]);
+
+  const unitFrom = (
+    lotId: string,
+    kind: LotKind,
+    title: string | null,
+    items: { itemId: string; item: StampLabelRow }[]
+  ): SaleUnitOption | null => {
+    // A unit is available only when it holds ≥1 copy and none has already sold — a unit lot is
+    // atomic, so a single already-sold copy retires the whole unit.
+    if (items.length === 0 || items.some((li) => sold.has(li.itemId))) return null;
+    const itemLabels = items.map((li) => copyLabel(li.item.stamp));
+    return {
+      lotId,
+      label: deriveLotLabel(kind, title, itemLabels),
+      itemIds: items.map((li) => li.itemId),
+      itemLabels,
+    };
+  };
+
+  const offers: SellableOffer[] = [];
+  for (const r of rows) {
+    const lotKind = (isLotKind(r.lot.kind) ? r.lot.kind : "unit") as LotKind;
+    const units: SaleUnitOption[] = [];
+    if (lotKind === "unit") {
+      const u = unitFrom(r.lotId, "unit", r.lot.title, r.lot.items);
+      if (u) units.push(u);
+    } else {
+      for (const s of r.lot.subLots) {
+        const childKind = (isLotKind(s.child.kind) ? s.child.kind : "unit") as LotKind;
+        const u = unitFrom(s.child.id, childKind, s.child.title, s.child.items);
+        if (u) units.push(u);
+      }
+    }
+    if (units.length === 0) continue;
+
+    const lotLabel =
+      lotKind === "unit"
+        ? units[0].label
+        : deriveLotLabel(
+            "quantity",
+            r.lot.title,
+            r.lot.subLots.map(
+              (s) =>
+                s.child.title ??
+                deriveLotLabel(
+                  (isLotKind(s.child.kind) ? s.child.kind : "unit") as LotKind,
+                  s.child.title,
+                  s.child.items.map((li) => copyLabel(li.item.stamp))
+                )
+            )
+          );
+
+    offers.push({
+      offerId: r.id,
+      platformId: r.platformId,
+      platformName: r.platform.name,
+      lotId: r.lotId,
+      lotLabel,
+      lotKind,
+      price: Number(r.price).toFixed(2),
+      currency: r.currency,
+      state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+      units,
+    });
+  }
+  return offers;
+}
+
+// ── Header create / update ────────────────────────────────────────────────
+
+export interface SaleHeaderInput {
+  platformId: string;
+  /** The buyer contact (buyer role), or null when unknown/anonymous. */
+  buyerId: string | null;
+  /** The external system's transaction / order number, or null. */
+  externalRef: string | null;
+  soldAt: Date;
+  currency: string;
+  /** Buyer-paid handling (+) and platform commission (−) are known at sale time, so they live on
+   * the header. My actual shipping (−) is learned later and set on the detail screen. */
+  buyerHandling: string | null;
+  commission: string | null;
+}
+
+export interface SaleLineDraft {
+  offerId: string;
+  /** The unit lot / sub-lot that sold (`SaleLine.lotId`). */
+  lotId: string;
+  /** Line sale price in the sale's transaction currency. */
+  price: string;
+  /** The exact copies that left — must be the full current copy set of `lotId`. */
+  itemIds: string[];
+}
+
+/** Freeze the base-currency FX rate at save time (same behaviour as purchases, #119). Returns
+ * null when the sale is already in the base currency or no rate is available. */
+async function freezeFxRate(
+  collectionId: string,
+  currency: string,
+  baseCurrency: string
+): Promise<Prisma.Decimal | null> {
+  if (currency === baseCurrency) return null;
+  try {
+    const { rate } = await getOrFetchRate(collectionId, currency, baseCurrency);
+    return new Prisma.Decimal(rate);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether every copy of a lot has now left on a sale line — read inside the sale transaction so
+ * the just-recorded lines count. A unit lot is fully sold when all its copies are gone; a
+ * quantity lot when every one of its sub-lots is fully sold. Drives the offer → `sold` flip. */
+async function isLotFullySold(
+  tx: Prisma.TransactionClient,
+  lotId: string,
+  kind: LotKind
+): Promise<boolean> {
+  const unitLotIds =
+    kind === "unit"
+      ? [lotId]
+      : (
+          await tx.lotSubLot.findMany({
+            where: { parentLotId: lotId },
+            select: { childLotId: true },
+          })
+        ).map((r) => r.childLotId);
+  if (unitLotIds.length === 0) return false;
+
+  const items = await tx.lotItem.findMany({
+    where: { lotId: { in: unitLotIds } },
+    select: { lotId: true, itemId: true },
+  });
+  if (items.length === 0) return false;
+
+  const sold = new Set(
+    (
+      await tx.saleLineItem.findMany({
+        where: { itemId: { in: items.map((i) => i.itemId) } },
+        select: { itemId: true },
+      })
+    ).map((r) => r.itemId)
+  );
+  // A unit lot with no copies (an empty sub-lot) can never be "sold"; require each to hold ≥1.
+  const byUnit = new Map<string, string[]>();
+  for (const i of items) {
+    const arr = byUnit.get(i.lotId) ?? [];
+    arr.push(i.itemId);
+    byUnit.set(i.lotId, arr);
+  }
+  return unitLotIds.every((id) => {
+    const copies = byUnit.get(id) ?? [];
+    return copies.length > 0 && copies.every((itemId) => sold.has(itemId));
+  });
+}
+
+interface SaleRef {
+  collectionId: string;
+  platformId: string;
+  currency: string;
+  baseCurrency: string;
+}
+
+/** Verify a sale exists and is owned by `ownerId`; returns the fields the line/shared mutations
+ * need (collection, platform, currency, base currency). */
+async function assertSaleOwner(ownerId: string, saleId: string): Promise<SaleRef> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collectionId: true,
+      platformId: true,
+      currency: true,
+      collection: { select: { ownerId: true, baseCurrency: true } },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  return {
+    collectionId: sale.collectionId,
+    platformId: sale.platformId,
+    currency: sale.currency,
+    baseCurrency: sale.collection.baseCurrency,
+  };
+}
+
+/**
+ * Create a **sale header** (ADR-0012, #166): platform, buyer, date, currency, and the two
+ * sale-time shared amounts (buyer handling + commission). Its sold units — and my shipping cost,
+ * learned later — are added on the sale's detail screen, mirroring the purchase intake flow
+ * (#120/#121). The FX rate to base is frozen now (re-frozen if the currency later changes).
+ * Returns the new sale id.
+ */
+export async function createSale(
+  ownerId: string,
+  collectionId: string,
+  input: SaleHeaderInput
+): Promise<string> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  await assertPlatform(collectionId, input.platformId);
+  await assertBuyer(collectionId, input.buyerId);
+  if (!input.currency) {
+    throw new SaleActionBlockedError("empty", "Choose the sale currency.");
+  }
+
+  const fxRateToBase = await freezeFxRate(collectionId, input.currency, baseCurrency);
+  const sale = await prisma.sale.create({
+    data: {
+      collectionId,
+      platformId: input.platformId,
+      buyerId: input.buyerId,
+      externalRef: input.externalRef,
+      soldAt: input.soldAt,
+      currency: input.currency,
+      fxRateToBase,
+      buyerHandling: input.buyerHandling,
+      commission: input.commission,
+    },
+    select: { id: true },
+  });
+  return sale.id;
+}
+
+/** Edit a sale header (platform / buyer / date / currency / handling / commission). Re-freezes
+ * the FX rate. The platform cannot change once the sale has sold units — a sale is
+ * single-platform and its lines reference offers on that platform. My shipping cost is not
+ * touched here (it is set on the detail screen). */
+export async function updateSaleHeader(
+  ownerId: string,
+  saleId: string,
+  input: SaleHeaderInput
+): Promise<void> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  await assertPlatform(ref.collectionId, input.platformId);
+  await assertBuyer(ref.collectionId, input.buyerId);
+  if (!input.currency) {
+    throw new SaleActionBlockedError("empty", "Choose the sale currency.");
+  }
+  if (input.platformId !== ref.platformId) {
+    const lineCount = await prisma.saleLine.count({ where: { saleId } });
+    if (lineCount > 0) {
+      throw new SaleActionBlockedError(
+        "bad-offer",
+        "Remove the sold units before changing the platform — a sale stays on one platform."
+      );
+    }
+  }
+  const fxRateToBase = await freezeFxRate(ref.collectionId, input.currency, ref.baseCurrency);
+  await prisma.sale.update({
+    where: { id: saleId },
+    data: {
+      platformId: input.platformId,
+      buyerId: input.buyerId,
+      externalRef: input.externalRef,
+      soldAt: input.soldAt,
+      currency: input.currency,
+      fxRateToBase,
+      buyerHandling: input.buyerHandling,
+      commission: input.commission,
+    },
+  });
+}
+
+/** The three shared-amount fields, editable in place on the detail screen. */
+export type SaleAmountField = "buyerHandling" | "shippingCost" | "commission";
+
+/** Set one of a sale's shared amounts (buyer handling / shipping / commission) in place. Null
+ * when cleared. Feeds the allocation engine on read (`getSaleDetail`). */
+export async function updateSaleAmount(
+  ownerId: string,
+  saleId: string,
+  field: SaleAmountField,
+  value: string | null
+): Promise<void> {
+  await assertSaleOwner(ownerId, saleId);
+  await prisma.sale.update({
+    where: { id: saleId },
+    data: { [field]: value },
+  });
+}
+
+/**
+ * Add one or more sold units to a sale (ADR-0012, #166). Each draft is a whole unit — a unit lot
+ * or one sub-lot of a quantity lot — priced in the sale currency, carrying the unit's full copy
+ * set. Every offer must be on the sale's platform (a sale is single-platform) and still sellable.
+ * After writing the lines, each offer whose lot is now **fully** sold flips to `sold`; a partial
+ * quantity-lot sale leaves the offer live for its remaining sub-lots.
+ *
+ * Whole-unit integrity: a draft's `itemIds` must be exactly the full current copy set of its unit
+ * (`lotId`), which must be the offer's lot or one of its sub-lots. The DB-level unique on
+ * `sale_line_item.itemId` backstops the no-double-sale rule.
+ */
+export async function addSaleLines(
+  ownerId: string,
+  saleId: string,
+  drafts: SaleLineDraft[]
+): Promise<void> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  if (drafts.length === 0) {
+    throw new SaleActionBlockedError("empty", "Choose at least one unit to add.");
+  }
+
+  const offerIds = [...new Set(drafts.map((d) => d.offerId))];
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: offerIds }, collectionId: ref.collectionId },
+    select: { id: true, lotId: true, platformId: true, state: true, lot: { select: { kind: true } } },
+  });
+  const offerById = new Map(offers.map((o) => [o.id, o]));
+
+  // Resolve sub-lot membership for the quantity lots involved, so a draft's unit can be verified
+  // as a real member of the offered lot.
+  const quantityLotIds = offers.filter((o) => o.lot.kind === "quantity").map((o) => o.lotId);
+  const subLotRows = await prisma.lotSubLot.findMany({
+    where: { parentLotId: { in: quantityLotIds } },
+    select: { parentLotId: true, childLotId: true },
+  });
+  const subLotsByParent = new Map<string, Set<string>>();
+  for (const r of subLotRows) {
+    const set = subLotsByParent.get(r.parentLotId) ?? new Set<string>();
+    set.add(r.childLotId);
+    subLotsByParent.set(r.parentLotId, set);
+  }
+
+  for (const line of drafts) {
+    const offer = offerById.get(line.offerId);
+    if (!offer) {
+      throw new SaleActionBlockedError("bad-offer", "One of the offers is no longer available.");
+    }
+    if (offer.platformId !== ref.platformId) {
+      throw new SaleActionBlockedError(
+        "bad-offer",
+        "That offer is on a different platform than this sale."
+      );
+    }
+    const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
+    if (!isSellableOfferState(state)) {
+      throw new SaleActionBlockedError(
+        "bad-offer",
+        "One of the offers is already sold or withdrawn."
+      );
+    }
+
+    // The unit must be the offered unit lot itself, or a sub-lot of the offered quantity lot.
+    const isOwnLot = offer.lot.kind === "unit" && line.lotId === offer.lotId;
+    const isSubLot =
+      offer.lot.kind === "quantity" && (subLotsByParent.get(offer.lotId)?.has(line.lotId) ?? false);
+    if (!isOwnLot && !isSubLot) {
+      throw new SaleActionBlockedError(
+        "bad-unit",
+        "A sold unit does not belong to the offer it was recorded against."
+      );
+    }
+
+    // Whole-unit integrity: the draft's copies must be exactly the unit's full current copy set.
+    const actual = await prisma.lotItem.findMany({
+      where: { lotId: line.lotId },
+      select: { itemId: true },
+    });
+    const actualIds = new Set(actual.map((r) => r.itemId));
+    const givenIds = new Set(line.itemIds);
+    if (
+      actualIds.size === 0 ||
+      actualIds.size !== givenIds.size ||
+      [...givenIds].some((id) => !actualIds.has(id))
+    ) {
+      throw new SaleActionBlockedError(
+        "bad-unit",
+        "A sold unit must include exactly the copies it holds — a series cannot be split."
+      );
+    }
+
+    // None of the copies may have already left on a prior sale line.
+    const already = await soldItemIds(line.itemIds);
+    if (already.size > 0) {
+      throw new SaleActionBlockedError(
+        "already-sold",
+        "One or more of these copies has already been sold."
+      );
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const line of drafts) {
+        await tx.saleLine.create({
+          data: {
+            saleId,
+            offerId: line.offerId,
+            lotId: line.lotId,
+            price: line.price,
+            items: { create: line.itemIds.map((itemId) => ({ itemId })) },
+          },
+        });
+      }
+      // Flip an offer to `sold` only once its lot is fully sold (the only stored side effect;
+      // lot / item sold state stays derived).
+      for (const offerId of offerIds) {
+        const offer = offerById.get(offerId)!;
+        const lotKind = (isLotKind(offer.lot.kind) ? offer.lot.kind : "unit") as LotKind;
+        if (await isLotFullySold(tx, offer.lotId, lotKind)) {
+          await tx.offer.update({ where: { id: offerId }, data: { state: "sold" } });
+        }
+      }
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new SaleActionBlockedError(
+        "already-sold",
+        "One or more of these copies has already been sold."
+      );
+    }
+    throw e;
+  }
+}
+
+/** Remove a sold unit from a sale (ADR-0012, #166). Its copies become available again (their
+ * sold state is derived), and if the line's offer had been flipped to `sold` but its lot is no
+ * longer fully sold, the offer reverts to `active`. */
+export async function removeSaleLine(ownerId: string, lineId: string): Promise<void> {
+  const line = await prisma.saleLine.findUnique({
+    where: { id: lineId },
+    select: {
+      offerId: true,
+      sale: { select: { collection: { select: { ownerId: true } } } },
+    },
+  });
+  if (!line || line.sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale line not found or access denied.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.saleLine.delete({ where: { id: lineId } });
+    if (line.offerId) {
+      const offer = await tx.offer.findUnique({
+        where: { id: line.offerId },
+        select: { state: true, lotId: true, lot: { select: { kind: true } } },
+      });
+      if (offer && offer.state === "sold") {
+        const kind = (isLotKind(offer.lot.kind) ? offer.lot.kind : "unit") as LotKind;
+        if (!(await isLotFullySold(tx, offer.lotId, kind))) {
+          await tx.offer.update({ where: { id: line.offerId }, data: { state: "active" } });
+        }
+      }
+    }
+  });
+}
+
+// ── List ──────────────────────────────────────────────────────────────────
+
+export interface SaleListItem {
+  id: string;
+  platformId: string;
+  platformName: string;
+  /** The buyer's name, or null when unknown/anonymous. */
+  buyerName: string | null;
+  /** External system's transaction / order number, or null. */
+  externalRef: string | null;
+  soldAt: Date;
+  currency: string;
+  lineCount: number;
+  itemCount: number;
+  /** Sum of line sale prices (transaction currency). */
+  grossProceeds: string;
+  /** Gross + buyer handling − shipping − commission (transaction currency). */
+  netProceeds: string;
+  createdAt: Date;
+}
+
+const SALE_LIST_SELECT = {
+  id: true,
+  platformId: true,
+  externalRef: true,
+  soldAt: true,
+  currency: true,
+  fxRateToBase: true,
+  buyerHandling: true,
+  shippingCost: true,
+  commission: true,
+  createdAt: true,
+  platform: { select: { name: true } },
+  buyer: { select: { name: true } },
+  lines: { select: { price: true, _count: { select: { items: true } } } },
+} as const;
+
+function num(v: Prisma.Decimal | null): number {
+  return v == null ? 0 : Number(v);
+}
+
+/** A money value as a fixed 2-dp string (or null), so every UI display and edit prefill is
+ * consistently formatted (Prisma `Decimal` drops trailing zeros in `toString`). */
+function money(v: Prisma.Decimal | null): string | null {
+  return v == null ? null : Number(v).toFixed(2);
+}
+
+function toSaleListItem(row: {
+  id: string;
+  platformId: string;
+  externalRef: string | null;
+  soldAt: Date;
+  currency: string;
+  buyerHandling: Prisma.Decimal | null;
+  shippingCost: Prisma.Decimal | null;
+  commission: Prisma.Decimal | null;
+  createdAt: Date;
+  platform: { name: string };
+  buyer: { name: string } | null;
+  lines: { price: Prisma.Decimal; _count: { items: number } }[];
+}): SaleListItem {
+  const gross = row.lines.reduce((s, l) => s + Number(l.price), 0);
+  const net = gross + num(row.buyerHandling) - num(row.shippingCost) - num(row.commission);
+  return {
+    id: row.id,
+    platformId: row.platformId,
+    platformName: row.platform.name,
+    buyerName: row.buyer?.name ?? null,
+    externalRef: row.externalRef,
+    soldAt: row.soldAt,
+    currency: row.currency,
+    lineCount: row.lines.length,
+    itemCount: row.lines.reduce((s, l) => s + l._count.items, 0),
+    grossProceeds: gross.toFixed(2),
+    netProceeds: net.toFixed(2),
+    createdAt: row.createdAt,
+  };
+}
+
+export interface SaleListFilters {
+  platformId?: string;
+  offset?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSalesResult {
+  items: SaleListItem[];
+  nextCursor: string | null;
+}
+
+/** Paginated sales list for the Sales screen (ADR-0012, #166). Newest sale first; filters by
+ * platform. Offset-paginated to feed the shared infinite scroll. */
+export async function listSalesPaginated(
+  ownerId: string,
+  collectionId: string,
+  filters: SaleListFilters = {}
+): Promise<PaginatedSalesResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+
+  const rows = await prisma.sale.findMany({
+    where: {
+      collectionId,
+      ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    },
+    orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+    take: pageSize + 1,
+    skip: offset,
+    select: SALE_LIST_SELECT,
+  });
+
+  const hasMore = rows.length > pageSize;
+  const page = hasMore ? rows.slice(0, pageSize) : rows;
+  return {
+    items: page.map(toSaleListItem),
+    nextCursor: hasMore ? String(offset + pageSize) : null,
+  };
+}
+
+/** Distinct platforms that currently have at least one sale, for the list-screen filter. */
+export async function listSalePlatforms(
+  ownerId: string,
+  collectionId: string
+): Promise<{ id: string; name: string }[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.sale.findMany({
+    where: { collectionId },
+    select: { platform: { select: { id: true, name: true } } },
+    distinct: ["platformId"],
+    orderBy: { platform: { name: "asc" } },
+  });
+  return rows.map((r) => r.platform);
+}
+
+// ── Detail ──────────────────────────────────────────────────────────────────
+
+export interface SaleDetailLine {
+  id: string;
+  lotId: string;
+  lotLabel: string;
+  lotKind: LotKind;
+  offerId: string | null;
+  price: string;
+  /** How many physical copies left on this line (its copies load lazily on the detail screen). */
+  copyCount: number;
+  itemLabels: string[];
+  /** This line's resolved net proceeds in the transaction currency (allocation engine). */
+  netTx: string;
+  /** …and converted to the base currency at the frozen FX rate. */
+  netBase: string;
+}
+
+export interface SaleDetail {
+  id: string;
+  collectionId: string;
+  platformId: string;
+  platformName: string;
+  buyerId: string | null;
+  buyerName: string | null;
+  externalRef: string | null;
+  baseCurrency: string;
+  soldAt: Date;
+  currency: string;
+  fxRateToBase: string | null;
+  buyerHandling: string | null;
+  shippingCost: string | null;
+  commission: string | null;
+  grossProceeds: string;
+  netProceeds: string;
+  lines: SaleDetailLine[];
+  createdAt: Date;
+}
+
+/** Full sale read model for the detail view (ADR-0012, #166). Runs the pure allocation engine
+ * (`distributeSaleShared`, #163) to resolve each line's net proceeds — this is where the recorded
+ * sale is "fed to" the engine; per-item P/L surfacing is #168. */
+export async function getSaleDetail(ownerId: string, saleId: string): Promise<SaleDetail | null> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      id: true,
+      collectionId: true,
+      platformId: true,
+      buyerId: true,
+      externalRef: true,
+      soldAt: true,
+      currency: true,
+      fxRateToBase: true,
+      buyerHandling: true,
+      shippingCost: true,
+      commission: true,
+      createdAt: true,
+      collection: { select: { ownerId: true, baseCurrency: true } },
+      platform: { select: { name: true } },
+      buyer: { select: { name: true } },
+      lines: {
+        select: {
+          id: true,
+          lotId: true,
+          offerId: true,
+          price: true,
+          lot: {
+            select: {
+              kind: true,
+              title: true,
+              items: { select: { item: { select: STAMP_LABEL_SELECT } } },
+            },
+          },
+          items: { select: { item: { select: STAMP_LABEL_SELECT } } },
+        },
+      },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) return null;
+
+  const shared = {
+    buyerHandling: num(sale.buyerHandling),
+    shippingCost: num(sale.shippingCost),
+    commission: num(sale.commission),
+    fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
+  };
+  const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({ id: l.id, price: Number(l.price) }));
+  // The shared amounts are distributed proportionally to line price, so there must be at least
+  // one positive-priced line to distribute across. A sale still being built (no lines yet, or
+  // only zero-priced lines) can't be allocated — show each line's own price as its net until it
+  // can (the engine would otherwise throw on a positive shared amount over a zero weight base).
+  const canDistribute = lineInputs.reduce((s, l) => s + l.price, 0) > 0;
+  const nets = canDistribute ? distributeSaleShared(shared, lineInputs) : [];
+  const netById = new Map(nets.map((n) => [n.id, n]));
+
+  const lines: SaleDetailLine[] = sale.lines.map((l) => {
+    const kind = (isLotKind(l.lot.kind) ? l.lot.kind : "unit") as LotKind;
+    const lotLabel = deriveLotLabel(
+      kind,
+      l.lot.title,
+      l.lot.items.map((li) => copyLabel(li.item.stamp))
+    );
+    const net = netById.get(l.id);
+    return {
+      id: l.id,
+      lotId: l.lotId,
+      lotLabel,
+      lotKind: kind,
+      offerId: l.offerId,
+      price: Number(l.price).toFixed(2),
+      copyCount: l.items.length,
+      itemLabels: l.items.map((li) => copyLabel(li.item.stamp)),
+      netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
+      netBase: (net?.netBase ?? Number(l.price)).toFixed(2),
+    };
+  });
+
+  const gross = sale.lines.reduce((s, l) => s + Number(l.price), 0);
+  const net = gross + shared.buyerHandling - shared.shippingCost - shared.commission;
+
+  return {
+    id: sale.id,
+    collectionId: sale.collectionId,
+    platformId: sale.platformId,
+    platformName: sale.platform.name,
+    buyerId: sale.buyerId,
+    buyerName: sale.buyer?.name ?? null,
+    externalRef: sale.externalRef,
+    baseCurrency: sale.collection.baseCurrency,
+    soldAt: sale.soldAt,
+    currency: sale.currency,
+    fxRateToBase: sale.fxRateToBase == null ? null : String(sale.fxRateToBase),
+    buyerHandling: money(sale.buyerHandling),
+    shippingCost: money(sale.shippingCost),
+    commission: money(sale.commission),
+    grossProceeds: gross.toFixed(2),
+    netProceeds: net.toFixed(2),
+    lines,
+    createdAt: sale.createdAt,
+  };
+}
+
+// ── Delete ──────────────────────────────────────────────────────────────────
+
+/** Delete a sale (ADR-0012, #166). Cascades its lines + line items, so the copies become
+ * available again (their sold state is derived). Offers the sale marked `sold` revert to
+ * `active` — the package is back on the market; prior `paused` state is not restored (nothing
+ * stores it), which is the safe, re-listable default. */
+export async function deleteSale(ownerId: string, saleId: string): Promise<void> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collection: { select: { ownerId: true } },
+      lines: { select: { offerId: true } },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const offerIds = [...new Set(sale.lines.map((l) => l.offerId).filter((id): id is string => !!id))];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.sale.delete({ where: { id: saleId } });
+    if (offerIds.length > 0) {
+      await tx.offer.updateMany({
+        where: { id: { in: offerIds }, state: "sold" },
+        data: { state: "active" },
+      });
+    }
+  });
+}
+
+// ── Sold-unit copies (packing view) ──────────────────────────────────────────
+
+/** Distinct issue ids across every copy sold on a sale, for the detail screen's issue-group
+ * headers (loaded once, cheaply — mirrors `getPurchaseIssueIds`). */
+export async function getSaleIssueIds(saleId: string): Promise<string[]> {
+  const rows = await prisma.issueMember.findMany({
+    where: {
+      stamp: { items: { some: { saleLineItems: { some: { saleLine: { saleId } } } } } },
+    },
+    select: { issueId: true },
+    distinct: ["issueId"],
+  });
+  return rows.map((r) => r.issueId);
+}
+
+/** The physical copies that left on one sale line, as fully-enriched `ItemListItem`s (same shape
+ * as the Copies screen / lot detail). Loaded lazily per sold unit on the detail screen so a large
+ * sale never enriches every copy up front. A unit is bounded (a komplet / single / sub-lot), so
+ * this returns the whole — small — set for that line. */
+export async function listSaleLineCopies(
+  ownerId: string,
+  lineId: string
+): Promise<ItemListItem[]> {
+  const line = await prisma.saleLine.findUnique({
+    where: { id: lineId },
+    select: {
+      sale: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      items: { select: { itemId: true } },
+    },
+  });
+  if (!line || line.sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale line not found or access denied.");
+  }
+  const ids = line.items.map((i) => i.itemId);
+  if (ids.length === 0) return [];
+  const { items } = await listItemsPaginated(ownerId, line.sale.collectionId, {
+    ids,
+    pageSize: ids.length,
+  });
+  return items;
+}
+
+/** Every physical copy across a whole sale, enriched for the packing view's "group by lot off"
+ * flat / by-issue stream. A sale is one buyer's order, so its copy count is inherently bounded —
+ * loaded in one query (only when the flat view is opened). */
+export async function listSaleCopies(
+  ownerId: string,
+  saleId: string
+): Promise<ItemListItem[]> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collectionId: true,
+      collection: { select: { ownerId: true } },
+      lines: { select: { items: { select: { itemId: true } } } },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const ids = sale.lines.flatMap((l) => l.items.map((i) => i.itemId));
+  if (ids.length === 0) return [];
+  const { items } = await listItemsPaginated(ownerId, sale.collectionId, {
+    ids,
+    pageSize: ids.length,
+  });
+  return items;
+}

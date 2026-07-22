@@ -97,6 +97,7 @@ warning, and the offer lifecycle.
 
 - [Inventory](inventory.md) — the copies you compose lots from.
 - [Offers](offers.md) — listing a lot on marketplaces.
+- [Sales](sales.md) — recording the sale when a lot's offer sells.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used later for
   profit/loss on a sale.
 - [Contacts](contacts.md) — the platforms you will list lots on.

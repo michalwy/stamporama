@@ -202,8 +202,10 @@ Sale                                             -- table "sale"
   id            String   @id @default(cuid())
   collectionId  String   → Collection  (onDelete: Cascade)
   platformId    String   → Contact       (onDelete: Restrict)
+  buyerId       String?  → Contact       (onDelete: Restrict)  -- buyer role; null = unknown (#166)
   soldAt        DateTime @db.Date                 -- FX frozen at this date
   currency      String
+  externalRef   String?                           -- marketplace order/txn number, free-text (#166)
   fxRateToBase  Decimal?                          -- DECIMAL(65,30)
   buyerHandling Decimal? @db.Decimal(10, 2)       -- + proceeds
   shippingCost  Decimal? @db.Decimal(10, 2)       -- − my cost
@@ -225,9 +227,14 @@ SaleLineItem                                     -- table "sale_line_item"
 ```
 
 `Item` gains two back-relations (`lotMemberships: LotItem[]`, `saleLineItems: SaleLineItem[]`);
-`Contact` gains `offers` (platform) and `salesPlatform`; `Collection` gains `lots` / `offers`
-/ `sales`. No columns were added to `Item` — sold state is read through the `sale_line_item`
-join, not a flag, keeping it a single source of truth.
+`Contact` gains `offers` (platform), `salesPlatform`, and `salesBuyer` (the `Sale.buyerId`
+back-relation, #166); `Collection` gains `lots` / `offers` / `sales`. No columns were added to
+`Item` — sold state is read through the `sale_line_item` join, not a flag, keeping it a single
+source of truth.
+
+`Sale.buyerId` (#166) is a nullable FK to the `Contact` carrying the `buyer` role — who the sale
+went to — added alongside the platform it sold on (`onDelete: Restrict`, like the purchase
+supplier). Null when the buyer is unknown/anonymous.
 
 ## Consequences
 

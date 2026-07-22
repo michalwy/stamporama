@@ -558,10 +558,17 @@ model Sale {
   id            String   @id @default(cuid())
   collectionId  String
   platformId    String
+  // Optional buyer — the `Contact` (carrying the `buyer` role) the sale went to. `onDelete:
+  // Restrict`: a referenced buyer cannot be deleted without first detaching it (like the
+  // purchase supplier). Null when the buyer is unknown/anonymous.
+  buyerId       String?
   // The moment of sale; the FX rate is frozen as of this date.
   soldAt        DateTime @db.Date
   // Single transaction currency for every amount on this sale and its lines.
   currency      String
+  // The transaction / order number in the external system (e.g. a Delcampe or Allegro order id),
+  // free-text. Null when not recorded. Handy for reconciling against the marketplace.
+  externalRef   String?
   // Base-currency FX rate frozen at `soldAt` (DECIMAL(65,30), like `ExchangeRate.rate`);
   // null when base == transaction currency or no rate is known yet.
   fxRateToBase  Decimal?
@@ -575,10 +582,12 @@ model Sale {
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  buyer      Contact?   @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
   lines      SaleLine[]
 
   @@index([collectionId])
   @@index([platformId])
+  @@index([buyerId])
   @@map("sale")
 }
 
@@ -653,6 +662,9 @@ model Contact {
   // guard as purchases).
   offers            Offer[]    @relation("OfferPlatform")
   salesPlatform     Sale[]     @relation("SalePlatform")
+  // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
+  // via the `Sale.buyerId` FK (`onDelete: Restrict`).
+  salesBuyer        Sale[]     @relation("SaleBuyer")
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

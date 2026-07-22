@@ -31,7 +31,7 @@ interface PurchaseContactSelectProps {
   placeholder: string;
   /** Narrows suggestions to contacts carrying this role, and (server-side) tags a newly
    * created contact with it: `seller` for suppliers, `platform` for platforms. */
-  role: "platform" | "seller";
+  role: "platform" | "seller" | "buyer";
   disabled?: boolean;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
    * edited to a name that has not been matched to a suggestion) and the current text. Lets a
