@@ -87,9 +87,16 @@ The toolbar filters the list by **kind** (Unit / Quantity) and by **state** (Dra
 Dissolved). Deleting a lot removes the package and any listings, but never touches the copies
 it held — those stay in your [inventory](inventory.md).
 
+## Listing a lot on marketplaces
+
+Once a lot is composed, list it on one or more platforms from its **Offers** section (or the
+**Offers** screen). See [Offers](offers.md) for pricing, the one-active-offer-per-platform
+warning, and the offer lifecycle.
+
 ## Related
 
 - [Inventory](inventory.md) — the copies you compose lots from.
+- [Offers](offers.md) — listing a lot on marketplaces.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used later for
   profit/loss on a sale.
 - [Contacts](contacts.md) — the platforms you will list lots on.

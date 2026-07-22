@@ -33,6 +33,10 @@ interface PurchaseContactSelectProps {
    * created contact with it: `seller` for suppliers, `platform` for platforms. */
   role: "platform" | "seller";
   disabled?: boolean;
+  /** Notified whenever the selection changes: the picked contact id (`""` when the text was
+   * edited to a name that has not been matched to a suggestion) and the current text. Lets a
+   * parent react live to the choice — e.g. the offer dialog's collision check (#165). */
+  onSelectionChange?: (contactId: string, name: string) => void;
 }
 
 /** Create-on-type contact picker for the purchase dialog, shared by the supplier and
@@ -51,6 +55,7 @@ export function PurchaseContactSelect({
   placeholder,
   role,
   disabled,
+  onSelectionChange,
 }: PurchaseContactSelectProps) {
   const [selectedId, setSelectedId] = useState(initialContactId ?? "");
   const [value, setValue] = useState(initialContactName ?? "");
@@ -66,11 +71,13 @@ export function PurchaseContactSelect({
     // Editing the text detaches any picked contact; the server will resolve the new name.
     setSelectedId("");
     setValue(next);
+    onSelectionChange?.("", next);
   }
 
   function pick(contact: { id: string; name: string }) {
     setSelectedId(contact.id);
     setValue(contact.name);
+    onSelectionChange?.(contact.id, contact.name);
   }
 
   return (

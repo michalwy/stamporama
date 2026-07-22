@@ -12,20 +12,38 @@ export interface DialogShellProps {
   maxWidth?: string;
   /** Fixes the panel height so its content scrolls internally instead of resizing the dialog. */
   height?: string;
+  /** Base stacking order (overlay = base, panel = base + 1). Default 100. Raise it for a dialog
+   * stacked on top of another so it paints above the one beneath (e.g. a picker opened from
+   * inside another dialog). */
+  zIndexBase?: number;
+  /** Whether pressing Escape or clicking the backdrop closes this dialog (default true). Set
+   * false on the underlying dialog while a nested one is open, so a single Escape only dismisses
+   * the topmost dialog. */
+  dismissable?: boolean;
   children: ReactNode;
 }
 
-export function DialogShell({ title, onClose, minHeight, maxWidth, height, children }: DialogShellProps) {
+export function DialogShell({
+  title,
+  onClose,
+  minHeight,
+  maxWidth,
+  height,
+  zIndexBase = 100,
+  dismissable = true,
+  children,
+}: DialogShellProps) {
   const headingId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!dismissable) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, dismissable]);
 
   useEffect(() => {
     const el = panelRef.current;
@@ -42,12 +60,12 @@ export function DialogShell({ title, onClose, minHeight, maxWidth, height, child
     <>
       <div
         aria-hidden="true"
-        onClick={onClose}
+        onClick={dismissable ? onClose : undefined}
         style={{
           position: "fixed",
           inset: 0,
           background: "rgb(0 0 0 / 0.4)",
-          zIndex: 100,
+          zIndex: zIndexBase,
         }}
       />
       <div
@@ -60,7 +78,7 @@ export function DialogShell({ title, onClose, minHeight, maxWidth, height, child
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          zIndex: 101,
+          zIndex: zIndexBase + 1,
           width: "100%",
           maxWidth: maxWidth ?? "32rem",
           maxHeight: "calc(100vh - 4rem)",

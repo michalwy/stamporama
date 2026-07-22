@@ -29,6 +29,7 @@ import { LotFormDialog } from "../lot-form-dialog";
 import { useInvalidateLots } from "../use-lots-query";
 import { InventoryPicker } from "./inventory-picker";
 import { SubLotPicker } from "./lot-member-picker";
+import { LotOffersSection } from "./lot-offers-section";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
@@ -555,6 +556,14 @@ export function LotDetailPanel({
             ))}
         </div>
       </div>
+
+      {/* Offers — the same package listed across marketplaces (#165). */}
+      <LotOffersSection
+        collectionId={collectionId}
+        baseCurrency={baseCurrency}
+        lot={{ id: lot.id, label: lot.label }}
+        editable={editable}
+      />
 
       {/* Dialogs */}
       {quickPriceItem && (

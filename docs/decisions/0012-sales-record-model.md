@@ -87,6 +87,16 @@ purchases deriving lot totals rather than storing them).
 the platform, with the copies still committed to the lot. No `reserved`/negotiation states in
 v1. A **derived "to-close" flag** overlays `active` (§5).
 
+**Offer management (#165).** New offers start `active`. The manual transitions are
+`active↔paused` and `→withdrawn` (both `withdrawn` and `sold` are terminal; relisting is a new
+offer). `sold` is reached **only** by recording a sale (#166), never by a hand toggle, so the
+offers UI never exposes a "mark sold". The state machine and validation are pure
+(`offer-rules.ts`, unit-tested); the domain module (`offers.ts`) owns CRUD, the paginated list,
+the eligible-lot picker, and the collision lookup. The "at most one active offer per
+(`Item` × platform)" rule is enforced as a **non-blocking warning** surfaced live in the offer
+dialog (a collision lookup over active offers sharing a copy), not a hard guard — the deeper
+coordination surface (list-level to-close flags) is #167.
+
 ### 4. Currency
 
 One currency per `Sale`, and one per `Offer` (platforms price independently, so an offer
