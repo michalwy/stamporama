@@ -13,7 +13,7 @@ A contact can carry any combination of **roles**, or none at all:
 - **Seller** / **Buyer** — someone you buy from or sell to.
 - **Exchange partner** — someone you swap stamps with.
 - **Auction house** — e.g. Cherrystone, David Feldman.
-- **Platform** — an online marketplace a purchase is routed through.
+- **Platform** — an online marketplace a purchase, offer, or sale is routed through.
 - **Other** — anyone who doesn't fit the above.
 
 Roles are just labels: they show as badges on each row and let you filter the list. A
@@ -24,6 +24,12 @@ and tick the ones that apply.
 
 Click **Add contact** and fill in the **name** (required), optional **email**, **phone**,
 **notes**, and the **roles**. Names must be unique within the collection.
+
+Ticking **Platform** reveals a **Platform currency** field. This is the one currency every
+[offer](offers.md) and [sale](sales.md) on that platform uses — it is inherited and locked there,
+so an offer and its sale can never disagree. You can set it here, or leave it unset and pick it
+inline the first time you list or sell on the platform. Changing it later leaves existing offers
+and sales untouched — each keeps the currency it was created with.
 
 Every contact row has a **⋮** menu with **Edit** and **Delete**. Editing replaces all the
 details and roles with whatever the dialog shows when you save.

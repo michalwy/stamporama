@@ -4,15 +4,7 @@ import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
-import { lsGet, lsSet } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
-
-/** localStorage key for the last currency chosen for a platform (per collection), so picking a
- * platform can restore the currency you usually sell in there. Keyed by platform name (stable
- * whether the platform is an existing contact or a newly typed one). */
-function currencyMemoKey(collectionId: string, platformName: string): string {
-  return `sale-currency:${collectionId}:${platformName.trim().toLowerCase()}`;
-}
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -75,7 +67,17 @@ export function SaleFormDialog({
   const [buyerName, setBuyerName] = useState(initial?.buyerName ?? "");
   const [externalRef, setExternalRef] = useState(initial?.externalRef ?? "");
   const [soldAt, setSoldAt] = useState(initial?.soldAt ?? today);
-  const [currency, setCurrency] = useState(initial?.currency ?? baseCurrency);
+  // Currency is inherited from the platform and locked (#196). Editing keeps the sale's snapshot;
+  // recording a new sale derives it from the platform — a known currency locks the field, an unset
+  // one (or a brand-new platform) shows an inline picker whose value becomes the platform's currency.
+  const [platformCurrency, setPlatformCurrency] = useState<string | null | undefined>(undefined);
+  const [currency, setCurrency] = useState(baseCurrency);
+  const lockedCurrency =
+    mode === "edit"
+      ? (initial?.currency ?? null)
+      : typeof platformCurrency === "string" && platformCurrency
+        ? platformCurrency
+        : null;
   const [buyerHandling, setBuyerHandling] = useState(initial?.buyerHandling ?? "");
   const [commission, setCommission] = useState(initial?.commission ?? "");
 
@@ -90,10 +92,6 @@ export function SaleFormDialog({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // Remember the currency chosen for this platform, to default it next time.
-    if (platformName.trim()) {
-      lsSet(currencyMemoKey(collectionId, platformName), currency);
-    }
     onSubmit({
       platformId: platformId || null,
       platformName: platformName || null,
@@ -101,7 +99,9 @@ export function SaleFormDialog({
       buyerName: buyerName || null,
       externalRef,
       soldAt,
-      currency,
+      // Locked to the platform's currency; the setter's value only applies as the first-sale
+      // fallback that sets an unset platform's currency (#196).
+      currency: lockedCurrency ?? currency,
       buyerHandling,
       commission,
     });
@@ -128,14 +128,13 @@ export function SaleFormDialog({
                 inputId="sale-platform"
                 placeholder="e.g. Delcampe, Allegro…"
                 disabled={isPending || platformLocked}
-                onSelectionChange={(id, name) => {
+                onSelectionChange={(id, name, pc) => {
                   setPlatformId(id);
                   setPlatformName(name);
-                  // When an existing platform is picked, restore the currency last used for it.
-                  if (id) {
-                    const remembered = lsGet(currencyMemoKey(collectionId, name));
-                    if (remembered) setCurrency(remembered);
-                  }
+                  // A picked platform carries its fixed currency (null when unset); a typed name is
+                  // an unknown/new platform, so its currency is prompted below (#196). Editing keeps
+                  // the sale's snapshot, so the platform's currency is not tracked then.
+                  if (mode !== "edit") setPlatformCurrency(id ? pc : undefined);
                 }}
               />
               {platformLocked && (
@@ -181,19 +180,31 @@ export function SaleFormDialog({
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-currency">Currency</LabelWithError>
-              <select
-                id="sale-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              {lockedCurrency ? (
+                // Inherited from the platform and locked (#196).
+                <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
+                  {lockedCurrency} · from platform
+                </div>
+              ) : (
+                <>
+                  <select
+                    id="sale-currency"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {COMMON_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    Sets this platform&apos;s currency — all its offers and sales will use it.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 

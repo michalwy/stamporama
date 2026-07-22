@@ -58,7 +58,7 @@ export function useOfferDetail(collectionId: string, offerId: string) {
 
 /** Platforms that currently have at least one offer, for the list filter dropdown. */
 export function useOfferPlatforms(collectionId: string) {
-  return useQuery<{ id: string; name: string }[]>({
+  return useQuery<{ id: string; name: string; platformCurrency: string | null }[]>({
     queryKey: ["offers", collectionId, "platforms"] as const,
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/offers/platforms`);

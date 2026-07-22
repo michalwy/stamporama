@@ -2,7 +2,8 @@
 
 A **sale** records that one or more of your [offers](offers.md) sold. A sale happens on a single
 platform, in a single currency, on one date — the date the exchange rate is frozen at, so
-profit/loss is measured against a fixed rate.
+profit/loss is measured against a fixed rate. The **currency comes from the platform**, the same
+one its offers use, so an offer and its sale always agree.
 
 Open the **Sales** screen from the **Trading** section of the sidebar.
 
@@ -22,7 +23,9 @@ Click **Record sale** and fill in:
 - **Order number** — the transaction/order number from the marketplace (optional), so you can
   reconcile the sale against the external system later. Shown on the sale row and header.
 - **Sale date** — defaults to today; the FX rate to your base currency is frozen at this date.
-- **Currency** — the transaction currency for every amount on the sale.
+- **Currency** — fixed by the platform and shown locked; every amount on the sale is in it. The
+  first time you sell (or list) on a platform that has no currency yet, you pick one inline and it
+  is saved to the platform.
 - **Buyer handling** and **Commission** — the two amounts you already know at sale time: the
   postage/handling the buyer paid you (**adds** to proceeds) and the platform's fee
   (**subtracts**). Your own shipping cost is added later on the detail screen.
@@ -41,8 +44,8 @@ set, or catalog number. Each set is a whole sellable piece:
   its copies together.
 
 Tick every set that sold and set each one's **sale price** in the sale currency (the offer's
-asking price pre-fills when the currencies match). **Add** records them all at once. You can come
-back and add more sets later, or **Remove** one from its row menu.
+asking price pre-fills, since the offer and the sale share the platform's currency). **Add** records
+them all at once. You can come back and add more sets later, or **Remove** one from its row menu.
 
 ### Step 3 — amounts
 
@@ -52,9 +55,10 @@ shipping** (−), and **commission** (−) — is **editable in place**: rows wi
 clicked to edit. Click the value (or **Set** when empty), type the amount, and press Enter
 (Escape reverts). Handling and commission can also be set upfront in the header dialog.
 
-You can revise the header (platform, buyer, date, currency, buyer handling, commission) any time
-with **Edit header** — though the platform is locked once units are recorded, since a sale stays
-on one platform.
+You can revise the header (platform, buyer, date, buyer handling, commission) any time with
+**Edit header** — though the platform is locked once units are recorded, since a sale stays on one
+platform. The currency stays fixed as a permanent record: editing a sale never rewrites it, and
+changing the platform's currency later leaves existing sales untouched.
 
 ## What a sale changes
 

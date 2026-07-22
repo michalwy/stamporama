@@ -21,9 +21,11 @@ sets". A plain single-stamp offer is just the one-set case.
 
 ## Creating and composing an offer
 
-1. Click **New offer** and choose the **platform** and **currency**. That's all — you usually
-   don't know the asking price yet (it follows from the copies you add) and there's no listing URL
-   until the auction is up. Creating the offer opens its detail screen.
+1. Click **New offer** and choose the **platform**. The **currency** comes from the platform — it
+   is shown locked and applies to every offer and sale there. The first time you list or sell on a
+   platform that has no currency yet, you pick one inline and it is saved to the platform. That's
+   all you need — you usually don't know the asking price yet (it follows from the copies you add)
+   and there's no listing URL until the auction is up. Creating the offer opens its detail screen.
 2. On the detail screen, use **Add set** to pick copies from your inventory. When you pick more
    than one copy you choose how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
@@ -31,8 +33,8 @@ sets". A plain single-stamp offer is just the one-set case.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
 4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
    offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
-   **currency** is an inline dropdown, and the offer's **state** actions live in the header's **⋮**
-   menu.
+   **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
+   in the header's **⋮** menu.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
@@ -84,6 +86,9 @@ from what has sold, so it clears the moment the offer no longer holds a sold cop
 - **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
 - **Sold** — set automatically when a [sale](sales.md) sells every set through the offer. You do
   not mark an offer sold by hand.
+
+Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
+currency it was created with as a permanent record; only new offers and sales use the new currency.
 
 From the row's **⋮** menu you can **edit** the price / platform / URL, **pause** / **resume**,
 **withdraw**, open the live listing, or **delete** the offer. Deleting removes the offer and its

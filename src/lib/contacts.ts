@@ -80,6 +80,9 @@ export interface ContactData extends ContactRoles {
   notes: string | null;
   email: string | null;
   phone: string | null;
+  /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
+   * contacts carrying the `platform` role. */
+  platformCurrency: string | null;
   createdAt: Date;
 }
 
@@ -96,6 +99,7 @@ const CONTACT_SELECT = {
   auctionHouse: true,
   platform: true,
   other: true,
+  platformCurrency: true,
   createdAt: true,
 } as const;
 
@@ -110,6 +114,8 @@ export interface ContactCreateInput {
   auctionHouse?: boolean;
   platform?: boolean;
   other?: boolean;
+  /** The platform's fixed currency (#196), or null. Set/edited on the platform's contact form. */
+  platformCurrency?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -241,6 +247,7 @@ export async function createContact(
         auctionHouse: data.auctionHouse ?? false,
         platform: data.platform ?? false,
         other: data.other ?? false,
+        platformCurrency: data.platformCurrency ?? null,
       },
       select: CONTACT_SELECT,
     });
@@ -278,6 +285,7 @@ export async function updateContact(
         auctionHouse: data.auctionHouse ?? false,
         platform: data.platform ?? false,
         other: data.other ?? false,
+        platformCurrency: data.platformCurrency ?? null,
       },
       select: CONTACT_SELECT,
     });

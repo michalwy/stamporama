@@ -73,8 +73,10 @@ async function resolveHeader(
 > {
   const soldAt = parseSaleDate(raw.soldAt);
   if (!soldAt) return { ok: false, message: "Enter a valid sale date." };
+  // Currency is inherited from the platform (#196). The form only sends one as a first-sale
+  // fallback (to set the platform's currency when unset); blank is fine when the platform already
+  // has a currency. The domain resolves and locks it.
   const currency = raw.currency.trim();
-  if (!currency) return { ok: false, message: "Choose the sale currency." };
 
   const buyerHandling = parseAmount(raw.buyerHandling, "Buyer handling");
   if (!buyerHandling.ok) return { ok: false, message: buyerHandling.message };

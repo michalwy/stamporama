@@ -34,9 +34,15 @@ interface PurchaseContactSelectProps {
   role: "platform" | "seller" | "buyer";
   disabled?: boolean;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
-   * edited to a name that has not been matched to a suggestion) and the current text. Lets a
-   * parent react live to the choice — e.g. the offer dialog's collision check (#165). */
-  onSelectionChange?: (contactId: string, name: string) => void;
+   * edited to a name that has not been matched to a suggestion), the current text, and — when a
+   * suggestion was picked — that contact's fixed platform currency (#196; `null` when unset,
+   * `undefined` when no suggestion is matched). Lets a parent react live to the choice — e.g. the
+   * offer dialog's collision check (#165) and the derived-currency lock (#196). */
+  onSelectionChange?: (
+    contactId: string,
+    name: string,
+    platformCurrency?: string | null
+  ) => void;
 }
 
 /** Create-on-type contact picker for the purchase dialog, shared by the supplier and
@@ -68,16 +74,17 @@ export function PurchaseContactSelect({
   );
 
   function handleValueChange(next: string) {
-    // Editing the text detaches any picked contact; the server will resolve the new name.
+    // Editing the text detaches any picked contact; the server will resolve the new name. The
+    // platform currency is unknown until a suggestion is matched, so it is left undefined (#196).
     setSelectedId("");
     setValue(next);
-    onSelectionChange?.("", next);
+    onSelectionChange?.("", next, undefined);
   }
 
-  function pick(contact: { id: string; name: string }) {
+  function pick(contact: { id: string; name: string; platformCurrency: string | null }) {
     setSelectedId(contact.id);
     setValue(contact.name);
-    onSelectionChange?.(contact.id, contact.name);
+    onSelectionChange?.(contact.id, contact.name, contact.platformCurrency);
   }
 
   return (
@@ -94,7 +101,7 @@ export function PurchaseContactSelect({
         renderItem={(c) => (
           <span style={{ fontWeight: c.id === selectedId ? 600 : 400 }}>{c.name}</span>
         )}
-        onSelect={(c) => pick({ id: c.id, name: c.name })}
+        onSelect={(c) => pick({ id: c.id, name: c.name, platformCurrency: c.platformCurrency })}
         placeholder={placeholder}
         inputStyle={INPUT_STYLE}
         inputId={inputId}

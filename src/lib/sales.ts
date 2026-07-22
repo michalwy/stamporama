@@ -27,6 +27,7 @@ import { listItemsPaginated, type ItemListItem } from "./items";
 
 export type SaleBlockReason =
   | "no-platform"
+  | "no-currency"
   | "empty"
   | "bad-offer"
   | "bad-set"
@@ -60,14 +61,44 @@ async function assertCollectionOwner(
   return { baseCurrency: col.baseCurrency };
 }
 
-async function assertPlatform(collectionId: string, platformId: string): Promise<void> {
+async function assertPlatform(
+  collectionId: string,
+  platformId: string
+): Promise<{ platformCurrency: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
-    select: { id: true },
+    select: { platformCurrency: true },
   });
   if (!contact) {
     throw new SaleActionBlockedError("no-platform", "Choose a platform this sale happened on.");
   }
+  return { platformCurrency: contact.platformCurrency };
+}
+
+/**
+ * The platform's fixed currency (#196): every sale routed to a platform inherits and locks it.
+ * When the platform already has a currency it wins. When it has none, this is the first offer/sale
+ * on the platform — `fallback` (chosen inline on the sale form) is written to the platform and
+ * returned. Throws `no-currency` when unset and no fallback is given.
+ */
+async function resolvePlatformCurrency(
+  platformId: string,
+  existing: string | null,
+  fallback: string | null
+): Promise<string> {
+  if (existing) return existing;
+  const first = fallback?.trim();
+  if (!first) {
+    throw new SaleActionBlockedError(
+      "no-currency",
+      "Set this platform's currency before recording a sale on it."
+    );
+  }
+  await prisma.contact.update({
+    where: { id: platformId },
+    data: { platformCurrency: first },
+  });
+  return first;
 }
 
 /** Verify an optional buyer contact exists in the collection and carries the `buyer` role. A
@@ -332,13 +363,13 @@ export async function createSale(
   input: SaleHeaderInput
 ): Promise<string> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
-  await assertPlatform(collectionId, input.platformId);
+  const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
   await assertBuyer(collectionId, input.buyerId);
-  if (!input.currency) {
-    throw new SaleActionBlockedError("empty", "Choose the sale currency.");
-  }
+  // Currency is inherited from the platform (#196): locked to the platform's, or set from the
+  // form's fallback on the first offer/sale. Snapshotted onto the sale for history + FX freeze.
+  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
-  const fxRateToBase = await freezeFxRate(collectionId, input.currency, baseCurrency);
+  const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
   const sale = await prisma.sale.create({
     data: {
       collectionId,
@@ -346,7 +377,7 @@ export async function createSale(
       buyerId: input.buyerId,
       externalRef: input.externalRef,
       soldAt: input.soldAt,
-      currency: input.currency,
+      currency,
       fxRateToBase,
       buyerHandling: input.buyerHandling,
       commission: input.commission,
@@ -356,9 +387,11 @@ export async function createSale(
   return sale.id;
 }
 
-/** Edit a sale header (platform / buyer / date / currency / handling / commission). Re-freezes
- * the FX rate. The platform cannot change once the sale has sold sets — a sale is single-platform
- * and its lines reference offers on that platform. My shipping cost is not touched here. */
+/** Edit a sale header (platform / buyer / date / handling / commission). The currency is a fixed
+ * snapshot (#196): inherited from the platform at creation and never rewritten by an edit, so the
+ * FX rate is re-frozen against the sale's own currency. The platform cannot change once the sale
+ * has sold sets — a sale is single-platform and its lines reference offers on that platform. My
+ * shipping cost is not touched here. */
 export async function updateSaleHeader(
   ownerId: string,
   saleId: string,
@@ -367,9 +400,6 @@ export async function updateSaleHeader(
   const ref = await assertSaleOwner(ownerId, saleId);
   await assertPlatform(ref.collectionId, input.platformId);
   await assertBuyer(ref.collectionId, input.buyerId);
-  if (!input.currency) {
-    throw new SaleActionBlockedError("empty", "Choose the sale currency.");
-  }
   if (input.platformId !== ref.platformId) {
     const lineCount = await prisma.saleLine.count({ where: { saleId } });
     if (lineCount > 0) {
@@ -379,7 +409,7 @@ export async function updateSaleHeader(
       );
     }
   }
-  const fxRateToBase = await freezeFxRate(ref.collectionId, input.currency, ref.baseCurrency);
+  const fxRateToBase = await freezeFxRate(ref.collectionId, ref.currency, ref.baseCurrency);
   await prisma.sale.update({
     where: { id: saleId },
     data: {
@@ -387,7 +417,6 @@ export async function updateSaleHeader(
       buyerId: input.buyerId,
       externalRef: input.externalRef,
       soldAt: input.soldAt,
-      currency: input.currency,
       fxRateToBase,
       buyerHandling: input.buyerHandling,
       commission: input.commission,

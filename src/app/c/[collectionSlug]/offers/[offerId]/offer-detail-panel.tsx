@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
-import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip } from "../offer-badges";
 import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offers-query";
@@ -93,7 +92,7 @@ export function OfferDetailPanel({
   const editable = !isTerminalState(offer.state);
 
   /** Patch a single header field in place, then refresh. */
-  function patch(field: "price" | "url" | "currency", value: string) {
+  function patch(field: "price" | "url", value: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
@@ -156,22 +155,10 @@ export function OfferDetailPanel({
         </div>
 
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-          {/* Currency — inline select, saves on change. */}
-          {editable ? (
-            <select
-              aria-label="Currency"
-              value={offer.currency}
-              disabled={isPending}
-              onChange={(e) => patch("currency", e.target.value)}
-              style={{ ...CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
-            >
-              {COMMON_CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          ) : (
-            <span style={CHIP}>{offer.currency}</span>
-          )}
+          {/* Currency — inherited from the platform and locked (#196), shown as a read-only chip. */}
+          <span style={CHIP} title="Inherited from the platform — set it on the platform's contact">
+            {offer.currency}
+          </span>
 
           {/* Listing URL — inline editable. */}
           <InlineText

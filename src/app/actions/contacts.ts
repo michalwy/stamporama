@@ -51,6 +51,11 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     auctionHouse: bool(formData, "auctionHouse"),
     platform: bool(formData, "platform"),
     other: bool(formData, "other"),
+    // The platform's fixed currency (#196). Only meaningful with the `platform` role, so it is
+    // dropped when the role is not set; blank normalises to null (unset).
+    platformCurrency: bool(formData, "platform")
+      ? str(formData, "platformCurrency") || null
+      : null,
   };
 }
 

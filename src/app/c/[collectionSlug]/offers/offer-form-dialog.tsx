@@ -29,8 +29,10 @@ export interface OfferFormDialogProps {
   baseCurrency: string;
   /** The offer being edited (edit mode). Omit for create. */
   offer?: Pick<OfferDetail, "platformId" | "platformName" | "url" | "price" | "currency">;
-  /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. */
-  initialPlatform?: { id: string; name: string };
+  /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
+   * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
+   * show a misleading editable picker. */
+  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -52,6 +54,17 @@ export function OfferFormDialog({
 }: OfferFormDialogProps) {
   const isEdit = !!offer;
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
+  // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
+  // creating derives it from the platform — a known currency locks the field, an unset one (or a
+  // brand-new platform) shows an inline picker whose value becomes the platform's currency.
+  const [platformCurrency, setPlatformCurrency] = useState<string | null | undefined>(
+    isEdit ? undefined : (initialPlatform?.platformCurrency ?? undefined)
+  );
+  const lockedCurrency = isEdit
+    ? offer!.currency
+    : typeof platformCurrency === "string" && platformCurrency
+      ? platformCurrency
+      : null;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -83,7 +96,12 @@ export function OfferFormDialog({
               inputId="offer-platform"
               placeholder="e.g. Delcampe, Allegro, Colnect…"
               disabled={isPending}
-              onSelectionChange={(id) => setPlatformId(id)}
+              onSelectionChange={(id, _name, pc) => {
+                setPlatformId(id);
+                // A picked platform carries its currency (null when unset); a typed name is an
+                // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
+                if (!isEdit) setPlatformCurrency(id ? pc : undefined);
+              }}
             />
           </div>
 
@@ -108,19 +126,35 @@ export function OfferFormDialog({
             )}
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-currency">Currency</LabelWithError>
-              <select
-                id="offer-currency"
-                name="currency"
-                defaultValue={offer?.currency ?? baseCurrency}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              {lockedCurrency ? (
+                // Inherited from the platform and locked (#196). Submitted as a hidden field so the
+                // server has it as a first-offer fallback; ignored once the platform has a currency.
+                <>
+                  <input type="hidden" name="currency" value={lockedCurrency} />
+                  <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
+                    {lockedCurrency} · from platform
+                  </div>
+                </>
+              ) : (
+                <>
+                  <select
+                    id="offer-currency"
+                    name="currency"
+                    defaultValue={baseCurrency}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {COMMON_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    Sets this platform&apos;s currency — all its offers and sales will use it.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 

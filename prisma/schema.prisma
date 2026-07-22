@@ -615,6 +615,12 @@ model Contact {
   auctionHouse     Boolean  @default(false)
   platform         Boolean  @default(false)
   other            Boolean  @default(false)
+  // Fixed transaction currency for a platform (#196). Every offer and sale routed to this
+  // platform inherits and locks this currency, guaranteeing offer↔sale consistency. Nullable —
+  // only platforms carry it, and it is required (domain-enforced, not a DB constraint) before the
+  // first offer/sale on the platform. A per-offer/-sale `currency` snapshot preserves history, so
+  // changing this later leaves existing offers/sales untouched.
+  platformCurrency String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

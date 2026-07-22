@@ -65,8 +65,10 @@ async function readOfferInput(
     price = priced.value;
   }
 
+  // Currency is inherited from the platform (#196). The form only sends one as a first-offer
+  // fallback (to set the platform's currency when it has none yet); a blank value is fine when the
+  // platform already has a currency. The domain resolves and locks it.
   const currency = str(formData, "currency");
-  if (!currency) return { ok: false, message: "Choose a currency." };
 
   const platformId = await resolvePurchaseContact(collectionId, {
     id: str(formData, "platformId") || null,
@@ -146,10 +148,11 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
 }
 
 /** In-place edit of a single offer header field from the detail screen. `price` accepts blank
- * (clears to 0); `url` blank clears the listing link. */
+ * (clears to 0); `url` blank clears the listing link. Currency is not editable here (#196) — it is
+ * inherited and locked from the platform. */
 export async function patchOfferAction(
   offerId: string,
-  field: "price" | "url" | "currency",
+  field: "price" | "url",
   rawValue: string
 ): Promise<OfferActionState> {
   const session = await getSession();
@@ -163,12 +166,8 @@ export async function patchOfferAction(
         price = priced.value;
       }
       await patchOffer(session.user.id, offerId, { price });
-    } else if (field === "url") {
-      await patchOffer(session.user.id, offerId, { url: normalizeUrl(rawValue) });
     } else {
-      const currency = rawValue.trim();
-      if (!currency) return { status: "error", message: "Choose a currency." };
-      await patchOffer(session.user.id, offerId, { currency });
+      await patchOffer(session.user.id, offerId, { url: normalizeUrl(rawValue) });
     }
     return { status: "success" };
   } catch (e) {

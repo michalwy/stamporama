@@ -30,6 +30,7 @@ export type OfferBlockReason =
   | "terminal"
   | "bad-transition"
   | "no-platform"
+  | "no-currency"
   | "empty"
   | "sold-set";
 
@@ -106,15 +107,46 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
   };
 }
 
-/** Verify a contact exists in the collection and carries the `platform` role. */
-async function assertPlatform(collectionId: string, platformId: string): Promise<void> {
+/** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
+ * currency (#196), which may be null when not set yet. */
+async function assertPlatform(
+  collectionId: string,
+  platformId: string
+): Promise<{ platformCurrency: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
-    select: { id: true },
+    select: { platformCurrency: true },
   });
   if (!contact) {
     throw new OfferActionBlockedError("no-platform", "Choose a platform to list on.");
   }
+  return { platformCurrency: contact.platformCurrency };
+}
+
+/**
+ * The platform's fixed currency (#196), inherited and locked by every offer/sale routed to it.
+ * When the platform already has a currency it wins (the offer is locked to it). When it has none,
+ * this is the first offer/sale on the platform: `fallback` (chosen inline on the offer/sale form)
+ * is written to the platform and returned. Throws `no-currency` when unset and no fallback given.
+ */
+async function resolvePlatformCurrency(
+  platformId: string,
+  existing: string | null,
+  fallback: string | null
+): Promise<string> {
+  if (existing) return existing;
+  const first = fallback?.trim();
+  if (!first) {
+    throw new OfferActionBlockedError(
+      "no-currency",
+      "Set this platform's currency before listing an offer on it."
+    );
+  }
+  await prisma.contact.update({
+    where: { id: platformId },
+    data: { platformCurrency: first },
+  });
+  return first;
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────
@@ -383,15 +415,16 @@ export async function listOffersPaginated(
   };
 }
 
-/** Distinct platforms that currently have at least one offer, for the list-screen filter. */
+/** Distinct platforms that currently have at least one offer, for the list-screen filter and the
+ * new-offer dialog's derived-currency lock (#196), so it carries each platform's fixed currency. */
 export async function listOfferPlatforms(
   ownerId: string,
   collectionId: string
-): Promise<{ id: string; name: string }[]> {
+): Promise<{ id: string; name: string; platformCurrency: string | null }[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.offer.findMany({
     where: { collectionId },
-    select: { platform: { select: { id: true, name: true } } },
+    select: { platform: { select: { id: true, name: true, platformCurrency: true } } },
     distinct: ["platformId"],
     orderBy: { platform: { name: "asc" } },
   });
@@ -603,25 +636,29 @@ export interface OfferInput {
   platformId: string;
   url: string | null;
   price: string;
+  /** First-offer fallback currency (#196): used only to set the platform's currency when it has
+   * none yet. Ignored once the platform has a currency — the offer is locked to the platform's. */
   currency: string;
 }
 
-/** Create an `active` offer on a platform (ADR-0013). Its sets are composed afterwards on the
- * offer detail screen. */
+/** Create an `active` offer on a platform (ADR-0013). Its currency is inherited from the platform
+ * (#196) — locked to the platform's currency, or, on the first offer/sale, set from `input.currency`
+ * and stored as this offer's snapshot. Its sets are composed afterwards on the offer detail screen. */
 export async function createOffer(
   ownerId: string,
   collectionId: string,
   input: OfferInput
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
-  await assertPlatform(collectionId, input.platformId);
+  const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
+  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
   const offer = await prisma.offer.create({
     data: {
       collectionId,
       platformId: input.platformId,
       url: input.url,
       price: input.price,
-      currency: input.currency,
+      currency,
       state: "active",
     },
     select: { id: true },
@@ -629,8 +666,9 @@ export async function createOffer(
   return offer.id;
 }
 
-/** Edit an offer's platform / URL / price / currency. Terminal offers (sold / withdrawn) are
- * frozen. */
+/** Edit an offer's platform / URL / price. Terminal offers (sold / withdrawn) are frozen. Currency
+ * is not edited here (#196): it is a per-offer snapshot inherited from the platform at creation, so
+ * editing an offer never rewrites it. */
 export async function updateOffer(
   ownerId: string,
   offerId: string,
@@ -647,7 +685,6 @@ export async function updateOffer(
       platformId: input.platformId,
       url: input.url,
       price: input.price,
-      currency: input.currency,
     },
   });
 }
@@ -656,11 +693,11 @@ export interface OfferPatch {
   platformId?: string;
   url?: string | null;
   price?: string;
-  currency?: string;
 }
 
-/** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits price /
- * currency / URL individually. Terminal offers are frozen; a changed platform is re-validated. */
+/** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits price / URL
+ * individually. Currency is not patchable (#196): it is inherited and locked from the platform.
+ * Terminal offers are frozen; a changed platform is re-validated. */
 export async function patchOffer(ownerId: string, offerId: string, patch: OfferPatch): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (isTerminalState(ref.state)) {
@@ -675,7 +712,6 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.platformId !== undefined ? { platformId: patch.platformId } : {}),
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
-      ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
     },
   });
 }
