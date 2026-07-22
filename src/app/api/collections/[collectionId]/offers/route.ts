@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { listOffersPaginated } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 
-// Paginated offers list for the Offers screen (ADR-0012, #165). Filters by platform + state; a
-// `lotId` narrows to one lot's offers (the lot detail panel).
+// Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or the
+// derived "needs action" overlay (active offers holding a set sold elsewhere).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -23,14 +23,14 @@ export async function GET(
   const platformId = sp.get("platformId") || undefined;
   const stateParam = sp.get("state");
   const state = stateParam && isOfferState(stateParam) ? stateParam : undefined;
-  const lotId = sp.get("lotId") || undefined;
+  const needsAction = sp.get("needsAction") === "1";
 
   try {
     const result = await listOffersPaginated(session.user.id, collectionId, {
       offset,
       platformId,
       state,
-      lotId,
+      needsAction,
       pageSize: 50,
     });
     return NextResponse.json(result);

@@ -178,10 +178,10 @@ export async function updateSaleAmountAction(
   }
 }
 
-/** A sold unit added on the detail screen: an offer, its unit lot / sub-lot, price, and copies. */
+/** A sold set added on the detail screen: an offer, its set, price, and copies. */
 export interface SaleLineRaw {
   offerId: string;
-  lotId: string;
+  offerSetId: string;
   price: string;
   itemIds: string[];
 }
@@ -192,18 +192,18 @@ export async function addSaleLinesAction(
 ): Promise<SaleActionState> {
   const session = await getSession();
   if (raw.length === 0) {
-    return { status: "error", message: "Choose at least one unit to add." };
+    return { status: "error", message: "Choose at least one set to add." };
   }
-  const lines: { offerId: string; lotId: string; price: string; itemIds: string[] }[] = [];
+  const lines: { offerId: string; offerSetId: string; price: string; itemIds: string[] }[] = [];
   for (const line of raw) {
     const priced = parsePrice(line.price);
     if (!priced.ok) return { status: "error", message: priced.message };
-    if (!line.offerId || !line.lotId || line.itemIds.length === 0) {
-      return { status: "error", message: "Each sold unit needs an offer and its copies." };
+    if (!line.offerId || !line.offerSetId || line.itemIds.length === 0) {
+      return { status: "error", message: "Each sold set needs an offer and its copies." };
     }
     lines.push({
       offerId: line.offerId,
-      lotId: line.lotId,
+      offerSetId: line.offerSetId,
       price: priced.value,
       itemIds: line.itemIds,
     });
@@ -212,7 +212,7 @@ export async function addSaleLinesAction(
     await addSaleLines(session.user.id, saleId, lines);
     return { status: "success" };
   } catch (e) {
-    return fail(e, "Failed to add the sold units.");
+    return fail(e, "Failed to add the sold sets.");
   }
 }
 

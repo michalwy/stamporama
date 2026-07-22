@@ -29,21 +29,20 @@ Click **Record sale** and fill in:
 
 **Continue** creates the sale and opens its detail screen.
 
-### Step 2 — add the sold units
+### Step 2 — add the sold sets
 
-On the detail screen, **Add sold units** opens a browse-and-pick dialog listing every unit still
-sellable on the sale's platform. Filter by **kind** (unit / quantity) in the left panel, or
-**search** by lot title, sub-lot, or catalog number. Each unit is a whole sellable piece:
+On the detail screen, **Add sold sets** opens a browse-and-pick dialog listing every
+[set](offers.md) still sellable on the sale's platform, grouped by offer. **Search** by offer,
+set, or catalog number. Each set is a whole sellable piece:
 
-- A **unit lot** (a single stamp or an indivisible *komplet*) is one row — ticking it sells the
-  whole thing.
-- A **quantity lot** is a single **collapsible row**; expand it to reveal its member **sub-lots**
-  and tick the specific ones the buyer took. A sub-lot is a whole unit — a series never breaks
-  apart, so selecting it retires all of its copies together.
+- A single-set offer is **one row** — ticking it sells the whole thing.
+- A multi-set (quantity) offer is a **collapsible row**; expand it to tick the specific sets the
+  buyer took. A set is indivisible — a series never breaks apart, so selecting it retires all of
+  its copies together.
 
-Tick every unit that sold and set each one's **sale price** in the sale currency (the offer's
+Tick every set that sold and set each one's **sale price** in the sale currency (the offer's
 asking price pre-fills when the currencies match). **Add** records them all at once. You can come
-back and add more units later, or **Remove** one from its row menu.
+back and add more sets later, or **Remove** one from its row menu.
 
 ### Step 3 — amounts
 
@@ -61,8 +60,11 @@ on one platform.
 
 - The exact **copies** that left are recorded on the sale and become **unavailable** — they drop
   out of your for-sale inventory and can never be sold twice.
-- Each **offer** the sale went through flips to **Sold**.
-- The **lot's** sold / partially-sold status follows automatically from the sub-lots that left.
+- Each **offer** flips to **Sold** once *every* one of its sets has sold through it; a partial sale
+  keeps it **Active** for its remaining sets.
+- Any **other active offer** — on another platform — holding a set with a copy you just sold is
+  flagged **Needs action**, so you can take those stale listings down. See
+  [keeping platforms in sync](offers.md) on the Offers page.
 
 The shared amounts are split across the sold units in proportion to their sale prices, and each
 unit's net is converted to your base currency at the frozen rate — this feeds per-item
@@ -70,12 +72,12 @@ profit/loss (surfaced with the profit/loss views).
 
 ## Packing view
 
-The detail screen doubles as a **packing list**. Each sold unit is a collapsible card (expanded
-by default) whose header shows the unit, its copy count, price, and net. Expanding it shows the
+The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
+by default) whose header shows the set, its copy count, price, and net. Expanding it shows the
 exact physical copies that left — as full inventory rows with catalog number, condition, and
 **location**, so you can pull each piece to pack it. It works like a purchase order:
 
-- The primary grouping is **Lot** (each sold unit its own card, the default), **Location** (a
+- The primary grouping is **Set** (each sold set its own card, the default), **Location** (a
   section per storage spot — a packing walk-order, so you clear one spot at a time), or neither
   (a flat stream). Lot and Location are mutually exclusive.
 - **Issue** sub-groups the copies within whichever primary you chose.
@@ -84,7 +86,7 @@ exact physical copies that left — as full inventory rows with catalog number, 
 - Copies load lazily, so even a large sale opens quickly. Use **Collapse all** / **Expand all**
   to switch between an overview and full contents.
 
-Remove a sold unit from its card's **⋮** menu (its copies become available again).
+Remove a sold set from its card's **⋮** menu (its copies become available again).
 
 ## Deleting
 
@@ -94,6 +96,5 @@ available again, and returns any offers it marked sold to **Active**. Filter the
 
 ## Related
 
-- [Offers](offers.md) — the listings a sale is recorded against.
-- [Lots](lots.md) — the packages, whose sold status derives from sales.
+- [Offers](offers.md) — the listings (and their sets) a sale is recorded against.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used for profit/loss.

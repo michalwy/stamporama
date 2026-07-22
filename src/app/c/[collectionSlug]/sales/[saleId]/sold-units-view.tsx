@@ -12,7 +12,6 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { KindChip } from "@/app/c/[collectionSlug]/lots/lot-badges";
 import {
   sortCopies,
   COPY_SORT_KEYS,
@@ -497,7 +496,7 @@ export function SoldUnitsView({
               sortDir={sortDir}
               ctx={ctx}
               onToggle={() => toggle(line.id)}
-              onRemove={() => onRemove(line.id, line.lotLabel)}
+              onRemove={() => onRemove(line.id, line.setLabel)}
             />
           ))}
         </div>
@@ -605,10 +604,9 @@ function SoldUnitCard({
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {line.lotLabel}
+            {line.setLabel}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
-            <KindChip kind={line.lotKind} />
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}
             </span>

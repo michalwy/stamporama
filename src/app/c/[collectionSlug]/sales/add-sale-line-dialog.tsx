@@ -9,8 +9,6 @@ import {
   DialogSecondaryButton,
   ErrorBubble,
 } from "@/app/dialog-shell";
-import { KindChip } from "@/app/c/[collectionSlug]/lots/lot-badges";
-import type { LotKind } from "@/lib/sale-lot-rules";
 import type { SellableOffer } from "@/lib/sales";
 import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers } from "./use-sales-query";
@@ -45,82 +43,53 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
-const FACET_LABEL: React.CSSProperties = {
-  fontSize: "0.6875rem",
-  fontWeight: 600,
-  color: "var(--color-text-muted)",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-  padding: "0 0.25rem 0.375rem",
-  margin: "0.75rem 0 0",
-};
-
 const MUTED = "var(--color-text-muted)";
 
-/** One selectable unit: a unit lot, or one sub-lot of a quantity lot. */
-interface UnitRow {
+/** One selectable set inside an offer. */
+interface SetRow {
   offerId: string;
-  unitLotId: string;
-  unitLabel: string;
+  offerSetId: string;
+  label: string;
   itemLabels: string[];
   itemIds: string[];
 }
 
-/** A picker group = one offer. A unit-lot group holds a single unit (shown as a plain row); a
- * quantity-lot group holds its sub-lots (shown as a collapsible parent). */
+/** A picker group = one offer, holding its sellable sets. */
 interface Group {
   offerId: string;
-  lotKind: LotKind;
   label: string;
   offerPrice: string;
   offerCurrency: string;
-  units: UnitRow[];
+  sets: SetRow[];
 }
 
 interface Picked {
   offerId: string;
-  unitLotId: string;
+  offerSetId: string;
   itemIds: string[];
   price: string;
 }
 
 function buildGroups(offers: SellableOffer[]): Group[] {
-  // The same unit (same physical copies) can surface under more than one offer on a platform —
-  // a lot listed twice, or a sub-lot shared across quantity lots (N:M). Selling retires the same
-  // copies regardless, so keep the first offer seen and drop duplicate units.
-  const seen = new Set<string>();
-  const groups: Group[] = [];
-  for (const offer of offers) {
-    const units: UnitRow[] = [];
-    for (const unit of offer.units) {
-      if (seen.has(unit.lotId)) continue;
-      seen.add(unit.lotId);
-      units.push({
-        offerId: offer.offerId,
-        unitLotId: unit.lotId,
-        unitLabel: unit.label,
-        itemLabels: unit.itemLabels,
-        itemIds: unit.itemIds,
-      });
-    }
-    if (units.length === 0) continue;
-    groups.push({
+  return offers
+    .map((offer) => ({
       offerId: offer.offerId,
-      lotKind: offer.lotKind,
-      label: offer.lotLabel,
+      label: offer.offerLabel,
       offerPrice: offer.price,
       offerCurrency: offer.currency,
-      units,
-    });
-  }
-  return groups;
+      sets: offer.sets.map((s) => ({
+        offerId: offer.offerId,
+        offerSetId: s.offerSetId,
+        label: s.label,
+        itemLabels: s.itemLabels,
+        itemIds: s.itemIds,
+      })),
+    }))
+    .filter((g) => g.sets.length > 0);
 }
 
-function unitMatches(u: UnitRow, q: string): boolean {
-  return (
-    u.unitLabel.toLowerCase().includes(q) ||
-    u.itemLabels.join(" ").toLowerCase().includes(q)
-  );
+function setMatches(s: SetRow, q: string): boolean {
+  return s.label.toLowerCase().includes(q) || s.itemLabels.join(" ").toLowerCase().includes(q);
 }
 
 function priceValid(p: string): boolean {
@@ -143,12 +112,10 @@ export interface AddSaleLineDialogProps {
 }
 
 /**
- * Rich browse-and-pick dialog for adding sold units to a sale (ADR-0012, #166). Mirrors the
- * system's other pickers: a wide portal dialog with a left **facet panel** (unit vs quantity,
- * with live counts) and a right column holding a search box over a scrollable list. A unit lot is
- * one selectable row; a **quantity lot is a single collapsible row** that expands to its member
- * sub-lots. Multi-select — tick every unit that sold, set each one's sale price (pre-filled from
- * the offer's asking price), and confirm to add them all as sale lines.
+ * Browse-and-pick dialog for adding sold sets to a sale (ADR-0013). Each offer on the sale's
+ * platform is a group; a single-set offer is one row, a multi-set (quantity) offer is a
+ * collapsible group over its sets. Multi-select — tick every set that sold, set each one's sale
+ * price (pre-filled from the offer's asking price), and confirm to add them all as sale lines.
  */
 export function AddSaleLineDialog({
   collectionId,
@@ -160,14 +127,12 @@ export function AddSaleLineDialog({
   onSubmit,
 }: AddSaleLineDialogProps) {
   const [search, setSearch] = useState("");
-  const [kind, setKind] = useState<LotKind | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [picked, setPicked] = useState<Record<string, Picked>>({});
   const { data: offers = [], isLoading } = useSellableOffers(collectionId, platformId, true);
 
   const groups = useMemo(() => buildGroups(offers), [offers]);
 
-  // Escape closes only this (topmost) dialog.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -181,67 +146,42 @@ export function AddSaleLineDialog({
 
   const q = search.trim().toLowerCase();
 
-  // Text filter: a group survives if its label matches (keep all its units) or any of its units
-  // match (keep just the matching ones). Each surviving group carries its visible units.
-  const byText = useMemo(() => {
-    if (!q) return groups.map((g) => ({ group: g, units: g.units }));
-    const out: { group: Group; units: UnitRow[] }[] = [];
+  const visible = useMemo(() => {
+    if (!q) return groups.map((g) => ({ group: g, sets: g.sets }));
+    const out: { group: Group; sets: SetRow[] }[] = [];
     for (const g of groups) {
       if (g.label.toLowerCase().includes(q)) {
-        out.push({ group: g, units: g.units });
+        out.push({ group: g, sets: g.sets });
         continue;
       }
-      const matching = g.units.filter((u) => unitMatches(u, q));
-      if (matching.length > 0) out.push({ group: g, units: matching });
+      const matching = g.sets.filter((s) => setMatches(s, q));
+      if (matching.length > 0) out.push({ group: g, sets: matching });
     }
     return out;
   }, [groups, q]);
 
-  const kindCounts = useMemo(
-    () => ({
-      unit: byText.filter((g) => g.group.lotKind === "unit").length,
-      quantity: byText.filter((g) => g.group.lotKind === "quantity").length,
-    }),
-    [byText]
-  );
-
-  const visible = useMemo(
-    () => byText.filter((g) => !kind || g.group.lotKind === kind),
-    [byText, kind]
-  );
-
-  function toggleUnit(u: UnitRow, offer: { price: string; currency: string }) {
+  function toggleSet(s: SetRow, offerPrice: string) {
     setPicked((prev) => {
       const next = { ...prev };
-      if (next[u.unitLotId]) {
-        delete next[u.unitLotId];
-      } else {
-        next[u.unitLotId] = {
-          offerId: u.offerId,
-          unitLotId: u.unitLotId,
-          itemIds: u.itemIds,
-          // Pre-fill the sale price from the offer's asking price (edited if it differs).
-          price: offer.price,
-        };
-      }
+      if (next[s.offerSetId]) delete next[s.offerSetId];
+      else next[s.offerSetId] = { offerId: s.offerId, offerSetId: s.offerSetId, itemIds: s.itemIds, price: offerPrice };
       return next;
     });
   }
 
-  function setPrice(unitLotId: string, price: string) {
-    setPicked((prev) => ({ ...prev, [unitLotId]: { ...prev[unitLotId], price } }));
+  function setPrice(offerSetId: string, price: string) {
+    setPicked((prev) => ({ ...prev, [offerSetId]: { ...prev[offerSetId], price } }));
   }
 
   const pickedList = Object.values(picked);
-  const allPriced = pickedList.every((p) => priceValid(p.price));
-  const canAdd = !isPending && pickedList.length > 0 && allPriced;
+  const canAdd = !isPending && pickedList.length > 0 && pickedList.every((p) => priceValid(p.price));
 
   function confirm() {
     if (!canAdd) return;
     onSubmit(
       pickedList.map((p) => ({
         offerId: p.offerId,
-        lotId: p.unitLotId,
+        offerSetId: p.offerSetId,
         price: p.price,
         itemIds: p.itemIds,
       }))
@@ -252,116 +192,75 @@ export function AddSaleLineDialog({
 
   return createPortal(
     <DialogShell
-      title="Add sold units"
+      title="Add sold sets"
       onClose={onClose}
-      maxWidth="min(94vw, 62rem)"
-      height="min(90vh, 48rem)"
+      maxWidth="min(94vw, 48rem)"
+      height="min(90vh, 44rem)"
       zIndexBase={120}
     >
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {/* Facet panel */}
-        <div
-          style={{
-            width: "12rem",
-            flexShrink: 0,
-            padding: "0.75rem",
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.125rem",
-          }}
-        >
-          <p style={{ ...FACET_LABEL, marginTop: 0 }}>Kind</p>
-          <FacetRow label="All kinds" active={kind === null} onClick={() => setKind(null)} count={byText.length} />
-          <FacetRow label="Unit" active={kind === "unit"} onClick={() => setKind(kind === "unit" ? null : "unit")} count={kindCounts.unit} />
-          <FacetRow label="Quantity" active={kind === "quantity"} onClick={() => setKind(kind === "quantity" ? null : "quantity")} count={kindCounts.quantity} />
-
-          {pickedList.length > 0 && (
-            <>
-              <p style={FACET_LABEL}>Selected</p>
-              <div style={{ padding: "0.375rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                {pickedList.length} unit{pickedList.length === 1 ? "" : "s"}
-              </div>
-            </>
-          )}
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)" }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter by offer, set, or catalog number…"
+            style={SEARCH_STYLE}
+            aria-label="Filter sets"
+            autoFocus
+          />
         </div>
 
-        {/* List column */}
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            borderLeft: "1px solid var(--color-border)",
-          }}
-        >
-          <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)" }}>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by lot, sub-lot, or catalog number…"
-              style={SEARCH_STYLE}
-              aria-label="Filter units"
-              autoFocus
-            />
-          </div>
-
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {isLoading ? (
-              <p style={HINT_STYLE}>Loading offers…</p>
-            ) : visible.length === 0 ? (
-              <p style={HINT_STYLE}>
-                {groups.length === 0
-                  ? "No active offers left to sell on this platform. List a lot on it first."
-                  : "No units match these filters."}
-              </p>
-            ) : (
-              visible.map(({ group, units }, i) => {
-                const isLast = i === visible.length - 1;
-                if (group.lotKind === "unit") {
-                  const u = units[0];
-                  return (
-                    <UnitPickRow
-                      key={group.offerId}
-                      unit={u}
-                      askingPrice={group.offerPrice}
-                      askingCurrency={group.offerCurrency}
-                      currency={currency}
-                      checked={!!picked[u.unitLotId]}
-                      price={picked[u.unitLotId]?.price ?? ""}
-                      isLast={isLast}
-                      onToggle={() => toggleUnit(u, { price: group.offerPrice, currency: group.offerCurrency })}
-                      onPrice={(p) => setPrice(u.unitLotId, p)}
-                    />
-                  );
-                }
-                // Quantity lot: one collapsible parent row over its sub-lots. Auto-expand while a
-                // search is active so matching sub-lots are visible without a manual click.
-                const open = q ? true : (expanded[group.offerId] ?? false);
-                const selectedCount = group.units.filter((u) => picked[u.unitLotId]).length;
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          {isLoading ? (
+            <p style={HINT_STYLE}>Loading offers…</p>
+          ) : visible.length === 0 ? (
+            <p style={HINT_STYLE}>
+              {groups.length === 0
+                ? "No offers left to sell on this platform. Create and compose an offer on it first."
+                : "No sets match this filter."}
+            </p>
+          ) : (
+            visible.map(({ group, sets }, i) => {
+              const isLast = i === visible.length - 1;
+              if (group.sets.length === 1) {
+                const s = sets[0] ?? group.sets[0];
                 return (
-                  <QuantityGroup
+                  <SetPickRow
                     key={group.offerId}
-                    group={group}
-                    visibleUnits={units}
+                    set={s}
+                    askingPrice={group.offerPrice}
+                    askingCurrency={group.offerCurrency}
                     currency={currency}
-                    open={open}
-                    selectedCount={selectedCount}
+                    checked={!!picked[s.offerSetId]}
+                    price={picked[s.offerSetId]?.price ?? ""}
                     isLast={isLast}
-                    picked={picked}
-                    onToggleExpand={() =>
-                      setExpanded((prev) => ({ ...prev, [group.offerId]: !(prev[group.offerId] ?? false) }))
-                    }
-                    onToggleUnit={(u) => toggleUnit(u, { price: group.offerPrice, currency: group.offerCurrency })}
-                    onPrice={setPrice}
+                    onToggle={() => toggleSet(s, group.offerPrice)}
+                    onPrice={(p) => setPrice(s.offerSetId, p)}
                   />
                 );
-              })
-            )}
-          </div>
+              }
+              const open = q ? true : (expanded[group.offerId] ?? false);
+              const selectedCount = group.sets.filter((s) => picked[s.offerSetId]).length;
+              return (
+                <QuantityGroup
+                  key={group.offerId}
+                  group={group}
+                  visibleSets={sets}
+                  currency={currency}
+                  open={open}
+                  selectedCount={selectedCount}
+                  isLast={isLast}
+                  picked={picked}
+                  onToggleExpand={() =>
+                    setExpanded((prev) => ({ ...prev, [group.offerId]: !(prev[group.offerId] ?? false) }))
+                  }
+                  onToggleSet={(s) => toggleSet(s, group.offerPrice)}
+                  onPrice={setPrice}
+                />
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -372,8 +271,8 @@ export function AddSaleLineDialog({
           {isPending
             ? "Adding…"
             : pickedList.length > 0
-              ? `Add ${pickedList.length} unit${pickedList.length === 1 ? "" : "s"}`
-              : "Add sold units"}
+              ? `Add ${pickedList.length} set${pickedList.length === 1 ? "" : "s"}`
+              : "Add sold sets"}
         </DialogPrimaryButton>
       </DialogFooter>
     </DialogShell>,
@@ -381,113 +280,46 @@ export function AddSaleLineDialog({
   );
 }
 
-function FacetRow({
-  label,
-  active,
-  count,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  count: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        padding: "0.375rem 0.5rem",
-        borderRadius: "0.375rem",
-        border: "none",
-        background: active ? "var(--color-bg-muted)" : "transparent",
-        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-        fontWeight: active ? 600 : 400,
-        fontSize: "0.8125rem",
-        cursor: "pointer",
-        textAlign: "left",
-        width: "100%",
-      }}
-    >
-      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ fontSize: "0.75rem", color: MUTED, fontVariantNumeric: "tabular-nums" }}>{count}</span>
-    </button>
-  );
-}
-
-/** A quantity lot as one collapsible row: the parent shows the package, its sub-lot count and
- * how many are selected; expanding reveals the member sub-lots as selectable rows. */
+/** A multi-set (quantity) offer as one collapsible row over its sets. */
 function QuantityGroup({
   group,
-  visibleUnits,
+  visibleSets,
   currency,
   open,
   selectedCount,
   isLast,
   picked,
   onToggleExpand,
-  onToggleUnit,
+  onToggleSet,
   onPrice,
 }: {
   group: Group;
-  visibleUnits: UnitRow[];
+  visibleSets: SetRow[];
   currency: string;
   open: boolean;
   selectedCount: number;
   isLast: boolean;
   picked: Record<string, Picked>;
   onToggleExpand: () => void;
-  onToggleUnit: (u: UnitRow) => void;
-  onPrice: (unitLotId: string, price: string) => void;
+  onToggleSet: (s: SetRow) => void;
+  onPrice: (offerSetId: string, price: string) => void;
 }) {
   return (
     <div style={{ borderBottom: isLast && !open ? undefined : "1px solid var(--color-border)" }}>
-      {/* Parent row */}
-      <div
-        onClick={onToggleExpand}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.625rem",
-          padding: "0.625rem 1rem",
-          cursor: "pointer",
-        }}
-      >
+      <div onClick={onToggleExpand} style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 1rem", cursor: "pointer" }}>
         <span
           aria-hidden
-          style={{
-            width: "0.9rem",
-            flexShrink: 0,
-            color: MUTED,
-            fontSize: "0.75rem",
-            transform: open ? "rotate(90deg)" : undefined,
-            transition: "transform 0.12s ease",
-          }}
+          style={{ width: "0.9rem", flexShrink: 0, color: MUTED, fontSize: "0.75rem", transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.12s ease" }}
         >
           ▶
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {group.label}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
-            <KindChip kind="quantity" />
-            <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap" }}>
-              {group.units.length} sub-lot{group.units.length === 1 ? "" : "s"}
-              {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
-            </span>
+          <div style={{ fontSize: "0.75rem", color: MUTED, marginTop: "0.3rem" }}>
+            {group.sets.length} set{group.sets.length === 1 ? "" : "s"}
+            {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
           </div>
         </div>
         <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap", flexShrink: 0 }}>
@@ -495,22 +327,21 @@ function QuantityGroup({
         </span>
       </div>
 
-      {/* Sub-lot rows */}
       {open && (
         <div style={{ borderTop: "1px solid var(--color-border)", background: "var(--color-bg-page)" }}>
-          {visibleUnits.map((u, i) => (
-            <UnitPickRow
-              key={u.unitLotId}
-              unit={u}
+          {visibleSets.map((s, i) => (
+            <SetPickRow
+              key={s.offerSetId}
+              set={s}
               askingPrice={group.offerPrice}
               askingCurrency={group.offerCurrency}
               currency={currency}
-              checked={!!picked[u.unitLotId]}
-              price={picked[u.unitLotId]?.price ?? ""}
-              isLast={i === visibleUnits.length - 1}
+              checked={!!picked[s.offerSetId]}
+              price={picked[s.offerSetId]?.price ?? ""}
+              isLast={i === visibleSets.length - 1}
               indent
-              onToggle={() => onToggleUnit(u)}
-              onPrice={(p) => onPrice(u.unitLotId, p)}
+              onToggle={() => onToggleSet(s)}
+              onPrice={(p) => onPrice(s.offerSetId, p)}
             />
           ))}
         </div>
@@ -519,8 +350,8 @@ function QuantityGroup({
   );
 }
 
-function UnitPickRow({
-  unit,
+function SetPickRow({
+  set,
   askingPrice,
   askingCurrency,
   currency,
@@ -531,7 +362,7 @@ function UnitPickRow({
   onToggle,
   onPrice,
 }: {
-  unit: UnitRow;
+  set: SetRow;
   askingPrice: string;
   askingCurrency: string;
   currency: string;
@@ -549,54 +380,27 @@ function UnitPickRow({
         display: "flex",
         alignItems: "center",
         gap: "0.625rem",
-        padding: "0.5rem 1rem 0.5rem",
+        padding: "0.5rem 1rem",
         paddingLeft: indent ? "2.5rem" : "1rem",
         borderBottom: isLast ? undefined : "1px solid var(--color-border)",
         background: checked ? "var(--color-accent-soft)" : undefined,
         cursor: "pointer",
       }}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onToggle}
-        onClick={(e) => e.stopPropagation()}
-        style={{ flexShrink: 0 }}
-      />
+      <input type="checkbox" checked={checked} onChange={onToggle} onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: "0.875rem",
-            fontWeight: indent ? 500 : 600,
-            color: "var(--color-text-primary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {unit.unitLabel}
+        <div style={{ fontSize: "0.875rem", fontWeight: indent ? 500 : 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {set.label}
         </div>
         <div style={{ marginTop: "0.2rem", fontSize: "0.75rem", color: MUTED }}>
-          {unit.itemLabels.length} cop{unit.itemLabels.length === 1 ? "y" : "ies"}
-          {unit.itemLabels.length > 0 ? ` · ${unit.itemLabels.join(", ")}` : ""}
+          {set.itemLabels.length} cop{set.itemLabels.length === 1 ? "y" : "ies"}
+          {set.itemLabels.length > 0 ? ` · ${set.itemLabels.join(", ")}` : ""}
         </div>
       </div>
 
       {checked ? (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}
-        >
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={price}
-            onChange={(e) => onPrice(e.target.value)}
-            aria-label="Sale price"
-            style={PRICE_INPUT_STYLE}
-          />
+        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+          <input type="number" min="0" step="0.01" placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
           <span style={{ fontSize: "0.75rem", color: MUTED }}>{currency}</span>
         </div>
       ) : (

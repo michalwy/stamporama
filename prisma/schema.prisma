@@ -43,7 +43,6 @@ model Collection {
   contacts        Contact[]
   locations       Location[]
   purchases       Purchase[]
-  lots            Lot[]
   offers          Offer[]
   sales           Sale[]
 
@@ -279,11 +278,11 @@ model Item {
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
   photos            Photo[]
-  // Sales module (ADR-0012). A copy is packaged into sale `Lot`s (N:M) and, once sold,
-  // is recorded on exactly one `SaleLine` via the `sale_line_item` join (the DB-level
-  // no-double-sale guard is the unique on `itemId` there).
-  lotMemberships    LotItem[]
-  saleLineItems     SaleLineItem[]
+  // Sales module (ADR-0013). A copy is packaged into offer sets (N:M — the same copy can be
+  // listed on several platforms at once) and, once sold, is recorded on exactly one `SaleLine`
+  // via the `sale_line_item` join (the DB-level no-double-sale guard is the unique on `itemId`).
+  offerSetMemberships OfferSetItem[]
+  saleLineItems       SaleLineItem[]
 
   @@index([collectionId])
   @@index([stampId])
@@ -456,80 +455,16 @@ model PurchaseExpense {
   @@map("purchase_expense")
 }
 
-// Sales module — the platform-agnostic package the collector composes and sells
-// (ADR-0012, #162). `Lot` is **recursive** along two shapes:
-//   - a **unit lot** (`kind = "unit"`) is the atomic sellable unit — a single stamp or an
-//     indivisible series (a *komplet*). It holds `Item`s directly via `lot_item` (N:M: the
-//     same physical copy can be packaged differently per platform).
-//   - a **quantity lot** (`kind = "quantity"`) groups N interchangeable sub-lots of the same
-//     shape via the `lot_sub_lot` self relation, and holds NO items directly. It is divisible
-//     only by whole sub-lots, so a series never breaks apart.
-// Explicit lifecycle `state`: draft | ready | dissolved. `sold` / `partially-sold` are
-// **derived** from sub-lot and item states, never stored (no duplicated source of truth).
-// The kind/holds-items-vs-sub-lots invariants are enforced in the domain layer, not the DB.
-model Lot {
-  id           String   @id @default(cuid())
-  collectionId String
-  // "unit" | "quantity" — the recursion discriminator (see model doc).
-  kind         String
-  // Lifecycle: draft | ready | dissolved. dissolved = unpacked back into inventory.
-  state        String   @default("draft")
-  // Optional free-text label; the UI derives one from the packaged copies when blank.
-  title        String?
-  createdAt    DateTime @default(now())
-
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  // Direct item membership — populated for unit lots only.
-  items      LotItem[]
-  // This quantity lot's member sub-lots (rows where this lot is the parent).
-  subLots    LotSubLot[] @relation("LotParent")
-  // Quantity lots this lot is a sub-lot of (rows where this lot is the child).
-  parentLots LotSubLot[] @relation("LotChild")
-  offers     Offer[]
-  saleLines  SaleLine[]
-
-  @@index([collectionId])
-  @@map("lot")
-}
-
-// Item N:M Lot join (ADR-0012). Populated for unit lots; a copy can belong to several lots
-// (packaged solo on one platform and as a komplet on another). Cascade-deleted with either side.
-model LotItem {
-  lotId  String
-  itemId String
-
-  lot  Lot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  @@id([lotId, itemId])
-  @@index([itemId])
-  @@map("lot_item")
-}
-
-// Quantity-lot ↔ sub-lot self relation (ADR-0012). `parentLotId` is the quantity lot;
-// `childLotId` is one of its interchangeable member sub-lots. N:M so a sub-lot shape can be
-// reused; cascade-deleted with either side.
-model LotSubLot {
-  parentLotId String
-  childLotId  String
-
-  parent Lot @relation("LotParent", fields: [parentLotId], references: [id], onDelete: Cascade)
-  child  Lot @relation("LotChild", fields: [childLotId], references: [id], onDelete: Cascade)
-
-  @@id([parentLotId, childLotId])
-  @@index([childLotId])
-  @@map("lot_sub_lot")
-}
-
-// A `Lot` listed on one platform (ADR-0012). `Lot` 1:N `Offer` — the same package can be
-// offered on Delcampe, Allegro, Colnect at once. `platformId` is a `Contact` carrying the
-// `platform` role. Price + currency are per-offer (platforms price independently). Lifecycle
-// `state`: active | paused | sold | withdrawn; the derived "to-close" flag (an active offer
-// holding an already-sold item / unavailable sub-lot) is computed, never stored.
+// A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its
+// composition** directly (mirroring `Purchase ⊃ PurchaseLot ⊃ Item`): it holds N `OfferSet`s,
+// each an atomic sellable unit. `platformId` is a `Contact` carrying the `platform` role. Price +
+// currency are per-offer (platforms price independently). Lifecycle `state`: active | paused |
+// sold | withdrawn. Nothing is shared between offers — the same copy listed elsewhere is a
+// separate offer with its own sets. The derived "needs action" overlay (an active offer holding a
+// set whose copy has already sold) is computed, never stored.
 model Offer {
   id           String   @id @default(cuid())
   collectionId String
-  lotId        String
   platformId   String
   // Listing URL on the platform.
   url          String?
@@ -540,14 +475,48 @@ model Offer {
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  lot        Lot        @relation(fields: [lotId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  sets       OfferSet[]
   saleLines  SaleLine[]
 
   @@index([collectionId])
-  @@index([lotId])
   @@index([platformId])
   @@map("offer")
+}
+
+// One atomic sellable unit inside an offer (ADR-0013). A set holds one or more `Item`s that sell
+// **together and indivisibly** — a series / *komplet* never breaks apart. There is no unit/quantity
+// discriminator: a single-stamp offer is one 1-item set, a series is one N-item set, and a
+// "quantity" listing is simply many sets. Cascade-deleted with its offer.
+model OfferSet {
+  id      String  @id @default(cuid())
+  offerId String
+  // Optional free-text label; the UI derives one from the copies when blank.
+  title   String?
+
+  offer     Offer          @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  items     OfferSetItem[]
+  saleLines SaleLine[]
+
+  @@index([offerId])
+  @@map("offer_set")
+}
+
+// The physical copies in an offer set (ADR-0013). **N:M** — unlike `PurchaseLot`, which owns its
+// items, a copy can belong to sets across several offers at once (listed on multiple platforms).
+// This is the cross-platform thread: selling a copy retires it globally (`sale_line_item.itemId`
+// UNIQUE) and every other offer whose set still holds it surfaces as needing action. Cascade-
+// deleted with either side.
+model OfferSetItem {
+  offerSetId String
+  itemId     String
+
+  offerSet OfferSet @relation(fields: [offerSetId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([offerSetId, itemId])
+  @@index([itemId])
+  @@map("offer_set_item")
 }
 
 // A sale transaction (ADR-0012). Single platform, single currency. Shared amounts —
@@ -591,28 +560,27 @@ model Sale {
   @@map("sale")
 }
 
-// One line of a sale (ADR-0012): the unit lot or sub-lot that went, the offer it sold through,
-// its line sale price (sale currency), and the exact physical `Item`s that left (via
-// `sale_line_item`). A partial quantity-lot sale records one line per sub-lot sold.
+// One line of a sale (ADR-0013): the offer set that went, the offer it sold through, its line
+// sale price (sale currency), and the exact physical `Item`s that left (via `sale_line_item`).
+// One line per set sold — a quantity offer selling K units records K lines.
 model SaleLine {
-  id      String  @id @default(cuid())
-  saleId  String
+  id         String  @id @default(cuid())
+  saleId     String
   // The offer the sale came through; `SetNull` so a historical sale survives offer cleanup.
-  offerId String?
-  // The unit lot or sub-lot sold; `Restrict` so a sold lot cannot be deleted out from under
-  // the sale record.
-  lotId   String
+  offerId    String?
+  // The offer set sold; `Restrict` so a sold set cannot be deleted out from under the sale record.
+  offerSetId String
   // Line sale price in the sale's transaction currency.
-  price   Decimal @db.Decimal(10, 2)
+  price      Decimal @db.Decimal(10, 2)
 
-  sale  Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  offer Offer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
-  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
-  items SaleLineItem[]
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  offer    Offer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  offerSet OfferSet @relation(fields: [offerSetId], references: [id], onDelete: Restrict)
+  items    SaleLineItem[]
 
   @@index([saleId])
   @@index([offerId])
-  @@index([lotId])
+  @@index([offerSetId])
   @@map("sale_line")
 }
 

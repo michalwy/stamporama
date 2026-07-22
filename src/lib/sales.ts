@@ -2,25 +2,25 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
-import { type LotKind, isLotKind, deriveLotLabel } from "./sale-lot-rules";
 import { type OfferState, isOfferState } from "./offer-rules";
+import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { listItemsPaginated, type ItemListItem } from "./items";
 
-// Server-side domain logic for the **sale transaction flow** (ADR-0012 §4/§5, #166). A `Sale`
-// records that one or more `Offer`s sold on a single platform, in a single currency, on one
-// date (the FX-freeze date). Each `SaleLine` is a **whole sellable unit** that left — a unit lot
-// or one sub-lot of a quantity lot — carrying the exact physical `Item`s via `SaleLineItem`.
+// Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
+// §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
+// single currency, on one date (the FX-freeze date). Each `SaleLine` is a whole `OfferSet` that
+// left — the atomic sellable unit — carrying its exact physical `Item`s via `SaleLineItem`.
 //
-// Only `Offer.state → sold` is a stored side effect. "Item unavailable" and "lot sold" are
-// **derived** from the `sale_line_item` join (ADR-0012 — no Item columns), so recording the
-// sale is all it takes to retire the copies. The pure allocation engine (`sale-allocation.ts`,
-// #163) is fed here: `getSaleDetail` distributes the shared amounts to per-line nets.
+// Only `Offer.state → sold` is a stored side effect (when every set of an offer has sold through
+// it). "Item unavailable" and "set sold" are **derived** from the `sale_line_item` join, so
+// recording the sale is all it takes to retire the copies. The pure allocation engine
+// (`sale-allocation.ts`, #163) is fed on read by `getSaleDetail`.
 //
-// This module owns: the sellable-offer picker, create / delete a sale, and the paginated list
-// + detail read models. Whole-unit integrity — a series never breaks apart — is enforced by
-// requiring a line's items to be the full current copy set of its unit; the DB-level unique on
+// This module owns: the sellable-offer/set picker, create / delete a sale, and the paginated list
+// + detail read models. Whole-set integrity — a series never breaks apart — is enforced by
+// requiring a line's items to be the full current copy set of its set; the DB-level unique on
 // `sale_line_item.itemId` is the no-double-sale backstop. All access is owner-scoped.
 
 // ── Errors ────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ export type SaleBlockReason =
   | "no-platform"
   | "empty"
   | "bad-offer"
-  | "bad-unit"
+  | "bad-set"
   | "already-sold";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
@@ -97,8 +97,6 @@ const STAMP_LABEL_SELECT = {
   stamp: { select: { name: true, catalogNumbers: { select: { number: true }, take: 1 } } },
 } as const;
 
-type StampLabelRow = { stamp: { name: string | null; catalogNumbers: { number: string }[] } };
-
 /** Item ids already retired on a sale line, from a candidate set (no-double-sale). */
 async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
   if (itemIds.length === 0) return new Set();
@@ -111,13 +109,13 @@ async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
 
 // ── Sellable-offer picker ───────────────────────────────────────────────────
 
-/** One whole sellable unit inside an offer: a unit lot, or one sub-lot of a quantity lot. The
- * unit sells atomically — all its copies leave together (a series never breaks apart). */
-export interface SaleUnitOption {
-  /** The unit lot / sub-lot id; becomes `SaleLine.lotId`. */
-  lotId: string;
+/** One whole sellable set inside an offer — it sells atomically (all its copies leave together, a
+ * series never breaks apart). */
+export interface SaleSetOption {
+  /** The offer set id; becomes `SaleLine.offerSetId`. */
+  offerSetId: string;
   label: string;
-  /** Every physical copy that leaves when this unit sells (whole-unit integrity). */
+  /** Every physical copy that leaves when this set sells (whole-set integrity). */
   itemIds: string[];
   itemLabels: string[];
 }
@@ -126,54 +124,38 @@ export interface SellableOffer {
   offerId: string;
   platformId: string;
   platformName: string;
-  /** The offered package (unit or quantity lot). */
-  lotId: string;
-  lotLabel: string;
-  lotKind: LotKind;
+  offerLabel: string;
   /** Asking price + currency, used to pre-fill line prices when the sale is in that currency. */
   price: string;
   currency: string;
   state: OfferState;
-  /** The units still available to sell (fully-sold units are dropped). Always ≥ 1. */
-  units: SaleUnitOption[];
+  /** The sets still available to sell (fully-sold sets are dropped). Always ≥ 1. */
+  sets: SaleSetOption[];
 }
 
 const SELLABLE_OFFER_SELECT = {
   id: true,
   platformId: true,
-  lotId: true,
   price: true,
   currency: true,
   state: true,
   createdAt: true,
   platform: { select: { name: true } },
-  lot: {
+  sets: {
+    orderBy: { id: "asc" as const },
     select: {
-      kind: true,
+      id: true,
       title: true,
       items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
-      subLots: {
-        select: {
-          child: {
-            select: {
-              id: true,
-              kind: true,
-              title: true,
-              items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
-            },
-          },
-        },
-      },
     },
   },
 } as const;
 
 /**
- * Offers that can be recorded as sold (ADR-0012, #166): `active` or `paused` offers in the
- * collection, optionally on one `platformId`, each expanded into its still-available units. A
- * unit lot contributes one unit (itself); a quantity lot contributes one unit per sub-lot. Units
- * whose copies have already left on an earlier sale are dropped, and an offer with no available
- * unit is omitted entirely. Newest offer first.
+ * Offers that can be recorded as sold (ADR-0013): `active` or `paused` offers in the collection,
+ * optionally on one `platformId`, each expanded into its still-available sets. A set whose copies
+ * have already left on an earlier sale is dropped, and an offer with no available set is omitted
+ * entirely. Newest offer first.
  */
 export async function listSellableOffers(
   ownerId: string,
@@ -193,75 +175,37 @@ export async function listSellableOffers(
   });
 
   // Batch the sold-copy lookup across every candidate copy in one query.
-  const allItemIds = rows.flatMap((r) =>
-    r.lot.kind === "quantity"
-      ? r.lot.subLots.flatMap((s) => s.child.items.map((li) => li.itemId))
-      : r.lot.items.map((li) => li.itemId)
-  );
+  const allItemIds = rows.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId)));
   const sold = await soldItemIds([...new Set(allItemIds)]);
-
-  const unitFrom = (
-    lotId: string,
-    kind: LotKind,
-    title: string | null,
-    items: { itemId: string; item: StampLabelRow }[]
-  ): SaleUnitOption | null => {
-    // A unit is available only when it holds ≥1 copy and none has already sold — a unit lot is
-    // atomic, so a single already-sold copy retires the whole unit.
-    if (items.length === 0 || items.some((li) => sold.has(li.itemId))) return null;
-    const itemLabels = items.map((li) => copyLabel(li.item.stamp));
-    return {
-      lotId,
-      label: deriveLotLabel(kind, title, itemLabels),
-      itemIds: items.map((li) => li.itemId),
-      itemLabels,
-    };
-  };
 
   const offers: SellableOffer[] = [];
   for (const r of rows) {
-    const lotKind = (isLotKind(r.lot.kind) ? r.lot.kind : "unit") as LotKind;
-    const units: SaleUnitOption[] = [];
-    if (lotKind === "unit") {
-      const u = unitFrom(r.lotId, "unit", r.lot.title, r.lot.items);
-      if (u) units.push(u);
-    } else {
-      for (const s of r.lot.subLots) {
-        const childKind = (isLotKind(s.child.kind) ? s.child.kind : "unit") as LotKind;
-        const u = unitFrom(s.child.id, childKind, s.child.title, s.child.items);
-        if (u) units.push(u);
-      }
+    const sets: SaleSetOption[] = [];
+    for (const s of r.sets) {
+      // A set is available only when it holds ≥1 copy and none has already sold — a set is
+      // atomic, so a single already-sold copy retires the whole set.
+      if (s.items.length === 0 || s.items.some((li) => sold.has(li.itemId))) continue;
+      const itemLabels = s.items.map((li) => copyLabel(li.item.stamp));
+      sets.push({
+        offerSetId: s.id,
+        label: deriveSetLabel(s.title, itemLabels),
+        itemIds: s.items.map((li) => li.itemId),
+        itemLabels,
+      });
     }
-    if (units.length === 0) continue;
-
-    const lotLabel =
-      lotKind === "unit"
-        ? units[0].label
-        : deriveLotLabel(
-            "quantity",
-            r.lot.title,
-            r.lot.subLots.map(
-              (s) =>
-                s.child.title ??
-                deriveLotLabel(
-                  (isLotKind(s.child.kind) ? s.child.kind : "unit") as LotKind,
-                  s.child.title,
-                  s.child.items.map((li) => copyLabel(li.item.stamp))
-                )
-            )
-          );
+    if (sets.length === 0) continue;
 
     offers.push({
       offerId: r.id,
       platformId: r.platformId,
       platformName: r.platform.name,
-      lotId: r.lotId,
-      lotLabel,
-      lotKind,
+      offerLabel: deriveOfferLabel(
+        r.sets.map((s) => deriveSetLabel(s.title, s.items.map((li) => copyLabel(li.item.stamp))))
+      ),
       price: Number(r.price).toFixed(2),
       currency: r.currency,
       state: (isOfferState(r.state) ? r.state : "active") as OfferState,
-      units,
+      sets,
     });
   }
   return offers;
@@ -285,11 +229,11 @@ export interface SaleHeaderInput {
 
 export interface SaleLineDraft {
   offerId: string;
-  /** The unit lot / sub-lot that sold (`SaleLine.lotId`). */
-  lotId: string;
+  /** The offer set that sold (`SaleLine.offerSetId`). */
+  offerSetId: string;
   /** Line sale price in the sale's transaction currency. */
   price: string;
-  /** The exact copies that left — must be the full current copy set of `lotId`. */
+  /** The exact copies that left — must be the full current copy set of `offerSetId`. */
   itemIds: string[];
 }
 
@@ -309,50 +253,18 @@ async function freezeFxRate(
   }
 }
 
-/** Whether every copy of a lot has now left on a sale line — read inside the sale transaction so
- * the just-recorded lines count. A unit lot is fully sold when all its copies are gone; a
- * quantity lot when every one of its sub-lots is fully sold. Drives the offer → `sold` flip. */
-async function isLotFullySold(
-  tx: Prisma.TransactionClient,
-  lotId: string,
-  kind: LotKind
-): Promise<boolean> {
-  const unitLotIds =
-    kind === "unit"
-      ? [lotId]
-      : (
-          await tx.lotSubLot.findMany({
-            where: { parentLotId: lotId },
-            select: { childLotId: true },
-          })
-        ).map((r) => r.childLotId);
-  if (unitLotIds.length === 0) return false;
-
-  const items = await tx.lotItem.findMany({
-    where: { lotId: { in: unitLotIds } },
-    select: { lotId: true, itemId: true },
+/** Whether every set of an offer has now sold **through this offer** — read inside the sale
+ * transaction so the just-recorded lines count. Drives the offer → `sold` flip. A set that sold
+ * elsewhere does not count (that leaves the offer `active` / needing action, not `sold`). */
+async function isOfferFullySold(tx: Prisma.TransactionClient, offerId: string): Promise<boolean> {
+  const sets = await tx.offerSet.findMany({ where: { offerId }, select: { id: true } });
+  if (sets.length === 0) return false;
+  const soldSets = await tx.saleLine.findMany({
+    where: { offerSetId: { in: sets.map((s) => s.id) } },
+    select: { offerSetId: true },
+    distinct: ["offerSetId"],
   });
-  if (items.length === 0) return false;
-
-  const sold = new Set(
-    (
-      await tx.saleLineItem.findMany({
-        where: { itemId: { in: items.map((i) => i.itemId) } },
-        select: { itemId: true },
-      })
-    ).map((r) => r.itemId)
-  );
-  // A unit lot with no copies (an empty sub-lot) can never be "sold"; require each to hold ≥1.
-  const byUnit = new Map<string, string[]>();
-  for (const i of items) {
-    const arr = byUnit.get(i.lotId) ?? [];
-    arr.push(i.itemId);
-    byUnit.set(i.lotId, arr);
-  }
-  return unitLotIds.every((id) => {
-    const copies = byUnit.get(id) ?? [];
-    return copies.length > 0 && copies.every((itemId) => sold.has(itemId));
-  });
+  return soldSets.length === sets.length;
 }
 
 interface SaleRef {
@@ -386,11 +298,10 @@ async function assertSaleOwner(ownerId: string, saleId: string): Promise<SaleRef
 }
 
 /**
- * Create a **sale header** (ADR-0012, #166): platform, buyer, date, currency, and the two
- * sale-time shared amounts (buyer handling + commission). Its sold units — and my shipping cost,
- * learned later — are added on the sale's detail screen, mirroring the purchase intake flow
- * (#120/#121). The FX rate to base is frozen now (re-frozen if the currency later changes).
- * Returns the new sale id.
+ * Create a **sale header** (ADR-0013): platform, buyer, date, currency, and the two sale-time
+ * shared amounts (buyer handling + commission). Its sold sets — and my shipping cost, learned
+ * later — are added on the sale's detail screen, mirroring the purchase intake flow. The FX rate
+ * to base is frozen now (re-frozen if the currency later changes). Returns the new sale id.
  */
 export async function createSale(
   ownerId: string,
@@ -423,9 +334,8 @@ export async function createSale(
 }
 
 /** Edit a sale header (platform / buyer / date / currency / handling / commission). Re-freezes
- * the FX rate. The platform cannot change once the sale has sold units — a sale is
- * single-platform and its lines reference offers on that platform. My shipping cost is not
- * touched here (it is set on the detail screen). */
+ * the FX rate. The platform cannot change once the sale has sold sets — a sale is single-platform
+ * and its lines reference offers on that platform. My shipping cost is not touched here. */
 export async function updateSaleHeader(
   ownerId: string,
   saleId: string,
@@ -442,7 +352,7 @@ export async function updateSaleHeader(
     if (lineCount > 0) {
       throw new SaleActionBlockedError(
         "bad-offer",
-        "Remove the sold units before changing the platform — a sale stays on one platform."
+        "Remove the sold sets before changing the platform — a sale stays on one platform."
       );
     }
   }
@@ -481,14 +391,13 @@ export async function updateSaleAmount(
 }
 
 /**
- * Add one or more sold units to a sale (ADR-0012, #166). Each draft is a whole unit — a unit lot
- * or one sub-lot of a quantity lot — priced in the sale currency, carrying the unit's full copy
- * set. Every offer must be on the sale's platform (a sale is single-platform) and still sellable.
- * After writing the lines, each offer whose lot is now **fully** sold flips to `sold`; a partial
- * quantity-lot sale leaves the offer live for its remaining sub-lots.
+ * Add one or more sold sets to a sale (ADR-0013). Each draft is a whole `OfferSet`, priced in the
+ * sale currency, carrying the set's full copy set. Every offer must be on the sale's platform (a
+ * sale is single-platform) and still sellable. After writing the lines, each offer whose every set
+ * is now sold flips to `sold`; a partial sale leaves the offer live for its remaining sets.
  *
- * Whole-unit integrity: a draft's `itemIds` must be exactly the full current copy set of its unit
- * (`lotId`), which must be the offer's lot or one of its sub-lots. The DB-level unique on
+ * Whole-set integrity: a draft's `itemIds` must be exactly the full current copy set of its set
+ * (`offerSetId`), which must belong to the draft's offer. The DB-level unique on
  * `sale_line_item.itemId` backstops the no-double-sale rule.
  */
 export async function addSaleLines(
@@ -498,29 +407,15 @@ export async function addSaleLines(
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
   if (drafts.length === 0) {
-    throw new SaleActionBlockedError("empty", "Choose at least one unit to add.");
+    throw new SaleActionBlockedError("empty", "Choose at least one set to add.");
   }
 
   const offerIds = [...new Set(drafts.map((d) => d.offerId))];
   const offers = await prisma.offer.findMany({
     where: { id: { in: offerIds }, collectionId: ref.collectionId },
-    select: { id: true, lotId: true, platformId: true, state: true, lot: { select: { kind: true } } },
+    select: { id: true, platformId: true, state: true, sets: { select: { id: true } } },
   });
   const offerById = new Map(offers.map((o) => [o.id, o]));
-
-  // Resolve sub-lot membership for the quantity lots involved, so a draft's unit can be verified
-  // as a real member of the offered lot.
-  const quantityLotIds = offers.filter((o) => o.lot.kind === "quantity").map((o) => o.lotId);
-  const subLotRows = await prisma.lotSubLot.findMany({
-    where: { parentLotId: { in: quantityLotIds } },
-    select: { parentLotId: true, childLotId: true },
-  });
-  const subLotsByParent = new Map<string, Set<string>>();
-  for (const r of subLotRows) {
-    const set = subLotsByParent.get(r.parentLotId) ?? new Set<string>();
-    set.add(r.childLotId);
-    subLotsByParent.set(r.parentLotId, set);
-  }
 
   for (const line of drafts) {
     const offer = offerById.get(line.offerId);
@@ -528,33 +423,24 @@ export async function addSaleLines(
       throw new SaleActionBlockedError("bad-offer", "One of the offers is no longer available.");
     }
     if (offer.platformId !== ref.platformId) {
-      throw new SaleActionBlockedError(
-        "bad-offer",
-        "That offer is on a different platform than this sale."
-      );
+      throw new SaleActionBlockedError("bad-offer", "That offer is on a different platform than this sale.");
     }
     const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
     if (!isSellableOfferState(state)) {
+      throw new SaleActionBlockedError("bad-offer", "One of the offers is already sold or withdrawn.");
+    }
+
+    // The set must belong to the offer it was recorded against.
+    if (!offer.sets.some((s) => s.id === line.offerSetId)) {
       throw new SaleActionBlockedError(
-        "bad-offer",
-        "One of the offers is already sold or withdrawn."
+        "bad-set",
+        "A sold set does not belong to the offer it was recorded against."
       );
     }
 
-    // The unit must be the offered unit lot itself, or a sub-lot of the offered quantity lot.
-    const isOwnLot = offer.lot.kind === "unit" && line.lotId === offer.lotId;
-    const isSubLot =
-      offer.lot.kind === "quantity" && (subLotsByParent.get(offer.lotId)?.has(line.lotId) ?? false);
-    if (!isOwnLot && !isSubLot) {
-      throw new SaleActionBlockedError(
-        "bad-unit",
-        "A sold unit does not belong to the offer it was recorded against."
-      );
-    }
-
-    // Whole-unit integrity: the draft's copies must be exactly the unit's full current copy set.
-    const actual = await prisma.lotItem.findMany({
-      where: { lotId: line.lotId },
+    // Whole-set integrity: the draft's copies must be exactly the set's full current copy set.
+    const actual = await prisma.offerSetItem.findMany({
+      where: { offerSetId: line.offerSetId },
       select: { itemId: true },
     });
     const actualIds = new Set(actual.map((r) => r.itemId));
@@ -565,18 +451,15 @@ export async function addSaleLines(
       [...givenIds].some((id) => !actualIds.has(id))
     ) {
       throw new SaleActionBlockedError(
-        "bad-unit",
-        "A sold unit must include exactly the copies it holds — a series cannot be split."
+        "bad-set",
+        "A sold set must include exactly the copies it holds — a series cannot be split."
       );
     }
 
     // None of the copies may have already left on a prior sale line.
     const already = await soldItemIds(line.itemIds);
     if (already.size > 0) {
-      throw new SaleActionBlockedError(
-        "already-sold",
-        "One or more of these copies has already been sold."
-      );
+      throw new SaleActionBlockedError("already-sold", "One or more of these copies has already been sold.");
     }
   }
 
@@ -587,36 +470,31 @@ export async function addSaleLines(
           data: {
             saleId,
             offerId: line.offerId,
-            lotId: line.lotId,
+            offerSetId: line.offerSetId,
             price: line.price,
             items: { create: line.itemIds.map((itemId) => ({ itemId })) },
           },
         });
       }
-      // Flip an offer to `sold` only once its lot is fully sold (the only stored side effect;
-      // lot / item sold state stays derived).
+      // Flip an offer to `sold` only once every set has sold through it (the only stored side
+      // effect; set / item sold state stays derived).
       for (const offerId of offerIds) {
-        const offer = offerById.get(offerId)!;
-        const lotKind = (isLotKind(offer.lot.kind) ? offer.lot.kind : "unit") as LotKind;
-        if (await isLotFullySold(tx, offer.lotId, lotKind)) {
+        if (await isOfferFullySold(tx, offerId)) {
           await tx.offer.update({ where: { id: offerId }, data: { state: "sold" } });
         }
       }
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      throw new SaleActionBlockedError(
-        "already-sold",
-        "One or more of these copies has already been sold."
-      );
+      throw new SaleActionBlockedError("already-sold", "One or more of these copies has already been sold.");
     }
     throw e;
   }
 }
 
-/** Remove a sold unit from a sale (ADR-0012, #166). Its copies become available again (their
- * sold state is derived), and if the line's offer had been flipped to `sold` but its lot is no
- * longer fully sold, the offer reverts to `active`. */
+/** Remove a sold set from a sale (ADR-0013). Its copies become available again (their sold state
+ * is derived), and if the line's offer had been flipped to `sold` but is no longer fully sold, the
+ * offer reverts to `active`. */
 export async function removeSaleLine(ownerId: string, lineId: string): Promise<void> {
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
@@ -634,13 +512,10 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
     if (line.offerId) {
       const offer = await tx.offer.findUnique({
         where: { id: line.offerId },
-        select: { state: true, lotId: true, lot: { select: { kind: true } } },
+        select: { state: true },
       });
-      if (offer && offer.state === "sold") {
-        const kind = (isLotKind(offer.lot.kind) ? offer.lot.kind : "unit") as LotKind;
-        if (!(await isLotFullySold(tx, offer.lotId, kind))) {
-          await tx.offer.update({ where: { id: line.offerId }, data: { state: "active" } });
-        }
+      if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, line.offerId))) {
+        await tx.offer.update({ where: { id: line.offerId }, data: { state: "active" } });
       }
     }
   });
@@ -736,8 +611,8 @@ export interface PaginatedSalesResult {
   nextCursor: string | null;
 }
 
-/** Paginated sales list for the Sales screen (ADR-0012, #166). Newest sale first; filters by
- * platform. Offset-paginated to feed the shared infinite scroll. */
+/** Paginated sales list for the Sales screen (ADR-0013). Newest sale first; filters by platform.
+ * Offset-paginated to feed the shared infinite scroll. */
 export async function listSalesPaginated(
   ownerId: string,
   collectionId: string,
@@ -785,9 +660,8 @@ export async function listSalePlatforms(
 
 export interface SaleDetailLine {
   id: string;
-  lotId: string;
-  lotLabel: string;
-  lotKind: LotKind;
+  offerSetId: string;
+  setLabel: string;
   offerId: string | null;
   price: string;
   /** How many physical copies left on this line (its copies load lazily on the detail screen). */
@@ -820,9 +694,8 @@ export interface SaleDetail {
   createdAt: Date;
 }
 
-/** Full sale read model for the detail view (ADR-0012, #166). Runs the pure allocation engine
- * (`distributeSaleShared`, #163) to resolve each line's net proceeds — this is where the recorded
- * sale is "fed to" the engine; per-item P/L surfacing is #168. */
+/** Full sale read model for the detail view (ADR-0013). Runs the pure allocation engine
+ * (`distributeSaleShared`, #163) to resolve each line's net proceeds. */
 export async function getSaleDetail(ownerId: string, saleId: string): Promise<SaleDetail | null> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -845,12 +718,11 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       lines: {
         select: {
           id: true,
-          lotId: true,
+          offerSetId: true,
           offerId: true,
           price: true,
-          lot: {
+          offerSet: {
             select: {
-              kind: true,
               title: true,
               items: { select: { item: { select: STAMP_LABEL_SELECT } } },
             },
@@ -871,25 +743,21 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({ id: l.id, price: Number(l.price) }));
   // The shared amounts are distributed proportionally to line price, so there must be at least
   // one positive-priced line to distribute across. A sale still being built (no lines yet, or
-  // only zero-priced lines) can't be allocated — show each line's own price as its net until it
-  // can (the engine would otherwise throw on a positive shared amount over a zero weight base).
+  // only zero-priced lines) can't be allocated — show each line's own price as its net until it can.
   const canDistribute = lineInputs.reduce((s, l) => s + l.price, 0) > 0;
   const nets = canDistribute ? distributeSaleShared(shared, lineInputs) : [];
   const netById = new Map(nets.map((n) => [n.id, n]));
 
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
-    const kind = (isLotKind(l.lot.kind) ? l.lot.kind : "unit") as LotKind;
-    const lotLabel = deriveLotLabel(
-      kind,
-      l.lot.title,
-      l.lot.items.map((li) => copyLabel(li.item.stamp))
+    const setLbl = deriveSetLabel(
+      l.offerSet.title,
+      l.offerSet.items.map((li) => copyLabel(li.item.stamp))
     );
     const net = netById.get(l.id);
     return {
       id: l.id,
-      lotId: l.lotId,
-      lotLabel,
-      lotKind: kind,
+      offerSetId: l.offerSetId,
+      setLabel: setLbl,
       offerId: l.offerId,
       price: Number(l.price).toFixed(2),
       copyCount: l.items.length,
@@ -926,10 +794,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
 
 // ── Delete ──────────────────────────────────────────────────────────────────
 
-/** Delete a sale (ADR-0012, #166). Cascades its lines + line items, so the copies become
- * available again (their sold state is derived). Offers the sale marked `sold` revert to
- * `active` — the package is back on the market; prior `paused` state is not restored (nothing
- * stores it), which is the safe, re-listable default. */
+/** Delete a sale (ADR-0013). Cascades its lines + line items, so the copies become available
+ * again (their sold state is derived). Offers the sale marked `sold` revert to `active`. */
 export async function deleteSale(ownerId: string, saleId: string): Promise<void> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -954,10 +820,10 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
   });
 }
 
-// ── Sold-unit copies (packing view) ──────────────────────────────────────────
+// ── Sold-set copies (packing view) ────────────────────────────────────────────
 
 /** Distinct issue ids across every copy sold on a sale, for the detail screen's issue-group
- * headers (loaded once, cheaply — mirrors `getPurchaseIssueIds`). */
+ * headers (loaded once, cheaply). */
 export async function getSaleIssueIds(saleId: string): Promise<string[]> {
   const rows = await prisma.issueMember.findMany({
     where: {
@@ -969,10 +835,8 @@ export async function getSaleIssueIds(saleId: string): Promise<string[]> {
   return rows.map((r) => r.issueId);
 }
 
-/** The physical copies that left on one sale line, as fully-enriched `ItemListItem`s (same shape
- * as the Copies screen / lot detail). Loaded lazily per sold unit on the detail screen so a large
- * sale never enriches every copy up front. A unit is bounded (a komplet / single / sub-lot), so
- * this returns the whole — small — set for that line. */
+/** The physical copies that left on one sale line, as fully-enriched `ItemListItem`s. Loaded
+ * lazily per sold set on the detail screen so a large sale never enriches every copy up front. */
 export async function listSaleLineCopies(
   ownerId: string,
   lineId: string
@@ -996,9 +860,8 @@ export async function listSaleLineCopies(
   return items;
 }
 
-/** Every physical copy across a whole sale, enriched for the packing view's "group by lot off"
- * flat / by-issue stream. A sale is one buyer's order, so its copy count is inherently bounded —
- * loaded in one query (only when the flat view is opened). */
+/** Every physical copy across a whole sale, enriched for the packing view's flat / by-issue
+ * stream. A sale is one buyer's order, so its copy count is inherently bounded. */
 export async function listSaleCopies(
   ownerId: string,
   saleId: string

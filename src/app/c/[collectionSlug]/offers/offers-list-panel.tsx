@@ -13,13 +13,11 @@ import {
   type OfferFilters,
 } from "./use-offers-query";
 import { OfferFormDialog } from "./offer-form-dialog";
-import { LotPickerDialog } from "./lot-picker-dialog";
 import { OfferRow } from "./offer-row";
 
 type DialogState =
   | { kind: "none" }
-  | { kind: "pickLot" }
-  | { kind: "add"; lot: { id: string; label: string } }
+  | { kind: "add" }
   | { kind: "edit"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
   | { kind: "delete"; offer: OfferListItem };
@@ -49,11 +47,15 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
   const { invalidateAll } = useInvalidateOffers();
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
 
+  const needsAction = searchParams.get("needsAction") === "1";
   const stateParam = searchParams.get("state") as OfferState | null;
-  const state = stateParam && OFFER_STATES.includes(stateParam) ? stateParam : undefined;
+  const state = !needsAction && stateParam && OFFER_STATES.includes(stateParam) ? stateParam : undefined;
   const platformId = searchParams.get("platform") || undefined;
 
-  const filters: OfferFilters = useMemo(() => ({ platformId, state }), [platformId, state]);
+  const filters: OfferFilters = useMemo(
+    () => ({ platformId, state, needsAction }),
+    [platformId, state, needsAction]
+  );
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -88,8 +90,6 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
   }
 
   function setOfferState(offer: OfferListItem, next: "active" | "paused" | "withdrawn") {
-    // Withdrawing is terminal — route it through a confirmation. Pause / resume are reversible
-    // and fire immediately.
     if (next === "withdrawn") {
       setDialog({ kind: "withdraw", offer });
       return;
@@ -103,7 +103,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
     });
   }
 
-  const hasActiveFilters = !!platformId || !!state;
+  const hasActiveFilters = !!platformId || !!state || needsAction;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -131,15 +131,22 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
                 key={value}
                 label={OFFER_STATE_LABEL[value]}
                 active={active}
-                onClick={() => updateParams({ state: active ? "" : value })}
+                onClick={() => updateParams({ state: active ? "" : value, needsAction: "" })}
               />
             );
           })}
+          <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
+          {/* Derived overlay (ADR-0013 §4): active offers holding a set sold elsewhere. */}
+          <FilterChip
+            label="Needs action"
+            active={needsAction}
+            onClick={() => updateParams({ needsAction: needsAction ? "" : "1", state: "" })}
+          />
         </div>
 
         <button
           type="button"
-          onClick={() => setDialog({ kind: "pickLot" })}
+          onClick={() => setDialog({ kind: "add" })}
           style={{
             ...CONTROL_STYLE,
             marginLeft: "auto",
@@ -174,9 +181,11 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
 
         {!isLoading && rows.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {hasActiveFilters
-              ? "No offers match this filter."
-              : "No offers yet. List a composed lot on a marketplace to get started."}
+            {needsAction
+              ? "Nothing needs action — no active offer holds a set that has sold elsewhere."
+              : hasActiveFilters
+                ? "No offers match this filter."
+                : "No offers yet. Create one and compose its sets from your inventory."}
           </div>
         )}
 
@@ -202,22 +211,11 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
         )}
       </div>
 
-      {/* Step 1 of create: choose the lot to list (an offer without a lot is meaningless). */}
-      {dialog.kind === "pickLot" && (
-        <LotPickerDialog
-          collectionId={collectionId}
-          baseCurrency={baseCurrency}
-          onClose={closeDialog}
-          onConfirm={(lot) => setDialog({ kind: "add", lot })}
-        />
-      )}
-
-      {/* Step 2 of create / edit: the offer form (lot already fixed). */}
+      {/* Create / edit the offer header. */}
       {(dialog.kind === "add" || dialog.kind === "edit") && (
         <OfferFormDialog
           collectionId={collectionId}
           baseCurrency={baseCurrency}
-          fixedLot={dialog.kind === "add" ? dialog.lot : undefined}
           offer={dialog.kind === "edit" ? dialog.offer : undefined}
           initialPlatform={
             dialog.kind === "add" ? platforms.find((p) => p.id === platformId) : undefined
@@ -225,13 +223,16 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
-          onSubmit={(fd, lotId) => {
+          onSubmit={(fd) => {
             startTransition(async () => {
               if (dialog.kind === "add") {
                 const { createOfferAction } = await import("@/app/actions/offers");
-                const result = await createOfferAction(collectionId, lotId, fd);
-                if (result.status === "success") handleSuccess();
-                else setActionError(result.message);
+                const result = await createOfferAction(collectionId, fd);
+                if (result.status === "success") {
+                  invalidateAll(collectionId);
+                  // Straight to the compose screen — a fresh offer has no sets yet.
+                  router.push(`/c/${collectionSlug}/offers/${result.id}`);
+                } else setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateOfferAction } = await import("@/app/actions/offers");
                 const result = await updateOfferAction(collectionId, dialog.offer.id, fd);
@@ -247,7 +248,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
       {dialog.kind === "withdraw" && (
         <ConfirmDialog
           title="Withdraw offer"
-          message="This takes the listing down on the platform. Withdrawn is final — to sell here again, list the lot as a new offer. The lot and its copies are untouched."
+          message="This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           variant="destructive"
@@ -269,7 +270,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
       {dialog.kind === "delete" && (
         <ConfirmDialog
           title="Delete offer"
-          message="This permanently removes the offer. The lot and its copies stay in your inventory. This cannot be undone."
+          message="This permanently removes the offer and its sets. The copies stay in your inventory. This cannot be undone."
           actionLabel="Delete offer"
           pendingLabel="Deleting…"
           variant="destructive"

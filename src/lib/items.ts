@@ -476,11 +476,11 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
    * for copies actually in hand — the sale-lot composition picker only offers those (#164). */
   deliveryState?: string;
   /** Exclude copies that have already left on a sale line (the no-double-sale guard,
-   * ADR-0012 §5). Used by the sale-lot composition picker (#164). */
+   * ADR-0013). Used by the offer composition picker. */
   excludeSold?: boolean;
-  /** Exclude copies already packaged into this sale `Lot` (#164), so the picker only
-   * offers copies not yet in the lot being composed. */
-  notInSaleLotId?: string;
+  /** Exclude copies already packaged into any set of this offer (ADR-0013), so the composition
+   * picker only offers copies not yet in the offer being built. */
+  notInOfferId?: string;
   /** Restrict to copies whose linked stamp has this issued year. A number matches
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
@@ -556,8 +556,8 @@ function buildItemWhere(
     ...(filters.lotId ? { lotId: filters.lotId } : {}),
     ...(filters.deliveryState ? { deliveryState: filters.deliveryState } : {}),
     ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
-    ...(filters.notInSaleLotId
-      ? { lotMemberships: { none: { lotId: filters.notInSaleLotId } } }
+    ...(filters.notInOfferId
+      ? { offerSetMemberships: { none: { offerSet: { offerId: filters.notInOfferId } } } }
       : {}),
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
     ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),

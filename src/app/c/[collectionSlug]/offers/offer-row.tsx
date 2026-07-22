@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
 import { isTerminalState, manualTransitions } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { OfferStateChip } from "./offer-badges";
+import { OfferStateChip, NeedsActionChip } from "./offer-badges";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -33,12 +33,12 @@ interface OfferRowProps {
   onDelete: (offer: OfferListItem) => void;
 }
 
-/** A single offer as a stacked card row: lot label + actions on top, then platform / state /
- * price chips. The whole row opens the listed lot's composition screen. */
+/** A single offer as a stacked card row: its derived label + actions on top, then platform /
+ * state / quantity / price chips. The whole row opens the offer's detail (compose) screen. */
 export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, onDelete }: OfferRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
-  const lotHref = `/c/${collectionSlug}/lots/${offer.lotId}`;
+  const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
   const terminal = isTerminalState(offer.state);
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
@@ -52,7 +52,7 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
     }));
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open lot", icon: "↗", onSelect: () => router.push(lotHref) },
+    { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },
     ...(offer.url
       ? [{ key: "listing", label: "Open listing", icon: "🔗", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
       : []),
@@ -75,11 +75,11 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => router.push(lotHref)}
+        onClick={() => router.push(detailHref)}
         role="link"
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(lotHref);
+          if (e.key === "Enter") router.push(detailHref);
         }}
         style={{
           padding: "0.75rem 1.25rem",
@@ -89,7 +89,7 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
           opacity: terminal ? 0.7 : 1,
         }}
       >
-        {/* Line 1: lot label + actions */}
+        {/* Line 1: offer label + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
             style={{
@@ -102,7 +102,7 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
               maxWidth: "70%",
             }}
           >
-            {offer.lotLabel}
+            {offer.label}
           </span>
           <span style={{ flex: 1 }} />
           <span onClick={(e) => e.stopPropagation()}>
@@ -110,10 +110,14 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
           </span>
         </div>
 
-        {/* Line 2: platform / state / price */}
+        {/* Line 2: platform / state / quantity / price */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
           <span style={CHIP} title="Platform">{offer.platformName}</span>
           <OfferStateChip state={offer.state} />
+          {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
+          {offer.setCount > 1 && (
+            <span style={CHIP} title="Sets in this offer">{offer.setCount}×</span>
+          )}
           {offer.url && (
             <a
               href={offer.url}
@@ -137,7 +141,11 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
             }}
             title="Asking price"
           >
-            {offer.price} {offer.currency}
+            {offer.price === "0.00" ? (
+              <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>No price yet</span>
+            ) : (
+              <>{offer.price} {offer.currency}</>
+            )}
           </span>
         </div>
       </div>

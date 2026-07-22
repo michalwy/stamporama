@@ -1,66 +1,103 @@
 # Offers
 
-An **offer** is a [lot](lots.md) listed on **one platform** — a marketplace such as Delcampe,
-Allegro, or Colnect. The lot is *what* you are selling; the offer is *where*. Because a lot is
-platform-agnostic, the **same lot can carry several offers at once** (one per platform), each
-with its own asking price, currency, and listing URL.
+An **offer** is something you list on **one platform** — a marketplace such as Delcampe, Allegro,
+or Colnect. The offer **owns what it lists**: you compose it from your inventory copies as one or
+more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
+independent offers — each tracked, edited, and sold on its own.
 
 Open the **Offers** screen from the **Trading** section of the sidebar.
 
-## Listing a lot
+## Sets — what an offer is made of
 
-You can list a lot two ways:
+A **set** is one whole sellable unit inside an offer. It holds one or more copies that **sell
+together and never split apart**:
 
-- **From the lot's detail screen** — open a lot and use **List on platform** in its *Offers*
-  section. The lot is already chosen, so you only pick the platform and price.
-- **From the Offers screen** — click **New offer**. Because an offer always lists a lot, you
-  first **choose the lot** in a browse dialog: filter by kind (Unit / Quantity) and state
-  (Draft / Ready), search by title or catalog number, and pick from a list showing each lot's
-  copy count and catalog value. Choosing the lot opens the offer form.
+- a **single stamp** → a set with one copy,
+- a **series / komplet** (several different stamps sold as one) → a set with several copies,
+- a **quantity** of interchangeable duplicates → **several sets** (one per copy).
 
-Either way you fill in:
+There is no "unit vs quantity" choice to make — every offer is simply "a listing with one or more
+sets". A plain single-stamp offer is just the one-set case.
 
-- **Platform** — start typing to search your [contacts](contacts.md) that are marked as
-  platforms; pick one, or type a new name to create it on the fly.
-- **Asking price** and **currency** — priced per offer, because platforms price independently.
-- **Listing URL** (optional) — a link to the live listing, so you can jump straight to it later.
+## Creating and composing an offer
 
-Only lots that are still composed (not [dissolved](lots.md)) and hold at least one member can be
-listed.
+1. Click **New offer** and choose the **platform** and **currency**. That's all — you usually
+   don't know the asking price yet (it follows from the copies you add) and there's no listing URL
+   until the auction is up. Creating the offer opens its detail screen.
+2. On the detail screen, use **Add set** to pick copies from your inventory. When you pick more
+   than one copy you choose how they go in:
+   - **Each copy as its own set** — a quantity of interchangeable singles, and
+   - **One set holding all of them** — a series sold together.
+3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
+4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
+   offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
+   **currency** is an inline dropdown, and the offer's **state** actions live in the header's **⋮**
+   menu.
 
-## One active offer per platform
+Next to the asking price the header shows a **suggested price** — the **average catalog value per
+set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
+**Use** applies it as the asking price in one click. It's a starting point; price as you see fit.
+
+Only copies that are **For sale**, **delivered**, **unsold**, and **not already in this offer**
+can be added. To list the same package on another marketplace, just create a second offer and
+compose it the same way.
+
+The offer's sets render like a [purchase order](purchases.md): each set is a **collapsible card**
+showing its copies as full inventory rows. Group by **Set** or **Location**, optionally sub-group
+by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
+Each copy row has a quick **+ catalog value** link (click the value to edit it) so you can fill in
+missing catalog prices without leaving the offer — which also feeds the suggested price. The
+**Only** filters — **Unpriced**, **No photo**, and **Unknown variant** — narrow the view to copies
+that still need a catalog value, a photo, or their variant identified, so you can clear them before
+listing.
+
+## One active offer per copy, per platform
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp
-could sell twice on the same marketplace. When you list (or edit) an offer, Stamporama checks
-for this and shows a **heads-up** if another active offer on that platform already includes a
-copy from this lot. It is only a warning: you can still proceed, but normally you would pause or
-withdraw the other offer first. (Listing the *same* lot on *different* platforms is exactly the
-point and is never flagged.)
+could sell twice on the same marketplace. When you add a copy that another active offer on that
+platform already lists, Stamporama shows a **heads-up**. It is only a warning: you can proceed,
+but normally you would remove it from the other offer first. (Listing the same copy on *different*
+platforms is exactly the point and is never flagged.)
+
+## Keeping platforms in sync — "needs action"
+
+Because a copy can be listed on several platforms, selling it in one place leaves the other
+listings stale. Stamporama surfaces this automatically: an **active** offer holding a **set whose
+copy has sold elsewhere** is flagged **Needs action** — a red badge on the offer row and on the
+affected set, plus a **Needs action** filter in the toolbar.
+
+To resolve one, open the offer and:
+
+- **Quantity still available** → **remove the affected set** (this is the decrement — the offer
+  now lists one fewer), after updating the quantity on the platform itself.
+- **Nothing left to sell** → **withdraw** the offer.
+
+The offer the sale actually went through is handled for you — it becomes **Sold** once *every* set
+has sold through it (a partial sale keeps it **Active** for its remaining sets). Nothing is done to
+other platforms automatically — you stay in control of each marketplace. The flag is derived live
+from what has sold, so it clears the moment the offer no longer holds a sold copy.
 
 ## Offer lifecycle
 
-An offer moves through these states:
+- **Active** — live on the platform. A new offer starts here.
+- **Paused** — temporarily suspended; the copies stay committed. Resume any time.
+- **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
+- **Sold** — set automatically when a [sale](sales.md) sells every set through the offer. You do
+  not mark an offer sold by hand.
 
-- **Active** — live on the platform. This is where a new offer starts.
-- **Paused** — temporarily suspended (for example, while you rethink the price). Copies stay
-  committed to the lot. Resume it back to active any time.
-- **Withdrawn** — taken down for good. This is **final**: to sell there again, list the lot as a
-  new offer.
-- **Sold** — set automatically when you [record a sale](sales.md) through the offer. You do not
-  mark an offer sold by hand.
-
-From the row's **⋮** menu you can **edit** the price / platform / URL, **pause** or **resume**,
-**withdraw**, open the live listing, or **delete** the offer. Deleting an offer never touches the
-lot or the copies inside it — it only removes the listing record.
+From the row's **⋮** menu you can **edit** the price / platform / URL, **pause** / **resume**,
+**withdraw**, open the live listing, or **delete** the offer. Deleting removes the offer and its
+sets; the copies stay in your inventory. An offer with a sold set can't be deleted — withdraw it.
 
 ## Filtering
 
-The toolbar filters offers by **platform** and by **state** (Active / Paused / Sold / Withdrawn),
-so you can, for example, see everything still live on one marketplace at a glance.
+The toolbar filters offers by **platform**, by **state** (Active / Paused / Sold / Withdrawn), and
+by **Needs action** (the derived overlay above). The state filters and **Needs action** are
+mutually exclusive.
 
 ## Related
 
-- [Lots](lots.md) — the packages you list.
-- [Sales](sales.md) — record a sale when an offer sells.
+- [Inventory](inventory.md) — the copies you compose offers from.
+- [Sales](sales.md) — record a sale when an offer's set sells.
 - [Contacts](contacts.md) — mark a contact as a **platform** to list on it.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used later for profit/loss.

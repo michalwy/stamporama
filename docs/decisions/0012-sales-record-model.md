@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Accepted, but **partially superseded by [ADR-0013](0013-offer-owned-sale-composition.md)**:
+§1 (two axes `Lot`/`Offer`), §2 (recursive `Lot`), and §5 (cross-platform coordination) are
+replaced by an offer-owned model (`Offer ⊃ Set ⊃ Item`, `Lot` removed). §3 (offer lifecycle),
+§4 (currency / FX freeze), and §6 (P/L allocation) remain in force.
 
 ## Context
 

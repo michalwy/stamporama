@@ -46,3 +46,14 @@ export function OfferStateChip({ state }: { state: OfferState }) {
   if (!meta.token) return <span style={CHIP} title={meta.title}>{label}</span>;
   return tinted(meta.token, label, meta.title);
 }
+
+/** Derived overlay (ADR-0013 §4): an active offer holding a set whose copy sold elsewhere — go to
+ * the platform, remove the dead set (decrement) or withdraw. */
+export function NeedsActionChip({ soldCopyCount }: { soldCopyCount: number }) {
+  const copies = soldCopyCount === 1 ? "1 copy" : `${soldCopyCount} copies`;
+  return tinted(
+    "error",
+    "Needs action",
+    `${copies} in this offer sold elsewhere — remove the sold set(s) on the platform, or withdraw`
+  );
+}

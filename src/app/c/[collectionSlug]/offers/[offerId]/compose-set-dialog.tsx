@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -18,7 +18,7 @@ import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persiste
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
-import { useSellableCopies } from "../use-lots-query";
+import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -38,54 +38,35 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
-interface InventoryPickerProps {
+interface ComposeSetDialogProps {
   collectionId: string;
-  lotId: string;
+  offerId: string;
+  platformId: string;
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
-  isPending: boolean;
-  error?: string;
-  /** Dialog title override (e.g. "Add copies as sub-lots" for a quantity lot). */
-  title?: string;
-  /** Restrict to one stamp — the quantity-lot flow passes the lot's shape stamp so only
-   * interchangeable copies show. */
-  stampId?: string | null;
-  /** Restrict to one condition — the quantity-lot flow passes the lot's shape condition
-   * (condition must match for interchangeability). */
-  conditionId?: string | null;
-  /** Distinct certificate keys already in the target quantity lot ("" = none). When set, the
-   * picker warns if the current selection would mix certificates (a warning, not a block). */
-  existingCertKeys?: string[];
-  /** Copy ids to hide (already represented under the target quantity lot). */
-  excludeIds?: string[];
   onClose: () => void;
-  onConfirm: (itemIds: string[]) => void;
+  onDone: () => void;
 }
 
 /**
- * Popup **inventory picker** for composing a unit lot (ADR-0012 §2, #164). Mirrors the
- * Copies screen: an area sidebar + year facets on the left, a text-filterable **flat list**
- * of inventory copies on the right — each a checkbox row rendered with the same
- * `InventoryItemRow`. Only copies flagged *For sale* that aren't already in the lot, and
- * aren't sold, appear.
+ * Full **inventory picker** for composing an offer's sets (ADR-0013). Mirrors the Copies screen and
+ * the old lot picker: an area sidebar + year facets on the left, a text-filterable flat list of
+ * eligible copies (For sale, delivered, unsold, not already in this offer) on the right, each a
+ * checkbox row rendered with `InventoryItemRow`. Selected copies go in either as **one set per
+ * copy** (a quantity of singles) or **one set holding all** (a series). A non-blocking collision
+ * warning shows when another active offer on this platform already lists a chosen copy.
  */
-export function InventoryPicker({
+export function ComposeSetDialog({
   collectionId,
-  lotId,
+  offerId,
+  platformId,
   areas,
   locations,
   baseCurrency,
-  isPending,
-  error,
-  title = "Add copies from inventory",
-  stampId = null,
-  conditionId = null,
-  existingCertKeys,
-  excludeIds,
   onClose,
-  onConfirm,
-}: InventoryPickerProps) {
+  onDone,
+}: ComposeSetDialogProps) {
   const { storedAreaId, storedYear, writeStore } = useCollectionFilterStore(collectionId);
   const areaId = storedAreaId;
   const year = storedYear;
@@ -98,8 +79,10 @@ export function InventoryPicker({
     [writeStore, storedAreaId]
   );
 
-  const [search, setSearch] = usePersistedSearch(`${collectionId}:copies`);
+  const [search, setSearch] = usePersistedSearch(`${collectionId}:offer-copies`);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -119,15 +102,7 @@ export function InventoryPicker({
     return [...ids];
   }, [areas, areaId]);
 
-  // Copies are area-scoped server-side; year + search filter client-side for stable facets
-  // and instant response (mirrors the stamp picker).
-  const { data: copies = [], isLoading } = useSellableCopies(
-    collectionId,
-    lotId,
-    { areaIds, year: null, search: "", stampId, conditionId, excludeIds },
-    true
-  );
-
+  const { data: copies = [], isLoading } = useComposableCopies(collectionId, offerId, areaIds, true);
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
   const yearFacets = useMemo(() => {
@@ -148,9 +123,6 @@ export function InventoryPicker({
       if (!q) return true;
       if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
       if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
-      // Match catalog numbers on their normalized key (vendor abbreviation + area prefix +
-      // number) so a prefixed query resolves in any spacing — "Mi PL 200", "MiPL200",
-      // "PL200", or bare "200" all hit the same copy (#146), mirroring the inventory list.
       const vm = c.areaId ? vendorMapByArea.get(c.areaId) : undefined;
       const keys = c.catalogNumbers.map((cn) => {
         const v = vm?.get(cn.catalogVendorId);
@@ -171,7 +143,6 @@ export function InventoryPicker({
 
   const allVisibleIds = visibleCopies.map((c) => c.id);
   const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id));
-
   function toggleAll(on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -183,28 +154,35 @@ export function InventoryPicker({
     });
   }
 
-  const count = selected.size;
+  const selectedIds = useMemo(() => [...selected], [selected]);
+  const { data: collisions = [] } = useOfferCollisions(
+    collectionId,
+    selectedIds,
+    platformId,
+    offerId,
+    selectedIds.length > 0
+  );
 
-  // Certificate warning (not a block): adding these copies would leave the quantity lot with
-  // more than one distinct certificate status among its interchangeable units.
-  const certWarning = useMemo(() => {
-    if (!existingCertKeys) return false; // not the quantity-lot copy flow
-    const certs = new Set<string>(existingCertKeys);
-    for (const c of copies) {
-      if (selected.has(c.id)) certs.add(c.certificateStatusId ?? "");
+  const multi = selectedIds.length > 1;
+
+  function submit(perCopy: boolean) {
+    if (selectedIds.length === 0) {
+      setError("Pick at least one copy.");
+      return;
     }
-    return certs.size > 1;
-  }, [existingCertKeys, copies, selected]);
+    setError(undefined);
+    startTransition(async () => {
+      const { addOfferSetAction } = await import("@/app/actions/offers");
+      const result = await addOfferSetAction(offerId, selectedIds, { perCopy: multi ? perCopy : false });
+      if (result.status === "success") onDone();
+      else setError(result.message);
+    });
+  }
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <DialogShell
-      title={title}
-      onClose={onClose}
-      maxWidth="min(94vw, 80rem)"
-      height="min(90vh, 60rem)"
-    >
+    <DialogShell title="Add set" onClose={onClose} maxWidth="min(94vw, 80rem)" height="min(90vh, 60rem)">
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <ListFilterSidebar
           variant="dialog"
@@ -216,43 +194,10 @@ export function InventoryPicker({
           selectedYear={year}
           onSelectYear={setYear}
         />
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            borderLeft: "1px solid var(--color-border)",
-          }}
-        >
-          <div
-            style={{
-              padding: "0.75rem 1rem",
-              borderBottom: "1px solid var(--color-border)",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-secondary)",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(e) => toggleAll(e.target.checked)}
-                disabled={visibleCopies.length === 0}
-              />
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0, borderLeft: "1px solid var(--color-border)" }}>
+          <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)", whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer" }}>
+              <input type="checkbox" checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} disabled={visibleCopies.length === 0} />
               All
             </label>
             <input
@@ -271,7 +216,7 @@ export function InventoryPicker({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? "No copies available to add. Copies must be marked For sale and delivered (in hand)."
+                  ? "No copies available to add. Copies must be For sale and delivered (in hand), unsold, and not already in this offer."
                   : "No copies match your filter."}
               </p>
             ) : (
@@ -290,13 +235,7 @@ export function InventoryPicker({
                       background: checked ? "var(--color-accent-soft)" : undefined,
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(item.id)}
-                      aria-label="Select this copy"
-                      style={{ flexShrink: 0 }}
-                    />
+                    <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} aria-label="Select this copy" style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <InventoryItemRow
                         collectionId={collectionId}
@@ -319,18 +258,9 @@ export function InventoryPicker({
         </div>
       </div>
 
-      {certWarning && (
-        <div
-          style={{
-            padding: "0.5rem 1rem",
-            borderTop: "1px solid var(--color-warning-border, var(--color-border))",
-            background: "var(--color-warning-soft)",
-            color: "var(--color-warning)",
-            fontSize: "0.8125rem",
-          }}
-        >
-          ⚠ These copies have different certificate statuses. They can still be grouped, but the
-          quantity lot won&apos;t be uniform on certificate.
+      {collisions.length > 0 && (
+        <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-warning-border, var(--color-border))", background: "var(--color-warning-soft)", color: "var(--color-warning)", fontSize: "0.8125rem" }}>
+          ⚠ This platform already has an active offer sharing a copy — {collisions.map((c) => c.offerLabel).join(", ")}. You can still add it, but keep at most one active listing per copy on a platform.
         </div>
       )}
 
@@ -338,19 +268,24 @@ export function InventoryPicker({
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
           <ErrorBubble>{error}</ErrorBubble>
-          <DialogPrimaryButton
-            type="button"
-            onClick={() => onConfirm([...selected])}
-            disabled={isPending || count === 0}
-          >
-            {isPending
-              ? "Adding…"
-              : count > 0
-                ? `Add ${count} ${count === 1 ? "copy" : "copies"}`
-                : "Add copies"}
-          </DialogPrimaryButton>
+          {/* Single copy → one plain Add. Several → two ways to add them: as a quantity of
+              separate single-copy sets, or as one set sold together (a series). */}
+          {multi ? (
+            <>
+              <DialogSecondaryButton onClick={() => submit(false)} disabled={isPending}>
+                {isPending ? "Adding…" : `Add as one set`}
+              </DialogSecondaryButton>
+              <DialogPrimaryButton type="button" onClick={() => submit(true)} disabled={isPending}>
+                {isPending ? "Adding…" : `Add as ${selectedIds.length} sets`}
+              </DialogPrimaryButton>
+            </>
+          ) : (
+            <DialogPrimaryButton type="button" onClick={() => submit(false)} disabled={isPending || selectedIds.length === 0}>
+              {isPending ? "Adding…" : "Add copy"}
+            </DialogPrimaryButton>
+          )}
         </div>
       </DialogFooter>
     </DialogShell>,
