@@ -279,6 +279,9 @@ export interface SaleHeaderInput {
   /** Buyer-paid handling (+) and platform commission (−) are known at sale time, so they live on
    * the header. My actual shipping (−) is learned later and set on the detail screen. */
   buyerHandling: string | null;
+  /** The total the buyer paid, when it is the anchor instead of handling (#205). Mutually exclusive
+   * with `buyerHandling` — at most one is non-null; the other is stored null. */
+  buyerPaidTotal: string | null;
   commission: string | null;
 }
 
@@ -381,6 +384,7 @@ export async function createSale(
       currency,
       fxRateToBase,
       buyerHandling: input.buyerHandling,
+      buyerPaidTotal: input.buyerPaidTotal,
       commission: input.commission,
     },
     select: { id: true },
@@ -420,16 +424,19 @@ export async function updateSaleHeader(
       soldAt: input.soldAt,
       fxRateToBase,
       buyerHandling: input.buyerHandling,
+      buyerPaidTotal: input.buyerPaidTotal,
       commission: input.commission,
     },
   });
 }
 
-/** The three shared-amount fields, editable in place on the detail screen. */
-export type SaleAmountField = "buyerHandling" | "shippingCost" | "commission";
+/** The shared-amount fields editable in place on the detail screen. `buyerPaidTotal` is the
+ * alternate anchor for the buyer side (#205) — setting it clears `buyerHandling` and vice-versa. */
+export type SaleAmountField = "buyerHandling" | "buyerPaidTotal" | "shippingCost" | "commission";
 
-/** Set one of a sale's shared amounts (buyer handling / shipping / commission) in place. Null
- * when cleared. Feeds the allocation engine on read (`getSaleDetail`). */
+/** Set one of a sale's shared amounts in place. Null when cleared. Feeds the allocation engine on
+ * read (`getSaleDetail`). Buyer handling and buyer-paid total are mutually exclusive anchors, so
+ * writing one clears the other. */
 export async function updateSaleAmount(
   ownerId: string,
   saleId: string,
@@ -437,10 +444,24 @@ export async function updateSaleAmount(
   value: string | null
 ): Promise<void> {
   await assertSaleOwner(ownerId, saleId);
-  await prisma.sale.update({
-    where: { id: saleId },
-    data: { [field]: value },
-  });
+  const data: Prisma.SaleUpdateInput = { [field]: value };
+  if (field === "buyerHandling") data.buyerPaidTotal = null;
+  else if (field === "buyerPaidTotal") data.buyerHandling = null;
+  await prisma.sale.update({ where: { id: saleId }, data });
+}
+
+/** Resolve the effective buyer handling (the number fed to net + allocation) from a sale's two
+ * mutually-exclusive anchors and its gross (#205). Total-anchored handling is derived as
+ * `total − gross` and clamped at 0 — the allocation engine requires non-negative shared amounts, and
+ * a total below the offer prices is an error state surfaced separately (`totalBelowGross`). */
+function resolveBuyerHandling(
+  buyerHandling: Prisma.Decimal | null,
+  buyerPaidTotal: Prisma.Decimal | null,
+  gross: number
+): { handling: number; totalBelowGross: boolean } {
+  if (buyerPaidTotal == null) return { handling: num(buyerHandling), totalBelowGross: false };
+  const derived = Number(buyerPaidTotal) - gross;
+  return { handling: Math.max(0, derived), totalBelowGross: derived < 0 };
 }
 
 /**
@@ -612,6 +633,7 @@ const SALE_LIST_SELECT = {
   currency: true,
   fxRateToBase: true,
   buyerHandling: true,
+  buyerPaidTotal: true,
   shippingCost: true,
   commission: true,
   createdAt: true,
@@ -637,6 +659,7 @@ function toSaleListItem(row: {
   soldAt: Date;
   currency: string;
   buyerHandling: Prisma.Decimal | null;
+  buyerPaidTotal: Prisma.Decimal | null;
   shippingCost: Prisma.Decimal | null;
   commission: Prisma.Decimal | null;
   createdAt: Date;
@@ -645,7 +668,8 @@ function toSaleListItem(row: {
   lines: { price: Prisma.Decimal; _count: { items: number } }[];
 }): SaleListItem {
   const gross = row.lines.reduce((s, l) => s + Number(l.price), 0);
-  const net = gross + num(row.buyerHandling) - num(row.shippingCost) - num(row.commission);
+  const { handling } = resolveBuyerHandling(row.buyerHandling, row.buyerPaidTotal, gross);
+  const net = gross + handling - num(row.shippingCost) - num(row.commission);
   return {
     id: row.id,
     platformId: row.platformId,
@@ -747,7 +771,15 @@ export interface SaleDetail {
   soldAt: Date;
   currency: string;
   fxRateToBase: string | null;
+  /** The effective buyer handling shown in the breakdown — the stored value when handling-anchored,
+   * or the derived `total − gross` when total-anchored (#205). */
   buyerHandling: string | null;
+  /** The stored buyer-paid total when it is the anchor, else null. When non-null, handling is
+   * derived and read-only in the UI. */
+  buyerPaidTotal: string | null;
+  /** True when total-anchored and the total is below the offer prices — handling would be negative,
+   * so it is clamped to 0 and this flags the error state. */
+  totalBelowGross: boolean;
   shippingCost: string | null;
   commission: string | null;
   grossProceeds: string;
@@ -771,6 +803,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       currency: true,
       fxRateToBase: true,
       buyerHandling: true,
+      buyerPaidTotal: true,
       shippingCost: true,
       commission: true,
       createdAt: true,
@@ -796,8 +829,15 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   });
   if (!sale || sale.collection.ownerId !== ownerId) return null;
 
+  const gross = sale.lines.reduce((s, l) => s + Number(l.price), 0);
+  // Resolve the buyer-side anchor first: total-anchored handling is derived from gross (#205).
+  const { handling: effHandling, totalBelowGross } = resolveBuyerHandling(
+    sale.buyerHandling,
+    sale.buyerPaidTotal,
+    gross
+  );
   const shared = {
-    buyerHandling: num(sale.buyerHandling),
+    buyerHandling: effHandling,
     shippingCost: num(sale.shippingCost),
     commission: num(sale.commission),
     fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
@@ -829,7 +869,6 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     };
   });
 
-  const gross = sale.lines.reduce((s, l) => s + Number(l.price), 0);
   const net = gross + shared.buyerHandling - shared.shippingCost - shared.commission;
 
   return {
@@ -844,7 +883,10 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     soldAt: sale.soldAt,
     currency: sale.currency,
     fxRateToBase: sale.fxRateToBase == null ? null : String(sale.fxRateToBase),
-    buyerHandling: money(sale.buyerHandling),
+    // Total-anchored: show the derived (clamped) handling; handling-anchored: the stored value.
+    buyerHandling: sale.buyerPaidTotal != null ? effHandling.toFixed(2) : money(sale.buyerHandling),
+    buyerPaidTotal: money(sale.buyerPaidTotal),
+    totalBelowGross,
     shippingCost: money(sale.shippingCost),
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),

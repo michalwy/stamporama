@@ -110,7 +110,7 @@ describe("duplicate offer (list on another platform)", () => {
     await setOfferState(userId, other, "active"); // only a live listing can sell
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,
-      soldAt: new Date(), currency: "EUR", buyerHandling: null, commission: null,
+      soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await addSaleLines(userId, saleId, [{ offerId: other, offerSetId: otherSet, price: "9.00", itemIds: [a] }]);
 

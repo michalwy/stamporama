@@ -26,9 +26,16 @@ Click **Record sale** and fill in:
 - **Currency** — fixed by the platform and shown locked; every amount on the sale is in it. The
   first time you sell (or list) on a platform that has no currency yet, you pick one inline and it
   is saved to the platform.
-- **Buyer handling** and **Commission** — the two amounts you already know at sale time: the
-  postage/handling the buyer paid you (**adds** to proceeds) and the platform's fee
-  (**subtracts**). Your own shipping cost is added later on the detail screen.
+- **Buyer handling** and **Commission** — the amounts you know at sale time: the postage/handling
+  the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**). Your own
+  shipping cost is added later on the detail screen.
+  - **Buyer handling has two entry modes.** By default you enter the **total the buyer paid** and
+    the handling is worked out as **total − the offer prices**; the total is remembered, so as you
+    add sold sets the handling **shrinks by itself** and the total stays put. Use **Enter handling**
+    to type the handling directly instead (then the handling is fixed and the total is whatever the
+    offers plus handling come to). At creation no sets are picked yet, so the total equals the
+    handling until you add them. A total below the offer prices — which would make handling
+    negative — is flagged and can't be saved.
 
 **Continue** creates the sale and opens its detail screen.
 
@@ -53,11 +60,18 @@ the platform's currency after listing, any offer still on the **old** currency i
 
 ### Step 3 — amounts
 
-The **Amounts** section shows the proceeds breakdown: the gross of the line prices, the three
-shared amounts, and the resulting net. Each shared amount — **buyer handling** (+), **my
-shipping** (−), and **commission** (−) — is **editable in place**: rows with a pencil (✎) can be
-clicked to edit. Click the value (or **Set** when empty), type the amount, and press Enter
-(Escape reverts). Handling and commission can also be set upfront in the header dialog.
+The **Amounts** section shows the proceeds breakdown: the gross of the line prices, the shared
+amounts, and the resulting net. Each shared amount — **my shipping** (−) and **commission** (−),
+plus **buyer handling** (+) when you entered it directly — is **editable in place**: rows with a
+pencil (✎) can be clicked to edit. Click the value (or **Set** when empty), type the amount, and
+press Enter (Escape reverts).
+
+If the sale is anchored on the **total paid** (the default), the breakdown instead shows an
+editable **Total paid by buyer** row and a read-only **buyer handling** derived below it — the
+handling follows the total minus the offer prices and re-settles automatically as you add or
+remove sold sets. If the total ever falls below the offer prices, handling is held at 0 and a
+warning asks you to raise the total. Switch a sale between the two modes any time from **Edit
+header**.
 
 You can revise the header (platform, buyer, date, buyer handling, commission) any time with
 **Edit header** — though the platform is locked once units are recorded, since a sale stays on one

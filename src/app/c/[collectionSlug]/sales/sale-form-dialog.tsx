@@ -28,6 +28,9 @@ export interface SaleFormDialogInitial {
   soldAt: string;
   currency: string;
   buyerHandling: string;
+  /** The stored buyer-paid total when the sale is total-anchored (#205), else "". Drives which
+   * mode the dialog opens in. */
+  buyerPaidTotal: string;
   commission: string;
 }
 
@@ -40,6 +43,10 @@ export interface SaleFormDialogProps {
   initial?: SaleFormDialogInitial;
   /** Blocks platform change (edit mode with sold units already recorded). */
   platformLocked?: boolean;
+  /** Sum of the sale's line (offer) prices, when known — passed from the detail screen's Edit
+   * header so "total paid" can derive buyer handling = total − gross (#205). Absent at creation
+   * (no sold units picked yet), where it is treated as 0. */
+  grossProceeds?: string;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -56,6 +63,7 @@ export function SaleFormDialog({
   today,
   initial,
   platformLocked,
+  grossProceeds,
   isPending,
   error,
   onClose,
@@ -81,6 +89,48 @@ export function SaleFormDialog({
   const [buyerHandling, setBuyerHandling] = useState(initial?.buyerHandling ?? "");
   const [commission, setCommission] = useState(initial?.commission ?? "");
 
+  // Buyer handling can be entered directly, or derived from the total the buyer paid (#205):
+  // handling = total − gross (sum of the sale's offer prices). Gross is only known once sold units
+  // exist, so it is 0 at creation; the toggle still appears for consistency but total ≡ handling
+  // until units are added on the detail screen.
+  const grossNum = grossProceeds != null ? Number(grossProceeds) : 0;
+  const hasGross = grossProceeds != null && grossNum > 0;
+  // Open in the sale's own anchor: total-anchored sales reopen in total mode with the stored total;
+  // a handling-anchored sale opens in direct mode; a brand-new sale defaults to total (the primary
+  // entry the user asked for).
+  const totalAnchored = (initial?.buyerPaidTotal ?? "").trim() !== "";
+  const handlingAnchored = (initial?.buyerHandling ?? "").trim() !== "";
+  const [handlingMode, setHandlingMode] = useState<"direct" | "total">(
+    handlingAnchored && !totalAnchored ? "direct" : "total"
+  );
+  // Seed the total field: the stored total when total-anchored, otherwise derive it from any stored
+  // handling (total = handling + gross) so switching modes doesn't blank it.
+  const [totalPaid, setTotalPaid] = useState(() => {
+    if (totalAnchored) return (initial?.buyerPaidTotal ?? "").trim();
+    const h = initial?.buyerHandling?.trim();
+    if (!h) return "";
+    const n = Number(h);
+    return Number.isNaN(n) ? "" : (n + grossNum).toFixed(2);
+  });
+  const totalNum = totalPaid.trim() === "" ? null : Number(totalPaid);
+  const derivedHandling =
+    totalNum == null || Number.isNaN(totalNum) ? null : totalNum - grossNum;
+  // Total below gross would make handling negative — the issue's invalid case.
+  const totalTooLow = derivedHandling != null && derivedHandling < 0;
+  const resolvedCurrency = lockedCurrency ?? currency;
+
+  /** Swap entry modes, seeding the target field from the current one so neither jumps to blank. */
+  function switchHandlingMode(next: "direct" | "total") {
+    if (next === handlingMode) return;
+    if (next === "total") {
+      const h = buyerHandling.trim() === "" ? null : Number(buyerHandling);
+      if (h != null && !Number.isNaN(h)) setTotalPaid((h + grossNum).toFixed(2));
+    } else if (derivedHandling != null && !totalTooLow) {
+      setBuyerHandling(derivedHandling.toFixed(2));
+    }
+    setHandlingMode(next);
+  }
+
   const title = mode === "add" ? "Record a sale" : "Edit sale header";
   const actionLabel = isPending
     ? mode === "add"
@@ -92,6 +142,9 @@ export function SaleFormDialog({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // A total below the offer prices would make handling negative — the inline hint already flags
+    // it; block the submit so the invalid value never reaches the server.
+    if (handlingMode === "total" && totalTooLow) return;
     onSubmit({
       platformId: platformId || null,
       platformName: platformName || null,
@@ -101,8 +154,11 @@ export function SaleFormDialog({
       soldAt,
       // Locked to the platform's currency; the setter's value only applies as the first-sale
       // fallback that sets an unset platform's currency (#196).
-      currency: lockedCurrency ?? currency,
+      currency: resolvedCurrency,
+      // The anchor decides which field the server stores (#205); it clears the other.
+      handlingMode,
       buyerHandling,
+      buyerPaidTotal: totalPaid,
       commission,
     });
   }
@@ -225,21 +281,78 @@ export function SaleFormDialog({
           {/* Sale-time shared amounts */}
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-handling">Buyer handling</LabelWithError>
-              <input
-                id="sale-handling"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={buyerHandling}
-                onChange={(e) => setBuyerHandling(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                + paid by buyer
-              </p>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
+                <LabelWithError htmlFor={handlingMode === "direct" ? "sale-handling" : "sale-total-paid"}>
+                  {handlingMode === "direct" ? "Buyer handling" : "Total paid by buyer"}
+                </LabelWithError>
+                <button
+                  type="button"
+                  onClick={() => switchHandlingMode(handlingMode === "direct" ? "total" : "direct")}
+                  disabled={isPending}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    padding: 0,
+                    cursor: isPending ? "default" : "pointer",
+                    fontSize: "0.6875rem",
+                    color: "var(--color-action-primary)",
+                    fontWeight: 500,
+                  }}
+                >
+                  {handlingMode === "direct" ? "Enter total paid" : "Enter handling"}
+                </button>
+              </div>
+              {handlingMode === "direct" ? (
+                <>
+                  <input
+                    id="sale-handling"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={buyerHandling}
+                    onChange={(e) => setBuyerHandling(e.target.value)}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    + paid by buyer
+                  </p>
+                </>
+              ) : (
+                <>
+                  <input
+                    id="sale-total-paid"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={totalPaid}
+                    onChange={(e) => setTotalPaid(e.target.value)}
+                    disabled={isPending}
+                    aria-invalid={totalTooLow}
+                    style={{
+                      ...INPUT_STYLE,
+                      ...(totalTooLow ? { borderColor: "var(--color-error)" } : {}),
+                    }}
+                  />
+                  <p
+                    style={{
+                      fontSize: "0.6875rem",
+                      margin: "0.25rem 0 0",
+                      color: totalTooLow ? "var(--color-error)" : "var(--color-text-muted)",
+                    }}
+                  >
+                    {totalTooLow
+                      ? `Total must be at least ${grossNum.toFixed(2)} ${resolvedCurrency} (the offer prices).`
+                      : hasGross
+                        ? `− ${grossNum.toFixed(2)} offers = ${
+                            derivedHandling != null ? derivedHandling.toFixed(2) : "0.00"
+                          } ${resolvedCurrency} handling`
+                        : "No sold units yet — handling equals the total until you add them."}
+                  </p>
+                </>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-commission">Commission</LabelWithError>

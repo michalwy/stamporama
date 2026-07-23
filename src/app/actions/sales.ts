@@ -51,7 +51,11 @@ export interface SaleHeaderRaw {
   externalRef: string;
   soldAt: string;
   currency: string;
+  /** Which buyer-side anchor the form submitted (#205): "direct" uses `buyerHandling`, "total" uses
+   * `buyerPaidTotal` and derives handling. The unused field is ignored. */
+  handlingMode: "direct" | "total";
   buyerHandling: string;
+  buyerPaidTotal: string;
   commission: string;
 }
 
@@ -67,6 +71,7 @@ async function resolveHeader(
       soldAt: Date;
       currency: string;
       buyerHandling: string | null;
+      buyerPaidTotal: string | null;
       commission: string | null;
     }
   | { ok: false; message: string }
@@ -78,8 +83,13 @@ async function resolveHeader(
   // has a currency. The domain resolves and locks it.
   const currency = raw.currency.trim();
 
+  // Exactly one buyer-side anchor is stored (#205); the other is normalised to null. The offer
+  // prices aren't known here (they live on the sale's lines), so the total ≥ gross check is done
+  // in the dialog where gross is available; the domain clamps a shortfall on read.
   const buyerHandling = parseAmount(raw.buyerHandling, "Buyer handling");
   if (!buyerHandling.ok) return { ok: false, message: buyerHandling.message };
+  const buyerPaidTotal = parseAmount(raw.buyerPaidTotal, "Total paid by buyer");
+  if (!buyerPaidTotal.ok) return { ok: false, message: buyerPaidTotal.message };
   const commission = parseAmount(raw.commission, "Commission");
   if (!commission.ok) return { ok: false, message: commission.message };
 
@@ -104,7 +114,8 @@ async function resolveHeader(
     externalRef: raw.externalRef.trim() || null,
     soldAt,
     currency,
-    buyerHandling: buyerHandling.value,
+    buyerHandling: raw.handlingMode === "total" ? null : buyerHandling.value,
+    buyerPaidTotal: raw.handlingMode === "total" ? buyerPaidTotal.value : null,
     commission: commission.value,
   };
 }
@@ -124,6 +135,7 @@ export async function createSaleAction(
       soldAt: header.soldAt,
       currency: header.currency,
       buyerHandling: header.buyerHandling,
+      buyerPaidTotal: header.buyerPaidTotal,
       commission: header.commission,
     });
     return { status: "success", id };
@@ -148,6 +160,7 @@ export async function updateSaleHeaderAction(
       soldAt: header.soldAt,
       currency: header.currency,
       buyerHandling: header.buyerHandling,
+      buyerPaidTotal: header.buyerPaidTotal,
       commission: header.commission,
     });
     return { status: "success" };
@@ -158,6 +171,7 @@ export async function updateSaleHeaderAction(
 
 const AMOUNT_LABEL: Record<SaleAmountField, string> = {
   buyerHandling: "Buyer handling",
+  buyerPaidTotal: "Total paid by buyer",
   shippingCost: "Shipping cost",
   commission: "Commission",
 };

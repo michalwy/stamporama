@@ -542,8 +542,15 @@ model Sale {
   // Base-currency FX rate frozen at `soldAt` (DECIMAL(65,30), like `ExchangeRate.rate`);
   // null when base == transaction currency or no rate is known yet.
   fxRateToBase  Decimal?
-  // Buyer-paid handling/postage collected from the buyer (adds to proceeds, +).
+  // Buyer-paid handling/postage collected from the buyer (adds to proceeds, +). The buyer-side
+  // proceeds have exactly one anchor (#205): either this handling is stored directly, or the total
+  // the buyer paid is stored in `buyerPaidTotal` and handling is derived (total − gross). At most
+  // one of the two is non-null.
   buyerHandling Decimal? @db.Decimal(10, 2)
+  // The full amount the buyer paid, when that is the anchor (#205). When set, buyer handling is
+  // derived = this − gross (sum of line prices) and recomputed as sold sets change, so `buyerHandling`
+  // is null. Null when handling is entered directly.
+  buyerPaidTotal Decimal? @db.Decimal(10, 2)
   // My actual shipping/postage cost (subtracts from proceeds, −).
   shippingCost  Decimal? @db.Decimal(10, 2)
   // Platform commission/fees, entered manually per transaction (subtracts, −).

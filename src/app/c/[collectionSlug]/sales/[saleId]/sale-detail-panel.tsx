@@ -190,18 +190,48 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               {sale.grossProceeds} {sale.currency}
             </span>
           </AmountLine>
-          <EditableAmountRow
-            label="+ Buyer handling"
-            value={sale.buyerHandling}
-            currency={sale.currency}
-            disabled={isPending}
-            onSave={(next) =>
-              run(async () => {
-                const { updateSaleAmountAction } = await import("@/app/actions/sales");
-                return updateSaleAmountAction(sale.id, "buyerHandling", next);
-              })
-            }
-          />
+          {sale.buyerPaidTotal != null ? (
+            // Total-anchored (#205): the buyer-paid total is the editable anchor and handling is
+            // derived (total − gross), shown read-only and recomputed as sold units change.
+            <>
+              <EditableAmountRow
+                label="Total paid by buyer"
+                value={sale.buyerPaidTotal}
+                currency={sale.currency}
+                disabled={isPending}
+                onSave={(next) =>
+                  run(async () => {
+                    const { updateSaleAmountAction } = await import("@/app/actions/sales");
+                    return updateSaleAmountAction(sale.id, "buyerPaidTotal", next);
+                  })
+                }
+              />
+              <AmountLine label="+ Buyer handling">
+                <span style={READONLY_VALUE_STYLE} title="Derived from the total paid minus the offer prices">
+                  {sale.buyerHandling} {sale.currency}
+                </span>
+              </AmountLine>
+              {sale.totalBelowGross && (
+                <p style={{ margin: "0.125rem 0 0.25rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
+                  Total paid is below the offer prices ({sale.grossProceeds} {sale.currency}). Handling
+                  is held at 0 — raise the total or remove some sold units.
+                </p>
+              )}
+            </>
+          ) : (
+            <EditableAmountRow
+              label="+ Buyer handling"
+              value={sale.buyerHandling}
+              currency={sale.currency}
+              disabled={isPending}
+              onSave={(next) =>
+                run(async () => {
+                  const { updateSaleAmountAction } = await import("@/app/actions/sales");
+                  return updateSaleAmountAction(sale.id, "buyerHandling", next);
+                })
+              }
+            />
+          )}
           <EditableAmountRow
             label="− My shipping"
             value={sale.shippingCost}
@@ -287,10 +317,12 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             externalRef: sale.externalRef ?? "",
             soldAt: soldDate,
             currency: sale.currency,
-            buyerHandling: sale.buyerHandling ?? "",
+            buyerHandling: sale.buyerPaidTotal != null ? "" : (sale.buyerHandling ?? ""),
+            buyerPaidTotal: sale.buyerPaidTotal ?? "",
             commission: sale.commission ?? "",
           }}
           platformLocked={sale.lines.length > 0}
+          grossProceeds={sale.grossProceeds}
           isPending={isPending}
           error={error}
           onClose={() => {
