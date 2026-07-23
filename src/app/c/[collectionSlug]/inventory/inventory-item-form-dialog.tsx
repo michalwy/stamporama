@@ -111,6 +111,16 @@ export interface InventoryItemFormDialogProps {
   /** Add mode: constrain the stamp picker to this issue's stamps (opened from an issue
    * list row, #111). */
   scopeIssue?: IssuePickerContext;
+  /** Add mode: seed the disposition toggles, overriding the last-used defaults. Used by the
+   * quick-offer flow to start the copy as *For sale* so it's immediately listable (#241). */
+  initialDisposition?: Record<DispositionKey, boolean>;
+  /** Add mode: override the submit button label (e.g. "Save & continue to offer" in the
+   * quick-offer flow, #241). Defaults to "Add copy". */
+  addActionLabel?: string;
+  /** Add mode: whether to remember this copy's condition/location/disposition as the last-used
+   * add-copy defaults (#234). Defaults to true; the quick-offer flow (#241) turns it off so its
+   * seeded *For sale* disposition doesn't leak into the regular Add copy default. */
+  persistDefaults?: boolean;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -132,6 +142,9 @@ export function InventoryItemFormDialog({
   initialStamp,
   initialStampId,
   scopeIssue,
+  initialDisposition,
+  addActionLabel,
+  persistDefaults = true,
   isPending,
   error,
   onClose,
@@ -151,7 +164,8 @@ export function InventoryItemFormDialog({
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
     item
       ? { inCollection: item.inCollection, forSale: item.forSale, forTrade: item.forTrade }
-      : (addDefaults?.disposition ?? { inCollection: true, forSale: false, forTrade: false })
+      : (initialDisposition ??
+          addDefaults?.disposition ?? { inCollection: true, forSale: false, forTrade: false })
   );
 
   // Prefill the picker summary. In edit mode it is derived from the item; in add mode a
@@ -192,7 +206,7 @@ export function InventoryItemFormDialog({
     const formData = new FormData(e.currentTarget);
     formData.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
     // Remember the choices for the next add-copy, shared across every entry point (#234).
-    if (mode === "add") {
+    if (mode === "add" && persistDefaults) {
       writeAddCopyDefaults(collectionId, {
         conditionId: (formData.get("conditionId") as string) ?? "",
         locationId,
@@ -207,7 +221,7 @@ export function InventoryItemFormDialog({
     ? mode === "add" ? "Adding…" : "Saving…"
     : photosUploading
       ? "Uploading photos…"
-      : mode === "add" ? "Add copy" : "Save changes";
+      : mode === "add" ? (addActionLabel ?? "Add copy") : "Save changes";
   const actionDisabled = isPending || !stampId || photosUploading;
 
   return (

@@ -16,7 +16,13 @@ import {
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { OfferRow } from "./offer-row";
+import { QuickOfferFlow } from "./quick-offer-flow";
+import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
+import type { StampConditionData } from "@/lib/conditions";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 
 type DialogState =
   | { kind: "none" }
@@ -24,7 +30,8 @@ type DialogState =
   | { kind: "edit"; offer: OfferListItem }
   | { kind: "duplicate"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
-  | { kind: "delete"; offer: OfferListItem };
+  | { kind: "delete"; offer: OfferListItem }
+  | { kind: "quickOffer" };
 
 const CONTROL_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.625rem",
@@ -40,9 +47,22 @@ interface OffersListPanelProps {
   collectionId: string;
   collectionSlug: string;
   baseCurrency: string;
+  /** Taxonomy for the quick-offer flow's add-copy step (#241). */
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  conditions: StampConditionData[];
+  certificateStatuses: CertificateStatusData[];
 }
 
-export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: OffersListPanelProps) {
+export function OffersListPanel({
+  collectionId,
+  collectionSlug,
+  baseCurrency,
+  areas,
+  locations,
+  conditions,
+  certificateStatuses,
+}: OffersListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
@@ -54,11 +74,22 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
   // sees the platform as currency-less (#212).
   const { invalidateContacts } = useInvalidatePurchases();
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
+  const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
 
   const needsAction = searchParams.get("needsAction") === "1";
   const stateParam = searchParams.get("state") as OfferState | null;
   const state = !needsAction && stateParam && OFFER_STATES.includes(stateParam) ? stateParam : undefined;
   const platformId = searchParams.get("platform") || undefined;
+
+  // Seed a new offer's platform from the current filter, falling back to the last platform an offer
+  // was created on (#241). Resolved against the loaded platforms so it carries the name + currency
+  // the form needs; undefined until the list arrives or when neither is known.
+  const preferredPlatform = useMemo(
+    () =>
+      platforms.find((p) => p.id === platformId) ??
+      (lastPlatformId ? platforms.find((p) => p.id === lastPlatformId) : undefined),
+    [platforms, platformId, lastPlatformId]
+  );
 
   // Remembered client preference (#245): closed (sold / withdrawn) offers are hidden until opted in.
   const [includeClosed, setIncludeClosed] = usePersistedFlag(
@@ -164,22 +195,36 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setDialog({ kind: "add" })}
-          style={{
-            ...CONTROL_STYLE,
-            marginLeft: "auto",
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "#fff",
-            background: "var(--color-action-primary)",
-            border: "none",
-            padding: "0.375rem 0.875rem",
-          }}
-        >
-          New offer
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+          {/* Sell a new item end-to-end (#241): create the stamp, copy, and offer in one pass. */}
+          <button
+            type="button"
+            onClick={() => setDialog({ kind: "quickOffer" })}
+            title="Create the stamp, inventory copy, and offer in one flow"
+            style={{
+              ...CONTROL_STYLE,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Sell a new item
+          </button>
+          <button
+            type="button"
+            onClick={() => setDialog({ kind: "add" })}
+            style={{
+              ...CONTROL_STYLE,
+              cursor: "pointer",
+              fontWeight: 600,
+              color: "#fff",
+              background: "var(--color-action-primary)",
+              border: "none",
+              padding: "0.375rem 0.875rem",
+            }}
+          >
+            New offer
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -238,18 +283,18 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
           collectionId={collectionId}
           baseCurrency={baseCurrency}
           offer={dialog.kind === "edit" ? dialog.offer : undefined}
-          initialPlatform={
-            dialog.kind === "add" ? platforms.find((p) => p.id === platformId) : undefined
-          }
+          initialPlatform={dialog.kind === "add" ? preferredPlatform : undefined}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
           onSubmit={(fd) => {
+            const submittedPlatformId = (fd.get("platformId") as string | null) ?? "";
             startTransition(async () => {
               if (dialog.kind === "add") {
                 const { createOfferAction } = await import("@/app/actions/offers");
                 const result = await createOfferAction(collectionId, fd);
                 if (result.status === "success") {
+                  if (submittedPlatformId) rememberPlatform(submittedPlatformId);
                   invalidateAll(collectionId);
                   invalidateContacts(collectionId);
                   // Straight to the compose screen — a fresh offer has no sets yet.
@@ -318,6 +363,22 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
               else setActionError(result.message);
             });
           }}
+        />
+      )}
+
+      {/* End-to-end quick-offer flow (#241): stamp + copy + offer in one pass. */}
+      {dialog.kind === "quickOffer" && (
+        <QuickOfferFlow
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          baseCurrency={baseCurrency}
+          initialPlatform={preferredPlatform}
+          onPlatformUsed={rememberPlatform}
+          onClose={closeDialog}
+          onOfferDone={handleSuccess}
         />
       )}
     </div>

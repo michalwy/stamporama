@@ -32,11 +32,16 @@ import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
+import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useOfferPlatforms } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 
 type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "edit"; item: ItemListItem }
+  | { kind: "editStamp"; item: ItemListItem }
   | { kind: "identify"; item: ItemListItem }
   | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem }
@@ -90,6 +95,15 @@ export function InventoryListPanel({
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
+
+  // Last-used platform, to seed the "create new offer" sub-flow of Add to offer (#241). The Copies
+  // list has no platform filter, so the last one used is the only signal here.
+  const { data: offerPlatforms = [] } = useOfferPlatforms(collectionId);
+  const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
+  const preferredPlatform = useMemo(
+    () => (lastPlatformId ? offerPlatforms.find((p) => p.id === lastPlatformId) : undefined),
+    [offerPlatforms, lastPlatformId]
+  );
 
   // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
   // an explicit "all"); absent param falls back to the per-collection store. The
@@ -487,6 +501,7 @@ export function InventoryListPanel({
                 isFetchingNextPage={isFetchingNextPage}
                 onLoadMore={fetchNextPage}
                 onEdit={(it) => setDialog({ kind: "edit", item: it })}
+                onEditStamp={(it) => setDialog({ kind: "editStamp", item: it })}
                 onIdentify={(it) => setDialog({ kind: "identify", item: it })}
                 onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
@@ -529,6 +544,39 @@ export function InventoryListPanel({
         />
       )}
 
+      {/* Edit the copy's underlying stamp (#243): the shared stamp edit dialog, reused
+          exactly as the stamps list and purchase intake do, opened straight from the row. */}
+      {dialog.kind === "editStamp" && (
+        <StampFormDialog
+          mode="edit"
+          stampId={dialog.item.stampId}
+          collectionId={collectionId}
+          stamp={{
+            name: dialog.item.stampName,
+            issuedDay: dialog.item.issuedDay,
+            issuedMonth: dialog.item.issuedMonth,
+            issuedYear: dialog.item.issuedYear,
+            catalogNumbers: dialog.item.catalogNumbers,
+          }}
+          areaVendors={
+            dialog.item.areaId ? effectiveVendorsForArea(areas, dialog.item.areaId) : []
+          }
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            const stampId = dialog.item.stampId;
+            setActionError(undefined);
+            startTransition(async () => {
+              const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
+              const result = await updateStampWithCatalogAction(stampId, fd);
+              if (result.status === "success") handleSuccess();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
       {/* Identify variant */}
       {dialog.kind === "identify" && (
         <IdentifyVariantDialog
@@ -565,6 +613,10 @@ export function InventoryListPanel({
           areas={areas}
           locations={locations}
           baseCurrency={baseCurrency}
+          // No platform filter here, so seed the "create new offer" sub-flow from the last-used
+          // platform (#241) and record it when one is created.
+          initialPlatform={preferredPlatform}
+          onPlatformUsed={rememberPlatform}
           onClose={closeDialog}
           onDone={handleSuccess}
         />

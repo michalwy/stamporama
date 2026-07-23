@@ -269,6 +269,9 @@ interface InventoryItemRowProps {
    * it renders its own live/frozen cost chip in `trailingChips`. */
   showCostBasis?: boolean;
   onEdit?: (item: ItemListItem) => void;
+  /** When provided, adds an "Edit stamp" menu entry that opens the shared stamp edit
+   * dialog for the copy's underlying stamp (name, catalog numbers, prices) (#243). */
+  onEditStamp?: (item: ItemListItem) => void;
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
   onDelete?: (item: ItemListItem) => void;
@@ -295,6 +298,7 @@ export function InventoryItemRow({
   hideDispositions = false,
   showCostBasis = false,
   onEdit,
+  onEditStamp,
   onIdentify,
   onViewHistory,
   onDelete,
@@ -331,6 +335,9 @@ export function InventoryItemRow({
       ? [{ key: "add-to-offer", label: "Add to offer", icon: "🏷", onSelect: () => onAddToOffer(item) }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
+    ...(onEditStamp
+      ? [{ key: "edit-stamp", label: "Edit stamp", icon: "◆", onSelect: () => onEditStamp(item) }]
+      : []),
     {
       key: "delete",
       label: "Delete",

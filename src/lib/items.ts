@@ -353,6 +353,23 @@ export async function getItem(ownerId: string, itemId: string): Promise<ItemData
   return toItemData(item);
 }
 
+/** Fetch one copy enriched as an {@link ItemListItem} — identical shape and valuation to
+ * the Copies list. Used by the quick-offer flow (#241) to hand the freshly created copy to
+ * the offer step without re-fetching the whole list. */
+export async function getItemListItem(
+  ownerId: string,
+  itemId: string
+): Promise<ItemListItem> {
+  const collectionId = await resolveItemCollection(itemId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const row = await prisma.item.findUniqueOrThrow({
+    where: { id: itemId },
+    select: ITEM_LIST_SELECT,
+  });
+  const [item] = await enrichItemRows(collectionId, [row]);
+  return item;
+}
+
 export async function listItems(
   ownerId: string,
   collectionId: string,

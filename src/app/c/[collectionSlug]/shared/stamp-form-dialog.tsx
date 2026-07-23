@@ -414,7 +414,13 @@ export function StampFormDialog(props: StampFormDialogProps) {
     }
 
     if (props.mode === "edit") {
-      fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
+      // Only send this when the "Required for completeness" checkbox was actually shown — i.e. the
+      // caller passed the stamp's issue memberships. Callers that reuse this dialog without that
+      // context (the copy's stamp edit from Inventory/purchases, #243) must not clobber the flag on
+      // every membership; omitting the field leaves it untouched server-side.
+      if ((editProps?.stamp.issues?.length ?? 0) > 0) {
+        fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
+      }
       props.onSubmit(fd);
       return;
     }

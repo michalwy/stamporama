@@ -62,19 +62,6 @@ const FACET_LABEL: React.CSSProperties = {
   margin: "0.75rem 0 0",
 };
 
-const CREATE_BUTTON_STYLE: React.CSSProperties = {
-  flexShrink: 0,
-  padding: "0.375rem 0.75rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border-strong)",
-  background: "var(--color-bg-elevated)",
-  color: "var(--color-text-primary)",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
   fontWeight: 500,
@@ -132,6 +119,12 @@ export interface AddToOfferDialogProps {
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
+  /** Pre-fills the platform in the "create new offer" sub-flow (#241) — the list filter's platform,
+   * falling back to the last one used. */
+  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
+  /** Fires with the platform id when a brand-new offer is created here, so callers can remember it
+   * as the last-used platform (#241). */
+  onPlatformUsed?: (platformId: string) => void;
   onClose: () => void;
   onDone: () => void;
 }
@@ -156,6 +149,8 @@ export function AddToOfferDialog({
   areas,
   locations,
   baseCurrency,
+  initialPlatform,
+  onPlatformUsed,
   onClose,
   onDone,
 }: AddToOfferDialogProps) {
@@ -293,6 +288,7 @@ export function AddToOfferDialog({
   // the new offer, so the collector keeps their place in the list.
   function createOffer(formData: FormData) {
     setCreateError(undefined);
+    const usedPlatformId = (formData.get("platformId") as string | null) ?? "";
     startTransition(async () => {
       const actions = await import("@/app/actions/offers");
       const created = await actions.createOfferAction(collectionId, formData);
@@ -300,6 +296,7 @@ export function AddToOfferDialog({
         setCreateError(created.message);
         return;
       }
+      if (usedPlatformId) onPlatformUsed?.(usedPlatformId);
       const seeded = await actions.addOfferSetAction(created.id, [item.id], { perCopy: false });
       invalidateAll(collectionId);
       invalidateList(collectionId);
@@ -373,19 +370,9 @@ export function AddToOfferDialog({
               gap: "0.5rem",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <p style={{ margin: 0, flex: 1, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                Add <strong>{copyName}</strong> to an offer — as a new set, or into an existing one.
-              </p>
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                disabled={isPending}
-                style={CREATE_BUTTON_STYLE}
-              >
-                ＋ Create new offer
-              </button>
-            </div>
+            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+              Add <strong>{copyName}</strong> to an offer — as a new set, or into an existing one.
+            </p>
             <input
               type="text"
               value={search}
@@ -403,7 +390,7 @@ export function AddToOfferDialog({
             ) : visible.length === 0 ? (
               <p style={HINT_STYLE}>
                 {offers.length === 0
-                  ? "No offers yet. Use “Create new offer” above to start one from this copy."
+                  ? "No offers yet. Use “Create new offer” below to start one from this copy."
                   : "No offers match these filters."}
               </p>
             ) : (
@@ -437,8 +424,14 @@ export function AddToOfferDialog({
       </div>
 
       <DialogFooter>
+        {/* Standard bottom-right cluster, Cancel first: Cancel, then the branch-off "Create new
+            offer", then the completing primary — so both positive actions sit by the primary rather
+            than flying up to the top-right. */}
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
+        </DialogSecondaryButton>
+        <DialogSecondaryButton onClick={() => setCreating(true)} disabled={isPending}>
+          ＋ Create new offer
         </DialogSecondaryButton>
         <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
           <ErrorBubble>{error}</ErrorBubble>
@@ -455,6 +448,7 @@ export function AddToOfferDialog({
       <OfferFormDialog
         collectionId={collectionId}
         baseCurrency={baseCurrency}
+        initialPlatform={initialPlatform}
         isPending={isPending}
         error={createError}
         zIndexBase={110}

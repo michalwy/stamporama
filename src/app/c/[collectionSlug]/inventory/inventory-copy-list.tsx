@@ -25,6 +25,8 @@ interface InventoryCopyListProps {
   /** Read-only mode hides per-row actions (inventory popup, #110). */
   readOnly?: boolean;
   onEdit?: (item: ItemListItem) => void;
+  /** When provided, each row gains an "Edit stamp" action for its underlying stamp (#243). */
+  onEditStamp?: (item: ItemListItem) => void;
   onIdentify?: (item: ItemListItem) => void;
   onViewHistory?: (item: ItemListItem) => void;
   onDelete?: (item: ItemListItem) => void;
@@ -52,6 +54,7 @@ export function InventoryCopyList({
   onLoadMore,
   readOnly,
   onEdit,
+  onEditStamp,
   onIdentify,
   onViewHistory,
   onDelete,
@@ -84,6 +87,7 @@ export function InventoryCopyList({
             readOnly={readOnly}
             showCostBasis
             onEdit={onEdit}
+            onEditStamp={onEditStamp}
             onIdentify={onIdentify}
             onViewHistory={onViewHistory}
             onDelete={onDelete}

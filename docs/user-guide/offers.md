@@ -21,7 +21,9 @@ sets". A plain single-stamp offer is just the one-set case.
 
 ## Creating and composing an offer
 
-1. Click **New offer** and choose the **platform**. The **currency** comes from the platform — it
+1. Click **New offer** and choose the **platform** — it comes pre-filled with the platform the list
+   is currently filtered by, or, when no filter is set, the **last platform you created an offer on**
+   (remembered per collection); change it freely. The **currency** comes from the platform — it
    is shown locked and applies to every offer and sale there. The first time you list or sell on a
    platform that has no currency yet, you pick one inline and it is saved to the platform. That's
    all you need — you usually don't know the asking price yet (it follows from the copies you add)
@@ -63,6 +65,24 @@ list — the copy's **⋮** menu carries an **Add to offer** action. Its picker 
 state filters and search), and you choose where the copy lands: as a **new set**, or dropped into
 an **existing set** to build a series. That's the quick path for listing one copy; use **Add set**
 here when composing several copies at once.
+
+## Sell a new item — from nothing to a live offer
+
+When you have a stamp in hand that isn't in Stamporama yet, **Sell a new item** (next to **New
+offer**) walks the whole way in one flow — no need to create the Issue, stamp, and inventory copy
+on separate screens first:
+
+1. **Describe the item.** The add-copy form opens with its stamp picker; if the Issue or stamp
+   doesn't exist yet, create it **inline** from the picker without leaving the flow. The copy starts
+   **For sale** and **delivered** so it's ready to list — adjust anything as you go.
+2. **List it.** On save, the same offer picker as **Add to offer** opens, seeded with the copy you
+   just created: start a **new offer** (its **platform** pre-filled from the current filter or the
+   last platform you used, and its asking price pre-filled from the copy's catalog value) or drop
+   the copy into an **existing** offer.
+
+If you stop after step 1, nothing is lost — the copy is a normal inventory item, and Stamporama says
+so and offers to list it now or later. Steps you don't need are effortless: if the stamp already
+exists, pick it in the first step and move straight on.
 
 The offer's sets render like a [purchase order](purchases.md): each set is a **collapsible card**
 showing its copies as full inventory rows. Group by **Set** or **Location**, optionally sub-group

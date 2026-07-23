@@ -227,6 +227,11 @@ Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the 
 current values. Changing the stamp to a more specific variant re-points the copy and
 records the change in its refinement history.
 
+To edit the **stamp** a copy points to — its name, catalog numbers, or catalog prices — choose
+**Edit stamp** from the same **⋮** menu. It opens the shared stamp editor (the one on the Stamps
+and Issues lists), so you can fix stamp-level details without navigating away from Inventory. Edits
+here apply to the stamp itself, so every copy of it reflects the change.
+
 ## Adding a catalog value
 
 Click a copy's **value** in the list to price it in place — a **+ catalog value** link when the

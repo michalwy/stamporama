@@ -3,12 +3,25 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { createItem, updateItem, deleteItem, resolveItemVariant } from "@/lib/items";
+import {
+  createItem,
+  updateItem,
+  deleteItem,
+  resolveItemVariant,
+  getItemListItem,
+} from "@/lib/items";
+import type { ItemListItem } from "@/lib/items";
 import { applyPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 
 export type ItemActionState =
   | { status: "idle" }
   | { status: "success" }
+  | { status: "error"; message: string };
+
+/** Result of the quick-offer create path (#241): the freshly created copy, enriched as an
+ * {@link ItemListItem} so the flow can hand it straight to the offer step. */
+export type CreateItemForOfferState =
+  | { status: "success"; item: ItemListItem }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -86,6 +99,29 @@ export async function createItemAction(
       await applyPhotoChangeSet(session.user.id, item.id, changeSet);
     }
     return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to add copy. Please try again." };
+  }
+}
+
+/** Create a copy and return it enriched, for the end-to-end quick-offer flow (#241). Same
+ * validation and photo handling as {@link createItemAction}; differs only in returning the
+ * created {@link ItemListItem} so the caller can seed the offer step with it. */
+export async function createItemForOfferAction(
+  collectionId: string,
+  formData: FormData
+): Promise<CreateItemForOfferState> {
+  const session = await getSession();
+  const { data, error } = parseItemFields(formData);
+  if (error) return { status: "error", message: error };
+  const changeSet = parsePhotoChangeSet(formData);
+  try {
+    const created = await createItem(session.user.id, collectionId, data);
+    if (changeSet) {
+      await applyPhotoChangeSet(session.user.id, created.id, changeSet);
+    }
+    const item = await getItemListItem(session.user.id, created.id);
+    return { status: "success", item };
   } catch {
     return { status: "error", message: "Failed to add copy. Please try again." };
   }
