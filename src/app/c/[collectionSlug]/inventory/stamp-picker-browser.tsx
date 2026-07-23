@@ -31,7 +31,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
-import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
+import { issueLabel, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
 
@@ -60,39 +60,6 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     requiredPriceStale: false,
     rangeSuggestions: [],
     photos: [],
-  };
-}
-
-/** Build the picked-stamp summary for a just-created stamp from its submitted
- * form data (the new row isn't in the refreshed tree synchronously), mirroring
- * how {@link IssueBrowser}'s handlePick composes labels. */
-function buildPickedFromForm(
-  areas: CollectionAreaData[],
-  areaById: Map<string, CollectionAreaData>,
-  issue: IssueData,
-  stampId: string,
-  fd: FormData
-): PickedStamp {
-  const vendors = effectiveVendorsForArea(areas, issue.collectionAreaId);
-  const vm: VendorMap = new Map(vendors.map((v) => [v.catalogVendorId, v]));
-  const cats: string[] = [];
-  for (const [key, value] of fd.entries()) {
-    if (!key.startsWith("catalogNumber_")) continue;
-    const num = String(value).trim();
-    if (num) cats.push(formatStampCN(num, vm.get(key.slice("catalogNumber_".length))));
-  }
-  const name = (fd.get("name") as string | null)?.trim() || null;
-  const areaName = areaById.get(issue.collectionAreaId)?.name ?? null;
-  const secondary =
-    [issue.name || issue.year ? issueLabel(issue.name, issue.year) : null, areaName]
-      .filter(Boolean)
-      .join(" · ") || null;
-  return {
-    stampId,
-    primary: primaryLabel(cats, name),
-    secondary,
-    // A just-created stamp has no children yet, so it is never an unknown-variant base.
-    unknownVariant: false,
   };
 }
 
@@ -177,8 +144,6 @@ export function StampPickerBrowser({
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { invalidatePickerData } = useInvalidateInventory();
-
-  const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 
   // Selecting a parent area includes its descendants, so their issues surface too.
   const areaIds = useMemo(() => {
@@ -269,14 +234,17 @@ export function StampPickerBrowser({
     });
   }
 
-  function handleCreateStamp(issue: IssueData, issueId: string, fd: FormData) {
+  function handleCreateStamp(issueId: string, fd: FormData) {
     startTransition(async () => {
       const result = await addStampToIssueAction(collectionId, issueId, fd);
       if (result.status === "success" && result.stampId) {
+        // #182: creating a stamp inline just adds it to the picker — refresh so it appears
+        // in its issue's (already-expanded) tree, then close the create dialog. It is not
+        // auto-selected, and the browser stays open, so the user still picks it explicitly
+        // (or keeps browsing), mirroring inline issue creation.
+        setCreate(null);
+        setCreateError(undefined);
         invalidatePickerData(collectionId);
-        // Auto-select the freshly created stamp as the copy's target; `onPick` also
-        // closes the browser (matching a normal pick).
-        onPick(buildPickedFromForm(areas, areaById, issue, result.stampId, fd));
       } else if (result.status === "error") {
         setCreateError(result.message);
       }
@@ -379,7 +347,7 @@ export function StampPickerBrowser({
                   isPending={isPending}
                   error={createError}
                   onClose={closeCreate}
-                  onSubmit={(issueId, fd) => handleCreateStamp(issue, issueId, fd)}
+                  onSubmit={handleCreateStamp}
                 />
               );
             })()}

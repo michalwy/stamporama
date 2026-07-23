@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { formatIssuedDate } from "@/app/stamp-display";
+import {
+  formatIssuedDate,
+  moneyPrimaryText,
+  moneySecondaryText,
+  type MoneyLike,
+} from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
@@ -9,6 +14,8 @@ import type { LocationData } from "@/lib/locations";
 import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
+  PRICE_MAIN,
+  PRICE_CONVERTED,
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -134,23 +141,46 @@ function CopyValue({
       </Tooltip>
     );
   }
-  const converted = v.baseAmountDisplay != null;
-  const text = converted
-    ? `${v.baseAmountDisplay} ${baseCurrency}`
-    : `${v.amount} ${v.currency}`;
+  // Display the catalog price the same way as the issue list (#244): the base-currency
+  // value as the emphasised primary (prefixed `≈` when converted), with the original
+  // catalog currency as a muted secondary when it differs. A price in a currency with no
+  // base rate falls back to showing just its own currency.
+  const money: MoneyLike = {
+    amount: v.amount!,
+    currency: v.currency!,
+    convertedAmount: v.currency === baseCurrency ? null : v.baseAmountDisplay,
+    baseCurrency,
+  };
+  const primaryText = moneyPrimaryText(money);
+  const secondaryText = moneySecondaryText(money);
+  const noRate = v.currency !== baseCurrency && v.baseAmountDisplay == null;
   const title = v.uncertain
     ? "Estimated from the lowest child-variant price — the specific variant isn't identified yet."
-    : converted
-      ? "Catalog value"
-      : `Catalog value (no ${baseCurrency} rate available)`;
-  const valueStyle: React.CSSProperties = {
-    fontSize: "0.875rem",
-    fontWeight: 600,
-    fontVariantNumeric: "tabular-nums",
-    color: v.uncertain ? "var(--color-text-muted)" : "var(--color-text-primary)",
-    fontStyle: v.uncertain ? "italic" : undefined,
-    whiteSpace: "nowrap",
-  };
+    : noRate
+      ? `Catalog value (no ${baseCurrency} rate available)`
+      : "Catalog value";
+  const inner = (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "baseline",
+        gap: "0.35rem",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {v.uncertain && <span style={{ ...PRICE_MAIN, color: "var(--color-text-muted)" }}>~</span>}
+      {secondaryText && <span style={PRICE_CONVERTED}>{secondaryText}</span>}
+      <span
+        style={
+          v.uncertain
+            ? { ...PRICE_MAIN, color: "var(--color-text-muted)", fontStyle: "italic" }
+            : PRICE_MAIN
+        }
+      >
+        {primaryText}
+      </span>
+    </span>
+  );
   if (onSetPrice) {
     return (
       <Tooltip content={`${title} — click to edit`} align="end">
@@ -158,7 +188,6 @@ function CopyValue({
           type="button"
           onClick={onSetPrice}
           style={{
-            ...valueStyle,
             background: "none",
             border: "none",
             padding: 0,
@@ -167,18 +196,14 @@ function CopyValue({
             textUnderlineOffset: "0.2em",
           }}
         >
-          {v.uncertain ? "~" : ""}
-          {text}
+          {inner}
         </button>
       </Tooltip>
     );
   }
   return (
     <Tooltip content={title} align="end">
-      <span style={valueStyle}>
-        {v.uncertain ? "~" : ""}
-        {text}
-      </span>
+      {inner}
     </Tooltip>
   );
 }

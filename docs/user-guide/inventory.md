@@ -99,9 +99,10 @@ price. A copy with no matching catalog price shows **+ catalog value** in the va
 click it to record one without leaving the list. See
 [Adding a catalog value](#adding-a-catalog-value).
 
-Values are converted to your collection's **base currency** for display and totalling. A
-price in a currency with no available exchange rate is shown in its own currency and left
-out of the total.
+Each value shows the catalog price in its **own recorded currency**, with the conversion to
+your collection's **base currency** alongside it — matching how prices read on the issue
+list. Totals are summed in the base currency. A price in a currency with no available
+exchange rate is shown in its own currency only and left out of the total.
 
 Above the list, the holdings summary bar sums two figures over every copy that matches your
 current filters (change the filters and both totals follow):
@@ -193,9 +194,11 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    (you must still pick an existing **area** first):
    - **+ New issue** (top of the issue list) adds an issue to the selected area. It then
      appears in the list, ready for you to add a stamp to it.
-   - **+ New stamp** (inside an expanded issue) adds a stamp to that issue and selects it
-     for the copy straight away.
-   - **+ variant** (next to a base stamp) adds a variant under that stamp and selects it.
+   - **+ New stamp** (inside an expanded issue) adds a stamp to that issue. It then appears
+     in the issue's tree, ready for you to pick like any other stamp — it is not selected
+     automatically, and the picker stays open.
+   - **+ variant** (next to a base stamp) adds a variant under that stamp, which likewise
+     appears in the tree ready to pick.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
