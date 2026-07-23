@@ -71,6 +71,24 @@ platform already lists, Stamporama shows a **heads-up**. It is only a warning: y
 but normally you would remove it from the other offer first. (Listing the same copy on *different*
 platforms is exactly the point and is never flagged.)
 
+## Listing the same thing on another platform
+
+To offer the same stamps on a second marketplace, you don't re-compose them by hand. From an
+offer's **⋮** menu (on the list or the detail screen), choose **List on another platform**. Pick
+the new platform; the asking price **and currency** carry over from the original offer. If the new
+platform uses a different currency, the price is **re-converted** at the collection's current
+exchange rate — still editable, so you can round or adjust it for the new marketplace.
+
+Stamporama then creates a **new draft offer** with the same sets and copies, and opens it so you
+can review, price, and activate it. The copy is an independent snapshot: editing either offer
+afterwards — renaming a set, changing the price, adding a copy — leaves the other untouched. Any
+copy that has already **sold** elsewhere is left out of the clone, with a note telling you how many
+were skipped. The new offer's listing URL starts blank — paste it once the listing is live.
+
+Both offers now list the overlapping copies, which is exactly the cross-platform workflow the
+[needs-action](#keeping-platforms-in-sync--needs-action) sync is built for: selling on one platform
+flags the twin on the other.
+
 ## Keeping platforms in sync — "needs action"
 
 Because a copy can be listed on several platforms, selling it in one place leaves the other

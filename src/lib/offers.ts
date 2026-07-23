@@ -748,6 +748,79 @@ export async function createOffer(
   return offer.id;
 }
 
+export interface DuplicateOfferResult {
+  id: string;
+  /** Copies dropped from the clone because they had already sold elsewhere (ADR-0013 §4). */
+  skippedCopies: number;
+}
+
+/** List the same composition on another platform (#200): clone an offer's sets + item membership
+ * into a new `preparing` offer, prompting only for platform / price / currency (URL starts blank).
+ * The clone is an independent snapshot (ADR-0013 §1) — editing either offer afterwards is
+ * independent, since sets are copied rather than shared. Copies that have already sold elsewhere
+ * (globally retired) are skipped, and any set left empty by that is dropped; the count of skipped
+ * copies is returned so the caller can surface a note. Works from any source state — the clone is
+ * always a fresh draft. */
+export async function duplicateOffer(
+  ownerId: string,
+  sourceOfferId: string,
+  input: OfferInput
+): Promise<DuplicateOfferResult> {
+  const ref = await assertOfferOwner(ownerId, sourceOfferId);
+  const { platformCurrency } = await assertPlatform(ref.collectionId, input.platformId);
+  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
+
+  // Source composition + which of its copies have sold elsewhere (dropped from the clone).
+  const sets = await prisma.offerSet.findMany({
+    where: { offerId: sourceOfferId },
+    select: { title: true, items: { select: { itemId: true } } },
+    orderBy: { id: "asc" },
+  });
+  const allItemIds = sets.flatMap((s) => s.items.map((i) => i.itemId));
+  const soldRows = allItemIds.length
+    ? await prisma.saleLineItem.findMany({
+        where: { itemId: { in: allItemIds } },
+        select: { itemId: true },
+      })
+    : [];
+  const soldIds = new Set(soldRows.map((r) => r.itemId));
+
+  let skippedCopies = 0;
+  const cloneSets = sets
+    .map((s) => {
+      const keep = s.items.map((i) => i.itemId).filter((id) => !soldIds.has(id));
+      skippedCopies += s.items.length - keep.length;
+      return { title: s.title, itemIds: keep };
+    })
+    .filter((s) => s.itemIds.length > 0);
+
+  const id = await prisma.$transaction(async (tx) => {
+    const offer = await tx.offer.create({
+      data: {
+        collectionId: ref.collectionId,
+        platformId: input.platformId,
+        url: input.url,
+        price: input.price,
+        currency,
+        state: "preparing",
+      },
+      select: { id: true },
+    });
+    for (const s of cloneSets) {
+      await tx.offerSet.create({
+        data: {
+          offerId: offer.id,
+          title: s.title,
+          items: { create: s.itemIds.map((itemId) => ({ itemId })) },
+        },
+      });
+    }
+    return offer.id;
+  });
+
+  return { id, skippedCopies };
+}
+
 /** Edit an offer's platform / URL / price. Terminal offers (sold / withdrawn) are frozen. Currency
  * is not edited here (#196): it is a per-offer snapshot inherited from the platform at creation, so
  * editing an offer never rewrites it. */

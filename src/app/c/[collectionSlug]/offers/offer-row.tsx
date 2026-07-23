@@ -30,12 +30,13 @@ interface OfferRowProps {
   isLast: boolean;
   onEdit: (offer: OfferListItem) => void;
   onSetState: (offer: OfferListItem, state: "active" | "paused" | "withdrawn") => void;
+  onDuplicate: (offer: OfferListItem) => void;
   onDelete: (offer: OfferListItem) => void;
 }
 
 /** A single offer as a stacked card row: its derived label + actions on top, then platform /
  * state / quantity / price chips. The whole row opens the offer's detail (compose) screen. */
-export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, onDelete }: OfferRowProps) {
+export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, onDuplicate, onDelete }: OfferRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
@@ -64,6 +65,12 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
       ? []
       : [{ key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(offer) } as RowAction]),
     ...stateActions,
+    {
+      key: "duplicate",
+      label: "List on another platform",
+      icon: "⧉",
+      onSelect: () => onDuplicate(offer),
+    },
     {
       key: "delete",
       label: "Delete",

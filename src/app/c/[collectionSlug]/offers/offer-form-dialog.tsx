@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -38,6 +38,26 @@ export interface OfferFormDialogProps {
   /** Raises the dialog's stacking when opened on top of another dialog (e.g. the inventory
    * add-to-offer picker's "create new offer" path, #189). */
   zIndexBase?: number;
+  /** Show the asking-price field on create. Off by default — a fresh offer's price follows from the
+   * copies you add later. On for the duplicate flow (#200), where the composition is already known
+   * so pricing it for the new platform up front makes sense. */
+  showPrice?: boolean;
+  /** Controls the asking-price field. When set, the input is controlled and every keystroke calls
+   * `onPriceValueChange` — lets the parent recompute it (e.g. converting on a currency change). */
+  priceValue?: string;
+  onPriceValueChange?: (value: string) => void;
+  /** Seeds the currency picker's default on a non-edit form when the platform has no currency yet
+   * (else `baseCurrency`). The duplicate flow carries the source offer's currency over. */
+  initialCurrency?: string;
+  /** Fires with the effective currency (locked from the platform, else the picker's value) whenever
+   * it changes — the duplicate flow converts the carried-over price against it. */
+  onCurrencyChange?: (currency: string | null) => void;
+  /** Overrides the dialog title / submit label — used by the duplicate flow (#200). */
+  title?: string;
+  submitLabel?: string;
+  /** A line describing what a non-edit form is seeded from (e.g. "Copying 3 sets from …"), shown in
+   * place of the default "add the copies next" hint. */
+  sourceNote?: React.ReactNode;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -53,10 +73,21 @@ export function OfferFormDialog({
   isPending,
   error,
   zIndexBase,
+  showPrice = false,
+  priceValue,
+  onPriceValueChange,
+  initialCurrency,
+  onCurrencyChange,
+  title: titleProp,
+  submitLabel,
+  sourceNote,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
   const isEdit = !!offer;
+  // Whether the price field shows: always when editing, opt-in (duplicate) otherwise.
+  const showPriceField = isEdit || showPrice;
+  const priceControlled = priceValue !== undefined;
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
@@ -69,16 +100,31 @@ export function OfferFormDialog({
     : typeof platformCurrency === "string" && platformCurrency
       ? platformCurrency
       : null;
+  // The unlocked picker's chosen value (which becomes the platform's currency). Tracked in state so
+  // the effective currency can be reported up for price conversion (#200).
+  const [pickedCurrency, setPickedCurrency] = useState(initialCurrency ?? baseCurrency);
+  const effectiveCurrency = lockedCurrency ?? pickedCurrency;
+
+  // Report the effective currency (locked or picked) whenever it changes, via a ref so a parent
+  // needn't memoize the callback. Fires on mount too, so the parent has the starting currency.
+  const onCurrencyChangeRef = useRef(onCurrencyChange);
+  useEffect(() => {
+    onCurrencyChangeRef.current = onCurrencyChange;
+  });
+  useEffect(() => {
+    onCurrencyChangeRef.current?.(effectiveCurrency);
+  }, [effectiveCurrency]);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     onSubmit(new FormData(e.currentTarget));
   }
 
-  const title = isEdit ? "Edit offer" : "New offer";
+  const title = titleProp ?? (isEdit ? "Edit offer" : "New offer");
+  const doneLabel = submitLabel ?? (isEdit ? "Save changes" : "Create offer");
   const actionLabel = isPending
     ? isEdit ? "Saving…" : "Creating…"
-    : isEdit ? "Save changes" : "Create offer";
+    : doneLabel;
 
   return (
     <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="34rem" zIndexBase={zIndexBase}>
@@ -109,10 +155,11 @@ export function OfferFormDialog({
             />
           </div>
 
-          {/* Price + currency. The asking price is only asked for when editing — at creation you
-              rarely know it yet (it follows from the copies you add), so it is set later. */}
-          <div style={{ display: "flex", gap: "0.75rem", ...(isEdit ? FIELD_GAP : {}) }}>
-            {isEdit && (
+          {/* Price + currency. The asking price is only asked for when the composition is known —
+              editing, or duplicating (#200). On a plain create it follows from the copies you add
+              later, so it is deferred. */}
+          <div style={{ display: "flex", gap: "0.75rem", ...(showPriceField ? FIELD_GAP : {}) }}>
+            {showPriceField && (
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="offer-price">Asking price</LabelWithError>
                 <input
@@ -122,9 +169,11 @@ export function OfferFormDialog({
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  defaultValue={offer?.price ?? ""}
                   disabled={isPending}
                   style={INPUT_STYLE}
+                  {...(priceControlled
+                    ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
+                    : { defaultValue: offer?.price ?? "" })}
                 />
               </div>
             )}
@@ -144,7 +193,8 @@ export function OfferFormDialog({
                   <select
                     id="offer-currency"
                     name="currency"
-                    defaultValue={baseCurrency}
+                    value={pickedCurrency}
+                    onChange={(e) => setPickedCurrency(e.target.value)}
                     disabled={isPending}
                     style={{ ...INPUT_STYLE, cursor: "pointer" }}
                   >
@@ -178,12 +228,17 @@ export function OfferFormDialog({
             </div>
           )}
 
-          {!isEdit && (
-            <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              Add the copies (sets) next, then set the asking price and listing URL once you know
-              them.
-            </p>
-          )}
+          {!isEdit &&
+            (sourceNote ? (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                {sourceNote}
+              </p>
+            ) : (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Add the copies (sets) next, then set the asking price and listing URL once you know
+                them.
+              </p>
+            ))}
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

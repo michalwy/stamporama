@@ -13,12 +13,14 @@ import {
   type OfferFilters,
 } from "./use-offers-query";
 import { OfferFormDialog } from "./offer-form-dialog";
+import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { OfferRow } from "./offer-row";
 
 type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "edit"; offer: OfferListItem }
+  | { kind: "duplicate"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
   | { kind: "delete"; offer: OfferListItem };
 
@@ -199,6 +201,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
                 isLast={idx === rows.length - 1 && !hasNextPage}
                 onEdit={(row) => setDialog({ kind: "edit", offer: row })}
                 onSetState={setOfferState}
+                onDuplicate={(row) => setDialog({ kind: "duplicate", offer: row })}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
               />
             ))}
@@ -241,6 +244,17 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
               }
             });
           }}
+        />
+      )}
+
+      {/* Duplicate onto another platform (#200) */}
+      {dialog.kind === "duplicate" && (
+        <DuplicateOfferDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          source={{ id: dialog.offer.id, label: dialog.offer.label, setCount: dialog.offer.setCount, price: dialog.offer.price, currency: dialog.offer.currency }}
+          onClose={closeDialog}
         />
       )}
 

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   createOffer,
+  duplicateOffer,
   updateOffer,
   setOfferState,
   deleteOffer,
@@ -32,6 +33,10 @@ export type OfferActionState =
 
 export type CreateOfferActionState =
   | { status: "success"; id: string }
+  | { status: "error"; message: string };
+
+export type DuplicateOfferActionState =
+  | { status: "success"; id: string; skippedCopies: number }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -101,6 +106,25 @@ export async function createOfferAction(
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to create the offer. Please try again.");
+  }
+}
+
+/** List the same composition on another platform (#200): clone the source offer's sets into a new
+ * draft, prompting only for platform / price / currency. `skippedCopies` counts copies dropped from
+ * the clone because they had already sold elsewhere. */
+export async function duplicateOfferAction(
+  collectionId: string,
+  sourceOfferId: string,
+  formData: FormData
+): Promise<DuplicateOfferActionState> {
+  const session = await getSession();
+  const parsed = await readOfferInput(collectionId, formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const result = await duplicateOffer(session.user.id, sourceOfferId, parsed.input);
+    return { status: "success", id: result.id, skippedCopies: result.skippedCopies };
+  } catch (e) {
+    return fail(e, "Failed to duplicate the offer. Please try again.");
   }
 }
 

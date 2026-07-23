@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip } from "../offer-badges";
 import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offers-query";
+import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
 import { isTerminalState, manualTransitions } from "@/lib/offer-rules";
@@ -72,12 +73,18 @@ export function OfferDetailPanel({
   issueHeaderById,
 }: OfferDetailPanelProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const skippedParam = Number(searchParams.get("skipped")) || 0;
   const { data: offer, isLoading } = useOfferDetail(collectionId, offerId);
   const { data: copies = [], isLoading: copiesLoading } = useOfferCopies(collectionId, offerId, true);
   const { invalidateAll } = useInvalidateOffers();
   const [composing, setComposing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
+  // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
+  // URL so a refresh doesn't resurrect it.
+  const [skippedNote, setSkippedNote] = useState(skippedParam);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
 
@@ -130,11 +137,43 @@ export function OfferDetailPanel({
           onSelect: () => setState(s),
         };
       }),
+    { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* Skipped-copies note after a duplicate (#200): some copies had already sold and were left
+          out of this clone. */}
+      {skippedNote > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.5rem",
+            background: "var(--color-bg-page)",
+            padding: "0.625rem 1rem",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            {skippedNote} cop{skippedNote === 1 ? "y" : "ies"} that had already sold elsewhere{" "}
+            {skippedNote === 1 ? "was" : "were"} skipped when copying this offer.
+          </span>
+          <button
+            type="button"
+            onClick={() => setSkippedNote(0)}
+            aria-label="Dismiss"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header summary card */}
       <div
         style={{
@@ -311,6 +350,16 @@ export function OfferDetailPanel({
             setComposing(false);
             invalidateAll(collectionId);
           }}
+        />
+      )}
+
+      {duplicating && (
+        <DuplicateOfferDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          source={{ id: offerId, label: offer.label, setCount: offer.sets.length, price: offer.price, currency: offer.currency }}
+          onClose={() => setDuplicating(false)}
         />
       )}
 
