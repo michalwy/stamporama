@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
-import { isTerminalState, manualTransitions } from "@/lib/offer-rules";
+import { isTerminalState, manualTransitions, type ManualOfferTarget } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip } from "./offer-badges";
 
@@ -19,6 +19,8 @@ const CHIP: React.CSSProperties = {
 };
 
 const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
+  ready: { label: "Mark ready", icon: "✓" },
+  preparing: { label: "Back to preparing", icon: "↩" },
   active: { label: "Resume", icon: "▶" },
   paused: { label: "Pause", icon: "⏸" },
   withdrawn: { label: "Withdraw", icon: "⇤" },
@@ -29,7 +31,7 @@ interface OfferRowProps {
   collectionSlug: string;
   isLast: boolean;
   onEdit: (offer: OfferListItem) => void;
-  onSetState: (offer: OfferListItem, state: "active" | "paused" | "withdrawn") => void;
+  onSetState: (offer: OfferListItem, state: ManualOfferTarget) => void;
   onDuplicate: (offer: OfferListItem) => void;
   onDelete: (offer: OfferListItem) => void;
 }
@@ -43,10 +45,10 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
   const terminal = isTerminalState(offer.state);
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
-    .filter((s): s is "active" | "paused" | "withdrawn" => s !== "sold")
+    .filter((s): s is ManualOfferTarget => s !== "sold")
     .map((s) => {
-      // Publishing a preparing offer reads "Activate"; resuming a paused one keeps "Resume".
-      const activating = offer.state === "preparing" && s === "active";
+      // Publishing a ready offer reads "Activate"; resuming a paused one keeps "Resume".
+      const activating = offer.state === "ready" && s === "active";
       return {
         key: s,
         label: activating ? "Activate" : TRANSITION_LABEL[s].label,

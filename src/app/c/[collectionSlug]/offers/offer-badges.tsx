@@ -35,6 +35,7 @@ function tinted(token: string, label: string, title?: string) {
 
 const STATE: Record<OfferState, { token: string | null; title: string }> = {
   preparing: { token: "info", title: "Still being composed — not yet published" },
+  ready: { token: "info", title: "Fully prepared — ready to post to the platform" },
   active: { token: "accent", title: "Live on the platform" },
   paused: { token: "warning", title: "Temporarily suspended on the platform" },
   sold: { token: "success", title: "Sold through this offer" },

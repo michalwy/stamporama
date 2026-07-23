@@ -5,19 +5,24 @@
 
 import { normalizeDecimalInput } from "./decimal-input";
 
-export type OfferState = "preparing" | "active" | "paused" | "sold" | "withdrawn";
+export type OfferState = "preparing" | "ready" | "active" | "paused" | "sold" | "withdrawn";
 
 export const OFFER_STATES: readonly OfferState[] = [
   "preparing",
+  "ready",
   "active",
   "paused",
   "sold",
   "withdrawn",
 ];
 
+/** Terminal / "closed" states — dead listings the offers list hides by default (#245). */
+export const CLOSED_OFFER_STATES: readonly OfferState[] = ["sold", "withdrawn"];
+
 export function isOfferState(value: unknown): value is OfferState {
   return (
     value === "preparing" ||
+    value === "ready" ||
     value === "active" ||
     value === "paused" ||
     value === "sold" ||
@@ -26,33 +31,46 @@ export function isOfferState(value: unknown): value is OfferState {
 }
 
 /** Only an `active` offer competes for its copies, so only `active` offers can collide (at most
- * one active offer per Item × platform). `preparing` (still being composed), paused, sold, and
- * withdrawn offers hold no live claim. */
+ * one active offer per Item × platform). `preparing` / `ready` (still being composed or awaiting
+ * posting), paused, sold, and withdrawn offers hold no live claim. */
 export function isLiveState(state: OfferState): boolean {
   return state === "active";
 }
 
 /**
- * The offer state machine (ADR-0012): `preparing → active ↔ paused → sold / withdrawn`.
+ * The offer state machine (ADR-0012, extended in #246): two pre-live states before an offer goes
+ * live — `preparing → ready → active ↔ paused → sold / withdrawn`.
  *
- *   preparing→ active | withdrawn        (still being composed; publish via Activate, #188)
+ *   preparing→ ready | withdrawn         (still being composed — mark Ready once assembled, #246)
+ *   ready    → active | preparing | withdrawn   (fully prepared; publish via Activate, or step back)
  *   active   → paused | withdrawn        (and → sold, but only via the sale flow, #166)
  *   paused   → active | withdrawn        (and → sold, via #166)
  *   sold     → (terminal)
  *   withdrawn→ (terminal — relist = a new offer)
  *
- * `preparing`, `active`, and `paused` are all composable (the states are orientational — they
+ * The flow is linear but reversible: `ready` can drop back to `preparing` to keep editing. All of
+ * `preparing`, `ready`, `active`, and `paused` are composable (the states are orientational — they
  * scope filtering, not composition mechanics — #188); only terminal states freeze a listing.
  * `sold` is reachable only by recording a sale, never by a manual toggle, so it is excluded from
  * the manual-transition map below. Returns the states a user may move to by hand.
  */
 const MANUAL_TRANSITIONS: Record<OfferState, readonly OfferState[]> = {
-  preparing: ["active", "withdrawn"],
+  preparing: ["ready", "withdrawn"],
+  ready: ["active", "preparing", "withdrawn"],
   active: ["paused", "withdrawn"],
   paused: ["active", "withdrawn"],
   sold: [],
   withdrawn: [],
 };
+
+/** A user-reachable manual target (every state except `sold`, which the sale flow owns). */
+export type ManualOfferTarget = Exclude<OfferState, "sold">;
+
+/** A transition into `ready` or `active` requires the offer to actually list something (≥1 set) —
+ * you cannot mark an empty draft as ready or publish it (#188, #246). */
+export function requiresSets(to: OfferState): boolean {
+  return to === "ready" || to === "active";
+}
 
 /** Whether a user-initiated lifecycle change from `from` to `to` is allowed (excludes `sold`,
  * which the sale flow owns). */
@@ -72,6 +90,7 @@ export function isTerminalState(state: OfferState): boolean {
 
 export const OFFER_STATE_LABEL: Record<OfferState, string> = {
   preparing: "Preparing",
+  ready: "Ready",
   active: "Active",
   paused: "Paused",
   sold: "Sold",

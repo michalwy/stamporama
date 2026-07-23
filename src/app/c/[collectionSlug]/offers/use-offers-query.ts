@@ -16,6 +16,8 @@ export interface OfferFilters {
   state?: OfferState;
   /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `state`. */
   needsAction?: boolean;
+  /** Show closed (sold / withdrawn) offers; off by default hides dead listings (#245). */
+  includeClosed?: boolean;
 }
 
 export const offerKeys = {
@@ -35,6 +37,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.state) params.set("state", filters.state);
+      else if (filters.includeClosed) params.set("includeClosed", "1");
       const res = await fetch(`/api/collections/${collectionId}/offers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch offers");
       return res.json();

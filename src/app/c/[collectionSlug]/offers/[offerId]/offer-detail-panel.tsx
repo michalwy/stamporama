@@ -9,7 +9,7 @@ import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offe
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
-import { isTerminalState, manualTransitions } from "@/lib/offer-rules";
+import { isTerminalState, manualTransitions, type ManualOfferTarget } from "@/lib/offer-rules";
 import type { OfferDetailSet } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -58,6 +58,8 @@ const EDIT_CONTROL: React.CSSProperties = {
 };
 
 const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
+  ready: { label: "Mark ready", icon: "✓" },
+  preparing: { label: "Back to preparing", icon: "↩" },
   active: { label: "Resume", icon: "▶" },
   paused: { label: "Pause", icon: "⏸" },
   withdrawn: { label: "Withdraw", icon: "⇤" },
@@ -119,7 +121,7 @@ export function OfferDetailPanel({
     });
   }
 
-  function setState(next: "active" | "paused" | "withdrawn") {
+  function setState(next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setConfirm("withdraw");
       return;
@@ -135,10 +137,10 @@ export function OfferDetailPanel({
 
   const menuActions: RowAction[] = [
     ...manualTransitions(offer.state)
-      .filter((s): s is "active" | "paused" | "withdrawn" => s !== "sold")
+      .filter((s): s is ManualOfferTarget => s !== "sold")
       .map((s) => {
-        // Publishing a preparing offer reads "Activate"; resuming a paused one keeps "Resume".
-        const activating = offer.state === "preparing" && s === "active";
+        // Publishing a ready offer reads "Activate"; resuming a paused one keeps "Resume".
+        const activating = offer.state === "ready" && s === "active";
         return {
           key: s,
           label: activating ? "Activate" : TRANSITION_LABEL[s].label,

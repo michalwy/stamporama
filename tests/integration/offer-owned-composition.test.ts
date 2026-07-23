@@ -71,9 +71,13 @@ describe("offer-owned composition + coordination", () => {
     setQAy = await addOfferSet(userId, offerQA, [y]);
     await addOfferSet(userId, offerQA, [z]);
 
-    // These are live listings (#188): a new offer starts `preparing`, so publish each once its sets
-    // are composed. Only `active` offers hold a live claim (needs-action / sellable derivations).
-    for (const id of [offerA, offerB, offerQD, offerQA]) await setOfferState(userId, id, "active");
+    // These are live listings (#188, #246): a new offer starts `preparing`, so advance each through
+    // ready → active once its sets are composed. Only `active` offers hold a live claim
+    // (needs-action / sellable derivations).
+    for (const id of [offerA, offerB, offerQD, offerQA]) {
+      await setOfferState(userId, id, "ready");
+      await setOfferState(userId, id, "active");
+    }
   });
 
   after(async () => {

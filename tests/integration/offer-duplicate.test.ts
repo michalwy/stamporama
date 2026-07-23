@@ -107,6 +107,7 @@ describe("duplicate offer (list on another platform)", () => {
     // Sell copy `a` through a separate offer so it is globally retired.
     const other = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "9.00", currency: "EUR" });
     const otherSet = await addOfferSet(userId, other, [a]);
+    await setOfferState(userId, other, "ready"); // preparing → ready → active (#246)
     await setOfferState(userId, other, "active"); // only a live listing can sell
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,

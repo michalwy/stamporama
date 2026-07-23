@@ -9,6 +9,8 @@ import {
   isOfferState,
   canTransition,
   isTerminalState,
+  requiresSets,
+  CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
 
@@ -18,8 +20,8 @@ import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
 // never breaks apart). Nothing is shared between offers; the same physical copy listed elsewhere
 // is a separate offer with its own sets, and the `Item` is the cross-platform thread.
 //
-// This module owns: offer create / edit / delete + the manual lifecycle (active ↔ paused →
-// withdrawn; `sold` is set by the sale flow, #166), set add / rename / remove, the paginated
+// This module owns: offer create / edit / delete + the manual lifecycle (preparing → ready →
+// active ↔ paused → withdrawn; `sold` is set by the sale flow, #166), set add / rename / remove, the paginated
 // offers list + the offer detail read model, the composable-copies picker, the non-blocking
 // collision warning, and the derived **"needs action"** overlay (an active offer holding a set
 // whose copy has already sold elsewhere — ADR-0013 §4). The pure state machine lives in
@@ -397,6 +399,9 @@ export interface OfferListFilters {
   /** The derived "needs action" overlay (ADR-0013 §4): active offers holding a set whose copy sold
    * elsewhere. Takes precedence over `state`. */
   needsAction?: boolean;
+  /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
+   * the user opts in (#245). Ignored when an explicit `state` filter is set. */
+  includeClosed?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -442,7 +447,13 @@ export async function listOffersPaginated(
     where: {
       collectionId,
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
-      ...(filters.state ? { state: filters.state } : {}),
+      // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the
+      // user opted in (#245).
+      ...(filters.state
+        ? { state: filters.state }
+        : filters.includeClosed
+          ? {}
+          : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
     },
     orderBy: { createdAt: "desc" },
     take: pageSize + 1,
@@ -721,12 +732,12 @@ export interface ComposeTargets {
   copies: ItemListItem[];
 }
 
-const COMPOSE_TARGET_STATES = ["preparing", "active", "paused"] as const;
-const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, active: 1, paused: 2 };
+const COMPOSE_TARGET_STATES = ["preparing", "ready", "active", "paused"] as const;
+const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, active: 2, paused: 3 };
 
 /** Offers a copy can be added to from the inventory list (#188): the collection's non-terminal
- * offers (preparing / active / paused, all platforms), each with its sets, ordered preparing →
- * active → paused then newest first. When `itemId` is given, the sets and offers already holding
+ * offers (preparing / ready / active / paused, all platforms), each with its sets, ordered
+ * preparing → ready → active → paused then newest first. When `itemId` is given, the sets and offers already holding
  * that copy are flagged so the picker can disable them (an offer never lists a copy twice).
  * Enriched copies for every listed set ride along for the picker's expandable set details. */
 export async function listComposeTargets(
@@ -936,8 +947,8 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   });
 }
 
-/** Move an offer through its manual lifecycle (active ↔ paused → withdrawn). `sold` is owned by
- * the sale flow (#166) and rejected here. */
+/** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
+ * reversible; #246). `sold` is owned by the sale flow (#166) and rejected here. */
 export async function setOfferState(ownerId: string, offerId: string, to: OfferState): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (to === "sold") {
@@ -946,11 +957,12 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   if (!canTransition(ref.state, to)) {
     throw new OfferActionBlockedError("bad-transition", `Cannot move an offer from ${ref.state} to ${to}.`);
   }
-  // Publishing a preparing offer (Activate, #188): it must actually list something.
-  if (ref.state === "preparing" && to === "active") {
+  // Marking an offer ready or publishing it (Activate, #188/#246): it must actually list something.
+  if (requiresSets(to)) {
     const setCount = await prisma.offerSet.count({ where: { offerId } });
     if (setCount === 0) {
-      throw new OfferActionBlockedError("empty", "Add at least one set before activating this offer.");
+      const verb = to === "active" ? "activating" : "marking this offer ready";
+      throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
     }
   }
   await prisma.offer.update({ where: { id: offerId }, data: { state: to } });

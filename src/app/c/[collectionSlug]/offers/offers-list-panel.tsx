@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import type { OfferListItem } from "@/lib/offers";
-import { type OfferState, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { type OfferState, type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import {
   useOffersInfinite,
   useOfferPlatforms,
@@ -59,9 +60,14 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
   const state = !needsAction && stateParam && OFFER_STATES.includes(stateParam) ? stateParam : undefined;
   const platformId = searchParams.get("platform") || undefined;
 
+  // Remembered client preference (#245): closed (sold / withdrawn) offers are hidden until opted in.
+  const [includeClosed, setIncludeClosed] = usePersistedFlag(
+    `stamporama:offers:includeClosed:${collectionId}`
+  );
+
   const filters: OfferFilters = useMemo(
-    () => ({ platformId, state, needsAction }),
-    [platformId, state, needsAction]
+    () => ({ platformId, state, needsAction, includeClosed }),
+    [platformId, state, needsAction, includeClosed]
   );
 
   const updateParams = useCallback(
@@ -96,7 +102,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
     invalidateAll(collectionId);
   }
 
-  function setOfferState(offer: OfferListItem, next: "active" | "paused" | "withdrawn") {
+  function setOfferState(offer: OfferListItem, next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setDialog({ kind: "withdraw", offer });
       return;
@@ -148,6 +154,13 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
             label="Needs action"
             active={needsAction}
             onClick={() => updateParams({ needsAction: needsAction ? "" : "1", state: "" })}
+          />
+          <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
+          {/* Remembered toggle (#245): closed (sold / withdrawn) offers are hidden by default. */}
+          <FilterChip
+            label="Show sold/withdrawn"
+            active={includeClosed}
+            onClick={() => setIncludeClosed(!includeClosed)}
           />
         </div>
 

@@ -24,6 +24,7 @@ export async function GET(
   const stateParam = sp.get("state");
   const state = stateParam && isOfferState(stateParam) ? stateParam : undefined;
   const needsAction = sp.get("needsAction") === "1";
+  const includeClosed = sp.get("includeClosed") === "1";
 
   try {
     const result = await listOffersPaginated(session.user.id, collectionId, {
@@ -31,6 +32,7 @@ export async function GET(
       platformId,
       state,
       needsAction,
+      includeClosed,
       pageSize: 50,
     });
     return NextResponse.json(result);

@@ -32,7 +32,7 @@ const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 const MUTED = "var(--color-text-muted)";
 
 /** The composable states, in the order the facet panel lists them. Terminal offers can't be added to. */
-const FACET_STATES: readonly OfferState[] = ["preparing", "active", "paused"];
+const FACET_STATES: readonly OfferState[] = ["preparing", "ready", "active", "paused"];
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -256,7 +256,7 @@ export function AddToOfferDialog({
   }, [offers, raw, q, ctx]);
 
   const stateCounts = useMemo(() => {
-    const counts: Record<string, number> = { preparing: 0, active: 0, paused: 0 };
+    const counts: Record<string, number> = { preparing: 0, ready: 0, active: 0, paused: 0 };
     for (const { offer } of byText) counts[offer.state] = (counts[offer.state] ?? 0) + 1;
     return counts;
   }, [byText]);

@@ -40,9 +40,11 @@ sets". A plain single-stamp offer is just the one-set case.
    **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu.
-5. When the listing is up on the platform, **Activate** the offer (in the header's **⋮** menu) to
-   move it from **Preparing** to **Active**. An offer needs at least one set before it can be
-   activated.
+5. Once the offer is assembled, **Mark ready** (in the header's **⋮** menu) to move it from
+   **Preparing** to **Ready** — fully prepared, waiting to be posted. When the listing is actually up
+   on the platform, **Activate** it to move **Ready** → **Active**. An offer needs at least one set
+   before it can be marked ready or activated. You can step a **Ready** offer back to **Preparing**
+   at any time to keep editing.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
@@ -117,30 +119,39 @@ from what has sold, so it clears the moment the offer no longer holds a sold cop
 
 ## Offer lifecycle
 
-- **Preparing** — composed but not yet published. A new offer starts here. **Activate** it (in the
-  **⋮** menu) once the listing is live on the platform.
+- **Preparing** — being put together (photos, description, price not finalised). A new offer starts
+  here. **Mark ready** (in the **⋮** menu) once it is assembled.
+- **Ready** — fully prepared, waiting to be posted to the platform. **Activate** it once the listing
+  is live, or step it back to **Preparing** to keep editing.
 - **Active** — live on the platform.
 - **Paused** — temporarily suspended; the copies stay committed. Resume any time.
 - **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
 - **Sold** — set automatically when a [sale](sales.md) sells every set through the offer. You do
   not mark an offer sold by hand.
 
-The states are **orientational** — they help you sort and filter your listings. They don't restrict
-composing: you can add sets or copies to a Preparing, Active, or Paused offer alike; only Withdrawn
-and Sold offers are frozen.
+The lifecycle is linear but reversible: **Preparing → Ready → Active ↔ Paused**, with **Withdrawn**
+reachable from any live state. The states are **orientational** — they help you sort and filter your
+listings. They don't restrict composing: you can add sets or copies to a Preparing, Ready, Active, or
+Paused offer alike; only Withdrawn and Sold offers are frozen.
 
 Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
 currency it was created with as a permanent record; only new offers and sales use the new currency.
 
-From the row's **⋮** menu you can **edit** the price / platform / URL, **activate** a preparing
-offer, **pause** / **resume**, **withdraw**, open the live listing, or **delete** the offer. Deleting removes the offer and its
+From the row's **⋮** menu you can **edit** the price / platform / URL, **mark ready** a preparing
+offer, **activate** a ready one, **pause** / **resume**, **withdraw**, open the live listing, or
+**delete** the offer. Deleting removes the offer and its
 sets; the copies stay in your inventory. An offer with a sold set can't be deleted — withdraw it.
 
 ## Filtering
 
-The toolbar filters offers by **platform**, by **state** (Preparing / Active / Paused / Sold /
+The toolbar filters offers by **platform**, by **state** (Preparing / Ready / Active / Paused / Sold /
 Withdrawn), and by **Needs action** (the derived overlay above). The state filters and **Needs action** are
 mutually exclusive.
+
+Closed listings — **Sold** and **Withdrawn** offers — are **hidden by default** so the list shows
+only what's still in play. Toggle **Show sold/withdrawn** to bring them back; the choice is
+remembered per collection. Selecting the **Sold** or **Withdrawn** state chip always shows those
+offers regardless of the toggle.
 
 ## Related
 

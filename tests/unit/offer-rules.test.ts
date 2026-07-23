@@ -6,17 +6,20 @@ import {
   canTransition,
   manualTransitions,
   isTerminalState,
+  requiresSets,
   parsePrice,
   normalizeUrl,
   OFFER_STATES,
+  CLOSED_OFFER_STATES,
 } from "../../src/lib/offer-rules";
 
 // Type guard ----------------------------------------------------------------
 
 describe("isOfferState", () => {
-  it("accepts the five states and rejects everything else", () => {
+  it("accepts the six states and rejects everything else", () => {
     for (const s of OFFER_STATES) assert.equal(isOfferState(s), true);
     assert.equal(isOfferState("preparing"), true);
+    assert.equal(isOfferState("ready"), true);
     assert.equal(isOfferState("draft"), false);
     assert.equal(isOfferState(undefined), false);
     assert.equal(isOfferState(""), false);
@@ -29,9 +32,17 @@ describe("isLiveState", () => {
   it("only active offers hold a live claim (collide)", () => {
     assert.equal(isLiveState("active"), true);
     assert.equal(isLiveState("preparing"), false);
+    assert.equal(isLiveState("ready"), false);
     assert.equal(isLiveState("paused"), false);
     assert.equal(isLiveState("sold"), false);
     assert.equal(isLiveState("withdrawn"), false);
+  });
+});
+
+describe("CLOSED_OFFER_STATES", () => {
+  it("is exactly the terminal states (hidden from the list by default, #245)", () => {
+    assert.deepEqual([...CLOSED_OFFER_STATES], ["sold", "withdrawn"]);
+    for (const s of CLOSED_OFFER_STATES) assert.equal(isTerminalState(s), true);
   });
 });
 
@@ -47,11 +58,20 @@ describe("isTerminalState", () => {
 // State machine -------------------------------------------------------------
 
 describe("canTransition", () => {
-  it("publishes a preparing offer (→ active) or drops it (→ withdrawn)", () => {
-    assert.equal(canTransition("preparing", "active"), true);
+  it("advances a preparing offer (→ ready) or drops it (→ withdrawn)", () => {
+    assert.equal(canTransition("preparing", "ready"), true);
     assert.equal(canTransition("preparing", "withdrawn"), true);
+    assert.equal(canTransition("preparing", "active"), false); // must pass through ready (#246)
     assert.equal(canTransition("preparing", "paused"), false);
     assert.equal(canTransition("preparing", "sold"), false);
+  });
+
+  it("publishes a ready offer (→ active), steps it back (→ preparing), or drops it", () => {
+    assert.equal(canTransition("ready", "active"), true);
+    assert.equal(canTransition("ready", "preparing"), true);
+    assert.equal(canTransition("ready", "withdrawn"), true);
+    assert.equal(canTransition("ready", "paused"), false);
+    assert.equal(canTransition("ready", "sold"), false);
   });
 
   it("allows active ↔ paused and → withdrawn", () => {
@@ -81,11 +101,22 @@ describe("canTransition", () => {
 
 describe("manualTransitions", () => {
   it("lists exactly the hand-reachable targets", () => {
-    assert.deepEqual([...manualTransitions("preparing")], ["active", "withdrawn"]);
+    assert.deepEqual([...manualTransitions("preparing")], ["ready", "withdrawn"]);
+    assert.deepEqual([...manualTransitions("ready")], ["active", "preparing", "withdrawn"]);
     assert.deepEqual([...manualTransitions("active")], ["paused", "withdrawn"]);
     assert.deepEqual([...manualTransitions("paused")], ["active", "withdrawn"]);
     assert.deepEqual([...manualTransitions("sold")], []);
     assert.deepEqual([...manualTransitions("withdrawn")], []);
+  });
+});
+
+describe("requiresSets", () => {
+  it("only ready and active require the offer to list something (#188, #246)", () => {
+    assert.equal(requiresSets("ready"), true);
+    assert.equal(requiresSets("active"), true);
+    assert.equal(requiresSets("preparing"), false);
+    assert.equal(requiresSets("paused"), false);
+    assert.equal(requiresSets("withdrawn"), false);
   });
 });
 
