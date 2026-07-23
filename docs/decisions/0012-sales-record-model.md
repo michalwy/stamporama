@@ -136,20 +136,27 @@ Symmetric to the purchase cost-allocation engine (ADR-0009 §3, `purchase-alloca
 the money flowing the other way. The pure engine is `src/lib/sale-allocation.ts` (#163),
 unit-tested without Prisma; the server (#166/#168) assembles inputs and surfaces the result.
 
-1. A sale's three **shared amounts** are each distributed across **all** lines proportionally
-   to line **sale price**: buyer-paid handling (`+`), my actual shipping (`−`), and platform
-   commission (`−`, entered **manually** per transaction). Each is a non-negative amount split
-   by the same price weights, so the largest-remainder apportionment from purchases applies
-   unchanged.
-2. A line's **net proceeds** (transaction currency) = `price + handlingShare − shippingShare −
-   commissionShare`. This may be **negative** (a line whose fees exceed its price).
-3. The net is converted to base currency at the frozen FX rate, then distributed to the line's
-   `Item`s proportionally to the **primary-catalog price for each item's condition ×
-   certificate** (ADR-0006) — the same weight the purchase engine uses, so a komplet's copies
-   split symmetrically. A single-item line short-circuits (the copy takes the whole net).
+1. The two **buyer-side shared amounts** are distributed across **all** lines proportionally to
+   line **sale price**, in the **transaction currency**: buyer-paid handling (`+`) and platform
+   commission (`−`, entered **manually** per transaction). Each is a non-negative amount split by
+   the same price weights, so the largest-remainder apportionment from purchases applies unchanged.
+2. A line's **buyer-side net** (transaction currency) = `price + handlingShare − commissionShare`.
+   This may be **negative** (a line whose commission exceeds its price).
+3. That net is converted to base currency at the frozen FX rate. **My actual shipping (`−`) is a
+   cost I pay in my own currency, so it is converted straight to the base currency** (#206, its own
+   rate frozen at the sale date) and distributed across lines by the same price weights — a
+   base-currency deduction. A line's **base net** = base proceeds − `shippingBaseShare`. The base
+   net is then distributed to the line's `Item`s proportionally to the **primary-catalog price for
+   each item's condition × certificate** (ADR-0006) — the same weight the purchase engine uses, so
+   a komplet's copies split symmetrically. A single-item line short-circuits (the copy takes the
+   whole net).
 4. Per copy: **P/L = net proceeds (base) − `Item.costBasis` (base)**. A `null` cost-basis
    (lot still open / channel wrote no cost) yields a `null` P/L — reporting treats that as *not
    yet computable*, never phantom profit (consistent with `resolveCostBasis`, ADR-0009).
+
+Because shipping lands in the base currency, a sale's **net proceeds** is a base-currency figure
+`(gross + handling − commission) × rate − shippingBase`; for a single-currency collection this
+equals the former transaction-currency net.
 
 **Rounding.** Everything reconciles to the cent via integer-cent largest-remainder
 apportionment: each shared amount's shares sum exactly to that amount, and per-item proceeds
@@ -215,8 +222,11 @@ Sale                                             -- table "sale"
   currency      String
   externalRef   String?                           -- marketplace order/txn number, free-text (#166)
   fxRateToBase  Decimal?                          -- DECIMAL(65,30)
-  buyerHandling Decimal? @db.Decimal(10, 2)       -- + proceeds
-  shippingCost  Decimal? @db.Decimal(10, 2)       -- − my cost
+  buyerHandling Decimal? @db.Decimal(10, 2)       -- + proceeds (or derived from buyerPaidTotal, #205)
+  buyerPaidTotal Decimal? @db.Decimal(10, 2)      -- + alt anchor: total buyer paid, handling = total − gross (#205)
+  shippingCost  Decimal? @db.Decimal(10, 2)       -- − my cost, in shippingCurrency (#206)
+  shippingCurrency String?                        -- currency shipping was paid in, any currency (#206)
+  shippingFxRateToBase Decimal?                   -- DECIMAL(65,30), shipping→base frozen at soldAt (#206)
   commission    Decimal? @db.Decimal(10, 2)       -- − manual
   createdAt     DateTime @default(now())
 

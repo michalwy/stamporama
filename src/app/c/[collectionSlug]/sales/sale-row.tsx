@@ -125,9 +125,9 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
               color: "var(--color-text-primary)",
               whiteSpace: "nowrap",
             }}
-            title="Net proceeds (transaction currency): gross + buyer handling − shipping − commission"
+            title="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
           >
-            {sale.netProceeds} {sale.currency}
+            {sale.netProceeds} {sale.baseCurrency}
           </span>
         </div>
       </div>

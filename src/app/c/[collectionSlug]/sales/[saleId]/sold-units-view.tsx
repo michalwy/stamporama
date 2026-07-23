@@ -617,7 +617,7 @@ function SoldUnitCard({
             {line.price} {currency}
           </div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-            net {line.netTx} {currency}
+            net {line.netBase} {ctx.baseCurrency}
           </div>
         </div>
         <span onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>

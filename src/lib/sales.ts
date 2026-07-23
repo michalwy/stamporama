@@ -430,9 +430,10 @@ export async function updateSaleHeader(
   });
 }
 
-/** The shared-amount fields editable in place on the detail screen. `buyerPaidTotal` is the
- * alternate anchor for the buyer side (#205) — setting it clears `buyerHandling` and vice-versa. */
-export type SaleAmountField = "buyerHandling" | "buyerPaidTotal" | "shippingCost" | "commission";
+/** The single-currency shared-amount fields editable in place on the detail screen. `buyerPaidTotal`
+ * is the alternate anchor for the buyer side (#205) — setting it clears `buyerHandling` and
+ * vice-versa. Shipping is multi-currency (#206) and goes through `updateSaleShipping` instead. */
+export type SaleAmountField = "buyerHandling" | "buyerPaidTotal" | "commission";
 
 /** Set one of a sale's shared amounts in place. Null when cleared. Feeds the allocation engine on
  * read (`getSaleDetail`). Buyer handling and buyer-paid total are mutually exclusive anchors, so
@@ -448,6 +449,30 @@ export async function updateSaleAmount(
   if (field === "buyerHandling") data.buyerPaidTotal = null;
   else if (field === "buyerPaidTotal") data.buyerHandling = null;
   await prisma.sale.update({ where: { id: saleId }, data });
+}
+
+/** Set (or clear) my shipping cost in any currency (#206). Freezes the shipping currency's base
+ * rate at save time — independent of the sale's transaction currency — so profit is computed in the
+ * base currency. A blank amount clears all three shipping fields. */
+export async function updateSaleShipping(
+  ownerId: string,
+  saleId: string,
+  amount: string | null,
+  currency: string
+): Promise<void> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  if (amount == null) {
+    await prisma.sale.update({
+      where: { id: saleId },
+      data: { shippingCost: null, shippingCurrency: null, shippingFxRateToBase: null },
+    });
+    return;
+  }
+  const shippingFxRateToBase = await freezeFxRate(ref.collectionId, currency, ref.baseCurrency);
+  await prisma.sale.update({
+    where: { id: saleId },
+    data: { shippingCost: amount, shippingCurrency: currency, shippingFxRateToBase },
+  });
 }
 
 /** Resolve the effective buyer handling (the number fed to net + allocation) from a sale's two
@@ -618,9 +643,13 @@ export interface SaleListItem {
   currency: string;
   lineCount: number;
   itemCount: number;
+  /** The collection base currency — `netProceeds` is expressed in it (#206). */
+  baseCurrency: string;
   /** Sum of line sale prices (transaction currency). */
   grossProceeds: string;
-  /** Gross + buyer handling − shipping − commission (transaction currency). */
+  /** Base-currency net (#206): (gross + buyer handling − commission) converted to base, minus my
+   * shipping (already in base). For a single-currency collection this equals the old transaction-
+   * currency net. */
   netProceeds: string;
   createdAt: Date;
 }
@@ -635,6 +664,8 @@ const SALE_LIST_SELECT = {
   buyerHandling: true,
   buyerPaidTotal: true,
   shippingCost: true,
+  shippingCurrency: true,
+  shippingFxRateToBase: true,
   commission: true,
   createdAt: true,
   platform: { select: { name: true } },
@@ -652,24 +683,56 @@ function money(v: Prisma.Decimal | null): string | null {
   return v == null ? null : Number(v).toFixed(2);
 }
 
-function toSaleListItem(row: {
-  id: string;
-  platformId: string;
-  externalRef: string | null;
-  soldAt: Date;
-  currency: string;
-  buyerHandling: Prisma.Decimal | null;
-  buyerPaidTotal: Prisma.Decimal | null;
-  shippingCost: Prisma.Decimal | null;
-  commission: Prisma.Decimal | null;
-  createdAt: Date;
-  platform: { name: string };
-  buyer: { name: string } | null;
-  lines: { price: Prisma.Decimal; _count: { items: number } }[];
-}): SaleListItem {
+/** Convert a sale's shipping cost (entered in its own currency, #206) to the base currency. Identity
+ * when the shipping currency is the base or unset; uses the frozen shipping rate otherwise. A null
+ * rate on a foreign shipping currency means no rate is known — treated as 0 here and surfaced by the
+ * sale's own "no FX rate" state, so an unconvertible cost never silently distorts a base figure. */
+function shippingToBase(
+  shippingCost: Prisma.Decimal | null,
+  shippingCurrency: string | null,
+  shippingFxRateToBase: Prisma.Decimal | null,
+  baseCurrency: string
+): number {
+  if (shippingCost == null) return 0;
+  if (shippingCurrency == null || shippingCurrency === baseCurrency) return Number(shippingCost);
+  if (shippingFxRateToBase == null) return 0;
+  return Number(shippingCost) * Number(shippingFxRateToBase);
+}
+
+function toSaleListItem(
+  row: {
+    id: string;
+    platformId: string;
+    externalRef: string | null;
+    soldAt: Date;
+    currency: string;
+    fxRateToBase: Prisma.Decimal | null;
+    buyerHandling: Prisma.Decimal | null;
+    buyerPaidTotal: Prisma.Decimal | null;
+    shippingCost: Prisma.Decimal | null;
+    shippingCurrency: string | null;
+    shippingFxRateToBase: Prisma.Decimal | null;
+    commission: Prisma.Decimal | null;
+    createdAt: Date;
+    platform: { name: string };
+    buyer: { name: string } | null;
+    lines: { price: Prisma.Decimal; _count: { items: number } }[];
+  },
+  baseCurrency: string
+): SaleListItem {
   const gross = row.lines.reduce((s, l) => s + Number(l.price), 0);
   const { handling } = resolveBuyerHandling(row.buyerHandling, row.buyerPaidTotal, gross);
-  const net = gross + handling - num(row.shippingCost) - num(row.commission);
+  // Buyer-side net (transaction ccy) → base, then my shipping (already base). Rate defaults to 1
+  // (base == transaction, or the rare unknown-rate window the detail flags separately).
+  const buyerNetTx = gross + handling - num(row.commission);
+  const rate = row.fxRateToBase == null ? 1 : Number(row.fxRateToBase);
+  const shippingBase = shippingToBase(
+    row.shippingCost,
+    row.shippingCurrency,
+    row.shippingFxRateToBase,
+    baseCurrency
+  );
+  const netBase = buyerNetTx * rate - shippingBase;
   return {
     id: row.id,
     platformId: row.platformId,
@@ -680,8 +743,9 @@ function toSaleListItem(row: {
     currency: row.currency,
     lineCount: row.lines.length,
     itemCount: row.lines.reduce((s, l) => s + l._count.items, 0),
+    baseCurrency,
     grossProceeds: gross.toFixed(2),
-    netProceeds: net.toFixed(2),
+    netProceeds: netBase.toFixed(2),
     createdAt: row.createdAt,
   };
 }
@@ -704,7 +768,7 @@ export async function listSalesPaginated(
   collectionId: string,
   filters: SaleListFilters = {}
 ): Promise<PaginatedSalesResult> {
-  await assertCollectionOwner(ownerId, collectionId);
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
 
@@ -722,7 +786,7 @@ export async function listSalesPaginated(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   return {
-    items: page.map(toSaleListItem),
+    items: page.map((row) => toSaleListItem(row, baseCurrency)),
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
 }
@@ -780,9 +844,19 @@ export interface SaleDetail {
   /** True when total-anchored and the total is below the offer prices — handling would be negative,
    * so it is clamped to 0 and this flags the error state. */
   totalBelowGross: boolean;
+  /** My shipping cost as originally entered, in `shippingCurrency` (#206). */
   shippingCost: string | null;
+  /** Currency the shipping cost was paid in; defaults to the sale currency for new entries. Null
+   * when no shipping is recorded. */
+  shippingCurrency: string | null;
+  /** The shipping cost converted to the base currency (#206), or null when none is recorded. */
+  shippingBase: string | null;
+  /** True when shipping is in a foreign currency but no FX rate to base is known — the cost can't
+   * be converted, so it is excluded from the base net until a rate exists. */
+  shippingRateMissing: boolean;
   commission: string | null;
   grossProceeds: string;
+  /** Base-currency net (#206): buyer-side proceeds converted to base, minus shipping (base). */
   netProceeds: string;
   lines: SaleDetailLine[];
   createdAt: Date;
@@ -805,6 +879,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       buyerHandling: true,
       buyerPaidTotal: true,
       shippingCost: true,
+      shippingCurrency: true,
+      shippingFxRateToBase: true,
       commission: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
@@ -836,9 +912,22 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     sale.buyerPaidTotal,
     gross
   );
+  const baseCurrency = sale.collection.baseCurrency;
+  // Shipping is my cost in my own currency, converted straight to base (#206).
+  const shippingBase = shippingToBase(
+    sale.shippingCost,
+    sale.shippingCurrency,
+    sale.shippingFxRateToBase,
+    baseCurrency
+  );
+  const shippingRateMissing =
+    sale.shippingCost != null &&
+    sale.shippingCurrency != null &&
+    sale.shippingCurrency !== baseCurrency &&
+    sale.shippingFxRateToBase == null;
   const shared = {
     buyerHandling: effHandling,
-    shippingCost: num(sale.shippingCost),
+    shippingBase,
     commission: num(sale.commission),
     fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
   };
@@ -869,7 +958,11 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     };
   });
 
-  const net = gross + shared.buyerHandling - shared.shippingCost - shared.commission;
+  // Net is a base-currency figure (#206): buyer-side proceeds converted to base, minus my base
+  // shipping. For a single-currency collection this equals the old transaction-currency net.
+  const rate = sale.fxRateToBase == null ? 1 : Number(sale.fxRateToBase);
+  const buyerNetTx = gross + shared.buyerHandling - shared.commission;
+  const net = buyerNetTx * rate - shippingBase;
 
   return {
     id: sale.id,
@@ -879,7 +972,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     buyerId: sale.buyerId,
     buyerName: sale.buyer?.name ?? null,
     externalRef: sale.externalRef,
-    baseCurrency: sale.collection.baseCurrency,
+    baseCurrency,
     soldAt: sale.soldAt,
     currency: sale.currency,
     fxRateToBase: sale.fxRateToBase == null ? null : String(sale.fxRateToBase),
@@ -888,6 +981,9 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     buyerPaidTotal: money(sale.buyerPaidTotal),
     totalBelowGross,
     shippingCost: money(sale.shippingCost),
+    shippingCurrency: sale.shippingCurrency,
+    shippingBase: sale.shippingCost == null ? null : shippingBase.toFixed(2),
+    shippingRateMissing,
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),
     netProceeds: net.toFixed(2),

@@ -551,8 +551,16 @@ model Sale {
   // derived = this − gross (sum of line prices) and recomputed as sold sets change, so `buyerHandling`
   // is null. Null when handling is entered directly.
   buyerPaidTotal Decimal? @db.Decimal(10, 2)
-  // My actual shipping/postage cost (subtracts from proceeds, −).
+  // My actual shipping/postage cost, in `shippingCurrency` (subtracts from proceeds, −). Entered in
+  // any currency (#206) — converted straight to the base currency for profit, not to the sale's
+  // transaction currency.
   shippingCost  Decimal? @db.Decimal(10, 2)
+  // Currency `shippingCost` was paid in (#206), independent of the sale's transaction currency.
+  // Null when no shipping cost is recorded; defaults to the sale currency in the UI.
+  shippingCurrency String?
+  // Base-currency FX rate for `shippingCurrency`, frozen at `soldAt` (DECIMAL(65,30), like
+  // `fxRateToBase`). Null when `shippingCurrency == base` (identity) or no rate is known (#206).
+  shippingFxRateToBase Decimal?
   // Platform commission/fees, entered manually per transaction (subtracts, −).
   commission    Decimal? @db.Decimal(10, 2)
   createdAt     DateTime @default(now())

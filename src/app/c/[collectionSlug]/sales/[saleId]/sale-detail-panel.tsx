@@ -7,6 +7,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetail } from "@/lib/sales";
+import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
@@ -161,9 +162,9 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           )}
           <span
             style={{ marginLeft: "auto", fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
-            title="Net proceeds (transaction currency)"
+            title="Net proceeds (base currency)"
           >
-            {sale.netProceeds} {sale.currency}
+            {sale.netProceeds} {sale.baseCurrency}
           </span>
         </div>
         {sale.fxRateToBase == null && sale.currency !== sale.baseCurrency && (
@@ -232,15 +233,18 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               }
             />
           )}
-          <EditableAmountRow
-            label="− My shipping"
-            value={sale.shippingCost}
-            currency={sale.currency}
+          <EditableShippingRow
+            amount={sale.shippingCost}
+            currency={sale.shippingCurrency ?? sale.currency}
+            saleCurrency={sale.currency}
+            baseCurrency={sale.baseCurrency}
+            baseEquivalent={sale.shippingBase}
+            rateMissing={sale.shippingRateMissing}
             disabled={isPending}
-            onSave={(next) =>
+            onSave={(amount, ccy) =>
               run(async () => {
-                const { updateSaleAmountAction } = await import("@/app/actions/sales");
-                return updateSaleAmountAction(sale.id, "shippingCost", next);
+                const { updateSaleShippingAction } = await import("@/app/actions/sales");
+                return updateSaleShippingAction(sale.id, amount, ccy);
               })
             }
           />
@@ -258,7 +262,7 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           />
           <AmountLine label="Net proceeds" bold topBorder>
             <span style={{ ...READONLY_VALUE_STYLE, color: "var(--color-text-primary)" }}>
-              {sale.netProceeds} {sale.currency}
+              {sale.netProceeds} {sale.baseCurrency}
             </span>
           </AmountLine>
         </div>
@@ -533,6 +537,149 @@ function EditableAmountRow({
           </span>
           <span>{value ? `${value} ${currency}` : "Set"}</span>
         </button>
+      )}
+    </AmountLine>
+  );
+}
+
+const SHIP_ICON_BTN: React.CSSProperties = {
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-elevated)",
+  borderRadius: "0.25rem",
+  cursor: "pointer",
+  fontSize: "0.75rem",
+  lineHeight: 1,
+  padding: "0.25rem 0.375rem",
+  color: "var(--color-text-secondary)",
+};
+
+/** The "− My shipping" row (#206): editable amount **plus a currency selector**, since shipping can
+ * be paid in a currency other than the sale's. Read-only it shows the entered amount and — when the
+ * currency differs from base — its base-currency equivalent (or a "no rate" flag when unconvertible).
+ * Editing commits amount + currency together via explicit ✓/✕ (a currency `select` can't share the
+ * blur-to-commit trick the single-value rows use). */
+function EditableShippingRow({
+  amount,
+  currency,
+  saleCurrency,
+  baseCurrency,
+  baseEquivalent,
+  rateMissing,
+  disabled,
+  onSave,
+}: {
+  amount: string | null;
+  currency: string;
+  saleCurrency: string;
+  baseCurrency: string;
+  baseEquivalent: string | null;
+  rateMissing: boolean;
+  disabled: boolean;
+  onSave: (amount: string, currency: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [draftAmount, setDraftAmount] = useState("");
+  const [draftCcy, setDraftCcy] = useState(saleCurrency);
+
+  function open() {
+    if (disabled) return;
+    setDraftAmount(amount ?? "");
+    setDraftCcy(currency || saleCurrency);
+    setEditing(true);
+  }
+  function commit() {
+    setEditing(false);
+    // Skip a no-op write (compare against the shown amount + currency).
+    if (draftAmount.trim() === (amount ?? "") && draftCcy === (currency || saleCurrency)) return;
+    onSave(draftAmount, draftCcy);
+  }
+
+  const showBase = amount != null && !!currency && currency !== baseCurrency;
+
+  return (
+    <AmountLine label="− My shipping">
+      {editing ? (
+        <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            autoFocus
+            value={draftAmount}
+            onChange={(e) => setDraftAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                setEditing(false);
+              }
+            }}
+            style={{ ...INPUT_STYLE, width: "6rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
+          />
+          <select
+            aria-label="Shipping currency"
+            value={draftCcy}
+            onChange={(e) => setDraftCcy(e.target.value)}
+            style={{ ...INPUT_STYLE, width: "5.5rem", padding: "0.125rem 0.375rem", cursor: "pointer" }}
+          >
+            {COMMON_CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={commit} title="Save" aria-label="Save shipping" style={SHIP_ICON_BTN}>
+            ✓
+          </button>
+          <button type="button" onClick={() => setEditing(false)} title="Cancel" aria-label="Cancel" style={SHIP_ICON_BTN}>
+            ✕
+          </button>
+        </span>
+      ) : (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          {showBase && !rateMissing && baseEquivalent && (
+            <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}>
+              = {baseEquivalent} {baseCurrency}
+            </span>
+          )}
+          {rateMissing && (
+            <span
+              style={{ fontSize: "0.6875rem", color: "var(--color-error)" }}
+              title={`No exchange rate from ${currency} to ${baseCurrency} is known yet, so this cost is not in the base net.`}
+            >
+              no rate
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={open}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            disabled={disabled}
+            title="Click to edit"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              border: "none",
+              background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
+              cursor: disabled ? "default" : "pointer",
+              padding: `0.125rem ${VALUE_INSET}`,
+              borderRadius: "0.25rem",
+              fontVariantNumeric: "tabular-nums",
+              fontSize: "0.8125rem",
+              color: amount ? "var(--color-text-primary)" : "var(--color-text-muted)",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+              ✎
+            </span>
+            <span>{amount ? `${amount} ${currency}` : "Set"}</span>
+          </button>
+        </span>
       )}
     </AmountLine>
   );

@@ -66,6 +66,14 @@ plus **buyer handling** (+) when you entered it directly — is **editable in pl
 pencil (✎) can be clicked to edit. Click the value (or **Set** when empty), type the amount, and
 press Enter (Escape reverts).
 
+**My shipping can be in any currency.** Postage is often paid in your own currency, not the
+marketplace's, so the shipping row has its own currency selector (defaulting to the sale currency).
+Whatever currency you pick, the cost is converted **straight to your base currency** at the rate on
+the sale date, and it's the base amount that feeds profit. The row shows the base equivalent beside
+a foreign-currency amount (or flags **no rate** if none is known yet). Because shipping lands in the
+base currency, the **net proceeds** figure — on the sale, its rows, and the list — is shown in the
+**base currency**. For a single-currency collection (base = sale currency) nothing looks different.
+
 If the sale is anchored on the **total paid** (the default), the breakdown instead shows an
 editable **Total paid by buyer** row and a read-only **buyer handling** derived below it — the
 handling follows the total minus the offer prices and re-settles automatically as you add or

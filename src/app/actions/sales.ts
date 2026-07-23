@@ -7,6 +7,7 @@ import {
   createSale,
   updateSaleHeader,
   updateSaleAmount,
+  updateSaleShipping,
   addSaleLines,
   removeSaleLine,
   deleteSale,
@@ -172,12 +173,11 @@ export async function updateSaleHeaderAction(
 const AMOUNT_LABEL: Record<SaleAmountField, string> = {
   buyerHandling: "Buyer handling",
   buyerPaidTotal: "Total paid by buyer",
-  shippingCost: "Shipping cost",
   commission: "Commission",
 };
 
-/** Set one shared amount (buyer handling / shipping / commission) in place from the detail
- * screen. Blank normalises to null (not recorded). */
+/** Set one single-currency shared amount (buyer handling / total / commission) in place from the
+ * detail screen. Blank normalises to null (not recorded). */
 export async function updateSaleAmountAction(
   saleId: string,
   field: SaleAmountField,
@@ -191,6 +191,28 @@ export async function updateSaleAmountAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the amount.");
+  }
+}
+
+/** Set (or clear) my shipping cost in any currency (#206). The rate to base is frozen server-side.
+ * A blank amount clears the shipping cost regardless of the currency passed. */
+export async function updateSaleShippingAction(
+  saleId: string,
+  rawAmount: string,
+  currency: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  const parsed = parseAmount(rawAmount, "Shipping cost");
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  const ccy = currency.trim().toUpperCase();
+  if (parsed.value != null && !ccy) {
+    return { status: "error", message: "Choose the currency the shipping was paid in." };
+  }
+  try {
+    await updateSaleShipping(session.user.id, saleId, parsed.value, ccy);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to save the shipping cost.");
   }
 }
 

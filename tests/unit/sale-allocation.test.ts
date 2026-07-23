@@ -15,7 +15,7 @@ import {
 
 const NO_SHARED: Omit<SaleSharedAmounts, "fxRateToBase"> = {
   buyerHandling: 0,
-  shippingCost: 0,
+  shippingBase: 0,
   commission: 0,
 };
 
@@ -31,10 +31,10 @@ function sumCents(values: number[]): number {
 // Shared-amount distribution (ADR-0012 §6.1) --------------------------------
 
 describe("distributeSaleShared", () => {
-  it("splits each shared amount across lines by sale price and resolves net", () => {
+  it("splits shared amounts by sale price; buyer-side net in tx, shipping deducted in base", () => {
     const shared: SaleSharedAmounts = {
       buyerHandling: 5,
-      shippingCost: 4,
+      shippingBase: 4, // already base; fxRateToBase null → base == transaction (rate 1)
       commission: 3,
       fxRateToBase: null,
     };
@@ -46,20 +46,29 @@ describe("distributeSaleShared", () => {
 
     // Each shared amount ties out exactly to its total.
     assert.equal(sumCents(nets.map((n) => n.handlingShare)), 500);
-    assert.equal(sumCents(nets.map((n) => n.shippingShare)), 400);
+    assert.equal(sumCents(nets.map((n) => n.shippingBaseShare)), 400);
     assert.equal(sumCents(nets.map((n) => n.commissionShare)), 300);
 
-    // Line A (60%): +3.00 −2.40 −1.80 on top of 60 → 58.80.
+    // Buyer-side net (tx) excludes shipping. Line A (60%): 60 + 3.00 − 1.80 → 61.20.
     assert.deepEqual(
       nets.map((n) => [n.id, n.netTx]),
+      [
+        ["a", 61.2],
+        ["b", 30.6],
+        ["c", 10.2],
+      ]
+    );
+    // Base net subtracts my shipping share. Line A: 61.20 − 2.40 → 58.80.
+    assert.deepEqual(
+      nets.map((n) => [n.id, n.netBase]),
       [
         ["a", 58.8],
         ["b", 29.4],
         ["c", 9.8],
       ]
     );
-    // Whole-sale net = total price + handling − shipping − commission = 100 + 5 − 4 − 3 = 98.
-    assert.equal(sumCents(nets.map((n) => n.netTx)), 9800);
+    // Whole-sale base net = total price + handling − commission − shipping = 100 + 5 − 3 − 4 = 98.
+    assert.equal(sumCents(nets.map((n) => n.netBase)), 9800);
   });
 
   it("applies the frozen FX rate to the base-currency net", () => {
@@ -69,21 +78,22 @@ describe("distributeSaleShared", () => {
     assert.equal(net.netBase, 50);
   });
 
-  it("a line net can go negative when fees exceed its price", () => {
+  it("a line's base net can go negative when costs exceed its price", () => {
     const shared: SaleSharedAmounts = {
       buyerHandling: 0,
-      shippingCost: 5,
+      shippingBase: 5,
       commission: 5,
       fxRateToBase: null,
     };
     const [net] = distributeSaleShared(shared, [{ id: "a", price: 8 }]);
-    assert.equal(net.netTx, -2);
+    assert.equal(net.netTx, 3); // buyer-side: 8 − 5 commission
+    assert.equal(net.netBase, -2); // − 5 shipping (base)
   });
 
   it("distributes leftover cents by largest remainder and ties out exactly", () => {
     const shared: SaleSharedAmounts = {
       buyerHandling: 10,
-      shippingCost: 0,
+      shippingBase: 0,
       commission: 0,
       fxRateToBase: null,
     };
@@ -169,7 +179,7 @@ describe("allocateSale", () => {
     ];
     const shared: SaleSharedAmounts = {
       buyerHandling: 3,
-      shippingCost: 2,
+      shippingBase: 2,
       commission: 1,
       fxRateToBase: null,
     };
@@ -186,7 +196,7 @@ describe("allocateSale", () => {
     ];
     const shared: SaleSharedAmounts = {
       buyerHandling: 0,
-      shippingCost: 4,
+      shippingBase: 4,
       commission: 0,
       fxRateToBase: null,
     };

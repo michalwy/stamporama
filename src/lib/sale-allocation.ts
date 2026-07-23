@@ -5,20 +5,21 @@
 // Symmetric to the purchase allocation engine (`purchase-allocation.ts`, #119), but the
 // money flows the other way and the shared amounts have signs:
 //
-//   1. A sale's three shared amounts are each distributed across ALL lines proportionally
-//      to line sale price (transaction currency):
+//   1. The two buyer-side shared amounts are distributed across ALL lines proportionally to
+//      line sale price, in the sale's transaction currency:
 //        - buyer-paid handling  (+)  adds to proceeds,
-//        - my actual shipping   (−)  subtracts,
 //        - platform commission  (−)  subtracts.
-//      Each is a non-negative amount split by the same price weights, so the same
-//      largest-remainder apportionment as purchases applies unchanged.
-//   2. A line's net proceeds (transaction currency) = price + handlingShare − shippingShare
-//      − commissionShare. This can be negative (a line whose fees exceed its price).
-//   3. The net is converted to the base currency at the FX rate frozen at the sale date
-//      (ADR-0012 §4), then distributed to the line's `Item`s proportionally to the
-//      primary-catalog price for each item's condition × certificate (ADR-0006) — the same
-//      weight the purchase engine uses, so a komplet's items split symmetrically.
-//   4. Per item: P/L = net proceeds (base) − `Item.costBasis` (base). A `null` cost-basis
+//   2. A line's buyer-side net (transaction currency) = price + handlingShare − commissionShare.
+//      This can be negative (a line whose commission exceeds its price).
+//   3. That net is converted to the base currency at the FX rate frozen at the sale date
+//      (ADR-0012 §4). My actual shipping (−) is a cost I pay in my own currency, so it is
+//      converted straight to the base currency (#206, its own frozen rate) and distributed
+//      across lines by the same price weights — a base-currency deduction. A line's
+//      base-currency net = base proceeds − shippingBaseShare.
+//   4. The base net is distributed to the line's `Item`s proportionally to the primary-catalog
+//      price for each item's condition × certificate (ADR-0006) — the same weight the purchase
+//      engine uses, so a komplet's items split symmetrically.
+//   5. Per item: P/L = net proceeds (base) − `Item.costBasis` (base). A `null` cost-basis
 //      (lot still open / channel wrote no cost) yields a `null` P/L, never a phantom profit.
 //
 // Rounding: everything reconciles to the cent via integer-cent largest-remainder
@@ -32,13 +33,14 @@ export interface SaleLineInput {
   price: number;
 }
 
-/** The shared amounts of a whole sale, in its single transaction currency. */
+/** The shared amounts of a whole sale. Buyer-side amounts are in the sale's transaction currency;
+ * shipping is already converted to the base currency (#206). */
 export interface SaleSharedAmounts {
-  /** Buyer-paid handling/postage collected from the buyer; adds to proceeds (>= 0). */
+  /** Buyer-paid handling/postage collected from the buyer; adds to proceeds (>= 0, transaction ccy). */
   buyerHandling: number;
-  /** My actual shipping/postage cost; subtracts from proceeds (>= 0). */
-  shippingCost: number;
-  /** Platform commission/fees, entered manually; subtracts from proceeds (>= 0). */
+  /** My actual shipping/postage cost, converted to the base currency; subtracts (>= 0, base ccy). */
+  shippingBase: number;
+  /** Platform commission/fees, entered manually; subtracts from proceeds (>= 0, transaction ccy). */
   commission: number;
   /** Base-currency rate frozen at the sale date; null when base == transaction currency. */
   fxRateToBase: number | null;
@@ -50,13 +52,15 @@ export interface SaleLineNet {
   price: number;
   /** This line's share of buyer handling (transaction currency, +). */
   handlingShare: number;
-  /** This line's share of my shipping (transaction currency, −). */
-  shippingShare: number;
+  /** This line's share of my shipping, in the base currency (−). */
+  shippingBaseShare: number;
   /** This line's share of the commission (transaction currency, −). */
   commissionShare: number;
-  /** price + handlingShare − shippingShare − commissionShare, transaction currency, 2 dp. */
+  /** Buyer-side net: price + handlingShare − commissionShare, transaction currency, 2 dp. Excludes
+   * shipping, which is a base-currency cost (#206). */
   netTx: number;
-  /** netTx converted to the base currency at the frozen FX rate, 2 dp. */
+  /** Final net in the base currency: netTx converted at the frozen FX rate, minus this line's
+   * base-currency shipping share, 2 dp. Feeds the per-item proceeds split + P/L. */
   netBase: number;
 }
 
@@ -169,19 +173,22 @@ export function distributeSaleShared(
 ): SaleLineNet[] {
   const weights = lines.map((l) => l.price);
   const handling = apportionNonNeg(shared.buyerHandling, weights);
-  const shipping = apportionNonNeg(shared.shippingCost, weights);
   const commission = apportionNonNeg(shared.commission, weights);
+  // Shipping is already in the base currency (#206), so it is apportioned and subtracted there.
+  const shippingBase = apportionNonNeg(shared.shippingBase, weights);
 
   return lines.map((l, i) => {
-    const netTx = toCents(l.price + handling[i] - shipping[i] - commission[i]) / 100;
+    // Buyer-side net (transaction currency), converted to base, then my base-currency shipping share.
+    const netTx = toCents(l.price + handling[i] - commission[i]) / 100;
+    const netBase = toCents(toBase(netTx, shared.fxRateToBase) - shippingBase[i]) / 100;
     return {
       id: l.id,
       price: l.price,
       handlingShare: handling[i],
-      shippingShare: shipping[i],
+      shippingBaseShare: shippingBase[i],
       commissionShare: commission[i],
       netTx,
-      netBase: toBase(netTx, shared.fxRateToBase),
+      netBase,
     };
   });
 }
