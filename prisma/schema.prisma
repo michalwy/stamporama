@@ -567,17 +567,38 @@ model Sale {
   shippingFxRateToBase Decimal?
   // Platform commission/fees, entered manually per transaction (subtracts, −).
   commission    Decimal? @db.Decimal(10, 2)
+  // Fulfillment status in lifecycle order (#191): ordered → paid → packed → sent → received.
+  // Defaults `ordered` — a freshly recorded sale is placed but not yet paid/shipped. Each change
+  // also appends a `SaleStatusEvent` so the transition timeline is preserved for reporting/audit.
+  status        String   @default("ordered")
   createdAt     DateTime @default(now())
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact    @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
-  buyer      Contact?   @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
-  lines      SaleLine[]
+  collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  lines         SaleLine[]
+  statusEvents  SaleStatusEvent[]
 
   @@index([collectionId])
   @@index([platformId])
   @@index([buyerId])
   @@map("sale")
+}
+
+// Append-only fulfillment-status transition log for a sale (#191). One row per status change,
+// stamped at the moment of transition, so the sale's progression through ordered → paid → packed
+// → sent → received is preserved for future reporting/audit. Cascades with its sale.
+model SaleStatusEvent {
+  id        String   @id @default(cuid())
+  saleId    String
+  // The status the sale moved to at `changedAt` (same token set as `Sale.status`).
+  status    String
+  changedAt DateTime @default(now())
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@map("sale_status_event")
 }
 
 // One line of a sale (ADR-0013): the offer set that went, the offer it sold through, its line
@@ -611,6 +632,11 @@ model SaleLine {
 model SaleLineItem {
   saleLineId String
   itemId     String
+  // Whether this individual physical copy has been packed (#192). Independent of the sale's overall
+  // fulfillment status (#191): packing happens per copy, and a sale can span many copies packed at
+  // different times. When every copy of a sale is packed the UI hints that the sale can advance to
+  // the `packed` status, but never changes `Sale.status` automatically.
+  packed     Boolean  @default(false)
 
   saleLine SaleLine @relation(fields: [saleLineId], references: [id], onDelete: Cascade)
   item     Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)

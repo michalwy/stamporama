@@ -18,11 +18,13 @@ export async function GET(
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const platformId = sp.get("platformId") || undefined;
+  const search = sp.get("search") || undefined;
 
   try {
     const result = await listSalesPaginated(session.user.id, collectionId, {
       offset,
       platformId,
+      search,
       pageSize: 50,
     });
     return NextResponse.json(result);

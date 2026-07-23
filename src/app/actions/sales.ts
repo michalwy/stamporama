@@ -11,8 +11,12 @@ import {
   addSaleLines,
   removeSaleLine,
   deleteSale,
+  setSaleStatus,
+  setSaleLineItemPacked,
+  isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
+  type SaleStatus,
 } from "@/lib/sales";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import { parsePrice, parseAmount, parseSaleDate } from "@/lib/sale-rules";
@@ -261,6 +265,38 @@ export async function removeSaleLineAction(lineId: string): Promise<SaleActionSt
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to remove the sold unit.");
+  }
+}
+
+/** Set a sale's fulfillment status inline from the detail view (#191). Appends a timestamped
+ * transition event server-side. No side effects on copies or offers. */
+export async function setSaleStatusAction(
+  saleId: string,
+  status: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  if (!isSaleStatus(status)) {
+    return { status: "error", message: "Unknown sale status." };
+  }
+  try {
+    await setSaleStatus(session.user.id, saleId, status as SaleStatus);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update the sale status.");
+  }
+}
+
+/** Mark a single sold copy packed/unpacked (#192), independent of the sale's overall status. */
+export async function setSaleLineItemPackedAction(
+  itemId: string,
+  packed: boolean
+): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await setSaleLineItemPacked(session.user.id, itemId, packed);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update the packed status.");
   }
 }
 

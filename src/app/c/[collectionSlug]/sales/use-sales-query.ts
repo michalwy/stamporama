@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SaleListItem, SellableOffer } from "@/lib/sales";
+import type { SaleListItem, SellableOffer, SaleCopyItem } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
 
 interface SalesPage {
@@ -11,6 +11,8 @@ interface SalesPage {
 
 export interface SaleFilters {
   platformId?: string;
+  /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
+  search?: string;
 }
 
 export const saleKeys = {
@@ -26,6 +28,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.search) params.set("search", filters.search);
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch sales");
       return res.json();
@@ -88,7 +91,7 @@ export function useSellableCopies(collectionId: string, platformId: string | und
 /** The copies that left on one sale line (packing view). Lazily fetched when its sold-unit card
  * is expanded; cached by React Query so re-expanding is instant. */
 export function useSaleLineCopies(collectionId: string, lineId: string, enabled: boolean) {
-  return useQuery<ItemListItem[]>({
+  return useQuery<SaleCopyItem[]>({
     queryKey: ["sales", collectionId, "line-copies", lineId] as const,
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/sales/lines/${lineId}/copies`);
@@ -102,7 +105,7 @@ export function useSaleLineCopies(collectionId: string, lineId: string, enabled:
 /** Every copy across a whole sale (the packing view's flat / by-issue stream, "group by lot"
  * off). Lazily fetched only when the flat view is shown. */
 export function useSaleCopies(collectionId: string, saleId: string, enabled: boolean) {
-  return useQuery<ItemListItem[]>({
+  return useQuery<SaleCopyItem[]>({
     queryKey: ["sales", collectionId, "sale-copies", saleId] as const,
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/sales/${saleId}/copies`);

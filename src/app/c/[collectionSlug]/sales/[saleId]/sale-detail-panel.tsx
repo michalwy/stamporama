@@ -13,6 +13,7 @@ import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
+import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -99,6 +100,26 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
 
   const soldDate = formatDate(sale.soldAt);
 
+  // Fulfillment status controls (#191): the inline select saves immediately; the advance button
+  // steps one place along the fixed lifecycle (hidden at the terminal `received`).
+  const statusIdx = SALE_STATUS_ORDER.indexOf(sale.status as SaleStatus);
+  const nextStatus =
+    statusIdx >= 0 && statusIdx < SALE_STATUS_ORDER.length - 1
+      ? SALE_STATUS_ORDER[statusIdx + 1]
+      : null;
+  // "All packed" hint (#192): every copy is packed but the sale hasn't reached `packed` yet. A
+  // suggestion only — the collector advances the status manually; it never changes on its own.
+  const packedIdx = SALE_STATUS_ORDER.indexOf("packed");
+  const showPackedHint = sale.allItemsPacked && statusIdx >= 0 && statusIdx < packedIdx;
+
+  function applyStatus(next: string) {
+    if (next === sale.status) return;
+    run(async () => {
+      const { setSaleStatusAction } = await import("@/app/actions/sales");
+      return setSaleStatusAction(sale.id, next);
+    });
+  }
+
   // Base-currency equivalents for the sale-currency amounts (#208), at the sale's frozen rate. Only
   // shown when the sale currency differs from base and a rate is known; shipping (already base, #206)
   // and net (a base figure, #206) carry their own base display.
@@ -182,6 +203,70 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             profit/loss cannot be computed. Add a rate first.
           </p>
         )}
+
+        {/* Fulfillment status (#191): inline select + one-click advance along the lifecycle. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginTop: "0.9rem",
+            paddingTop: "0.9rem",
+            borderTop: "1px solid var(--color-border)",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Status
+          </span>
+          <select
+            aria-label="Sale fulfillment status"
+            value={sale.status}
+            onChange={(e) => applyStatus(e.target.value)}
+            disabled={isPending}
+            style={{
+              padding: "0.375rem 0.625rem",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "0.375rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-primary)",
+              background: "var(--color-bg-elevated)",
+              cursor: "pointer",
+            }}
+          >
+            {SALE_STATUS_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {SALE_STATUS_META[s].label}
+              </option>
+            ))}
+          </select>
+          {nextStatus && (
+            <button
+              type="button"
+              onClick={() => applyStatus(nextStatus)}
+              disabled={isPending}
+              style={SECONDARY_BTN}
+              title={`Advance to ${SALE_STATUS_META[nextStatus as SaleStatus].label}`}
+            >
+              → {SALE_STATUS_META[nextStatus as SaleStatus].label}
+            </button>
+          )}
+          {showPackedHint && (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--color-accent)",
+                background: "var(--color-accent-soft, var(--color-bg-page))",
+                border: "1px solid var(--color-accent-border, var(--color-border))",
+                borderRadius: "0.375rem",
+                padding: "0.125rem 0.5rem",
+              }}
+              title="Every copy on this sale is packed"
+            >
+              All copies packed — advance to Packed?
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Amounts summary — at the top so the proceeds are visible at a glance. Gross + net are

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SaleListItem } from "@/lib/sales";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -49,6 +50,7 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
 
   const unitWord = sale.itemCount === 1 ? "copy" : "copies";
   const lineWord = sale.lineCount === 1 ? "unit" : "units";
+  const status = saleStatusMeta(sale.status);
 
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
@@ -110,6 +112,9 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
             flexWrap: "wrap",
           }}
         >
+          <span style={saleStatusChipStyle(status.token)} title="Fulfillment status">
+            {status.label}
+          </span>
           <span style={CHIP} title="Sold units">
             {sale.lineCount} {lineWord}
           </span>

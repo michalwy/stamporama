@@ -108,6 +108,20 @@ The shared amounts are split across the sold units in proportion to their sale p
 unit's net is converted to your base currency at the frozen rate — this feeds per-item
 profit/loss (surfaced with the profit/loss views).
 
+## Fulfillment status
+
+A sale carries a **fulfillment status** that tracks its progress through a fixed sequence:
+
+**Ordered → Paid → Packed → Sent → Received**
+
+A new sale starts at **Ordered**. On the detail screen's header, the **Status** control lets you
+either pick any step from the dropdown or click the **→ next** button to advance one step. Each
+change is saved immediately and stamped with the moment it happened, so the sale keeps a timeline
+of its transitions. The current status also shows as a chip on each sale's list row.
+
+Status is independent of everything else on the sale — advancing it never changes copies or offers,
+and it can move backward (pick an earlier step) if you need to correct a mistake.
+
 ## Packing view
 
 The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
@@ -124,13 +138,25 @@ exact physical copies that left — as full inventory rows with catalog number, 
 - Copies load lazily, so even a large sale opens quickly. Use **Collapse all** / **Expand all**
   to switch between an overview and full contents.
 
+Each copy row has a **packed** checkbox on its left. Tick it as you physically pack that piece —
+packing happens copy by copy, so this is tracked **per copy**, independent of the sale's overall
+[status](#fulfillment-status). When every copy on the sale is packed, the header shows a gentle
+**"All copies packed — advance to Packed?"** hint next to the status control; it's only a reminder —
+you still advance the status yourself, it never changes on its own.
+
 Remove a sold set from its card's **⋮** menu (its copies become available again).
 
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
-available again, and returns any offers it marked sold to **Active**. Filter the list by
-**platform** from the toolbar.
+available again, and returns any offers it marked sold to **Active**.
+
+## Finding a sale
+
+The Sales toolbar has a **search** box and a **platform** filter. Search matches the buyer name,
+the platform name, the order number, and the **name or catalog number of any copy** sold on the
+sale — so you can find a sale by what was in it, not just who bought it. The platform dropdown
+narrows the list to a single marketplace; the two combine.
 
 ## Related
 

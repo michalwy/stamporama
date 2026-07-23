@@ -32,6 +32,8 @@ export async function GET(
       forTrade: boolParam(sp.get("forTrade")),
       noPhotos: boolParam(sp.get("noPhotos")),
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
+      // Match the list: sold copies are excluded unless includeSold=true (#207).
+      excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
     });
     return NextResponse.json({ years });
   } catch {

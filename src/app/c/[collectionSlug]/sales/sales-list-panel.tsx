@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { SaleListItem } from "@/lib/sales";
 import {
   useSalesInfinite,
@@ -46,7 +47,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const { data: platforms = [] } = useSalePlatforms(collectionId);
 
   const platformId = searchParams.get("platform") || undefined;
-  const filters: SaleFilters = useMemo(() => ({ platformId }), [platformId]);
+  const search = searchParams.get("search") || undefined;
+  const filters: SaleFilters = useMemo(() => ({ platformId, search }), [platformId, search]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -60,6 +62,23 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     },
     [router, collectionSlug, searchParams]
   );
+
+  // Debounced search box (#193): mirrors the shared ListToolbar — settle the local input, then
+  // push it to the URL, skipping the initial mount so an empty box doesn't clear the param.
+  const [localSearch, setLocalSearch] = useState(search ?? "");
+  const debouncedSearch = useDebouncedValue(localSearch);
+  const updateParamsRef = useRef(updateParams);
+  useEffect(() => {
+    updateParamsRef.current = updateParams;
+  });
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    updateParamsRef.current({ search: debouncedSearch });
+  }, [debouncedSearch]);
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useSalesInfinite(
     collectionId,
@@ -78,6 +97,37 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "0 1 20rem", minWidth: "12rem" }}>
+          <input
+            type="text"
+            placeholder="Search buyer, platform, item…"
+            aria-label="Search sales"
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            style={{ ...SEARCH_INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
+          />
+          {localSearch && (
+            <button
+              type="button"
+              onClick={() => setLocalSearch("")}
+              title="Clear search"
+              style={{
+                position: "absolute",
+                right: "0.375rem",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--color-text-muted)",
+                fontSize: "0.75rem",
+                padding: "0 0.25rem",
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <select
           aria-label="Filter by platform"
           value={platformId ?? ""}
@@ -129,9 +179,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
 
         {!isLoading && rows.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {platformId
-              ? "No sales on this platform yet."
-              : "No sales yet. Record a sale when a listed lot sells on a marketplace."}
+            {search
+              ? "No sales match your search."
+              : platformId
+                ? "No sales on this platform yet."
+                : "No sales yet. Record a sale when a listed lot sells on a marketplace."}
           </div>
         )}
 

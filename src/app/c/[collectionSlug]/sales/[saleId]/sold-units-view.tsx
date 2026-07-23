@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { ItemListItem } from "@/lib/items";
+import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetailLine } from "@/lib/sales";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -22,7 +23,7 @@ import {
   usePersistentToggle,
   usePersistentString,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
-import { useSaleLineCopies, useSaleCopies } from "../use-sales-query";
+import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
@@ -36,12 +37,14 @@ const REF_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 
 /** Sort copies for the packing view. Handles the sales-local "ref" key (by location ref, blanks
  * last, natural order); everything else delegates to the shared `sortCopies`. */
 function sortSaleCopies(
-  items: ItemListItem[],
+  items: SaleCopyItem[],
   sortKey: string,
   sortDir: string,
   primaryVendorByArea: Map<string, string | null>
-): ItemListItem[] {
-  if (sortKey !== "ref") return sortCopies(items, sortKey, sortDir, primaryVendorByArea);
+): SaleCopyItem[] {
+  // `sortCopies` only reorders the same objects, so the result still holds `SaleCopyItem`s.
+  if (sortKey !== "ref")
+    return sortCopies(items, sortKey, sortDir, primaryVendorByArea) as SaleCopyItem[];
   const dir = sortDir === "desc" ? -1 : 1;
   return items
     .map((it, i) => ({ it, i }))
@@ -64,6 +67,7 @@ const LS_PRIMARY = "stamporama:sale:primaryGroup";
 const LS_BY_ISSUE = "stamporama:sale:byIssue";
 const LS_SORT_KEY = "stamporama:sale:sortKey";
 const LS_SORT_DIR = "stamporama:sale:sortDir";
+const LS_PACKED_FILTER = "stamporama:sale:packedFilter";
 
 /** Primary grouping of the sold copies (mutually exclusive): each sold **lot** as its own card,
  * each storage **location** as a section (packing walk-order), or a single flat stream. */
@@ -90,6 +94,17 @@ const TOOLBAR_LABEL: React.CSSProperties = {
   letterSpacing: "0.04em",
 };
 
+/** Packed-status filter for the packing view (#192): show everything, only packed, or only the
+ * copies still to pack. */
+type PackedFilter = "all" | "packed" | "unpacked";
+
+/** Narrow a copy set by packed status. */
+function filterByPacked(items: SaleCopyItem[], filter: PackedFilter): SaleCopyItem[] {
+  if (filter === "all") return items;
+  const want = filter === "packed";
+  return items.filter((it) => it.packed === want);
+}
+
 /** Maps + lookups the copy rows need, bundled so they pass through one prop. */
 interface CopyCtx {
   collectionId: string;
@@ -100,16 +115,22 @@ interface CopyCtx {
   primaryVendorByArea: Map<string, string | null>;
   vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
   areaNameById: Map<string, string>;
+  /** Toggle a single copy's packed flag (#192). */
+  onTogglePacked: (itemId: string, packed: boolean) => void;
+  /** True while a packed toggle is in flight — disables the checkboxes to avoid double-submits. */
+  packedPending: boolean;
+  /** Active packed-status filter (#192): copies are narrowed to it before grouping/rendering. */
+  packedFilter: PackedFilter;
 }
 
 interface CopyGroup {
   key: string;
   label: string;
-  items: ItemListItem[];
+  items: SaleCopyItem[];
 }
 
 /** Group copies by owning issue, preserving first-seen order (mirrors the lot / PO views). */
-function groupByIssue(items: ItemListItem[]): CopyGroup[] {
+function groupByIssue(items: SaleCopyItem[]): CopyGroup[] {
   const order: string[] = [];
   const byKey = new Map<string, CopyGroup>();
   for (const it of items) {
@@ -127,7 +148,7 @@ function groupByIssue(items: ItemListItem[]): CopyGroup[] {
 
 /** Group copies by storage location (packing walk-order), preserving first-seen order. Unfiled
  * copies fall into a trailing group. */
-function groupByLocation(items: ItemListItem[], locations: LocationData[]): CopyGroup[] {
+function groupByLocation(items: SaleCopyItem[], locations: LocationData[]): CopyGroup[] {
   const order: string[] = [];
   const byKey = new Map<string, CopyGroup>();
   for (const it of items) {
@@ -177,23 +198,82 @@ function useMeasuredHeight<T extends HTMLElement>() {
   return [ref, height] as const;
 }
 
-function CopyRow({ item, ctx, isLast }: { item: ItemListItem; ctx: CopyCtx; isLast: boolean }) {
+function CopyRow({ item, ctx, isLast }: { item: SaleCopyItem; ctx: CopyCtx; isLast: boolean }) {
   const areaId = item.areaId;
   const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
   const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+  const rowBorder = isLast ? undefined : "1px solid var(--color-border)";
+  const packed = item.packed;
   return (
-    <InventoryItemRow
-      collectionId={ctx.collectionId}
-      item={item}
-      areas={ctx.areas}
-      locations={ctx.locations}
-      baseCurrency={ctx.baseCurrency}
-      primaryVendorId={primaryVendorId}
-      vendorMap={vendorMap}
-      isLast={isLast}
-      readOnly
-      showCostBasis
-    />
+    <div
+      style={{
+        display: "flex",
+        alignItems: "stretch",
+        background: packed ? "var(--color-success-soft, var(--color-bg-page))" : undefined,
+      }}
+    >
+      {/* Per-copy packed toggle (#192): the whole full-height column is clickable (not just the
+          chip), so it's an easy target while packing. The chip inside is a visual indicator. */}
+      <Tooltip content={packed ? "Packed — click to mark as not packed" : "Mark this copy packed"}>
+        <button
+          type="button"
+          aria-label={packed ? "Packed" : "Not packed"}
+          aria-pressed={packed}
+          disabled={ctx.packedPending}
+          onClick={() => ctx.onTogglePacked(item.id, !packed)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 0.75rem",
+            border: "none",
+            borderBottom: rowBorder,
+            borderRight: "1px solid var(--color-border)",
+            background: "transparent",
+            cursor: ctx.packedPending ? "default" : "pointer",
+            opacity: ctx.packedPending ? 0.6 : 1,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.3rem",
+              minWidth: "5.5rem",
+              justifyContent: "center",
+              padding: "0.25rem 0.6rem",
+              borderRadius: "999px",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              border: packed
+                ? "1px solid var(--color-success-border, var(--color-success))"
+                : "1px solid var(--color-border-strong)",
+              color: packed ? "var(--color-success)" : "var(--color-text-muted)",
+              background: packed ? "var(--color-success-soft, var(--color-bg-page))" : "var(--color-bg-elevated)",
+            }}
+          >
+            <span style={{ fontSize: "0.8rem", lineHeight: 1 }}>{packed ? "✓" : "○"}</span>
+            {packed ? "Packed" : "Pack"}
+          </span>
+        </button>
+      </Tooltip>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <InventoryItemRow
+          collectionId={ctx.collectionId}
+          item={item}
+          areas={ctx.areas}
+          locations={ctx.locations}
+          baseCurrency={ctx.baseCurrency}
+          primaryVendorId={primaryVendorId}
+          vendorMap={vendorMap}
+          isLast={isLast}
+          readOnly
+          showCostBasis
+        />
+      </div>
+    </div>
   );
 }
 
@@ -206,7 +286,7 @@ function IssueOrFlat({
   issueStickyTop,
   ctx,
 }: {
-  items: ItemListItem[];
+  items: SaleCopyItem[];
   byIssue: boolean;
   issueStickyTop: number | null;
   ctx: CopyCtx;
@@ -277,7 +357,7 @@ function CopiesBody({
   stickyTop,
   ctx,
 }: {
-  items: ItemListItem[];
+  items: SaleCopyItem[];
   isLoading: boolean;
   byIssue: boolean;
   sortKey: string;
@@ -286,12 +366,19 @@ function CopiesBody({
   ctx: CopyCtx;
 }) {
   const sorted = useMemo(
-    () => sortSaleCopies(items, sortKey, sortDir, ctx.primaryVendorByArea),
-    [items, sortKey, sortDir, ctx.primaryVendorByArea]
+    () => sortSaleCopies(filterByPacked(items, ctx.packedFilter), sortKey, sortDir, ctx.primaryVendorByArea),
+    [items, ctx.packedFilter, sortKey, sortDir, ctx.primaryVendorByArea]
   );
   if (isLoading) return <div style={MUTED_BOX}>Loading copies…</div>;
-  if (sorted.length === 0) return <div style={MUTED_BOX}>No copies.</div>;
+  if (sorted.length === 0) return <div style={MUTED_BOX}>{emptyCopiesLabel(ctx.packedFilter)}</div>;
   return <IssueOrFlat items={sorted} byIssue={byIssue} issueStickyTop={stickyTop} ctx={ctx} />;
+}
+
+/** Empty-state copy for a copies list, tailored to the active packed filter (#192). */
+function emptyCopiesLabel(filter: PackedFilter): string {
+  if (filter === "packed") return "No packed copies.";
+  if (filter === "unpacked") return "No copies left to pack.";
+  return "No copies.";
 }
 
 /** The whole-sale copies grouped by storage location (packing walk-order). Each location is its
@@ -305,7 +392,7 @@ function LocationView({
   sortDir,
   ctx,
 }: {
-  items: ItemListItem[];
+  items: SaleCopyItem[];
   isLoading: boolean;
   byIssue: boolean;
   sortKey: string;
@@ -313,13 +400,13 @@ function LocationView({
   ctx: CopyCtx;
 }) {
   const sorted = useMemo(
-    () => sortSaleCopies(items, sortKey, sortDir, ctx.primaryVendorByArea),
-    [items, sortKey, sortDir, ctx.primaryVendorByArea]
+    () => sortSaleCopies(filterByPacked(items, ctx.packedFilter), sortKey, sortDir, ctx.primaryVendorByArea),
+    [items, ctx.packedFilter, sortKey, sortDir, ctx.primaryVendorByArea]
   );
   const groups = useMemo(() => groupByLocation(sorted, ctx.locations), [sorted, ctx.locations]);
 
   if (isLoading) return <div style={MUTED_BOX}>Loading copies…</div>;
-  if (sorted.length === 0) return <div style={MUTED_BOX}>No copies.</div>;
+  if (sorted.length === 0) return <div style={MUTED_BOX}>{emptyCopiesLabel(ctx.packedFilter)}</div>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {groups.map((group) => (
@@ -403,6 +490,10 @@ export function SoldUnitsView({
   const [byIssue, setByIssue] = usePersistentToggle(`${LS_BY_ISSUE}:${collectionId}`, true);
   const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
   const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
+  const [packedFilterRaw, setPackedFilter] = usePersistentString(`${LS_PACKED_FILTER}:${collectionId}`, "all");
+  const packedFilter = (packedFilterRaw === "packed" || packedFilterRaw === "unpacked"
+    ? packedFilterRaw
+    : "all") as PackedFilter;
 
   // Cards default expanded (packing wants contents visible); a set of collapsed line ids overrides.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -410,6 +501,22 @@ export function SoldUnitsView({
 
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
+
+  // Per-copy packed toggle (#192): flip the flag, then refresh the copy caches and the server
+  // component (so the header's "all packed" hint / status stay in sync).
+  const router = useRouter();
+  const { invalidateAll } = useInvalidateSales();
+  const [packedPending, startPacked] = useTransition();
+  function onTogglePacked(itemId: string, packed: boolean) {
+    startPacked(async () => {
+      const { setSaleLineItemPackedAction } = await import("@/app/actions/sales");
+      const result = await setSaleLineItemPackedAction(itemId, packed);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        router.refresh();
+      }
+    });
+  }
 
   const ctx: CopyCtx = {
     collectionId,
@@ -420,6 +527,9 @@ export function SoldUnitsView({
     primaryVendorByArea,
     vendorMapByArea,
     areaNameById,
+    onTogglePacked,
+    packedPending,
+    packedFilter,
   };
 
   // Whole-sale copies for the flat / location views — one lazy query, run only when not by-lot.
@@ -470,6 +580,13 @@ export function SoldUnitsView({
               {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
             </button>
           </Tooltip>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={TOOLBAR_LABEL}>Packed</span>
+          <ToggleChip label="All" on={packedFilter === "all"} onClick={() => setPackedFilter("all")} />
+          <ToggleChip label="Packed" on={packedFilter === "packed"} onClick={() => setPackedFilter("packed")} />
+          <ToggleChip label="To pack" on={packedFilter === "unpacked"} onClick={() => setPackedFilter("unpacked")} />
         </div>
 
         {primary === "lot" && (

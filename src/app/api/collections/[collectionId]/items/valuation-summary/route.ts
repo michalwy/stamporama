@@ -42,6 +42,9 @@ export async function GET(
       forTrade: boolParam(sp.get("forTrade")),
       noPhotos: boolParam(sp.get("noPhotos")),
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
+      // Match the list: sold copies are excluded unless includeSold=true (#207), so the total
+      // tracks exactly what is shown.
+      excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
     });
     return NextResponse.json(total);
   } catch {

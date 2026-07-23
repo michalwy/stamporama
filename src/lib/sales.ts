@@ -45,6 +45,12 @@ export class SaleActionBlockedError extends Error {
   }
 }
 
+// ── Fulfillment status (#191) ────────────────────────────────────────────────
+// The token set / order / validator live in the pure `./sale-status` module (no `server-only`), so
+// client UI can share them; re-exported here for existing server-side importers.
+export { SALE_STATUS_ORDER, isSaleStatus, type SaleStatus } from "./sale-status";
+import { isSaleStatus, type SaleStatus } from "./sale-status";
+
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
 /** Verify collection ownership and return its base currency (needed to freeze the FX rate). */
@@ -386,10 +392,55 @@ export async function createSale(
       buyerHandling: input.buyerHandling,
       buyerPaidTotal: input.buyerPaidTotal,
       commission: input.commission,
+      // Seed the transition log with the initial `ordered` event (#191), so every sale has a
+      // non-empty status timeline from the moment it is recorded.
+      statusEvents: { create: { status: "ordered" } },
     },
     select: { id: true },
   });
   return sale.id;
+}
+
+// ── Fulfillment status + packing mutations (#191/#192) ────────────────────────
+
+/** Set a sale's fulfillment status (#191) from the inline control on the detail view. Validates
+ * the token, updates `Sale.status`, and appends a `SaleStatusEvent` so the transition timeline is
+ * preserved for reporting/audit. No side effects on copies or offers — status is an independent
+ * axis. A no-op when the status is unchanged. */
+export async function setSaleStatus(
+  ownerId: string,
+  saleId: string,
+  status: SaleStatus
+): Promise<void> {
+  await assertSaleOwner(ownerId, saleId);
+  if (!isSaleStatus(status)) {
+    throw new Error("Unknown sale status.");
+  }
+  const current = await prisma.sale.findUnique({ where: { id: saleId }, select: { status: true } });
+  if (current?.status === status) return;
+  await prisma.$transaction([
+    prisma.sale.update({ where: { id: saleId }, data: { status } }),
+    prisma.saleStatusEvent.create({ data: { saleId, status } }),
+  ]);
+}
+
+/** Toggle whether a single physical copy has been packed (#192). Keyed by `itemId` alone — the
+ * `sale_line_item.itemId` unique constraint means a copy belongs to at most one sale line, so the
+ * item identifies the row unambiguously. Independent of the sale's overall status; the UI surfaces
+ * an advance-to-`packed` hint when the last copy is packed, but this never changes `Sale.status`. */
+export async function setSaleLineItemPacked(
+  ownerId: string,
+  itemId: string,
+  packed: boolean
+): Promise<void> {
+  const row = await prisma.saleLineItem.findUnique({
+    where: { itemId },
+    select: { saleLine: { select: { sale: { select: { collection: { select: { ownerId: true } } } } } } },
+  });
+  if (!row || row.saleLine.sale.collection.ownerId !== ownerId) {
+    throw new Error("Sold copy not found or access denied.");
+  }
+  await prisma.saleLineItem.update({ where: { itemId }, data: { packed } });
 }
 
 /** Edit a sale header (platform / buyer / date / handling / commission). The currency is a fixed
@@ -639,6 +690,8 @@ export interface SaleListItem {
   buyerName: string | null;
   /** External system's transaction / order number, or null. */
   externalRef: string | null;
+  /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
+  status: string;
   soldAt: Date;
   currency: string;
   lineCount: number;
@@ -658,6 +711,7 @@ const SALE_LIST_SELECT = {
   id: true,
   platformId: true,
   externalRef: true,
+  status: true,
   soldAt: true,
   currency: true,
   fxRateToBase: true,
@@ -704,6 +758,7 @@ function toSaleListItem(
     id: string;
     platformId: string;
     externalRef: string | null;
+    status: string;
     soldAt: Date;
     currency: string;
     fxRateToBase: Prisma.Decimal | null;
@@ -739,6 +794,7 @@ function toSaleListItem(
     platformName: row.platform.name,
     buyerName: row.buyer?.name ?? null,
     externalRef: row.externalRef,
+    status: row.status,
     soldAt: row.soldAt,
     currency: row.currency,
     lineCount: row.lines.length,
@@ -752,6 +808,9 @@ function toSaleListItem(
 
 export interface SaleListFilters {
   platformId?: string;
+  /** Free-text search over buyer name, platform name, external reference, and the stamp name /
+   * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
+  search?: string;
   offset?: number;
   pageSize?: number;
 }
@@ -759,6 +818,26 @@ export interface SaleListFilters {
 export interface PaginatedSalesResult {
   items: SaleListItem[];
   nextCursor: string | null;
+}
+
+/** The `where` fragment for the sales-list free-text search (#193): buyer name, platform name, the
+ * external reference, or any sold copy's stamp name / catalog number. Case-insensitive substring. */
+function saleSearchWhere(search: string): Prisma.SaleWhereInput {
+  const s = search.trim();
+  const stampMatch = {
+    OR: [
+      { name: { contains: s, mode: "insensitive" as const } },
+      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" as const } } } },
+    ],
+  };
+  return {
+    OR: [
+      { externalRef: { contains: s, mode: "insensitive" } },
+      { platform: { name: { contains: s, mode: "insensitive" } } },
+      { buyer: { name: { contains: s, mode: "insensitive" } } },
+      { lines: { some: { items: { some: { item: { stamp: stampMatch } } } } } },
+    ],
+  };
 }
 
 /** Paginated sales list for the Sales screen (ADR-0013). Newest sale first; filters by platform.
@@ -776,6 +855,7 @@ export async function listSalesPaginated(
     where: {
       collectionId,
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
+      ...(filters.search ? saleSearchWhere(filters.search) : {}),
     },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
     take: pageSize + 1,
@@ -861,6 +941,11 @@ export interface SaleDetail {
   grossProceeds: string;
   /** Base-currency net (#206): buyer-side proceeds converted to base, minus shipping (base). */
   netProceeds: string;
+  /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
+  status: string;
+  /** True when the sale has at least one copy and every copy is packed (#192) — drives the
+   * "mark sale packed?" hint. Never auto-advances the status. */
+  allItemsPacked: boolean;
   lines: SaleDetailLine[];
   createdAt: Date;
 }
@@ -885,6 +970,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       shippingCurrency: true,
       shippingFxRateToBase: true,
       commission: true,
+      status: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: { select: { name: true } },
@@ -901,7 +987,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
               items: { select: { item: { select: STAMP_LABEL_SELECT } } },
             },
           },
-          items: { select: { item: { select: STAMP_LABEL_SELECT } } },
+          items: { select: { packed: true, item: { select: STAMP_LABEL_SELECT } } },
         },
       },
     },
@@ -971,6 +1057,11 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const buyerNetTx = gross + shared.buyerHandling - shared.commission;
   const net = buyerNetTx * rate - shippingBase;
 
+  // "All packed" hint (#192): true only when the sale has copies and every one is packed. Never
+  // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
+  const allCopies = sale.lines.flatMap((l) => l.items);
+  const allItemsPacked = allCopies.length > 0 && allCopies.every((i) => i.packed);
+
   return {
     id: sale.id,
     collectionId: sale.collectionId,
@@ -994,6 +1085,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),
     netProceeds: net.toFixed(2),
+    status: sale.status,
+    allItemsPacked: allItemsPacked,
     lines,
     createdAt: sale.createdAt,
   };
@@ -1042,12 +1135,31 @@ export async function getSaleIssueIds(saleId: string): Promise<string[]> {
   return rows.map((r) => r.issueId);
 }
 
-/** The physical copies that left on one sale line, as fully-enriched `ItemListItem`s. Loaded
- * lazily per sold set on the detail screen so a large sale never enriches every copy up front. */
+/** An enriched sold copy plus its per-copy packed flag (#192), for the packing view. */
+export interface SaleCopyItem extends ItemListItem {
+  /** Whether this individual copy has been packed (#192). */
+  packed: boolean;
+}
+
+/** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) into a set of
+ * enriched copies, preserving the enriched order. */
+async function withPacked(items: ItemListItem[]): Promise<SaleCopyItem[]> {
+  if (items.length === 0) return [];
+  const rows = await prisma.saleLineItem.findMany({
+    where: { itemId: { in: items.map((i) => i.id) } },
+    select: { itemId: true, packed: true },
+  });
+  const packedById = new Map(rows.map((r) => [r.itemId, r.packed]));
+  return items.map((i) => ({ ...i, packed: packedById.get(i.id) ?? false }));
+}
+
+/** The physical copies that left on one sale line, as fully-enriched copies with their packed flag.
+ * Loaded lazily per sold set on the detail screen so a large sale never enriches every copy up
+ * front. */
 export async function listSaleLineCopies(
   ownerId: string,
   lineId: string
-): Promise<ItemListItem[]> {
+): Promise<SaleCopyItem[]> {
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
     select: {
@@ -1064,15 +1176,15 @@ export async function listSaleLineCopies(
     ids,
     pageSize: ids.length,
   });
-  return items;
+  return withPacked(items);
 }
 
-/** Every physical copy across a whole sale, enriched for the packing view's flat / by-issue
- * stream. A sale is one buyer's order, so its copy count is inherently bounded. */
+/** Every physical copy across a whole sale, enriched (with packed flag) for the packing view's
+ * flat / by-issue stream. A sale is one buyer's order, so its copy count is inherently bounded. */
 export async function listSaleCopies(
   ownerId: string,
   saleId: string
-): Promise<ItemListItem[]> {
+): Promise<SaleCopyItem[]> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
     select: {
@@ -1090,5 +1202,5 @@ export async function listSaleCopies(
     ids,
     pageSize: ids.length,
   });
-  return items;
+  return withPacked(items);
 }

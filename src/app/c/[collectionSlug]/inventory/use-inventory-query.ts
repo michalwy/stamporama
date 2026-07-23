@@ -47,6 +47,9 @@ export interface InventoryItemFilters {
   noPhotos?: boolean;
   /** Restrict to copies missing a catalog value — unpriced for their condition (#229). */
   missingCatalogValue?: boolean;
+  /** Show copies that have already sold (#207). Sold copies are hidden by default; set true to
+   * include them. */
+  includeSold?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -67,6 +70,8 @@ export interface InventoryYearFacetFilters {
   forTrade?: boolean;
   noPhotos?: boolean;
   missingCatalogValue?: boolean;
+  /** Include already-sold copies in the facet counts (#207); hidden by default. */
+  includeSold?: boolean;
 }
 
 export const inventoryKeys = {
@@ -103,6 +108,7 @@ export function useInventoryItemsInfinite(
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
+      if (filters.includeSold) params.set("includeSold", "true");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -139,6 +145,7 @@ export function useHoldingsValuation(
       forTrade: filters.forTrade,
       noPhotos: filters.noPhotos,
       missingCatalogValue: filters.missingCatalogValue,
+      includeSold: filters.includeSold,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -158,6 +165,7 @@ export function useHoldingsValuation(
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
+      if (filters.includeSold) params.set("includeSold", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -194,6 +202,7 @@ export function useItemYears(
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
+      if (filters.includeSold) params.set("includeSold", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );

@@ -67,6 +67,9 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   for their condition (those showing **—**), so you can find and fill pricing gaps in bulk.
   Pairs with the **+ catalog value** price link below. The holdings totals and year panel
   follow this filter too.
+- **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
+  shows only what you still hold. Toggle this on to bring sold copies back into view (for example
+  to look up what a piece went for). The holdings totals and year panel follow this filter too.
 - **Condition** — show only copies of one condition.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet

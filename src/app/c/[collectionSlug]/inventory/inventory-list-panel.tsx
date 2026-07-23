@@ -120,6 +120,8 @@ export function InventoryListPanel({
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
   const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
+  // Sold copies are hidden by default (#207); this toggle brings them back into the list.
+  const includeSold = searchParams.get("includeSold") === "true";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -173,10 +175,11 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      includeSold: includeSold || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, includeSold, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -193,8 +196,9 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      includeSold: includeSold || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, includeSold]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -261,6 +265,7 @@ export function InventoryListPanel({
     !!year ||
     noPhotos ||
     missingCatalogValue ||
+    includeSold ||
     activeDispositions.size > 0;
 
   return (
@@ -399,6 +404,21 @@ export function InventoryListPanel({
                   }}
                 >
                   Missing catalog value
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateParams({ includeSold: includeSold ? "" : "true" })}
+                  title="Also show copies that have already sold (hidden by default)"
+                  style={{
+                    ...CONTROL_STYLE,
+                    cursor: "pointer",
+                    fontWeight: includeSold ? 600 : 400,
+                    color: includeSold ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: includeSold ? "var(--color-accent)" : "var(--color-border-strong)",
+                    background: includeSold ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                  }}
+                >
+                  Include sold
                 </button>
               </div>
 
