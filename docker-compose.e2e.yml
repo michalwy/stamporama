@@ -2,7 +2,7 @@
 # Started automatically by pnpm test:integration; do not use this database for development.
 services:
   e2e-db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: stamporama_test
       POSTGRES_USER: stamporama
