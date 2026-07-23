@@ -35,6 +35,9 @@ export interface OfferFormDialogProps {
   initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
   isPending: boolean;
   error?: string;
+  /** Raises the dialog's stacking when opened on top of another dialog (e.g. the inventory
+   * add-to-offer picker's "create new offer" path, #189). */
+  zIndexBase?: number;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -49,6 +52,7 @@ export function OfferFormDialog({
   initialPlatform,
   isPending,
   error,
+  zIndexBase,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -77,7 +81,7 @@ export function OfferFormDialog({
     : isEdit ? "Save changes" : "Create offer";
 
   return (
-    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="34rem">
+    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="34rem" zIndexBase={zIndexBase}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}

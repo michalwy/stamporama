@@ -220,6 +220,11 @@ Choose where the copy lands: **＋ New set** on an offer (a fresh single-item se
 **existing set** — dropping it in turns that set into a series sold together. Confirm with
 **Add to offer**. Only the offer you pick is affected.
 
+Starting a brand-new offer from the copy is in the same picker: **＋ Create new offer** opens the
+offer header form (platform, currency). Creating it seeds the offer with this copy as a single-item
+set and returns you to the Inventory list. Set the asking price and add more copies later from the
+offer's compose screen — see [Offers](offers.md).
+
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.
 

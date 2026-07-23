@@ -20,6 +20,7 @@ import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
+import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
 import {
   useComposeTargets,
   useInvalidateOffers,
@@ -58,6 +59,19 @@ const FACET_LABEL: React.CSSProperties = {
   letterSpacing: "0.05em",
   padding: "0 0.25rem 0.375rem",
   margin: "0.75rem 0 0",
+};
+
+const CREATE_BUTTON_STYLE: React.CSSProperties = {
+  flexShrink: 0,
+  padding: "0.375rem 0.75rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-elevated)",
+  color: "var(--color-text-primary)",
+  fontSize: "0.8125rem",
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const CHIP: React.CSSProperties = {
@@ -129,6 +143,11 @@ export interface AddToOfferDialogProps {
  * brand-new single-item set on an offer, or an existing set (turning it into a series) — then
  * confirm. Offers already listing this copy are shown but disabled (no double-listing). Adding to a
  * `preparing` offer is the common path; the states are orientational, so active/paused work too.
+ *
+ * The picker doubles as the quick-start create path (#189): "Create new offer" opens the offer
+ * header form, then seeds the fresh offer with this copy as a single-item set — so listing a copy
+ * on a brand-new offer lives in the same flow as adding it to an existing one, and leaves the
+ * collector on the inventory list either way.
  */
 export function AddToOfferDialog({
   collectionId,
@@ -140,6 +159,9 @@ export function AddToOfferDialog({
   onDone,
 }: AddToOfferDialogProps) {
   const [search, setSearch] = useState("");
+  // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker.
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>();
   // Persisted per collection so the picker reopens on the state facet it was left on (mirrors the
   // search box's own persistence). "" (or any non-composable value) means "All offers".
   const [storedFacet, setStoredFacet] = usePersistedSearch(`${collectionId}:add-to-offer-state`);
@@ -237,12 +259,38 @@ export function AddToOfferDialog({
     });
   }
 
+  // Create a brand-new offer from its header and seed it with this copy as a single-item set (#189).
+  // Stays on the inventory list — same as adding to an existing offer — rather than navigating to
+  // the new offer, so the collector keeps their place in the list.
+  function createOffer(formData: FormData) {
+    setCreateError(undefined);
+    startTransition(async () => {
+      const actions = await import("@/app/actions/offers");
+      const created = await actions.createOfferAction(collectionId, formData);
+      if (created.status !== "success") {
+        setCreateError(created.message);
+        return;
+      }
+      const seeded = await actions.addOfferSetAction(created.id, [item.id], { perCopy: false });
+      invalidateAll(collectionId);
+      invalidateList(collectionId);
+      if (seeded.status !== "success") {
+        // The offer exists but the copy didn't land — surface it and keep the picker open. The new
+        // (empty) offer now shows in the list, so the collector can retry via "New set" on it.
+        setCreateError(seeded.message);
+        return;
+      }
+      onDone();
+    });
+  }
+
   if (typeof document === "undefined") return null;
 
   const copyName = item.stampName ?? "this copy";
   const selectedKey = selected ? targetKey(selected) : null;
 
   return createPortal(
+    <>
     <DialogShell
       title="Add to offer"
       onClose={onClose}
@@ -295,9 +343,19 @@ export function AddToOfferDialog({
               gap: "0.5rem",
             }}
           >
-            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Add <strong>{copyName}</strong> to an offer — as a new set, or into an existing one.
-            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <p style={{ margin: 0, flex: 1, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                Add <strong>{copyName}</strong> to an offer — as a new set, or into an existing one.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                disabled={isPending}
+                style={CREATE_BUTTON_STYLE}
+              >
+                ＋ Create new offer
+              </button>
+            </div>
             <input
               type="text"
               value={search}
@@ -315,7 +373,7 @@ export function AddToOfferDialog({
             ) : visible.length === 0 ? (
               <p style={HINT_STYLE}>
                 {offers.length === 0
-                  ? "No offers to add to. Create an offer first, then list copies on it."
+                  ? "No offers yet. Use “Create new offer” above to start one from this copy."
                   : "No offers match these filters."}
               </p>
             ) : (
@@ -359,7 +417,27 @@ export function AddToOfferDialog({
           </DialogPrimaryButton>
         </div>
       </DialogFooter>
-    </DialogShell>,
+    </DialogShell>
+
+    {/* Quick-start create (#189): the offer header form stacked above the picker. On success it
+        seeds this copy and navigates, so there is no return-to-picker step. */}
+    {creating && (
+      <OfferFormDialog
+        collectionId={collectionId}
+        baseCurrency={baseCurrency}
+        isPending={isPending}
+        error={createError}
+        zIndexBase={110}
+        onClose={() => {
+          if (!isPending) {
+            setCreating(false);
+            setCreateError(undefined);
+          }
+        }}
+        onSubmit={createOffer}
+      />
+    )}
+    </>,
     document.body
   );
 }
