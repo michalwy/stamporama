@@ -612,12 +612,12 @@ export function OfferSetsView({
               setCopyError(undefined);
             }
           }}
-          onSubmit={(amount) => {
+          onSubmit={(entries) => {
             const it = quickPriceItem;
             setCopyError(undefined);
             startTransition(async () => {
-              const { quickSetCatalogPriceAction } = await import("@/app/actions/stamps");
-              const r = await quickSetCatalogPriceAction(it.stampId, it.conditionId, it.certificateStatusId, amount);
+              const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              const r = await quickSetCatalogPricesAction(it.stampId, it.conditionId, it.certificateStatusId, entries);
               if (r.status === "error") setCopyError(r.message);
               else {
                 setQuickPriceItem(null);

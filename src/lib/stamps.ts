@@ -906,50 +906,6 @@ export async function updateStampWithCatalog(
   });
 }
 
-/** Resolve where a quick single-price edit lands: the latest edition of the stamp's
- * effective **primary** catalog (ADR-0006), plus that catalog's currency. Throws a
- * user-facing message when the stamp has no area, no primary catalog, or the catalog has
- * no editions yet. */
-async function resolvePrimaryCatalogTarget(
-  collectionId: string,
-  stampId: string
-): Promise<{ catalogLabel: string; currency: string; editionId: string; editionYear: number }> {
-  const stamp = await prisma.stamp.findUnique({
-    where: { id: stampId },
-    select: { stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } } },
-  });
-  const link = stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0];
-  const areaId = link?.collectionAreaId ?? null;
-  if (!areaId) {
-    throw new Error("This stamp isn't linked to an area, so it has no primary catalog.");
-  }
-  const primaryByArea = await buildEffectivePrimaryCatalogMap(collectionId);
-  const catalogNameId = primaryByArea.get(areaId) ?? null;
-  if (!catalogNameId) {
-    throw new Error("No primary catalog is configured for this stamp's area.");
-  }
-  const cat = await prisma.catalogName.findUnique({
-    where: { id: catalogNameId },
-    select: {
-      name: true,
-      currency: true,
-      catalogEditions: { select: { id: true, year: true }, orderBy: { year: "desc" }, take: 1 },
-    },
-  });
-  const edition = cat?.catalogEditions[0];
-  if (!cat || !edition) {
-    throw new Error(
-      `The primary catalog (${cat?.name ?? "?"}) has no editions yet. Add one on the Catalog screen.`
-    );
-  }
-  return {
-    catalogLabel: cat.name,
-    currency: cat.currency,
-    editionId: edition.id,
-    editionYear: edition.year,
-  };
-}
-
 /** One already-recorded catalog price shown for reference in the quick editor, so the user
  * can price a new (condition × certificate × edition) consistently with what's on file. */
 export interface QuickCatalogPriceReference {
@@ -964,20 +920,111 @@ export interface QuickCatalogPriceReference {
   isTarget: boolean;
 }
 
-/** Context for the quick catalog-price editor: which catalog/edition/currency the value
- * will land in, the amount already recorded there for this condition × certificate (if
- * any) so the field can prefill, and read-only context (area + any other recorded prices)
- * so the user can price confidently without leaving the dialog (#147). */
-export interface QuickCatalogPriceContext {
+/** One catalog the quick-price editor can write to: the latest edition of a catalog active
+ * on the stamp's primary area (plus the effective primary catalog), the currency the value
+ * lands in, and the amount already recorded there for this condition × certificate so the
+ * field can prefill. `isPrimary` marks the stamp's effective primary catalog (#170). */
+export interface QuickCatalogTarget {
+  catalogNameId: string;
   catalogLabel: string;
-  currency: string;
+  vendorAbbreviation: string;
   editionYear: number;
+  currency: string;
   amount: string | null;
+  isPrimary: boolean;
+}
+
+/** Context for the quick catalog-price editor: every catalog the value can land in (one row
+ * per vendor active on the stamp's area, primary flagged), and read-only context (area + any
+ * other recorded prices) so the user can price confidently without leaving the dialog
+ * (#147, #170). */
+export interface QuickCatalogPriceContext {
+  /** Catalogs the editor exposes an input for, primary first. Empty when the stamp's area
+   * has no catalog with an edition yet. */
+  catalogs: QuickCatalogTarget[];
   /** Area whose effective primary catalog the value resolves through, for orientation. */
   areaName: string | null;
   /** Every recorded price for this stamp across editions/conditions/certificates, newest
    * edition first, for reference. Empty when nothing is on file yet. */
   otherPrices: QuickCatalogPriceReference[];
+}
+
+/** Resolve the catalogs the quick-price editor can write to for a stamp: every catalog active
+ * on the stamp's primary area, unioned with the area's effective primary catalog, keeping only
+ * catalogs that have at least one edition (a price needs an edition to land on). Latest edition
+ * per catalog, primary first, then by vendor/catalog name. Throws if the stamp isn't linked to
+ * an area. Returns the internal target shape (with `editionId` for price matching); the public
+ * `QuickCatalogTarget` drops `editionId` and adds the recorded `amount`. */
+async function resolveAreaCatalogTargets(
+  collectionId: string,
+  stampId: string
+): Promise<
+  Array<{
+    catalogNameId: string;
+    catalogLabel: string;
+    vendorAbbreviation: string;
+    editionId: string;
+    editionYear: number;
+    currency: string;
+    isPrimary: boolean;
+  }>
+> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } } },
+  });
+  const link = stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0];
+  const areaId = link?.collectionAreaId ?? null;
+  if (!areaId) {
+    throw new Error("This stamp isn't linked to an area, so it has no catalog.");
+  }
+  const primaryByArea = await buildEffectivePrimaryCatalogMap(collectionId);
+  const primaryCatalogNameId = primaryByArea.get(areaId) ?? null;
+
+  const area = await prisma.collectionArea.findUnique({
+    where: { id: areaId },
+    select: { collectionAreaCatalogs: { select: { catalogNameId: true } } },
+  });
+  const candidateIds = new Set<string>(
+    (area?.collectionAreaCatalogs ?? []).map((c) => c.catalogNameId)
+  );
+  if (primaryCatalogNameId) candidateIds.add(primaryCatalogNameId);
+  if (candidateIds.size === 0) return [];
+
+  const catalogs = await prisma.catalogName.findMany({
+    where: { id: { in: [...candidateIds] } },
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+      vendor: { select: { abbreviation: true } },
+      catalogEditions: { select: { id: true, year: true }, orderBy: { year: "desc" }, take: 1 },
+    },
+  });
+
+  return catalogs
+    .flatMap((c) => {
+      const edition = c.catalogEditions[0];
+      if (!edition) return [];
+      return [
+        {
+          catalogNameId: c.id,
+          catalogLabel: c.name,
+          vendorAbbreviation: c.vendor.abbreviation,
+          editionId: edition.id,
+          editionYear: edition.year,
+          currency: c.currency,
+          isPrimary: c.id === primaryCatalogNameId,
+        },
+      ];
+    })
+    .sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return (
+        a.vendorAbbreviation.localeCompare(b.vendorAbbreviation) ||
+        a.catalogLabel.localeCompare(b.catalogLabel)
+      );
+    });
 }
 
 export async function getQuickCatalogPriceContext(
@@ -988,8 +1035,8 @@ export async function getQuickCatalogPriceContext(
 ): Promise<QuickCatalogPriceContext> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
-  const target = await resolvePrimaryCatalogTarget(collectionId, stampId);
   const certId = certificateStatusId ?? null;
+  const targets = await resolveAreaCatalogTargets(collectionId, stampId);
 
   const prices = await prisma.stampCatalogPrice.findMany({
     where: { stampId },
@@ -1008,20 +1055,29 @@ export async function getQuickCatalogPriceContext(
     orderBy: { catalogEdition: { year: "desc" } },
   });
 
-  const existing = prices.find(
-    (p) =>
-      p.catalogEditionId === target.editionId &&
-      p.conditionId === conditionId &&
-      p.certificateStatusId === certId
-  );
+  const amountFor = (editionId: string) => {
+    const existing = prices.find(
+      (p) =>
+        p.catalogEditionId === editionId &&
+        p.conditionId === conditionId &&
+        p.certificateStatusId === certId
+    );
+    return existing ? existing.price.toFixed(2) : null;
+  };
+  const targetEditionIds = new Set(targets.map((t) => t.editionId));
 
   const areaName = await resolvePrimaryAreaName(stampId);
 
   return {
-    catalogLabel: target.catalogLabel,
-    currency: target.currency,
-    editionYear: target.editionYear,
-    amount: existing ? existing.price.toFixed(2) : null,
+    catalogs: targets.map((t) => ({
+      catalogNameId: t.catalogNameId,
+      catalogLabel: t.catalogLabel,
+      vendorAbbreviation: t.vendorAbbreviation,
+      editionYear: t.editionYear,
+      currency: t.currency,
+      amount: amountFor(t.editionId),
+      isPrimary: t.isPrimary,
+    })),
     areaName,
     otherPrices: prices.map((p) => ({
       catalogLabel: p.catalogEdition.catalogName.name,
@@ -1030,8 +1086,10 @@ export async function getQuickCatalogPriceContext(
       certificateStatusName: p.certificateStatus?.name ?? null,
       price: p.price.toFixed(2),
       currency: p.currency,
+      // A recorded price is a "target" (the value an input prefills from) when it sits on one
+      // of the editable editions for this condition × certificate.
       isTarget:
-        p.catalogEditionId === target.editionId &&
+        targetEditionIds.has(p.catalogEditionId) &&
         p.conditionId === conditionId &&
         p.certificateStatusId === certId,
     })),
@@ -1054,21 +1112,29 @@ async function resolvePrimaryAreaName(stampId: string): Promise<string | null> {
   return link?.collectionArea.name ?? null;
 }
 
-/** Quickly set (or overwrite) a single catalog value: the given amount for this stamp at
- * `conditionId × certificateStatusId` on the latest edition of its **primary** catalog
- * (ADR-0006), in that catalog's currency. Used by the lot intake screen to price a copy
- * inline without opening the full stamp editor (#121). */
-export async function quickSetCatalogPrice(
+/** One catalog value to set from the quick-price editor: a raw amount for a specific catalog
+ * (by `catalogNameId`), which resolves to that catalog's latest edition and currency. */
+export interface QuickCatalogPriceEntry {
+  catalogNameId: string;
+  amount: number;
+}
+
+/** Quickly set (or overwrite) catalog values for a stamp at `conditionId × certificateStatusId`
+ * from the quick-add dialog: each entry lands on the latest edition of its catalog, in that
+ * catalog's currency (#170). Catalogs must belong to the collection; each is written on the
+ * latest edition (ADR-0006). Used by the lot intake / offer-set screens to price a copy inline
+ * without opening the full stamp editor (#121, #164). */
+export async function quickSetCatalogPrices(
   ownerId: string,
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  amount: number
+  entries: QuickCatalogPriceEntry[]
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
-  if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error("Enter a valid non-negative amount.");
+  if (entries.length === 0) {
+    throw new Error("Enter at least one catalog value.");
   }
   const cond = await prisma.stampCondition.findFirst({
     where: { id: conditionId, collectionId },
@@ -1082,35 +1148,50 @@ export async function quickSetCatalogPrice(
     });
     if (!cert) throw new Error("Certificate status not found in this collection.");
   }
-  const target = await resolvePrimaryCatalogTarget(collectionId, stampId);
-  const priceStr = amount.toFixed(2);
-  // The (stamp, edition, condition, cert) uniqueness uses NULLS NOT DISTINCT, which Prisma
-  // can't target in `upsert`; find-then-write instead.
-  const existing = await prisma.stampCatalogPrice.findFirst({
-    where: {
-      stampId,
-      catalogEditionId: target.editionId,
-      conditionId,
-      certificateStatusId: certificateStatusId ?? null,
-    },
-    select: { id: true },
-  });
-  if (existing) {
-    await prisma.stampCatalogPrice.update({
-      where: { id: existing.id },
-      data: { price: priceStr, currency: target.currency },
-    });
-  } else {
-    await prisma.stampCatalogPrice.create({
-      data: {
-        stampId,
-        catalogEditionId: target.editionId,
-        conditionId,
-        certificateStatusId: certificateStatusId ?? null,
-        price: priceStr,
-        currency: target.currency,
+
+  for (const entry of entries) {
+    if (!Number.isFinite(entry.amount) || entry.amount < 0) {
+      throw new Error("Enter a valid non-negative amount.");
+    }
+    const catalog = await prisma.catalogName.findFirst({
+      where: { id: entry.catalogNameId, vendor: { collectionId } },
+      select: {
+        currency: true,
+        catalogEditions: { select: { id: true }, orderBy: { year: "desc" }, take: 1 },
       },
     });
+    if (!catalog) throw new Error("Catalog not found in this collection.");
+    const edition = catalog.catalogEditions[0];
+    if (!edition) throw new Error("That catalog has no editions yet.");
+    const priceStr = entry.amount.toFixed(2);
+    // The (stamp, edition, condition, cert) uniqueness uses NULLS NOT DISTINCT, which Prisma
+    // can't target in `upsert`; find-then-write instead.
+    const existing = await prisma.stampCatalogPrice.findFirst({
+      where: {
+        stampId,
+        catalogEditionId: edition.id,
+        conditionId,
+        certificateStatusId: certificateStatusId ?? null,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.stampCatalogPrice.update({
+        where: { id: existing.id },
+        data: { price: priceStr, currency: catalog.currency },
+      });
+    } else {
+      await prisma.stampCatalogPrice.create({
+        data: {
+          stampId,
+          catalogEditionId: edition.id,
+          conditionId,
+          certificateStatusId: certificateStatusId ?? null,
+          price: priceStr,
+          currency: catalog.currency,
+        },
+      });
+    }
   }
 }
 

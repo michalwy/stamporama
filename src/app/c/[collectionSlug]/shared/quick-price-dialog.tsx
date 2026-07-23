@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -8,24 +8,16 @@ import {
   DialogPrimaryButton,
   DialogSecondaryButton,
   ErrorBubble,
-  LabelWithError,
 } from "@/app/dialog-shell";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
 import type { QuickCatalogPriceContext } from "@/lib/stamps";
-import { formatStampCN } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import {
+  formatStampCN,
+  STAMP_PRIMARY_CHIP,
+  STAMP_SECONDARY_CHIP,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -38,13 +30,29 @@ const INPUT_STYLE: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+/** Condition badge (#227): emphasises which condition × certificate the entered value applies
+ * to, so it can't be missed in the "this stamp" card. */
+const CONDITION_BADGE: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  color: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+  border: "1px solid var(--color-accent-border)",
+  whiteSpace: "nowrap",
+};
+
 /**
- * Inline "set catalog value" dialog (#147): prices a copy's stamp on the latest edition of its
- * primary catalog for the copy's condition × certificate, without leaving the list. Shows the
- * stamp's issue, catalog numbers, condition, area, this copy's photos, and any prices already
- * recorded (the target row marked) so the user can price consistently. Shared by the
- * purchase-order intake view (#121) and the sale-lot composition view (#164). The dialog only
- * loads the context and reports the entered `amount`; the caller performs the save.
+ * Inline "set catalog value" dialog (#147, #170): prices a copy's stamp on the latest edition
+ * of every catalog active on its area — one input per vendor, the primary catalog focused by
+ * default for fast entry, the rest optional. Shows the stamp's issue, catalog numbers (primary
+ * highlighted), condition badge, area, this copy's photos, and any prices already recorded (the
+ * target rows marked) so the user can price consistently. Shared by the purchase-order intake
+ * view (#121) and the sale-lot composition view (#164). The dialog only loads the context and
+ * reports the entered amounts; the caller performs the save.
  */
 export function QuickPriceDialog({
   item,
@@ -65,18 +73,18 @@ export function QuickPriceDialog({
   isPending: boolean;
   error?: string;
   onClose: () => void;
-  onSubmit: (amount: string) => void;
+  onSubmit: (entries: Array<{ catalogNameId: string; amount: string }>) => void;
 }) {
-  const [amount, setAmount] = useState("");
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [context, setContext] = useState<QuickCatalogPriceContext | null>(null);
   const [loadError, setLoadError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const primaryInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the amount field once it is enabled (autoFocus can't fire while it is disabled
-  // during the context load).
+  // Focus the primary catalog's field once inputs are enabled (autoFocus can't fire while
+  // they are disabled during the context load).
   useEffect(() => {
-    if (!loading && !loadError) inputRef.current?.focus();
+    if (!loading && !loadError) primaryInputRef.current?.focus();
   }, [loading, loadError]);
 
   useEffect(() => {
@@ -91,7 +99,11 @@ export function QuickPriceDialog({
       if (!active) return;
       if (r.status === "success") {
         setContext(r.context);
-        if (r.context.amount != null) setAmount(r.context.amount);
+        setAmounts(
+          Object.fromEntries(
+            r.context.catalogs.flatMap((c) => (c.amount != null ? [[c.catalogNameId, c.amount]] : []))
+          )
+        );
       } else {
         setLoadError(r.message);
       }
@@ -102,15 +114,25 @@ export function QuickPriceDialog({
     };
   }, [item]);
 
+  const filledEntries = useMemo(
+    () =>
+      (context?.catalogs ?? []).flatMap((c) => {
+        const amount = (amounts[c.catalogNameId] ?? "").trim();
+        return amount !== "" ? [{ catalogNameId: c.catalogNameId, amount }] : [];
+      }),
+    [context, amounts]
+  );
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    onSubmit(amount.trim());
+    onSubmit(filledEntries);
   }
 
   const condLabel = `${item.conditionAbbreviation}${
     item.certificateStatusName ? ` · ${item.certificateStatusName}` : ""
   }`;
-  const canSave = !isPending && !loading && !loadError && amount.trim() !== "";
+  const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
+  const canSave = !isPending && !loading && !loadError && filledEntries.length > 0;
 
   const issueLabel = item.issueName
     ? `${item.issueName}${item.issueYear ? ` (${item.issueYear})` : ""}`
@@ -122,7 +144,7 @@ export function QuickPriceDialog({
   });
 
   return (
-    <DialogShell title="Set catalog value" onClose={onClose} maxWidth="24rem">
+    <DialogShell title="Set catalog value" onClose={onClose} maxWidth="32rem">
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
           <div
@@ -136,7 +158,7 @@ export function QuickPriceDialog({
               color: "var(--color-text-secondary)",
               display: "flex",
               flexDirection: "column",
-              gap: "0.25rem",
+              gap: "0.375rem",
             }}
           >
             <div style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -146,20 +168,22 @@ export function QuickPriceDialog({
             {catalogNumbers.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
                 {catalogNumbers.map((cn) => (
-                  <span key={cn.catalogVendorId} style={CHIP}>
+                  <span
+                    key={cn.catalogVendorId}
+                    style={cn.catalogVendorId === primaryVendorId ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
+                    title={cn.catalogVendorId === primaryVendorId ? "Primary catalog" : undefined}
+                  >
                     {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
                   </span>
                 ))}
               </div>
             )}
-            <div>Condition: {condLabel}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+              <span style={{ color: "var(--color-text-muted)" }}>Condition:</span>
+              <span style={CONDITION_BADGE}>{condLabel}</span>
+            </div>
             {(context?.areaName ?? areaName) && (
               <div style={{ color: "var(--color-text-muted)" }}>Area: {context?.areaName ?? areaName}</div>
-            )}
-            {context && (
-              <div style={{ color: "var(--color-text-muted)" }}>
-                Primary catalog: {context.catalogLabel} {context.editionYear} · {context.currency}
-              </div>
             )}
             {item.photos.length > 0 && (
               <div style={{ marginTop: "0.25rem" }}>
@@ -214,33 +238,99 @@ export function QuickPriceDialog({
 
           {loadError ? (
             <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-error)" }}>{loadError}</p>
+          ) : loading ? (
+            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>Loading…</p>
+          ) : !hasCatalogs ? (
+            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              No catalog with an edition is set up for this stamp&apos;s area. Add a catalog edition on
+              the Catalog screen to record a value.
+            </p>
           ) : (
             <>
-              <LabelWithError htmlFor="quick-price">
-                Catalog value {context ? `(${context.currency})` : ""}
-              </LabelWithError>
-              <input
-                id="quick-price"
-                ref={inputRef}
-                name="amount"
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                disabled={isPending || loading}
-                placeholder={loading ? "Loading…" : "0.00"}
-                style={INPUT_STYLE}
-              />
-              <p style={{ margin: "0.375rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                Saved on the latest edition of the primary catalog for this condition × certificate.
+              <div
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  color: "var(--color-text-muted)",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                Catalog value
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                {context!.catalogs.map((c) => (
+                  <div
+                    key={c.catalogNameId}
+                    style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
+                  >
+                    <label
+                      htmlFor={`quick-price-${c.catalogNameId}`}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.125rem",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          fontSize: "0.8125rem",
+                          fontWeight: c.isPrimary ? 600 : 500,
+                          color: "var(--color-text-primary)",
+                        }}
+                      >
+                        {c.catalogLabel}
+                        {c.isPrimary && (
+                          <span
+                            style={{
+                              fontSize: "0.625rem",
+                              fontWeight: 600,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.04em",
+                              color: "var(--color-accent)",
+                            }}
+                          >
+                            Primary
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                        {c.vendorAbbreviation} · {c.editionYear} · {c.currency}
+                      </span>
+                    </label>
+                    <input
+                      id={`quick-price-${c.catalogNameId}`}
+                      ref={c.isPrimary ? primaryInputRef : undefined}
+                      name={`amount-${c.catalogNameId}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={amounts[c.catalogNameId] ?? ""}
+                      onChange={(e) =>
+                        setAmounts((prev) => ({ ...prev, [c.catalogNameId]: e.target.value }))
+                      }
+                      disabled={isPending}
+                      placeholder="0.00"
+                      style={{ ...INPUT_STYLE, width: "8rem", flexShrink: 0, textAlign: "right" }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin: "0.625rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                Each value is saved on the latest edition of its catalog for this condition ×
+                certificate. Leave a field blank to skip it.
               </p>
             </>
           )}
         </DialogBody>
         <DialogFooter>
-          {/* Cancel stays enabled while the amount is empty — only saving is gated by
+          {/* Cancel stays enabled while no amount is entered — only saving is gated by
               `canSave`; disabling both (via DialogActions' single `disabled`) would trap the
               user in the dialog until they typed a value. */}
           <DialogSecondaryButton onClick={onClose} disabled={isPending}>

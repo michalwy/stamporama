@@ -289,13 +289,17 @@ Closing is **blocked** if any copy lacks a primary-catalog price for its conditi
 no weight to split the pool by. The screen highlights the copies that need a price and shows
 how many are unpriced; click the **⚠ N unpriced** chip to filter the list down to just those
 copies. To price them without leaving the screen, click the **+ catalog value** link in the
-copy's catalog-value column — a small dialog sets that value on the stamp's **primary catalog**
-(latest edition) for the copy's condition × certificate. The dialog shows the stamp's issue,
-catalog numbers, area, and this **copy's photos** (click a thumbnail to open the lightbox, with
-prev/next and Esc to close), plus any prices already recorded for it (across editions,
-conditions, and certificates) so you can price consistently — the target row is marked with an
-arrow. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the **Prices** tab.) Then
-try the close again.
+copy's catalog-value column — a small dialog sets those values (latest edition) for the copy's
+condition × certificate. It shows **one field per catalog vendor active on the stamp's area**,
+with the **primary catalog's** field focused first for fast entry; the other vendors' fields are
+optional, so you can price several catalogs in one pass or leave any blank to skip it. Saving
+requires at least one value. The dialog also shows the stamp's issue, catalog numbers (the
+primary catalog's number highlighted), the condition it applies to (shown as a badge), area, and
+this **copy's photos** (click a thumbnail to open the lightbox, with prev/next and Esc to close),
+plus any prices already recorded for it (across editions, conditions, and certificates) so you
+can price consistently — the target rows are marked with an arrow. Closing still only requires a
+**primary-catalog** price. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
+**Prices** tab.) Then try the close again.
 
 ### Reopening for corrections
 

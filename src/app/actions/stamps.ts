@@ -16,7 +16,7 @@ import {
   getStampCatalogPrices,
   getStampPriceDetails,
   getQuickCatalogPriceContext,
-  quickSetCatalogPrice,
+  quickSetCatalogPrices,
 } from "@/lib/stamps";
 import type { StampSubtypeAssignment, QuickCatalogPriceContext } from "@/lib/stamps";
 import {
@@ -74,21 +74,36 @@ export async function getQuickCatalogPriceContextAction(
   }
 }
 
-/** Quickly set a single catalog value for a stamp at a condition × certificate on its
- * primary catalog's latest edition (#121). `amount` is the raw string from the input. */
-export async function quickSetCatalogPriceAction(
+/** Quickly set catalog values for a stamp at a condition × certificate, one per catalog vendor
+ * active on the stamp's area — each lands on that catalog's latest edition (#170). `entries`
+ * carries raw amount strings from the inputs; only non-empty ones are submitted. */
+export async function quickSetCatalogPricesAction(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  amount: string
+  entries: Array<{ catalogNameId: string; amount: string }>
 ): Promise<StampActionState> {
   const session = await getSession();
-  const n = Number(amount);
-  if (!amount.trim() || !Number.isFinite(n) || n < 0) {
-    return { status: "error", message: "Enter a valid non-negative amount." };
+  const parsed: Array<{ catalogNameId: string; amount: number }> = [];
+  for (const e of entries) {
+    if (!e.amount.trim()) continue;
+    const n = Number(e.amount);
+    if (!Number.isFinite(n) || n < 0) {
+      return { status: "error", message: "Enter a valid non-negative amount." };
+    }
+    parsed.push({ catalogNameId: e.catalogNameId, amount: n });
+  }
+  if (parsed.length === 0) {
+    return { status: "error", message: "Enter at least one catalog value." };
   }
   try {
-    await quickSetCatalogPrice(session.user.id, stampId, conditionId, certificateStatusId, n);
+    await quickSetCatalogPrices(
+      session.user.id,
+      stampId,
+      conditionId,
+      certificateStatusId,
+      parsed
+    );
     return { status: "success" };
   } catch (e) {
     return {

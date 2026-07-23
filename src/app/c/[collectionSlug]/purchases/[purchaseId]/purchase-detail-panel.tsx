@@ -916,17 +916,17 @@ function useCopyEditing(ctx: {
               setCopyError(undefined);
             }
           }}
-          onSubmit={(amount) => {
+          onSubmit={(entries) => {
             const it = quickPriceItem;
             setCopyError(undefined);
             run(
               async () => {
-                const { quickSetCatalogPriceAction } = await import("@/app/actions/stamps");
-                const r = await quickSetCatalogPriceAction(
+                const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+                const r = await quickSetCatalogPricesAction(
                   it.stampId,
                   it.conditionId,
                   it.certificateStatusId,
-                  amount
+                  entries
                 );
                 if (r.status === "error") setCopyError(r.message);
                 return r;
