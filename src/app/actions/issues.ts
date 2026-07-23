@@ -15,6 +15,7 @@ import {
   moveIssueToArea,
   listIssueReferencedVendors,
   getIssuePriceDetails,
+  getIssueAreaId,
 } from "@/lib/issues";
 import type {
   AutoCreateStampsInput,
@@ -28,6 +29,7 @@ import {
   generateCatalogNumbers,
   type CatalogRangeScheme,
 } from "@/lib/catalog-number";
+import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
 
 export async function getIssuePriceDetailsAction(
   collectionId: string,
@@ -122,6 +124,19 @@ export async function createIssueAction(
       numbers: generateCatalogNumbers(r.scheme, count!),
     }));
     autoCreateStamps = { count, vendors };
+
+    // Block-mode duplicate guard (#85): the generated numbers become real stamps,
+    // so reject up front when any collides and the collection blocks duplicates.
+    const candidates = vendors.flatMap((v) =>
+      v.numbers.map((number) => ({ catalogVendorId: v.catalogVendorId, number }))
+    );
+    const blockMessage = await enforceCandidateCatalogDuplicates(
+      session.user.id,
+      collectionId,
+      areaId,
+      candidates
+    );
+    if (blockMessage) return { status: "error", message: blockMessage };
   }
 
   try {
@@ -247,6 +262,15 @@ export async function addStampToIssueAction(
       currency,
     });
   }
+
+  // Block-mode duplicate guard (#85): use the issue's area as the prefix context.
+  const blockMessage = await enforceCandidateCatalogDuplicates(
+    session.user.id,
+    collectionId,
+    await getIssueAreaId(issueId),
+    catalogNumbers
+  );
+  if (blockMessage) return { status: "error", message: blockMessage };
 
   try {
     const { stampId } = await addStampToIssue(session.user.id, collectionId, issueId, {

@@ -32,6 +32,7 @@ import type {
   StampCatalogPriceDisplay,
   StampPriceDetails,
 } from "@/lib/stamps";
+import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 
 export type StampActionState =
   | { status: "idle" }
@@ -252,6 +253,16 @@ export async function updateStampWithCatalogAction(
           : null;
 
   const photoChangeSet = parsePhotoChangeSet(formData);
+
+  // Block-mode duplicate guard (#85): reject before mutating when the collection
+  // blocks duplicate catalog identities. Warn mode passes through (the form shows
+  // the non-blocking warning instead).
+  const blockMessage = await enforceStampCatalogDuplicates(
+    session.user.id,
+    stampId,
+    catalogNumbers
+  );
+  if (blockMessage) return { status: "error", message: blockMessage };
 
   try {
     await updateStampWithCatalog(session.user.id, stampId, {

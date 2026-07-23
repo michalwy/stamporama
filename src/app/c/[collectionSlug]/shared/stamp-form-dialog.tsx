@@ -21,6 +21,8 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
 import { Segmented } from "./segmented";
+import { CatalogDuplicateWarningIcon } from "./catalog-duplicate-warning";
+import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -123,6 +125,26 @@ export function StampFormDialog(props: StampFormDialogProps) {
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );
   const hasPricesTab = areaVendors.length > 0;
+
+  // ── Live duplicate-catalog detection (#85) ──
+  // Catalog-number inputs are controlled so their values can be checked against
+  // existing stamps as the user types (debounced). The warning is advisory in
+  // "warn" mode; in "block" mode the same conflicts also disable the save.
+  const [catalogInputs, setCatalogInputs] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const v of vendors) {
+      m[v.catalogVendorId] = editProps
+        ? (editProps.stamp.catalogNumbers.find((cn) => cn.catalogVendorId === v.catalogVendorId)
+            ?.number ?? "")
+        : (addProps?.defaultCatalogNumbers?.find((cn) => cn.catalogVendorId === v.catalogVendorId)
+            ?.number ?? "");
+    }
+    return m;
+  });
+  const [dupCheck, setDupCheck] = useState<{
+    mode: DuplicateCatalogMode;
+    groups: CatalogDuplicateGroup[];
+  }>({ mode: "warn", groups: [] });
 
   // Currency is fixed per catalog edition — derived from the catalog, not editable.
   const currencyByEdition = useMemo(() => {
@@ -261,6 +283,48 @@ export function StampFormDialog(props: StampFormDialogProps) {
     return () => { cancelled = true; };
   }, [editStampId]);
 
+  // Duplicate check context: the edited stamp's own primary area (edit), or the
+  // selected existing issue's area (add). Skipped while auto-creating a new issue,
+  // since its area — and thus the catalog prefix — isn't known yet.
+  const checkStampId = editProps?.stampId ?? null;
+  const addAreaId =
+    addProps && !autoCreateIssue
+      ? (addProps.issues.find((i) => i.id === selectedIssueId)?.collectionAreaId ?? null)
+      : null;
+  const canCheckDuplicates = !!checkStampId || !!addAreaId;
+
+  useEffect(() => {
+    let cancelled = false;
+    // All state updates happen inside the debounced async callback (never
+    // synchronously in the effect body) to avoid cascading renders.
+    const timer = setTimeout(async () => {
+      if (!canCheckDuplicates) {
+        if (!cancelled) setDupCheck((prev) => ({ mode: prev.mode, groups: [] }));
+        return;
+      }
+      const candidates = Object.entries(catalogInputs)
+        .map(([catalogVendorId, number]) => ({ catalogVendorId, number: number.trim() }))
+        .filter((c) => c.number);
+      if (candidates.length === 0) {
+        if (!cancelled) setDupCheck((prev) => ({ mode: prev.mode, groups: [] }));
+        return;
+      }
+      const { checkCatalogDuplicatesAction } = await import("@/app/actions/duplicate-catalog");
+      const res = await checkCatalogDuplicatesAction(
+        collectionId,
+        candidates,
+        checkStampId ? { stampId: checkStampId } : { contextAreaId: addAreaId }
+      );
+      if (!cancelled) setDupCheck(res);
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [catalogInputs, canCheckDuplicates, checkStampId, addAreaId, collectionId]);
+
+  const blockDuplicates = dupCheck.mode === "block" && dupCheck.groups.length > 0;
+
   const needsMembers =
     !!addProps && !!selectedIssueId && !autoCreateIssue && !addProps.prefilledParentStampId;
   const { data: members } = useIssueMembers(collectionId, selectedIssueId || "", needsMembers);
@@ -316,13 +380,6 @@ export function StampFormDialog(props: StampFormDialogProps) {
     props.onSubmit(autoCreateIssue ? "" : selectedIssueId, fd);
   }
 
-  function catalogNumberDefault(catalogVendorId: string): string {
-    if (editProps) {
-      return editProps.stamp.catalogNumbers.find((cn) => cn.catalogVendorId === catalogVendorId)?.number ?? "";
-    }
-    return addProps?.defaultCatalogNumbers?.find((cn) => cn.catalogVendorId === catalogVendorId)?.number ?? "";
-  }
-
   const title = props.mode === "edit" ? "Edit stamp" : "Add stamp";
   const actionLabel = isPending
     ? "Saving…"
@@ -334,6 +391,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const actionDisabled =
     isPending ||
     photosUploading ||
+    blockDuplicates ||
     (props.mode === "add" && !autoCreateIssue && !selectedIssueId);
 
   return (
@@ -481,22 +539,55 @@ export function StampFormDialog(props: StampFormDialogProps) {
                     gap: "0.375rem 0.75rem",
                   }}
                 >
-                  {vendors.map((v, i) => (
+                  {vendors.map((v, i) => {
+                    const vendorGroups = dupCheck.groups.filter(
+                      (g) => g.catalogVendorId === v.catalogVendorId
+                    );
+                    return (
                     <div key={v.catalogVendorId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
                       <span style={{ width: "4rem", flexShrink: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
                         {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
                       </span>
-                      <input
-                        name={`catalogNumber_${v.catalogVendorId}`}
-                        type="text"
-                        disabled={isPending}
-                        placeholder="e.g. 1"
-                        defaultValue={catalogNumberDefault(v.catalogVendorId)}
-                        data-autofocus={(skipToFields && i === 0) || undefined}
-                        style={{ ...INPUT_STYLE, flex: 1 }}
-                      />
+                      <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
+                        <input
+                          name={`catalogNumber_${v.catalogVendorId}`}
+                          type="text"
+                          disabled={isPending}
+                          placeholder="e.g. 1"
+                          value={catalogInputs[v.catalogVendorId] ?? ""}
+                          onChange={(e) =>
+                            setCatalogInputs((prev) => ({
+                              ...prev,
+                              [v.catalogVendorId]: e.target.value,
+                            }))
+                          }
+                          data-autofocus={(skipToFields && i === 0) || undefined}
+                          style={{
+                            ...INPUT_STYLE,
+                            flex: 1,
+                            paddingRight: vendorGroups.length > 0 ? "2rem" : INPUT_STYLE.padding,
+                          }}
+                        />
+                        {vendorGroups.length > 0 && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              right: "0.5rem",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              display: "inline-flex",
+                            }}
+                          >
+                            <CatalogDuplicateWarningIcon
+                              groups={vendorGroups}
+                              blocking={dupCheck.mode === "block"}
+                            />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

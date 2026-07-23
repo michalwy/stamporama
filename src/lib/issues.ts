@@ -65,6 +65,16 @@ async function resolveIssueArea(issueId: string): Promise<{ collectionId: string
   return issue;
 }
 
+/** The area an issue belongs to, or null if the issue is missing. Used to resolve the
+ * catalog-number prefix context for duplicate detection when adding a stamp (#85). */
+export async function getIssueAreaId(issueId: string): Promise<string | null> {
+  const issue = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { collectionAreaId: true },
+  });
+  return issue?.collectionAreaId ?? null;
+}
+
 export interface StampNodeData {
   stampId: string;
   parentId: string | null;

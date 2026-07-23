@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeCatalogKey,
   catalogDigits,
+  catalogIdentityKey,
   formatCatalogNumber,
   catalogMatchKey,
   catalogKeyMatches,
@@ -50,6 +51,45 @@ describe("catalogMatchKey", () => {
   it("builds a normalized abbr+prefix+number key", () => {
     assert.equal(catalogMatchKey("Mi", "PL", "200"), "mipl200");
     assert.equal(catalogMatchKey("Sc", null, "45"), "sc45");
+  });
+});
+
+describe("catalogIdentityKey", () => {
+  it("distinguishes identities by vendor, prefix, and number", () => {
+    // Same vendor + prefix + number → equal (a real duplicate).
+    assert.equal(
+      catalogIdentityKey("v1", "PL", "200"),
+      catalogIdentityKey("v1", "PL", "200")
+    );
+    // Different area prefix under the same vendor → not a duplicate.
+    assert.notEqual(
+      catalogIdentityKey("v1", "PL", "200"),
+      catalogIdentityKey("v1", "DE", "200")
+    );
+    // Different vendor → not a duplicate.
+    assert.notEqual(
+      catalogIdentityKey("v1", "PL", "200"),
+      catalogIdentityKey("v2", "PL", "200")
+    );
+    // Exact number match only: "200" ≠ "200a".
+    assert.notEqual(
+      catalogIdentityKey("v1", "PL", "200"),
+      catalogIdentityKey("v1", "PL", "200a")
+    );
+  });
+
+  it("treats null, undefined, and empty prefix identically and trims", () => {
+    assert.equal(catalogIdentityKey("v1", null, "5"), catalogIdentityKey("v1", "", "5"));
+    assert.equal(catalogIdentityKey("v1", undefined, "5"), catalogIdentityKey("v1", "", "5"));
+    assert.equal(catalogIdentityKey("v1", "PL", " 5 "), catalogIdentityKey("v1", "PL", "5"));
+  });
+
+  it("does not alias across part boundaries", () => {
+    // "ab" + "c" must not equal "a" + "bc".
+    assert.notEqual(
+      catalogIdentityKey("ab", "c", "1"),
+      catalogIdentityKey("a", "bc", "1")
+    );
   });
 });
 

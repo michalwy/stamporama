@@ -27,6 +27,10 @@ model Collection {
   slug         String
   name         String
   baseCurrency String
+  // Duplicate catalog-number policy (#85): "warn" (default) shows a non-blocking
+  // warning; "block" prevents saving a stamp whose catalog identity (vendor +
+  // effective area prefix + number) already exists in the collection.
+  duplicateCatalogMode String @default("warn")
   ownerId      String
   createdAt    DateTime @default(now())
 

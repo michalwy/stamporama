@@ -91,6 +91,6 @@ export async function getCollectionsByOwner(ownerId: string) {
 export async function getCollectionBySlug(ownerId: string, slug: string) {
   return prisma.collection.findUnique({
     where: { ownerId_slug: { ownerId, slug } },
-    select: { id: true, name: true, slug: true, baseCurrency: true },
+    select: { id: true, name: true, slug: true, baseCurrency: true, duplicateCatalogMode: true },
   });
 }

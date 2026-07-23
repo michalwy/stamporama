@@ -59,6 +59,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialConditions={conditions}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
+          duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
           appVersion={getAppVersionLabel()}
         />

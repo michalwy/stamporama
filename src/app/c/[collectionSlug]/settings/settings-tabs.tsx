@@ -7,6 +7,8 @@ import { AreasPanel } from "../areas/areas-panel";
 import { ConditionsPanel } from "./conditions-panel";
 import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { SubtypesPanel } from "./subtypes-panel";
+import { DuplicatesPanel } from "./duplicates-panel";
+import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
 import type { StampConditionData } from "@/lib/conditions";
@@ -24,6 +26,7 @@ interface SettingsTabsProps {
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
 }
@@ -34,6 +37,7 @@ const TABS = [
   { key: "conditions", label: "Conditions" },
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
+  { key: "duplicates", label: "Duplicates" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -56,6 +60,7 @@ export function SettingsTabs({
   initialConditions,
   initialCertificateStatuses,
   initialSubtypes,
+  duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
 }: SettingsTabsProps) {
@@ -68,7 +73,8 @@ export function SettingsTabs({
     rawTab === "catalogs" ||
     rawTab === "areas" ||
     rawTab === "conditions" ||
-    rawTab === "subtypes"
+    rawTab === "subtypes" ||
+    rawTab === "duplicates"
       ? rawTab
       : "general";
 
@@ -166,6 +172,16 @@ export function SettingsTabs({
           initialAreas={initialAreas}
           catalogNames={catalogNames}
         />
+      )}
+      {activeTab === "duplicates" && (
+        <section>
+          <h2 style={sectionHeadingStyle}>Duplicate catalog numbers</h2>
+          <DuplicatesPanel
+            collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            initialMode={duplicateCatalogMode}
+          />
+        </section>
       )}
     </div>
   );

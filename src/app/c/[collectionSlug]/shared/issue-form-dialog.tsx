@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
@@ -14,13 +14,15 @@ import type {
   DuplicateIssueMatch,
 } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import { resolveCatalogRange } from "@/lib/catalog-number";
+import { resolveCatalogRange, generateCatalogNumbers } from "@/lib/catalog-number";
+import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
   flattenAreaTree,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,34 @@ function rangeCountFromForm(form: HTMLFormElement, vendorId: string): number | n
   return rangeCount(first, last);
 }
 
+// ── Auto-create duplicate-catalog candidates (#85) ────────────────────────────
+
+// Generate the catalog numbers auto-create would produce for the given vendors,
+// reading each vendor's First/Last range straight from the (uncontrolled) form.
+// Mirrors the server generation in src/app/actions/issues.ts; vendors with an
+// empty, unparseable, or over-limit range are skipped for the advisory check.
+function autoCreateCandidatesFromForm(
+  form: HTMLFormElement,
+  vendorIds: string[]
+): DuplicateCandidate[] {
+  const out: DuplicateCandidate[] = [];
+  for (const catalogVendorId of vendorIds) {
+    const firstEl = form.elements.namedItem(`issueCatalogFirst_${catalogVendorId}`);
+    const lastEl = form.elements.namedItem(`issueCatalogLast_${catalogVendorId}`);
+    const first = firstEl instanceof HTMLInputElement ? firstEl.value : "";
+    const last = lastEl instanceof HTMLInputElement ? lastEl.value : "";
+    if (!first.trim()) continue;
+    const range = resolveCatalogRange(first, last.trim() ? last : null);
+    if ("error" in range) continue;
+    const count = range.span ?? 1;
+    if (count < 1 || count > 50) continue;
+    for (const number of generateCatalogNumbers(range.scheme, count)) {
+      out.push({ catalogVendorId, number });
+    }
+  }
+  return out;
+}
+
 // ── Duplicate-name check (#178) ───────────────────────────────────────────────
 
 /** Debounce a rapidly-changing value so the duplicate-name lookup only fires once the
@@ -129,6 +159,9 @@ interface IssueFormProps {
   onNameChange?: (value: string) => void;
   /** Non-blocking warning rendered directly beneath the name field (#178). */
   nameWarning?: React.ReactNode;
+  /** Duplicate-catalog warning icon shown inside a vendor's First field when its
+   * auto-generated range collides with existing stamps (#85). */
+  catalogWarningFor?: (vendorId: string) => React.ReactNode;
 }
 
 function IssueForm({
@@ -146,6 +179,7 @@ function IssueForm({
   onVendorToggle,
   onNameChange,
   nameWarning,
+  catalogWarningFor,
 }: IssueFormProps) {
   const sortedVendors = useMemo(() => {
     if (!primaryVendorId) return vendors;
@@ -255,14 +289,38 @@ function IssueForm({
                     )}
                   </span>
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                    <input
-                      name={`issueCatalogFirst_${v.catalogVendorId}`}
-                      type="text"
-                      defaultValue={existing?.firstNumber ?? ""}
-                      disabled={isPending}
-                      placeholder="First"
-                      style={{ ...INPUT_STYLE, flex: 1 }}
-                    />
+                    {(() => {
+                      const warning = catalogWarningFor?.(v.catalogVendorId);
+                      return (
+                        <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
+                          <input
+                            name={`issueCatalogFirst_${v.catalogVendorId}`}
+                            type="text"
+                            defaultValue={existing?.firstNumber ?? ""}
+                            disabled={isPending}
+                            placeholder="First"
+                            style={{
+                              ...INPUT_STYLE,
+                              flex: 1,
+                              paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
+                            }}
+                          />
+                          {warning && (
+                            <span
+                              style={{
+                                position: "absolute",
+                                right: "0.5rem",
+                                top: "50%",
+                                transform: "translateY(-50%)",
+                                display: "inline-flex",
+                              }}
+                            >
+                              {warning}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <span
                       style={{
                         color: "var(--color-text-muted)",
@@ -430,6 +488,16 @@ export function IssueDialog(props: IssueDialogProps) {
   // each checkbox falls back to "primary only" while unset.
   const [vendorSelection, setVendorSelection] = useState<Record<string, boolean>>({});
 
+  // Auto-create duplicate check (#85): the generated catalog numbers become real
+  // stamps, so warn before creating when any collides. Reads the uncontrolled form
+  // on change (bumping `formVersion`) and re-runs the debounced lookup.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formVersion, setFormVersion] = useState(0);
+  const [autoDup, setAutoDup] = useState<{
+    mode: DuplicateCatalogMode;
+    groups: CatalogDuplicateGroup[];
+  }>({ mode: "warn", groups: [] });
+
   const vendors = useMemo(
     () => (selectedAreaId ? effectiveVendorsForArea(areas, selectedAreaId) : []),
     [areas, selectedAreaId]
@@ -468,6 +536,46 @@ export function IssueDialog(props: IssueDialogProps) {
     setVendorSelection((prev) => ({ ...prev, [vendorId]: checked }));
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    // formVersion (a dep) re-triggers this on any First/Last edit, since the inputs
+    // are uncontrolled. All state updates happen in the debounced async callback.
+    const timer = setTimeout(async () => {
+      if (!isCreate || !autoCreate || !selectedAreaId || !formRef.current) {
+        if (!cancelled) setAutoDup((prev) => ({ mode: prev.mode, groups: [] }));
+        return;
+      }
+      const selected = vendors
+        .filter((v) => vendorSelection[v.catalogVendorId] ?? v.catalogVendorId === primaryVendorId)
+        .map((v) => v.catalogVendorId);
+      const candidates = autoCreateCandidatesFromForm(formRef.current, selected);
+      if (candidates.length === 0) {
+        if (!cancelled) setAutoDup((prev) => ({ mode: prev.mode, groups: [] }));
+        return;
+      }
+      const { checkCatalogDuplicatesAction } = await import("@/app/actions/duplicate-catalog");
+      const res = await checkCatalogDuplicatesAction(collectionId, candidates, {
+        contextAreaId: selectedAreaId,
+      });
+      if (!cancelled) setAutoDup(res);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    isCreate,
+    autoCreate,
+    selectedAreaId,
+    vendorSelection,
+    primaryVendorId,
+    vendors,
+    formVersion,
+    collectionId,
+  ]);
+
+  const autoDupBlocking = autoDup.mode === "block" && autoDup.groups.length > 0;
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (isCreate) {
@@ -484,7 +592,12 @@ export function IssueDialog(props: IssueDialogProps) {
       onClose={onClose}
       minHeight="32rem"
     >
-      <form style={FORM_STYLE} onSubmit={handleSubmit}>
+      <form
+        ref={formRef}
+        style={FORM_STYLE}
+        onSubmit={handleSubmit}
+        onChange={() => setFormVersion((v) => v + 1)}
+      >
         <DialogBody>
           {isCreate && (
             <div style={{ marginBottom: "1.25rem" }}>
@@ -526,12 +639,27 @@ export function IssueDialog(props: IssueDialogProps) {
             onVendorToggle={handleVendorToggle}
             onNameChange={isCreate ? setNameValue : undefined}
             nameWarning={nameWarning}
+            catalogWarningFor={
+              isCreate && autoCreate
+                ? (vendorId) => {
+                    const vendorGroups = autoDup.groups.filter(
+                      (g) => g.catalogVendorId === vendorId
+                    );
+                    return vendorGroups.length > 0 ? (
+                      <CatalogDuplicateWarningIcon
+                        groups={vendorGroups}
+                        blocking={autoDup.mode === "block"}
+                      />
+                    ) : null;
+                  }
+                : undefined
+            }
           />
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}
           onCancel={onClose}
-          disabled={isPending || (isCreate && !selectedAreaId)}
+          disabled={isPending || (isCreate && !selectedAreaId) || autoDupBlocking}
           error={error}
         />
       </form>
