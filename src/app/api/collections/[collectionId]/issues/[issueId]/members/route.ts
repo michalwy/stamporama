@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { listIssueMembers } from "@/lib/issues";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ collectionId: string; issueId: string }> }
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -13,12 +13,15 @@ export async function GET(
   }
 
   const { collectionId, issueId } = await params;
+  const displayConditionId =
+    new URL(request.url).searchParams.get("displayConditionId") || undefined;
 
   try {
     const members = await listIssueMembers(
       session.user.id,
       collectionId,
-      issueId
+      issueId,
+      displayConditionId
     );
     return NextResponse.json({ members });
   } catch {

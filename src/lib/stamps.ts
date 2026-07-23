@@ -20,7 +20,7 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
-import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 
 async function assertCollectionOwner(
@@ -773,7 +773,7 @@ export async function searchStampsForPicker(
         stampId: s.id,
         parentId: s.parentId,
         isVariant: s.parentId !== null,
-        hasVariants: s.variants.some(childIsVariant),
+        hasVariants: isUnknownVariantStamp(s),
         name: s.name,
         issuedYear: s.issuedYear,
         areaId,

@@ -1,5 +1,6 @@
 import {
   pickCatalogPriceFor,
+  pickLowestByBase,
   baseValueOf,
   type PickedPrice,
   type RawCatalogPrice,
@@ -76,28 +77,6 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
     .map(pick)
     .filter((p): p is PickedPrice => p !== null);
   return toValuation(pickLowestByBase(candidates, baseCurrency, rates), true, baseCurrency, rates);
-}
-
-/** The candidate with the lowest base-currency value. Unconvertible candidates (no rate)
- * cannot be compared, so they are skipped; if every candidate is unconvertible the first is
- * returned (amount known, base value unknown). Null when there are no candidates. */
-function pickLowestByBase(
-  candidates: PickedPrice[],
-  baseCurrency: string,
-  rates: Map<string, number | null>
-): PickedPrice | null {
-  if (candidates.length === 0) return null;
-  let best: PickedPrice | null = null;
-  let bestBase: number | null = null;
-  for (const c of candidates) {
-    const bv = baseValueOf(c.amount, c.currency, baseCurrency, rates);
-    if (bv === null) continue;
-    if (bestBase === null || bv < bestBase) {
-      best = c;
-      bestBase = bv;
-    }
-  }
-  return best ?? candidates[0];
 }
 
 function toValuation(

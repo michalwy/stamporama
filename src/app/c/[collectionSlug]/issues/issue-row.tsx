@@ -239,6 +239,9 @@ interface IssueRowProps {
   onFilterByArea?: (areaId: string) => void;
   callbacks: IssueRowCallbacks;
   defaultExpanded?: boolean;
+  /** Condition whose price fills each member's headline price, matching the list's
+   *  price column so the expanded rows track the condition switcher (#238). */
+  displayConditionId?: string | null;
 }
 
 export function IssueRow({
@@ -254,6 +257,7 @@ export function IssueRow({
   onFilterByArea,
   callbacks,
   defaultExpanded,
+  displayConditionId,
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const [hovered, setHovered] = useState(false);
@@ -261,7 +265,8 @@ export function IssueRow({
   const { data: members, isLoading: membersLoading } = useIssueMembers(
     collectionId,
     issue.id,
-    isExpanded
+    isExpanded,
+    displayConditionId
   );
 
   const stampTree = members ? buildStampTree(members) : [];
@@ -454,6 +459,7 @@ export function IssueRow({
               const incomplete = t.pricedCount < t.requiredCount;
               const unpriced = t.requiredCount - t.pricedCount - t.olderEditionExcludedCount;
               const showWarning = t.usesOlderEdition || incomplete;
+              const estimated = t.estimatedCount > 0;
               const secondary = moneySecondaryText(t);
               const warningLabel = t.usesOlderEdition ? "Older-edition prices" : "Partial total";
               return (
@@ -466,6 +472,29 @@ export function IssueRow({
                   }}
                   title={showWarning ? undefined : "Total of required stamps (main catalog)"}
                 >
+                  {estimated && (
+                    <Tooltip
+                      align="end"
+                      content={
+                        <>
+                          <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
+                            Includes an estimate
+                          </div>
+                          <div style={{ color: "var(--color-text-secondary)" }}>
+                            {t.estimatedCount} required stamp{t.estimatedCount !== 1 ? "s" : ""} priced
+                            from the lowest variant (no own price).
+                          </div>
+                        </>
+                      }
+                    >
+                      <span
+                        aria-label="Includes an estimate"
+                        style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
+                      >
+                        ~
+                      </span>
+                    </Tooltip>
+                  )}
                   {showWarning && (
                     <Tooltip
                       align="end"

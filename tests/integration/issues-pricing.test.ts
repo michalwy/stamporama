@@ -120,6 +120,235 @@ describe("issue list price staleness", () => {
   });
 });
 
+describe("issue member price tracks the display condition (#238)", () => {
+  let userId: string;
+  let collectionId: string;
+  let issueId: string;
+  let stampId: string;
+  let editionId: string;
+  let condMintId: string;
+  let condUsedId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-isscond-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User isscond-${ts}`,
+        email: `test-isscond-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const col = await prisma.collection.create({
+      data: { slug: `col-isscond-${ts}`, name: `Collection isscond-${ts}`, baseCurrency: "EUR", ownerId: userId },
+    });
+    collectionId = col.id;
+
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Michel Katalog", currency: "EUR" },
+    });
+    editionId = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
+    ).id;
+
+    condMintId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
+      })
+    ).id;
+    condUsedId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 },
+      })
+    ).id;
+
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
+    });
+    const issue = await prisma.issue.create({
+      data: { collectionId, collectionAreaId: area.id, name: "Condition Issue", year: 1872 },
+    });
+    issueId = issue.id;
+
+    const stamp = await prisma.stamp.create({ data: { collectionId, name: "Member Stamp" } });
+    stampId = stamp.id;
+    await prisma.stampCollectionArea.create({
+      data: { stampId, collectionAreaId: area.id, isPrimary: true },
+    });
+    await prisma.issueMember.create({
+      data: { issueId, stampId, requiredForCompleteness: true },
+    });
+
+    // Distinct prices per condition so the wrong condition is obvious.
+    await addPrice(stampId, editionId, condMintId, "30.00");
+    await addPrice(stampId, editionId, condUsedId, "8.00");
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("defaults to the first condition when none is requested", async () => {
+    const members = await listIssueMembers(userId, collectionId, issueId);
+    const node = members.find((n) => n.stampId === stampId);
+    assert.equal(node?.mainCatalogPrice?.amount, "30.00");
+  });
+
+  it("uses the requested non-first condition's price", async () => {
+    const members = await listIssueMembers(userId, collectionId, issueId, condUsedId);
+    const node = members.find((n) => n.stampId === stampId);
+    assert.equal(node?.mainCatalogPrice?.amount, "8.00");
+  });
+});
+
+describe("issue headline price rolls up from variants (#238)", () => {
+  let userId: string;
+  let collectionId: string;
+  let issueId: string;
+  let umbrellaId: string; // base "10", no own price, has variant children
+  let midId: string; // intermediate "10a", no own price, has variant child "10aI"
+  let plainId: string; // required member with its own price
+  let editionId: string;
+  let conditionId: string;
+  let variantSubtypeId: string;
+
+  const addPriceP = async (stampId: string, price: string) =>
+    addPrice(stampId, editionId, conditionId, price);
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-issroll-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User issroll-${ts}`,
+        email: `test-issroll-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const col = await prisma.collection.create({
+      data: { slug: `col-issroll-${ts}`, name: `Collection issroll-${ts}`, baseCurrency: "PLN", ownerId: userId },
+    });
+    collectionId = col.id;
+
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Fischer", abbreviation: "Fi" },
+    });
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId: vendor.id, name: "Fischer Katalog", currency: "PLN" },
+    });
+    editionId = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
+    ).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    variantSubtypeId = (
+      await prisma.stampSubtype.create({
+        data: { collectionId, name: "Variety", actsAsVariant: true, isDefault: true, sortOrder: 0 },
+      })
+    ).id;
+
+    const area = await prisma.collectionArea.create({
+      data: { collectionId, name: "Poland", primaryCatalogNameId: catalogName.id },
+    });
+    const issue = await prisma.issue.create({
+      data: { collectionId, collectionAreaId: area.id, name: "Rollup Issue", year: 1990 },
+    });
+    issueId = issue.id;
+
+    const link = (stampId: string) =>
+      prisma.stampCollectionArea.create({
+        data: { stampId, collectionAreaId: area.id, isPrimary: true },
+      });
+    const requireMember = (stampId: string) =>
+      prisma.issueMember.create({
+        data: { issueId, stampId, requiredForCompleteness: true },
+      });
+    const optionalMember = (stampId: string) =>
+      prisma.issueMember.create({
+        data: { issueId, stampId, requiredForCompleteness: false },
+      });
+
+    // Required umbrella "10" (no own price) → variant "10a" (no own price) → variant "10aI" = 1000.
+    umbrellaId = (await prisma.stamp.create({ data: { collectionId, name: "10" } })).id;
+    await link(umbrellaId);
+    await requireMember(umbrellaId);
+    midId = (
+      await prisma.stamp.create({
+        data: { collectionId, parentId: umbrellaId, name: "10a", subtypeId: variantSubtypeId },
+      })
+    ).id;
+    await link(midId);
+    await optionalMember(midId);
+    const deepId = (
+      await prisma.stamp.create({
+        data: { collectionId, parentId: midId, name: "10aI", subtypeId: variantSubtypeId },
+      })
+    ).id;
+    await link(deepId);
+    await optionalMember(deepId);
+    await addPriceP(deepId, "1000.00");
+
+    // A second variant of "10", priced higher, so "lowest" is exercised.
+    const otherVariantId = (
+      await prisma.stamp.create({
+        data: { collectionId, parentId: umbrellaId, name: "10b", subtypeId: variantSubtypeId },
+      })
+    ).id;
+    await link(otherVariantId);
+    await optionalMember(otherVariantId);
+    await addPriceP(otherVariantId, "1500.00");
+
+    // A plain required member with its own price.
+    plainId = (await prisma.stamp.create({ data: { collectionId, name: "2" } })).id;
+    await link(plainId);
+    await requireMember(plainId);
+    await addPriceP(plainId, "20.00");
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("member node: umbrella with no own price shows the lowest variant, flagged uncertain", async () => {
+    const members = await listIssueMembers(userId, collectionId, issueId);
+    const umbrella = members.find((n) => n.stampId === umbrellaId);
+    assert.equal(umbrella?.mainCatalogPrice?.amount, "1000.00");
+    assert.equal(umbrella?.mainCatalogPriceUncertain, true);
+    // Intermediate node "10a" is also an umbrella (its variant child priced) — rolls up too (#239).
+    const mid = members.find((n) => n.stampId === midId);
+    assert.equal(mid?.mainCatalogPrice?.amount, "1000.00");
+    assert.equal(mid?.mainCatalogPriceUncertain, true);
+    // Plain member keeps its own certain price.
+    const plain = members.find((n) => n.stampId === plainId);
+    assert.equal(plain?.mainCatalogPrice?.amount, "20.00");
+    assert.equal(plain?.mainCatalogPriceUncertain, false);
+  });
+
+  it("issue total: sums the rolled-up umbrella price and flags the estimate", async () => {
+    const { items } = await listIssuesPaginated(userId, collectionId, {});
+    const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
+    assert.ok(t);
+    assert.equal(t.amount, "1020.00"); // 20 (plain) + 1000 (umbrella lowest variant)
+    assert.equal(t.pricedCount, 2);
+    assert.equal(t.requiredCount, 2);
+    assert.equal(t.estimatedCount, 1);
+  });
+});
+
 describe("issue total edition-mix handling", () => {
   let userId: string;
   let collectionId: string;

@@ -39,8 +39,8 @@ export const issueKeys = {
     ["issues", collectionId, "list", filters] as const,
   years: (collectionId: string, filters: IssueYearFacetFilters) =>
     ["issues", collectionId, "years", filters] as const,
-  members: (collectionId: string, issueId: string) =>
-    ["issues", collectionId, "members", issueId] as const,
+  members: (collectionId: string, issueId: string, displayConditionId?: string | null) =>
+    ["issues", collectionId, "members", issueId, displayConditionId ?? null] as const,
 };
 
 export function useIssuesInfinite(
@@ -98,13 +98,17 @@ export function useIssueYears(
 export function useIssueMembers(
   collectionId: string,
   issueId: string,
-  enabled: boolean
+  enabled: boolean,
+  displayConditionId?: string | null
 ) {
   return useQuery<StampNodeData[]>({
-    queryKey: issueKeys.members(collectionId, issueId),
+    queryKey: issueKeys.members(collectionId, issueId, displayConditionId),
     queryFn: async () => {
+      const params = new URLSearchParams();
+      if (displayConditionId) params.set("displayConditionId", displayConditionId);
+      const qs = params.toString();
       const res = await fetch(
-        `/api/collections/${collectionId}/issues/${issueId}/members`
+        `/api/collections/${collectionId}/issues/${issueId}/members${qs ? `?${qs}` : ""}`
       );
       if (!res.ok) throw new Error("Failed to fetch members");
       const data = await res.json();
@@ -122,8 +126,10 @@ export function useInvalidateIssues() {
         queryKey: issueKeys.all(collectionId),
       }),
     invalidateMembers: (collectionId: string, issueId: string) =>
+      // Prefix match so every display-condition variant of this issue's members is
+      // invalidated (the full key carries a trailing displayConditionId, #238).
       queryClient.invalidateQueries({
-        queryKey: issueKeys.members(collectionId, issueId),
+        queryKey: ["issues", collectionId, "members", issueId],
       }),
   };
 }

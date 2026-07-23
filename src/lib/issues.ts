@@ -2,7 +2,11 @@ import "server-only";
 import { prisma } from "./db";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
-import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import {
+  childIsVariant,
+  isUnknownVariantStamp,
+  VARIANT_FLAG_SELECT,
+} from "./variant-classification";
 import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
 import { computeIssueRangeSuggestions, type IssueRangeSuggestion } from "./catalog-number";
 
@@ -35,8 +39,9 @@ import {
   type IssuePriceTotal,
   type MoneyDisplay,
   type RawCatalogPrice,
+  buildDescendantMap,
   buildEffectivePrimaryCatalogMap,
-  pickMainCatalogPrice,
+  pickHeadlineCatalogPrice,
   getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
@@ -90,6 +95,9 @@ export interface StampNodeData {
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
+  /** True when the displayed main price was rolled up from the lowest variant child because
+   *  this stamp is an unknown-variant umbrella with no own price (#238) — an estimate. */
+  mainCatalogPriceUncertain: boolean;
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
@@ -116,6 +124,16 @@ export interface IssueData {
   completeness: { required: number; owned: number };
 }
 
+/** Prisma select producing a {@link RawCatalogPrice} — the fields the headline price picker
+ *  needs (amount, currency, condition/certificate, edition year + catalog name). */
+const HEADLINE_PRICE_SELECT = {
+  price: true,
+  currency: true,
+  conditionId: true,
+  certificateStatusId: true,
+  catalogEdition: { select: { year: true, catalogNameId: true } },
+} as const;
+
 const MEMBER_SELECT = {
   stampId: true,
   requiredForCompleteness: true,
@@ -127,20 +145,57 @@ const MEMBER_SELECT = {
       issuedMonth: true,
       issuedYear: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
-      catalogPrices: {
-        select: {
-          price: true,
-          currency: true,
-          conditionId: true,
-          certificateStatusId: true,
-          catalogEdition: { select: { year: true, catalogNameId: true } },
-        },
-      },
+      catalogPrices: { select: HEADLINE_PRICE_SELECT },
       photos: { select: PHOTO_SUMMARY_SELECT },
+      // Own flags → this member's `actsAsVariant`; children flags → whether it is an
+      // unknown-variant umbrella whose price rolls up from its variants (#238).
       ...VARIANT_FLAG_SELECT,
+      variants: { select: VARIANT_FLAG_SELECT },
     },
   },
 } as const;
+
+/** For a set of umbrella stamps (unknown-variant base stamps), the variant-kind descendants'
+ *  prices, so the headline catalog price can roll up from the lowest variant (#238). Mirrors
+ *  the copy-valuation descendant gather (ADR-0007 §7): only descendants whose effective
+ *  actsAsVariant is true contribute. Returns per-stamp variant price arrays plus every currency
+ *  seen (so the caller can widen its rate map). */
+async function loadVariantPricesForUmbrellas(
+  collectionId: string,
+  umbrellaStampIds: string[]
+): Promise<{ variantPricesByStamp: Map<string, RawCatalogPrice[][]>; currencies: string[] }> {
+  const variantPricesByStamp = new Map<string, RawCatalogPrice[][]>();
+  const currencies: string[] = [];
+  if (umbrellaStampIds.length === 0) return { variantPricesByStamp, currencies };
+
+  const descendantsByStamp = await buildDescendantMap(collectionId, new Set(umbrellaStampIds));
+  const descendantIds = new Set<string>();
+  for (const set of descendantsByStamp.values()) for (const id of set) descendantIds.add(id);
+  if (descendantIds.size === 0) return { variantPricesByStamp, currencies };
+
+  const stamps = await prisma.stamp.findMany({
+    where: { id: { in: [...descendantIds] } },
+    select: { id: true, catalogPrices: { select: HEADLINE_PRICE_SELECT }, ...VARIANT_FLAG_SELECT },
+  });
+  const pricesByStamp = new Map<string, RawCatalogPrice[]>();
+  const isVariantByStamp = new Map<string, boolean>();
+  for (const s of stamps) {
+    pricesByStamp.set(s.id, s.catalogPrices);
+    isVariantByStamp.set(s.id, childIsVariant(s));
+    for (const p of s.catalogPrices) currencies.push(p.currency);
+  }
+
+  for (const stampId of umbrellaStampIds) {
+    const variantDescendants = [
+      ...(descendantsByStamp.get(stampId) ?? new Set<string>()),
+    ].filter((id) => isVariantByStamp.get(id) ?? false);
+    variantPricesByStamp.set(
+      stampId,
+      variantDescendants.map((id) => pricesByStamp.get(id) ?? [])
+    );
+  }
+  return { variantPricesByStamp, currencies };
+}
 
 function toStampNode(
   m: {
@@ -157,6 +212,10 @@ function toStampNode(
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
       subtype: { actsAsVariant: boolean } | null;
+      variants: {
+        actsAsVariantOverride: boolean | null;
+        subtype: { actsAsVariant: boolean } | null;
+      }[];
     };
   },
   pricing?: {
@@ -164,11 +223,23 @@ function toStampNode(
     baseCurrency: string;
     latestYearByName: Map<string, number>;
     displayConditionId: string | null;
+    rates: Map<string, number | null>;
+    /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
+    variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
   }
 ): StampNodeData {
-  const main = pricing
-    ? pickMainCatalogPrice(m.stamp.catalogPrices, pricing.primaryNameId, pricing.displayConditionId)
-    : null;
+  const headline = pricing
+    ? pickHeadlineCatalogPrice({
+        ownPrices: m.stamp.catalogPrices,
+        variantPrices: pricing.variantPricesByStamp.get(m.stampId),
+        isUmbrella: isUnknownVariantStamp(m.stamp),
+        primaryCatalogNameId: pricing.primaryNameId,
+        displayConditionId: pricing.displayConditionId,
+        baseCurrency: pricing.baseCurrency,
+        rates: pricing.rates,
+      })
+    : { picked: null, uncertain: false };
+  const main = headline.picked;
   const mainCatalogPriceStale =
     main && pricing
       ? (pricing.latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear
@@ -182,12 +253,22 @@ function toStampNode(
     issuedYear: m.stamp.issuedYear,
     requiredForCompleteness: m.requiredForCompleteness,
     catalogNumbers: m.stamp.catalogNumbers,
-    // convertedAmount filled by the caller after rates are fetched
     mainCatalogPrice:
       main && pricing
-        ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency: pricing.baseCurrency }
+        ? {
+            amount: main.amount.toFixed(2),
+            currency: main.currency,
+            convertedAmount: applyConversion(
+              main.amount,
+              main.currency,
+              pricing.baseCurrency,
+              pricing.rates
+            ),
+            baseCurrency: pricing.baseCurrency,
+          }
         : null,
     mainCatalogPriceStale,
+    mainCatalogPriceUncertain: headline.uncertain,
     actsAsVariant: childIsVariant(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
   };
@@ -227,6 +308,10 @@ function toIssueData(issue: {
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
       subtype: { actsAsVariant: boolean } | null;
+      variants: {
+        actsAsVariantOverride: boolean | null;
+        subtype: { actsAsVariant: boolean } | null;
+      }[];
     };
   }[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
@@ -396,20 +481,16 @@ const ISSUE_LIST_SELECT = {
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
   members: {
     select: {
+      stampId: true,
       requiredForCompleteness: true,
       stamp: {
         select: {
           // Member catalog numbers drive the declared-range coverage check.
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
-          catalogPrices: {
-            select: {
-              price: true,
-              currency: true,
-              conditionId: true,
-              certificateStatusId: true,
-              catalogEdition: { select: { year: true, catalogNameId: true } },
-            },
-          },
+          catalogPrices: { select: HEADLINE_PRICE_SELECT },
+          // Children's variant flags decide whether a required member is an unknown-variant
+          // umbrella whose headline price rolls up from its lowest variant child (#238).
+          variants: { select: VARIANT_FLAG_SELECT },
           // Only the main photo represents the stamp on the issue-level gallery (#137).
           photos: { where: { role: "main" }, select: PHOTO_SUMMARY_SELECT },
         },
@@ -426,54 +507,79 @@ const ISSUE_LIST_SELECT = {
  * `convertedAmount` is left null for the caller to fill after fetching rates.
  */
 function computeRequiredPriceTotal(
-  requiredMembers: { stamp: { catalogPrices: RawCatalogPrice[] } }[],
+  requiredMembers: {
+    stampId: string;
+    stamp: {
+      catalogPrices: RawCatalogPrice[];
+      variants: {
+        actsAsVariantOverride: boolean | null;
+        subtype: { actsAsVariant: boolean } | null;
+      }[];
+    };
+  }[],
   primaryNameId: string | null,
   baseCurrency: string,
   latestYearByName: Map<string, number>,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  rates: Map<string, number | null>,
+  variantPricesByStamp: Map<string, RawCatalogPrice[][]>
 ): IssuePriceTotal | null {
   let sumCurrent = 0;
   let currentCount = 0;
+  let estimatedCurrent = 0;
   let sumOlder = 0;
   let olderCount = 0;
+  let estimatedOlder = 0;
   let currency: string | null = null;
   for (const m of requiredMembers) {
-    const main = pickMainCatalogPrice(m.stamp.catalogPrices, primaryNameId, displayConditionId);
+    // Each required member's headline price applies the unknown-variant rollup (#238): an
+    // umbrella with no own price contributes its lowest variant child's price instead.
+    const { picked: main, uncertain } = pickHeadlineCatalogPrice({
+      ownPrices: m.stamp.catalogPrices,
+      variantPrices: variantPricesByStamp.get(m.stampId),
+      isUmbrella: isUnknownVariantStamp(m.stamp),
+      primaryCatalogNameId: primaryNameId,
+      displayConditionId,
+      baseCurrency,
+      rates,
+    });
     if (!main) continue;
     currency = main.currency;
     const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
     if (isOlder) {
       sumOlder += main.amount;
       olderCount += 1;
+      if (uncertain) estimatedOlder += 1;
     } else {
       sumCurrent += main.amount;
       currentCount += 1;
+      if (uncertain) estimatedCurrent += 1;
     }
   }
 
+  const finish = (
+    amount: number,
+    pricedCount: number,
+    usesOlderEdition: boolean,
+    olderEditionExcludedCount: number,
+    estimatedCount: number
+  ): IssuePriceTotal => ({
+    amount: amount.toFixed(2),
+    currency: currency!,
+    convertedAmount: applyConversion(amount, currency!, baseCurrency, rates),
+    baseCurrency,
+    pricedCount,
+    requiredCount: requiredMembers.length,
+    usesOlderEdition,
+    olderEditionExcludedCount,
+    estimatedCount,
+  });
+
   if (currency && currentCount > 0) {
-    return {
-      amount: sumCurrent.toFixed(2),
-      currency,
-      convertedAmount: null,
-      baseCurrency,
-      pricedCount: currentCount,
-      requiredCount: requiredMembers.length,
-      usesOlderEdition: false,
-      olderEditionExcludedCount: olderCount,
-    };
+    return finish(sumCurrent, currentCount, false, olderCount, estimatedCurrent);
   }
   if (currency && olderCount > 0) {
-    return {
-      amount: sumOlder.toFixed(2),
-      currency,
-      convertedAmount: null,
-      baseCurrency,
-      pricedCount: olderCount,
-      requiredCount: requiredMembers.length,
-      usesOlderEdition: true,
-      olderEditionExcludedCount: 0,
-    };
+    return finish(sumOlder, olderCount, true, 0, estimatedOlder);
   }
   return null;
 }
@@ -489,10 +595,15 @@ function toIssueListItem(
     createdAt: Date;
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
     members: {
+      stampId: string;
       requiredForCompleteness: boolean;
       stamp: {
         catalogNumbers: { catalogVendorId: string; number: string }[];
         catalogPrices: RawCatalogPrice[];
+        variants: {
+          actsAsVariantOverride: boolean | null;
+          subtype: { actsAsVariant: boolean } | null;
+        }[];
         photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       };
     }[];
@@ -501,7 +612,9 @@ function toIssueListItem(
   baseCurrency: string,
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
-  vendorAbbrev: ReadonlyMap<string, string>
+  vendorAbbrev: ReadonlyMap<string, string>,
+  rates: Map<string, number | null>,
+  variantPricesByStamp: Map<string, RawCatalogPrice[][]>
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
@@ -516,13 +629,14 @@ function toIssueListItem(
     vendorAbbrev
   );
 
-  // convertedAmount filled after rates are fetched (see buildIssueListItems).
   const requiredPriceTotal = computeRequiredPriceTotal(
     requiredMembers,
     primaryNameId,
     baseCurrency,
     latestYearByName,
-    displayConditionId
+    displayConditionId,
+    rates,
+    variantPricesByStamp
   );
 
   return {
@@ -559,20 +673,40 @@ async function buildIssueListItems(
     }),
   ]);
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
-  const items = issues.map((i) =>
-    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId, vendorAbbrev)
+
+  // Roll umbrella required members up from their variant children (#238): gather those
+  // stamps across the page, load their variant prices, and build one rate map spanning
+  // every currency in play (members' own prices and the variant candidates) so the
+  // lowest-by-base comparison and the base-currency conversion both have their rates.
+  const umbrellaStampIds = issues.flatMap((i) =>
+    i.members
+      .filter((m) => m.requiredForCompleteness && isUnknownVariantStamp(m.stamp))
+      .map((m) => m.stampId)
   );
-  const currencies = items
-    .map((i) => i.requiredPriceTotal?.currency)
-    .filter((c): c is string => !!c);
+  const { variantPricesByStamp, currencies: variantCurrencies } =
+    await loadVariantPricesForUmbrellas(collectionId, umbrellaStampIds);
+  const currencies = [
+    ...issues.flatMap((i) =>
+      i.members
+        .filter((m) => m.requiredForCompleteness)
+        .flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency))
+    ),
+    ...variantCurrencies,
+  ];
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
-  for (const it of items) {
-    const t = it.requiredPriceTotal;
-    if (t) {
-      t.convertedAmount = applyConversion(Number(t.amount), t.currency, baseCurrency, rates);
-    }
-  }
-  return items;
+
+  return issues.map((i) =>
+    toIssueListItem(
+      i,
+      primaryCatalogByArea,
+      baseCurrency,
+      latestYearByName,
+      displayConditionId,
+      vendorAbbrev,
+      rates,
+      variantPricesByStamp
+    )
+  );
 }
 
 function parseNumericCatalog(val: string | null | undefined): number {
@@ -781,7 +915,11 @@ export async function searchIssues(
 export async function listIssueMembers(
   ownerId: string,
   collectionId: string,
-  issueId: string
+  issueId: string,
+  /** Condition whose price fills each member's headline price. Mirrors the issue list's
+   *  price column (#95); when omitted, defaults to the collection's first condition so
+   *  the expanded member rows track the list's condition switcher (#238). */
+  requestedDisplayConditionId?: string | null
 ): Promise<StampNodeData[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -795,22 +933,34 @@ export async function listIssueMembers(
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
     getLatestEditionYearByName(collectionId),
-    resolveDisplayConditionId(collectionId, undefined),
+    resolveDisplayConditionId(collectionId, requestedDisplayConditionId),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
 
-  const nodes = members.map((m) =>
-    toStampNode(m, { primaryNameId, baseCurrency, latestYearByName, displayConditionId })
-  );
-  const currencies = nodes
-    .map((n) => n.mainCatalogPrice?.currency)
-    .filter((c): c is string => !!c);
+  // Umbrella members (unknown-variant base stamps) roll their headline price up from the
+  // lowest variant child, so load those descendant prices and build one rate map covering
+  // every currency in play — members' own prices and the variant candidates (#238).
+  const umbrellaStampIds = members
+    .filter((m) => isUnknownVariantStamp(m.stamp))
+    .map((m) => m.stampId);
+  const { variantPricesByStamp, currencies: variantCurrencies } =
+    await loadVariantPricesForUmbrellas(collectionId, umbrellaStampIds);
+  const currencies = [
+    ...members.flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency)),
+    ...variantCurrencies,
+  ];
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
-  for (const n of nodes) {
-    const mp = n.mainCatalogPrice;
-    if (mp) mp.convertedAmount = applyConversion(Number(mp.amount), mp.currency, baseCurrency, rates);
-  }
-  return nodes;
+
+  return members.map((m) =>
+    toStampNode(m, {
+      primaryNameId,
+      baseCurrency,
+      latestYearByName,
+      displayConditionId,
+      rates,
+      variantPricesByStamp,
+    })
+  );
 }
 
 /** Axes shared by every issue price/average cell so the dialog can lay them out as a matrix. */

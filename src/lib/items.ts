@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
+  buildDescendantMap,
   buildEffectivePrimaryCatalogMap,
   getCollectionBaseCurrency,
   safeRateMap,
@@ -14,7 +15,11 @@ import {
   type HoldingsSummary,
 } from "./valuation";
 import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
-import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import {
+  childIsVariant,
+  isUnknownVariantStamp,
+  VARIANT_FLAG_SELECT,
+} from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
@@ -597,7 +602,7 @@ async function resolveMissingCatalogItemIds(
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
     unknownVariant:
-      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+      isUnknownVariantStamp(row.stamp),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
   return rows.filter((row) => valuations.get(row.id)!.unpriced).map((row) => row.id);
@@ -726,7 +731,7 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
     conditionId: row.condition.id,
     certificateStatusId: row.certificateStatus?.id ?? null,
     unknownVariant:
-      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+      isUnknownVariantStamp(row.stamp),
   };
 }
 
@@ -741,7 +746,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     stampId: row.stampId,
     stampName: row.stamp.name,
     unknownVariant:
-      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+      isUnknownVariantStamp(row.stamp),
     hasHistory: row._count.variantHistory > 0,
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,
@@ -1259,49 +1264,6 @@ const VALUATION_PRICE_SELECT = {
   catalogEdition: { select: { year: true, catalogNameId: true } },
 } as const;
 
-/** For each ancestor stamp id, the set of all descendant stamp ids (children,
- * grandchildren, …), so unknown-variant valuation can gather every child's prices.
- * Empty when no ancestors.
- *
- * Scoped to the subtrees under `ancestorIds` via a recursive CTE rather than a flat
- * read of the whole collection, so the cost scales with the descendants actually
- * valued, not the size of the collection (#171). */
-async function buildDescendantMap(
-  collectionId: string,
-  ancestorIds: Set<string>
-): Promise<Map<string, Set<string>>> {
-  const result = new Map<string, Set<string>>();
-  if (ancestorIds.size === 0) return result;
-
-  // Walk each root's subtree, carrying the originating root id down every edge so a
-  // single CTE resolves all ancestors at once. `collectionId` guards the tenancy
-  // boundary; the parentId join keeps the walk inside it regardless.
-  const rows = await prisma.$queryRaw<Array<{ root: string; id: string }>>`
-    WITH RECURSIVE subtree AS (
-      SELECT s."id" AS root, s."id" AS id
-      FROM "stamp" s
-      WHERE s."id" IN (${Prisma.join([...ancestorIds])})
-        AND s."collectionId" = ${collectionId}
-      UNION ALL
-      SELECT st.root, c."id"
-      FROM "stamp" c
-      JOIN subtree st ON c."parentId" = st.id
-      WHERE c."collectionId" = ${collectionId}
-    )
-    SELECT root, id FROM subtree WHERE id <> root
-  `;
-
-  for (const { root, id } of rows) {
-    let set = result.get(root);
-    if (!set) {
-      set = new Set<string>();
-      result.set(root, set);
-    }
-    set.add(id);
-  }
-  return result;
-}
-
 /** Value a set of copies. Loads the stamp prices, area primary catalogs, descendant
  * variant prices, and currency rates once, then applies the pure `valuateCopy` rule.
  * Caller must have already asserted collection ownership. Returns id → valuation. */
@@ -1412,7 +1374,7 @@ export async function valuateItemsByIds(
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
     unknownVariant:
-      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+      isUnknownVariantStamp(row.stamp),
   }));
   return valuateItemRows(collectionId, valuationRows);
 }
@@ -1456,7 +1418,7 @@ export async function getHoldingsValuation(
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
     unknownVariant:
-      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+      isUnknownVariantStamp(row.stamp),
   }));
 
   // Actual purchase cost-basis over the same filtered set (#134). Snapshots are frozen in

@@ -156,7 +156,9 @@ If the collection has no conditions yet, the Prices tab prompts you to add some 
 
 ### Which price the lists show
 
-The item list and the issues list each show a **single price column**. Because a stamp now has many prices, a **"Price for …" selector** above the list chooses which **condition** the column reflects (certificate status = None). Your choice is remembered per collection in your browser; the default is the first condition in your list.
+The item list and the issues list each show a **single price column**. Because a stamp now has many prices, a **"Price for …" selector** above the list chooses which **condition** the column reflects (certificate status = None). Your choice is remembered per collection in your browser; the default is the first condition in your list. On the issues list the selector also drives the prices shown for each stamp when you **expand an issue** — switching the condition updates both the issue totals and the individual member-stamp prices.
+
+**Unknown-variant stamps roll their price up from their variants.** A stamp that has variant children (an "unknown variant" umbrella — see [Inventory → unknown variant](inventory.md)) but no price of its own borrows the **lowest** price among its variant children (compared in the collection currency), exactly like a copy's catalog value does. Such a rolled-up price is shown as an estimate — prefixed with **~** and set in muted italics — because it is inferred rather than recorded. This applies at any depth of the variant tree. The estimate also feeds the **issue total**: when the total includes one or more rolled-up members it carries a **~** marker (hover it to see how many stamps were estimated). A stamp that has its own recorded price always uses that price and is never an estimate.
 
 ### The price details dialog
 

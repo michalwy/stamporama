@@ -467,6 +467,7 @@ export function IssuesListPanel({
                   onFilterByArea={handleNavigateFilter}
                   callbacks={callbacks}
                   defaultExpanded={issue.id === autoExpandIssueId}
+                  displayConditionId={displayConditionId || undefined}
                 />
               );
             })}

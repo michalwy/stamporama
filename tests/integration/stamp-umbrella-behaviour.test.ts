@@ -144,6 +144,28 @@ describe("unknown-variant umbrella keys off effective actsAsVariant", () => {
     await addChild(base, "2a", variantSubtypeId, false);
     assert.equal(await baseStampUmbrella(base), false);
   });
+
+  it("intermediate node with variant children → umbrella at any depth (#239)", async () => {
+    // 3 → 3A → {3Aa, 3Ab}. A copy on the intermediate 3A (its specific sub-variant
+    // unknown) must be treated as an umbrella just like a top-level base stamp.
+    const base = await prisma.stamp.create({ data: { collectionId, name: "3" } });
+    await addAreaLink(base.id);
+    const mid = await addChild(base.id, "3A", variantSubtypeId);
+    await addChild(mid, "3Aa", variantSubtypeId);
+    await addChild(mid, "3Ab", variantSubtypeId);
+    // Copy points at the intermediate node, not the top-level base.
+    await createItem(userId, collectionId, { stampId: mid, conditionId });
+    assert.equal(await baseStampUmbrella(mid), true);
+  });
+
+  it("intermediate leaf variant (no children) → NOT an umbrella (#239)", async () => {
+    const base = await prisma.stamp.create({ data: { collectionId, name: "4" } });
+    await addAreaLink(base.id);
+    const mid = await addChild(base.id, "4A", variantSubtypeId);
+    const leaf = await addChild(mid, "4Aa", variantSubtypeId);
+    await createItem(userId, collectionId, { stampId: leaf, conditionId });
+    assert.equal(await baseStampUmbrella(leaf), false);
+  });
 });
 
 describe("lowest-child valuation is over variant-kind children only", () => {

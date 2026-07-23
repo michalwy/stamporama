@@ -22,6 +22,9 @@ export interface IssuePriceTotal extends MoneyDisplay {
   usesOlderEdition: boolean;
   // Required members priced only on an older edition, excluded from a current-edition sum.
   olderEditionExcludedCount: number;
+  // Counted members whose price was rolled up from the lowest variant child because they
+  // are unknown-variant umbrellas with no own price (#238) — the total is then an estimate.
+  estimatedCount: number;
 }
 
 /** Raw catalog price shape needed to pick the main-catalog price. */
@@ -82,6 +85,60 @@ export function pickMainCatalogPrice(
   displayConditionId: string | null
 ): PickedPrice | null {
   return pickCatalogPriceFor(prices, primaryCatalogNameId, displayConditionId, null);
+}
+
+/** The candidate with the lowest base-currency value. Unconvertible candidates (no rate)
+ * cannot be compared, so they are skipped; if every candidate is unconvertible the first is
+ * returned (amount known, base value unknown). Null when there are no candidates. Shared by
+ * the copy valuation (unknown-variant rule) and the issue-list headline rollup. */
+export function pickLowestByBase(
+  candidates: PickedPrice[],
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): PickedPrice | null {
+  if (candidates.length === 0) return null;
+  let best: PickedPrice | null = null;
+  let bestBase: number | null = null;
+  for (const c of candidates) {
+    const bv = baseValueOf(c.amount, c.currency, baseCurrency, rates);
+    if (bv === null) continue;
+    if (bestBase === null || bv < bestBase) {
+      best = c;
+      bestBase = bv;
+    }
+  }
+  return best ?? candidates[0];
+}
+
+/**
+ * Headline catalog price for a stamp, applying the unknown-variant rule (ADR-0007 §7) to
+ * the primary catalog at the display condition (certificate = none): the stamp's own price
+ * when it has one, otherwise — when it is an unknown-variant umbrella — the **lowest**
+ * descendant-variant price compared in the base currency (#238). `uncertain` is true only
+ * when the value was rolled up from a variant (the stamp has no own price of its own); an
+ * umbrella that carries its own recorded price is a definite figure and stays certain.
+ * Non-umbrella stamps never roll up.
+ */
+export function pickHeadlineCatalogPrice(input: {
+  ownPrices: RawCatalogPrice[];
+  /** Per variant-child descendant: that variant's prices. Only consulted for an umbrella
+   *  with no own price. Each inner array is one descendant variant. */
+  variantPrices?: RawCatalogPrice[][];
+  isUmbrella: boolean;
+  primaryCatalogNameId: string | null;
+  displayConditionId: string | null;
+  baseCurrency: string;
+  rates: Map<string, number | null>;
+}): { picked: PickedPrice | null; uncertain: boolean } {
+  const pick = (prices: RawCatalogPrice[]) =>
+    pickMainCatalogPrice(prices, input.primaryCatalogNameId, input.displayConditionId);
+  const own = pick(input.ownPrices);
+  if (own || !input.isUmbrella) return { picked: own, uncertain: false };
+  const candidates = (input.variantPrices ?? [])
+    .map(pick)
+    .filter((p): p is PickedPrice => p !== null);
+  const lowest = pickLowestByBase(candidates, input.baseCurrency, input.rates);
+  return { picked: lowest, uncertain: lowest !== null };
 }
 
 /**

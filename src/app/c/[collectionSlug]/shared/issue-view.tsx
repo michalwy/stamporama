@@ -221,10 +221,31 @@ export function StampDetailLine({
       {node.mainCatalogPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
           {node.mainCatalogPriceStale && <StalePriceIcon />}
+          {node.mainCatalogPriceUncertain && (
+            <Tooltip
+              align="end"
+              content="Estimated from the lowest variant's price — this stamp has no price of its own."
+            >
+              <span
+                aria-label="Estimated from lowest variant"
+                style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
+              >
+                ~
+              </span>
+            </Tooltip>
+          )}
           {moneySecondaryText(node.mainCatalogPrice) && (
             <span style={PRICE_CONVERTED}>{moneySecondaryText(node.mainCatalogPrice)}</span>
           )}
-          <span style={PRICE_MAIN}>{moneyPrimaryText(node.mainCatalogPrice)}</span>
+          <span
+            style={
+              node.mainCatalogPriceUncertain
+                ? { ...PRICE_MAIN, color: "var(--color-text-muted)", fontStyle: "italic" }
+                : PRICE_MAIN
+            }
+          >
+            {moneyPrimaryText(node.mainCatalogPrice)}
+          </span>
         </span>
       )}
     </div>

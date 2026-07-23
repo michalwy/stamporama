@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 
@@ -8,6 +9,8 @@ import { getOrFetchRate } from "./exchange-rates";
 export {
   pickMainCatalogPrice,
   pickCatalogPriceFor,
+  pickHeadlineCatalogPrice,
+  pickLowestByBase,
   baseValueOf,
   averageOf,
   applyConversion,
@@ -107,6 +110,51 @@ export async function resolveDisplayConditionId(
     select: { id: true },
   });
   return first?.id ?? null;
+}
+
+/**
+ * For each ancestor stamp id, the set of all descendant stamp ids (children,
+ * grandchildren, …), so unknown-variant valuation and the issue-list headline rollup can
+ * gather every child's prices. Empty when no ancestors.
+ *
+ * Scoped to the subtrees under `ancestorIds` via a recursive CTE rather than a flat read
+ * of the whole collection, so the cost scales with the descendants actually needed, not
+ * the size of the collection (#171).
+ */
+export async function buildDescendantMap(
+  collectionId: string,
+  ancestorIds: Set<string>
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  if (ancestorIds.size === 0) return result;
+
+  // Walk each root's subtree, carrying the originating root id down every edge so a
+  // single CTE resolves all ancestors at once. `collectionId` guards the tenancy
+  // boundary; the parentId join keeps the walk inside it regardless.
+  const rows = await prisma.$queryRaw<Array<{ root: string; id: string }>>`
+    WITH RECURSIVE subtree AS (
+      SELECT s."id" AS root, s."id" AS id
+      FROM "stamp" s
+      WHERE s."id" IN (${Prisma.join([...ancestorIds])})
+        AND s."collectionId" = ${collectionId}
+      UNION ALL
+      SELECT st.root, c."id"
+      FROM "stamp" c
+      JOIN subtree st ON c."parentId" = st.id
+      WHERE c."collectionId" = ${collectionId}
+    )
+    SELECT root, id FROM subtree WHERE id <> root
+  `;
+
+  for (const { root, id } of rows) {
+    let set = result.get(root);
+    if (!set) {
+      set = new Set<string>();
+      result.set(root, set);
+    }
+    set.add(id);
+  }
+  return result;
 }
 
 /** Collection base currency (small dedicated query for list endpoints). */
