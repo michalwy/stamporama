@@ -8,6 +8,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { PurchaseContactSelect } from "./purchase-contact-select";
 
@@ -163,12 +164,9 @@ export function PurchaseFormDialog({
           {/* Shipping (a shared cost of the whole order, spread across its lines) */}
           <div>
             <LabelWithError htmlFor="purchase-shipping">Shipping / shared cost</LabelWithError>
-            <input
+            <NumericInput
               id="purchase-shipping"
               name="shippingCost"
-              type="number"
-              min="0"
-              step="0.01"
               placeholder="0.00"
               defaultValue={purchase?.shippingCost ?? ""}
               disabled={isPending}

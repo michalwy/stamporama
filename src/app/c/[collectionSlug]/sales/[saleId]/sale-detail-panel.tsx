@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -538,10 +539,7 @@ function EditableAmountRow({
       <div style={ROW_LABEL}>{label}</div>
       <div style={ORIG_CELL}>
         {editing ? (
-          <input
-            type="number"
-            min="0"
-            step="0.01"
+          <NumericInput
             placeholder="0.00"
             autoFocus
             value={draft}
@@ -651,10 +649,7 @@ function EditableShippingRow({
       <div style={ORIG_CELL}>
         {editing ? (
           <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
+            <NumericInput
               placeholder="0.00"
               autoFocus
               value={draftAmount}

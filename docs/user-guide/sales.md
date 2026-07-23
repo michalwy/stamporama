@@ -26,6 +26,9 @@ Click **Record sale** and fill in:
 - **Currency** — fixed by the platform and shown locked; every amount on the sale is in it. The
   first time you sell (or list) on a platform that has no currency yet, you pick one inline and it
   is saved to the platform.
+Every amount field accepts either a comma or a period as the decimal separator — type `12,50` or
+`12.50`, whichever your keyboard gives you.
+
 - **Buyer handling** and **Commission** — the amounts you know at sale time: the postage/handling
   the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**). Your own
   shipping cost is added later on the detail screen.

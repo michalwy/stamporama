@@ -28,6 +28,9 @@ describe("parsePrice", () => {
     assert.deepEqual(parsePrice("  3.5 "), { ok: true, value: "3.50" });
     assert.deepEqual(parsePrice("0"), { ok: true, value: "0.00" });
   });
+  it("accepts a comma decimal separator (#233)", () => {
+    assert.deepEqual(parsePrice("3,5"), { ok: true, value: "3.50" });
+  });
   it("rejects blank, non-numeric, and negative", () => {
     assert.equal(parsePrice("").ok, false);
     assert.equal(parsePrice("abc").ok, false);
@@ -44,6 +47,7 @@ describe("parseAmount", () => {
   });
   it("normalises a valid amount to 2 dp", () => {
     assert.deepEqual(parseAmount("2.5", "Shipping"), { ok: true, value: "2.50" });
+    assert.deepEqual(parseAmount("2,5", "Shipping"), { ok: true, value: "2.50" });
   });
   it("rejects non-numeric and negative with a labelled message", () => {
     const bad = parseAmount("-1", "Shipping");

@@ -10,6 +10,7 @@ import {
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { OfferDetail } from "@/lib/offers";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -162,12 +163,9 @@ export function OfferFormDialog({
             {showPriceField && (
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="offer-price">Asking price</LabelWithError>
-                <input
+                <NumericInput
                   id="offer-price"
                   name="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
                   placeholder="0.00"
                   disabled={isPending}
                   style={INPUT_STYLE}

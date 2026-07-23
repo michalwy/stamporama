@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
 import type { CatalogVendorData } from "@/lib/catalog";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampConditionData } from "@/lib/conditions";
@@ -20,7 +22,7 @@ const CELL_INPUT: React.CSSProperties = {
 };
 
 export function formatPrice(value: string): string {
-  const trimmed = value.trim();
+  const trimmed = normalizeDecimalInput(value.trim());
   if (trimmed === "") return "";
   const n = Number(trimmed);
   if (Number.isNaN(n)) return trimmed;
@@ -245,9 +247,7 @@ export function StampCatalogPricesTab({
                       if (isNewest) {
                         return (
                           <td key={col.id ?? "none"} style={tdCellStyle}>
-                            <input
-                              type="text"
-                              inputMode="decimal"
+                            <NumericInput
                               value={price}
                               onChange={(e) => onPriceChange(key, e.target.value)}
                               onBlur={(e) => onPriceChange(key, formatPrice(e.target.value))}

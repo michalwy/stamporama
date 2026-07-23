@@ -3,6 +3,8 @@
 // small validation helpers, so they can be unit-tested without a DB and reused verbatim by the
 // server domain module (`offers.ts`). No side effects.
 
+import { normalizeDecimalInput } from "./decimal-input";
+
 export type OfferState = "preparing" | "active" | "paused" | "sold" | "withdrawn";
 
 export const OFFER_STATES: readonly OfferState[] = [
@@ -79,7 +81,7 @@ export const OFFER_STATE_LABEL: Record<OfferState, string> = {
 /** Validate and normalise a user-entered asking price. Returns the 2-dp string on success or a
  * human-readable message on failure. Empty / non-numeric / negative are rejected. */
 export function parsePrice(raw: string): { ok: true; value: string } | { ok: false; message: string } {
-  const trimmed = raw.trim();
+  const trimmed = normalizeDecimalInput(raw.trim());
   if (!trimmed) return { ok: false, message: "Enter an asking price." };
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: "Asking price must be a number." };

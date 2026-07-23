@@ -27,6 +27,7 @@ import {
   type LotBulkScope,
 } from "@/lib/lots";
 import { parsePhotoChangeSet } from "@/lib/photos";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type PurchaseActionState =
   | { status: "idle" }
@@ -78,7 +79,7 @@ function parseDisposition(formData: FormData): {
 /** A price string → number in whole cents precision, or `null` when blank/invalid. */
 function parseMoney(raw: string): number | null {
   if (!raw) return null;
-  const n = Number(raw);
+  const n = Number(normalizeDecimalInput(raw));
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100) / 100;
 }

@@ -19,6 +19,9 @@ On the purchases screen a purchase is just its **header**:
 - a **shipping / shared cost** (spread across the order's lines by price),
 - a **delivery status** (*Preparing*, *In transit*, or *Arrived*).
 
+Every amount field — shipping, lot prices, expense prices — accepts either a comma or a period as
+the decimal separator, so `12,50` and `12.50` are both fine.
+
 The order's line items are managed separately, during **lot intake**:
 
 - **Lots** — the *inventory* lines. A lot is a priced parcel — a single stamp, a whole

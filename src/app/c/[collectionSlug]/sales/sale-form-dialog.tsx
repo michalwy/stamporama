@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -304,11 +305,8 @@ export function SaleFormDialog({
               </div>
               {handlingMode === "direct" ? (
                 <>
-                  <input
+                  <NumericInput
                     id="sale-handling"
-                    type="number"
-                    min="0"
-                    step="0.01"
                     placeholder="0.00"
                     value={buyerHandling}
                     onChange={(e) => setBuyerHandling(e.target.value)}
@@ -321,11 +319,8 @@ export function SaleFormDialog({
                 </>
               ) : (
                 <>
-                  <input
+                  <NumericInput
                     id="sale-total-paid"
-                    type="number"
-                    min="0"
-                    step="0.01"
                     placeholder="0.00"
                     value={totalPaid}
                     onChange={(e) => setTotalPaid(e.target.value)}
@@ -356,11 +351,8 @@ export function SaleFormDialog({
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-commission">Commission</LabelWithError>
-              <input
+              <NumericInput
                 id="sale-commission"
-                type="number"
-                min="0"
-                step="0.01"
                 placeholder="0.00"
                 value={commission}
                 onChange={(e) => setCommission(e.target.value)}

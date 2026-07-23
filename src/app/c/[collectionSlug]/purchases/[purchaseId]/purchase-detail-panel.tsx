@@ -19,6 +19,7 @@ import {
 } from "@/app/dialog-shell";
 import { type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
@@ -2326,12 +2327,9 @@ function LotDialog({
             </p>
           </div>
           <LabelWithError htmlFor="lot-price">Lot price</LabelWithError>
-          <input
+          <NumericInput
             id="lot-price"
             name="price"
-            type="number"
-            step="0.01"
-            min="0"
             required
             defaultValue={initialPrice ?? ""}
             disabled={isPending}

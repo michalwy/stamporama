@@ -9,6 +9,7 @@ import {
   DialogSecondaryButton,
   ErrorBubble,
 } from "@/app/dialog-shell";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
 import type { QuickCatalogPriceContext } from "@/lib/stamps";
@@ -304,13 +305,10 @@ export function QuickPriceDialog({
                         {c.vendorAbbreviation} · {c.editionYear} · {c.currency}
                       </span>
                     </label>
-                    <input
+                    <NumericInput
                       id={`quick-price-${c.catalogNameId}`}
                       ref={c.isPrimary ? primaryInputRef : undefined}
                       name={`amount-${c.catalogNameId}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
                       value={amounts[c.catalogNameId] ?? ""}
                       onChange={(e) =>
                         setAmounts((prev) => ({ ...prev, [c.catalogNameId]: e.target.value }))

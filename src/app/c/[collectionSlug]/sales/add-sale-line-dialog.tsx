@@ -17,6 +17,7 @@ import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
@@ -658,7 +659,7 @@ function SetPickRow({
           </span>
         ) : checked ? (
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
-            <input type="number" min="0" step="0.01" placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
+            <NumericInput placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />
             <span style={{ fontSize: "0.75rem", color: MUTED }}>{currency}</span>
           </div>
         ) : (

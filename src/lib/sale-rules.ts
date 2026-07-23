@@ -5,6 +5,7 @@
 // unit-tested without a DB. No side effects.
 
 import type { OfferState } from "./offer-rules";
+import { normalizeDecimalInput } from "./decimal-input";
 
 /** Offer states a sale can be recorded against: an offer must still be live (`active`) or merely
  * `paused` on the platform — a `sold` offer is already spent and a `withdrawn` one was taken
@@ -20,7 +21,7 @@ export function isSellableOfferState(state: OfferState): boolean {
 export function parsePrice(
   raw: string
 ): { ok: true; value: string } | { ok: false; message: string } {
-  const trimmed = raw.trim();
+  const trimmed = normalizeDecimalInput(raw.trim());
   if (!trimmed) return { ok: false, message: "Enter a sale price." };
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: "Sale price must be a number." };
@@ -35,7 +36,7 @@ export function parseAmount(
   raw: string,
   label: string
 ): { ok: true; value: string | null } | { ok: false; message: string } {
-  const trimmed = raw.trim();
+  const trimmed = normalizeDecimalInput(raw.trim());
   if (!trimmed) return { ok: true, value: null };
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: `${label} must be a number.` };

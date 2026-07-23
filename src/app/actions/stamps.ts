@@ -33,6 +33,7 @@ import type {
   StampPriceDetails,
 } from "@/lib/stamps";
 import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type StampActionState =
   | { status: "idle" }
@@ -87,7 +88,7 @@ export async function quickSetCatalogPricesAction(
   const parsed: Array<{ catalogNameId: string; amount: number }> = [];
   for (const e of entries) {
     if (!e.amount.trim()) continue;
-    const n = Number(e.amount);
+    const n = Number(normalizeDecimalInput(e.amount));
     if (!Number.isFinite(n) || n < 0) {
       return { status: "error", message: "Enter a valid non-negative amount." };
     }
@@ -124,7 +125,7 @@ function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
       .slice("catalogPrice_".length)
       .split("~");
     if (!catalogEditionId || !conditionId) continue;
-    const price = (value as string).trim();
+    const price = normalizeDecimalInput((value as string).trim());
     if (!price) continue;
     const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
     if (!currency) continue;
