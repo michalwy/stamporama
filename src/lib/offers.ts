@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "./db";
 import { listItemsPaginated, valuateItemsByIds, type ItemListItem } from "./items";
-import { getOrFetchRate } from "./exchange-rates";
+import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
+import type { BaseCurrency } from "./currencies";
 import {
   type OfferState,
   isOfferState,
@@ -47,14 +48,15 @@ export class OfferActionBlockedError extends Error {
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
-async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
+async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<{ baseCurrency: string }> {
   const col = await prisma.collection.findUnique({
     where: { id: collectionId },
-    select: { ownerId: true },
+    select: { ownerId: true, baseCurrency: true },
   });
   if (!col || col.ownerId !== ownerId) {
     throw new Error("Collection not found or access denied.");
   }
+  return { baseCurrency: col.baseCurrency };
 }
 
 interface OfferRef {
@@ -289,6 +291,11 @@ export interface OfferListItem {
   url: string | null;
   price: string;
   currency: string;
+  /** The collection base currency, so the row can label `priceBase` (#208). */
+  baseCurrency: string;
+  /** Asking price converted to the base currency at the current rate (#208), or null when the offer
+   * is already in the base currency, has no price yet, or no rate is known. */
+  priceBase: string | null;
   state: OfferState;
   /** How many sellable sets the offer holds (its "quantity"). */
   setCount: number;
@@ -325,7 +332,7 @@ type OfferRow = {
   sets: OfferSetRow[];
 };
 
-function toListItem(row: OfferRow, soldCopyCount = 0): OfferListItem {
+function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): OfferListItem {
   return {
     id: row.id,
     label: offerLabel(row.sets),
@@ -334,6 +341,8 @@ function toListItem(row: OfferRow, soldCopyCount = 0): OfferListItem {
     url: row.url,
     price: String(row.price),
     currency: row.currency,
+    baseCurrency,
+    priceBase: null, // filled by attachBasePrices (needs the current rate)
     state: (isOfferState(row.state) ? row.state : "active") as OfferState,
     setCount: row.sets.length,
     itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
@@ -343,11 +352,42 @@ function toListItem(row: OfferRow, soldCopyCount = 0): OfferListItem {
   };
 }
 
+/** Fill each item's `priceBase` with its asking price converted to the base currency at the current
+ * rate (#208). Distinct currencies are fetched in one batch. Best-effort: a rate lookup failure (no
+ * cache, offline) leaves `priceBase` null rather than breaking the list. */
+async function attachBasePrices(
+  collectionId: string,
+  baseCurrency: string,
+  items: OfferListItem[]
+): Promise<void> {
+  const currencies = [...new Set(items.map((i) => i.currency).filter((c) => c !== baseCurrency))];
+  if (currencies.length === 0) return;
+  let rates: Map<string, { rate: number }>;
+  try {
+    rates = await getOrFetchRates(collectionId, baseCurrency as BaseCurrency, currencies);
+  } catch {
+    return;
+  }
+  for (const it of items) {
+    if (it.currency === baseCurrency) continue;
+    const r = rates.get(it.currency);
+    const p = Number(it.price);
+    if (!r || !(p > 0)) continue;
+    it.priceBase = (p * r.rate).toFixed(2);
+  }
+}
+
 /** Enrich a fetched page of offer rows with their derived "needs action" counts in one batched
- * query (only `active` offers can need action). */
-async function withNeedsAction(rows: OfferRow[]): Promise<OfferListItem[]> {
+ * query (only `active` offers can need action), then their base-currency prices (#208). */
+async function withNeedsAction(
+  rows: OfferRow[],
+  collectionId: string,
+  baseCurrency: string
+): Promise<OfferListItem[]> {
   const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, sets: r.sets })));
-  return rows.map((r) => toListItem(r, counts.get(r.id) ?? 0));
+  const items = rows.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
+  await attachBasePrices(collectionId, baseCurrency, items);
+  return items;
 }
 
 export interface OfferListFilters {
@@ -372,7 +412,7 @@ export async function listOffersPaginated(
   collectionId: string,
   filters: OfferListFilters = {}
 ): Promise<PaginatedOffersResult> {
-  await assertCollectionOwner(ownerId, collectionId);
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
 
@@ -389,8 +429,10 @@ export async function listOffersPaginated(
     const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, sets: r.sets })));
     const flagged = rows.filter((r) => counts.has(r.id));
     const page = flagged.slice(offset, offset + pageSize);
+    const items = page.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
+    await attachBasePrices(collectionId, baseCurrency, items);
     return {
-      items: page.map((r) => toListItem(r, counts.get(r.id) ?? 0)),
+      items,
       nextCursor: flagged.length > offset + pageSize ? String(offset + pageSize) : null,
     };
   }
@@ -410,7 +452,7 @@ export async function listOffersPaginated(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   return {
-    items: await withNeedsAction(page),
+    items: await withNeedsAction(page, collectionId, baseCurrency),
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
 }
@@ -452,6 +494,11 @@ export interface OfferDetail {
   url: string | null;
   price: string;
   currency: string;
+  /** The collection base currency, to label `priceBase` (#208). */
+  baseCurrency: string;
+  /** Asking price converted to the base currency at the current rate (#208), or null when already in
+   * the base currency, unpriced, or no rate is known. */
+  priceBase: string | null;
   state: OfferState;
   needsAction: boolean;
   /** Derived suggested asking price **in the offer's currency**: the average catalog value per set
@@ -557,6 +604,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     }
   }
 
+  // Asking price converted to base at the current rate (#208). Skipped when already in base or
+  // unpriced; a missing rate leaves it null.
+  const priceNum = Number(offer.price);
+  let priceBase: string | null = null;
+  if (offer.currency !== baseCurrency && priceNum > 0) {
+    try {
+      const { rate } = await getOrFetchRate(offer.collectionId, offer.currency, baseCurrency);
+      priceBase = (priceNum * rate).toFixed(2);
+    } catch {
+      priceBase = null;
+    }
+  }
+
   return {
     id: offer.id,
     collectionId: offer.collectionId,
@@ -566,6 +626,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     url: offer.url,
     price: String(offer.price),
     currency: offer.currency,
+    baseCurrency,
+    priceBase,
     state,
     needsAction: sets.some((s) => s.needsAction),
     suggestedPrice,

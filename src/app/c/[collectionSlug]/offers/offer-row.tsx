@@ -155,7 +155,14 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
             {offer.price === "0.00" ? (
               <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>No price yet</span>
             ) : (
-              <>{offer.price} {offer.currency}</>
+              <>
+                {offer.price} {offer.currency}
+                {offer.priceBase && (
+                  <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                    ≈ {offer.priceBase} {offer.baseCurrency}
+                  </span>
+                )}
+              </>
             )}
           </span>
         </div>

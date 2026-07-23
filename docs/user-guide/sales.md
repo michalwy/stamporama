@@ -66,6 +66,11 @@ plus **buyer handling** (+) when you entered it directly — is **editable in pl
 pencil (✎) can be clicked to edit. Click the value (or **Set** when empty), type the amount, and
 press Enter (Escape reverts).
 
+When the sale's currency differs from your base currency, each amount also shows a base-currency
+equivalent (**≈ 200 PLN**) beside it — gross, buyer handling/total, commission, and each sold unit's
+price — converted at the sale's **frozen** rate. The net proceeds are already shown in the base
+currency, and the sale list shows each sale's net in base too.
+
 **My shipping can be in any currency.** Postage is often paid in your own currency, not the
 marketplace's, so the shipping row has its own currency selector (defaulting to the sale currency).
 Whatever currency you pick, the cost is converted **straight to your base currency** at the rate on

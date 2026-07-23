@@ -615,6 +615,11 @@ function SoldUnitCard({
         <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <div style={{ fontSize: "0.875rem", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)" }}>
             {line.price} {currency}
+            {line.priceBase && (
+              <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                ≈ {line.priceBase} {ctx.baseCurrency}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             net {line.netBase} {ctx.baseCurrency}

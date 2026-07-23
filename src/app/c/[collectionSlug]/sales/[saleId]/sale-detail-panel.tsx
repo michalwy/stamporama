@@ -98,6 +98,14 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
 
   const soldDate = formatDate(sale.soldAt);
 
+  // Base-currency equivalents for the sale-currency amounts (#208), at the sale's frozen rate. Only
+  // shown when the sale currency differs from base and a rate is known; shipping (already base, #206)
+  // and net (a base figure, #206) carry their own base display.
+  const saleRate = sale.fxRateToBase == null ? null : Number(sale.fxRateToBase);
+  const showBase = sale.currency !== sale.baseCurrency && saleRate != null;
+  const toBase = (amt: string | null): string | null =>
+    showBase && amt != null && amt !== "" ? (Number(amt) * (saleRate as number)).toFixed(2) : null;
+
   /** Run a mutation, then refresh the server component and the client caches (the sellable-offers
    * picker is a client query, so a server refresh alone won't reflect line/offer changes). */
   function run(
@@ -185,12 +193,25 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           padding: "1rem 1.25rem",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-          <AmountLine label="Gross proceeds">
-            <span style={READONLY_VALUE_STYLE}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto auto",
+            columnGap: "1.25rem",
+            rowGap: "0.125rem",
+            alignItems: "center",
+            fontSize: "0.8125rem",
+          }}
+        >
+          {/* Gross (read-only) */}
+          <div style={ROW_LABEL}>Gross proceeds</div>
+          <div style={ORIG_CELL}>
+            <span style={{ paddingRight: VALUE_INSET }}>
               {sale.grossProceeds} {sale.currency}
             </span>
-          </AmountLine>
+          </div>
+          <div style={BASE_CELL}>{baseEqText(toBase(sale.grossProceeds), sale.baseCurrency)}</div>
+
           {sale.buyerPaidTotal != null ? (
             // Total-anchored (#205): the buyer-paid total is the editable anchor and handling is
             // derived (total − gross), shown read-only and recomputed as sold units change.
@@ -199,6 +220,8 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
                 label="Total paid by buyer"
                 value={sale.buyerPaidTotal}
                 currency={sale.currency}
+                baseEquivalent={toBase(sale.buyerPaidTotal)}
+                baseCurrency={sale.baseCurrency}
                 disabled={isPending}
                 onSave={(next) =>
                   run(async () => {
@@ -207,13 +230,16 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
                   })
                 }
               />
-              <AmountLine label="+ Buyer handling">
-                <span style={READONLY_VALUE_STYLE} title="Derived from the total paid minus the offer prices">
+              {/* Derived handling (read-only) */}
+              <div style={ROW_LABEL}>+ Buyer handling</div>
+              <div style={ORIG_CELL} title="Derived from the total paid minus the offer prices">
+                <span style={{ paddingRight: VALUE_INSET }}>
                   {sale.buyerHandling} {sale.currency}
                 </span>
-              </AmountLine>
+              </div>
+              <div style={BASE_CELL}>{baseEqText(toBase(sale.buyerHandling), sale.baseCurrency)}</div>
               {sale.totalBelowGross && (
-                <p style={{ margin: "0.125rem 0 0.25rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
+                <p style={{ gridColumn: "1 / -1", margin: "0.125rem 0 0.25rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
                   Total paid is below the offer prices ({sale.grossProceeds} {sale.currency}). Handling
                   is held at 0 — raise the total or remove some sold units.
                 </p>
@@ -224,6 +250,8 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               label="+ Buyer handling"
               value={sale.buyerHandling}
               currency={sale.currency}
+              baseEquivalent={toBase(sale.buyerHandling)}
+              baseCurrency={sale.baseCurrency}
               disabled={isPending}
               onSave={(next) =>
                 run(async () => {
@@ -252,6 +280,8 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             label="− Commission"
             value={sale.commission}
             currency={sale.currency}
+            baseEquivalent={toBase(sale.commission)}
+            baseCurrency={sale.baseCurrency}
             disabled={isPending}
             onSave={(next) =>
               run(async () => {
@@ -260,11 +290,28 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               })
             }
           />
-          <AmountLine label="Net proceeds" bold topBorder>
-            <span style={{ ...READONLY_VALUE_STYLE, color: "var(--color-text-primary)" }}>
-              {sale.netProceeds} {sale.baseCurrency}
-            </span>
-          </AmountLine>
+
+          {/* Net (always base currency). When the sale currency differs from base it belongs in the
+              base column; for a single-currency sale it sits in the value column with everything else. */}
+          <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--color-border)", marginTop: "0.25rem" }} />
+          <div style={{ ...ROW_LABEL, fontWeight: 600, color: "var(--color-text-primary)" }}>Net proceeds</div>
+          {showBase ? (
+            <>
+              <div style={ORIG_CELL} />
+              <div style={{ ...BASE_CELL, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                {sale.netProceeds} {sale.baseCurrency}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ ...ORIG_CELL, fontSize: "0.875rem", fontWeight: 600 }}>
+                <span style={{ paddingRight: VALUE_INSET }}>
+                  {sale.netProceeds} {sale.baseCurrency}
+                </span>
+              </div>
+              <div style={BASE_CELL} />
+            </>
+          )}
         </div>
       </div>
 
@@ -406,60 +453,59 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
   );
 }
 
-// Shared right-hand value geometry so read-only and editable rows line their numbers up in the
-// same column (identical horizontal inset on both).
+// The Amounts breakdown is a 3-column grid (#208): label · original currency · base currency, so the
+// numbers line up in their own right-aligned columns. Row components emit exactly these three cells
+// (via a fragment); full-width items use `gridColumn: 1 / -1`.
 const VALUE_INSET = "0.375rem";
-const READONLY_VALUE_STYLE: React.CSSProperties = {
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-text-primary)",
-  padding: `0.125rem ${VALUE_INSET}`,
+
+/** Column 1: the row label. */
+const ROW_LABEL: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  minHeight: "1.75rem",
+  color: "var(--color-text-secondary)",
 };
 
-/** One breakdown row: label on the left, a value node on the right. `bold` / `topBorder` style
- * the net-proceeds total. */
-function AmountLine({
-  label,
-  bold,
-  topBorder,
-  children,
-}: {
-  label: string;
-  bold?: boolean;
-  topBorder?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        minHeight: "1.75rem",
-        fontWeight: bold ? 600 : undefined,
-        ...(topBorder
-          ? { borderTop: "1px solid var(--color-border)", paddingTop: "0.5rem", marginTop: "0.25rem" }
-          : {}),
-      }}
-    >
-      <span style={{ color: bold ? "var(--color-text-primary)" : undefined }}>{label}</span>
-      {children}
-    </div>
-  );
+/** Column 2: the amount in the sale's own (transaction) currency, right-aligned. */
+const ORIG_CELL: React.CSSProperties = {
+  justifySelf: "end",
+  display: "inline-flex",
+  alignItems: "center",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+  color: "var(--color-text-primary)",
+  fontSize: "0.8125rem",
+};
+
+/** Column 3: the base-currency equivalent, right-aligned and muted. */
+const BASE_CELL: React.CSSProperties = {
+  justifySelf: "end",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+  color: "var(--color-text-muted)",
+  fontSize: "0.6875rem",
+  paddingRight: VALUE_INSET,
+};
+
+/** The muted "≈ X BASE" text for a base-currency column cell (#208), or null when none applies. */
+function baseEqText(value: string | null | undefined, currency: string): string | null {
+  return value ? `≈ ${value} ${currency}` : null;
 }
 
-/** A breakdown row whose amount is editable in place: shows the value (or a muted "Set" when
- * empty) with a pencil affordance; clicking opens a compact number input that commits on
- * Enter/blur and reverts on Escape. The number's right edge matches the read-only rows. */
 function EditableAmountRow({
   label,
   value,
   currency,
+  baseEquivalent,
+  baseCurrency,
   disabled,
   onSave,
 }: {
   label: string;
   value: string | null;
   currency: string;
+  baseEquivalent?: string | null;
+  baseCurrency?: string;
   disabled: boolean;
   onSave: (next: string) => void;
 }) {
@@ -488,57 +534,61 @@ function EditableAmountRow({
   }
 
   return (
-    <AmountLine label={label}>
-      {editing ? (
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              e.currentTarget.blur();
-            } else if (e.key === "Escape") {
-              cancelRef.current = true;
-              e.currentTarget.blur();
-            }
-          }}
-          style={{ ...INPUT_STYLE, width: "8rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={open}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          disabled={disabled}
-          title="Click to edit"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            border: "none",
-            background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
-            cursor: disabled ? "default" : "pointer",
-            padding: `0.125rem ${VALUE_INSET}`,
-            borderRadius: "0.25rem",
-            fontVariantNumeric: "tabular-nums",
-            fontSize: "0.8125rem",
-            color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
-          }}
-        >
-          <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-            ✎
-          </span>
-          <span>{value ? `${value} ${currency}` : "Set"}</span>
-        </button>
-      )}
-    </AmountLine>
+    <>
+      <div style={ROW_LABEL}>{label}</div>
+      <div style={ORIG_CELL}>
+        {editing ? (
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                cancelRef.current = true;
+                e.currentTarget.blur();
+              }
+            }}
+            style={{ ...INPUT_STYLE, width: "8rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={open}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            disabled={disabled}
+            title="Click to edit"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              border: "none",
+              background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
+              cursor: disabled ? "default" : "pointer",
+              padding: `0.125rem ${VALUE_INSET}`,
+              borderRadius: "0.25rem",
+              fontVariantNumeric: "tabular-nums",
+              fontSize: "0.8125rem",
+              color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+              ✎
+            </span>
+            <span>{value ? `${value} ${currency}` : "Set"}</span>
+          </button>
+        )}
+      </div>
+      <div style={BASE_CELL}>{baseEqText(baseEquivalent, baseCurrency ?? "")}</div>
+    </>
   );
 }
 
@@ -595,64 +645,50 @@ function EditableShippingRow({
     onSave(draftAmount, draftCcy);
   }
 
-  const showBase = amount != null && !!currency && currency !== baseCurrency;
-
   return (
-    <AmountLine label="− My shipping">
-      {editing ? (
-        <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            autoFocus
-            value={draftAmount}
-            onChange={(e) => setDraftAmount(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              } else if (e.key === "Escape") {
-                setEditing(false);
-              }
-            }}
-            style={{ ...INPUT_STYLE, width: "6rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
-          />
-          <select
-            aria-label="Shipping currency"
-            value={draftCcy}
-            onChange={(e) => setDraftCcy(e.target.value)}
-            style={{ ...INPUT_STYLE, width: "5.5rem", padding: "0.125rem 0.375rem", cursor: "pointer" }}
-          >
-            {COMMON_CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={commit} title="Save" aria-label="Save shipping" style={SHIP_ICON_BTN}>
-            ✓
-          </button>
-          <button type="button" onClick={() => setEditing(false)} title="Cancel" aria-label="Cancel" style={SHIP_ICON_BTN}>
-            ✕
-          </button>
-        </span>
-      ) : (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-          {showBase && !rateMissing && baseEquivalent && (
-            <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}>
-              = {baseEquivalent} {baseCurrency}
-            </span>
-          )}
-          {rateMissing && (
-            <span
-              style={{ fontSize: "0.6875rem", color: "var(--color-error)" }}
-              title={`No exchange rate from ${currency} to ${baseCurrency} is known yet, so this cost is not in the base net.`}
+    <>
+      <div style={ROW_LABEL}>− My shipping</div>
+      <div style={ORIG_CELL}>
+        {editing ? (
+          <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              autoFocus
+              value={draftAmount}
+              onChange={(e) => setDraftAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  setEditing(false);
+                }
+              }}
+              style={{ ...INPUT_STYLE, width: "6rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
+            />
+            <select
+              aria-label="Shipping currency"
+              value={draftCcy}
+              onChange={(e) => setDraftCcy(e.target.value)}
+              style={{ ...INPUT_STYLE, width: "5.5rem", padding: "0.125rem 0.375rem", cursor: "pointer" }}
             >
-              no rate
-            </span>
-          )}
+              {COMMON_CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={commit} title="Save" aria-label="Save shipping" style={SHIP_ICON_BTN}>
+              ✓
+            </button>
+            <button type="button" onClick={() => setEditing(false)} title="Cancel" aria-label="Cancel" style={SHIP_ICON_BTN}>
+              ✕
+            </button>
+          </span>
+        ) : (
           <button
             type="button"
             onClick={open}
@@ -679,8 +715,23 @@ function EditableShippingRow({
             </span>
             <span>{amount ? `${amount} ${currency}` : "Set"}</span>
           </button>
-        </span>
-      )}
-    </AmountLine>
+        )}
+      </div>
+      <div style={rateMissing ? { ...BASE_CELL, color: "var(--color-error)" } : BASE_CELL}>
+        {rateMissing ? (
+          <span title={`No exchange rate from ${currency} to ${baseCurrency} is known yet, so this cost is not in the base net.`}>
+            no rate
+          </span>
+        ) : baseEquivalent ? (
+          // The base column always carries the shipping cost in base (#208/#206) — shown even when
+          // paid in the base currency, but then it's exact, so no "≈".
+          currency === baseCurrency ? (
+            `${baseEquivalent} ${baseCurrency}`
+          ) : (
+            baseEqText(baseEquivalent, baseCurrency)
+          )
+        ) : null}
+      </div>
+    </>
   );
 }

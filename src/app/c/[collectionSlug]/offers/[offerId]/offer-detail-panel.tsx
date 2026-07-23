@@ -250,6 +250,14 @@ export function OfferDetailPanel({
                 onSave={(v) => patch("price", v)}
               />
             </span>
+            {offer.priceBase && (
+              <span
+                style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}
+                title={`Converted to ${offer.baseCurrency} at the current rate`}
+              >
+                ≈ {offer.priceBase} {offer.baseCurrency}
+              </span>
+            )}
             {editable && offer.suggestedPrice && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <span title="Average catalog value per set, in this offer's currency">

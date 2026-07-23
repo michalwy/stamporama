@@ -44,6 +44,10 @@ Next to the asking price the header shows a **suggested price** — the **averag
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
 **Use** applies it as the asking price in one click. It's a starting point; price as you see fit.
 
+When the offer's currency differs from your collection's base currency, the asking price also shows
+a base-currency equivalent (**≈ 200 PLN**) — on both the offer list and its detail — converted at
+the **current** exchange rate, so you can compare offers across platforms at a glance.
+
 Only copies that are **For sale**, **delivered**, **unsold**, and **not already in this offer**
 can be added. To list the same package on another marketplace, just create a second offer and
 compose it the same way.

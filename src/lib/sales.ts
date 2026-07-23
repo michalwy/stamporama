@@ -814,6 +814,9 @@ export interface SaleDetailLine {
   setLabel: string;
   offerId: string | null;
   price: string;
+  /** The line sale price converted to the base currency at the frozen rate (#208), or null when the
+   * sale is already in base or no rate is known. */
+  priceBase: string | null;
   /** How many physical copies left on this line (its copies load lazily on the detail screen). */
   copyCount: number;
   itemLabels: string[];
@@ -951,6 +954,10 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       setLabel: setLbl,
       offerId: l.offerId,
       price: Number(l.price).toFixed(2),
+      priceBase:
+        sale.currency === baseCurrency || sale.fxRateToBase == null
+          ? null
+          : (Number(l.price) * Number(sale.fxRateToBase)).toFixed(2),
       copyCount: l.items.length,
       itemLabels: l.items.map((li) => copyLabel(li.item.stamp)),
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
