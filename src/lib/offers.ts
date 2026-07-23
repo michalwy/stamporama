@@ -1,4 +1,5 @@
 import "server-only";
+import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { listItemsPaginated, valuateItemsByIds, type ItemListItem } from "./items";
 import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
@@ -324,7 +325,7 @@ type OfferRow = {
   id: string;
   platformId: string;
   url: string | null;
-  price: unknown;
+  price: Decimal;
   currency: string;
   state: string;
   createdAt: Date;
@@ -339,7 +340,7 @@ function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): Off
     platformId: row.platformId,
     platformName: row.platform.name,
     url: row.url,
-    price: String(row.price),
+    price: row.price.toFixed(2),
     currency: row.currency,
     baseCurrency,
     priceBase: null, // filled by attachBasePrices (needs the current rate)
@@ -624,7 +625,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformId: offer.platformId,
     platformName: offer.platform.name,
     url: offer.url,
-    price: String(offer.price),
+    price: offer.price.toFixed(2),
     currency: offer.currency,
     baseCurrency,
     priceBase,
@@ -754,7 +755,7 @@ export async function listComposeTargets(
         platformId: r.platformId,
         platformName: r.platform.name,
         label: offerLabel(r.sets),
-        price: String(r.price),
+        price: r.price.toFixed(2),
         currency: r.currency,
         state: (isOfferState(r.state) ? r.state : "active") as OfferState,
         sets,
