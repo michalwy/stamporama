@@ -18,6 +18,11 @@ import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
+import {
+  readAddCopyDefaults,
+  writeAddCopyDefaults,
+  type AddCopyDefaults,
+} from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -132,15 +137,22 @@ export function InventoryItemFormDialog({
   onClose,
   onSubmit,
 }: InventoryItemFormDialogProps) {
+  // Last-used condition / location / disposition, remembered globally across every add-copy
+  // entry point (#234). Add mode only; edit mode always reflects the item being edited. Computed
+  // once at mount so the fields stay stable while the dialog is open.
+  const [addDefaults] = useState<AddCopyDefaults | null>(() =>
+    mode === "add" ? readAddCopyDefaults(collectionId, conditions, locations) : null
+  );
+
   const [stampId, setStampId] = useState(item?.stampId ?? initialStampId ?? "");
-  const [locationId, setLocationId] = useState(item?.locationId ?? "");
+  const [locationId, setLocationId] = useState(item?.locationId ?? addDefaults?.locationId ?? "");
   const [deliveryState, setDeliveryState] = useState(item?.deliveryState ?? "delivered");
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
-  const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>({
-    inCollection: item ? item.inCollection : true,
-    forSale: item?.forSale ?? false,
-    forTrade: item?.forTrade ?? false,
-  });
+  const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
+    item
+      ? { inCollection: item.inCollection, forSale: item.forSale, forTrade: item.forTrade }
+      : (addDefaults?.disposition ?? { inCollection: true, forSale: false, forTrade: false })
+  );
 
   // Prefill the picker summary. In edit mode it is derived from the item; in add mode a
   // caller may pass one (adding a copy from a stamp list row, #111). Catalog numbers on the
@@ -179,6 +191,14 @@ export function InventoryItemFormDialog({
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
+    // Remember the choices for the next add-copy, shared across every entry point (#234).
+    if (mode === "add") {
+      writeAddCopyDefaults(collectionId, {
+        conditionId: (formData.get("conditionId") as string) ?? "",
+        locationId,
+        disposition,
+      });
+    }
     onSubmit(formData);
   }
 
@@ -220,7 +240,7 @@ export function InventoryItemFormDialog({
                 <select
                   id="copy-condition"
                   name="conditionId"
-                  defaultValue={item?.conditionId ?? ""}
+                  defaultValue={item?.conditionId ?? addDefaults?.conditionId ?? ""}
                   disabled={isPending}
                   style={INPUT_STYLE}
                 >

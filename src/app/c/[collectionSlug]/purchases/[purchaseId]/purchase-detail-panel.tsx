@@ -50,14 +50,19 @@ import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-sum
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import {
-  lsGet,
-  lsSet,
-  lsRemove,
   useHydrated,
   usePersistentToggle,
   usePersistentString,
   usePersistentStringSet,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import {
+  readLast,
+  writeLast,
+  LS_LAST_CONDITION,
+  LS_LAST_CERT,
+  LS_LAST_LOCATION,
+  LS_LAST_DISPOSITION,
+} from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import {
   StampPickerBrowser,
   type PickedIssue,
@@ -2740,14 +2745,8 @@ interface IntakeConditionDialogProps {
   onSubmit: (formData: FormData) => void;
 }
 
-// Remember the last condition/certificate/location chosen during intake so the next stamp
-// preselects them (#121). Scoped per collection since ids are collection-specific.
-const LS_LAST_CONDITION = "stamporama:intake:conditionId";
-const LS_LAST_CERT = "stamporama:intake:certId";
-const LS_LAST_LOCATION = "stamporama:intake:locationId";
-// Last disposition chosen during intake (#160), stored as a comma-joined list of active flag
-// keys so the next stamp preselects the same chips.
-const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
+// The last condition/certificate/location/disposition chosen for an add-copy are remembered
+// across every entry point (#121, #234) — see shared/add-copy-defaults (readLast/writeLast).
 // Persisted order-level view preferences (#121): whether copies group by lot and/or by issue
 // (per collection), and which issue groups are collapsed (per collection + lot/scope).
 // Suffixed with the ids by the caller.
@@ -2756,13 +2755,6 @@ const LS_GROUP_BY_ISSUE = "stamporama:lot:groupByIssue";
 const LS_COLLAPSED_GROUPS = "stamporama:lot:collapsedGroups";
 const LS_SORT_KEY = "stamporama:lot:sortKey";
 const LS_SORT_DIR = "stamporama:lot:sortDir";
-function readLast(key: string, collectionId: string): string {
-  return lsGet(`${key}:${collectionId}`) ?? "";
-}
-function writeLast(key: string, collectionId: string, value: string): void {
-  if (value) lsSet(`${key}:${collectionId}`, value);
-  else lsRemove(`${key}:${collectionId}`);
-}
 
 /** After a stamp or whole issue is picked, capture the condition (required) and certificate
  * (optional) that every created copy will share, then confirm the intake (#121). The last

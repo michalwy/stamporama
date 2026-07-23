@@ -192,13 +192,20 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    - **+ variant** (next to a base stamp) adds a variant under that stamp and selects it.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
-4. Set the **disposition** flags. New copies default to *In collection*.
+4. Set the **disposition** flags. New copies default to *In collection* until you've added
+   one — after that, see the note below.
 5. Optionally file the copy into a **storage location** and add an in-location **ref**
    (e.g. a page or pocket). Only locations that can hold copies are selectable — see
    [Locations](locations.md).
 6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
 7. Optionally attach **photos** — front, back, and titled extras. See [Photos](#photos).
 8. Click **Add copy**. Everything is saved together in one step.
+
+> **Remembered defaults** — your last-used **condition**, **location**, and **disposition**
+> are remembered per collection and pre-filled the next time you add a copy — anywhere, whether
+> from this dialog or from [lot intake](purchases.md). Adding many copies with the same settings
+> (e.g. filing a whole lot into one box) then only takes a stamp pick. Override any field per
+> copy; the new choices become the defaults for the next add.
 
 > **Acquisition and cost** — supplier, date, and what you paid — are recorded on a
 > [purchase](purchases.md), not on the copy: the copy form captures identity, condition,

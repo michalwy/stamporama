@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, type KeyboardEvent } from "react";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import type { CatalogVendorData } from "@/lib/catalog";
@@ -172,6 +172,39 @@ export function StampCatalogPricesTab({
     return blocks;
   }, [rows, conditions, certColumns, pricedCells]);
 
+  // Column-first Tab order (#232): within an editable table, Tab walks top-to-bottom
+  // through the condition rows of a certificate column before moving to the next
+  // column, instead of the browser's default left-to-right-then-down. Only the newest
+  // editions carry inputs, so navigation is built across those blocks in
+  // block → certificate-column → condition-row order.
+  const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+  const navOrder = useMemo(() => {
+    const order: string[] = [];
+    for (const block of visibleBlocks) {
+      if (!block.isNewest) continue;
+      for (const col of certColumns) {
+        for (const cond of block.conditions) {
+          order.push(priceCellKey(block.row.editionId, cond.id, col.id));
+        }
+      }
+    }
+    return order;
+  }, [visibleBlocks, certColumns]);
+
+  function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>, key: string) {
+    if (e.key !== "Tab") return;
+    const idx = navOrder.indexOf(key);
+    if (idx === -1) return;
+    const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
+    // At either end let the browser take over, so focus can leave the grid normally.
+    if (nextIdx < 0 || nextIdx >= navOrder.length) return;
+    const target = inputRefs.current.get(navOrder[nextIdx]);
+    if (!target) return;
+    e.preventDefault();
+    target.focus();
+    target.select();
+  }
+
   if (rows.length === 0) {
     return (
       <div style={{ color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
@@ -248,9 +281,13 @@ export function StampCatalogPricesTab({
                         return (
                           <td key={col.id ?? "none"} style={tdCellStyle}>
                             <NumericInput
+                              ref={(el) => {
+                                inputRefs.current.set(key, el);
+                              }}
                               value={price}
                               onChange={(e) => onPriceChange(key, e.target.value)}
                               onBlur={(e) => onPriceChange(key, formatPrice(e.target.value))}
+                              onKeyDown={(e) => handleCellKeyDown(e, key)}
                               disabled={disabled}
                               placeholder="—"
                               style={CELL_INPUT}
