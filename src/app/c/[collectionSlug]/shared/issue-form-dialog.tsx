@@ -21,8 +21,8 @@ import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } 
 import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
-  flattenAreaTree,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
 
@@ -511,7 +511,7 @@ export function IssueDialog(props: IssueDialogProps) {
     [areas, selectedAreaId]
   );
 
-  const flatTree = useMemo(() => (isCreate ? flattenAreaTree(areas) : []), [isCreate, areas]);
+  const areaTree = useMemo(() => (isCreate ? buildAreaTree(areas) : []), [isCreate, areas]);
 
   // On toggling auto-create on, pre-select every vendor whose entered range
   // spans the same number of stamps as the primary catalog's range (the primary
@@ -622,27 +622,21 @@ export function IssueDialog(props: IssueDialogProps) {
         <DialogBody>
           {isCreate && (
             <div style={{ marginBottom: "1.25rem" }}>
-              <LabelWithError htmlFor="f-issue-area">Area</LabelWithError>
-              <select
-                id="f-issue-area"
-                value={selectedAreaId}
-                onChange={(e) => {
-                  setSelectedAreaId(e.target.value);
+              <LabelWithError htmlFor="issueAreaId-button">Area</LabelWithError>
+              <AreaTreeSelect
+                areas={areas}
+                areaTree={areaTree}
+                name="issueAreaId"
+                selectedId={selectedAreaId}
+                onSelectedIdChange={(id) => {
+                  setSelectedAreaId(id);
                   setVendorSelection({});
                 }}
                 disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                {areas.length === 0 && (
-                  <option value="">— No areas yet —</option>
-                )}
-                {flatTree.map(({ area, depth }) => (
-                  <option key={area.id} value={area.id}>
-                    {"  ".repeat(depth)}
-                    {area.name}
-                  </option>
-                ))}
-              </select>
+                noneOptionLabel={
+                  areas.length === 0 ? "— No areas yet —" : "— Select an area"
+                }
+              />
             </div>
           )}
           <IssueForm
