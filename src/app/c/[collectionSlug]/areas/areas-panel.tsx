@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   DialogShell,
@@ -19,6 +19,11 @@ import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
+
+// Persisted collapse state for the area management tree, consistent with the area
+// filter tree (#81). Distinct key so the two trees collapse independently (#237).
+const COLLAPSE_STORAGE_KEY = "stamporama:area-mgmt-collapsed";
 
 interface AreasPanelProps {
   collectionId: string;
@@ -439,6 +444,38 @@ export function AreasPanel({
     return m;
   }, [flatTree]);
 
+  // Ids of areas that have at least one child (only these get an expand/collapse toggle).
+  const parentIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of initialAreas) if (a.parentId) set.add(a.parentId);
+    return set;
+  }, [initialAreas]);
+
+  // Default (nothing stored yet): collapse nested parents, mirroring the filter tree (#81).
+  const computeDefaultCollapsed = useCallback(() => {
+    const defaults = new Set<string>();
+    for (const { area, depth } of flatTree) {
+      if (depth > 0 && parentIds.has(area.id)) defaults.add(area.id);
+    }
+    return defaults;
+  }, [flatTree, parentIds]);
+
+  const { collapsed, loaded, toggle } = useCollapsedSet(
+    COLLAPSE_STORAGE_KEY,
+    computeDefaultCollapsed
+  );
+
+  // Hide every descendant of a collapsed node.
+  const visibleTree = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const { area } of flatTree) {
+      if (collapsed.has(area.id)) {
+        for (const id of getDescendantIds(initialAreas, area.id)) hidden.add(id);
+      }
+    }
+    return flatTree.filter(({ area }) => !hidden.has(area.id));
+  }, [flatTree, collapsed, initialAreas]);
+
   function inheritedValuesFor(parentId: string | undefined | null): { inheritedPrimaryId: string | null; inheritedPrefixes: AreaCatalogEntry[] } {
     if (!parentId) return { inheritedPrimaryId: null, inheritedPrefixes: [] };
     const node = nodeByAreaId.get(parentId);
@@ -511,7 +548,7 @@ export function AreasPanel({
         </p>
       )}
 
-      {flatTree.length > 0 && (
+      {flatTree.length > 0 && loaded && (
         <div
           style={{
             border: "1px solid var(--color-border)",
@@ -519,7 +556,9 @@ export function AreasPanel({
             overflow: "hidden",
           }}
         >
-          {flatTree.map(({ area, depth, effectivePrimaryCatalogNameId, effectivePrefixEntries }, idx) => {
+          {visibleTree.map(({ area, depth, effectivePrimaryCatalogNameId, effectivePrefixEntries }, idx) => {
+            const hasChildren = parentIds.has(area.id);
+            const isCollapsed = collapsed.has(area.id);
             const primaryCatalog = effectivePrimaryCatalogNameId
               ? catalogById.get(effectivePrimaryCatalogNameId)
               : null;
@@ -548,9 +587,39 @@ export function AreasPanel({
                   paddingLeft: `${1.25 + depth * 1.5}rem`,
                   background: depth === 0 ? "var(--color-bg-elevated)" : "var(--color-bg-page)",
                   borderBottom:
-                    idx < flatTree.length - 1 ? "1px solid var(--color-border)" : undefined,
+                    idx < visibleTree.length - 1 ? "1px solid var(--color-border)" : undefined,
                 }}
               >
+                {/* Expand/collapse toggle for nodes with children; a reserved spacer
+                    otherwise so every row's name lines up (#237). */}
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    onClick={() => toggle(area.id)}
+                    aria-label={isCollapsed ? "Expand" : "Collapse"}
+                    aria-expanded={!isCollapsed}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "1rem",
+                      height: "1rem",
+                      flexShrink: 0,
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--color-text-muted)",
+                      fontSize: "0.625rem",
+                      padding: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {isCollapsed ? "▶" : "▼"}
+                  </button>
+                ) : (
+                  <span style={{ width: "1rem", flexShrink: 0 }} />
+                )}
+
                 <a
                   href={`/c/${collectionSlug}/issues?areaId=${area.id}`}
                   style={{
