@@ -41,6 +41,7 @@ export async function GET(
       forSale: boolParam(sp.get("forSale")),
       forTrade: boolParam(sp.get("forTrade")),
       noPhotos: boolParam(sp.get("noPhotos")),
+      missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
     });
     return NextResponse.json(total);
   } catch {

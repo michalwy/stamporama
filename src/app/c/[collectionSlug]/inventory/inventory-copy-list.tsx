@@ -29,6 +29,10 @@ interface InventoryCopyListProps {
   onViewHistory?: (item: ItemListItem) => void;
   onDelete?: (item: ItemListItem) => void;
   onAddToOffer?: (item: ItemListItem) => void;
+  /** When provided, each row's catalog-value cell becomes the quick-price trigger (#228): a
+   * "+ catalog value" link when unpriced, click-to-edit when priced — mirroring the purchase
+   * intake view (#121). The dialog itself is owned by the caller. */
+  onSetCatalogPrice?: (item: ItemListItem) => void;
 }
 
 /**
@@ -52,6 +56,7 @@ export function InventoryCopyList({
   onViewHistory,
   onDelete,
   onAddToOffer,
+  onSetCatalogPrice,
 }: InventoryCopyListProps) {
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
@@ -83,6 +88,7 @@ export function InventoryCopyList({
             onViewHistory={onViewHistory}
             onDelete={onDelete}
             onAddToOffer={onAddToOffer}
+            onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}
           />
         );
       })}

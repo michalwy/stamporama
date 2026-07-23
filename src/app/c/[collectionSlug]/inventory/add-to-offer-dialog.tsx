@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -163,6 +163,31 @@ export function AddToOfferDialog({
   // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker.
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
+
+  // Suggested asking price for the quick-start create path (#230): this copy's catalog value in the
+  // collection base currency. Blank when the copy is unpriced or its value can't be expressed in the
+  // base currency (no rate) — then no suggestion is shown and the field starts empty.
+  const catalogBase = item.value.unpriced ? "" : (item.value.baseAmountDisplay ?? "");
+  const [suggestedPrice, setSuggestedPrice] = useState(catalogBase);
+  // Only apply the latest conversion — quick currency switches can resolve out of order.
+  const convertToken = useRef(0);
+
+  // Re-express the catalog-value suggestion in the new offer's currency when it changes (mirrors the
+  // #200 duplicate flow). The base is always `catalogBase` in `baseCurrency`, so switching currencies
+  // never compounds; a missing rate leaves the current value for the collector to adjust.
+  function handlePriceCurrencyChange(currency: string | null) {
+    if (!currency || !catalogBase) return;
+    if (currency === baseCurrency) {
+      setSuggestedPrice(catalogBase);
+      return;
+    }
+    const token = ++convertToken.current;
+    void (async () => {
+      const { convertPriceAction } = await import("@/app/actions/exchange-rates");
+      const result = await convertPriceAction(collectionId, catalogBase, baseCurrency, currency);
+      if (token === convertToken.current && result.status === "success") setSuggestedPrice(result.value);
+    })();
+  }
   // Persisted per collection so the picker reopens on the state facet it was left on (mirrors the
   // search box's own persistence). "" (or any non-composable value) means "All offers".
   const [storedFacet, setStoredFacet] = usePersistedSearch(`${collectionId}:add-to-offer-state`);
@@ -433,6 +458,17 @@ export function AddToOfferDialog({
         isPending={isPending}
         error={createError}
         zIndexBase={110}
+        // Pre-fill the asking price with this copy's catalog value (#230), converted to the offer's
+        // currency and still fully editable. Shown only when the copy has a catalog value.
+        showPrice={!!catalogBase}
+        priceValue={catalogBase ? suggestedPrice : undefined}
+        onPriceValueChange={setSuggestedPrice}
+        onCurrencyChange={handlePriceCurrencyChange}
+        sourceNote={
+          catalogBase
+            ? "The asking price is pre-filled from this copy's catalog value — adjust it as needed, then add the listing URL once you have it."
+            : undefined
+        }
         onClose={() => {
           if (!isPending) {
             setCreating(false);

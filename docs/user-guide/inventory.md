@@ -60,6 +60,10 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   chosen marker.
 - **No photos** — toggle to show only copies that have no [photo](#photos) attached, so
   you can quickly find the pieces still waiting to be photographed.
+- **Missing catalog value** — toggle to show only copies with **no catalog value** recorded
+  for their condition (those showing **—**), so you can find and fill pricing gaps in bulk.
+  Pairs with the **+ catalog value** price link below. The holdings totals and year panel
+  follow this filter too.
 - **Condition** — show only copies of one condition.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
@@ -85,7 +89,9 @@ status**, taken from the **primary catalog of the stamp's area** at that catalog
 
 The certificate status must match exactly — a copy with a certificate is only valued from
 a price recorded *for that certificate status*; there is no fall-back to the no-certificate
-price. A copy with no matching catalog price shows **—** (unpriced).
+price. A copy with no matching catalog price shows **+ catalog value** in the value column —
+click it to record one without leaving the list. See
+[Adding a catalog value](#adding-a-catalog-value).
 
 Values are converted to your collection's **base currency** for display and totalling. A
 price in a currency with no available exchange rate is shown in its own currency and left
@@ -205,6 +211,19 @@ Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the 
 current values. Changing the stamp to a more specific variant re-points the copy and
 records the change in its refinement history.
 
+## Adding a catalog value
+
+Click a copy's **value** in the list to price it in place — a **+ catalog value** link when the
+copy is unpriced, or the value itself (click to edit) when one is already recorded. This is the
+same price link used on the [purchase](purchases.md) intake screen. A dialog opens showing the
+stamp, its catalog numbers, the copy's condition (and any certificate), and any prices already
+recorded, with one input per catalog active on the stamp's area — the primary catalog focused
+first. Enter the value(s) and save; each lands on the latest edition of its catalog for this
+condition, and the copy's value updates in place.
+
+To work through the gaps in bulk, turn on the **Missing catalog value** filter to list only the
+copies that still need pricing, then click each row's **+ catalog value** in turn.
+
 ## Adding a copy to an offer
 
 You can list a copy for sale without leaving the Inventory screen. On a copy that is
@@ -221,9 +240,11 @@ Choose where the copy lands: **＋ New set** on an offer (a fresh single-item se
 **Add to offer**. Only the offer you pick is affected.
 
 Starting a brand-new offer from the copy is in the same picker: **＋ Create new offer** opens the
-offer header form (platform, currency). Creating it seeds the offer with this copy as a single-item
-set and returns you to the Inventory list. Set the asking price and add more copies later from the
-offer's compose screen — see [Offers](offers.md).
+offer header form (platform, currency). When the copy has a [catalog value](#copy-value-and-holdings-total),
+the **asking price** is pre-filled with it — converted into the offer's currency and fully editable,
+so you can accept, adjust, or clear it. (A copy with no catalog value leaves the price blank.)
+Creating the offer seeds it with this copy as a single-item set and returns you to the Inventory
+list. Add more copies later from the offer's compose screen — see [Offers](offers.md).
 
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.

@@ -45,6 +45,8 @@ export interface InventoryItemFilters {
   forTrade?: boolean;
   /** Restrict to copies with no attached photos (#177). */
   noPhotos?: boolean;
+  /** Restrict to copies missing a catalog value — unpriced for their condition (#229). */
+  missingCatalogValue?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -64,6 +66,7 @@ export interface InventoryYearFacetFilters {
   forSale?: boolean;
   forTrade?: boolean;
   noPhotos?: boolean;
+  missingCatalogValue?: boolean;
 }
 
 export const inventoryKeys = {
@@ -99,6 +102,7 @@ export function useInventoryItemsInfinite(
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
+      if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -134,6 +138,7 @@ export function useHoldingsValuation(
       forSale: filters.forSale,
       forTrade: filters.forTrade,
       noPhotos: filters.noPhotos,
+      missingCatalogValue: filters.missingCatalogValue,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -152,6 +157,7 @@ export function useHoldingsValuation(
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
+      if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -187,6 +193,7 @@ export function useItemYears(
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
+      if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );

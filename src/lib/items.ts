@@ -488,6 +488,11 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   /** Restrict to copies with no attached photos (#177), so users can find pieces that
    * still need photographing (#112). */
   noPhotos?: boolean;
+  /** Restrict to copies whose catalog valuation is `unpriced` — no price recorded for the
+   * copy's own condition × certificate (#229), so users can find and fix pricing gaps. Since
+   * "unpriced" is derived (no column carries it), the reads valuate the matching set once and
+   * narrow to the resulting ids (see {@link resolveMissingCatalogItemIds}). */
+  missingCatalogValue?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -564,6 +569,53 @@ function buildItemWhere(
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
     ...(filters.noPhotos ? { photos: { none: {} } } : {}),
   };
+}
+
+/** The ids of copies matching `baseWhere` whose catalog valuation is `unpriced` — no price
+ * recorded for the copy's own condition × certificate (#229). "Unpriced" is derived (no column
+ * carries it), so this valuates the whole matching set once; callers then narrow their read to
+ * `id IN (…)`, keeping pagination/aggregation in SQL and the list, holdings total, and year
+ * facets consistent under the "missing catalog value" filter. */
+async function resolveMissingCatalogItemIds(
+  collectionId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  baseWhere: any
+): Promise<string[]> {
+  const rows = await prisma.item.findMany({
+    where: baseWhere,
+    select: {
+      id: true,
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+    },
+  });
+  const valuationRows: ValuationRow[] = rows.map((row) => ({
+    id: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    unknownVariant:
+      row.stamp.parentId === null && row.stamp.variants.some(childIsVariant),
+  }));
+  const valuations = await valuateItemRows(collectionId, valuationRows);
+  return rows.filter((row) => valuations.get(row.id)!.unpriced).map((row) => row.id);
+}
+
+/** Wrap a base `where` so it also matches only copies missing a catalog value, when the filter
+ * is set (#229). Returns the base `where` untouched otherwise. Kept as a helper so the list,
+ * holdings, and year-facet reads narrow identically. */
+async function withMissingCatalogFilter(
+  collectionId: string,
+  filters: ItemListFiltersPaginated,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  baseWhere: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  if (!filters.missingCatalogValue) return baseWhere;
+  const ids = await resolveMissingCatalogItemIds(collectionId, baseWhere);
+  return { AND: [baseWhere, { id: { in: ids } }] };
 }
 
 /** A copy enriched with the display data the list screen needs: the linked stamp's
@@ -758,8 +810,13 @@ export async function listItemsPaginated(
     ? await resolveLocationSubtree(collectionId, filters.locationId)
     : null;
 
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
   const rows = await prisma.item.findMany({
-    where: buildItemWhere(collectionId, filters, locationIds),
+    where,
     orderBy,
     take: pageSize + 1,
     skip: offset,
@@ -1374,8 +1431,13 @@ export async function getHoldingsValuation(
     ? await resolveLocationSubtree(collectionId, filters.locationId)
     : null;
 
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
   const rows = await prisma.item.findMany({
-    where: buildItemWhere(collectionId, filters, locationIds),
+    where,
     select: {
       id: true,
       stampId: true,
@@ -1433,8 +1495,13 @@ export async function listItemYearFacets(
   const locationIds = filters.locationId
     ? await resolveLocationSubtree(collectionId, filters.locationId)
     : null;
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
   const rows = await prisma.item.findMany({
-    where: buildItemWhere(collectionId, filters, locationIds),
+    where,
     select: { stamp: { select: { issuedYear: true } } },
   });
   const counts = new Map<number | null, number>();

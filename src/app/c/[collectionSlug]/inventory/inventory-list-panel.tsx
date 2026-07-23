@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
-import type { CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
@@ -38,7 +40,10 @@ type DialogState =
   | { kind: "identify"; item: ItemListItem }
   | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem }
-  | { kind: "addToOffer"; item: ItemListItem };
+  | { kind: "addToOffer"; item: ItemListItem }
+  | { kind: "quickPrice"; item: ItemListItem };
+
+const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 
 const DISPOSITION_FILTERS = [
   { key: "inCollection", label: "In collection" },
@@ -114,6 +119,7 @@ export function InventoryListPanel({
   const locationId = searchParams.get("locationId") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
+  const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -166,10 +172,11 @@ export function InventoryListPanel({
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
+      missingCatalogValue: missingCatalogValue || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -185,8 +192,9 @@ export function InventoryListPanel({
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
+      missingCatalogValue: missingCatalogValue || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -195,6 +203,11 @@ export function InventoryListPanel({
   );
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+
+  // Per-area vendor maps + area names for the quick-price dialog (#228), resolved once here so the
+  // dialog can format catalog numbers identically to the rows (mirrors the purchase intake view).
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -247,6 +260,7 @@ export function InventoryListPanel({
     !!locationId ||
     !!year ||
     noPhotos ||
+    missingCatalogValue ||
     activeDispositions.size > 0;
 
   return (
@@ -369,6 +383,23 @@ export function InventoryListPanel({
                 >
                   No photos
                 </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateParams({ missingCatalogValue: missingCatalogValue ? "" : "true" })
+                  }
+                  title="Show only copies with no catalog value recorded for their condition"
+                  style={{
+                    ...CONTROL_STYLE,
+                    cursor: "pointer",
+                    fontWeight: missingCatalogValue ? 600 : 400,
+                    color: missingCatalogValue ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: missingCatalogValue ? "var(--color-accent)" : "var(--color-border-strong)",
+                    background: missingCatalogValue ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                  }}
+                >
+                  Missing catalog value
+                </button>
               </div>
 
               <select
@@ -440,6 +471,7 @@ export function InventoryListPanel({
                 onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
                 onAddToOffer={(it) => setDialog({ kind: "addToOffer", item: it })}
+                onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
             </div>
           )}
@@ -515,6 +547,42 @@ export function InventoryListPanel({
           baseCurrency={baseCurrency}
           onClose={closeDialog}
           onDone={handleSuccess}
+        />
+      )}
+
+      {/* Quick-add catalog value (#228): the shared price dialog (#147/#170), opened from the
+          row action on copies with no catalog value for their condition. */}
+      {dialog.kind === "quickPrice" && (
+        <QuickPriceDialog
+          item={dialog.item}
+          collectionId={collectionId}
+          areaName={dialog.item.areaId ? (areaNameById.get(dialog.item.areaId) ?? null) : null}
+          primaryVendorId={
+            dialog.item.areaId ? (primaryVendorByArea.get(dialog.item.areaId) ?? null) : null
+          }
+          vendorMap={
+            dialog.item.areaId
+              ? (vendorMapByArea.get(dialog.item.areaId) ?? EMPTY_VENDOR_MAP)
+              : EMPTY_VENDOR_MAP
+          }
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(entries) => {
+            const it = dialog.item;
+            setActionError(undefined);
+            startTransition(async () => {
+              const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              const result = await quickSetCatalogPricesAction(
+                it.stampId,
+                it.conditionId,
+                it.certificateStatusId,
+                entries
+              );
+              if (result.status === "success") handleSuccess();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
         />
       )}
 
