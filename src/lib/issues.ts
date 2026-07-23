@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
@@ -1273,6 +1274,75 @@ export interface AutoCreateStampsInput {
   vendors: AutoCreateVendorRange[];
 }
 
+/** Validate a range auto-create request before any writes. Shared by issue creation
+ *  (#70) and post-creation bulk add (#219). */
+function assertAutoCreateInput(input: AutoCreateStampsInput): void {
+  const { count, vendors } = input;
+  if (count < 1) throw new Error("Range must include at least one stamp.");
+  if (count > 50) throw new Error("Range cannot exceed 50 stamps.");
+  if (vendors.length === 0) throw new Error("At least one catalog vendor must be selected.");
+  if (vendors.some((v) => v.numbers.length !== count)) {
+    throw new Error("Each vendor must supply one catalog number per stamp.");
+  }
+}
+
+/** Create `input.count` stamps as root nodes of `issueId` in `areaId`, tagging each with
+ *  the area (primary), enrolling it as a required member, and writing every vendor's
+ *  generated catalog number. Shared by issue creation (#70) and add-range (#219); runs
+ *  inside an existing transaction. Caller must have validated `input`. */
+async function createRangeStamps(
+  tx: Prisma.TransactionClient,
+  params: {
+    collectionId: string;
+    areaId: string;
+    issueId: string;
+    issuedYear: number | null;
+    input: AutoCreateStampsInput;
+  }
+): Promise<void> {
+  const { collectionId, areaId, issueId, issuedYear, input } = params;
+  const { count, vendors } = input;
+  const stampIds: string[] = [];
+
+  for (let n = 0; n < count; n++) {
+    const stamp = await tx.stamp.create({
+      data: { collectionId, issuedYear },
+      select: { id: true },
+    });
+    stampIds.push(stamp.id);
+  }
+
+  await tx.stampCollectionArea.createMany({
+    data: stampIds.map((stampId) => ({
+      stampId,
+      collectionAreaId: areaId,
+      isPrimary: true,
+    })),
+  });
+
+  await tx.issueMember.createMany({
+    data: stampIds.map((stampId) => ({
+      issueId,
+      stampId,
+      requiredForCompleteness: true,
+    })),
+  });
+
+  const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
+  for (let i = 0; i < stampIds.length; i++) {
+    for (const v of vendors) {
+      catalogNumberRows.push({
+        stampId: stampIds[i],
+        catalogVendorId: v.catalogVendorId,
+        number: v.numbers[i],
+      });
+    }
+  }
+  if (catalogNumberRows.length > 0) {
+    await tx.stampCatalogNumber.createMany({ data: catalogNumberRows });
+  }
+}
+
 export async function createIssue(
   ownerId: string,
   collectionId: string,
@@ -1293,15 +1363,7 @@ export async function createIssue(
     throw new Error("Collection area not found.");
   }
 
-  if (data.autoCreateStamps) {
-    const { count, vendors } = data.autoCreateStamps;
-    if (count < 1) throw new Error("Range must include at least one stamp.");
-    if (count > 50) throw new Error("Range cannot exceed 50 stamps.");
-    if (vendors.length === 0) throw new Error("At least one catalog vendor must be selected.");
-    if (vendors.some((v) => v.numbers.length !== count)) {
-      throw new Error("Each vendor must supply one catalog number per stamp.");
-    }
-  }
+  if (data.autoCreateStamps) assertAutoCreateInput(data.autoCreateStamps);
 
   const created = await prisma.$transaction(async (tx) => {
     const issue = await tx.issue.create({
@@ -1326,54 +1388,52 @@ export async function createIssue(
     }
 
     if (data.autoCreateStamps) {
-      const { count, vendors } = data.autoCreateStamps;
-      const stampIds: string[] = [];
-
-      for (let n = 0; n < count; n++) {
-        const stamp = await tx.stamp.create({
-          data: {
-            collectionId,
-            issuedYear: data.year ?? null,
-          },
-          select: { id: true },
-        });
-        stampIds.push(stamp.id);
-      }
-
-      await tx.stampCollectionArea.createMany({
-        data: stampIds.map((stampId) => ({
-          stampId,
-          collectionAreaId: areaId,
-          isPrimary: true,
-        })),
+      await createRangeStamps(tx, {
+        collectionId,
+        areaId,
+        issueId: issue.id,
+        issuedYear: data.year ?? null,
+        input: data.autoCreateStamps,
       });
-
-      await tx.issueMember.createMany({
-        data: stampIds.map((stampId) => ({
-          issueId: issue.id,
-          stampId,
-          requiredForCompleteness: true,
-        })),
-      });
-
-      const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
-      for (let i = 0; i < stampIds.length; i++) {
-        for (const v of vendors) {
-          catalogNumberRows.push({
-            stampId: stampIds[i],
-            catalogVendorId: v.catalogVendorId,
-            number: v.numbers[i],
-          });
-        }
-      }
-      if (catalogNumberRows.length > 0) {
-        await tx.stampCatalogNumber.createMany({ data: catalogNumberRows });
-      }
     }
 
     return issue;
   });
   return { id: created.id };
+}
+
+/**
+ * Add a catalog-number range of stamps to an existing issue (#219) — the post-creation
+ * equivalent of {@link createIssue}'s `autoCreateStamps` (#70). New stamps are appended as
+ * additional root nodes in the issue's own area, alongside anything already there. The
+ * generated numbers and per-vendor spans are prepared by the caller (same generation as
+ * creation); duplicate-catalog enforcement (#85) also happens in the action layer.
+ */
+export async function addStampRangeToIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  input: AutoCreateStampsInput
+): Promise<void> {
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  assertAutoCreateInput(input);
+
+  const issue = await prisma.issue.findUnique({
+    where: { id: issueId },
+    select: { year: true },
+  });
+
+  await prisma.$transaction((tx) =>
+    createRangeStamps(tx, {
+      collectionId,
+      areaId: collectionAreaId,
+      issueId,
+      issuedYear: issue?.year ?? null,
+      input,
+    })
+  );
 }
 
 export async function updateIssue(
@@ -1777,6 +1837,151 @@ export async function moveStampNode(
       })
     )
   );
+}
+
+/** A catalog identity that both the source and target issue's stamps already carry —
+ *  merging would place two stamps with the same number under one issue (#218, #85). */
+export interface IssueMergeConflict {
+  catalogVendorId: string;
+  vendorAbbreviation: string;
+  number: string;
+  /** Display label, e.g. "Mi 200". */
+  label: string;
+}
+
+export interface IssueMergePreview {
+  sourceName: string | null;
+  targetName: string | null;
+  /** Stamp nodes that will be reassigned from source to target. */
+  stampCount: number;
+  /** Catalog-number collisions between the two issues' stamps (advisory, non-blocking). */
+  conflicts: IssueMergeConflict[];
+}
+
+/** Catalog identities (vendor + number) shared by the source and target issues' member
+ *  stamps. Both issues are expected to share an area, so a plain vendor+number match is
+ *  the effective identity (prefix is area-derived). */
+async function computeMergeConflicts(
+  collectionId: string,
+  sourceIssueId: string,
+  targetIssueId: string
+): Promise<IssueMergeConflict[]> {
+  const [sourceNumbers, targetNumbers] = await Promise.all([
+    prisma.stampCatalogNumber.findMany({
+      where: { stamp: { issueMemberships: { some: { issueId: sourceIssueId } } } },
+      select: { catalogVendorId: true, number: true },
+    }),
+    prisma.stampCatalogNumber.findMany({
+      where: { stamp: { issueMemberships: { some: { issueId: targetIssueId } } } },
+      select: { catalogVendorId: true, number: true },
+    }),
+  ]);
+
+  const targetKeys = new Set(targetNumbers.map((n) => `${n.catalogVendorId} ${n.number}`));
+  const conflictKeys = new Map<string, { catalogVendorId: string; number: string }>();
+  for (const n of sourceNumbers) {
+    const key = `${n.catalogVendorId} ${n.number}`;
+    if (targetKeys.has(key)) {
+      conflictKeys.set(key, { catalogVendorId: n.catalogVendorId, number: n.number });
+    }
+  }
+  if (conflictKeys.size === 0) return [];
+
+  const vendorIds = [...new Set([...conflictKeys.values()].map((c) => c.catalogVendorId))];
+  const vendors = await prisma.catalogVendor.findMany({
+    where: { id: { in: vendorIds }, collectionId },
+    select: { id: true, abbreviation: true },
+  });
+  const abbrevById = new Map(vendors.map((v) => [v.id, v.abbreviation]));
+
+  return [...conflictKeys.values()]
+    .map((c) => {
+      const abbreviation = abbrevById.get(c.catalogVendorId) ?? "";
+      return {
+        catalogVendorId: c.catalogVendorId,
+        vendorAbbreviation: abbreviation,
+        number: c.number,
+        label: `${abbreviation} ${c.number}`.trim(),
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Summarize what merging `sourceIssueId` into `targetIssueId` would do (#218): how many
+ * stamp nodes move and which catalog numbers collide between the two issues. Read-only —
+ * drives the confirmation dialog before the irreversible merge.
+ */
+export async function previewIssueMerge(
+  ownerId: string,
+  collectionId: string,
+  sourceIssueId: string,
+  targetIssueId: string
+): Promise<IssueMergePreview> {
+  if (sourceIssueId === targetIssueId) throw new Error("Cannot merge an issue into itself.");
+  const { collectionId: sourceCollection } = await resolveIssueArea(sourceIssueId);
+  if (sourceCollection !== collectionId) throw new Error("Issue not found.");
+  const { collectionId: targetCollection } = await resolveIssueArea(targetIssueId);
+  if (targetCollection !== collectionId) throw new Error("Target issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const [source, target, stampCount, conflicts] = await Promise.all([
+    prisma.issue.findUnique({ where: { id: sourceIssueId }, select: { name: true } }),
+    prisma.issue.findUnique({ where: { id: targetIssueId }, select: { name: true } }),
+    prisma.issueMember.count({ where: { issueId: sourceIssueId } }),
+    computeMergeConflicts(collectionId, sourceIssueId, targetIssueId),
+  ]);
+
+  return {
+    sourceName: source?.name ?? null,
+    targetName: target?.name ?? null,
+    stampCount,
+    conflicts,
+  };
+}
+
+/**
+ * Merge `sourceIssueId` into `targetIssueId` (#218): reassign every stamp node under the
+ * source to the target and delete the now-empty source issue. Stamp tree structure is
+ * preserved (each stamp keeps its `parentId`), so the source's root nodes become root
+ * nodes of the target. Stamps already shared with the target keep their existing target
+ * membership; their duplicate source membership is dropped when the source issue is
+ * deleted (its `IssueMember` / `IssueCatalogNumber` rows cascade). Inventory items are
+ * unaffected — they reference the stamp, which now belongs to the target. Irreversible.
+ */
+export async function mergeIssues(
+  ownerId: string,
+  collectionId: string,
+  sourceIssueId: string,
+  targetIssueId: string
+): Promise<void> {
+  if (sourceIssueId === targetIssueId) throw new Error("Cannot merge an issue into itself.");
+  const { collectionId: sourceCollection } = await resolveIssueArea(sourceIssueId);
+  if (sourceCollection !== collectionId) throw new Error("Issue not found.");
+  const { collectionId: targetCollection } = await resolveIssueArea(targetIssueId);
+  if (targetCollection !== collectionId) throw new Error("Target issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const [sourceMembers, targetMembers] = await Promise.all([
+    prisma.issueMember.findMany({ where: { issueId: sourceIssueId }, select: { stampId: true } }),
+    prisma.issueMember.findMany({ where: { issueId: targetIssueId }, select: { stampId: true } }),
+  ]);
+  const targetStampIds = new Set(targetMembers.map((m) => m.stampId));
+  // Stamps not already in the target move over; stamps already shared with the target
+  // keep that membership and their source row is cascade-deleted with the source issue.
+  const stampIdsToMove = sourceMembers
+    .map((m) => m.stampId)
+    .filter((stampId) => !targetStampIds.has(stampId));
+
+  await prisma.$transaction(async (tx) => {
+    if (stampIdsToMove.length > 0) {
+      await tx.issueMember.updateMany({
+        where: { issueId: sourceIssueId, stampId: { in: stampIdsToMove } },
+        data: { issueId: targetIssueId },
+      });
+    }
+    await tx.issue.delete({ where: { id: sourceIssueId } });
+  });
 }
 
 export interface IssueReferencedVendor {

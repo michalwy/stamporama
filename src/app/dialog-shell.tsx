@@ -258,6 +258,10 @@ type DialogActionsProps = {
   cancelLabel?: string;
   variant?: "primary" | "destructive";
   disabled?: boolean;
+  /** Disabled state for the Cancel button. Defaults to `disabled`. Set this separately
+   *  when Save is gated by form validity but Cancel should stay clickable (typically only
+   *  blocked while a mutation is in flight) — cancelling never needs valid input (#240). */
+  cancelDisabled?: boolean;
   error?: ReactNode;
   onCancel?: () => void;
   onAction?: () => void;
@@ -268,6 +272,7 @@ export function DialogActions({
   cancelLabel = "Cancel",
   variant = "primary",
   disabled,
+  cancelDisabled,
   error,
   onCancel,
   onAction,
@@ -275,7 +280,7 @@ export function DialogActions({
   const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
   return (
     <DialogFooter>
-      <DialogSecondaryButton onClick={onCancel} disabled={disabled}>
+      <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
         {cancelLabel}
       </DialogSecondaryButton>
       <div style={{ position: "relative" }}>

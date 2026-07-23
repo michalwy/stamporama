@@ -9,10 +9,13 @@ import {
   deleteIssue,
   previewIssueDeletion,
   addStampToIssue,
+  addStampRangeToIssue,
   toggleIssueMemberRequired,
   removeStampFromIssue,
   moveStampNode,
   moveIssueToArea,
+  mergeIssues,
+  previewIssueMerge,
   listIssueReferencedVendors,
   getIssuePriceDetails,
   getIssueAreaId,
@@ -22,6 +25,7 @@ import {
 import type {
   AutoCreateStampsInput,
   IssueDeletionPreview,
+  IssueMergePreview,
   IssuePriceDetails,
   IssueReferencedVendor,
   IssueRangeSuggestion,
@@ -99,6 +103,65 @@ function parseCatalogNumbers(formData: FormData): { catalogVendorId: string; fir
   return result;
 }
 
+/** Resolve the `autoCreateVendor_*` selection plus each vendor's First/Last range into a
+ *  generated {@link AutoCreateStampsInput}, or an error message. Shared by issue creation
+ *  (#70) and post-creation add-range (#219): each selected vendor generates catalog numbers
+ *  from its own range (numeric, prefixed, or suffix-sequence); stamps are matched across
+ *  vendors by position, so every explicit range must span the same number of stamps. */
+function buildAutoCreateStamps(
+  formData: FormData,
+  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[]
+): { input: AutoCreateStampsInput } | { error: string } {
+  const vendorIds: string[] = [];
+  for (const key of formData.keys()) {
+    if (key.startsWith("autoCreateVendor_")) {
+      vendorIds.push(key.slice("autoCreateVendor_".length));
+    }
+  }
+  if (vendorIds.length === 0) {
+    return { error: "Select at least one catalog vendor." };
+  }
+
+  const resolved: { catalogVendorId: string; scheme: CatalogRangeScheme }[] = [];
+  let count: number | null = null;
+  for (const vendorId of vendorIds) {
+    const cn = catalogNumbers.find((c) => c.catalogVendorId === vendorId);
+    if (!cn || !cn.firstNumber) {
+      return { error: "Enter a First catalog number for each selected vendor." };
+    }
+    const range = resolveCatalogRange(cn.firstNumber, cn.lastNumber ?? null);
+    if ("error" in range) {
+      return { error: range.error };
+    }
+    resolved.push({ catalogVendorId: vendorId, scheme: range.scheme });
+    if (range.span !== null) {
+      if (count === null) {
+        count = range.span;
+      } else if (count !== range.span) {
+        return { error: "Selected vendors must span the same number of stamps." };
+      }
+    }
+  }
+  if (count === null) count = 1;
+  if (count > 50) {
+    return { error: "Range cannot exceed 50 stamps." };
+  }
+  const vendors = resolved.map((r) => ({
+    catalogVendorId: r.catalogVendorId,
+    numbers: generateCatalogNumbers(r.scheme, count!),
+  }));
+  return { input: { count, vendors } };
+}
+
+/** Flatten a generated range into duplicate-check candidates (#85). */
+function autoCreateCandidates(
+  input: AutoCreateStampsInput
+): { catalogVendorId: string; number: string }[] {
+  return input.vendors.flatMap((v) =>
+    v.numbers.map((number) => ({ catalogVendorId: v.catalogVendorId, number }))
+  );
+}
+
 export async function createIssueAction(
   collectionId: string,
   areaId: string,
@@ -115,59 +178,17 @@ export async function createIssueAction(
 
   let autoCreateStamps: AutoCreateStampsInput | undefined;
   if (formData.get("autoCreateStamps") === "true") {
-    const vendorIds: string[] = [];
-    for (const key of formData.keys()) {
-      if (key.startsWith("autoCreateVendor_")) {
-        vendorIds.push(key.slice("autoCreateVendor_".length));
-      }
-    }
-    if (vendorIds.length === 0) {
-      return { status: "error", message: "Select at least one catalog vendor for auto-create." };
-    }
-
-    // Each selected vendor generates catalog numbers from its own range (numeric,
-    // prefixed, or suffix-sequence). Stamps are matched across vendors by
-    // position, so every explicit range must span the same number of stamps.
-    const resolved: { catalogVendorId: string; scheme: CatalogRangeScheme }[] = [];
-    let count: number | null = null;
-    for (const vendorId of vendorIds) {
-      const cn = catalogNumbers.find((c) => c.catalogVendorId === vendorId);
-      if (!cn || !cn.firstNumber) {
-        return { status: "error", message: "Enter a First catalog number for each selected vendor." };
-      }
-      const range = resolveCatalogRange(cn.firstNumber, cn.lastNumber ?? null);
-      if ("error" in range) {
-        return { status: "error", message: range.error };
-      }
-      resolved.push({ catalogVendorId: vendorId, scheme: range.scheme });
-      if (range.span !== null) {
-        if (count === null) {
-          count = range.span;
-        } else if (count !== range.span) {
-          return { status: "error", message: "Selected vendors must span the same number of stamps." };
-        }
-      }
-    }
-    if (count === null) count = 1;
-    if (count > 50) {
-      return { status: "error", message: "Range cannot exceed 50 stamps." };
-    }
-    const vendors = resolved.map((r) => ({
-      catalogVendorId: r.catalogVendorId,
-      numbers: generateCatalogNumbers(r.scheme, count!),
-    }));
-    autoCreateStamps = { count, vendors };
+    const built = buildAutoCreateStamps(formData, catalogNumbers);
+    if ("error" in built) return { status: "error", message: built.error };
+    autoCreateStamps = built.input;
 
     // Block-mode duplicate guard (#85): the generated numbers become real stamps,
     // so reject up front when any collides and the collection blocks duplicates.
-    const candidates = vendors.flatMap((v) =>
-      v.numbers.map((number) => ({ catalogVendorId: v.catalogVendorId, number }))
-    );
     const blockMessage = await enforceCandidateCatalogDuplicates(
       session.user.id,
       collectionId,
       areaId,
-      candidates
+      autoCreateCandidates(autoCreateStamps)
     );
     if (blockMessage) return { status: "error", message: blockMessage };
   }
@@ -421,5 +442,69 @@ export async function moveStampNodeAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to move stamp. Please try again." };
+  }
+}
+
+/** Bulk-add a catalog-number range of stamps to an existing issue (#219). */
+export async function addStampRangeToIssueAction(
+  collectionId: string,
+  issueId: string,
+  formData: FormData
+): Promise<IssueActionState> {
+  const session = await getSession();
+  const catalogNumbers = parseCatalogNumbers(formData);
+  const built = buildAutoCreateStamps(formData, catalogNumbers);
+  if ("error" in built) return { status: "error", message: built.error };
+
+  // Block-mode duplicate guard (#85): the generated numbers become real stamps, so reject
+  // up front when any collides and the collection blocks duplicates. The issue's own area
+  // supplies the prefix context.
+  const areaId = await getIssueAreaId(issueId);
+  const blockMessage = await enforceCandidateCatalogDuplicates(
+    session.user.id,
+    collectionId,
+    areaId,
+    autoCreateCandidates(built.input)
+  );
+  if (blockMessage) return { status: "error", message: blockMessage };
+
+  try {
+    await addStampRangeToIssue(session.user.id, collectionId, issueId, built.input);
+    return { status: "success", issueId };
+  } catch {
+    return { status: "error", message: "Failed to add stamps. Please try again." };
+  }
+}
+
+/** Summarize a prospective issue merge — stamp count + catalog-number conflicts (#218). */
+export async function previewIssueMergeAction(
+  collectionId: string,
+  sourceIssueId: string,
+  targetIssueId: string
+): Promise<IssueMergePreview | { error: string }> {
+  const session = await getSession();
+  try {
+    return await previewIssueMerge(session.user.id, collectionId, sourceIssueId, targetIssueId);
+  } catch {
+    return { error: "Failed to prepare the merge. Please try again." };
+  }
+}
+
+/** Merge one issue into another: reassign its stamps, then delete it (#218). */
+export async function mergeIssuesAction(
+  collectionId: string,
+  sourceIssueId: string,
+  formData: FormData
+): Promise<IssueActionState> {
+  const session = await getSession();
+  const targetIssueId = (formData.get("targetIssueId") as string | null) ?? "";
+  if (!targetIssueId) {
+    return { status: "error", message: "Please select a target issue." };
+  }
+  try {
+    await mergeIssues(session.user.id, collectionId, sourceIssueId, targetIssueId);
+    return { status: "success", issueId: targetIssueId };
+  } catch {
+    return { status: "error", message: "Failed to merge issues. Please try again." };
   }
 }

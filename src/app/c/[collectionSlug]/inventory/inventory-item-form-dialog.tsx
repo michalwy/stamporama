@@ -397,6 +397,7 @@ export function InventoryItemFormDialog({
           actionLabel={actionLabel}
           onCancel={onClose}
           disabled={actionDisabled}
+          cancelDisabled={isPending}
           error={error}
         />
       </form>

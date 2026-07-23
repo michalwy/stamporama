@@ -47,6 +47,22 @@ An issue can be moved to a different collecting area after it is created. Open t
 
 Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area in **Settings → Areas**.
 
+## Adding a stamp range to an existing issue
+
+You can bulk-add stamps to an issue after it was created, the same way a range is generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want, enter a **First** and optional **Last** number for each (for example `100`–`105`), and the dialog shows how many stamps will be created, with a short preview of the generated numbers. As with issue creation, ranges may be plain numbers, share a prefix, or use a letter/roman suffix sequence (`100`, `423a`–`423c`, `12I`–`12II`); when more than one catalog is selected, every explicit range must span the same number of stamps. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
+
+If a generated catalog number would duplicate one already in the collection, the dialog surfaces a warning naming the collisions. In a collection set to **block** duplicates (see [Duplicate catalog numbers](duplicate-catalog-numbers.md)) this prevents the add until you resolve it; in a collection set to **warn**, it is advisory and you can add anyway.
+
+If the added stamps fall **outside the issue's declared catalog range**, a follow-up prompt appears right away showing the proposed widened range (for example, `Mi 100–105 → 100–110`) and asks you to choose **Widen range** or **Keep as-is** — the same decision offered when adding a single stamp. Keeping it as-is leaves the range warning on the issue row, which you can act on later.
+
+## Merging two issues
+
+Two issues in the same area can be merged into one — useful when the same set was entered twice or a split turned out to be unnecessary. Open the **⋮** menu of the issue you want to **remove** and choose **Merge into another issue…**, then pick the target issue to keep. The dialog reports how many stamps will move and warns if any catalog number appears in both issues (advisory only — the merge is still allowed).
+
+On **Merge**, every stamp under the source issue — including its nested children, whose tree structure is preserved — is reassigned to the target as root nodes, and the now-empty source issue is deleted. Inventory copies are unaffected: they reference the stamp, which now belongs to the target. **This cannot be undone**, so the confirmation names the source issue that will be deleted.
+
+If the merged-in stamps push the target issue's **declared catalog range** beyond its bounds, the same **Widen range / Keep as-is** prompt appears immediately after the merge, so you can decide whether to extend the target's declared range to cover them.
+
 ## Duplicate issue names
 
 When you type a name in the **Add issue** dialog, Stamporama checks whether an issue with that same name already exists **in the selected area** (the check ignores case and surrounding spaces). If one does, a small **⚠ warning icon** appears inside the name field; hover it to see a tooltip naming the existing issue(s) and their year. The warning never blocks you — the same name can legitimately repeat, so you can create the issue anyway if the duplicate is intentional. The check is per area only: the same name in a different area (for example, the same series name across two countries) is not flagged.

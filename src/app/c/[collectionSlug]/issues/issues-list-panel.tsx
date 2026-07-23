@@ -14,12 +14,19 @@ import {
   updateIssueAction,
   deleteIssueAction,
   addStampToIssueAction,
+  addStampRangeToIssueAction,
   moveStampNodeAction,
   moveIssueToAreaAction,
+  mergeIssuesAction,
+  getIssueRangeSuggestionsAction,
+  applyIssueRangeSuggestionAction,
   type IssueActionState,
 } from "@/app/actions/issues";
 import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
-import type { IssueListItem, IssueSortBy, StampNodeData } from "@/lib/issues";
+import { AddStampRangeDialog } from "./add-stamp-range-dialog";
+import { MergeIssueDialog } from "./merge-issue-dialog";
+import { RangeExtendedDialog } from "./range-extended-dialog";
+import type { IssueListItem, IssueSortBy, StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
@@ -39,7 +46,7 @@ import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectiveVendorsForArea, effectivePrimaryVendorId, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 
@@ -86,6 +93,14 @@ type DialogState =
     }
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-issue-area"; issue: IssueListItem }
+  | { kind: "add-stamp-range"; issue: IssueListItem }
+  | { kind: "merge-issue"; issue: IssueListItem }
+  | {
+      kind: "range-extended";
+      issueId: string;
+      issueLabel: string;
+      suggestions: IssueRangeSuggestion[];
+    }
   | { kind: "move-stamp"; issueId: string; stampId: string }
   | { kind: "delete-stamp"; issueId: string; stampId: string; stampName: string };
 
@@ -265,6 +280,22 @@ export function IssuesListPanel({
     invalidateList(collectionId);
   }
 
+  /** After a bulk add-range (#219) or merge (#218), refresh the issue and — if the new
+   *  stamps push its declared catalog range beyond its bounds — prompt to widen or keep
+   *  it, mirroring the Add-stamp widen-vs-keep choice. Otherwise just close. */
+  async function finishWithRangeCheck(issueId: string, issueLabel: string) {
+    invalidateMembers(collectionId, issueId);
+    invalidateList(collectionId);
+    setAutoExpandIssueId(issueId);
+    const suggestions = await getIssueRangeSuggestionsAction(collectionId, issueId);
+    if (suggestions.length > 0) {
+      setActionState({ status: "idle" });
+      setDialog({ kind: "range-extended", issueId, issueLabel, suggestions });
+    } else {
+      setDialog({ kind: "none" });
+    }
+  }
+
   function submitAction(
     action: (fd: FormData) => Promise<IssueActionState>,
     e: React.FormEvent<HTMLFormElement>
@@ -327,6 +358,8 @@ export function IssuesListPanel({
     onEdit: (issue) => openDialog({ kind: "edit-issue", issue }),
     onDelete: (issue) => openDialog({ kind: "delete-issue", issue }),
     onMoveIssueArea: (issue) => openDialog({ kind: "move-issue-area", issue }),
+    onAddStampRange: (issue) => openDialog({ kind: "add-stamp-range", issue }),
+    onMergeIssue: (issue) => openDialog({ kind: "merge-issue", issue }),
     onAddStamp: (issueId, parentStampId, parentCatalogNumbers) =>
       openDialog({
         kind: "add-stamp",
@@ -660,6 +693,103 @@ export function IssuesListPanel({
               }
             })
           }
+        />
+      )}
+
+      {dialog.kind === "add-stamp-range" &&
+        (() => {
+          const areaId = dialog.issue.collectionAreaId;
+          const issueLabel =
+            (dialog.issue.name ?? "(unnamed)") +
+            (dialog.issue.year ? ` (${dialog.issue.year})` : "");
+          return (
+            <AddStampRangeDialog
+              collectionId={collectionId}
+              issueName={issueLabel}
+              areaId={areaId}
+              vendors={effectiveVendorsForArea(areas, areaId)}
+              primaryVendorId={effectivePrimaryVendorId(areas, areaId)}
+              isPending={isPending}
+              error={error}
+              onClose={closeDialog}
+              onSubmit={(fd) =>
+                startTransition(async () => {
+                  const result = await addStampRangeToIssueAction(
+                    collectionId,
+                    dialog.issue.id,
+                    fd
+                  );
+                  setActionState(result);
+                  if (result.status === "success") {
+                    await finishWithRangeCheck(dialog.issue.id, issueLabel);
+                  }
+                })
+              }
+            />
+          );
+        })()}
+
+      {dialog.kind === "merge-issue" &&
+        (() => {
+          const source = dialog.issue;
+          const sourceLabel =
+            (source.name ?? "(unnamed)") + (source.year ? ` (${source.year})` : "");
+          const targets = allIssues
+            .filter(
+              (i) => i.id !== source.id && i.collectionAreaId === source.collectionAreaId
+            )
+            .map((i) => ({
+              id: i.id,
+              label: (i.name ?? "(unnamed)") + (i.year ? ` (${i.year})` : ""),
+            }));
+          return (
+            <MergeIssueDialog
+              collectionId={collectionId}
+              sourceIssueId={source.id}
+              sourceLabel={sourceLabel}
+              targets={targets}
+              isPending={isPending}
+              error={error}
+              onClose={closeDialog}
+              onSubmit={(fd) =>
+                startTransition(async () => {
+                  const result = await mergeIssuesAction(collectionId, source.id, fd);
+                  setActionState(result);
+                  if (result.status === "success" && result.issueId) {
+                    invalidateMembers(collectionId, source.id);
+                    const targetLabel =
+                      targets.find((t) => t.id === result.issueId)?.label ?? "the issue";
+                    await finishWithRangeCheck(result.issueId, targetLabel);
+                  }
+                })
+              }
+            />
+          );
+        })()}
+
+      {dialog.kind === "range-extended" && (
+        <RangeExtendedDialog
+          issueLabel={dialog.issueLabel}
+          suggestions={dialog.suggestions}
+          isPending={isPending}
+          error={error}
+          onKeep={() => setDialog({ kind: "none" })}
+          onWiden={() => {
+            const { issueId, suggestions } = dialog;
+            startTransition(async () => {
+              for (const s of suggestions) {
+                await applyIssueRangeSuggestionAction(
+                  collectionId,
+                  issueId,
+                  s.catalogVendorId,
+                  s.proposedFirst,
+                  s.proposedLast
+                );
+              }
+              invalidateList(collectionId);
+              setDialog({ kind: "none" });
+            });
+          }}
         />
       )}
 

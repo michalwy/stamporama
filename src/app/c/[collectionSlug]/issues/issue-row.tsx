@@ -216,6 +216,8 @@ export interface IssueRowCallbacks {
   onEdit: (issue: IssueListItem) => void;
   onDelete: (issue: IssueListItem) => void;
   onMoveIssueArea: (issue: IssueListItem) => void;
+  onAddStampRange: (issue: IssueListItem) => void;
+  onMergeIssue: (issue: IssueListItem) => void;
   onAddStamp: (
     issueId: string,
     parentStampId?: string,
@@ -322,6 +324,7 @@ export function IssueRow({
 
   const actions: RowAction[] = [
     { key: "add-stamp", label: "Add stamp", icon: "＋", onSelect: () => callbacks.onAddStamp(issue.id) },
+    { key: "add-stamp-range", label: "Add stamp range…", icon: "⋯", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
     copies.action,
     ...(issue.requiredPriceTotal ? [prices.action] : []),
@@ -336,6 +339,7 @@ export function IssueRow({
         ]
       : []),
     { key: "move-area", label: "Move to another area…", icon: "⇄", onSelect: () => callbacks.onMoveIssueArea(issue) },
+    { key: "merge", label: "Merge into another issue…", icon: "⤵", onSelect: () => callbacks.onMergeIssue(issue) },
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => callbacks.onEdit(issue) },
     {
       key: "delete",
