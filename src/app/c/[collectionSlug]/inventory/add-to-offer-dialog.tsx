@@ -26,6 +26,7 @@ import {
   useInvalidateOffers,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { useInvalidateInventory } from "./use-inventory-query";
+import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 const MUTED = "var(--color-text-muted)";
@@ -177,6 +178,9 @@ export function AddToOfferDialog({
   const [error, setError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
   const { invalidateList } = useInvalidateInventory();
+  // Creating the first offer for a platform sets its currency (#196); the platform picker reads the
+  // currency from the cached contact search, so it must be invalidated too (#212).
+  const { invalidateContacts } = useInvalidatePurchases();
 
   const { data, isLoading } = useComposeTargets(collectionId, item.id, true);
   const offers = useMemo(() => data?.offers ?? [], [data]);
@@ -274,6 +278,7 @@ export function AddToOfferDialog({
       const seeded = await actions.addOfferSetAction(created.id, [item.id], { perCopy: false });
       invalidateAll(collectionId);
       invalidateList(collectionId);
+      invalidateContacts(collectionId);
       if (seeded.status !== "success") {
         // The offer exists but the copy didn't land — surface it and keep the picker open. The new
         // (empty) offer now shows in the list, so the collector can retry via "New set" on it.

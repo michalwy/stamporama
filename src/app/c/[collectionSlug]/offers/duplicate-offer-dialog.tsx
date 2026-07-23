@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { OfferFormDialog } from "./offer-form-dialog";
 import { useInvalidateOffers } from "./use-offers-query";
+import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 
 export interface DuplicateOfferDialogProps {
   collectionId: string;
@@ -35,6 +36,9 @@ export function DuplicateOfferDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
+  // Duplicating onto a platform with no currency yet sets it (#196) — refresh the contact search
+  // cache the platform picker reads from, or the next create still sees it as currency-less (#212).
+  const { invalidateContacts } = useInvalidatePurchases();
 
   // The source price in its own currency is the conversion base — always convert from it, so
   // switching currencies never compounds. "0.00" means the source had no price yet → start blank.
@@ -94,6 +98,7 @@ export function DuplicateOfferDialog({
             return;
           }
           invalidateAll(collectionId);
+          invalidateContacts(collectionId);
           const qs = result.skippedCopies > 0 ? `?skipped=${result.skippedCopies}` : "";
           router.push(`/c/${collectionSlug}/offers/${result.id}${qs}`);
         });

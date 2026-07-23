@@ -15,6 +15,7 @@ import {
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { OfferRow } from "./offer-row";
+import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 
 type DialogState =
   | { kind: "none" }
@@ -47,6 +48,10 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
+  // A first offer for a platform sets that platform's currency (#196); the platform picker reads the
+  // currency from the cached contact search, so it must be invalidated too or the next create still
+  // sees the platform as currency-less (#212).
+  const { invalidateContacts } = useInvalidatePurchases();
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
 
   const needsAction = searchParams.get("needsAction") === "1";
@@ -233,6 +238,7 @@ export function OffersListPanel({ collectionId, collectionSlug, baseCurrency }: 
                 const result = await createOfferAction(collectionId, fd);
                 if (result.status === "success") {
                   invalidateAll(collectionId);
+                  invalidateContacts(collectionId);
                   // Straight to the compose screen — a fresh offer has no sets yet.
                   router.push(`/c/${collectionSlug}/offers/${result.id}`);
                 } else setActionError(result.message);
