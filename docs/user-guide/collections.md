@@ -51,6 +51,27 @@ Catalog numbers are never lost in a move: catalogs belong to the collection, not
 
 When you type a name in the **Add issue** dialog, Stamporama checks whether an issue with that same name already exists **in the selected area** (the check ignores case and surrounding spaces). If one does, a small **⚠ warning icon** appears inside the name field; hover it to see a tooltip naming the existing issue(s) and their year. The warning never blocks you — the same name can legitimately repeat, so you can create the issue anyway if the duplicate is intentional. The check is per area only: the same name in a different area (for example, the same series name across two countries) is not flagged.
 
+## Keeping an issue's catalog range in step with its stamps
+
+An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the issue's **required-for-completeness** stamps still fit inside that declared range and flags it when one **extends beyond** it. Only required stamps count — optional extras such as blocks or varieties never widen the range.
+
+**When you add a stamp** that is required for completeness and whose catalog number falls outside the issue's declared range, the **Add stamp** dialog shows the proposed widened range (for example, `Mi 100–105 → 100–106`) and asks you to choose before saving:
+
+- **Widen the issue's declared range to cover this stamp** — the range is updated as part of adding the stamp.
+- **Keep this stamp outside the declared range** — the stamp is added and the range is left as-is.
+
+You cannot save the stamp until you pick one, so the decision is never made for you.
+
+**On an existing issue**, the same situation is surfaced after the fact:
+
+- The affected **catalog-number chip** on the **Issues** list turns to a warning colour. Hover it to see the widened range being proposed.
+- The issue's **⋮** menu gains an **Update declared range** action that widens the range for you — one click updates every affected catalog and refreshes the list.
+- You can also do it from the **Edit issue** dialog: the same suggestion appears under **Catalog numbers** with an **Apply** button that fills in the widened First/Last; save the issue to keep it.
+
+The check only ever suggests **widening** a range, never narrowing it — a range that is broader than the required stamps you have entered so far is normal while an issue is still being filled in, so it is never flagged. Comparison stays within the **same numbering family** as the range: for a plain numeric range like `100–105`, a block (`BL12`) or sheetlet (`Ark. 103`) that belongs to the same issue is a different family and is left alone, whereas a range written as `BL17–BL18` **is** extended by `BL19`.
+
+The **basic numbering takes precedence**. If a range was declared in a special numbering — for example a block range `BL1–BL3` — and a required stamp with the basic numbering (a plain number like `200`) is added, the series **adopts the basic numbering**: the proposal replaces the block range with the basic one (`BL1–BL3 → 200`) rather than extending it.
+
 ## Required for completeness
 
 Each stamp carries a **Required for completeness** flag that controls whether it counts toward its issue's required-stamps total. The flag can be set when adding a stamp and changed later from the stamp's **Edit** dialog — toggle the **Required for completeness** checkbox and save.

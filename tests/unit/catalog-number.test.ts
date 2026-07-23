@@ -11,6 +11,9 @@ import {
   parseCatalogSearch,
   resolveCatalogRange,
   generateCatalogNumbers,
+  formatSchemeValue,
+  computeIssueRangeExtension,
+  computeIssueRangeSuggestions,
 } from "../../src/lib/catalog-number";
 
 describe("normalizeCatalogKey", () => {
@@ -160,6 +163,180 @@ describe("resolveCatalogRange + generateCatalogNumbers", () => {
   it("rejects a descending range", () => {
     assert.match(expand("105", "100") as string, /≤/);
     assert.match(expand("100c", "100a") as string, /≤/);
+  });
+});
+
+describe("formatSchemeValue", () => {
+  function scheme(first: string, last: string) {
+    const r = resolveCatalogRange(first, last);
+    if ("error" in r) throw new Error(r.error);
+    return r.scheme;
+  }
+
+  it("renders one position for each scheme kind", () => {
+    assert.equal(formatSchemeValue(scheme("100", "105"), 108), "108");
+    assert.equal(formatSchemeValue(scheme("BL17", "BL18"), 19), "BL19");
+    assert.equal(formatSchemeValue(scheme("40A", "50A"), 43), "43A");
+    assert.equal(formatSchemeValue(scheme("423a", "423c"), 4), "423d");
+    assert.equal(formatSchemeValue(scheme("12I", "12III"), 4), "12IV");
+  });
+
+  it("agrees with generateCatalogNumbers position by position", () => {
+    const s = scheme("100", "104");
+    const all = generateCatalogNumbers(s, 5);
+    for (let i = 0; i < all.length; i++) {
+      assert.equal(formatSchemeValue(s, s.from + i), all[i]);
+    }
+  });
+});
+
+describe("computeIssueRangeExtension", () => {
+  it("proposes widening a numeric range above and below", () => {
+    assert.deepEqual(computeIssueRangeExtension("100", "105", ["104", "106"]), {
+      kind: "extend",
+      proposedFirst: "100",
+      proposedLast: "106",
+      outsideNumbers: ["106"],
+    });
+    assert.deepEqual(computeIssueRangeExtension("100", "105", ["098", "103"]), {
+      kind: "extend",
+      proposedFirst: "98",
+      proposedLast: "105",
+      outsideNumbers: ["098"],
+    });
+  });
+
+  it("returns null when members stay within the declared range (partial entry is fine)", () => {
+    assert.equal(computeIssueRangeExtension("100", "105", ["100", "101", "102"]), null);
+    assert.equal(computeIssueRangeExtension("100", "105", []), null);
+  });
+
+  it("ignores members from a different family (block / sheet vs numeric range)", () => {
+    // BL12 (prefix "BL") and "Ark. 103" (prefix "Ark. ") are not part of a bare
+    // numeric 100–105 range.
+    assert.equal(computeIssueRangeExtension("100", "105", ["BL12", "Ark. 103", "103"]), null);
+  });
+
+  it("extends a prefixed range when a same-prefix member exceeds it", () => {
+    assert.deepEqual(computeIssueRangeExtension("BL17", "BL18", ["BL19"]), {
+      kind: "extend",
+      proposedFirst: "BL17",
+      proposedLast: "BL19",
+      outsideNumbers: ["BL19"],
+    });
+  });
+
+  it("extends a letter-suffix range", () => {
+    assert.deepEqual(computeIssueRangeExtension("423a", "423c", ["423d"]), {
+      kind: "extend",
+      proposedFirst: "423a",
+      proposedLast: "423d",
+      outsideNumbers: ["423d"],
+    });
+    // A different base (424a) is a different family — ignored.
+    assert.equal(computeIssueRangeExtension("423a", "423c", ["424a"]), null);
+  });
+
+  it("extends a Roman-suffix range", () => {
+    assert.deepEqual(computeIssueRangeExtension("12I", "12III", ["12IV"]), {
+      kind: "extend",
+      proposedFirst: "12I",
+      proposedLast: "12IV",
+      outsideNumbers: ["12IV"],
+    });
+  });
+
+  it("widens a lone-First single value when a same-family member sits beyond it", () => {
+    assert.deepEqual(computeIssueRangeExtension("105", null, ["107"]), {
+      kind: "extend",
+      proposedFirst: "105",
+      proposedLast: "107",
+      outsideNumbers: ["107"],
+    });
+  });
+
+  it("adopts basic numbering when a block range gains a basic-numbered member", () => {
+    // A block range BL1–BL3 with a basic-numbered member (200) takes over the basic span.
+    assert.deepEqual(computeIssueRangeExtension("BL1", "BL3", ["200"]), {
+      kind: "adopt-basic",
+      proposedFirst: "200",
+      proposedLast: null,
+      outsideNumbers: ["200"],
+    });
+    // Several basic members → their span; block members are set aside.
+    assert.deepEqual(computeIssueRangeExtension("BL1", "BL3", ["BL2", "200", "202"]), {
+      kind: "adopt-basic",
+      proposedFirst: "200",
+      proposedLast: "202",
+      outsideNumbers: ["200", "202"],
+    });
+  });
+
+  it("does not adopt basic numbering for a bare numeric declared range", () => {
+    // Declared range is already basic (no prefix) → block members stay ignored.
+    assert.equal(computeIssueRangeExtension("100", "105", ["102", "BL2"]), null);
+  });
+
+  it("returns null when the declared range cannot be interpreted", () => {
+    assert.equal(computeIssueRangeExtension("BL", null, ["BL5"]), null);
+    assert.equal(computeIssueRangeExtension("", "5", ["3"]), null);
+  });
+});
+
+describe("computeIssueRangeSuggestions", () => {
+  const abbrev = new Map([
+    ["mi", "Mi"],
+    ["sc", "Sc"],
+  ]);
+
+  it("returns one suggestion per extended vendor and skips in-range vendors", () => {
+    const ranges = [
+      { catalogVendorId: "mi", firstNumber: "100", lastNumber: "105" },
+      { catalogVendorId: "sc", firstNumber: "10", lastNumber: "12" },
+    ];
+    const members = [
+      { catalogVendorId: "mi", number: "106" }, // extends Mi
+      { catalogVendorId: "mi", number: "BL3" }, // different family, ignored
+      { catalogVendorId: "sc", number: "11" }, // within Sc range
+    ];
+    assert.deepEqual(computeIssueRangeSuggestions(ranges, members, abbrev), [
+      {
+        catalogVendorId: "mi",
+        vendorAbbreviation: "Mi",
+        kind: "extend",
+        currentFirst: "100",
+        currentLast: "105",
+        proposedFirst: "100",
+        proposedLast: "106",
+        outsideNumbers: ["106"],
+      },
+    ]);
+  });
+
+  it("proposes adopting basic numbering over a declared block range", () => {
+    const ranges = [{ catalogVendorId: "mi", firstNumber: "BL1", lastNumber: "BL3" }];
+    const members = [
+      { catalogVendorId: "mi", number: "200" },
+      { catalogVendorId: "mi", number: "BL2" },
+    ];
+    assert.deepEqual(computeIssueRangeSuggestions(ranges, members, abbrev), [
+      {
+        catalogVendorId: "mi",
+        vendorAbbreviation: "Mi",
+        kind: "adopt-basic",
+        currentFirst: "BL1",
+        currentLast: "BL3",
+        proposedFirst: "200",
+        proposedLast: null,
+        outsideNumbers: ["200"],
+      },
+    ]);
+  });
+
+  it("returns an empty array when nothing extends", () => {
+    const ranges = [{ catalogVendorId: "mi", firstNumber: "100", lastNumber: "105" }];
+    const members = [{ catalogVendorId: "mi", number: "102" }];
+    assert.deepEqual(computeIssueRangeSuggestions(ranges, members, abbrev), []);
   });
 });
 

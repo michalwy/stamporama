@@ -19,6 +19,7 @@ import type { CatalogVendorData } from "@/lib/catalog";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import { computeIssueRangeExtension } from "@/lib/catalog-number";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
 import { Segmented } from "./segmented";
 import { CatalogDuplicateWarningIcon } from "./catalog-duplicate-warning";
@@ -325,6 +326,52 @@ export function StampFormDialog(props: StampFormDialogProps) {
 
   const blockDuplicates = dupCheck.mode === "block" && dupCheck.groups.length > 0;
 
+  // ── Declared-range extension (add-to-issue only) ──
+  // Only a required-for-completeness stamp defines an issue's range, so the prompt
+  // fires only when Required is checked. For each vendor whose entered number falls
+  // beyond the selected issue's declared First–Last (same numbering family), we
+  // surface the proposed widened range and force an explicit widen/keep choice
+  // before the stamp can be saved. Debounced so transient values while typing don't
+  // flash a prompt (mirrors the duplicate check above).
+  const [rangeExtensions, setRangeExtensions] = useState<
+    { catalogVendorId: string; current: string; proposed: string }[]
+  >([]);
+  // Explicit choice: "widen" the issue range on save, or "keep" the stamp outside it.
+  const [rangeChoice, setRangeChoice] = useState<"widen" | "keep" | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const issue =
+        addProps && !autoCreateIssue && requiredForCompleteness && selectedIssueId
+          ? addProps.issues.find((i) => i.id === selectedIssueId)
+          : undefined;
+      const out: { catalogVendorId: string; current: string; proposed: string }[] = [];
+      for (const declared of issue?.catalogNumbers ?? []) {
+        const entered = (catalogInputs[declared.catalogVendorId] ?? "").trim();
+        if (!entered) continue;
+        const ext = computeIssueRangeExtension(declared.firstNumber, declared.lastNumber, [entered]);
+        if (!ext) continue;
+        const abbr =
+          vendors.find((v) => v.catalogVendorId === declared.catalogVendorId)?.vendorAbbreviation ?? "";
+        const fmt = (first: string, last: string | null) => {
+          const range = last ? `${first}–${last}` : first;
+          return abbr ? `${abbr} ${range}` : range;
+        };
+        out.push({
+          catalogVendorId: declared.catalogVendorId,
+          current: fmt(declared.firstNumber, declared.lastNumber),
+          proposed: fmt(ext.proposedFirst, ext.proposedLast),
+        });
+      }
+      setRangeExtensions(out);
+      // No extension pending → clear any stale choice so a fresh one re-asks.
+      if (out.length === 0) setRangeChoice(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addProps, autoCreateIssue, requiredForCompleteness, selectedIssueId, catalogInputs, vendors]);
+
+  const hasRangeExtension = rangeExtensions.length > 0;
+
   const needsMembers =
     !!addProps && !!selectedIssueId && !autoCreateIssue && !addProps.prefilledParentStampId;
   const { data: members } = useIssueMembers(collectionId, selectedIssueId || "", needsMembers);
@@ -377,6 +424,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
       fd.set("newIssueYear", newIssueYear.trim());
     }
     fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
+    if (hasRangeExtension && rangeChoice === "widen") {
+      fd.set("widenIssueRange", "true");
+    }
     props.onSubmit(autoCreateIssue ? "" : selectedIssueId, fd);
   }
 
@@ -392,7 +442,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
     isPending ||
     photosUploading ||
     blockDuplicates ||
-    (props.mode === "add" && !autoCreateIssue && !selectedIssueId);
+    (props.mode === "add" && !autoCreateIssue && !selectedIssueId) ||
+    (hasRangeExtension && rangeChoice === null);
 
   return (
     <DialogShell title={title} onClose={onClose} minHeight="22rem" maxWidth="52rem">
@@ -604,6 +655,75 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   />
                   Required for completeness
                 </label>
+              </div>
+            )}
+
+            {/* Declared-range extension prompt: forces an explicit widen/keep choice
+                before a required stamp that overruns the issue's range can be saved. */}
+            {hasRangeExtension && (
+              <div
+                role="group"
+                aria-label="Declared range extension"
+                style={{
+                  marginBottom: "0.875rem",
+                  border: "1px solid var(--color-warning-border)",
+                  background: "var(--color-warning-soft)",
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem 0.875rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                  <span aria-hidden style={{ color: "var(--color-warning)", lineHeight: 1.3 }}>
+                    ⚠
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "var(--color-warning)" }}>
+                      This stamp changes the issue&rsquo;s declared catalog range
+                    </p>
+                    <ul
+                      style={{
+                        margin: "0 0 0.5rem",
+                        padding: 0,
+                        listStyle: "none",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      {rangeExtensions.map((e) => (
+                        <li key={e.catalogVendorId}>
+                          <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{e.current}</span>
+                          <span style={{ color: "var(--color-text-muted)" }}> → </span>
+                          <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{e.proposed}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                        <input
+                          type="radio"
+                          name="rangeChoice"
+                          checked={rangeChoice === "widen"}
+                          onChange={() => setRangeChoice("widen")}
+                          disabled={isPending}
+                        />
+                        Update the issue&rsquo;s declared range as shown above
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                        <input
+                          type="radio"
+                          name="rangeChoice"
+                          checked={rangeChoice === "keep"}
+                          onChange={() => setRangeChoice("keep")}
+                          disabled={isPending}
+                        />
+                        Keep this stamp outside the declared range
+                      </label>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -6,8 +6,9 @@ import {
   moneyPrimaryText,
   moneySecondaryText,
 } from "@/app/stamp-display";
-import type { StampNodeData } from "@/lib/issues";
+import type { StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
+import { Tooltip } from "./tooltip";
 import {
   ISSUE_PRIMARY_CHIP,
   ISSUE_SECONDARY_CHIP,
@@ -68,16 +69,29 @@ export function IssueTitle({ name, year }: { name: string | null; year: number |
   );
 }
 
-/** Issue catalog-number chips (primary vendor first, then the rest). */
+/** Warning-toned overlay for a catalog chip whose declared range is extended by
+ * member stamps — keeps the chip's shape but recolors it (border/text/fill). */
+const CHIP_RANGE_WARNING_STYLE: React.CSSProperties = {
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning-border)",
+  background: "var(--color-warning-soft)",
+};
+
+/** Issue catalog-number chips (primary vendor first, then the rest). When a vendor's
+ * declared range is extended by its member stamps (`rangeSuggestions`), that chip is
+ * shown in a warning state with a tooltip proposing the widened range. */
 export function IssueCatalogChips({
   catalogNumbers,
   vendorMap,
   primaryVendorId,
+  rangeSuggestions = [],
 }: {
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
   vendorMap: VendorMap;
   primaryVendorId: string | null;
+  rangeSuggestions?: IssueRangeSuggestion[];
 }) {
+  const warnById = new Map(rangeSuggestions.map((s) => [s.catalogVendorId, s]));
   const primary = primaryVendorId
     ? catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ?? null
     : null;
@@ -87,10 +101,32 @@ export function IssueCatalogChips({
     style: React.CSSProperties
   ) => {
     const v = vendorMap.get(c.catalogVendorId);
+    const warn = warnById.get(c.catalogVendorId);
+    const label = formatIssueCatalogNumber(c.firstNumber, c.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix);
+    if (!warn) {
+      return (
+        <span key={c.catalogVendorId} style={style}>
+          {label}
+        </span>
+      );
+    }
+    const proposed = `${warn.proposedFirst}${warn.proposedLast ? `–${warn.proposedLast}` : ""}`;
     return (
-      <span key={c.catalogVendorId} style={style}>
-        {formatIssueCatalogNumber(c.firstNumber, c.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix)}
-      </span>
+      <Tooltip
+        key={c.catalogVendorId}
+        align="start"
+        content={
+          <span>
+            {warn.kind === "adopt-basic"
+              ? "Required stamps use the basic numbering — set this catalog's range to "
+              : "Required stamps extend this range — widen it to "}
+            <span style={{ fontWeight: 600 }}>{proposed}</span>. Use “Update declared range” or edit
+            the issue.
+          </span>
+        }
+      >
+        <span style={{ ...style, ...CHIP_RANGE_WARNING_STYLE, cursor: "help" }}>{label}</span>
+      </Tooltip>
     );
   };
   return (

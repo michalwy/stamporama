@@ -4,6 +4,9 @@ import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
+import { computeIssueRangeSuggestions, type IssueRangeSuggestion } from "./catalog-number";
+
+export type { IssueRangeSuggestion } from "./catalog-number";
 
 /** Prisma select for a photo summary carried on a stamp node/issue row (#137). */
 const PHOTO_SUMMARY_SELECT = {
@@ -369,6 +372,9 @@ export interface IssueListItem {
   requiredPriceTotal: IssuePriceTotal | null;
   /** True when at least one required member's counted price is on a non-latest edition. */
   requiredPriceStale: boolean;
+  /** Per-vendor suggestions where member stamps extend the declared catalog range
+   *  (empty when every declared range still covers its members). */
+  rangeSuggestions: IssueRangeSuggestion[];
   /** Main photos of the required-for-completeness stamps (#137), shown on the collapsed issue
    * row as a representative gallery of the issue. */
   photos: PhotoSummary[];
@@ -393,6 +399,8 @@ const ISSUE_LIST_SELECT = {
       requiredForCompleteness: true,
       stamp: {
         select: {
+          // Member catalog numbers drive the declared-range coverage check.
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
           catalogPrices: {
             select: {
               price: true,
@@ -483,6 +491,7 @@ function toIssueListItem(
     members: {
       requiredForCompleteness: boolean;
       stamp: {
+        catalogNumbers: { catalogVendorId: string; number: string }[];
         catalogPrices: RawCatalogPrice[];
         photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       };
@@ -491,12 +500,21 @@ function toIssueListItem(
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   latestYearByName: Map<string, number>,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  vendorAbbrev: ReadonlyMap<string, string>
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
   // One representative main photo per required stamp (already filtered to role="main").
   const photos = toPhotoSummaries(requiredMembers.flatMap((m) => m.stamp.photos));
+
+  // Declared-range coverage: only required-for-completeness members define the
+  // range — optional extras (blocks, varieties) never widen it.
+  const rangeSuggestions = computeIssueRangeSuggestions(
+    issue.catalogNumbers,
+    requiredMembers.flatMap((m) => m.stamp.catalogNumbers),
+    vendorAbbrev
+  );
 
   // convertedAmount filled after rates are fetched (see buildIssueListItems).
   const requiredPriceTotal = computeRequiredPriceTotal(
@@ -520,6 +538,7 @@ function toIssueListItem(
     requiredCount: requiredMembers.length,
     requiredPriceTotal,
     requiredPriceStale: requiredPriceTotal?.usesOlderEdition ?? false,
+    rangeSuggestions,
     photos,
   };
 }
@@ -532,9 +551,16 @@ async function buildIssueListItems(
   baseCurrency: string,
   displayConditionId: string | null
 ): Promise<IssueListItem[]> {
-  const latestYearByName = await getLatestEditionYearByName(collectionId);
+  const [latestYearByName, vendors] = await Promise.all([
+    getLatestEditionYearByName(collectionId),
+    prisma.catalogVendor.findMany({
+      where: { collectionId },
+      select: { id: true, abbreviation: true },
+    }),
+  ]);
+  const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
   const items = issues.map((i) =>
-    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId)
+    toIssueListItem(i, primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId, vendorAbbrev)
   );
   const currencies = items
     .map((i) => i.requiredPriceTotal?.currency)
@@ -1232,6 +1258,75 @@ export async function updateIssue(
         });
       }
     }
+  });
+}
+
+/**
+ * Declared-range coverage suggestions for one issue: for each vendor whose member
+ * stamps extend the issue's First–Last range, a proposal to widen it. Empty when
+ * every declared range still covers its members. See {@link computeIssueRangeSuggestions}.
+ */
+export async function getIssueRangeSuggestions(
+  ownerId: string,
+  collectionId: string,
+  issueId: string
+): Promise<IssueRangeSuggestion[]> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const [issue, vendors] = await Promise.all([
+    prisma.issue.findUnique({
+      where: { id: issueId },
+      select: {
+        catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+        members: {
+          select: {
+            requiredForCompleteness: true,
+            stamp: { select: { catalogNumbers: { select: { catalogVendorId: true, number: true } } } },
+          },
+        },
+      },
+    }),
+    prisma.catalogVendor.findMany({ where: { collectionId }, select: { id: true, abbreviation: true } }),
+  ]);
+  if (!issue) return [];
+  const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
+  return computeIssueRangeSuggestions(
+    issue.catalogNumbers,
+    issue.members
+      .filter((m) => m.requiredForCompleteness)
+      .flatMap((m) => m.stamp.catalogNumbers),
+    vendorAbbrev
+  );
+}
+
+/** Upsert a single vendor's declared First–Last range on an issue (used to apply a
+ *  coverage suggestion without touching the issue's other vendor ranges). */
+export async function setIssueCatalogRange(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  catalogVendorId: string,
+  firstNumber: string,
+  lastNumber: string | null
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  const first = firstNumber.trim();
+  if (!first) throw new Error("First catalog number is required.");
+  const last = lastNumber?.trim() || null;
+  // Guard the vendor belongs to this collection before writing.
+  const vendor = await prisma.catalogVendor.findFirst({
+    where: { id: catalogVendorId, collectionId },
+    select: { id: true },
+  });
+  if (!vendor) throw new Error("Catalog vendor not found.");
+  await prisma.issueCatalogNumber.upsert({
+    where: { issueId_catalogVendorId: { issueId, catalogVendorId } },
+    create: { issueId, catalogVendorId, firstNumber: first, lastNumber: last },
+    update: { firstNumber: first, lastNumber: last },
   });
 }
 

@@ -12,7 +12,9 @@ import type {
   IssueListItem,
   IssueCatalogNumberData,
   DuplicateIssueMatch,
+  IssueRangeSuggestion,
 } from "@/lib/issues";
+import { IssueRangeWarning } from "@/app/c/[collectionSlug]/shared/issue-range-warning";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { resolveCatalogRange, generateCatalogNumbers } from "@/lib/catalog-number";
 import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -576,6 +578,25 @@ export function IssueDialog(props: IssueDialogProps) {
 
   const autoDupBlocking = autoDup.mode === "block" && autoDup.groups.length > 0;
 
+  // Declared-range coverage (edit only): the list already computed which vendors'
+  // members extend the range. Applying a suggestion writes the widened range into
+  // the (uncontrolled) First/Last inputs and drops it from the list; the user saves
+  // the form normally to persist it.
+  const [rangeSuggestions, setRangeSuggestions] = useState<IssueRangeSuggestion[]>(
+    isCreate ? [] : props.issue.rangeSuggestions
+  );
+
+  function handleApplyRange(s: IssueRangeSuggestion) {
+    const form = formRef.current;
+    if (form) {
+      const firstEl = form.elements.namedItem(`issueCatalogFirst_${s.catalogVendorId}`);
+      const lastEl = form.elements.namedItem(`issueCatalogLast_${s.catalogVendorId}`);
+      if (firstEl instanceof HTMLInputElement) firstEl.value = s.proposedFirst;
+      if (lastEl instanceof HTMLInputElement) lastEl.value = s.proposedLast ?? "";
+    }
+    setRangeSuggestions((prev) => prev.filter((x) => x.catalogVendorId !== s.catalogVendorId));
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (isCreate) {
@@ -655,6 +676,13 @@ export function IssueDialog(props: IssueDialogProps) {
                 : undefined
             }
           />
+          {!isCreate && (
+            <IssueRangeWarning
+              suggestions={rangeSuggestions}
+              onApply={handleApplyRange}
+              disabled={isPending}
+            />
+          )}
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}

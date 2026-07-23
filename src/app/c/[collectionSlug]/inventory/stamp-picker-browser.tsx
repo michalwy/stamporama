@@ -58,6 +58,7 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     requiredCount: issue.completeness.required,
     requiredPriceTotal: null,
     requiredPriceStale: false,
+    rangeSuggestions: [],
     photos: [],
   };
 }

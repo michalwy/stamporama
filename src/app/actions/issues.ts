@@ -16,12 +16,15 @@ import {
   listIssueReferencedVendors,
   getIssuePriceDetails,
   getIssueAreaId,
+  getIssueRangeSuggestions,
+  setIssueCatalogRange,
 } from "@/lib/issues";
 import type {
   AutoCreateStampsInput,
   IssueDeletionPreview,
   IssuePriceDetails,
   IssueReferencedVendor,
+  IssueRangeSuggestion,
 } from "@/lib/issues";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import {
@@ -37,6 +40,36 @@ export async function getIssuePriceDetailsAction(
 ): Promise<IssuePriceDetails> {
   const session = await getSession();
   return getIssuePriceDetails(session.user.id, collectionId, issueId);
+}
+
+/** Coverage suggestions for an issue: vendors whose members extend the declared range. */
+export async function getIssueRangeSuggestionsAction(
+  collectionId: string,
+  issueId: string
+): Promise<IssueRangeSuggestion[]> {
+  const session = await getSession();
+  try {
+    return await getIssueRangeSuggestions(session.user.id, collectionId, issueId);
+  } catch {
+    return [];
+  }
+}
+
+/** Apply one coverage suggestion by widening a vendor's declared range on the issue. */
+export async function applyIssueRangeSuggestionAction(
+  collectionId: string,
+  issueId: string,
+  catalogVendorId: string,
+  firstNumber: string,
+  lastNumber: string | null
+): Promise<IssueActionState> {
+  const session = await getSession();
+  try {
+    await setIssueCatalogRange(session.user.id, collectionId, issueId, catalogVendorId, firstNumber, lastNumber);
+    return { status: "success", issueId };
+  } catch {
+    return { status: "error", message: "Failed to update the catalog range. Please try again." };
+  }
 }
 
 export type IssueActionState =
@@ -290,6 +323,22 @@ export async function addStampToIssueAction(
     const photoChangeSet = parsePhotoChangeSet(formData);
     if (photoChangeSet) {
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
+    }
+    // The user chose to widen the issue's declared range to cover this stamp
+    // (required-for-completeness extensions only; see the add-stamp dialog). Recompute
+    // and apply every current suggestion now that the new member exists.
+    if (formData.get("widenIssueRange") === "true") {
+      const suggestions = await getIssueRangeSuggestions(session.user.id, collectionId, issueId);
+      for (const s of suggestions) {
+        await setIssueCatalogRange(
+          session.user.id,
+          collectionId,
+          issueId,
+          s.catalogVendorId,
+          s.proposedFirst,
+          s.proposedLast
+        );
+      }
     }
     return { status: "success", stampId };
   } catch {
