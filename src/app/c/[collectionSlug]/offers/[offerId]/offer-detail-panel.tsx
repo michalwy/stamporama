@@ -47,6 +47,16 @@ const INLINE_INPUT: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+const EDIT_CONTROL: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: "0 0.125rem",
+  cursor: "pointer",
+  color: "var(--color-text-muted)",
+  fontSize: "0.75rem",
+  lineHeight: 1,
+};
+
 const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
   active: { label: "Resume", icon: "▶" },
   paused: { label: "Pause", icon: "⏸" },
@@ -203,7 +213,9 @@ export function OfferDetailPanel({
             {offer.currency}
           </span>
 
-          {/* Listing URL — inline editable. */}
+          {/* Listing URL — editable in any state, including sold/withdrawn, for record-keeping
+              (#213). When a URL is set the link opens on click and a separate pencil edits it, so
+              the click-to-open never gets hijacked by editing (#214). */}
           <InlineText
             value={offer.url ?? ""}
             placeholder="Add listing URL"
@@ -222,7 +234,9 @@ export function OfferDetailPanel({
                 <span style={{ ...CHIP, color: "var(--color-text-muted)", cursor: "text" }}>Add listing URL</span>
               )
             }
-            editable={editable}
+            editable
+            editControl={!!offer.url}
+            editAriaLabel="Edit listing URL"
             isPending={isPending}
             inputType="url"
             onSave={(v) => patch("url", v)}
@@ -448,7 +462,9 @@ export function OfferDetailPanel({
 }
 
 /** A click-to-edit inline field: shows `display`, and on click swaps to an input that commits on
- * Enter / blur and reverts on Escape. Used for the offer's price and listing URL. */
+ * Enter / blur and reverts on Escape. Used for the offer's price and listing URL. When `editControl`
+ * is set, the display is left interactive (e.g. a link that opens) and a separate pencil button
+ * beside it enters edit mode, so the display's own click is never hijacked (#214). */
 function InlineText({
   value,
   placeholder,
@@ -457,6 +473,8 @@ function InlineText({
   isPending,
   inputType,
   suffix,
+  editControl = false,
+  editAriaLabel = "Edit",
   onSave,
 }: {
   value: string;
@@ -466,6 +484,8 @@ function InlineText({
   isPending: boolean;
   inputType: "url" | "number" | "text";
   suffix?: string;
+  editControl?: boolean;
+  editAriaLabel?: string;
   onSave: (next: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -473,20 +493,36 @@ function InlineText({
 
   if (!editable) return <>{display}</>;
 
+  function startEditing() {
+    setDraft(value);
+    setEditing(true);
+  }
+
   if (!editing) {
+    if (editControl) {
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+          {display}
+          <button
+            type="button"
+            onClick={startEditing}
+            disabled={isPending}
+            aria-label={editAriaLabel}
+            title={editAriaLabel}
+            style={EDIT_CONTROL}
+          >
+            ✎
+          </button>
+        </span>
+      );
+    }
     return (
       <span
         role="button"
         tabIndex={0}
-        onClick={() => {
-          setDraft(value);
-          setEditing(true);
-        }}
+        onClick={startEditing}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            setDraft(value);
-            setEditing(true);
-          }
+          if (e.key === "Enter") startEditing();
         }}
         title="Click to edit"
         style={{ cursor: "text", display: "inline-flex", alignItems: "center" }}

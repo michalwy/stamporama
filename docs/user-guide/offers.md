@@ -33,7 +33,10 @@ sets". A plain single-stamp offer is just the one-set case.
    - **One set holding all of them** — a series sold together.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
 4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
-   offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
+   offer's header — click the value to edit it (Enter or click away saves, Escape reverts). Once a
+   listing URL is set, its **🔗 Listing** link opens the listing when clicked; use the **✎** pencil
+   beside it to change the URL. The listing URL stays editable in **every** state — including a
+   **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu.
 5. When the listing is up on the platform, **Activate** the offer (in the header's **⋮** menu) to

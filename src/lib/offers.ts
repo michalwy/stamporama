@@ -914,10 +914,12 @@ export interface OfferPatch {
 
 /** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits price / URL
  * individually. Currency is not patchable (#196): it is inherited and locked from the platform.
- * Terminal offers are frozen; a changed platform is re-validated. */
+ * Terminal offers freeze price and platform, but the listing URL stays editable in every state for
+ * record-keeping (#213); a changed platform is re-validated. */
 export async function patchOffer(ownerId: string, offerId: string, patch: OfferPatch): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
-  if (isTerminalState(ref.state)) {
+  const touchesFrozenField = patch.platformId !== undefined || patch.price !== undefined;
+  if (isTerminalState(ref.state) && touchesFrozenField) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
   }
   if (patch.platformId !== undefined) {
