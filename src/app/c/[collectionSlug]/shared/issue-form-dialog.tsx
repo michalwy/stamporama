@@ -16,7 +16,11 @@ import type {
 } from "@/lib/issues";
 import { IssueRangeWarning } from "@/app/c/[collectionSlug]/shared/issue-range-warning";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
-import { resolveCatalogRange, generateCatalogNumbers } from "@/lib/catalog-number";
+import {
+  resolveCatalogRange,
+  generateCatalogNumbers,
+  formatSchemeValue,
+} from "@/lib/catalog-number";
 import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import {
   effectiveVendorsForArea,
@@ -78,6 +82,42 @@ function rangeCountFromForm(form: HTMLFormElement, vendorId: string): number | n
   const first = firstEl instanceof HTMLInputElement ? firstEl.value : "";
   const last = lastEl instanceof HTMLInputElement ? lastEl.value : "";
   return rangeCount(first, last);
+}
+
+// Auto-fill a secondary vendor's "Last" from the primary vendor's range span (#185): given the
+// secondary's "First" and how many stamps the primary spans, the last sits `count - 1` positions
+// up the same numbering scheme (e.g. First 200 + primary span 4 → 203). Returns null when First
+// can't be parsed as a range start.
+function autoFillLastFromSpan(first: string, primaryCount: number): string | null {
+  if (!first.trim() || primaryCount < 1) return null;
+  const range = resolveCatalogRange(first, null);
+  if ("error" in range) return null;
+  return formatSchemeValue(range.scheme, range.scheme.from + primaryCount - 1);
+}
+
+// onBlur handler for a secondary vendor's "First" input: once the primary catalog has a full
+// from–to range, entering only "First" for another vendor auto-fills its empty "Last" to span the
+// same number of stamps (#185). Skips when the user already typed a "Last" (never fights them),
+// when the primary range is a single stamp, or when the primary from/to isn't fully set.
+function autoFillSecondaryLast(
+  form: HTMLFormElement,
+  vendorId: string,
+  primaryVendorId: string | null
+): void {
+  if (!primaryVendorId || vendorId === primaryVendorId) return;
+  const firstEl = form.elements.namedItem(`issueCatalogFirst_${vendorId}`);
+  const lastEl = form.elements.namedItem(`issueCatalogLast_${vendorId}`);
+  if (!(firstEl instanceof HTMLInputElement) || !(lastEl instanceof HTMLInputElement)) return;
+  if (!firstEl.value.trim() || lastEl.value.trim()) return;
+  const primFirstEl = form.elements.namedItem(`issueCatalogFirst_${primaryVendorId}`);
+  const primLastEl = form.elements.namedItem(`issueCatalogLast_${primaryVendorId}`);
+  const primFirst = primFirstEl instanceof HTMLInputElement ? primFirstEl.value : "";
+  const primLast = primLastEl instanceof HTMLInputElement ? primLastEl.value : "";
+  if (!primFirst.trim() || !primLast.trim()) return;
+  const count = rangeCount(primFirst, primLast);
+  if (!count || count < 2) return;
+  const filled = autoFillLastFromSpan(firstEl.value, count);
+  if (filled) lastEl.value = filled;
 }
 
 // ── Auto-create duplicate-catalog candidates (#85) ────────────────────────────
@@ -305,6 +345,19 @@ function IssueForm({
                             data-lpignore="true"
                             data-1p-ignore
                             data-bwignore
+                            onBlur={
+                              showAutoCreate && !isPrimary
+                                ? (e) => {
+                                    const form = e.currentTarget.form;
+                                    if (form)
+                                      autoFillSecondaryLast(
+                                        form,
+                                        v.catalogVendorId,
+                                        primaryVendorId ?? null
+                                      );
+                                  }
+                                : undefined
+                            }
                             style={{
                               ...INPUT_STYLE,
                               flex: 1,

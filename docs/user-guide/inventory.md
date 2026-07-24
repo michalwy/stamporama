@@ -192,7 +192,11 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
      you can tell similar stamps apart.
    - **Browse…** opens a larger picker: pick an **area** on the left, filter its **issues**
      on the right, then expand an issue to choose a stamp or one of its variants. The picker
-     remembers its area, year, and search text, so it reopens on the same filter you left it on.
+     remembers its area, year, and search text, so it reopens on the same filter you left it
+     on — and the remembered text is **selected** when it opens, so you can just start typing
+     to replace it. The filter also looks **inside** each issue: a term that matches a stamp's
+     name or catalog number (but not the issue's own name) still surfaces that issue, opens it,
+     and highlights the matching stamps while dimming the rest.
 
    Choose a specific variant if you know it, or the **base stamp** if the variant is
    unknown. The chosen stamp appears as a summary with a **Change** link to reselect.
@@ -201,9 +205,9 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    (you must still pick an existing **area** first):
    - **+ New issue** (top of the issue list) adds an issue to the selected area. It then
      appears in the list, ready for you to add a stamp to it.
-   - **+ New stamp** (inside an expanded issue) adds a stamp to that issue. It then appears
-     in the issue's tree, ready for you to pick like any other stamp — it is not selected
-     automatically, and the picker stays open.
+   - **+ New stamp** (at the bottom of an expanded issue's stamp tree) adds a stamp to that
+     issue. It then appears in the issue's tree, ready for you to pick like any other stamp —
+     it is not selected automatically, and the picker stays open.
    - **+ variant** (next to a base stamp) adds a variant under that stamp, which likewise
      appears in the tree ready to pick.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both

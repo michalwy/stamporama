@@ -48,6 +48,19 @@ export function DialogShell({
   useEffect(() => {
     const el = panelRef.current;
     if (!el) return;
+    // Opt-in: focus AND select the field's text, so a remembered value (e.g. a picker's last
+    // search term) is overwritten by the first keystroke instead of appended to (#183).
+    const selectTarget = el.querySelector<HTMLElement>("[data-autofocus-select]");
+    if (selectTarget) {
+      selectTarget.focus();
+      if (
+        selectTarget instanceof HTMLInputElement ||
+        selectTarget instanceof HTMLTextAreaElement
+      ) {
+        selectTarget.select();
+      }
+      return;
+    }
     const explicit = el.querySelector<HTMLElement>("[data-autofocus]");
     if (explicit) { explicit.focus(); return; }
     const first =

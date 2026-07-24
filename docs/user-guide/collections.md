@@ -35,7 +35,7 @@ The **Issues**, **Stamps**, and **Copies** (inventory) lists share the same thre
 - **Year filter** (middle) — the years present in the current results, each with a count of how many items fall in that year. Click a year to narrow the list to it, or click it again (or **All years**) to clear. Items with no year appear under a **No year** entry. On the issue list the year comes from the issue's year; on the stamp and copies lists it comes from each stamp's own issue year. The counts update as you change the area filter, search, or the other filters. Use the **◂** / **▸** toggle in the panel header to hide or show this column — the choice is remembered between visits.
 - **List** (right) — the issues, stamps, or copies themselves, with the toolbar for search, sort, and the list-specific filters above it.
 
-All filtering and sorting happens on the server, and the active area, year, search, and sort are kept in the page URL so a view can be bookmarked or shared. The **area** and **year** selections are also remembered per collection and shared across these three lists: pick an area and year on one list and they carry over when you switch to another, and they are restored when you come back after visiting an unrelated page. Other filters (search, catalog number, sort, and the copies-only filters) stay per list. When you add an issue while a year is selected, the new issue's year is pre-filled to match.
+All filtering and sorting happens on the server, and the active area, year, search, and sort are kept in the page URL so a view can be bookmarked or shared. Whatever sort you pick (name, year, issue date, …), items that share the same sort value are then ordered by their **primary catalog number**, so a run of same-year issues still reads in catalog order rather than an arbitrary one. The **area** and **year** selections are also remembered per collection and shared across these three lists: pick an area and year on one list and they carry over when you switch to another, and they are restored when you come back after visiting an unrelated page. Other filters (search, catalog number, sort, and the copies-only filters) stay per list. When you add an issue while a year is selected, the new issue's year is pre-filled to match.
 
 ## Row actions
 
@@ -64,6 +64,10 @@ An issue can be moved to a different collecting area after it is created. Open t
 
 Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area in **Settings → Areas**.
 
+## Auto-filling a secondary catalog's range when creating an issue
+
+When you create an issue and let Stamporama **generate its stamps** from a catalog number range, you enter a **First** and **Last** for the primary catalog (for example Fischer `100`–`103`). Once that primary range is complete, entering just the **First** for another catalog fills in its **Last** automatically so it spans the same number of stamps — enter Michel `200` and the **Last** becomes `203` (four stamps, matching Fischer). The value is only filled when you left **Last** empty, and you can always overwrite it if a catalog's numbering doesn't line up one-to-one.
+
 ## Adding a stamp range to an existing issue
 
 You can bulk-add stamps to an issue after it was created, the same way a range is generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want, enter a **First** and optional **Last** number for each (for example `100`–`105`), and the dialog shows how many stamps will be created, with a short preview of the generated numbers. As with issue creation, ranges may be plain numbers, share a prefix, or use a letter/roman suffix sequence (`100`, `423a`–`423c`, `12I`–`12II`); when more than one catalog is selected, every explicit range must span the same number of stamps. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
@@ -71,6 +75,8 @@ You can bulk-add stamps to an issue after it was created, the same way a range i
 If a generated catalog number would duplicate one already in the collection, the dialog surfaces a warning naming the collisions. In a collection set to **block** duplicates (see [Duplicate catalog numbers](duplicate-catalog-numbers.md)) this prevents the add until you resolve it; in a collection set to **warn**, it is advisory and you can add anyway.
 
 If the added stamps fall **outside the issue's declared catalog range**, a follow-up prompt appears right away showing the proposed widened range (for example, `Mi 100–105 → 100–110`) and asks you to choose **Widen range** or **Keep as-is** — the same decision offered when adding a single stamp. Keeping it as-is leaves the range warning on the issue row, which you can act on later.
+
+To add a **single** stamp instead, expand an issue row on the **Issues** list (the **▶** toggle) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
 ## Merging two issues
 

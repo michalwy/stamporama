@@ -405,24 +405,40 @@ function IssueBrowser({
     return m;
   }, [areas]);
 
-  const filtered = useMemo(() => {
+  // Filter issues by the search term, matching issue name/year AND the stamps nested within each
+  // issue — by stamp name or catalog number (#186). `innerMatchByIssue` records, for issues that
+  // surfaced *only* because of an inner stamp match (the issue header itself didn't match), which
+  // member stamps matched; the row uses it to reveal and highlight those while dimming the rest.
+  const { filtered, innerMatchByIssue } = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return issues;
-    return issues.filter((issue) => {
-      if ((issue.name ?? "").toLowerCase().includes(q)) return true;
-      if (issue.year && String(issue.year).includes(q)) return true;
-      // Match catalog numbers on their normalized key (vendor abbreviation + area
-      // prefix + number) so a prefixed query resolves in any spacing — "Mi PL 200",
-      // "MiPL200", "PL200", or bare "200" all hit the same stamp (#146).
+    if (!q) return { filtered: issues, innerMatchByIssue: new Map<string, Set<string>>() };
+    const out: IssueData[] = [];
+    const innerMatch = new Map<string, Set<string>>();
+    for (const issue of issues) {
+      const headerMatch =
+        (issue.name ?? "").toLowerCase().includes(q) ||
+        (issue.year != null && String(issue.year).includes(q));
+      // Match catalog numbers on their normalized key (vendor abbreviation + area prefix +
+      // number) so a prefixed query resolves in any spacing — "Mi PL 200", "MiPL200", "PL200",
+      // or bare "200" all hit the same stamp (#146).
       const vm = vendorMapByArea.get(issue.collectionAreaId);
-      const keys = issue.members.flatMap((m) =>
-        m.catalogNumbers.map((cn) => {
+      const matchedStampIds = new Set<string>();
+      for (const m of issue.members) {
+        const nameHit = (m.name ?? "").toLowerCase().includes(q);
+        const keys = m.catalogNumbers.map((cn) => {
           const v = vm?.get(cn.catalogVendorId);
           return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
-        })
-      );
-      return catalogKeyMatches(filter, keys);
-    });
+        });
+        if (nameHit || catalogKeyMatches(filter, keys)) matchedStampIds.add(m.stampId);
+      }
+      if (headerMatch || matchedStampIds.size > 0) {
+        out.push(issue);
+        // Grey-out only when the issue surfaced purely via its stamps; a header match shows the
+        // whole tree normally.
+        if (!headerMatch && matchedStampIds.size > 0) innerMatch.set(issue.id, matchedStampIds);
+      }
+    }
+    return { filtered: out, innerMatchByIssue: innerMatch };
   }, [issues, filter, vendorMapByArea]);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueData) {
@@ -458,6 +474,8 @@ function IssueBrowser({
           placeholder={selectedAreaId ? "Filter issues in this area…" : "Filter issues…"}
           style={{ ...SEARCH_STYLE, flex: 1 }}
           aria-label="Filter issues"
+          // Focus + select the remembered filter text on open, so typing overwrites it (#183).
+          data-autofocus-select
         />
         <button
           type="button"
@@ -486,6 +504,7 @@ function IssueBrowser({
               isLast={i === filtered.length - 1}
               defaultExpanded={issue.id === justCreatedIssueId}
               justAdded={issue.id === justCreatedIssueId}
+              matchedStampIds={innerMatchByIssue.get(issue.id) ?? null}
               onPick={handlePick}
               onPickIssue={
                 onPickIssue
@@ -516,6 +535,7 @@ function PickIssueRow({
   isLast,
   defaultExpanded,
   justAdded,
+  matchedStampIds,
   onPick,
   onPickIssue,
   onNewStamp,
@@ -530,14 +550,20 @@ function PickIssueRow({
   defaultExpanded: boolean;
   /** Flash this row once right after the issue is created inline (#158). */
   justAdded: boolean;
+  /** When set, this issue surfaced only via matching stamps inside it (#186): expand the tree
+   * and let the nodes dim non-matches. Null when the issue matched by name/year (show normally). */
+  matchedStampIds: Set<string> | null;
   onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueData) => void;
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   onPickIssue?: () => void;
   onNewStamp: () => void;
   onNewVariant: (parentStampId: string) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [userExpanded, setUserExpanded] = useState(defaultExpanded);
   const [hovered, setHovered] = useState(false);
+  // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
+  // filter clears, the row falls back to the user's own toggle.
+  const isExpanded = userExpanded || matchedStampIds !== null;
   const tree = useMemo<StampTreeNodeData[]>(() => buildStampTree(issue.members), [issue.members]);
   // Issue-level gallery (#137): the main photos of the required-for-completeness stamps —
   // computed client-side from the members the picker already loaded.
@@ -555,7 +581,7 @@ function PickIssueRow({
         className={justAdded ? "just-added-flash" : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => setIsExpanded((v) => !v)}
+        onClick={() => setUserExpanded(!isExpanded)}
         style={{
           padding: "0.875rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
@@ -571,7 +597,7 @@ function PickIssueRow({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setIsExpanded((v) => !v);
+            setUserExpanded(!isExpanded);
           }}
           aria-label={isExpanded ? "Collapse" : "Expand"}
           style={{
@@ -709,6 +735,7 @@ function PickIssueRow({
                 isLast={i === tree.length - 1}
                 onPick={(node, unknownVariant) => onPick(node, unknownVariant, issue)}
                 onNewVariant={onNewVariant}
+                matchedStampIds={matchedStampIds}
               />
             ))
           )}

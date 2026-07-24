@@ -11,6 +11,12 @@ import {
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { PhotoThumb } from "./photo-thumb";
 
+/** True when this node or any descendant is in the active filter's match set (#186). */
+function subtreeHasMatch(treeNode: StampTreeNodeData, matched: Set<string>): boolean {
+  if (matched.has(treeNode.node.stampId)) return true;
+  return treeNode.children.some((c) => subtreeHasMatch(c, matched));
+}
+
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
  * the "— unknown variant" marker on a base stamp that still has variants). Shared by the
  * area→issue→stamp Browse popup (#104) and the issue-scoped stamp picker for adding a copy
@@ -27,6 +33,7 @@ export function SelectableStampNode({
   isLast,
   onPick,
   onNewVariant,
+  matchedStampIds,
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
@@ -36,11 +43,22 @@ export function SelectableStampNode({
   isLast: boolean;
   onPick: (node: StampNodeData, unknownVariant: boolean) => void;
   onNewVariant?: (parentStampId: string) => void;
+  /** When set, the active filter matched only stamps within this issue (#186): nodes whose
+   * subtree contains no match are dimmed, and nodes on the path to a match start expanded. */
+  matchedStampIds?: Set<string> | null;
 }) {
-  const [collapsed, setCollapsed] = useState(true);
-  const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
+  // Under an active inner-stamp filter, reveal the path to a matching descendant.
+  const childHasMatch =
+    !!matchedStampIds && children.some((c) => subtreeHasMatch(c, matchedStampIds));
+  const [userCollapsed, setUserCollapsed] = useState(true);
+  // A filter match forces the node open (so the match is visible) regardless of the user's toggle;
+  // when the filter clears, the node falls back to the user's own collapsed state.
+  const collapsed = userCollapsed && !childHasMatch;
+  const [hovered, setHovered] = useState(false);
+  // Dim a node when a filter is active and neither it nor any descendant matches.
+  const dimmed = !!matchedStampIds && !subtreeHasMatch(treeNode, matchedStampIds);
   // A base stamp (top level) is selectable as the "unknown variant" only when it has
   // at least one child that acts as a variant (ADR-0010 §3) — not for a stamp whose
   // children are all distinct entries (errors, overprints…).
@@ -66,9 +84,11 @@ export function SelectableStampNode({
           padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
           fontSize: "0.8125rem",
           background: hovered ? "var(--color-bg-row-hover)" : undefined,
-          transition: "background 0.1s ease",
+          transition: "background 0.1s ease, opacity 0.1s ease",
           borderBottom: isLast ? undefined : "1px solid var(--color-border)",
           cursor: "pointer",
+          // De-emphasize stamps that don't match the active inner-stamp filter (#186).
+          opacity: dimmed ? 0.45 : 1,
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
@@ -78,7 +98,7 @@ export function SelectableStampNode({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setCollapsed(!collapsed);
+                setUserCollapsed(!collapsed);
               }}
               aria-label={collapsed ? "Expand" : "Collapse"}
               style={{
@@ -156,6 +176,7 @@ export function SelectableStampNode({
             isLast={isLast && i === children.length - 1}
             onPick={onPick}
             onNewVariant={onNewVariant}
+            matchedStampIds={matchedStampIds}
           />
         ))}
     </>

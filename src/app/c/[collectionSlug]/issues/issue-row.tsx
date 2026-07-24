@@ -10,6 +10,7 @@ import {
   PRICE_MAIN,
   PRICE_CONVERTED,
   PRICE_STALE_ICON,
+  CREATE_LINK_STYLE,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import {
   buildStampTree,
@@ -593,41 +594,55 @@ export function IssueRow({
               </button>
             </div>
           ) : (
-            stampTree.map((treeNode, i) => (
-              <StampTreeNode
-                key={treeNode.node.stampId}
-                treeNode={treeNode}
-                depth={0}
-                collectionId={collectionId}
-                areas={areas}
-                baseCurrency={baseCurrency}
-                primaryVendorId={primaryVendorId}
-                vendorMap={vendorMap}
-                isLast={i === stampTree.length - 1}
-                onEdit={(stampId) => {
-                  const stampNode = members?.find(
-                    (m) => m.stampId === stampId
-                  );
-                  if (stampNode) callbacks.onEditStamp(issue.id, stampNode);
-                }}
-                onAddChild={(parentStampId) => {
-                  const parentNode = members?.find(
-                    (m) => m.stampId === parentStampId
-                  );
-                  callbacks.onAddStamp(
-                    issue.id,
-                    parentStampId,
-                    parentNode?.catalogNumbers ?? []
-                  );
-                }}
-                onDelete={(stampId, stampName) =>
-                  callbacks.onDeleteStamp(issue.id, stampId, stampName)
-                }
-                onMove={(stampId) =>
-                  callbacks.onMoveStamp(issue.id, stampId)
-                }
-              />
-            ))
+            <>
+              {stampTree.map((treeNode, i) => (
+                <StampTreeNode
+                  key={treeNode.node.stampId}
+                  treeNode={treeNode}
+                  depth={0}
+                  collectionId={collectionId}
+                  areas={areas}
+                  baseCurrency={baseCurrency}
+                  primaryVendorId={primaryVendorId}
+                  vendorMap={vendorMap}
+                  isLast={i === stampTree.length - 1}
+                  onEdit={(stampId) => {
+                    const stampNode = members?.find(
+                      (m) => m.stampId === stampId
+                    );
+                    if (stampNode) callbacks.onEditStamp(issue.id, stampNode);
+                  }}
+                  onAddChild={(parentStampId) => {
+                    const parentNode = members?.find(
+                      (m) => m.stampId === parentStampId
+                    );
+                    callbacks.onAddStamp(
+                      issue.id,
+                      parentStampId,
+                      parentNode?.catalogNumbers ?? []
+                    );
+                  }}
+                  onDelete={(stampId, stampName) =>
+                    callbacks.onDeleteStamp(issue.id, stampId, stampName)
+                  }
+                  onMove={(stampId) =>
+                    callbacks.onMoveStamp(issue.id, stampId)
+                  }
+                />
+              ))}
+              {/* Add-stamp button pinned at the bottom of the tree (#180), mirroring the
+                  "+ New stamp" button in the browse-stamps picker. Opens the add-stamp dialog
+                  with this issue pre-filled. */}
+              <div style={{ padding: "0.625rem 1rem 0.75rem 0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => callbacks.onAddStamp(issue.id)}
+                  style={CREATE_LINK_STYLE}
+                >
+                  + Add stamp
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}
