@@ -34,7 +34,7 @@ import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { useOfferPlatforms } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 
 type DialogState =
@@ -98,7 +98,8 @@ export function InventoryListPanel({
 
   // Last-used platform, to seed the "create new offer" sub-flow of Add to offer (#241). The Copies
   // list has no platform filter, so the last one used is the only signal here.
-  const { data: offerPlatforms = [] } = useOfferPlatforms(collectionId);
+  const { data: contacts = [] } = useContacts(collectionId);
+  const offerPlatforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
   const preferredPlatform = useMemo(
     () => (lastPlatformId ? offerPlatforms.find((p) => p.id === lastPlatformId) : undefined),
@@ -461,8 +462,10 @@ export function InventoryListPanel({
               </select>
 
               {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface
-                  for-sale copies still needing a listing there. Only shown once at least one
-                  offer platform exists. */}
+                  for-sale copies still needing a listing there. Lists every platform contact
+                  (not just ones with existing offers), since the point is to catch platforms
+                  that haven't been used yet. Only shown once at least one platform contact
+                  exists. */}
               {offerPlatforms.length > 0 && (
                 <select
                   value={notOfferedPlatformId}
