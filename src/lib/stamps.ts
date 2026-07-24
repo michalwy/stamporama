@@ -21,6 +21,7 @@ import {
   resolveDisplayConditionId,
 } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 
@@ -653,32 +654,6 @@ export interface StampSearchItem {
   catalogNumbers: string[];
 }
 
-interface AreaPrefixNode {
-  parentId: string | null;
-  name: string;
-  /** Per-vendor prefix rows set directly on this area (value may be null). */
-  vendorPrefix: Map<string, string | null>;
-}
-
-/** Resolve the effective per-vendor area prefix, inheriting from the nearest
- * ancestor area that sets one (mirrors `effectiveVendorsForArea` on the client). */
-function resolveEffectivePrefix(
-  areaId: string,
-  vendorId: string,
-  nodes: Map<string, AreaPrefixNode>
-): string | null {
-  let current: string | null = areaId;
-  let depth = 0;
-  while (current && depth < 50) {
-    const node: AreaPrefixNode | undefined = nodes.get(current);
-    if (!node) break;
-    if (node.vendorPrefix.has(vendorId)) return node.vendorPrefix.get(vendorId) ?? null;
-    current = node.parentId;
-    depth++;
-  }
-  return null;
-}
-
 const PICKER_LIMIT = 20;
 
 /**
@@ -747,18 +722,7 @@ export async function searchStampsForPicker(
 
   const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
   const areaNames = new Map(areaRows.map((a) => [a.id, a.name]));
-  const areaNodes = new Map<string, AreaPrefixNode>(
-    areaRows.map((a) => [
-      a.id,
-      {
-        parentId: a.parentId,
-        name: a.name,
-        vendorPrefix: new Map(
-          a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
-        ),
-      },
-    ])
-  );
+  const areaNodes = buildAreaPrefixNodes(areaRows);
 
   interface Scored {
     item: StampSearchItem;
