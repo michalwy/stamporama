@@ -82,6 +82,12 @@ To add a **single** stamp instead, expand an issue row on the **Issues** list (t
 
 The **Add stamp** and **Edit stamp** dialogs include a **Colnect** field in the catalog-numbers section, filled in like any other number. It holds the stamp's [Colnect](https://colnect.com) Marketplace **item-ID** — the number in a catalog page's address (`…/stamps/stamp/123456-…`). It is an external reference, not a catalog number, so it has no vendor prefix and is not checked for duplicates; leave it blank if you don't use Colnect. When a stamp has one, its **Colnect** ID shows as a small tag on the stamp row.
 
+## Colnect catalog mapping
+
+Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`Mi`, `Sn`, `Yt`, `Sg`, `AFA`, `Pol`…), which don't all match yours — notably Colnect's `Pol` is **Fischer**, which you may abbreviate `Fi`. **Settings → Colnect** lets you record, per collection, which local catalog each Colnect abbreviation means.
+
+You only need a row where the abbreviations **differ**. Any Colnect abbreviation without a row automatically maps to a local catalog whose abbreviation is spelled the **same** (case-insensitive) — so `Mi` → your Michel needs no row. Anything still unmatched is simply **ignored**, never an error. Each row is a Colnect abbreviation plus the local catalog it points to; an abbreviation can be mapped only once per collection. (This mapping is preparation for future Colnect number-matching; on its own it changes nothing about your stamps.)
+
 ## Merging two issues
 
 Two issues in the same area can be merged into one — useful when the same set was entered twice or a split turned out to be unnecessary. Open the **⋮** menu of the issue you want to **remove** and choose **Merge into another issue…**, then pick the target issue to keep. The dialog reports how many stamps will move and warns if any catalog number appears in both issues (advisory only — the merge is still allowed).

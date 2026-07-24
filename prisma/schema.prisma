@@ -49,6 +49,7 @@ model Collection {
   purchases       Purchase[]
   offers          Offer[]
   sales           Sale[]
+  colnectCatalogMappings ColnectCatalogMapping[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -114,8 +115,32 @@ model CatalogVendor {
   stampCatalogNumbers   StampCatalogNumber[]
   issueCatalogNumbers   IssueCatalogNumber[]
   collectionAreaVendors CollectionAreaVendor[]
+  colnectCatalogMappings ColnectCatalogMapping[]
 
   @@map("catalog_vendor")
+}
+
+// Per-collection translation from a Colnect catalog abbreviation (as printed on Colnect
+// catalog pages: Mi, Sn, Yt, Sg, AFA, Pol…) to one of our local `CatalogVendor`s (#248,
+// part of #155). Needed because Colnect's abbreviations don't all match ours — notably
+// Colnect `Pol` is Fischer, which we abbreviate `Fi`. Only mismatches need an explicit row:
+// an abbreviation with no row falls back to a local vendor whose `abbreviation` matches it
+// exactly (case-insensitive); anything still unresolved is ignored during matching, not an
+// error. See `src/lib/colnect.ts`.
+model ColnectCatalogMapping {
+  id              String @id @default(cuid())
+  collectionId    String
+  // The Colnect catalog abbreviation, stored as entered (e.g. "Pol"). Unique per collection.
+  colnectAbbrev   String
+  catalogVendorId String
+
+  collection    Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, colnectAbbrev])
+  @@index([collectionId])
+  @@index([catalogVendorId])
+  @@map("colnect_catalog_mapping")
 }
 
 model CatalogName {

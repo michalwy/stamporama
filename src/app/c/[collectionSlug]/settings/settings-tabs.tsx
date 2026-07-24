@@ -8,9 +8,11 @@ import { ConditionsPanel } from "./conditions-panel";
 import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
+import { ColnectPanel } from "./colnect-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
+import type { ColnectMappingData } from "@/lib/colnect";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
@@ -26,6 +28,7 @@ interface SettingsTabsProps {
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  initialColnectMappings: ColnectMappingData[];
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -38,6 +41,7 @@ const TABS = [
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
   { key: "duplicates", label: "Duplicates" },
+  { key: "colnect", label: "Colnect" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -60,6 +64,7 @@ export function SettingsTabs({
   initialConditions,
   initialCertificateStatuses,
   initialSubtypes,
+  initialColnectMappings,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -74,7 +79,8 @@ export function SettingsTabs({
     rawTab === "areas" ||
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
-    rawTab === "duplicates"
+    rawTab === "duplicates" ||
+    rawTab === "colnect"
       ? rawTab
       : "general";
 
@@ -180,6 +186,20 @@ export function SettingsTabs({
             collectionId={collectionId}
             collectionSlug={collectionSlug}
             initialMode={duplicateCatalogMode}
+          />
+        </section>
+      )}
+      {activeTab === "colnect" && (
+        <section>
+          <h2 style={sectionHeadingStyle}>Colnect catalog mapping</h2>
+          <ColnectPanel
+            collectionId={collectionId}
+            initialMappings={initialColnectMappings}
+            vendors={initialTree.map((v) => ({
+              id: v.id,
+              name: v.name,
+              abbreviation: v.abbreviation,
+            }))}
           />
         </section>
       )}
