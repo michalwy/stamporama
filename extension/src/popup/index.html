@@ -12,11 +12,13 @@
         --muted: #6b7280;
         --border: #e5e7eb;
         --panel: #f9fafb;
+        --sunk: #f3f4f6;
         --primary: #2563eb;
         --primary-fg: #ffffff;
         --danger: #dc2626;
         --warn: #b45309;
         --ok: #15803d;
+        --scrim: rgba(0, 0, 0, 0.45);
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -25,20 +27,24 @@
           --muted: #9ca3af;
           --border: #3a3a3a;
           --panel: #262626;
+          --sunk: #1a1a1a;
           --primary: #3b82f6;
+          --scrim: rgba(0, 0, 0, 0.6);
         }
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        width: 380px;
+        /* Hosted as a standalone window (opened centred by the service worker), so the layout is
+           fluid rather than the cramped fixed width a toolbar popup forces. */
+        min-width: 380px;
         font-family: system-ui, -apple-system, sans-serif;
-        font-size: 13px;
+        font-size: 14px;
         background: var(--bg);
         color: var(--fg);
       }
-      .pad { padding: 12px 14px; }
-      h1 { font-size: 14px; margin: 0 0 8px; }
+      .pad { padding: 18px 20px 28px; max-width: 900px; margin: 0 auto; }
+      h1 { font-size: 17px; margin: 0 0 12px; }
       .badge {
         display: flex; flex-direction: column; gap: 2px;
         padding: 8px 10px; border-radius: 8px;
@@ -46,31 +52,89 @@
         margin-bottom: 10px;
       }
       .badge .name { font-weight: 600; }
-      .badge .url { color: var(--muted); font-size: 11px; word-break: break-all; }
+      .badge .url { color: var(--muted); font-size: 12px; word-break: break-all; }
       .badge.none { color: var(--warn); }
+      .scan {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 8px 10px; margin-bottom: 8px;
+        border: 1px solid var(--border); border-radius: 8px; background: var(--sunk);
+      }
+      .scan .found { font-weight: 600; }
+      .scan.empty .found { font-weight: 400; color: var(--muted); }
       .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
       button {
         font: inherit; padding: 6px 10px; border-radius: 6px; cursor: pointer;
         border: 1px solid var(--border); background: var(--panel); color: var(--fg);
       }
       button.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+      button.small { padding: 3px 8px; font-size: 12px; }
       button:disabled { opacity: 0.5; cursor: default; }
-      a { color: var(--primary); }
+
+      .progress { height: 4px; border-radius: 999px; background: var(--sunk); overflow: hidden; margin-bottom: 8px; }
+      .progress .bar { height: 100%; width: 0%; background: var(--primary); transition: width 0.15s ease; }
       .status { color: var(--muted); min-height: 16px; margin: 4px 0 8px; }
       .status.err { color: var(--danger); }
+      .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+      .chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+      .chip.auto { background: rgba(21,128,61,0.15); color: var(--ok); }
+      .chip.needs { background: rgba(180,83,9,0.15); color: var(--warn); }
+
+      .sec { margin-bottom: 12px; }
+      .sec > .hdr {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: var(--muted); margin-bottom: 6px; font-weight: 600;
+      }
+      details.sec > summary {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: var(--muted); font-weight: 600; cursor: pointer; margin-bottom: 6px;
+      }
+
       .item {
         border: 1px solid var(--border); border-radius: 8px;
-        padding: 8px 10px; margin-bottom: 8px; background: var(--panel);
+        margin-bottom: 8px; background: var(--panel); overflow: hidden;
       }
+      /* With room to spare, put the Colnect item and the stamp it resolved to side by side so the
+         "this ↔ that" reading is immediate. Falls back to stacked on a narrow window. */
+      @media (min-width: 720px) {
+        .item { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
+        .item > .match { border-top: none; border-left: 1px solid var(--border); }
+      }
+      .item > .src { padding: 10px 12px; }
       .item .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-      .item .id { font-family: monospace; color: var(--muted); font-size: 11px; }
-      .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+      .item .title { font-weight: 600; }
+      .item .id { font-family: monospace; color: var(--muted); font-size: 12px; }
+      .refs { margin-top: 4px; font-family: monospace; font-size: 12px; color: var(--muted); }
+      .tag { font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
       .tag.auto { background: rgba(21,128,61,0.15); color: var(--ok); }
       .tag.needs { background: rgba(180,83,9,0.15); color: var(--warn); }
       .tag.skip { background: rgba(107,114,128,0.15); color: var(--muted); }
-      .cand { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 4px 0; }
-      .cand .meta { color: var(--muted); font-size: 11px; }
-      .muted { color: var(--muted); }
+
+      .match { border-top: 1px solid var(--border); background: var(--sunk); }
+      .match .lbl {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: var(--muted); padding: 6px 10px 0;
+      }
+      .stamp { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px 8px; }
+      .stamp + .stamp { border-top: 1px dashed var(--border); }
+      .stamp .nm { font-weight: 600; }
+      .stamp .issue { font-size: 12px; margin-top: 2px; font-style: italic; }
+      .stamp .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      .stamp .cat { font-family: monospace; }
+      .warnline { color: var(--warn); font-size: 12px; margin-top: 2px; }
+      .empty { color: var(--muted); padding: 6px 10px 8px; }
+
+      .overlay {
+        position: fixed; inset: 0; background: var(--scrim);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+      }
+      .overlay[hidden] { display: none; }
+      .box {
+        background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+        padding: 14px; max-width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      .box .msg { margin-bottom: 12px; line-height: 1.45; }
+      .box .target { font-weight: 600; word-break: break-all; }
+      .box .acts { display: flex; gap: 8px; justify-content: flex-end; }
     </style>
   </head>
   <body>
@@ -78,16 +142,28 @@
       <h1>Stamporama Assistant</h1>
       <div id="badge" class="badge none">No active profile — open Options.</div>
 
-      <div class="row">
-        <button id="extract">Extract from this page</button>
-        <button id="sample">Load sample refs</button>
+      <div id="scan" class="scan empty">
+        <span id="found" class="found">Scanning page…</span>
       </div>
+
       <div class="row">
-        <button id="preview" class="primary" disabled>Preview matches (dry-run)</button>
-        <button id="writeAuto" disabled>Write auto-matches</button>
+        <button id="writeAuto" class="primary" disabled>Write auto-matches</button>
       </div>
+
+      <div id="progress" class="progress" hidden><div id="bar" class="bar"></div></div>
       <div id="status" class="status"></div>
+      <div id="chips" class="chips" hidden></div>
       <div id="results"></div>
+    </div>
+
+    <div id="overlay" class="overlay" hidden>
+      <div class="box">
+        <div id="confirmMsg" class="msg"></div>
+        <div class="acts">
+          <button id="confirmCancel">Cancel</button>
+          <button id="confirmOk" class="primary">Confirm</button>
+        </div>
+      </div>
     </div>
     <script src="popup.js"></script>
   </body>

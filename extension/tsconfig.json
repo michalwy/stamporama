@@ -14,5 +14,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "build.mjs"]
+  "include": ["src", "build.mjs"],
+  "//": "Tests run via tsx (own transpile) and use node:test — kept out of the browser-only typecheck.",
+  "exclude": ["**/*.test.ts"]
 }

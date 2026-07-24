@@ -49,6 +49,16 @@ lives in **Settings → Colnect**; the full registration/code-exchange issuance 
 - The matcher endpoints are reachable both by a signed-in user (session) and the extension (token)
   with no CORS surface, because the extension calls them from its background worker.
 - Tokens are owner-delegating and irrecoverable (hash-only) — a lost token is revoked and regenerated.
+- The action opens the UI as a **centred `chrome.windows` popup window**, not a toolbar popup: a
+  toolbar popup cannot exceed 800×600 and is anchored to the icon, which is too cramped for
+  comparing an item against candidate stamps. The consequence is that the UI is its own window, so
+  the source tab's id is passed in the URL — inside that window "the active tab of the current
+  window" is the Assistant itself, not the page being matched.
+- The content script runs **declaratively** on `colnect.com` (a coarse manifest match; the module's
+  own `matches(url)` does the precise check) so the toolbar badge can show how many items a page
+  holds before the popup is opened. That detection is entirely local — no instance call is made for
+  it — and the popup still injects on demand as well, covering tabs opened before an extension
+  reload. Per the #249 ToS note this only ever touches pages the user themselves opened.
 - The shell is intentionally partial: a single-profile stub (multi-profile + selector is #251), no
   real extractor (Colnect DOM is #249), no packaging/distribution (#254). A "Load sample refs" path in
   the popup makes the dry-run → confirm → write flow testable before #249 exists.

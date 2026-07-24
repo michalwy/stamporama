@@ -5,7 +5,9 @@ import type { PlatformModule } from "./module";
 // #249 adds the Colnect module by calling `registerPlatformModule` from the content entrypoint.
 const modules: PlatformModule[] = [];
 
+/** Register a module. Idempotent by `id` — safe when the content script is re-injected on demand. */
 export function registerPlatformModule(module: PlatformModule): void {
+  if (modules.some((m) => m.id === module.id)) return;
   modules.push(module);
 }
 

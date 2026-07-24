@@ -34,3 +34,12 @@ export type ConfirmResponse =
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
 export type BackgroundRequest = MatchRequest | ConfirmRequest;
+
+// content script → background: "this tab holds N extractable items", for the toolbar badge. Purely
+// local — no instance call is made to produce it. Fire-and-forget, no response.
+export interface DetectedNotice {
+  type: "detected";
+  count: number;
+}
+
+export type BackgroundMessage = BackgroundRequest | DetectedNotice;

@@ -214,6 +214,8 @@ export interface ColnectCandidate {
   name: string | null;
   issuedYear: number | null;
   areaName: string | null;
+  /** Name of the issue the stamp belongs to, for orientation when picking between siblings. */
+  issueName: string | null;
   /** Formatted catalog labels, e.g. ["Mi·PL 200"]. */
   catalogNumbers: string[];
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
@@ -221,7 +223,15 @@ export interface ColnectCandidate {
 }
 
 export type ColnectMatchResult =
-  | { colnectId: string; status: "auto"; stampId: string; written: boolean; alreadySet: boolean }
+  | {
+      colnectId: string;
+      status: "auto";
+      stampId: string;
+      written: boolean;
+      alreadySet: boolean;
+      /** The matched stamp, so callers can show *which* stamp the ID landed on (#249 preview). */
+      stamp: ColnectCandidate | null;
+    }
   | {
       colnectId: string;
       status: "needs-confirm";
@@ -334,6 +344,7 @@ export async function matchColnectItems(
           colnectId: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 },
         },
       })
     : [];
@@ -362,6 +373,7 @@ export async function matchColnectItems(
         name: s.name,
         issuedYear: s.issuedYear,
         areaName: areaId ? (areaNames.get(areaId) ?? null) : null,
+        issueName: s.issueMemberships[0]?.issue.name ?? null,
         catalogNumbers: labels,
         existingColnectId: s.colnectId,
       },
@@ -396,6 +408,7 @@ export async function matchColnectItems(
         stampId: decision.stampId,
         written: willWrite,
         alreadySet: decision.alreadySet,
+        stamp: candidatesById.get(decision.stampId)?.candidate ?? null,
       });
     }
   }

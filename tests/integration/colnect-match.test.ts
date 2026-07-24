@@ -86,6 +86,11 @@ async function seed(suffix: string): Promise<Seed> {
     return stamp.id;
   }
 
+  // One issue, so candidate results can be checked to carry the issue name (#249 preview detail).
+  const issue = await prisma.issue.create({
+    data: { collectionId, collectionAreaId: area.id, name: `Birds-${suffix}`, year: 1960 },
+  });
+
   const stamps: Record<string, string> = {
     auto: await makeStamp("Mi PL 200", [{ vendorId: mi.id, number: "200" }]),
     mapping: await makeStamp("Fi 300", [{ vendorId: fi.id, number: "300" }]),
@@ -97,6 +102,8 @@ async function seed(suffix: string): Promise<Seed> {
     ]),
     existing: await makeStamp("Existing", [{ vendorId: mi.id, number: "600" }], "old-600"),
   };
+
+  await prisma.issueMember.create({ data: { issueId: issue.id, stampId: stamps.auto } });
 
   return { userId, collectionId, areaId: area.id, miVendorId: mi.id, fiVendorId: fi.id, scVendorId: sc.id, stamps };
 }
@@ -167,6 +174,10 @@ describe("matchColnectItems", () => {
     if (auto?.status === "auto") {
       assert.equal(auto.stampId, s.stamps.auto);
       assert.equal(auto.written, true);
+      // The matched stamp travels with the result so callers can show what the ID landed on (#249).
+      assert.equal(auto.stamp?.stampId, s.stamps.auto);
+      assert.ok(auto.stamp?.catalogNumbers.includes("Mi·PL 200"));
+      assert.ok(auto.stamp?.issueName?.startsWith("Birds-"), "issue name travels with the candidate");
     }
 
     // 222 — resolved through the Colnect `Pol` → Fischer mapping → written.
