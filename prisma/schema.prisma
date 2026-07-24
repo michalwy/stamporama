@@ -203,6 +203,11 @@ model Stamp {
   issuedMonth  Int?
   issuedYear   Int?
   createdAt    DateTime @default(now())
+  // Denormalized numeric sort key for catalog-number ordering (#181): the parsed number of the
+  // stamp's effective primary-catalog vendor (via its primary area link), else the lowest numeric
+  // across its numbers, else null (sorts last). Maintained on every write that changes the stamp's
+  // numbers or area link, and bulk-recomputed when an area's primary catalog changes. See ADR-0012.
+  primaryCatalogSortKey Int?
 
   collection        Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   parent            Stamp?                @relation("StampVariants", fields: [parentId], references: [id])
@@ -218,6 +223,8 @@ model Stamp {
   photos             Photo[]
 
   @@index([subtypeId])
+  @@index([collectionId, issuedYear, primaryCatalogSortKey])
+  @@index([collectionId, primaryCatalogSortKey])
   @@map("stamp")
 }
 
@@ -777,12 +784,19 @@ model Issue {
   year             Int?
   isAutoCreated    Boolean  @default(false)
   createdAt        DateTime @default(now())
+  // Denormalized numeric sort key for catalog-number ordering (#181): the parsed number of the
+  // issue's effective primary-catalog vendor, else the lowest numeric across its numbers, else
+  // null (sorts last). Maintained on every write that changes the issue's numbers or area, and
+  // bulk-recomputed when an area's effective primary catalog changes. See ADR-0012.
+  primaryCatalogSortKey Int?
 
   collection     Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   members        IssueMember[]
   catalogNumbers IssueCatalogNumber[]
 
+  @@index([collectionId, year, primaryCatalogSortKey])
+  @@index([collectionId, primaryCatalogSortKey])
   @@map("issue")
 }
 

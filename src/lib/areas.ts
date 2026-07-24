@@ -1,5 +1,29 @@
 import "server-only";
 import { prisma } from "./db";
+import { recomputeSortKeysForAreas } from "./catalog-sort-key-recompute";
+
+/** The area plus every area nested under it, within a collection. Used to scope a catalog
+ * sort-key recompute to a subtree when an area's effective primary catalog shifts (#181). */
+async function areaSubtreeIds(collectionId: string, rootId: string): Promise<string[]> {
+  const areas = await prisma.collectionArea.findMany({
+    where: { collectionId },
+    select: { id: true, parentId: true },
+  });
+  const childrenByParent = new Map<string | null, string[]>();
+  for (const a of areas) {
+    const list = childrenByParent.get(a.parentId) ?? [];
+    list.push(a.id);
+    childrenByParent.set(a.parentId, list);
+  }
+  const out: string[] = [];
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    out.push(id);
+    stack.push(...(childrenByParent.get(id) ?? []));
+  }
+  return out;
+}
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -215,6 +239,7 @@ export async function updateCollectionArea(
     select: {
       parentId: true,
       assignable: true,
+      primaryCatalogNameId: true,
       _count: { select: { issues: true, stampAreaLinks: true } },
     },
   });
@@ -280,6 +305,15 @@ export async function updateCollectionArea(
         : {}),
     },
   });
+
+  // Changing an area's own primary catalog or its parent shifts the *effective* primary catalog
+  // (and thus the catalog sort key, #181) for this area and every descendant that inherits it.
+  // Recompute the whole subtree — rare, so a bulk pass is fine.
+  const primaryChanged = (data.primaryCatalogNameId ?? null) !== existing.primaryCatalogNameId;
+  if (primaryChanged || parentChanged) {
+    const subtree = await areaSubtreeIds(collectionId, areaId);
+    await recomputeSortKeysForAreas(collectionId, subtree);
+  }
 }
 
 export async function deleteCollectionArea(

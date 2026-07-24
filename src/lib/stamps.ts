@@ -22,6 +22,7 @@ import {
 } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
+import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -433,11 +434,6 @@ export interface StampListFilterOpts {
   displayConditionId?: string | null;
 }
 
-function parseNumericCatalog(val: string | null | undefined): number {
-  if (!val) return Number.MAX_SAFE_INTEGER;
-  const n = parseInt(val, 10);
-  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
-}
 
 /** Build the Prisma `where` for the stamp list from the active filters.
  *  Reused by the paginated list and the year-facet aggregation; the latter
@@ -529,6 +525,7 @@ export async function listStampsPaginated(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const dir = opts.sortDir ?? "asc";
+  const sortBy = opts.sortBy ?? "issueDate";
   const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
@@ -537,54 +534,76 @@ export async function listStampsPaginated(
 
   const where = buildStampListWhere(collectionId, opts);
 
-  if (opts.sortBy === "catalogNumber" || opts.sortBy === "issueName") {
-    const selectForSort =
-      opts.sortBy === "catalogNumber"
-        ? { id: true, catalogNumbers: { select: { number: true } } }
-        : { id: true, issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 } };
+  // The primary catalog number is the implicit secondary (tiebreaker) sort key everywhere (#181),
+  // served by the denormalized `primaryCatalogSortKey` column (ADR-0014). Number-less rows sort
+  // last (NULLS LAST); the date components keep their prior default null ordering.
+  const tieBreak = { primaryCatalogSortKey: { sort: "asc", nulls: "last" } } as const;
 
-    const allIds = await prisma.stamp.findMany({
+  // The `issueName` sort orders by the stamp's issue, which lives across the to-many
+  // `issueMemberships` relation Prisma can't `orderBy`; resolve it in memory. The stored sort key
+  // still supplies the tiebreaker, so no catalog-number re-parsing is needed.
+  if (sortBy === "issueName") {
+    const rows = await prisma.stamp.findMany({
       where,
-      select: selectForSort as { id: true },
+      select: {
+        id: true,
+        name: true,
+        primaryCatalogSortKey: true,
+        issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 },
+      },
     });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    allIds.sort((a: any, b: any) => {
-      let cmp: number;
-      if (opts.sortBy === "catalogNumber") {
-        const aNum = parseNumericCatalog(a.catalogNumbers?.[0]?.number);
-        const bNum = parseNumericCatalog(b.catalogNumbers?.[0]?.number);
-        cmp = aNum - bNum;
-      } else {
-        const aName: string = a.issueMemberships?.[0]?.issue?.name ?? "";
-        const bName: string = b.issueMemberships?.[0]?.issue?.name ?? "";
-        cmp = aName.localeCompare(bName);
+    const s = dir === "desc" ? -1 : 1;
+    const issueNameOf = (r: (typeof rows)[number]) => r.issueMemberships[0]?.issue.name ?? "";
+    rows.sort((a, b) => {
+      const primary = s * issueNameOf(a).localeCompare(issueNameOf(b));
+      if (primary !== 0) return primary;
+      // Tiebreaker: primary catalog number ascending, nulls last.
+      const ka = a.primaryCatalogSortKey;
+      const kb = b.primaryCatalogSortKey;
+      if (ka !== kb) {
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        return ka - kb;
       }
-      return dir === "desc" ? -cmp : cmp;
+      const n = (a.name ?? "").localeCompare(b.name ?? "");
+      if (n !== 0) return n;
+      return a.id.localeCompare(b.id);
     });
-
-    const pageIds = allIds.slice(offset, offset + pageSize + 1).map((r) => r.id);
-    const hasMore = pageIds.length > pageSize;
-    const finalIds = hasMore ? pageIds.slice(0, pageSize) : pageIds;
-
+    const pageRows = rows.slice(offset, offset + pageSize + 1);
+    const hasMore = pageRows.length > pageSize;
+    const finalIds = (hasMore ? pageRows.slice(0, pageSize) : pageRows).map((r) => r.id);
     const stamps = await prisma.stamp.findMany({
       where: { id: { in: finalIds } },
       select: STAMP_LIST_SELECT,
     });
     const idOrder = new Map(finalIds.map((id, i) => [id, i]));
     stamps.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
-
-    const items = await buildStampListItems(stamps, collectionId, primaryCatalogByArea, baseCurrency, displayConditionId);
-    const nextCursor = hasMore ? String(offset + pageSize) : null;
-    return { items, nextCursor };
+    const items = await buildStampListItems(
+      stamps,
+      collectionId,
+      primaryCatalogByArea,
+      baseCurrency,
+      displayConditionId
+    );
+    return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
   }
 
   const orderBy =
-    opts.sortBy === "name"
-      ? [{ name: dir }, { id: "asc" as const }]
-      : opts.sortBy === "issueDate"
-        ? [{ issuedYear: dir }, { issuedMonth: dir }, { issuedDay: dir }, { id: "asc" as const }]
-        : [{ createdAt: dir }];
+    sortBy === "name"
+      ? [{ name: dir }, tieBreak, { id: "asc" as const }]
+      : sortBy === "catalogNumber"
+        ? [
+            { primaryCatalogSortKey: { sort: dir, nulls: "last" } } as const,
+            { name: "asc" as const },
+            { id: "asc" as const },
+          ]
+        : [
+            { issuedYear: dir },
+            { issuedMonth: dir },
+            { issuedDay: dir },
+            tieBreak,
+            { id: "asc" as const },
+          ];
 
   const stamps = await prisma.stamp.findMany({
     where,
@@ -593,7 +612,6 @@ export async function listStampsPaginated(
     take: pageSize + 1,
     skip: offset,
   });
-
   const hasMore = stamps.length > pageSize;
   const items = await buildStampListItems(
     hasMore ? stamps.slice(0, pageSize) : stamps,
@@ -603,7 +621,6 @@ export async function listStampsPaginated(
     displayConditionId
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
-
   return { items, nextCursor };
 }
 
@@ -904,6 +921,8 @@ export async function updateStampWithCatalog(
       }
     }
   });
+  // Catalog numbers may have changed → refresh the denormalized sort key (#181).
+  await recomputeStampSortKeys(collectionId, [stampId]);
 }
 
 /** One already-recorded catalog price shown for reference in the quick editor, so the user
@@ -1208,6 +1227,7 @@ export async function upsertStampCatalogNumber(
     create: { stampId, catalogVendorId, number },
     update: { number },
   });
+  await recomputeStampSortKeys(collectionId, [stampId]);
 }
 
 export async function deleteStampCatalogNumber(
@@ -1220,6 +1240,7 @@ export async function deleteStampCatalogNumber(
   await prisma.stampCatalogNumber.delete({
     where: { stampId_catalogVendorId: { stampId, catalogVendorId } },
   });
+  await recomputeStampSortKeys(collectionId, [stampId]);
 }
 
 export interface StampCatalogPriceData {

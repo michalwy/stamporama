@@ -2,6 +2,18 @@ import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { seedDemoData, wipeDemoData } from "./demo";
+import {
+  recomputeIssueSortKeys,
+  recomputeStampSortKeys,
+} from "./catalog-sort-key-recompute";
+
+/** Populate the denormalized catalog sort key (#181) for a whole collection after demo data is
+ * seeded. Runs post-commit (the recompute reads through the plain client), which is fine for
+ * seeding: nothing reads the collection's lists until the create/reset call returns. */
+async function recomputeCollectionSortKeys(collectionId: string): Promise<void> {
+  await recomputeIssueSortKeys(collectionId);
+  await recomputeStampSortKeys(collectionId);
+}
 import { seedDefaultConditions } from "./conditions";
 import { seedDefaultSubtypes } from "./subtypes";
 
@@ -40,7 +52,7 @@ export async function createCollection(
 
   const slug = await generateUniqueSlug(ownerId, trimmed);
 
-  return prisma.$transaction(
+  const created = await prisma.$transaction(
     async (tx) => {
       const created = await tx.collection.create({
         data: { ownerId, name: trimmed, slug, baseCurrency },
@@ -57,6 +69,8 @@ export async function createCollection(
     // 5s interactive-transaction timeout is not enough.
     { timeout: 120_000, maxWait: 10_000 }
   );
+  if (options?.seedDemo) await recomputeCollectionSortKeys(created.id);
+  return created;
 }
 
 export async function resetCollectionToDemo(
@@ -78,6 +92,7 @@ export async function resetCollectionToDemo(
     // default 5s interactive-transaction timeout.
     { timeout: 120_000, maxWait: 10_000 }
   );
+  await recomputeCollectionSortKeys(collectionId);
 }
 
 export async function getCollectionsByOwner(ownerId: string) {

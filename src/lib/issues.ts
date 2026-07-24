@@ -10,6 +10,10 @@ import {
 } from "./variant-classification";
 import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
 import { computeIssueRangeSuggestions, type IssueRangeSuggestion } from "./catalog-number";
+import {
+  recomputeIssueSortKeys,
+  recomputeStampSortKeys,
+} from "./catalog-sort-key-recompute";
 
 export type { IssueRangeSuggestion } from "./catalog-number";
 
@@ -710,11 +714,6 @@ async function buildIssueListItems(
   );
 }
 
-function parseNumericCatalog(val: string | null | undefined): number {
-  if (!val) return Number.MAX_SAFE_INTEGER;
-  const n = parseInt(val, 10);
-  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
-}
 
 export interface IssueListFilterOpts {
   areaIds?: string[];
@@ -821,6 +820,7 @@ export async function listIssuesPaginated(
   const pageSize = opts.pageSize ?? 50;
   const offset = opts.offset ?? 0;
   const dir = opts.sortDir ?? "asc";
+  const sortBy = opts.sortBy ?? "year";
   const [primaryCatalogByArea, baseCurrency, displayConditionId] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
     getCollectionBaseCurrency(collectionId),
@@ -829,42 +829,21 @@ export async function listIssuesPaginated(
 
   const where = buildIssueListWhere(collectionId, opts);
 
-  if (opts.sortBy === "catalogNumber") {
-    const allIds = await prisma.issue.findMany({
-      where,
-      select: {
-        id: true,
-        catalogNumbers: { select: { firstNumber: true } },
-      },
-    });
-    allIds.sort((a, b) => {
-      const aNum = parseNumericCatalog(a.catalogNumbers[0]?.firstNumber);
-      const bNum = parseNumericCatalog(b.catalogNumbers[0]?.firstNumber);
-      const cmp = aNum - bNum;
-      return dir === "desc" ? -cmp : cmp;
-    });
-    const pageIds = allIds.slice(offset, offset + pageSize + 1).map((r) => r.id);
-    const hasMore = pageIds.length > pageSize;
-    const finalIds = hasMore ? pageIds.slice(0, pageSize) : pageIds;
-
-    const issues = await prisma.issue.findMany({
-      where: { id: { in: finalIds } },
-      select: ISSUE_LIST_SELECT,
-    });
-    const idOrder = new Map(finalIds.map((id, i) => [id, i]));
-    issues.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
-
-    const items = await buildIssueListItems(issues, collectionId, primaryCatalogByArea, baseCurrency, displayConditionId);
-    const nextCursor = hasMore ? String(offset + pageSize) : null;
-    return { items, nextCursor };
-  }
-
+  // The primary catalog number is the implicit secondary (tiebreaker) sort key everywhere (#181),
+  // served by the denormalized `primaryCatalogSortKey` column (ADR-0012) so the sort stays an
+  // indexed ORDER BY + LIMIT/OFFSET. Number-less rows sort last (NULLS LAST). `year` keeps its
+  // prior default null ordering.
+  const tieBreak = { primaryCatalogSortKey: { sort: "asc", nulls: "last" } } as const;
   const orderBy =
-    opts.sortBy === "name"
-      ? [{ name: dir }, { id: "asc" as const }]
-      : opts.sortBy === "year"
-        ? [{ year: dir }, { name: "asc" as const }, { id: "asc" as const }]
-        : [{ year: dir }, { name: "asc" as const }, { createdAt: "asc" as const }];
+    sortBy === "name"
+      ? [{ name: dir }, tieBreak, { id: "asc" as const }]
+      : sortBy === "catalogNumber"
+        ? [
+            { primaryCatalogSortKey: { sort: dir, nulls: "last" } } as const,
+            { name: "asc" as const },
+            { id: "asc" as const },
+          ]
+        : [{ year: dir }, tieBreak, { name: "asc" as const }, { id: "asc" as const }];
 
   const issues = await prisma.issue.findMany({
     where,
@@ -873,8 +852,8 @@ export async function listIssuesPaginated(
     take: pageSize + 1,
     skip: offset,
   });
-
   const hasMore = issues.length > pageSize;
+
   const items = await buildIssueListItems(
     hasMore ? issues.slice(0, pageSize) : issues,
     collectionId,
@@ -883,7 +862,6 @@ export async function listIssuesPaginated(
     displayConditionId
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
-
   return { items, nextCursor };
 }
 
@@ -1299,7 +1277,7 @@ async function createRangeStamps(
     issuedYear: number | null;
     input: AutoCreateStampsInput;
   }
-): Promise<void> {
+): Promise<string[]> {
   const { collectionId, areaId, issueId, issuedYear, input } = params;
   const { count, vendors } = input;
   const stampIds: string[] = [];
@@ -1341,6 +1319,7 @@ async function createRangeStamps(
   if (catalogNumberRows.length > 0) {
     await tx.stampCatalogNumber.createMany({ data: catalogNumberRows });
   }
+  return stampIds;
 }
 
 export async function createIssue(
@@ -1392,8 +1371,9 @@ export async function createIssue(
       });
     }
 
+    let stampIds: string[] = [];
     if (data.autoCreateStamps) {
-      await createRangeStamps(tx, {
+      stampIds = await createRangeStamps(tx, {
         collectionId,
         areaId,
         issueId: issue.id,
@@ -1402,8 +1382,11 @@ export async function createIssue(
       });
     }
 
-    return issue;
+    return { id: issue.id, stampIds };
   });
+  // Populate the denormalized catalog sort key for the issue and any auto-created stamps (#181).
+  await recomputeIssueSortKeys(collectionId, [created.id]);
+  await recomputeStampSortKeys(collectionId, created.stampIds);
   return { id: created.id };
 }
 
@@ -1430,7 +1413,7 @@ export async function addStampRangeToIssue(
     select: { year: true },
   });
 
-  await prisma.$transaction((tx) =>
+  const stampIds = await prisma.$transaction((tx) =>
     createRangeStamps(tx, {
       collectionId,
       areaId: collectionAreaId,
@@ -1439,6 +1422,7 @@ export async function addStampRangeToIssue(
       input,
     })
   );
+  await recomputeStampSortKeys(collectionId, stampIds);
 }
 
 export async function updateIssue(
@@ -1474,6 +1458,9 @@ export async function updateIssue(
       }
     }
   });
+  if (data.catalogNumbers !== undefined) {
+    await recomputeIssueSortKeys(collectionId, [issueId]);
+  }
 }
 
 /**
@@ -1543,6 +1530,8 @@ export async function setIssueCatalogRange(
     create: { issueId, catalogVendorId, firstNumber: first, lastNumber: last },
     update: { firstNumber: first, lastNumber: last },
   });
+  // The vendor's First may be the primary catalog number driving this issue's sort key (#181).
+  await recomputeIssueSortKeys(collectionId, [issueId]);
 }
 
 export async function deleteIssue(
@@ -1768,6 +1757,7 @@ export async function addStampToIssue(
     return { stampId: stamp.id };
   });
 
+  await recomputeStampSortKeys(collectionId, [result.stampId]);
   return result;
 }
 
@@ -2129,4 +2119,11 @@ export async function moveIssueToArea(
       }
     }
   });
+  // The issue and its re-tagged stamps changed area → their effective primary vendor, and thus
+  // the sort key, may differ (#181).
+  await recomputeIssueSortKeys(collectionId, [issueId]);
+  await recomputeStampSortKeys(
+    collectionId,
+    members.map((m) => m.stampId)
+  );
 }

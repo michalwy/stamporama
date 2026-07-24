@@ -53,6 +53,33 @@ export async function buildEffectivePrimaryCatalogMap(
 }
 
 /**
+ * Effective primary *vendor* per area: the vendor that owns each area's effective primary catalog
+ * name (inherited from ancestors just like {@link buildEffectivePrimaryCatalogMap}). Areas with no
+ * primary catalog — or whose primary catalog name no longer exists — map to null. Used to resolve
+ * the "primary catalog number" for the implicit secondary sort key (#181).
+ * Returns Map<areaId, primaryVendorId | null>.
+ */
+export async function buildPrimaryVendorByAreaMap(
+  collectionId: string
+): Promise<Map<string, string | null>> {
+  const byArea = await buildEffectivePrimaryCatalogMap(collectionId);
+  const nameIds = [...new Set([...byArea.values()].filter((v): v is string => !!v))];
+  const vendorByName = new Map<string, string>();
+  if (nameIds.length > 0) {
+    const names = await prisma.catalogName.findMany({
+      where: { id: { in: nameIds } },
+      select: { id: true, vendorId: true },
+    });
+    for (const n of names) vendorByName.set(n.id, n.vendorId);
+  }
+  const result = new Map<string, string | null>();
+  for (const [areaId, nameId] of byArea) {
+    result.set(areaId, nameId ? (vendorByName.get(nameId) ?? null) : null);
+  }
+  return result;
+}
+
+/**
  * Latest edition year per catalog name in a collection.
  * Used to detect stale prices (a price whose edition is not the newest for its catalog name).
  */
