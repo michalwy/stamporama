@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Stamporama Assistant",
+  "version": "0.1.0",
+  "description": "Match marketplace catalog pages (Colnect first) against your Stamporama collection.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Stamporama Assistant",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "host_permissions": ["http://*/*", "https://*/*"]
+}

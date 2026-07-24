@@ -1,0 +1,17 @@
+{
+  "name": "@stamporama/assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stamporama Assistant — MV3 browser extension shell (#253, part of #155)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.24.0",
+    "typescript": "^5"
+  }
+}

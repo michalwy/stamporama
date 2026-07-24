@@ -50,6 +50,7 @@ model Collection {
   offers          Offer[]
   sales           Sale[]
   colnectCatalogMappings ColnectCatalogMapping[]
+  assistantTokens AssistantToken[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -141,6 +142,28 @@ model ColnectCatalogMapping {
   @@index([collectionId])
   @@index([catalogVendorId])
   @@map("colnect_catalog_mapping")
+}
+
+// Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a
+// collection's Colnect matcher endpoints. An extension running on colnect.com reaches our origin
+// cross-site, where Better Auth's session cookie is not sent, so a token is needed. A token
+// authorizes as the collection's owner for that one collection (owner-only access model). Only the
+// SHA-256 hash of the raw token is stored; the raw value is shown once at creation. The full
+// registration/code-exchange issuance UX is #252 — this is the minimal generator behind it.
+model AssistantToken {
+  id           String    @id @default(cuid())
+  collectionId String
+  // SHA-256 hex of the raw token; the raw value (prefix "stmpa_") is never stored.
+  tokenHash    String    @unique
+  // Optional human label, e.g. the profile/instance name it was issued for.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@map("assistant_token")
 }
 
 model CatalogName {

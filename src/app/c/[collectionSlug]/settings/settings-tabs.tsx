@@ -13,6 +13,7 @@ import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData } from "@/lib/colnect";
+import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
@@ -29,6 +30,7 @@ interface SettingsTabsProps {
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
   initialColnectMappings: ColnectMappingData[];
+  initialAssistantTokens: AssistantTokenData[];
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -65,6 +67,7 @@ export function SettingsTabs({
   initialCertificateStatuses,
   initialSubtypes,
   initialColnectMappings,
+  initialAssistantTokens,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -195,6 +198,7 @@ export function SettingsTabs({
           <ColnectPanel
             collectionId={collectionId}
             initialMappings={initialColnectMappings}
+            initialTokens={initialAssistantTokens}
             vendors={initialTree.map((v) => ({
               id: v.id,
               name: v.name,

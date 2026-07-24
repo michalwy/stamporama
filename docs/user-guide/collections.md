@@ -88,6 +88,10 @@ Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`M
 
 You only need a row where the abbreviations **differ**. Any Colnect abbreviation without a row automatically maps to a local catalog whose abbreviation is spelled the **same** (case-insensitive) — so `Mi` → your Michel needs no row. Anything still unmatched is simply **ignored**, never an error. Each row is a Colnect abbreviation plus the local catalog it points to; an abbreviation can be mapped only once per collection. (This mapping is preparation for future Colnect number-matching; on its own it changes nothing about your stamps.)
 
+### Assistant tokens
+
+The same **Settings → Colnect** screen has an **Assistant tokens** section. The Stamporama Assistant browser extension uses a token to match Colnect pages against this collection on your behalf. Click **Generate Assistant token**, optionally label it, and copy the value into the extension's options — it is shown **only once**, so if you lose it, revoke it and generate a new one. A token grants write access to this collection's Colnect matching, so treat it like a password; revoke any you no longer use.
+
 ## Merging two issues
 
 Two issues in the same area can be merged into one — useful when the same set was entered twice or a split turned out to be unnecessary. Open the **⋮** menu of the issue you want to **remove** and choose **Merge into another issue…**, then pick the target issue to keep. The dialog reports how many stamps will move and warns if any catalog number appears in both issues (advisory only — the merge is still allowed).

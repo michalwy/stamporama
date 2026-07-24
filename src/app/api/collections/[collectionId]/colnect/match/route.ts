@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { resolveCollectionOwner } from "@/lib/route-auth";
 import { matchColnectItems, type ColnectMatchItemInput } from "@/lib/colnect";
 
 // Colnect catalog-number matcher (#250, part of #155). Accepts a batch of extracted Colnect items
@@ -38,12 +37,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
+  const { collectionId } = await params;
+  const ownerId = await resolveCollectionOwner(request, collectionId);
+  if (!ownerId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { collectionId } = await params;
 
   let body: unknown;
   try {
@@ -58,7 +56,7 @@ export async function POST(
   }
 
   try {
-    const results = await matchColnectItems(session.user.id, collectionId, parsed.items, {
+    const results = await matchColnectItems(ownerId, collectionId, parsed.items, {
       dryRun: parsed.dryRun,
     });
     return NextResponse.json({ results });

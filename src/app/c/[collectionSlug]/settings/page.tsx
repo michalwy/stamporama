@@ -9,6 +9,7 @@ import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getColnectMappings } from "@/lib/colnect";
+import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppVersionLabel } from "@/lib/version";
 import { SettingsTabs } from "./settings-tabs";
@@ -36,6 +37,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     certificateStatuses,
     subtypes,
     colnectMappings,
+    assistantTokens,
     photoStorageBytes,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
@@ -45,6 +47,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
+    listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
   ]);
 
@@ -63,6 +66,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
           initialColnectMappings={colnectMappings}
+          initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
           appVersion={getAppVersionLabel()}

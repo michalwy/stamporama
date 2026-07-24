@@ -5,7 +5,9 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
-    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"]
+    // The extension is a separate workspace package with its own tsconfig, chrome globals, and
+    // typecheck (`extension/`); the app's Next lint config does not apply to it.
+    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts", "extension/**"]
   },
   {
     linterOptions: {

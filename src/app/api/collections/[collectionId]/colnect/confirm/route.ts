@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { resolveCollectionOwner } from "@/lib/route-auth";
 import { confirmColnectMatch, ColnectMatchConflictError } from "@/lib/colnect";
 
 // Commit a user-chosen Colnect match (#250, part of #155): write `Stamp.colnectId` for a stamp the
@@ -11,12 +10,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
+  const { collectionId } = await params;
+  const ownerId = await resolveCollectionOwner(request, collectionId);
+  if (!ownerId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { collectionId } = await params;
 
   let body: unknown;
   try {
@@ -35,7 +33,7 @@ export async function POST(
   }
 
   try {
-    await confirmColnectMatch(session.user.id, collectionId, {
+    await confirmColnectMatch(ownerId, collectionId, {
       colnectId: colnectId.trim(),
       stampId,
       allowOverwrite: allowOverwrite === true,

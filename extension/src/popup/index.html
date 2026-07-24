@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stamporama Assistant</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --panel: #f9fafb;
+        --primary: #2563eb;
+        --primary-fg: #ffffff;
+        --danger: #dc2626;
+        --warn: #b45309;
+        --ok: #15803d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1e1e1e;
+          --fg: #ececec;
+          --muted: #9ca3af;
+          --border: #3a3a3a;
+          --panel: #262626;
+          --primary: #3b82f6;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 380px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .pad { padding: 12px 14px; }
+      h1 { font-size: 14px; margin: 0 0 8px; }
+      .badge {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 8px 10px; border-radius: 8px;
+        background: var(--panel); border: 1px solid var(--border);
+        margin-bottom: 10px;
+      }
+      .badge .name { font-weight: 600; }
+      .badge .url { color: var(--muted); font-size: 11px; word-break: break-all; }
+      .badge.none { color: var(--warn); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+      button {
+        font: inherit; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+      }
+      button.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      a { color: var(--primary); }
+      .status { color: var(--muted); min-height: 16px; margin: 4px 0 8px; }
+      .status.err { color: var(--danger); }
+      .item {
+        border: 1px solid var(--border); border-radius: 8px;
+        padding: 8px 10px; margin-bottom: 8px; background: var(--panel);
+      }
+      .item .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+      .item .id { font-family: monospace; color: var(--muted); font-size: 11px; }
+      .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+      .tag.auto { background: rgba(21,128,61,0.15); color: var(--ok); }
+      .tag.needs { background: rgba(180,83,9,0.15); color: var(--warn); }
+      .tag.skip { background: rgba(107,114,128,0.15); color: var(--muted); }
+      .cand { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 4px 0; }
+      .cand .meta { color: var(--muted); font-size: 11px; }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="pad">
+      <h1>Stamporama Assistant</h1>
+      <div id="badge" class="badge none">No active profile — open Options.</div>
+
+      <div class="row">
+        <button id="extract">Extract from this page</button>
+        <button id="sample">Load sample refs</button>
+      </div>
+      <div class="row">
+        <button id="preview" class="primary" disabled>Preview matches (dry-run)</button>
+        <button id="writeAuto" disabled>Write auto-matches</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="results"></div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
