@@ -16,6 +16,7 @@ import {
   useCollectionLocations,
   useInvalidateInventory,
 } from "./use-inventory-query";
+import { useInvalidateIssues } from "@/app/c/[collectionSlug]/issues/use-issues-query";
 
 /** Row-actions-menu entry that opens the read-only inventory popup for a stamp or
  * issue (#110). Returns the menu action plus the dialog element to render at the
@@ -83,6 +84,7 @@ export function useInventoryAddAction({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
+  const { invalidateList: invalidateIssuesList } = useInvalidateIssues();
 
   // Fetched client-side so the stamp/issue lists don't have to thread these server-loaded
   // props down to every row. Both are cached (staleTime) and shared across rows.
@@ -127,6 +129,9 @@ export function useInventoryAddAction({
             setOpen(false);
             setError(undefined);
             invalidateList(collectionId);
+            // Also invalidate the Issue list: a promoted stamp photo (#137) shows up
+            // there too, and it's a separate query key namespace (#264).
+            invalidateIssuesList(collectionId);
           } else if (result.status === "error") {
             setError(result.message);
           }
