@@ -476,7 +476,15 @@ export function IssueDialog(props: IssueDialogProps) {
   const isCreate = props.mode === "create";
 
   const [selectedAreaId, setSelectedAreaId] = useState(() => {
-    if (isCreate) return props.defaultAreaId ?? areas[0]?.id ?? "";
+    if (isCreate) {
+      // Grouping-only areas (#263) can't hold issues, so never default to one — prefer the
+      // requested area when it's assignable, else the first assignable area.
+      const requested = props.defaultAreaId
+        ? areas.find((a) => a.id === props.defaultAreaId)
+        : undefined;
+      if (requested?.assignable) return requested.id;
+      return areas.find((a) => a.assignable)?.id ?? "";
+    }
     return props.issue.collectionAreaId;
   });
 
@@ -641,6 +649,7 @@ export function IssueDialog(props: IssueDialogProps) {
                   setVendorSelection({});
                 }}
                 disabled={isPending}
+                onlyAssignableSelectable
                 noneOptionLabel={
                   areas.length === 0 ? "— No areas yet —" : "— Select an area"
                 }

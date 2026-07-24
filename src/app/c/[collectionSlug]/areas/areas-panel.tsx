@@ -13,6 +13,7 @@ import {
   createCollectionAreaAction,
   updateCollectionAreaAction,
   deleteCollectionAreaAction,
+  reorderCollectionAreasAction,
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
@@ -158,6 +159,19 @@ const catalogBadgeStyle: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
+const groupingBadgeStyle: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  background: "var(--color-bg-page)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.25rem",
+  padding: "0.1rem 0.4rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  whiteSpace: "nowrap",
+};
+
 // ── CollectionAreaForm ────────────────────────────────────────────────────────
 
 interface EntryState {
@@ -172,6 +186,7 @@ interface CollectionAreaFormProps {
   defaultTitleName?: string | null;
   defaultPrimaryCatalogNameId?: string | null;
   defaultCatalogEntries?: AreaCatalogEntry[];
+  defaultAssignable?: boolean;
   inheritedPrimaryId: string | null;
   inheritedPrefixes: AreaCatalogEntry[];
   areas: CollectionAreaData[];
@@ -187,6 +202,7 @@ function CollectionAreaForm({
   defaultTitleName,
   defaultPrimaryCatalogNameId,
   defaultCatalogEntries,
+  defaultAssignable = true,
   inheritedPrimaryId,
   inheritedPrefixes,
   areas,
@@ -314,6 +330,44 @@ function CollectionAreaForm({
           with) this area&apos;s name. <strong>Clear it</strong> to roll this area up to the nearest
           parent that has a title name — handy for internal grouping levels.
         </p>
+      </div>
+
+      {/* Grouping-only areas (#263): organize children but can't receive issues directly. */}
+      <div style={{ marginBottom: "1rem" }}>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "0.5rem",
+            fontSize: "0.875rem",
+            color: "var(--color-text-primary)",
+            cursor: isPending ? "not-allowed" : "pointer",
+          }}
+        >
+          {/* An unchecked checkbox submits nothing, so the action reads `assignable` as
+              false when off and "true" when on — no hidden companion field. */}
+          <input
+            type="checkbox"
+            name="assignable"
+            value="true"
+            defaultChecked={defaultAssignable}
+            disabled={isPending}
+            style={{ marginTop: "0.2rem" }}
+          />
+          <span>
+            Can hold issues
+            <span
+              style={{
+                display: "block",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Leave unchecked for a grouping-only area (e.g. &ldquo;Europe&rdquo;) that just
+              organizes the areas inside it. Catalog settings still pass down to children.
+            </span>
+          </span>
+        </label>
       </div>
 
       {catalogNames.length > 0 && (
@@ -516,6 +570,66 @@ export function AreasPanel({
     return flatTree.filter(({ area }) => !hidden.has(area.id));
   }, [flatTree, collapsed, initialAreas]);
 
+  // ── Drag-and-drop reordering within a sibling group (#78) ──────────────────
+  const areaById = useMemo(() => {
+    const m = new Map<string, CollectionAreaData>();
+    for (const a of initialAreas) m.set(a.id, a);
+    return m;
+  }, [initialAreas]);
+
+  // `dragId` is the area being dragged (drag is armed only from its grip handle so the
+  // name link and actions menu still work). `dropTarget` marks the row and edge the
+  // indicator line renders on.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+
+  function clearDrag() {
+    setDragId(null);
+    setDragArmedId(null);
+    setDropTarget(null);
+  }
+
+  // True when `targetId` is a valid drop for the current drag: a different area under the
+  // same parent (reordering is sibling-scoped only).
+  function isSiblingDropTarget(targetId: string): boolean {
+    if (!dragId || dragId === targetId) return false;
+    const dragged = areaById.get(dragId);
+    const target = areaById.get(targetId);
+    return !!dragged && !!target && dragged.parentId === target.parentId;
+  }
+
+  function handleReorderDrop(targetId: string) {
+    const dragged = dragId ? areaById.get(dragId) : undefined;
+    const target = dropTarget ?? null;
+    if (!dragged || !target || !isSiblingDropTarget(targetId) || target.id !== targetId) {
+      clearDrag();
+      return;
+    }
+
+    const siblingIds = initialAreas
+      .filter((a) => a.parentId === dragged.parentId)
+      .map((a) => a.id);
+    const without = siblingIds.filter((id) => id !== dragged.id);
+    const targetIdx = without.indexOf(targetId);
+    const insertIdx = target.position === "after" ? targetIdx + 1 : targetIdx;
+    without.splice(insertIdx, 0, dragged.id);
+
+    // No-op if the order is unchanged.
+    if (without.length === siblingIds.length && without.every((id, i) => id === siblingIds[i])) {
+      clearDrag();
+      return;
+    }
+
+    const parentId = dragged.parentId;
+    clearDrag();
+    startTransition(async () => {
+      const result = await reorderCollectionAreasAction(collectionId, parentId, without);
+      setActionState(result);
+      if (result.status === "success") router.refresh();
+    });
+  }
+
   function inheritedValuesFor(parentId: string | undefined | null): { inheritedPrimaryId: string | null; inheritedPrefixes: AreaCatalogEntry[] } {
     if (!parentId) return { inheritedPrimaryId: null, inheritedPrefixes: [] };
     const node = nodeByAreaId.get(parentId);
@@ -616,20 +730,92 @@ export function AreasPanel({
               (e) => e.catalogNameId !== effectivePrimaryCatalogNameId
             );
 
+            const isDragging = dragId === area.id;
+            // Subtle depth shading: the top level sits on the clean elevated surface (white),
+            // and each deeper level mixes a bit more neutral gray in, so nesting reads as a gentle
+            // fade — scales to any depth (capped). Theme-safe — both surfaces are tokens.
+            const shadePct = Math.min(depth, 6) * 22;
+            const rowBackground = `color-mix(in srgb, var(--color-bg-muted) ${shadePct}%, var(--color-bg-elevated))`;
+            const showDropBefore =
+              dropTarget?.id === area.id && dropTarget.position === "before";
+            const showDropAfter =
+              dropTarget?.id === area.id && dropTarget.position === "after";
+
             return (
               <div
                 key={area.id}
+                draggable={dragArmedId === area.id}
+                onDragStart={(e) => {
+                  setDragId(area.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox requires data to be set for a drag to start.
+                  e.dataTransfer.setData("text/plain", area.id);
+                }}
+                onDragOver={(e) => {
+                  if (!isSiblingDropTarget(area.id)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const position = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                  setDropTarget((prev) =>
+                    prev?.id === area.id && prev.position === position
+                      ? prev
+                      : { id: area.id, position }
+                  );
+                }}
+                onDragLeave={(e) => {
+                  // Ignore leave events bubbling from children still within the row.
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                  setDropTarget((prev) => (prev?.id === area.id ? null : prev));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleReorderDrop(area.id);
+                }}
+                onDragEnd={clearDrag}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: "0.75rem",
                   padding: "0.75rem 1.25rem",
                   paddingLeft: `${1.25 + depth * 1.5}rem`,
-                  background: depth === 0 ? "var(--color-bg-elevated)" : "var(--color-bg-page)",
+                  background: rowBackground,
                   borderBottom:
                     idx < visibleTree.length - 1 ? "1px solid var(--color-border)" : undefined,
+                  opacity: isDragging ? 0.4 : undefined,
+                  boxShadow: showDropBefore
+                    ? "inset 0 2px 0 0 var(--color-accent)"
+                    : showDropAfter
+                      ? "inset 0 -2px 0 0 var(--color-accent)"
+                      : undefined,
                 }}
               >
+                {/* Drag handle (#78): arms dragging so the name link and actions menu stay
+                    clickable. Grouping and leaf areas both reorder among their siblings. */}
+                <button
+                  type="button"
+                  aria-label={`Drag to reorder ${area.name}`}
+                  onMouseDown={() => setDragArmedId(area.id)}
+                  onMouseUp={() => setDragArmedId((prev) => (dragId ? prev : null))}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "1rem",
+                    flexShrink: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "grab",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.875rem",
+                    padding: 0,
+                    lineHeight: 1,
+                    touchAction: "none",
+                  }}
+                >
+                  ⠿
+                </button>
+
                 {/* Expand/collapse toggle for nodes with children; a reserved spacer
                     otherwise so every row's name lines up (#237). */}
                 {hasChildren ? (
@@ -662,6 +848,7 @@ export function AreasPanel({
 
                 <a
                   href={`/c/${collectionSlug}/issues?areaId=${area.id}`}
+                  draggable={false}
                   style={{
                     flex: 1,
                     fontSize: "0.9375rem",
@@ -678,6 +865,9 @@ export function AreasPanel({
                 >
                   {area.name}
                 </a>
+
+                {/* Grouping-only marker (#263): this area organizes children but holds no issues. */}
+                {!area.assignable && <span style={groupingBadgeStyle}>Grouping</span>}
 
                 {/* Primary catalog badge */}
                 {primaryCatalog && (
@@ -807,6 +997,7 @@ export function AreasPanel({
                 defaultTitleName={dialog.area.titleName}
                 defaultPrimaryCatalogNameId={dialog.area.primaryCatalogNameId}
                 defaultCatalogEntries={dialog.area.catalogEntries}
+                defaultAssignable={dialog.area.assignable}
                 inheritedPrimaryId={dialog.inheritedPrimaryId}
                 inheritedPrefixes={dialog.inheritedPrefixes}
                 areas={initialAreas}

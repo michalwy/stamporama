@@ -41,9 +41,26 @@ All filtering and sorting happens on the server, and the active area, year, sear
 
 Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
+## Organizing collecting areas
+
+Areas are managed in **Settings → Areas**, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves.
+
+### Grouping-only areas
+
+Some areas exist only to organize the ones inside them — for example a **Europe** node that groups individual countries but never holds issues of its own. In the **Add area** / **Edit area** dialog, the **Can hold issues** checkbox controls this:
+
+- **Leave it checked** (the default) for a normal area that holds issues and stamps.
+- **Uncheck** it for a grouping-only area. Grouping-only areas are shown with a **Grouping** badge in the area list, and they cannot be picked as the area for an issue — in the **Add issue** and **Move to another area** dialogs they appear for context but are not selectable; you choose one of the real areas nested inside them instead. Catalog settings (primary catalog, number prefixes) still pass down to their children as before.
+
+You cannot mark an area as grouping-only while issues or stamps are still assigned directly to it — move those into a child area first.
+
+### Custom order
+
+Within each level of the tree, areas can be arranged in whatever order you like instead of alphabetically. Grab the **⠿** handle at the left of an area row and drag it up or down to reposition it among its siblings; the new order is saved immediately and is used everywhere the area tree appears (filters, pickers, and the management list). Reordering only moves an area among the siblings under the same parent — to move it under a different parent, use **Edit** and change its parent area. New areas are added at the end of their group.
+
 ## Moving an issue to another area
 
-An issue can be moved to a different collecting area after it is created. Open the issue's **⋮** menu on the **Issues** list and choose **Move to another area…**, then pick the target area from the tree and click **Move**. The issue's whole **stamp tree moves with it** — its stamps are re-tagged to the new area (a stamp that also belongs to another issue still in the old area keeps its place there too).
+An issue can be moved to a different collecting area after it is created. Open the issue's **⋮** menu on the **Issues** list and choose **Move to another area…**, then pick the target area from the tree and click **Move**. The issue's whole **stamp tree moves with it** — its stamps are re-tagged to the new area (a stamp that also belongs to another issue still in the old area keeps its place there too). Grouping-only areas are shown but can't be chosen as the destination.
 
 Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area in **Settings → Areas**.
 

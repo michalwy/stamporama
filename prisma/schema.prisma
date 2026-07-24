@@ -156,6 +156,13 @@ model CollectionArea {
   // that sets one, else the area's own `name` — so internal grouping levels (e.g. "Second Republic")
   // roll up to a public area ("Poland") while siblings ("General Gouvernement") keep their own.
   titleName            String?
+  // Grouping-only areas (e.g. "Europe") have `assignable = false`: they organize child
+  // areas but cannot themselves receive Issues/stamps directly. Leaf areas that hold
+  // material have `assignable = true`. Defaults true. Mirrors `Location.assignable` (#56, #263).
+  assignable           Boolean  @default(true)
+  // Custom display order among siblings under the same parent (#78). Lower sorts first;
+  // ties break by name. New areas are appended (max sibling `sortOrder` + 1).
+  sortOrder            Int      @default(0)
   createdAt            DateTime @default(now())
 
   collection             Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)

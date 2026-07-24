@@ -47,6 +47,12 @@ function getAreaPath(areas: CollectionAreaData[], areaId: string): string {
   return path.join(" › ");
 }
 
+/**
+ * Tree-select over collection areas. When `onlyAssignableSelectable` is set (the
+ * issue-assignment case, #263) grouping-only areas (`assignable = false`) are shown for
+ * context and can be expanded, but cannot be chosen — only areas that hold material are
+ * selectable. The parent-picker and filter cases leave every node selectable.
+ */
 export function AreaTreeSelect({
   areas,
   areaTree,
@@ -54,6 +60,7 @@ export function AreaTreeSelect({
   selectedId,
   onSelectedIdChange,
   disabled,
+  onlyAssignableSelectable = false,
   noneOptionLabel = "— None (top-level)",
 }: {
   areas: CollectionAreaData[];
@@ -62,6 +69,7 @@ export function AreaTreeSelect({
   selectedId: string;
   onSelectedIdChange: (id: string) => void;
   disabled?: boolean;
+  onlyAssignableSelectable?: boolean;
   noneOptionLabel?: string;
 }) {
   const buttonId = `${name}-button`;
@@ -93,12 +101,18 @@ export function AreaTreeSelect({
     noneOptionLabel,
   });
 
+  function isSelectable(id: string): boolean {
+    if (!onlyAssignableSelectable) return true;
+    return areas.find((a) => a.id === id)?.assignable ?? false;
+  }
+
   function commitActive() {
     if (activeId === TREE_SELECT_NONE_ID || activeId === "") {
       setSelected("");
       return;
     }
-    setSelected(activeId);
+    // Ignore Enter on a grouping-only area in assignment mode (#263).
+    if (isSelectable(activeId)) setSelected(activeId);
   }
 
   const handleKeyDown = buildHandleKeyDown(commitActive);
@@ -147,6 +161,8 @@ export function AreaTreeSelect({
                   expandedIds={effectiveExpandedIds}
                   level={0}
                   selectedId={selectedId}
+                  selectable={isSelectable(area.id)}
+                  onlyAssignableSelectable={onlyAssignableSelectable}
                   onSelect={setSelected}
                   onToggleExpanded={toggleExpanded}
                 />
@@ -169,6 +185,8 @@ function AreaTreeSelectNode({
   expandedIds,
   level,
   selectedId,
+  selectable,
+  onlyAssignableSelectable,
   onSelect,
   onToggleExpanded,
 }: {
@@ -177,6 +195,8 @@ function AreaTreeSelectNode({
   expandedIds: Set<string>;
   level: number;
   selectedId: string;
+  selectable: boolean;
+  onlyAssignableSelectable: boolean;
   onSelect: (id: string) => void;
   onToggleExpanded: (id: string) => void;
 }) {
@@ -209,19 +229,32 @@ function AreaTreeSelectNode({
         ) : (
           <span />
         )}
-        <button
-          aria-selected={isSelected}
-          className={`min-h-9 w-full rounded-md px-2 py-1.5 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-[var(--color-ring-strong)] ${
-            isActive
-              ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-accent-soft)]"
-              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
-          }`}
-          role="option"
-          type="button"
-          onClick={() => onSelect(area.id)}
-        >
-          <span className="block truncate">{area.name}</span>
-        </button>
+        {selectable ? (
+          <button
+            aria-selected={isSelected}
+            className={`min-h-9 w-full rounded-md px-2 py-1.5 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-[var(--color-ring-strong)] ${
+              isActive
+                ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-accent-soft)]"
+                : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+            }`}
+            role="option"
+            type="button"
+            onClick={() => onSelect(area.id)}
+          >
+            <span className="block truncate">{area.name}</span>
+          </button>
+        ) : (
+          // Grouping-only area in assignment mode (#263): a non-selectable header. Clicking
+          // it toggles expansion so the user can drill into its assignable children.
+          <button
+            className="min-h-9 w-full cursor-default rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--color-text-muted)] transition"
+            type="button"
+            title="Grouping-only area — pick a specific area inside it"
+            onClick={() => hasChildren && onToggleExpanded(area.id)}
+          >
+            <span className="block truncate">{area.name}</span>
+          </button>
+        )}
       </div>
       {hasChildren && isExpanded ? (
         <ol className="mt-0.5 grid gap-0.5">
@@ -233,6 +266,8 @@ function AreaTreeSelectNode({
               expandedIds={expandedIds}
               level={level + 1}
               selectedId={selectedId}
+              selectable={!onlyAssignableSelectable || child.assignable}
+              onlyAssignableSelectable={onlyAssignableSelectable}
               onSelect={onSelect}
               onToggleExpanded={onToggleExpanded}
             />

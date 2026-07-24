@@ -62,6 +62,10 @@ export interface CollectionAreaData {
   primaryCatalogNameId: string | null;
   /** Optional name used for this area in auto-generated listing titles (#210); null when blank. */
   titleName: string | null;
+  /** Grouping-only areas (#263) organize children but can't receive Issues/stamps directly. */
+  assignable: boolean;
+  /** Custom sibling display order (#78); lower sorts first, ties break by name. */
+  sortOrder: number;
   stampCount: number;
   childCount: number;
   catalogEntries: AreaCatalogEntry[];
@@ -74,7 +78,7 @@ export async function getCollectionAreas(
   await assertCollectionOwner(ownerId, collectionId);
   const areas = await prisma.collectionArea.findMany({
     where: { collectionId },
-    orderBy: { name: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {
       id: true,
       name: true,
@@ -82,6 +86,8 @@ export async function getCollectionAreas(
       description: true,
       primaryCatalogNameId: true,
       titleName: true,
+      assignable: true,
+      sortOrder: true,
       _count: { select: { stampAreaLinks: true, children: true } },
       collectionAreaCatalogs: {
         orderBy: [
@@ -111,6 +117,8 @@ export async function getCollectionAreas(
     description: a.description,
     primaryCatalogNameId: a.primaryCatalogNameId,
     titleName: a.titleName,
+    assignable: a.assignable,
+    sortOrder: a.sortOrder,
     stampCount: a._count.stampAreaLinks,
     childCount: a._count.children,
     catalogEntries: (() => {
@@ -138,6 +146,7 @@ export async function createCollectionArea(
     description?: string | null;
     primaryCatalogNameId?: string | null;
     titleName?: string | null;
+    assignable?: boolean;
   }
 ): Promise<{ id: string }> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -150,10 +159,13 @@ export async function createCollectionArea(
       throw new Error("Parent area not found.");
     }
   }
-  await assertEffectivePrimaryCatalog(
-    data.primaryCatalogNameId,
-    data.parentId
-  );
+  // Grouping-only areas hold no material of their own, so they're exempt from the
+  // primary-catalog requirement (#263) — a bare "Europe" node needs none. They may still
+  // set one to pass down; assignable areas must have an effective primary as before (#69).
+  const isAssignable = data.assignable ?? true;
+  if (isAssignable) {
+    await assertEffectivePrimaryCatalog(data.primaryCatalogNameId, data.parentId);
+  }
   const created = await prisma.collectionArea.create({
     data: {
       collectionId,
@@ -162,10 +174,25 @@ export async function createCollectionArea(
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       titleName: data.titleName ?? null,
+      assignable: data.assignable ?? true,
+      // Append to the end of the sibling group (#78).
+      sortOrder: await nextSiblingSortOrder(collectionId, data.parentId ?? null),
     },
     select: { id: true },
   });
   return { id: created.id };
+}
+
+/** Next sortOrder for a new area appended to its sibling group (#78): max sibling + 1, else 0. */
+async function nextSiblingSortOrder(
+  collectionId: string,
+  parentId: string | null
+): Promise<number> {
+  const last = await prisma.collectionArea.aggregate({
+    where: { collectionId, parentId },
+    _max: { sortOrder: true },
+  });
+  return last._max.sortOrder === null ? 0 : last._max.sortOrder + 1;
 }
 
 export async function updateCollectionArea(
@@ -177,10 +204,31 @@ export async function updateCollectionArea(
     description?: string | null;
     primaryCatalogNameId?: string | null;
     titleName?: string | null;
+    assignable?: boolean;
   }
 ): Promise<void> {
   const collectionId = await resolveAreaCollection(areaId);
   await assertCollectionOwner(ownerId, collectionId);
+
+  const existing = await prisma.collectionArea.findUniqueOrThrow({
+    where: { id: areaId },
+    select: {
+      parentId: true,
+      assignable: true,
+      _count: { select: { issues: true, stampAreaLinks: true } },
+    },
+  });
+
+  // Making an area grouping-only while Issues/stamps are directly assigned to it would
+  // strand them (grouping-only areas can't hold material). Block it — move them first (#263).
+  if (data.assignable === false) {
+    const { issues, stampAreaLinks } = existing._count;
+    if (issues > 0 || stampAreaLinks > 0) {
+      throw new Error(
+        "Cannot mark an area grouping-only while it has issues or stamps assigned to it. Move them first."
+      );
+    }
+  }
 
   if (data.parentId) {
     const parent = await prisma.collectionArea.findUnique({
@@ -206,18 +254,30 @@ export async function updateCollectionArea(
     }
   }
 
-  await assertEffectivePrimaryCatalog(
-    data.primaryCatalogNameId,
-    data.parentId
-  );
+  // Grouping-only areas are exempt from the primary-catalog requirement (#263); assignable
+  // areas must still have an effective primary (#69). Use the post-update assignable value.
+  const effectiveAssignable = data.assignable ?? existing.assignable;
+  if (effectiveAssignable) {
+    await assertEffectivePrimaryCatalog(data.primaryCatalogNameId, data.parentId);
+  }
+
+  // Moving to a different parent puts the area into a new sibling group, so append it to
+  // the end there (#78). Staying under the same parent keeps its existing position.
+  const nextParentId = data.parentId ?? null;
+  const parentChanged = nextParentId !== existing.parentId;
+
   await prisma.collectionArea.update({
     where: { id: areaId },
     data: {
       name: data.name,
-      parentId: data.parentId ?? null,
+      parentId: nextParentId,
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       titleName: data.titleName ?? null,
+      ...(data.assignable !== undefined ? { assignable: data.assignable } : {}),
+      ...(parentChanged
+        ? { sortOrder: await nextSiblingSortOrder(collectionId, nextParentId) }
+        : {}),
     },
   });
 }
@@ -246,6 +306,44 @@ export async function deleteCollectionArea(
   }
 
   await prisma.collectionArea.delete({ where: { id: areaId } });
+}
+
+/**
+ * Persist a custom sibling order (#78). `orderedIds` is the full set of areas that share
+ * `parentId`, in the desired top-to-bottom order; each is assigned `sortOrder = index`.
+ * Reordering is sibling-scoped only — every id must belong to the collection and sit under
+ * `parentId`, and the set must be complete, so a partial or cross-level list is rejected.
+ */
+export async function reorderCollectionAreas(
+  ownerId: string,
+  collectionId: string,
+  parentId: string | null,
+  orderedIds: string[]
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const siblings = await prisma.collectionArea.findMany({
+    where: { collectionId, parentId },
+    select: { id: true },
+  });
+  const siblingIds = new Set(siblings.map((s) => s.id));
+
+  if (
+    orderedIds.length !== siblingIds.size ||
+    new Set(orderedIds).size !== orderedIds.length ||
+    orderedIds.some((id) => !siblingIds.has(id))
+  ) {
+    throw new Error("Reorder list must be the exact set of sibling areas.");
+  }
+
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.collectionArea.update({
+        where: { id },
+        data: { sortOrder: index },
+      })
+    )
+  );
 }
 
 export async function syncAreaCatalogEntries(

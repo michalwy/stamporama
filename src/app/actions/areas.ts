@@ -8,6 +8,7 @@ import {
   updateCollectionArea,
   deleteCollectionArea,
   syncAreaCatalogEntries,
+  reorderCollectionAreas,
 } from "@/lib/areas";
 
 export type AreaActionState =
@@ -28,6 +29,10 @@ function str(formData: FormData, key: string): string {
 function optionalStr(formData: FormData, key: string): string | null {
   const v = str(formData, key);
   return v || null;
+}
+
+function bool(formData: FormData, key: string): boolean {
+  return formData.get(key) === "true";
 }
 
 function parseCatalogEntries(
@@ -66,6 +71,7 @@ export async function createCollectionAreaAction(
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       titleName: optionalStr(formData, "titleName"),
+      assignable: bool(formData, "assignable"),
     });
     await syncAreaCatalogEntries(session.user.id, id, parseCatalogEntries(formData));
     return { status: "success" };
@@ -91,6 +97,7 @@ export async function updateCollectionAreaAction(
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       titleName: optionalStr(formData, "titleName"),
+      assignable: bool(formData, "assignable"),
     });
     await syncAreaCatalogEntries(session.user.id, areaId, parseCatalogEntries(formData));
     return { status: "success" };
@@ -113,6 +120,24 @@ export async function deleteCollectionAreaAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete area. Please try again.",
+    };
+  }
+}
+
+/** Persist a drag-and-drop reorder of a sibling group (#78). */
+export async function reorderCollectionAreasAction(
+  collectionId: string,
+  parentId: string | null,
+  orderedIds: string[]
+): Promise<AreaActionState> {
+  const session = await getSession();
+  try {
+    await reorderCollectionAreas(session.user.id, collectionId, parentId, orderedIds);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to reorder areas. Please try again.",
     };
   }
 }

@@ -94,6 +94,7 @@ export function MoveIssueAreaDialog({
               selectedId={targetAreaId}
               onSelectedIdChange={setTargetAreaId}
               disabled={isPending}
+              onlyAssignableSelectable
               noneOptionLabel="— Select an area"
             />
             {isCurrentArea && (

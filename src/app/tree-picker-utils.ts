@@ -35,9 +35,16 @@ export function buildTree<T extends { id: string; parentId: string | null; name:
 }
 
 function sortTree<T extends { name: string }>(nodes: TreeNode<T>[]) {
-  nodes.sort((left, right) =>
-    left.name.localeCompare(right.name, "en", { sensitivity: "base" })
-  );
+  // Honor a custom sibling `sortOrder` when the items carry one (#78, collection areas);
+  // ties — and item types without it (e.g. locations) — fall back to alphabetical name.
+  nodes.sort((left, right) => {
+    const leftOrder = (left as { sortOrder?: number }).sortOrder;
+    const rightOrder = (right as { sortOrder?: number }).sortOrder;
+    if (leftOrder !== undefined && rightOrder !== undefined && leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.name.localeCompare(right.name, "en", { sensitivity: "base" });
+  });
 
   for (const node of nodes) {
     sortTree(node.children);

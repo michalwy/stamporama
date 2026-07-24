@@ -1357,10 +1357,15 @@ export async function createIssue(
   await assertCollectionOwner(ownerId, collectionId);
   const area = await prisma.collectionArea.findUnique({
     where: { id: areaId },
-    select: { collectionId: true },
+    select: { collectionId: true, assignable: true },
   });
   if (!area || area.collectionId !== collectionId) {
     throw new Error("Collection area not found.");
+  }
+  if (!area.assignable) {
+    throw new Error(
+      "This is a grouping-only area and can't hold issues. Pick a specific area."
+    );
   }
 
   if (data.autoCreateStamps) assertAutoCreateInput(data.autoCreateStamps);
@@ -2061,10 +2066,15 @@ export async function moveIssueToArea(
 
   const targetArea = await prisma.collectionArea.findUnique({
     where: { id: targetAreaId },
-    select: { collectionId: true },
+    select: { collectionId: true, assignable: true },
   });
   if (!targetArea || targetArea.collectionId !== collectionId) {
     throw new Error("Target area not found.");
+  }
+  if (!targetArea.assignable) {
+    throw new Error(
+      "This is a grouping-only area and can't hold issues. Pick a specific area."
+    );
   }
 
   const members = await prisma.issueMember.findMany({

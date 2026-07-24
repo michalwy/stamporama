@@ -9,6 +9,8 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     description: null,
     primaryCatalogNameId: null,
     titleName: null,
+    assignable: true,
+    sortOrder: 0,
     stampCount: 0,
     childCount: 0,
     catalogEntries: [],
