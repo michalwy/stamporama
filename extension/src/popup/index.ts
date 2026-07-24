@@ -1,6 +1,12 @@
 import { getActiveProfile, type Profile } from "../core/profile";
 import { findModuleForUrl } from "../platform/modules";
-import type { BackgroundRequest, ConfirmResponse, ExtractResponse, MatchResponse } from "../core/messages";
+import type {
+  BackgroundRequest,
+  CachedResultsResponse,
+  ConfirmResponse,
+  ExtractResponse,
+  MatchResponse,
+} from "../core/messages";
 import type { ExtractedItem } from "../platform/types";
 import type { Candidate, MatchResult } from "../core/decisions";
 
@@ -487,7 +493,30 @@ function render(): void {
  */
 async function scanAndMatch(): Promise<void> {
   await scanPage();
-  if (items.length > 0 && profile) await preview();
+  if (items.length === 0 || !profile) return;
+
+  // The page was very likely already matched as it loaded (#283); reuse that instead of running the
+  // whole batch again, so the window opens instantly.
+  if (sourceTabId !== null) {
+    const cached = (await chrome.runtime.sendMessage({
+      type: "cached-results",
+      tabId: sourceTabId,
+    })) as CachedResultsResponse;
+    // Only reuse a cache that covers exactly what the page shows now — the page may have grown
+    // (lazy-loaded cards) since it was matched, and a partial list would read as the whole truth.
+    const ids = new Set(items.map((i) => i.platformItemId));
+    if (
+      cached?.results?.length === items.length &&
+      cached.results.every((r) => ids.has(r.colnectId))
+    ) {
+      results = cached.results;
+      render();
+      setStatus("Preview only — nothing written.");
+      return;
+    }
+  }
+
+  await preview();
 }
 
 writeAutoBtn.addEventListener("click", writeAuto);

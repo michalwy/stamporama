@@ -35,11 +35,30 @@ export type ConfirmResponse =
 
 export type BackgroundRequest = MatchRequest | ConfirmRequest;
 
-// content script → background: "this tab holds N extractable items", for the toolbar badge. Purely
-// local — no instance call is made to produce it. Fire-and-forget, no response.
+/** The minimum an item needs for matching: no name, no image bytes. Keeps the load-time message
+ *  small, since it is sent on every supported page view. */
+export interface SlimItem {
+  platformItemId: string;
+  catalogRefs: ExtractedItem["catalogRefs"];
+}
+
+// content script → background: "this tab holds these items", on page load. The background sets the
+// toolbar badge from it and — when match-on-load is enabled — runs the dry-run so the badge can
+// count work to do rather than raw page contents. Fire-and-forget, no response.
 export interface DetectedNotice {
   type: "detected";
   count: number;
+  refs: SlimItem[];
 }
 
-export type BackgroundMessage = BackgroundRequest | DetectedNotice;
+// popup → background: hand back the load-time match for this tab, if it is still current, so
+// opening the window is instant instead of re-running the whole batch.
+export interface CachedResultsRequest {
+  type: "cached-results";
+  tabId: number;
+}
+export interface CachedResultsResponse {
+  results: MatchResult[] | null;
+}
+
+export type BackgroundMessage = BackgroundRequest | DetectedNotice | CachedResultsRequest;

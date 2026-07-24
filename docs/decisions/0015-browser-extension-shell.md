@@ -54,6 +54,11 @@ lives in **Settings → Colnect**; the full registration/code-exchange issuance 
   comparing an item against candidate stamps. The consequence is that the UI is its own window, so
   the source tab's id is passed in the URL — inside that window "the active tab of the current
   window" is the Assistant itself, not the page being matched.
+- Supported pages are **matched as they load** (#283) so the badge counts stamps needing action
+  rather than stamps present, with the result cached per tab for an instant window. That makes the
+  extension talk to the instance on every supported page view — read-only, but a posture change, so
+  it is switchable in Options (default on) and fails silently to the detected count when the
+  instance is unreachable.
 - The content script runs **declaratively** on `colnect.com` (a coarse manifest match; the module's
   own `matches(url)` does the precise check) so the toolbar badge can show how many items a page
   holds before the popup is opened. That detection is entirely local — no instance call is made for

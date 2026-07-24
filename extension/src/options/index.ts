@@ -1,4 +1,5 @@
 import { getActiveProfile, normalizeBaseUrl, setActiveProfile, type Profile } from "../core/profile";
+import { getMatchOnLoad, setMatchOnLoad } from "../core/settings";
 
 // Minimal single-profile options form (stub for #251). Loads the stored profile, saves edits back to
 // chrome.storage.local, and clears it.
@@ -13,7 +14,15 @@ const fields = {
 };
 const savedEl = $("saved");
 
+const matchOnLoadEl = $<HTMLInputElement>("matchOnLoad");
+
 async function load(): Promise<void> {
+  // Behaviour toggle saves on change; it is independent of the profile form's Save button.
+  matchOnLoadEl.checked = await getMatchOnLoad();
+  matchOnLoadEl.addEventListener("change", () => {
+    void setMatchOnLoad(matchOnLoadEl.checked).then(flashSaved);
+  });
+
   const p = await getActiveProfile();
   if (!p) return;
   fields.name.value = p.name ?? "";

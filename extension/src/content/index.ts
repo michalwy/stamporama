@@ -55,15 +55,21 @@ function captureThumb(img: HTMLImageElement): string | undefined {
   }
 }
 
-/** Extract the current page with whichever module handles it, or null when none does. */
-function extractHere() {
+/**
+ * Extract the current page with whichever module handles it, or null when none does.
+ * `withImages` drives the canvas capture, which is only worth its cost when the window is actually
+ * going to display the thumbnails — not on every page view for the badge.
+ */
+function extractHere(withImages: boolean) {
   const module = findModuleForUrl(location.href);
   if (!module) return null;
   const items = module.extract(document);
-  for (const item of items) {
-    if (!item.imageUrl) continue;
-    const img = renderedImage(item.imageUrl);
-    if (img) item.imageData = captureThumb(img);
+  if (withImages) {
+    for (const item of items) {
+      if (!item.imageUrl) continue;
+      const img = renderedImage(item.imageUrl);
+      if (img) item.imageData = captureThumb(img);
+    }
   }
   return items;
 }
@@ -75,7 +81,7 @@ if (!window.__stamporamaAssistantLoaded) {
     (msg: ExtractRequest, _sender, sendResponse: (r: ExtractResponse) => void) => {
       if (msg?.type !== "extract") return;
       try {
-        const items = extractHere();
+        const items = extractHere(true);
         if (!items) {
           sendResponse({ ok: false, error: "No Assistant module matches this page." });
           return;
@@ -87,11 +93,17 @@ if (!window.__stamporamaAssistantLoaded) {
     }
   );
 
-  // Report the count for the toolbar badge. Best-effort: a page we can't parse just reports 0, and
-  // the message is fire-and-forget (the service worker may be asleep on a page we don't handle).
+  // Report what this page holds, for the toolbar badge — and, when match-on-load is enabled, for
+  // the background to dry-run it so the badge counts work to do rather than page contents. Refs
+  // only: no names, no image bytes, since this is sent on every supported page view. Best-effort
+  // and fire-and-forget (the service worker may be asleep on a page we don't handle).
   try {
-    const count = extractHere()?.length ?? 0;
-    const notice: DetectedNotice = { type: "detected", count };
+    const items = extractHere(false) ?? [];
+    const notice: DetectedNotice = {
+      type: "detected",
+      count: items.length,
+      refs: items.map((i) => ({ platformItemId: i.platformItemId, catalogRefs: i.catalogRefs })),
+    };
     void chrome.runtime.sendMessage(notice).catch(() => {});
   } catch {
     /* detection must never break the page */

@@ -1,26 +1,67 @@
 import { getActiveProfile } from "../core/profile";
+import { getMatchOnLoad } from "../core/settings";
 import type {
   BackgroundMessage,
   BackgroundRequest,
+  CachedResultsResponse,
   ConfirmResponse,
+  DetectedNotice,
   MatchResponse,
 } from "../core/messages";
+import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
 // Extraction itself happens in the content script; the SW owns instance I/O and the badge.
 
-const BADGE_COLOR = "#2563eb";
+// Badge colours carry meaning: blue = "this many items are on the page" (we haven't matched, or
+// couldn't reach the instance), amber = "something needs your decision", green = "all unambiguous,
+// ready to write".
+const BADGE_DETECTED = "#2563eb";
+const BADGE_NEEDS_DECISION = "#b45309";
+const BADGE_AUTO = "#15803d";
 
-/** Show the detected count on the toolbar icon for one tab (empty clears it). */
-async function setBadge(tabId: number | undefined, count: number): Promise<void> {
+async function setBadge(tabId: number | undefined, count: number, color: string): Promise<void> {
   if (tabId === undefined) return;
   try {
-    await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR, tabId });
+    await chrome.action.setBadgeBackgroundColor({ color, tabId });
     await chrome.action.setBadgeText({ text: count > 0 ? String(count) : "", tabId });
   } catch {
     // The tab may be gone by now — a stale badge update is never worth surfacing.
+  }
+}
+
+/** Load-time match results, per tab, so opening the window is instant. Cleared on navigation. */
+const resultCache = new Map<number, MatchResult[]>();
+
+/**
+ * Dry-run the page as it loads and turn the outcome into a badge: how many stamps actually need
+ * action (`auto` waiting to be written + `needs-confirm`), amber when a decision is required.
+ * Everything here is read-only. On any failure — no profile, instance unreachable, disabled — the
+ * badge falls back to the detected count, so an absent badge never silently means "couldn't reach
+ * the instance".
+ */
+async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void> {
+  if (notice.count === 0) return;
+  if (!(await getMatchOnLoad())) return;
+  const profile = await getActiveProfile();
+  if (!profile) return;
+
+  try {
+    const items = notice.refs.map((r) => ({
+      platformItemId: r.platformItemId,
+      catalogRefs: r.catalogRefs,
+    }));
+    const results = await callMatch(profile, items, true);
+    resultCache.set(tabId, results);
+
+    const needsConfirm = results.filter((r) => r.status === "needs-confirm").length;
+    const pendingAuto = results.filter((r) => r.status === "auto" && !r.alreadySet).length;
+    const todo = needsConfirm + pendingAuto;
+    await setBadge(tabId, todo, needsConfirm > 0 ? BADGE_NEEDS_DECISION : BADGE_AUTO);
+  } catch {
+    // Leave the detected-count badge in place; browsing offline must stay quiet.
   }
 }
 
@@ -44,9 +85,18 @@ async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmRe
 }
 
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
-  // Fire-and-forget badge update from a content script; no response expected.
+  // Fire-and-forget page report from a content script: show what's there, then refine the badge
+  // into "work to do" once the dry-run comes back. No response expected.
   if (msg?.type === "detected") {
-    void setBadge(sender.tab?.id, msg.count);
+    const tabId = sender.tab?.id;
+    void setBadge(tabId, msg.count, BADGE_DETECTED);
+    if (tabId !== undefined) void matchOnLoad(tabId, msg);
+    return false;
+  }
+
+  // The window asking for the load-time match of its source tab.
+  if (msg?.type === "cached-results") {
+    sendResponse({ results: resultCache.get(msg.tabId) ?? null } satisfies CachedResultsResponse);
     return false;
   }
 
@@ -59,7 +109,14 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
 // A navigation invalidates the previous count; clear it so a stale number never lingers on a page
 // we haven't (or can't) parse. The content script sets a fresh one when the new page settles.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === "loading") void setBadge(tabId, 0);
+  if (changeInfo.status === "loading") {
+    resultCache.delete(tabId);
+    void setBadge(tabId, 0, BADGE_DETECTED);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  resultCache.delete(tabId);
 });
 
 // ── The Assistant window ─────────────────────────────────────────────────────

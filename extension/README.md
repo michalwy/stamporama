@@ -25,10 +25,15 @@ pnpm typecheck
 
 ## The flow
 
-On a Colnect stamp **list** page (a country/year list — cards are `div.pl-it`) the toolbar icon shows
-a **badge with the number of stamps found** on that page. That count is produced entirely in the page
-(a declarative content script on `colnect.com`); nothing is sent to your instance for it, and it
-clears on navigation.
+On a Colnect stamp **list** page (a country/year list — cards are `div.pl-it`) the toolbar icon
+carries a **badge counting the stamps that need action** — `auto` matches waiting to be written plus
+the ones needing a decision. Amber means something needs deciding, green means everything is
+unambiguous, and no badge means there is nothing to do on this page.
+
+Producing that count matches the page against your instance as it loads (read-only — a dry-run never
+writes). Turn **Match pages as they load** off in Options to keep the extension silent until you open
+the window; the badge then just counts the stamps found on the page, in blue. Blue is also the
+fallback when the instance can't be reached, so a missing badge never quietly means "offline".
 
 Clicking the icon opens the Assistant as a **centred window** (920×760) rather than a toolbar popup —
 a popup is capped at 800×600 and anchored to the icon, too cramped to compare an item against
@@ -36,7 +41,8 @@ candidate stamps. On a wide window each row shows the Colnect item and the stamp
 **side by side**. Clicking the icon again re-points and reloads the same window instead of opening a
 second one — that click *is* the refresh gesture, so there is no rescan/re-match button.
 
-It extracts the page and **matches it straight away** as a **dry-run** (sent in chunks,
+The window reuses the load-time match when it is still current, so it opens instantly; otherwise it
+extracts the page and **matches it** as a **dry-run** (sent in chunks,
 with a progress bar) — so you land directly on the decisions. That call only reads: nothing is
 written until you confirm. **Re-match** re-runs it; **Rescan** re-reads the page and matches again
 after you navigate.
