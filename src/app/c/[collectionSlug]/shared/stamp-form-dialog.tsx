@@ -611,6 +611,10 @@ export function StampFormDialog(props: StampFormDialogProps) {
                           type="text"
                           disabled={isPending}
                           placeholder="e.g. 1"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore
+                          data-bwignore
                           value={catalogInputs[v.catalogVendorId] ?? ""}
                           onChange={(e) =>
                             setCatalogInputs((prev) => ({

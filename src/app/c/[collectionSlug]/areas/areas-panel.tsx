@@ -396,6 +396,10 @@ function CollectionAreaForm({
                         onChange={(e) => updatePrefix(entry.catalogNameId, e.target.value)}
                         disabled={isPending}
                         placeholder="prefix"
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-bwignore
                         style={{ ...INPUT_STYLE, width: "6rem", flex: "none", padding: "0.375rem 0.5rem", minHeight: "2rem", fontFamily: "monospace" }}
                       />
                       <button

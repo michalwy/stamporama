@@ -301,6 +301,10 @@ function IssueForm({
                             defaultValue={existing?.firstNumber ?? ""}
                             disabled={isPending}
                             placeholder="First"
+                            autoComplete="off"
+                            data-lpignore="true"
+                            data-1p-ignore
+                            data-bwignore
                             style={{
                               ...INPUT_STYLE,
                               flex: 1,
@@ -338,6 +342,10 @@ function IssueForm({
                       defaultValue={existing?.lastNumber ?? ""}
                       disabled={isPending}
                       placeholder="Last (optional)"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore
+                      data-bwignore
                       style={{ ...INPUT_STYLE, flex: 1 }}
                     />
                   </div>
