@@ -31,6 +31,66 @@ so an offer and its sale can never disagree. You can set it here, or leave it un
 inline the first time you list or sell on the platform. Changing it later leaves existing offers
 and sales untouched — each keeps the currency it was created with.
 
+Ticking **Platform** also reveals a **Listing title template** — a free-text template that decides how
+[offer](offers.md) and set titles are pre-filled for this platform. Click **Edit template…** to open
+the **template builder**, where you write it with **tokens** in curly braces mixed with any literal
+text you like, for example `{catalog} {name} {year} {condition}`. Click a token chip to drop it in at
+the cursor. The builder shows a **live preview** of the resulting title rendered against a real
+inventory copy — **🎲 Random** shuffles to another copy, and **Pick copy…** lets you preview on a
+specific one you search out. The tokens fill in from the copies in the offer (or set):
+
+- `{name}` — stamp name
+- `{catalog}` — catalog number (configurable, see below)
+- `{year}` — stamp year (a range like `1850–1867` when copies span several)
+- `{condition}` — condition (full name)
+- `{conditionAbbr}` — condition abbreviation (e.g. `MNH`)
+- `{certificate}` — certificate status (full name)
+- `{certificateAbbr}` — certificate-status abbreviation
+- `{area}` — area
+- `{location}` — the copy's storage location name
+- `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
+- `{issueName}` — name of the issue the stamp belongs to
+- `{issueYear}` — year of that issue (also collapses to a range across copies)
+
+Literal text between tokens — spaces, `-`, `/` — is kept as written; it only disappears when it was
+gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several
+tokens: for example `{issueName|name|catalog}` prefers the issue name, falls back to the stamp name,
+then the catalog number.
+
+### Catalog numbers
+
+A stamp can carry catalog numbers from several vendors (Michel, Scott…), and each number's full
+identity is a **catalog prefix** (the vendor abbreviation, e.g. `Mi`) + an **area prefix** (e.g. `PL`)
++ the number (`200`) — shown as `Mi·PL 200`. The `{catalog}` token is configurable so you control
+exactly what appears, with the syntax `{catalog:VENDORS:FLAGS}`:
+
+- **VENDORS** — which vendors' numbers to show: a comma list of abbreviations (`Mi`, `Mi,Sc` — shown
+  in that order), `*` for **all** vendors on the stamp, or blank for the area's **primary** vendor.
+- **FLAGS** — which prefixes to show: `vendor` (the catalog prefix) and/or `area` (the area prefix),
+  comma-separated (short forms `v` and `a` also work). **Omit** the flags segment to show **both**
+  prefixes; give an **empty** segment to show the **bare number**.
+
+Examples:
+
+| Template | Result |
+| --- | --- |
+| `{catalog}` | `Mi·PL 200` (primary vendor, both prefixes) |
+| `{catalog:Mi:vendor}` | `Mi 200` |
+| `{catalog:Mi:vendor,area}` | `Mi·PL 200` |
+| `{catalog:Mi:}` | `200` (bare number) |
+| `{catalog:Mi,Sc:vendor}` | `Mi 200 / Sc 150` |
+| `{catalog:*:vendor}` | every vendor's number, with its abbreviation |
+
+When several copies are listed together, their numbers are grouped per vendor and **consecutive ones
+collapse into ranges** — `Mi·DR 1` + `Mi·DR 2` becomes `Mi·DR 1-2`, and a gapped set reads
+`Mi·DR 1-2,4,6-10`. Different vendors are shown separately, joined with ` / `.
+
+When an offer or set covers several copies, each token lists the distinct values it finds. Different
+platforms have different title conventions and length limits, so each keeps its own template. **Leave
+it blank** to fall back to Stamporama's plain catalog/copy label. Generated titles are only a
+starting point — you can always edit an offer's title by hand afterwards (see
+[Offers → Listing title](offers.md#listing-title)).
+
 Every contact row has a **⋮** menu with **Edit** and **Delete**. Editing replaces all the
 details and roles with whatever the dialog shows when you save.
 

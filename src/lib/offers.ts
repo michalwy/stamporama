@@ -13,6 +13,8 @@ import {
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
+import { renderTitleTemplate } from "./offer-title-template";
+import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -113,19 +115,20 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
 }
 
 /** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
- * currency (#196), which may be null when not set yet. */
+ * currency (#196), which may be null when not set yet, and its listing title template (#210), null
+ * when unset (the renderer then falls back to the built-in default). */
 async function assertPlatform(
   collectionId: string,
   platformId: string
-): Promise<{ platformCurrency: string | null }> {
+): Promise<{ platformCurrency: string | null; titleTemplate: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
-    select: { platformCurrency: true },
+    select: { platformCurrency: true, titleTemplate: true },
   });
   if (!contact) {
     throw new OfferActionBlockedError("no-platform", "Choose a platform to list on.");
   }
-  return { platformCurrency: contact.platformCurrency };
+  return { platformCurrency: contact.platformCurrency, titleTemplate: contact.titleTemplate };
 }
 
 /**
@@ -185,6 +188,32 @@ function setLabel(set: OfferSetRow): string {
 
 function offerLabel(sets: OfferSetRow[]): string {
   return deriveOfferLabel(sets.map(setLabel));
+}
+
+// ── Title generation (#210) ──────────────────────────────────────────────────
+
+/**
+ * Generate a listing / set title from a platform's `template` over the copies `itemIds` (#209/#210),
+ * but **only when the platform has an explicitly configured template**. A blank / null template means
+ * "fall back to the derived label" (#209 — the offer name defaults to the lot label, a set to its
+ * copies), so this returns null and the caller leaves the stored title unset. Loads the copies'
+ * fields in one query and preserves the caller's order, so a regenerated title is stable. Returns
+ * null when nothing resolves (no copies / all fields empty).
+ */
+async function generateConfiguredTitle(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[],
+  template: string | null
+): Promise<string | null> {
+  if (!template?.trim() || itemIds.length === 0) return null;
+  const [rows, mapCopy] = await Promise.all([
+    prisma.item.findMany({ where: { id: { in: itemIds }, collectionId }, select: TITLE_COPY_SELECT }),
+    makeTitleCopyMapper(ownerId, collectionId),
+  ]);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const ordered = itemIds.map((id) => byId.get(id)).filter((r): r is TitleCopyRow => r != null);
+  return renderTitleTemplate(template, ordered.map(mapCopy)) || null;
 }
 
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
@@ -288,6 +317,9 @@ export async function findOfferCollisions(
 
 export interface OfferListItem {
   id: string;
+  /** The stored listing title (#209), or null when never generated. */
+  name: string | null;
+  /** Label derived from the offer's sets — the display fallback when `name` is null. */
   label: string;
   platformId: string;
   platformName: string;
@@ -315,6 +347,7 @@ export interface OfferListItem {
 
 const OFFER_SELECT = {
   id: true,
+  name: true,
   platformId: true,
   url: true,
   price: true,
@@ -328,6 +361,7 @@ const OFFER_SELECT = {
 
 type OfferRow = {
   id: string;
+  name: string | null;
   platformId: string;
   url: string | null;
   price: Decimal;
@@ -342,6 +376,7 @@ type OfferRow = {
 function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): OfferListItem {
   return {
     id: row.id,
+    name: row.name,
     label: offerLabel(row.sets),
     platformId: row.platformId,
     platformName: row.platform.name,
@@ -505,6 +540,9 @@ export interface OfferDetailSet {
 export interface OfferDetail {
   id: string;
   collectionId: string;
+  /** The stored listing title (#209), or null when never generated. */
+  name: string | null;
+  /** Label derived from the offer's sets — the display fallback when `name` is null. */
   label: string;
   platformId: string;
   platformName: string;
@@ -537,6 +575,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     where: { id: offerId },
     select: {
       id: true,
+      name: true,
       collectionId: true,
       platformId: true,
       url: true,
@@ -640,6 +679,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   return {
     id: offer.id,
     collectionId: offer.collectionId,
+    name: offer.name,
     label: offerLabel(offer.sets),
     platformId: offer.platformId,
     platformName: offer.platform.name,
@@ -826,7 +866,7 @@ export async function createOffer(
   opts: { seedItemIds?: string[] } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
-  const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
+  const { platformCurrency, titleTemplate } = await assertPlatform(collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   const targetState = input.state;
@@ -851,11 +891,17 @@ export async function createOffer(
     );
   }
 
+  // Generate the listing title (#209/#210) from the platform's configured template over the seed
+  // copies. With no template configured, or no seed copies yet, the name stays null and the UI falls
+  // back to the derived label until the collector composes and regenerates.
+  const name = await generateConfiguredTitle(ownerId, collectionId, seedIds, titleTemplate);
+
   return prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
         collectionId,
         platformId: input.platformId,
+        name,
         url: input.url,
         price: input.price,
         currency,
@@ -894,7 +940,7 @@ export async function duplicateOffer(
   input: OfferInput
 ): Promise<DuplicateOfferResult> {
   const ref = await assertOfferOwner(ownerId, sourceOfferId);
-  const { platformCurrency } = await assertPlatform(ref.collectionId, input.platformId);
+  const { platformCurrency, titleTemplate } = await assertPlatform(ref.collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   // Source composition + which of its copies have sold elsewhere (dropped from the clone).
@@ -934,11 +980,17 @@ export async function duplicateOffer(
     );
   }
 
+  // Generate the clone's title from the *new* platform's configured template over its kept copies
+  // (#209/#210); null when that platform has no template (falls back to the derived label).
+  const cloneItemIds = [...new Set(cloneSets.flatMap((s) => s.itemIds))];
+  const name = await generateConfiguredTitle(ownerId, ref.collectionId, cloneItemIds, titleTemplate);
+
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
         collectionId: ref.collectionId,
         platformId: input.platformId,
+        name,
         url: input.url,
         price: input.price,
         currency,
@@ -992,12 +1044,15 @@ export interface OfferPatch {
   platformId?: string;
   url?: string | null;
   price?: string;
+  /** The listing title (#209). Blank clears it back to null (the UI then shows the derived label).
+   * Editable in every state for record-keeping, like the URL. */
+  name?: string | null;
 }
 
-/** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits price / URL
- * individually. Currency is not patchable (#196): it is inherited and locked from the platform.
- * Terminal offers freeze price and platform, but the listing URL stays editable in every state for
- * record-keeping (#213); a changed platform is re-validated. */
+/** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits name / price
+ * / URL individually. Currency is not patchable (#196): it is inherited and locked from the
+ * platform. Terminal offers freeze price and platform, but the listing URL and title stay editable
+ * in every state for record-keeping (#213, #209); a changed platform is re-validated. */
 export async function patchOffer(ownerId: string, offerId: string, patch: OfferPatch): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
   const touchesFrozenField = patch.platformId !== undefined || patch.price !== undefined;
@@ -1013,8 +1068,29 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.platformId !== undefined ? { platformId: patch.platformId } : {}),
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
     },
   });
+}
+
+/** Regenerate the listing title (#209/#210) from the platform's current template over the offer's
+ * present composition, overwriting any manual edit. Returns the new name (null when the offer lists
+ * nothing yet, so the UI falls back to the derived label). Allowed in every state — the title is
+ * record-keeping, never a live claim. */
+export async function regenerateOfferName(ownerId: string, offerId: string): Promise<string | null> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
+  const rows = await prisma.offerSetItem.findMany({
+    where: { offerSet: { offerId } },
+    select: { itemId: true, offerSet: { select: { id: true } } },
+    orderBy: [{ offerSet: { id: "asc" } }],
+  });
+  // Distinct copies in set order (an offer never lists a copy twice, but a copy can recur across
+  // sets — dedupe so the template doesn't repeat it).
+  const itemIds = [...new Set(rows.map((r) => r.itemId))];
+  const name = await generateConfiguredTitle(ownerId, ref.collectionId, itemIds, titleTemplate);
+  await prisma.offer.update({ where: { id: offerId }, data: { name } });
+  return name;
 }
 
 /** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
@@ -1102,10 +1178,15 @@ export async function addOfferSet(
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy to the set.");
   }
+  // Set/lot title (#210): an explicit title wins; otherwise pre-fill from the platform's configured
+  // template over this set's copies. Null (no template) leaves the label derived from the copies.
+  const explicit = title?.trim() || null;
+  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
+  const setTitle = explicit ?? (await generateConfiguredTitle(ownerId, ref.collectionId, addable, titleTemplate));
   const set = await prisma.offerSet.create({
     data: {
       offerId,
-      title: title?.trim() || null,
+      title: setTitle,
       items: { create: addable.map((itemId) => ({ itemId })) },
     },
     select: { id: true },
@@ -1128,11 +1209,18 @@ export async function addOfferSetsPerCopy(
   if (addable.length === 0) {
     throw new OfferActionBlockedError("empty", "Add at least one available copy.");
   }
+  // Pre-fill each single-copy set's title from the platform's configured template (#210), computed
+  // per copy so each stands alone. Null (no template) leaves each label derived from its copy.
+  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
+  const titles = new Map<string, string | null>();
+  for (const itemId of addable) {
+    titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate));
+  }
   const ids: string[] = [];
   await prisma.$transaction(async (tx) => {
     for (const itemId of addable) {
       const set = await tx.offerSet.create({
-        data: { offerId, items: { create: [{ itemId }] } },
+        data: { offerId, title: titles.get(itemId) ?? null, items: { create: [{ itemId }] } },
         select: { id: true },
       });
       ids.push(set.id);

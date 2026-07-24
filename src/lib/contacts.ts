@@ -83,6 +83,9 @@ export interface ContactData extends ContactRoles {
   /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
    * contacts carrying the `platform` role. */
   platformCurrency: string | null;
+  /** Free-text title template for this platform's listings (#210), or null (falls back to the
+   * built-in default). Only meaningful for the `platform` role. */
+  titleTemplate: string | null;
   createdAt: Date;
 }
 
@@ -100,6 +103,7 @@ const CONTACT_SELECT = {
   platform: true,
   other: true,
   platformCurrency: true,
+  titleTemplate: true,
   createdAt: true,
 } as const;
 
@@ -116,6 +120,8 @@ export interface ContactCreateInput {
   other?: boolean;
   /** The platform's fixed currency (#196), or null. Set/edited on the platform's contact form. */
   platformCurrency?: string | null;
+  /** The platform's title template (#210), or null. Set/edited on the platform's contact form. */
+  titleTemplate?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -248,6 +254,7 @@ export async function createContact(
         platform: data.platform ?? false,
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
+        titleTemplate: data.titleTemplate ?? null,
       },
       select: CONTACT_SELECT,
     });
@@ -286,6 +293,7 @@ export async function updateContact(
         platform: data.platform ?? false,
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
+        titleTemplate: data.titleTemplate ?? null,
       },
       select: CONTACT_SELECT,
     });

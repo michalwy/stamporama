@@ -141,8 +141,9 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
               whiteSpace: "nowrap",
               maxWidth: "70%",
             }}
+            title={offer.name ?? offer.label}
           >
-            {offer.label}
+            {offer.name ?? offer.label}
           </span>
           <span style={{ flex: 1 }} />
           <span onClick={(e) => e.stopPropagation()}>

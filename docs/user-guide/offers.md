@@ -107,6 +107,28 @@ missing catalog prices without leaving the offer — which also feeds the sugges
 that still need a catalog value, a photo, or their variant identified, so you can clear them before
 listing.
 
+## Listing title
+
+Every offer has its own **title** — shown large on the detail header and as the offer's name in the
+list. It starts from the copies you list: with no template configured on the platform it is the plain
+catalog/copy label (the same label the set cards use); when the platform has a **listing title
+template** (see [Contacts](contacts.md#adding-and-editing)) the title is generated from that template
+instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer.
+
+The title is yours to change:
+
+- **Edit it** — click the **✎** pencil beside the title on the detail header, type a new one, and
+  press Enter (Escape reverts). Clearing it falls back to the derived label. The title stays editable
+  in every state, including sold and withdrawn, so you can keep the record straight.
+- **Regenerate it** — the header's **⋮** menu has **Regenerate title**, which rebuilds it from the
+  platform's current template over whatever the offer lists now. Use it after adding or removing
+  copies, or after changing the platform's template. Regenerating overwrites a title you edited by
+  hand.
+
+The **sets** inside an offer are titled the same way: with a template configured, each set is
+pre-filled from it when you add it; otherwise a set reads as its copies. You can rename any set from
+its card.
+
 ## One active offer per copy, per platform
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp
@@ -173,7 +195,8 @@ currency it was created with as a permanent record; only new offers and sales us
 
 From the row's **⋮** menu you can **edit** the price / platform / URL, **mark ready** a preparing
 offer, **activate** a ready one, **pause** / **resume**, **withdraw**, open the live listing, or
-**delete** the offer. Deleting removes the offer and its
+**delete** the offer. The detail header's **⋮** menu adds **Regenerate title** (see
+[Listing title](#listing-title)). Deleting removes the offer and its
 sets; the copies stay in your inventory. An offer with a sold set can't be deleted — withdraw it.
 
 ## Filtering

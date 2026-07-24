@@ -137,11 +137,23 @@ export function OfferDetailPanel({
   const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0);
 
   /** Patch a single header field in place, then refresh. */
-  function patch(field: "price" | "url", value: string) {
+  function patch(field: "price" | "url" | "name", value: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       const result = await patchOfferAction(offerId, field, value);
+      if (result.status === "success") invalidateAll(collectionId);
+      else setActionError(result.message);
+    });
+  }
+
+  /** Regenerate the listing title from the platform's template over the current composition (#210),
+   * overwriting any manual edit. */
+  function regenerateTitle() {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { regenerateOfferNameAction } = await import("@/app/actions/offers");
+      const result = await regenerateOfferNameAction(offerId);
       if (result.status === "success") invalidateAll(collectionId);
       else setActionError(result.message);
     });
@@ -175,6 +187,7 @@ export function OfferDetailPanel({
           onSelect: () => setState(s),
         };
       }),
+    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: regenerateTitle },
     { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
@@ -222,8 +235,21 @@ export function OfferDetailPanel({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {/* Listing title (#209): the offer's own editable name, defaulting to the derived label
+              when never generated. A pencil edits it in place; the ⋮ menu regenerates it from the
+              platform's template. */}
           <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-            {offer.label}
+            <InlineText
+              value={offer.name ?? ""}
+              placeholder="Listing title"
+              display={<span style={{ cursor: "text" }}>{offer.name ?? offer.label}</span>}
+              editable
+              editControl
+              editAriaLabel="Edit listing title"
+              isPending={isPending}
+              inputType="text"
+              onSave={(v) => patch("name", v)}
+            />
           </h2>
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -608,7 +634,7 @@ function InlineText({
             setEditing(false);
           }
         }}
-        style={{ ...INLINE_INPUT, width: inputType === "url" ? "16rem" : "6rem", textAlign: inputType === "number" ? "right" : "left" }}
+        style={{ ...INLINE_INPUT, width: inputType === "url" ? "16rem" : inputType === "text" ? "20rem" : "6rem", textAlign: inputType === "number" ? "right" : "left" }}
       />
       {suffix && <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{suffix}</span>}
     </span>

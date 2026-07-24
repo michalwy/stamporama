@@ -10,6 +10,7 @@ import {
   setOfferState,
   deleteOffer,
   patchOffer,
+  regenerateOfferName,
   addOfferSet,
   addOfferSetsPerCopy,
   addItemToOfferSet,
@@ -207,11 +208,12 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
 }
 
 /** In-place edit of a single offer header field from the detail screen. `price` accepts blank
- * (clears to 0); `url` blank clears the listing link. Currency is not editable here (#196) — it is
- * inherited and locked from the platform. */
+ * (clears to 0); `url` blank clears the listing link; `name` blank clears the title back to the
+ * derived label (#209). Currency is not editable here (#196) — it is inherited and locked from the
+ * platform. */
 export async function patchOfferAction(
   offerId: string,
-  field: "price" | "url",
+  field: "price" | "url" | "name",
   rawValue: string
 ): Promise<OfferActionState> {
   const session = await getSession();
@@ -225,12 +227,26 @@ export async function patchOfferAction(
         price = priced.value;
       }
       await patchOffer(session.user.id, offerId, { price });
+    } else if (field === "name") {
+      await patchOffer(session.user.id, offerId, { name: rawValue.trim() || null });
     } else {
       await patchOffer(session.user.id, offerId, { url: normalizeUrl(rawValue) });
     }
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the change.");
+  }
+}
+
+/** Regenerate the offer's listing title from the platform's template over its current composition
+ * (#209/#210), overwriting any manual edit. */
+export async function regenerateOfferNameAction(offerId: string): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await regenerateOfferName(session.user.id, offerId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to regenerate the title.");
   }
 }
 

@@ -178,6 +178,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
       {(dialog.kind === "add" || dialog.kind === "edit") && (
         <ContactFormDialog
           mode={dialog.kind}
+          collectionId={collectionId}
           contact={dialog.kind === "edit" ? dialog.contact : undefined}
           isPending={isPending}
           error={actionError}

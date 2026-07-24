@@ -56,6 +56,12 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     platformCurrency: bool(formData, "platform")
       ? str(formData, "platformCurrency") || null
       : null,
+    // The platform's title template (#210). Like the currency, it is only meaningful for the
+    // `platform` role, so it is dropped when the role is not set; blank normalises to null (falls
+    // back to the built-in default template).
+    titleTemplate: bool(formData, "platform")
+      ? str(formData, "titleTemplate") || null
+      : null,
   };
 }
 
