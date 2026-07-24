@@ -278,6 +278,9 @@ interface InventoryItemRowProps {
   /** When provided, adds an "Add to offer" menu entry — shown only for a *for sale*, delivered
    * copy (the copies eligible to list, mirroring the compose picker's eligibility) (#188). */
   onAddToOffer?: (item: ItemListItem) => void;
+  /** When provided, adds an "Add to new offer" menu entry beside "Add to offer" (same eligibility),
+   * jumping straight into offer creation seeded with this copy, skipping the picker (#277). */
+  onAddToNewOffer?: (item: ItemListItem) => void;
 }
 
 export function InventoryItemRow({
@@ -303,6 +306,7 @@ export function InventoryItemRow({
   onViewHistory,
   onDelete,
   onAddToOffer,
+  onAddToNewOffer,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -333,6 +337,9 @@ export function InventoryItemRow({
     // (For sale + delivered + unsold); the sold guard is enforced server-side (#188, ADR-0013 §4).
     ...(onAddToOffer && item.forSale && item.deliveryState === "delivered"
       ? [{ key: "add-to-offer", label: "Add to offer", icon: "🏷", onSelect: () => onAddToOffer(item) }]
+      : []),
+    ...(onAddToNewOffer && item.forSale && item.deliveryState === "delivered"
+      ? [{ key: "add-to-new-offer", label: "Add to new offer", icon: "🆕", onSelect: () => onAddToNewOffer(item) }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
     ...(onEditStamp

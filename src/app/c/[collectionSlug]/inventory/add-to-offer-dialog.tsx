@@ -129,6 +129,10 @@ export interface AddToOfferDialogProps {
   /** Fires with the platform id when a brand-new offer is created here, so callers can remember it
    * as the last-used platform (#241). */
   onPlatformUsed?: (platformId: string) => void;
+  /** Open straight into the "create new offer" sub-flow, skipping the picker (#277): the dedicated
+   * "Add to new offer" row action. Cancelling the create form then closes the whole dialog rather
+   * than dropping back to the picker the collector never asked for. */
+  startInCreate?: boolean;
   onClose: () => void;
   onDone: () => void;
 }
@@ -155,12 +159,14 @@ export function AddToOfferDialog({
   baseCurrency,
   initialPlatform,
   onPlatformUsed,
+  startInCreate = false,
   onClose,
   onDone,
 }: AddToOfferDialogProps) {
   const [search, setSearch] = useState("");
-  // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker.
-  const [creating, setCreating] = useState(false);
+  // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker. Starts open when
+  // launched from the "Add to new offer" action (#277), which skips the picker entirely.
+  const [creating, setCreating] = useState(startInCreate);
   const [createError, setCreateError] = useState<string | undefined>();
 
   // Suggested asking price for the quick-start create path (#230): this copy's catalog value in the
@@ -207,7 +213,8 @@ export function AddToOfferDialog({
   const { invalidateContacts } = useInvalidatePurchases();
   const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
-  const { data, isLoading } = useComposeTargets(collectionId, item.id, true);
+  // In the direct "create new offer" flow (#277) the picker never shows, so don't fetch its targets.
+  const { data, isLoading } = useComposeTargets(collectionId, item.id, !startInCreate);
   const offers = useMemo(() => data?.offers ?? [], [data]);
   const copies = useMemo(() => data?.copies ?? [], [data]);
 
@@ -319,6 +326,9 @@ export function AddToOfferDialog({
 
   return createPortal(
     <>
+    {/* The picker is skipped entirely in the direct "create new offer" flow (#277) — only the
+        create form below shows. */}
+    {!startInCreate && (
     <DialogShell
       title="Add to offer"
       onClose={onClose}
@@ -442,6 +452,7 @@ export function AddToOfferDialog({
         </div>
       </DialogFooter>
     </DialogShell>
+    )}
 
     {/* Quick-start create (#189): the offer header form stacked above the picker. On success it
         seeds this copy and navigates, so there is no return-to-picker step. */}
@@ -467,10 +478,12 @@ export function AddToOfferDialog({
             : "Set the asking price, and add the listing URL once you have it."
         }
         onClose={() => {
-          if (!isPending) {
-            setCreating(false);
-            setCreateError(undefined);
-          }
+          if (isPending) return;
+          setCreateError(undefined);
+          // The "Add to new offer" flow (#277) has no picker to fall back to — cancelling the
+          // create form dismisses the whole dialog.
+          if (startInCreate) onClose();
+          else setCreating(false);
         }}
         onSubmit={createOffer}
       />

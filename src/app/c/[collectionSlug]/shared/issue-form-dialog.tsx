@@ -15,6 +15,7 @@ import type {
   IssueRangeSuggestion,
 } from "@/lib/issues";
 import { IssueRangeWarning } from "@/app/c/[collectionSlug]/shared/issue-range-warning";
+import { advanceToLastOnSeparator } from "@/app/c/[collectionSlug]/shared/catalog-range-focus";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import {
   resolveCatalogRange,
@@ -345,6 +346,9 @@ function IssueForm({
                             data-lpignore="true"
                             data-1p-ignore
                             data-bwignore
+                            onKeyDown={(e) =>
+                              advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
+                            }
                             onBlur={
                               showAutoCreate && !isPrimary
                                 ? (e) => {

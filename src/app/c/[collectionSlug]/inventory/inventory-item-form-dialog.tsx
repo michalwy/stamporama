@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -159,6 +159,17 @@ export function InventoryItemFormDialog({
 
   const [stampId, setStampId] = useState(item?.stampId ?? initialStampId ?? "");
   const [locationId, setLocationId] = useState(item?.locationId ?? addDefaults?.locationId ?? "");
+  // Auto-focus the in-location ref after a location is picked (#222): the Ref input is disabled
+  // until a location is set, so focus after the re-render that enables it, driven by a flag the
+  // select's change handler raises.
+  const locationRefInputRef = useRef<HTMLInputElement>(null);
+  const focusRefOnEnable = useRef(false);
+  useEffect(() => {
+    if (focusRefOnEnable.current && locationId) {
+      focusRefOnEnable.current = false;
+      locationRefInputRef.current?.focus();
+    }
+  }, [locationId]);
   const [deliveryState, setDeliveryState] = useState(item?.deliveryState ?? "delivered");
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
@@ -333,7 +344,12 @@ export function InventoryItemFormDialog({
                       locationTree={locationTree}
                       name="locationId"
                       selectedId={locationId}
-                      onSelectedIdChange={setLocationId}
+                      onSelectedIdChange={(id) => {
+                        // Selecting a concrete location moves focus to the Ref field (#222);
+                        // clearing to "None" leaves focus alone.
+                        if (id) focusRefOnEnable.current = true;
+                        setLocationId(id);
+                      }}
                       onlyAssignableSelectable
                       disabled={isPending}
                       noneOptionLabel="— None"
@@ -345,6 +361,7 @@ export function InventoryItemFormDialog({
                   <div style={{ flex: 1 }}>
                     <LabelWithError htmlFor="copy-location-ref">Ref</LabelWithError>
                     <input
+                      ref={locationRefInputRef}
                       id="copy-location-ref"
                       name="locationRef"
                       type="text"

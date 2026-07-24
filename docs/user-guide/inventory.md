@@ -73,7 +73,8 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   several platforms at once. Only offers that are done (**sold** or **withdrawn**) stop counting;
   a copy sitting in a **preparing**, **ready**, **active**, or **paused** offer on that platform
   is treated as already handled. This filter appears once you have at least one offer platform,
-  and the holdings totals and year panel follow it too.
+  and the holdings totals and year panel follow it too. Your chosen platform here is **remembered**
+  for this collection, so the filter comes back the way you left it next time.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
   to look up what a piece went for). The holdings totals and year panel follow this filter too.
@@ -215,8 +216,9 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
    one — after that, see the note below.
 5. Optionally file the copy into a **storage location** and add an in-location **ref**
-   (e.g. a page or pocket). Only locations that can hold copies are selectable — see
-   [Locations](locations.md).
+   (e.g. a page or pocket). Picking a location moves the cursor straight to the **Ref** field
+   so you can type the ref without an extra click. Only locations that can hold copies are
+   selectable — see [Locations](locations.md).
 6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
 7. Optionally attach **photos** — front, back, and titled extras. See [Photos](#photos).
 8. Click **Add copy**. Everything is saved together in one step.
@@ -277,6 +279,11 @@ the **asking price** is pre-filled with it — converted into the offer's curren
 so you can accept, adjust, or clear it. (A copy with no catalog value leaves the price blank.)
 Creating the offer seeds it with this copy as a single-item set and returns you to the Inventory
 list. Add more copies later from the offer's compose screen — see [Offers](offers.md).
+
+When you already know you want a fresh offer, the **⋮** menu also has **Add to new offer** — it
+skips the picker and opens that create form straight away, seeded with this copy. Cancelling it
+closes the dialog. (The full **Add to offer** picker is still there when you want to add the copy
+to an offer you already have.)
 
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.

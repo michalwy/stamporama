@@ -42,6 +42,7 @@ import {
 import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
@@ -165,7 +166,16 @@ export function IssuesListPanel({
     searchParams.get("sortDir"),
     ["year", "name", "catalogNumber"]
   );
-  const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
+  // Catalog vendor filter, remembered per collection (#115): the URL param wins when present
+  // (shareable), else fall back to the last-selected vendor on a fresh visit. Shared across the
+  // stamp and issue lists so a chosen catalog carries between them.
+  const [storedCatalogVendor, rememberCatalogVendor] = usePersistedCollectionValue(
+    "list-catalog-vendor",
+    collectionId
+  );
+  const catalogVendorId = searchParams.has("catalogVendorId")
+    ? (searchParams.get("catalogVendorId") ?? "")
+    : (storedCatalogVendor ?? "");
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
 
   const { conditions, displayConditionId, setDisplayConditionId } =
@@ -418,9 +428,10 @@ export function IssuesListPanel({
           catalogVendors={catalogVendors}
           catalogVendorId={catalogVendorId}
           catalogNumber={catalogNumber}
-          onCatalogSearchChange={(vid, num) =>
-            updateParams({ catalogVendorId: vid, catalogNumber: num })
-          }
+          onCatalogSearchChange={(vid, num) => {
+            rememberCatalogVendor(vid);
+            updateParams({ catalogVendorId: vid, catalogNumber: num });
+          }}
         >
           <button
             type="button"

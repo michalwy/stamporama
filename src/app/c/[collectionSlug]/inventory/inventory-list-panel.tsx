@@ -13,6 +13,7 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { parseCatalogSearch } from "@/lib/catalog-number";
@@ -46,6 +47,7 @@ type DialogState =
   | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem }
   | { kind: "addToOffer"; item: ItemListItem }
+  | { kind: "addToNewOffer"; item: ItemListItem }
   | { kind: "quickPrice"; item: ItemListItem };
 
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
@@ -135,9 +137,16 @@ export function InventoryListPanel({
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
   const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
-  // "For sale, not yet offered on platform X" (#259). A stale param (platform since removed) is
-  // ignored so the filter can't silently narrow to nothing.
-  const notOfferedPlatformParam = searchParams.get("notOfferedPlatform") ?? "";
+  // "For sale, not yet offered on platform X" (#259), remembered per collection (#275): the URL
+  // param wins when present (shareable), else fall back to the stored selection on a fresh visit.
+  // A stale value (platform since removed) is ignored so the filter can't silently narrow to nothing.
+  const [storedNotOfferedPlatform, rememberNotOfferedPlatform] = usePersistedCollectionValue(
+    "inventory-not-offered-platform",
+    collectionId
+  );
+  const notOfferedPlatformParam = searchParams.has("notOfferedPlatform")
+    ? (searchParams.get("notOfferedPlatform") ?? "")
+    : (storedNotOfferedPlatform ?? "");
   const notOfferedPlatformId =
     notOfferedPlatformParam && offerPlatforms.some((p) => p.id === notOfferedPlatformParam)
       ? notOfferedPlatformParam
@@ -469,7 +478,10 @@ export function InventoryListPanel({
               {offerPlatforms.length > 0 && (
                 <select
                   value={notOfferedPlatformId}
-                  onChange={(e) => updateParams({ notOfferedPlatform: e.target.value })}
+                  onChange={(e) => {
+                    rememberNotOfferedPlatform(e.target.value);
+                    updateParams({ notOfferedPlatform: e.target.value });
+                  }}
                   style={{
                     ...CONTROL_STYLE,
                     ...(notOfferedPlatformId
@@ -549,6 +561,7 @@ export function InventoryListPanel({
                 onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
                 onAddToOffer={(it) => setDialog({ kind: "addToOffer", item: it })}
+                onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", item: it })}
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
             </div>
@@ -648,8 +661,9 @@ export function InventoryListPanel({
         />
       )}
 
-      {/* Add copy to an existing offer (#188) */}
-      {dialog.kind === "addToOffer" && (
+      {/* Add copy to an offer: the full picker (#188), or straight into offer creation when the
+          "Add to new offer" action was used (#277). Same dialog, `startInCreate` skips the picker. */}
+      {(dialog.kind === "addToOffer" || dialog.kind === "addToNewOffer") && (
         <AddToOfferDialog
           collectionId={collectionId}
           item={dialog.item}
@@ -660,6 +674,7 @@ export function InventoryListPanel({
           // platform (#241) and record it when one is created.
           initialPlatform={preferredPlatform}
           onPlatformUsed={rememberPlatform}
+          startInCreate={dialog.kind === "addToNewOffer"}
           onClose={closeDialog}
           onDone={handleSuccess}
         />

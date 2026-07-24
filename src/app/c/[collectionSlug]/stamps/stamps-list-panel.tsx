@@ -15,6 +15,7 @@ import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display
 import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
   useStampsInfinite,
   useStampYears,
@@ -88,7 +89,16 @@ export function StampsListPanel({
     searchParams.get("sortDir"),
     ["issueDate", "catalogNumber", "name", "issueName"]
   );
-  const catalogVendorId = searchParams.get("catalogVendorId") ?? "";
+  // Catalog vendor filter, remembered per collection (#115): the URL param wins when present
+  // (shareable), else fall back to the last-selected vendor on a fresh visit. Shared across the
+  // stamp and issue lists so a chosen catalog carries between them.
+  const [storedCatalogVendor, rememberCatalogVendor] = usePersistedCollectionValue(
+    "list-catalog-vendor",
+    collectionId
+  );
+  const catalogVendorId = searchParams.has("catalogVendorId")
+    ? (searchParams.get("catalogVendorId") ?? "")
+    : (storedCatalogVendor ?? "");
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
 
@@ -247,9 +257,10 @@ export function StampsListPanel({
           catalogVendors={catalogVendors}
           catalogVendorId={catalogVendorId}
           catalogNumber={catalogNumber}
-          onCatalogSearchChange={(vid, num) =>
-            updateParams({ catalogVendorId: vid, catalogNumber: num })
-          }
+          onCatalogSearchChange={(vid, num) => {
+            rememberCatalogVendor(vid);
+            updateParams({ catalogVendorId: vid, catalogNumber: num });
+          }}
         >
           <IssueFilterAutocomplete
             collectionId={collectionId}

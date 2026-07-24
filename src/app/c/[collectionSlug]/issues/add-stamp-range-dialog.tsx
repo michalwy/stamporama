@@ -7,6 +7,7 @@ import {
   DialogActions,
 } from "@/app/dialog-shell";
 import { resolveCatalogRange, generateCatalogNumbers } from "@/lib/catalog-number";
+import { advanceToLastOnSeparator } from "@/app/c/[collectionSlug]/shared/catalog-range-focus";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type {
   CatalogDuplicateGroup,
@@ -243,6 +244,9 @@ export function AddStampRangeDialog({
                         disabled={isPending || !r.selected}
                         placeholder="First"
                         onChange={(e) => update(v.catalogVendorId, { first: e.target.value })}
+                        onKeyDown={(e) =>
+                          advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
+                        }
                         style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
                       />
                       <input
