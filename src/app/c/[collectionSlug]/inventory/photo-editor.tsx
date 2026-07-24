@@ -403,57 +403,56 @@ export function PhotoEditor({
         <ProgressBar fraction={aggregateFraction} />
       </div>
 
-      {/* Space for the strip is reserved even when empty (minHeight matches a card) so adding
-          the first photo doesn't grow the dialog and make it jump. */}
-      <div
-        style={{
-          display: "flex",
-          gap: "0.75rem",
-          overflowX: "auto",
-          paddingBottom: "0.5rem",
-          marginBottom: "0.75rem",
-          minHeight: CARD_HEIGHT,
-          ...(entries.length === 0
-            ? { alignItems: "center", justifyContent: "center" }
-            : null),
-        }}
-      >
-        {entries.length === 0 ? (
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            No photos yet — add some below.
-          </span>
-        ) : (
-          entries.map((entry, index) => (
-            <PhotoCard
-              key={entry.localId}
-              entry={entry}
-              disabled={disabled}
-              slots={slots}
-              onToggleRole={(role) => toggleRole(entry.localId, role)}
-              onSetTitle={(title) => setTitle(entry.localId, title)}
-              onRemove={() => removeEntry(entry.localId)}
-              // Promotion is only for already-committed copy photos, and only when a handler is
-              // wired (the copy editor, not the stamp editor). Staged uploads must Save first.
-              onPromote={
-                onPromotePhoto && entry.source === "committed" && entry.photoId
-                  ? (target) => onPromotePhoto(entry.photoId!, target)
-                  : undefined
-              }
-              onDragStart={() => {
-                dragIndex.current = index;
-              }}
-              onDropOn={() => {
-                if (dragIndex.current !== null) {
-                  reorder(dragIndex.current, index);
-                  dragIndex.current = null;
+      {/* With no photos yet, the dropzone expands to fill the whole reserved photo area, making a
+          big, easy drop target (#260). Once at least one photo exists, the strip grid returns above
+          a normal-height dropzone. The reserved height is the same either way (a card's height plus
+          the standalone dropzone), so adding the first photo doesn't make the dialog jump. */}
+      {entries.length === 0 ? (
+        <Dropzone disabled={disabled} onFiles={addFiles} fill />
+      ) : (
+        <>
+          <div
+            style={{
+              display: "flex",
+              gap: "0.75rem",
+              overflowX: "auto",
+              paddingBottom: "0.5rem",
+              marginBottom: "0.75rem",
+              minHeight: CARD_HEIGHT,
+            }}
+          >
+            {entries.map((entry, index) => (
+              <PhotoCard
+                key={entry.localId}
+                entry={entry}
+                disabled={disabled}
+                slots={slots}
+                onToggleRole={(role) => toggleRole(entry.localId, role)}
+                onSetTitle={(title) => setTitle(entry.localId, title)}
+                onRemove={() => removeEntry(entry.localId)}
+                // Promotion is only for already-committed copy photos, and only when a handler is
+                // wired (the copy editor, not the stamp editor). Staged uploads must Save first.
+                onPromote={
+                  onPromotePhoto && entry.source === "committed" && entry.photoId
+                    ? (target) => onPromotePhoto(entry.photoId!, target)
+                    : undefined
                 }
-              }}
-            />
-          ))
-        )}
-      </div>
+                onDragStart={() => {
+                  dragIndex.current = index;
+                }}
+                onDropOn={() => {
+                  if (dragIndex.current !== null) {
+                    reorder(dragIndex.current, index);
+                    dragIndex.current = null;
+                  }
+                }}
+              />
+            ))}
+          </div>
 
-      <Dropzone disabled={disabled} onFiles={addFiles} />
+          <Dropzone disabled={disabled} onFiles={addFiles} />
+        </>
+      )}
     </div>
   );
 }
@@ -1004,9 +1003,12 @@ function ProgressBar({
 function Dropzone({
   disabled,
   onFiles,
+  fill = false,
 }: {
   disabled: boolean;
   onFiles: (files: File[]) => void;
+  /** Expand to fill the whole reserved photo area (used when there are no photos yet, #260). */
+  fill?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -1035,6 +1037,12 @@ function Dropzone({
         tabIndex={disabled ? -1 : 0}
         aria-label="Add photos — drop or click"
         style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          // When it's the sole (empty-state) target, fill the space a card strip + standalone
+          // dropzone would otherwise occupy, so the dialog height doesn't shift on first add (#260).
+          minHeight: fill ? "13.75rem" : undefined,
           padding: "1.75rem 1rem",
           borderRadius: "0.5rem",
           border: `1px dashed ${dragOver ? "var(--color-accent)" : "var(--color-border-strong)"}`,

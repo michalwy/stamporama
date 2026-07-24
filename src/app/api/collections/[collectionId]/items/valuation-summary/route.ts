@@ -42,6 +42,7 @@ export async function GET(
       forTrade: boolParam(sp.get("forTrade")),
       noPhotos: boolParam(sp.get("noPhotos")),
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
+      notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
       // Match the list: sold copies are excluded unless includeSold=true (#207), so the total
       // tracks exactly what is shown.
       excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,

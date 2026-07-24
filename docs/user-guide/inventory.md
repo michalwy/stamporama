@@ -67,6 +67,13 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   for their condition (those showing **—**), so you can find and fill pricing gaps in bulk.
   Pairs with the **+ catalog value** price link below. The holdings totals and year panel
   follow this filter too.
+- **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
+  that have **no offer** on it yet — your worklist of what still needs listing there. A copy
+  already listed on a *different* platform still shows up, since the same copy can be offered on
+  several platforms at once. Only offers that are done (**sold** or **withdrawn**) stop counting;
+  a copy sitting in a **preparing**, **ready**, **active**, or **paused** offer on that platform
+  is treated as already handled. This filter appears once you have at least one offer platform,
+  and the holdings totals and year panel follow it too.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
   to look up what a piece went for). The holdings totals and year panel follow this filter too.
@@ -287,6 +294,11 @@ There are two kinds of slot:
 - **Additional photos** are unlimited extras, each with an optional **title**. Add them by
   dropping files on the **＋ Add photos** area or clicking it. Drag the **⠿** handle to
   reorder them, edit a title inline, and use **✕** to remove one.
+
+When a copy has **no photos yet**, the **＋ Add photos** area expands to fill the whole
+space reserved for photos, giving you one large, easy target to drop the first files onto.
+Once at least one photo is attached, the strip of photo cards returns above a normal-sized
+add-photos area.
 
 Accepted formats are **JPEG, PNG, and WebP**, up to **15 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.

@@ -134,6 +134,13 @@ export function InventoryListPanel({
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
   const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
+  // "For sale, not yet offered on platform X" (#259). A stale param (platform since removed) is
+  // ignored so the filter can't silently narrow to nothing.
+  const notOfferedPlatformParam = searchParams.get("notOfferedPlatform") ?? "";
+  const notOfferedPlatformId =
+    notOfferedPlatformParam && offerPlatforms.some((p) => p.id === notOfferedPlatformParam)
+      ? notOfferedPlatformParam
+      : "";
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
@@ -189,11 +196,12 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      notOfferedPlatformId: notOfferedPlatformId || undefined,
       includeSold: includeSold || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, includeSold, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -210,9 +218,10 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      notOfferedPlatformId: notOfferedPlatformId || undefined,
       includeSold: includeSold || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, includeSold]
+    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -279,6 +288,7 @@ export function InventoryListPanel({
     !!year ||
     noPhotos ||
     missingCatalogValue ||
+    !!notOfferedPlatformId ||
     includeSold ||
     activeDispositions.size > 0;
 
@@ -449,6 +459,36 @@ export function InventoryListPanel({
                   </option>
                 ))}
               </select>
+
+              {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface
+                  for-sale copies still needing a listing there. Only shown once at least one
+                  offer platform exists. */}
+              {offerPlatforms.length > 0 && (
+                <select
+                  value={notOfferedPlatformId}
+                  onChange={(e) => updateParams({ notOfferedPlatform: e.target.value })}
+                  style={{
+                    ...CONTROL_STYLE,
+                    ...(notOfferedPlatformId
+                      ? {
+                          fontWeight: 600,
+                          color: "var(--color-accent)",
+                          border: "1px solid var(--color-accent)",
+                          background: "var(--color-accent-soft)",
+                        }
+                      : null),
+                  }}
+                  aria-label="Show for-sale copies not yet offered on a platform"
+                  title="Show for-sale copies with no active offer on the chosen platform"
+                >
+                  <option value="">For sale: any platform</option>
+                  {offerPlatforms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Not offered on {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {locations.length > 0 && (
                 <div style={{ width: "12rem" }}>

@@ -21,6 +21,7 @@ import {
   VARIANT_FLAG_SELECT,
 } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
+import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { sortCopies } from "./copy-sort";
@@ -515,6 +516,11 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
    * "unpriced" is derived (no column carries it), the reads valuate the matching set once and
    * narrow to the resulting ids (see {@link resolveMissingCatalogItemIds}). */
   missingCatalogValue?: boolean;
+  /** Restrict to for-sale copies not yet offered on this platform (#259): copies with no
+   * *non-terminal* offer (any state except sold/withdrawn) on the given platform. A copy listed on
+   * a different platform still matches — multi-platform listing is expected (#165). Implies the
+   * `forSale` disposition, so it surfaces exactly what still needs listing there. */
+  notOfferedPlatformId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -587,9 +593,28 @@ function buildItemWhere(
       ? { offerSetMemberships: { none: { offerSet: { offerId: filters.notInOfferId } } } }
       : {}),
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
-    ...(filters.forSale !== undefined ? { forSale: filters.forSale } : {}),
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
     ...(filters.noPhotos ? { photos: { none: {} } } : {}),
+    // "For sale, not yet offered on platform X" (#259): implies the for-sale disposition, then
+    // excludes copies already sitting in a non-terminal offer on that platform. Merged with the
+    // explicit forSale toggle so both being set is a no-op, not a clobbered constraint.
+    ...(filters.notOfferedPlatformId
+      ? {
+          forSale: true,
+          offerSetMemberships: {
+            none: {
+              offerSet: {
+                offer: {
+                  platformId: filters.notOfferedPlatformId,
+                  state: { notIn: [...CLOSED_OFFER_STATES] },
+                },
+              },
+            },
+          },
+        }
+      : filters.forSale !== undefined
+        ? { forSale: filters.forSale }
+        : {}),
   };
 }
 

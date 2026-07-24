@@ -42,6 +42,7 @@ export async function GET(
   const forTrade = boolParam(sp.get("forTrade"));
   const noPhotos = boolParam(sp.get("noPhotos"));
   const missingCatalogValue = boolParam(sp.get("missingCatalogValue"));
+  const notOfferedPlatformId = sp.get("notOfferedPlatformId") || undefined;
   // Sold copies are hidden from the inventory list by default (#207); an explicit
   // `includeSold=true` shows them again.
   const excludeSold = boolParam(sp.get("includeSold")) ? undefined : true;
@@ -71,6 +72,7 @@ export async function GET(
       forTrade,
       noPhotos,
       missingCatalogValue,
+      notOfferedPlatformId,
       excludeSold,
       sortBy,
       sortDir,
