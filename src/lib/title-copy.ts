@@ -1,7 +1,7 @@
 import "server-only";
 import type { TitleTemplateCopy, TitleCatalogNumber } from "./offer-title-template";
 import { getCollectionAreas } from "./areas";
-import { buildAreaVendorMaps, type AreaVendorMaps } from "./area-vendor";
+import { buildAreaVendorMaps, buildAreaTitleMap, type AreaVendorMaps } from "./area-vendor";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -52,13 +52,20 @@ export type TitleCopyRow = {
  * `TitleTemplateCopy` the engine renders, using the collection's area-vendor `maps` to resolve each
  * catalog number's per-area prefix and which vendor is the copy's area primary. Picks the primary
  * area (else the first). */
-export function toTitleCopy(row: TitleCopyRow, maps: AreaVendorMaps): TitleTemplateCopy {
+export function toTitleCopy(
+  row: TitleCopyRow,
+  maps: AreaVendorMaps,
+  areaTitleById: ReadonlyMap<string, string>
+): TitleTemplateCopy {
   const areas = row.stamp.stampAreaLinks;
   const primaryLink = areas.find((a) => a.isPrimary) ?? areas[0];
   const areaId = primaryLink?.collectionAreaId ?? null;
   const vendorMap = areaId ? maps.vendorMapByArea.get(areaId) : undefined;
   const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
   const issue = row.stamp.issueMemberships[0]?.issue ?? null;
+  // The area shown in the title rolls up per its `titleName` config (#210); falls back to the leaf
+  // area's own name when nothing is configured up the chain.
+  const areaTitle = areaId ? (areaTitleById.get(areaId) ?? primaryLink?.collectionArea.name ?? null) : null;
 
   const catalogNumbers: TitleCatalogNumber[] = row.stamp.catalogNumbers.map((cn) => {
     const entry = vendorMap?.get(cn.catalogVendorId);
@@ -83,7 +90,7 @@ export function toTitleCopy(row: TitleCopyRow, maps: AreaVendorMaps): TitleTempl
     conditionAbbr: row.condition.abbreviation,
     certificate: row.certificateStatus?.name ?? null,
     certificateAbbr: row.certificateStatus?.abbreviation ?? null,
-    area: primaryLink?.collectionArea.name ?? null,
+    area: areaTitle,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
     issueName: issue?.name ?? null,
@@ -100,5 +107,6 @@ export async function makeTitleCopyMapper(
 ): Promise<(row: TitleCopyRow) => TitleTemplateCopy> {
   const areas = await getCollectionAreas(ownerId, collectionId);
   const maps = buildAreaVendorMaps(areas);
-  return (row) => toTitleCopy(row, maps);
+  const areaTitleById = buildAreaTitleMap(areas);
+  return (row) => toTitleCopy(row, maps, areaTitleById);
 }

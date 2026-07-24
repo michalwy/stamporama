@@ -60,6 +60,8 @@ export interface CollectionAreaData {
   parentId: string | null;
   description: string | null;
   primaryCatalogNameId: string | null;
+  /** Optional name used for this area in auto-generated listing titles (#210); null when blank. */
+  titleName: string | null;
   stampCount: number;
   childCount: number;
   catalogEntries: AreaCatalogEntry[];
@@ -79,6 +81,7 @@ export async function getCollectionAreas(
       parentId: true,
       description: true,
       primaryCatalogNameId: true,
+      titleName: true,
       _count: { select: { stampAreaLinks: true, children: true } },
       collectionAreaCatalogs: {
         orderBy: [
@@ -107,6 +110,7 @@ export async function getCollectionAreas(
     parentId: a.parentId,
     description: a.description,
     primaryCatalogNameId: a.primaryCatalogNameId,
+    titleName: a.titleName,
     stampCount: a._count.stampAreaLinks,
     childCount: a._count.children,
     catalogEntries: (() => {
@@ -133,6 +137,7 @@ export async function createCollectionArea(
     parentId?: string | null;
     description?: string | null;
     primaryCatalogNameId?: string | null;
+    titleName?: string | null;
   }
 ): Promise<{ id: string }> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -156,6 +161,7 @@ export async function createCollectionArea(
       parentId: data.parentId ?? null,
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
+      titleName: data.titleName ?? null,
     },
     select: { id: true },
   });
@@ -170,6 +176,7 @@ export async function updateCollectionArea(
     parentId?: string | null;
     description?: string | null;
     primaryCatalogNameId?: string | null;
+    titleName?: string | null;
   }
 ): Promise<void> {
   const collectionId = await resolveAreaCollection(areaId);
@@ -210,6 +217,7 @@ export async function updateCollectionArea(
       parentId: data.parentId ?? null,
       description: data.description ?? null,
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
+      titleName: data.titleName ?? null,
     },
   });
 }

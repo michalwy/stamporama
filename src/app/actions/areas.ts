@@ -65,6 +65,7 @@ export async function createCollectionAreaAction(
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
+      titleName: optionalStr(formData, "titleName"),
     });
     await syncAreaCatalogEntries(session.user.id, id, parseCatalogEntries(formData));
     return { status: "success" };
@@ -89,6 +90,7 @@ export async function updateCollectionAreaAction(
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
+      titleName: optionalStr(formData, "titleName"),
     });
     await syncAreaCatalogEntries(session.user.id, areaId, parseCatalogEntries(formData));
     return { status: "success" };

@@ -46,7 +46,7 @@ specific one you search out. The tokens fill in from the copies in the offer (or
 - `{conditionAbbr}` — condition abbreviation (e.g. `MNH`)
 - `{certificate}` — certificate status (full name)
 - `{certificateAbbr}` — certificate-status abbreviation
-- `{area}` — area
+- `{area}` — area (uses each area's optional **title name**, rolling up to a parent when blank — see below)
 - `{location}` — the copy's storage location name
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
 - `{issueName}` — name of the issue the stamp belongs to
@@ -84,6 +84,18 @@ Examples:
 When several copies are listed together, their numbers are grouped per vendor and **consecutive ones
 collapse into ranges** — `Mi·DR 1` + `Mi·DR 2` becomes `Mi·DR 1-2`, and a gapped set reads
 `Mi·DR 1-2,4,6-10`. Different vendors are shown separately, joined with ` / `.
+
+### Area names in titles
+
+Your area tree often mixes public territories with **internal grouping** levels — e.g. `Poland ›
+Second Republic`. Each area has a **Title name** (on the area in the Areas screen) that `{area}` uses.
+By default it **equals the area's name** and stays in sync as you rename — so every area shows itself
+out of the box. To make an internal grouping level defer to its parent, **clear its title name**:
+`{area}` then walks **up** the tree to the nearest ancestor that still has one.
+
+So for `Poland › { Second Republic, Third Republic, General Gouvernement }`: leave `Poland` and
+`General Gouvernement` as-is (they show themselves), and clear the title name on `Second Republic` and
+`Third Republic` so both roll up to `Poland`. You never touch the parent or the siblings.
 
 When an offer or set covers several copies, each token lists the distinct values it finds. Different
 platforms have different title conventions and length limits, so each keeps its own template. **Leave

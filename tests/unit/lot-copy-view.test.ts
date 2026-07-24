@@ -65,6 +65,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   parentId: null,
   description: null,
   primaryCatalogNameId: null,
+  titleName: null,
   stampCount: 0,
   childCount: 0,
   catalogEntries: [],

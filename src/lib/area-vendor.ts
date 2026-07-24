@@ -68,6 +68,33 @@ export interface AreaVendorMaps {
   vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
 }
 
+/**
+ * The name each area should show in an auto-generated listing title (#210): its own `titleName`
+ * when set, else the nearest ancestor that sets one, else the area's own `name`. So internal
+ * grouping levels (blank `titleName`) roll up to a public parent, while a sibling with its own
+ * `titleName` keeps it. Returns a map of area id → effective title name.
+ */
+export function buildAreaTitleMap(areas: CollectionAreaData[]): Map<string, string> {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const out = new Map<string, string>();
+  for (const area of areas) {
+    let current: CollectionAreaData | undefined = area;
+    let depth = 0;
+    let resolved: string | null = null;
+    while (current && depth < 50) {
+      const t = current.titleName?.trim();
+      if (t) {
+        resolved = t;
+        break;
+      }
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+      depth++;
+    }
+    out.set(area.id, resolved ?? area.name);
+  }
+  return out;
+}
+
 /** Build the per-area primary-vendor and vendor-lookup maps used to render catalog numbers on
  * stamp/issue/copy rows. Pure so the client hook ({@link ../app/.../use-area-vendor-maps}) and
  * the server lot-intake reads share one derivation. */

@@ -151,6 +151,11 @@ model CollectionArea {
   description          String?
   catalogId            String?
   primaryCatalogNameId String?
+  // Optional name to use for this area in auto-generated listing titles (#210), independent of the
+  // internal `name`. When blank, the `{area}` token walks up the tree and uses the nearest ancestor
+  // that sets one, else the area's own `name` — so internal grouping levels (e.g. "Second Republic")
+  // roll up to a public area ("Poland") while siblings ("General Gouvernement") keep their own.
+  titleName            String?
   createdAt            DateTime @default(now())
 
   collection             Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)

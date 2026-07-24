@@ -169,6 +169,7 @@ interface CollectionAreaFormProps {
   defaultName?: string;
   defaultParentId?: string | null;
   defaultDescription?: string | null;
+  defaultTitleName?: string | null;
   defaultPrimaryCatalogNameId?: string | null;
   defaultCatalogEntries?: AreaCatalogEntry[];
   inheritedPrimaryId: string | null;
@@ -183,6 +184,7 @@ function CollectionAreaForm({
   defaultName,
   defaultParentId,
   defaultDescription,
+  defaultTitleName,
   defaultPrimaryCatalogNameId,
   defaultCatalogEntries,
   inheritedPrimaryId,
@@ -211,6 +213,17 @@ function CollectionAreaForm({
   const selectableTree = useMemo(() => buildAreaTree(selectableAreas), [selectableAreas]);
 
   const [parentId, setParentId] = useState(defaultParentId ?? "");
+
+  // Name and title name (#210) are edited together: the title name mirrors the name while the two
+  // are equal (the common case — every area's title defaults to its own name), and stops mirroring
+  // once the user gives the title name its own value. So renaming an area keeps its title in sync
+  // unless it was deliberately customised or cleared (cleared = roll up to a parent).
+  const [name, setName] = useState(defaultName ?? "");
+  const [titleName, setTitleName] = useState(defaultTitleName ?? "");
+  function handleNameChange(next: string) {
+    setTitleName((tn) => (tn === name ? next : tn));
+    setName(next);
+  }
 
   const [entries, setEntries] = useState<EntryState[]>(
     (defaultCatalogEntries ?? []).map((e) => ({
@@ -247,7 +260,8 @@ function CollectionAreaForm({
           id="f-area-name"
           name="name"
           type="text"
-          defaultValue={defaultName}
+          value={name}
+          onChange={(e) => handleNameChange(e.target.value)}
           disabled={isPending}
           placeholder="e.g. Germany"
           style={INPUT_STYLE}
@@ -278,6 +292,28 @@ function CollectionAreaForm({
           disabled={isPending}
           style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4.5rem" }}
         />
+      </div>
+
+      {/* Title name (#210): the name to use for this area in auto-generated listing titles. Blank
+          rolls up to the nearest ancestor that sets one, else the area's own name — so internal
+          grouping levels can defer to a public parent. */}
+      <div style={{ marginBottom: "1rem" }}>
+        <LabelWithError htmlFor="f-area-title-name">Title name (optional)</LabelWithError>
+        <input
+          id="f-area-title-name"
+          name="titleName"
+          type="text"
+          value={titleName}
+          onChange={(e) => setTitleName(e.target.value)}
+          disabled={isPending}
+          placeholder="e.g. Poland"
+          style={INPUT_STYLE}
+        />
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          Used for the <code>{"{area}"}</code> token in listing titles. Defaults to (and stays in sync
+          with) this area&apos;s name. <strong>Clear it</strong> to roll this area up to the nearest
+          parent that has a title name — handy for internal grouping levels.
+        </p>
       </div>
 
       {catalogNames.length > 0 && (
@@ -764,6 +800,7 @@ export function AreasPanel({
                 defaultName={dialog.area.name}
                 defaultParentId={dialog.area.parentId}
                 defaultDescription={dialog.area.description}
+                defaultTitleName={dialog.area.titleName}
                 defaultPrimaryCatalogNameId={dialog.area.primaryCatalogNameId}
                 defaultCatalogEntries={dialog.area.catalogEntries}
                 inheritedPrimaryId={dialog.inheritedPrimaryId}
