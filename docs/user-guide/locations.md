@@ -21,6 +21,11 @@ for example a cabinet holding several stockbooks:
 To add one, click **+ Add location**, give it a name, optionally choose a **parent
 location** and a **description**, and decide whether it **can hold copies**.
 
+Any location with children shows a **▶ / ▼ toggle** to its left — click it to **collapse**
+that branch (hiding everything nested inside) or **expand** it again. Collapsed branches are
+remembered in your browser, so the tree opens the same way next time. Deeply nested branches
+start collapsed by default to keep long trees readable.
+
 ### Grouping locations vs. storage that holds copies
 
 The **Can hold copies** checkbox is the key setting:

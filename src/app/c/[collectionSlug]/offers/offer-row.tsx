@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
-import { isTerminalState, manualTransitions, type ManualOfferTarget } from "@/lib/offer-rules";
+import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip } from "./offer-badges";
 
@@ -26,6 +26,27 @@ const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
   withdrawn: { label: "Withdraw", icon: "⇤" },
 };
 
+const QUICK_ADVANCE_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-accent)",
+  color: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
+ * marking a `preparing` one ready keeps the plain transition label. */
+function advanceLabel(to: ManualOfferTarget): { label: string; icon: string } {
+  return to === "active" ? { label: "Activate", icon: "▲" } : TRANSITION_LABEL[to];
+}
+
 interface OfferRowProps {
   offer: OfferListItem;
   collectionSlug: string;
@@ -43,6 +64,12 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
   const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
   const terminal = isTerminalState(offer.state);
+
+  // One-click advance through the linear part of the lifecycle (#255). Only shown where the next
+  // move is unambiguous and permitted — a target that would list something needs ≥1 set, else the
+  // server would reject it; ambiguous/terminal states fall back to the ⋮ menu.
+  const advanceTo = terminal ? null : quickAdvanceTarget(offer.state);
+  const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.setCount > 0);
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
     .filter((s): s is ManualOfferTarget => s !== "sold")
@@ -127,6 +154,24 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
           <span style={CHIP} title="Platform">{offer.platformName}</span>
           <OfferStateChip state={offer.state} />
+          {canAdvance && advanceTo && (() => {
+            const { label, icon } = advanceLabel(advanceTo);
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSetState(offer, advanceTo);
+                }}
+                title={label}
+                aria-label={label}
+                style={QUICK_ADVANCE_BTN}
+              >
+                <span aria-hidden>{icon}</span>
+                {label}
+              </button>
+            );
+          })()}
           {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
           {offer.setCount > 1 && (
             <span style={CHIP} title="Sets in this offer">{offer.setCount}×</span>

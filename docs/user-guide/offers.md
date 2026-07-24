@@ -42,11 +42,15 @@ sets". A plain single-stamp offer is just the one-set case.
    **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu.
-5. Once the offer is assembled, **Mark ready** (in the header's **⋮** menu) to move it from
-   **Preparing** to **Ready** — fully prepared, waiting to be posted. When the listing is actually up
-   on the platform, **Activate** it to move **Ready** → **Active**. An offer needs at least one set
-   before it can be marked ready or activated. You can step a **Ready** offer back to **Preparing**
-   at any time to keep editing.
+5. Once the offer is assembled, **Mark ready** to move it from **Preparing** to **Ready** — fully
+   prepared, waiting to be posted. When the listing is actually up on the platform, **Activate** it to
+   move **Ready** → **Active**. A **quick-advance button** beside the offer's state chip — on both the
+   list row and the detail header — does this in one click: it shows **✓ Mark ready** on a Preparing
+   offer and **▲ Activate** on a Ready one, so you can walk an offer forward without opening the menu.
+   It appears only for that unambiguous next step; once an offer is **Active** (where the next move —
+   pause, withdraw, or sell — is a choice) the button steps aside and you use the **⋮** menu. An offer
+   needs at least one set before it can be marked ready or activated. You can step a **Ready** offer
+   back to **Preparing** at any time (from the **⋮** menu) to keep editing.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.

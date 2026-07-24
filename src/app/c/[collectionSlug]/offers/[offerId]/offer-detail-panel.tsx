@@ -9,7 +9,7 @@ import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offe
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
-import { isTerminalState, manualTransitions, type ManualOfferTarget } from "@/lib/offer-rules";
+import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
 import type { OfferDetailSet } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -65,6 +65,27 @@ const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
   withdrawn: { label: "Withdraw", icon: "⇤" },
 };
 
+const QUICK_ADVANCE_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-accent)",
+  color: "var(--color-accent)",
+  background: "var(--color-accent-soft)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
+ * marking a `preparing` one ready keeps the plain transition label. */
+function advanceLabel(to: ManualOfferTarget): { label: string; icon: string } {
+  return to === "active" ? { label: "Activate", icon: "▲" } : TRANSITION_LABEL[to];
+}
+
 interface OfferDetailPanelProps {
   collectionId: string;
   collectionSlug: string;
@@ -109,6 +130,11 @@ export function OfferDetailPanel({
   }
 
   const editable = !isTerminalState(offer.state);
+
+  // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
+  // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
+  const advanceTo = editable ? quickAdvanceTarget(offer.state) : null;
+  const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0);
 
   /** Patch a single header field in place, then refresh. */
   function patch(field: "price" | "url", value: string) {
@@ -202,6 +228,22 @@ export function OfferDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />
+            {canAdvance && advanceTo && (() => {
+              const { label, icon } = advanceLabel(advanceTo);
+              return (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setState(advanceTo)}
+                  title={label}
+                  aria-label={label}
+                  style={QUICK_ADVANCE_BTN}
+                >
+                  <span aria-hidden>{icon}</span>
+                  {label}
+                </button>
+              );
+            })()}
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}

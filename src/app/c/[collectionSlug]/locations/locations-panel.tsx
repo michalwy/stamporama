@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +20,11 @@ import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { getLocationDescendantIds, flattenLocationTree } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
+
+// Persisted collapse state for the location management tree, consistent with the area
+// management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
+const COLLAPSE_STORAGE_KEY = "stamporama:location-mgmt-collapsed";
 
 interface LocationsPanelProps {
   collectionId: string;
@@ -210,6 +215,38 @@ export function LocationsPanel({
     [initialLocations]
   );
 
+  // Ids of locations that have at least one child (only these get an expand/collapse toggle).
+  const parentIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of initialLocations) if (l.parentId) set.add(l.parentId);
+    return set;
+  }, [initialLocations]);
+
+  // Default (nothing stored yet): collapse nested parents, mirroring the area trees (#81/#237).
+  const computeDefaultCollapsed = useCallback(() => {
+    const defaults = new Set<string>();
+    for (const { location, depth } of flatTree) {
+      if (depth > 0 && parentIds.has(location.id)) defaults.add(location.id);
+    }
+    return defaults;
+  }, [flatTree, parentIds]);
+
+  const { collapsed, loaded, toggle } = useCollapsedSet(
+    COLLAPSE_STORAGE_KEY,
+    computeDefaultCollapsed
+  );
+
+  // Hide every descendant of a collapsed node.
+  const visibleTree = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const { location } of flatTree) {
+      if (collapsed.has(location.id)) {
+        for (const id of getLocationDescendantIds(initialLocations, location.id)) hidden.add(id);
+      }
+    }
+    return flatTree.filter(({ location }) => !hidden.has(location.id));
+  }, [flatTree, collapsed, initialLocations]);
+
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
     setDialog(d);
@@ -277,7 +314,7 @@ export function LocationsPanel({
         </p>
       )}
 
-      {flatTree.length > 0 && (
+      {flatTree.length > 0 && loaded && (
         <div
           style={{
             border: "1px solid var(--color-border)",
@@ -285,7 +322,10 @@ export function LocationsPanel({
             overflow: "hidden",
           }}
         >
-          {flatTree.map(({ location, depth }, idx) => (
+          {visibleTree.map(({ location, depth }, idx) => {
+            const hasChildren = parentIds.has(location.id);
+            const isCollapsed = collapsed.has(location.id);
+            return (
             <div
               key={location.id}
               style={{
@@ -297,9 +337,39 @@ export function LocationsPanel({
                 background:
                   depth === 0 ? "var(--color-bg-elevated)" : "var(--color-bg-page)",
                 borderBottom:
-                  idx < flatTree.length - 1 ? "1px solid var(--color-border)" : undefined,
+                  idx < visibleTree.length - 1 ? "1px solid var(--color-border)" : undefined,
               }}
             >
+              {/* Expand/collapse toggle for nodes with children; a reserved spacer otherwise so
+                  every row's name lines up (#237). */}
+              {hasChildren ? (
+                <button
+                  type="button"
+                  onClick={() => toggle(location.id)}
+                  aria-label={isCollapsed ? "Expand" : "Collapse"}
+                  aria-expanded={!isCollapsed}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "1rem",
+                    height: "1rem",
+                    flexShrink: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.625rem",
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  {isCollapsed ? "▶" : "▼"}
+                </button>
+              ) : (
+                <span style={{ width: "1rem", flexShrink: 0 }} />
+              )}
+
               <span
                 style={{
                   flex: 1,
@@ -356,7 +426,8 @@ export function LocationsPanel({
                 ]}
               />
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

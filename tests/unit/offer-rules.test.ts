@@ -7,6 +7,7 @@ import {
   manualTransitions,
   isTerminalState,
   requiresSets,
+  quickAdvanceTarget,
   parsePrice,
   normalizeUrl,
   OFFER_STATES,
@@ -117,6 +118,30 @@ describe("requiresSets", () => {
     assert.equal(requiresSets("preparing"), false);
     assert.equal(requiresSets("paused"), false);
     assert.equal(requiresSets("withdrawn"), false);
+  });
+});
+
+describe("quickAdvanceTarget", () => {
+  it("advances only the linear forward part of the lifecycle (#255)", () => {
+    assert.equal(quickAdvanceTarget("preparing"), "ready");
+    assert.equal(quickAdvanceTarget("ready"), "active");
+  });
+
+  it("returns null where the next move is ambiguous or terminal", () => {
+    assert.equal(quickAdvanceTarget("active"), null); // pause vs withdraw vs sell
+    assert.equal(quickAdvanceTarget("paused"), null); // resume vs withdraw vs sell
+    assert.equal(quickAdvanceTarget("sold"), null);
+    assert.equal(quickAdvanceTarget("withdrawn"), null);
+  });
+
+  it("only ever targets a hand-reachable state (never sold)", () => {
+    for (const s of OFFER_STATES) {
+      const target = quickAdvanceTarget(s);
+      if (target !== null) {
+        assert.notEqual(target, "sold");
+        assert.equal(canTransition(s, target), true);
+      }
+    }
   });
 });
 

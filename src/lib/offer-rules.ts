@@ -83,6 +83,20 @@ export function manualTransitions(from: OfferState): readonly OfferState[] {
   return MANUAL_TRANSITIONS[from];
 }
 
+/**
+ * The single unambiguous "advance one step" target for a one-click control (#255): the linear,
+ * forward part of the lifecycle only — `preparing → ready` and `ready → active`. Returns `null`
+ * wherever the next move is ambiguous (from `active` / `paused`: pause vs resume vs withdraw vs
+ * sell) or the state is terminal, so callers fall back to the manual dropdown instead of guessing.
+ * A `ready`/`active` target still requires the offer to list something (see {@link requiresSets}) —
+ * the caller gates on that.
+ */
+export function quickAdvanceTarget(from: OfferState): ManualOfferTarget | null {
+  if (from === "preparing") return "ready";
+  if (from === "ready") return "active";
+  return null;
+}
+
 /** Terminal states cannot change state and cannot be edited (price/url/platform are frozen). */
 export function isTerminalState(state: OfferState): boolean {
   return state === "sold" || state === "withdrawn";
