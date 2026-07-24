@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { resolveCollectionOwner } from "@/lib/route-auth";
 import { getPhotoForServing } from "@/lib/photos";
 import { getStorage, toWebStream, variantKey } from "@/lib/storage";
 import type { PhotoVariant } from "@/lib/storage";
@@ -13,7 +12,7 @@ const VALID_VARIANTS = new Set<PhotoVariant>(["full", "thumb"]);
 // GCS binding can 302 to a signed URL; the filesystem binding streams bytes here. With signed
 // URLs the auth check runs at mint time (short TTL).
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   {
     params,
   }: {
@@ -24,12 +23,14 @@ export async function GET(
     }>;
   }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
+  const { collectionId, photoId, variant } = await params;
+  // Session or Assistant bearer token (#253): the extension shows stamp photos beside the Colnect
+  // image (#282) and cannot put a token in an `<img src>`, so it fetches the bytes with a header.
+  const ownerId = await resolveCollectionOwner(request, collectionId);
+  if (!ownerId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { collectionId, photoId, variant } = await params;
   if (!VALID_VARIANTS.has(variant as PhotoVariant)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -40,7 +41,7 @@ export async function GET(
   if (
     !photo ||
     photo.collectionId !== collectionId ||
-    photo.ownerId !== session.user.id
+    photo.ownerId !== ownerId
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

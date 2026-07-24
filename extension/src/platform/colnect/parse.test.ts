@@ -9,7 +9,9 @@ import { extractColnect, matchesColnectUrl, parseCatalogCodes } from "./parse";
 const FIXTURE = `
 <html><body>
   <div class="pl-it">
-    <div class="ibox" data-xid="3690001"></div>
+    <div class="ibox" data-xid="3690001">
+      <img src="https://i.colnect.net/f/3690/001/Foo.jpg" alt="Foo">
+    </div>
     <a href="/en/stamps/stamp/3690001-Foo/">Poland 1998 Foo</a>
     <dl>
       <dt>Catalog codes:</dt>
@@ -18,7 +20,9 @@ const FIXTURE = `
   </div>
 
   <div class="pl-it">
-    <div class="ibox" data-xid="3701002"></div>
+    <div class="ibox" data-xid="3701002">
+      <img data-src="https://i.colnect.net/f/3701/002/Bar.jpg" src="data:image/gif;base64,R0lGOD" alt="Bar">
+    </div>
     <a href="/en/stamps/stamp/3701002-Bar/">Poland 1998 Bar</a>
     <dl>
       <dt>Catalog codes:</dt>
@@ -86,10 +90,15 @@ describe("extractColnect", () => {
         { catalog: "Mi", number: "PL 3690" },
         { catalog: "Sn", number: "PL 3382" },
       ],
+      imageUrl: "https://i.colnect.net/f/3690/001/Foo.jpg",
     });
+
+    // A lazy-loaded card keeps its real URL in data-src behind an inline placeholder in src.
+    assert.equal(items[1].imageUrl, "https://i.colnect.net/f/3701/002/Bar.jpg");
 
     // Item-ID falls back to the stamp-page link when there is no data-xid; range kept verbatim.
     assert.equal(items[2].platformItemId, "778899");
     assert.deepEqual(items[2].catalogRefs, [{ catalog: "Mi", number: "PL 3706-3711" }]);
+    assert.equal(items[2].imageUrl, undefined, "a card with no image simply has none");
   });
 });

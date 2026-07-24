@@ -17,11 +17,55 @@ declare global {
   }
 }
 
+/** Longest edge of a captured thumbnail, in px — enough to compare a stamp, small to message. */
+const THUMB_MAX_EDGE = 96;
+
+/** The already-rendered <img> for a URL, so capture never refetches anything. */
+function renderedImage(url: string): HTMLImageElement | null {
+  for (const img of Array.from(document.images)) {
+    if (img.currentSrc === url || img.src === url) return img;
+  }
+  return null;
+}
+
+/**
+ * Re-encode a rendered image as a small `data:` URL by drawing it to a canvas.
+ *
+ * The extension page is a different origin from Colnect, so pointing an <img> there at a Colnect
+ * URL is a hotlink the site may refuse. Capturing here sidesteps that: in the page, the thumbnail
+ * is same-origin and already decoded. Returns undefined if the image hasn't loaded, or if the
+ * canvas is tainted — which happens when the image comes from a CDN without CORS headers, and is a
+ * normal outcome, not an error: the row simply shows no Colnect picture.
+ */
+function captureThumb(img: HTMLImageElement): string | undefined {
+  if (!img.complete || !img.naturalWidth || !img.naturalHeight) return undefined;
+  const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+  const width = Math.max(1, Math.round(img.naturalWidth * scale));
+  const height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return undefined;
+  try {
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", 0.72);
+  } catch {
+    return undefined; // tainted canvas — cross-origin image without CORS
+  }
+}
+
 /** Extract the current page with whichever module handles it, or null when none does. */
 function extractHere() {
   const module = findModuleForUrl(location.href);
   if (!module) return null;
-  return module.extract(document);
+  const items = module.extract(document);
+  for (const item of items) {
+    if (!item.imageUrl) continue;
+    const img = renderedImage(item.imageUrl);
+    if (img) item.imageData = captureThumb(img);
+  }
+  return items;
 }
 
 if (!window.__stamporamaAssistantLoaded) {

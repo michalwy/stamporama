@@ -8,6 +8,8 @@ export interface Candidate {
   areaName: string | null;
   /** Issue the stamp belongs to, shown for orientation. */
   issueName: string | null;
+  /** Lead photo of the stamp, fetched through the collection-scoped serving route. */
+  photoId: string | null;
   catalogNumbers: string[];
   existingColnectId: string | null;
 }

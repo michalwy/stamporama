@@ -62,6 +62,43 @@ function esc(s: string): string {
   return d.innerHTML;
 }
 
+// ── Stamp photos ─────────────────────────────────────────────────────────────
+// The serving route is collection-scoped and token-authorized, and an <img src> cannot carry an
+// Authorization header (and a token does not belong in a URL). So the bytes are fetched here with
+// the header and handed to the <img> as an object URL, once per photo.
+
+const photoUrls = new Map<string, string | null>();
+
+async function loadStampPhoto(photoId: string): Promise<string | null> {
+  const cached = photoUrls.get(photoId);
+  if (cached !== undefined) return cached;
+  if (!profile) return null;
+  try {
+    const base = profile.apiBaseUrl.replace(/\/+$/, "");
+    const res = await fetch(`${base}/api/collections/${profile.collectionId}/photos/${photoId}/thumb`, {
+      headers: { Authorization: `Bearer ${profile.token}` },
+    });
+    const url = res.ok ? URL.createObjectURL(await res.blob()) : null;
+    photoUrls.set(photoId, url);
+    return url;
+  } catch {
+    photoUrls.set(photoId, null);
+    return null;
+  }
+}
+
+/** Fill in the stamp thumbnails left as placeholders by the last render. */
+function hydrateStampPhotos(): void {
+  resultsEl.querySelectorAll<HTMLImageElement>("img[data-photo]").forEach((img) => {
+    const photoId = img.dataset.photo;
+    if (!photoId) return;
+    void loadStampPhoto(photoId).then((url) => {
+      if (url) img.src = url;
+      else img.remove();
+    });
+  });
+}
+
 function setStatus(text: string, isError = false): void {
   statusEl.textContent = text;
   statusEl.classList.toggle("err", isError);
@@ -362,7 +399,9 @@ function stampBlock(c: Candidate, actionIndex?: number): string {
     : "";
   const issue = c.issueName ? `<div class="issue">${esc(c.issueName)}</div>` : "";
   const btn = actionIndex !== undefined ? `<button class="small" data-pick="${actionIndex}">Use this</button>` : "";
-  return `<div class="stamp"><span><div class="nm">${esc(c.name || "(unnamed stamp)")}</div>` +
+  // Placeholder only — the bytes need an auth header, so hydrateStampPhotos() fills src later.
+  const thumb = c.photoId ? `<img class="thumb" data-photo="${esc(c.photoId)}" alt="">` : "";
+  return `<div class="stamp">${thumb}<span class="grow"><div class="nm">${esc(c.name || "(unnamed stamp)")}</div>` +
     `${issue}<div class="meta">${meta || "no details"}</div>${warn}</span>${btn}</div>`;
 }
 
@@ -395,8 +434,16 @@ function itemCard(r: MatchResult): string {
     match = `<div class="match"><div class="empty">${esc(REASON_LABEL[r.reason] || r.reason)}</div></div>`;
   }
 
+  // Prefer the canvas-captured data URL; the raw Colnect URL is a hotlink the site may refuse.
+  const picture = src?.imageData ?? src?.imageUrl;
+  const thumb = picture ? `<img class="thumb" src="${esc(picture)}" alt="">` : "";
+
+  // The Colnect thumbnail sits at the *end* of its column and the stamp photo at the start of the
+  // next, so in the two-column layout the two pictures meet in the middle — image beside image.
   return `<div class="item"><div class="src"><div class="head"><span class="title">${title}</span>${tag}</div>` +
-    `<div class="id">Colnect #${esc(r.colnectId)}</div>${refsLine(src)}</div>${match}</div>`;
+    `<div class="srcrow"><span class="grow"><div class="id">Colnect #${esc(r.colnectId)}</div>${refsLine(
+      src
+    )}</span>${thumb}</div></div>${match}</div>`;
 }
 
 function section(title: string, rows: MatchResult[], collapsed: boolean): string {
@@ -427,6 +474,7 @@ function render(): void {
 
   renderChips();
   syncButtons();
+  hydrateStampPhotos();
 }
 
 /**

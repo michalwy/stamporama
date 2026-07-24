@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { catalogDigits, catalogMatchKey, formatCatalogNumber } from "./catalog-number";
 import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
+import { sortPhotos } from "./photos";
 import {
   colnectRefKey,
   decideColnectItem,
@@ -216,6 +217,10 @@ export interface ColnectCandidate {
   areaName: string | null;
   /** Name of the issue the stamp belongs to, for orientation when picking between siblings. */
   issueName: string | null;
+  /** First photo of the stamp (by the shared `sortPhotos` order), for a visual comparison in the
+   *  Assistant window (#282). Null when the stamp has no photos. Addressed through the
+   *  collection-scoped serving route; bytes are never inlined here. */
+  photoId: string | null;
   /** Formatted catalog labels, e.g. ["Mi·PL 200"]. */
   catalogNumbers: string[];
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
@@ -252,6 +257,24 @@ export class ColnectMatchConflictError extends Error {
 /** Internal shape for a discovered candidate stamp: decision keys plus display fields. */
 interface CandidateEntry extends CandidateStampRefs {
   candidate: ColnectCandidate;
+}
+
+/** The stamp's lead photo id — same ordering the rest of the app shows (front/main first). */
+function pickPhotoId(
+  photos: { id: string; role: string | null; title: string | null; sortOrder: number }[]
+): string | null {
+  if (photos.length === 0) return null;
+  const ordered = [...photos]
+    .map((p) => ({
+      ...p,
+      role: (p.role === "main" || p.role === "front" || p.role === "back" ? p.role : null) as
+        | "front"
+        | "back"
+        | "main"
+        | null,
+    }))
+    .sort(sortPhotos);
+  return ordered[0]?.id ?? null;
 }
 
 /**
@@ -345,6 +368,7 @@ export async function matchColnectItems(
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 },
+          photos: { select: { id: true, role: true, title: true, sortOrder: true } },
         },
       })
     : [];
@@ -374,6 +398,7 @@ export async function matchColnectItems(
         issuedYear: s.issuedYear,
         areaName: areaId ? (areaNames.get(areaId) ?? null) : null,
         issueName: s.issueMemberships[0]?.issue.name ?? null,
+        photoId: pickPhotoId(s.photos),
         catalogNumbers: labels,
         existingColnectId: s.colnectId,
       },

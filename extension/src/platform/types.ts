@@ -13,4 +13,10 @@ export interface ExtractedItem {
   platformItemId: string;
   name?: string;
   catalogRefs: CatalogRef[];
+  /** Absolute URL of the card's thumbnail as found in the page, when it has one. */
+  imageUrl?: string;
+  /** The thumbnail re-encoded as a `data:` URL, captured from the already-rendered image in the
+   *  page. Preferred over {@link imageUrl} for display: the extension page is a different origin,
+   *  where hotlinking may be refused. Absent when capture wasn't possible (see the content script). */
+  imageData?: string;
 }

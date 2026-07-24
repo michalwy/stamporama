@@ -84,6 +84,38 @@ function cardName(card: Element): string | undefined {
   return text || undefined;
 }
 
+/** First usable srcset entry ("url 1x, url2 2x" → "url"). */
+function firstSrcsetUrl(srcset: string | null): string | null {
+  const first = srcset?.split(",")[0]?.trim().split(/\s+/)[0];
+  return first || null;
+}
+
+/**
+ * The card's thumbnail URL, absolute. Tolerates lazy-loading (`data-src`/`data-original`/`srcset`)
+ * and skips inline placeholders. Relative URLs resolve against the document's base; if that isn't
+ * resolvable (e.g. a detached test document) the raw value is returned unchanged.
+ */
+function cardImageUrl(card: Element): string | undefined {
+  const img = card.querySelector("img");
+  if (!img) return undefined;
+  // Take the first real URL among the attributes a lazy-loader might use: a not-yet-loaded image
+  // typically parks an inline placeholder in `src` and keeps the true URL in `data-src`, so an
+  // inline `data:` value must fall through rather than end the search.
+  const raw = [
+    img.getAttribute("src"),
+    img.getAttribute("data-src"),
+    img.getAttribute("data-original"),
+    firstSrcsetUrl(img.getAttribute("srcset")),
+  ].find((u): u is string => !!u && !u.startsWith("data:"));
+  if (!raw) return undefined;
+  const base = card.ownerDocument?.baseURI;
+  try {
+    return base ? new URL(raw, base).href : raw;
+  } catch {
+    return raw;
+  }
+}
+
 /** The `dd` holding catalog codes: the one whose preceding/associated `dt` reads "Catalog codes". */
 function catalogCodesDd(card: Element): Element | null {
   for (const dt of Array.from(card.querySelectorAll("dt"))) {
@@ -103,7 +135,13 @@ export function extractCard(card: Element): ExtractedItem | null {
   const catalogRefs = dd ? parseCatalogCodes(dd) : [];
   if (catalogRefs.length === 0) return null;
   const name = cardName(card);
-  return name ? { platformItemId, name, catalogRefs } : { platformItemId, catalogRefs };
+  const imageUrl = cardImageUrl(card);
+  return {
+    platformItemId,
+    catalogRefs,
+    ...(name ? { name } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+  };
 }
 
 /** Extract every item card on a Colnect list page. */

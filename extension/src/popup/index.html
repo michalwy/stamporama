@@ -114,7 +114,14 @@
         font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
         color: var(--muted); padding: 6px 10px 0;
       }
-      .stamp { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px 8px; }
+      .stamp { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px 8px; }
+      .srcrow { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+      .grow { flex: 1; min-width: 0; }
+      /* Thumbnails: fixed box, letterboxed, so rows stay aligned whatever the image aspect. */
+      .thumb {
+        flex: 0 0 auto; width: 56px; height: 56px; object-fit: contain;
+        background: var(--sunk); border: 1px solid var(--border); border-radius: 4px;
+      }
       .stamp + .stamp { border-top: 1px dashed var(--border); }
       .stamp .nm { font-weight: 600; }
       .stamp .issue { font-size: 12px; margin-top: 2px; font-style: italic; }

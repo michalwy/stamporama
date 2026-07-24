@@ -41,6 +41,13 @@ with a progress bar) — so you land directly on the decisions. That call only r
 written until you confirm. **Re-match** re-runs it; **Rescan** re-reads the page and matches again
 after you navigate.
 
+Each row also shows a **picture on both sides** (#282): the Colnect thumbnail and the stamp's own
+photo from your collection. The Colnect one is captured from the already-rendered image in the page
+(canvas → `data:` URL) rather than hotlinked, since the extension page is a different origin; the
+Stamporama one is fetched with the Assistant token and shown via an object URL, because an
+`<img src>` cannot carry an auth header. Either side simply shows nothing when there is no image (or
+when Colnect serves its thumbnails from a CORS-less CDN, which taints the capture canvas).
+
 Each item shows its Colnect side (name, item-ID, catalog codes) next to
 the stamp it resolved to in your collection (name, year, area, catalog numbers). Results are grouped
 so only what matters stays open:
