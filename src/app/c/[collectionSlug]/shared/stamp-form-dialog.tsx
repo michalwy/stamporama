@@ -63,6 +63,9 @@ export interface StampFormData {
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   issues?: { requiredForCompleteness: boolean }[];
+  // Colnect item-ID (#247). `undefined` on an edit-mode stamp means the caller doesn't manage
+  // the field — the input is then hidden and never submitted, so the stored value is untouched.
+  colnectId?: string | null;
 }
 
 type StampFormDialogProps = {
@@ -126,6 +129,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
   );
   const hasPricesTab = areaVendors.length > 0;
+  // Colnect ID (#247): editable when adding, or when the edited stamp carries the field.
+  // A caller that omits `colnectId` (undefined) hides the input so its value is never clobbered.
+  const showColnect = props.mode === "add" || editProps?.stamp.colnectId !== undefined;
 
   // ── Live duplicate-catalog detection (#85) ──
   // Catalog-number inputs are controlled so their values can be checked against
@@ -585,8 +591,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
               <input type="hidden" name="parentStampId" value={addProps.prefilledParentStampId} />
             )}
 
-            {/* Catalog numbers */}
-            {vendors.length > 0 && (
+            {/* Catalog numbers (Colnect item-ID rides along as another number cell, #247) */}
+            {(vendors.length > 0 || showColnect) && (
               <div style={{ marginBottom: "0.875rem" }}>
                 <LabelWithError>Catalog numbers</LabelWithError>
                 <div
@@ -649,6 +655,30 @@ export function StampFormDialog(props: StampFormDialogProps) {
                     </div>
                     );
                   })}
+                  {/* Colnect item-ID (#247): sits in the same grid, styled like a vendor number
+                      row, but is a plain external identifier — no duplicate/prefix handling. */}
+                  {showColnect && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
+                      <span style={{ width: "4rem", flexShrink: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontFamily: "monospace", fontWeight: 600 }}>
+                        Colnect
+                      </span>
+                      <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
+                        <input
+                          name="colnectId"
+                          type="text"
+                          inputMode="numeric"
+                          disabled={isPending}
+                          defaultValue={editProps?.stamp.colnectId ?? ""}
+                          placeholder="item-ID"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore
+                          data-bwignore
+                          style={{ ...INPUT_STYLE, flex: 1 }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

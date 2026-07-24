@@ -253,6 +253,12 @@ export async function updateStampWithCatalogAction(
   const requiredForCompleteness =
     requiredRaw === null ? undefined : requiredRaw === "true";
 
+  // Colnect item-ID (#247): present only when the edit form rendered the field.
+  // Absent → undefined → leave the stored value untouched.
+  const colnectId = formData.has("colnectId")
+    ? ((formData.get("colnectId") as string).trim() || null)
+    : undefined;
+
   // Subtype fields are present only when the edit form renders them (child stamps).
   // `undefined` leaves the stored values untouched.
   const subtypeId = formData.has("subtypeId")
@@ -288,6 +294,7 @@ export async function updateStampWithCatalogAction(
       issuedYear: issuedYear ?? null,
       catalogNumbers,
       catalogPrices,
+      colnectId,
       requiredForCompleteness,
       subtypeId,
       actsAsVariantOverride,

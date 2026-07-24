@@ -208,6 +208,12 @@ model Stamp {
   // across its numbers, else null (sorts last). Maintained on every write that changes the stamp's
   // numbers or area link, and bulk-recomputed when an area's primary catalog changes. See ADR-0012.
   primaryCatalogSortKey Int?
+  // Colnect Marketplace item-ID (#247, part of #155). Colnect has no API/import — every catalog
+  // page exposes the numeric item-ID (header link `/en/stamps/stamp/<ID>-…`, `data-xid`). Stored
+  // as a plain optional string, not through the catalog-vendor machinery: a Colnect item-ID is an
+  // external identifier, not a priced catalog number, and it must be settable on any stamp
+  // regardless of area. No uniqueness constraint. A later browser agent (#155) will populate it.
+  colnectId    String?
 
   collection        Collection            @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   parent            Stamp?                @relation("StampVariants", fields: [parentId], references: [id])

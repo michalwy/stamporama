@@ -97,6 +97,8 @@ export interface StampNodeData {
   issuedYear: number | null;
   requiredForCompleteness: boolean;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  /** Colnect Marketplace item-ID (#247), or null when unset. */
+  colnectId: string | null;
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
@@ -149,6 +151,7 @@ const MEMBER_SELECT = {
       issuedDay: true,
       issuedMonth: true,
       issuedYear: true,
+      colnectId: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       catalogPrices: { select: HEADLINE_PRICE_SELECT },
       photos: { select: PHOTO_SUMMARY_SELECT },
@@ -212,6 +215,7 @@ function toStampNode(
       issuedDay: number | null;
       issuedMonth: number | null;
       issuedYear: number | null;
+      colnectId: string | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
@@ -258,6 +262,7 @@ function toStampNode(
     issuedYear: m.stamp.issuedYear,
     requiredForCompleteness: m.requiredForCompleteness,
     catalogNumbers: m.stamp.catalogNumbers,
+    colnectId: m.stamp.colnectId,
     mainCatalogPrice:
       main && pricing
         ? {
@@ -308,6 +313,7 @@ function toIssueData(issue: {
       issuedDay: number | null;
       issuedMonth: number | null;
       issuedYear: number | null;
+      colnectId: string | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
@@ -1651,6 +1657,8 @@ export interface AddStampData {
   subtypeId?: string | null;
   actsAsVariantOverride?: boolean | null;
   requiredForCompleteness: boolean;
+  /** Colnect item-ID (#247), or null/omitted when unset. */
+  colnectId?: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   catalogPrices?: {
     catalogEditionId: string;
@@ -1713,6 +1721,7 @@ export async function addStampToIssue(
         parentId: data.parentStampId ?? null,
         subtypeId,
         actsAsVariantOverride,
+        colnectId: data.colnectId || null,
       },
       select: { id: true },
     });

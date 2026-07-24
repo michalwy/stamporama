@@ -78,6 +78,10 @@ If the added stamps fall **outside the issue's declared catalog range**, a follo
 
 To add a **single** stamp instead, expand an issue row on the **Issues** list (the **▶** toggle) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
+### Colnect ID
+
+The **Add stamp** and **Edit stamp** dialogs include a **Colnect** field in the catalog-numbers section, filled in like any other number. It holds the stamp's [Colnect](https://colnect.com) Marketplace **item-ID** — the number in a catalog page's address (`…/stamps/stamp/123456-…`). It is an external reference, not a catalog number, so it has no vendor prefix and is not checked for duplicates; leave it blank if you don't use Colnect. When a stamp has one, its **Colnect** ID shows as a small tag on the stamp row.
+
 ## Merging two issues
 
 Two issues in the same area can be merged into one — useful when the same set was entered twice or a split turned out to be unnecessary. Open the **⋮** menu of the issue you want to **remove** and choose **Merge into another issue…**, then pick the target issue to keep. The dialog reports how many stamps will move and warns if any catalog number appears in both issues (advisory only — the merge is still allowed).

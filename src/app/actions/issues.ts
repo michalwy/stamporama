@@ -273,6 +273,7 @@ export async function addStampToIssueAction(
 
   const parentStampId = (formData.get("parentStampId") as string | null) || null;
   const requiredForCompleteness = formData.get("requiredForCompleteness") === "true";
+  const colnectId = ((formData.get("colnectId") as string | null) ?? "").trim() || null;
 
   // Child subtype classification (ignored server-side for top-level stamps).
   const subtypeId = (formData.get("subtypeId") as string | null) || null;
@@ -336,6 +337,7 @@ export async function addStampToIssueAction(
       subtypeId,
       actsAsVariantOverride,
       requiredForCompleteness,
+      colnectId,
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
     });

@@ -268,6 +268,8 @@ export interface StampListItem {
   issuedYear: number | null;
   createdAt: string;
   catalogNumbers: StampCatalogNumberData[];
+  /** Colnect Marketplace item-ID (#247), or null when unset. */
+  colnectId: string | null;
   areaId: string | null;
   issues: StampIssueMembership[];
   mainCatalogPrice: MoneyDisplay | null;
@@ -294,6 +296,7 @@ const STAMP_LIST_SELECT = {
   issuedMonth: true,
   issuedYear: true,
   createdAt: true,
+  colnectId: true,
   catalogNumbers: { select: { catalogVendorId: true, number: true } },
   catalogPrices: {
     select: {
@@ -329,6 +332,7 @@ function toStampListItem(
     issuedMonth: number | null;
     issuedYear: number | null;
     createdAt: Date;
+    colnectId: string | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
     catalogPrices: RawCatalogPrice[];
     stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
@@ -362,6 +366,7 @@ function toStampListItem(
     issuedMonth: stamp.issuedMonth,
     issuedYear: stamp.issuedYear,
     createdAt: stamp.createdAt.toISOString(),
+    colnectId: stamp.colnectId,
     catalogNumbers: stamp.catalogNumbers,
     areaId,
     issues: stamp.issueMemberships.map((m) => ({
@@ -831,6 +836,9 @@ export async function updateStampWithCatalog(
     issuedYear?: number | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
     catalogPrices?: CatalogPriceInput[];
+    // Colnect item-ID (#247). `undefined` leaves the stored value untouched (callers whose
+    // form doesn't render the field); a string sets it; `null`/"" clears it.
+    colnectId?: string | null;
     requiredForCompleteness?: boolean;
     // Child-only subtype classification (ADR-0010). `undefined` leaves the current
     // value untouched; for a child, `subtypeId: null` falls back to the collection
@@ -884,6 +892,9 @@ export async function updateStampWithCatalog(
         issuedDay: data.issuedDay ?? null,
         issuedMonth: data.issuedMonth ?? null,
         issuedYear: data.issuedYear ?? null,
+        // Omit when undefined so callers that don't manage the field leave it untouched;
+        // a blank string clears it to null.
+        ...(data.colnectId !== undefined ? { colnectId: data.colnectId || null } : {}),
         ...subtypeData,
       },
     });
