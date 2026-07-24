@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
 import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { OfferStateChip, NeedsActionChip } from "./offer-badges";
+import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -54,12 +54,24 @@ interface OfferRowProps {
   onEdit: (offer: OfferListItem) => void;
   onSetState: (offer: OfferListItem, state: ManualOfferTarget) => void;
   onDuplicate: (offer: OfferListItem) => void;
+  onSell: (offer: OfferListItem) => void;
+  onSetInActiveBidding: (offer: OfferListItem, value: boolean) => void;
   onDelete: (offer: OfferListItem) => void;
 }
 
 /** A single offer as a stacked card row: its derived label + actions on top, then platform /
  * state / quantity / price chips. The whole row opens the offer's detail (compose) screen. */
-export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, onDuplicate, onDelete }: OfferRowProps) {
+export function OfferRow({
+  offer,
+  collectionSlug,
+  isLast,
+  onEdit,
+  onSetState,
+  onDuplicate,
+  onSell,
+  onSetInActiveBidding,
+  onDelete,
+}: OfferRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
@@ -94,6 +106,28 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
       ? []
       : [{ key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(offer) } as RowAction]),
     ...stateActions,
+    ...(!terminal && offer.setCount > 0
+      ? [{ key: "sell", label: "Sell", icon: "💰", onSelect: () => onSell(offer) } as RowAction]
+      : []),
+    ...(offer.inActiveBidding
+      ? [
+          {
+            key: "clear-bidding",
+            label: "Clear active bidding",
+            icon: "🔨",
+            onSelect: () => onSetInActiveBidding(offer, false),
+          } as RowAction,
+        ]
+      : offer.state === "active"
+        ? [
+            {
+              key: "mark-bidding",
+              label: "Mark in active bidding",
+              icon: "🔨",
+              onSelect: () => onSetInActiveBidding(offer, true),
+            } as RowAction,
+          ]
+        : []),
     {
       key: "duplicate",
       label: "List on another platform",
@@ -174,6 +208,7 @@ export function OfferRow({ offer, collectionSlug, isLast, onEdit, onSetState, on
             );
           })()}
           {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
+          {offer.inActiveBidding && <InActiveBiddingChip />}
           {offer.setCount > 1 && (
             <span style={CHIP} title="Sets in this offer">{offer.setCount}×</span>
           )}

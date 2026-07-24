@@ -42,7 +42,12 @@ export interface SaleFormDialogProps {
   today: string;
   /** Existing header values in edit mode. */
   initial?: SaleFormDialogInitial;
-  /** Blocks platform change (edit mode with sold units already recorded). */
+  /** Pre-fills the platform on create — e.g. the quick-sell flow (#225). Its `platformCurrency`
+   * (#196) seeds the locked/derived currency so a pre-filled platform doesn't fall back to an
+   * editable picker defaulting to the base currency. */
+  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
+  /** Blocks platform change (edit mode with sold units already recorded, or a pre-filled platform
+   * on create — #225). */
   platformLocked?: boolean;
   /** Sum of the sale's line (offer) prices, when known — passed from the detail screen's Edit
    * header so "total paid" can derive buyer handling = total − gross (#205). Absent at creation
@@ -63,6 +68,7 @@ export function SaleFormDialog({
   baseCurrency,
   today,
   initial,
+  initialPlatform,
   platformLocked,
   grossProceeds,
   isPending,
@@ -70,8 +76,8 @@ export function SaleFormDialog({
   onClose,
   onSubmit,
 }: SaleFormDialogProps) {
-  const [platformId, setPlatformId] = useState(initial?.platformId ?? "");
-  const [platformName, setPlatformName] = useState(initial?.platformName ?? "");
+  const [platformId, setPlatformId] = useState(initial?.platformId ?? initialPlatform?.id ?? "");
+  const [platformName, setPlatformName] = useState(initial?.platformName ?? initialPlatform?.name ?? "");
   const [buyerId, setBuyerId] = useState(initial?.buyerId ?? "");
   const [buyerName, setBuyerName] = useState(initial?.buyerName ?? "");
   const [externalRef, setExternalRef] = useState(initial?.externalRef ?? "");
@@ -79,7 +85,11 @@ export function SaleFormDialog({
   // Currency is inherited from the platform and locked (#196). Editing keeps the sale's snapshot;
   // recording a new sale derives it from the platform — a known currency locks the field, an unset
   // one (or a brand-new platform) shows an inline picker whose value becomes the platform's currency.
-  const [platformCurrency, setPlatformCurrency] = useState<string | null | undefined>(undefined);
+  // A pre-filled platform (#225) seeds the lock immediately, mirroring OfferFormDialog — otherwise
+  // it stays undefined until the picker itself reports a selection.
+  const [platformCurrency, setPlatformCurrency] = useState<string | null | undefined>(
+    mode === "edit" ? undefined : (initialPlatform?.platformCurrency ?? undefined)
+  );
   const [currency, setCurrency] = useState(baseCurrency);
   const lockedCurrency =
     mode === "edit"
@@ -180,8 +190,8 @@ export function SaleFormDialog({
                 idFieldName="platformId"
                 nameFieldName="platformName"
                 role="platform"
-                initialContactId={initial?.platformId}
-                initialContactName={initial?.platformName}
+                initialContactId={initial?.platformId ?? initialPlatform?.id}
+                initialContactName={initial?.platformName ?? initialPlatform?.name}
                 inputId="sale-platform"
                 placeholder="e.g. Delcampe, Allegro…"
                 disabled={isPending || platformLocked}

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { OfferStateChip, NeedsActionChip } from "../offer-badges";
+import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "../offer-badges";
 import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offers-query";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
@@ -159,6 +159,16 @@ export function OfferDetailPanel({
     });
   }
 
+  function setBidding(value: boolean) {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { setOfferInActiveBiddingAction } = await import("@/app/actions/offers");
+      const result = await setOfferInActiveBiddingAction(offerId, value);
+      if (result.status === "success") invalidateAll(collectionId);
+      else setActionError(result.message);
+    });
+  }
+
   function setState(next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setConfirm("withdraw");
@@ -188,6 +198,11 @@ export function OfferDetailPanel({
         };
       }),
     { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: regenerateTitle },
+    ...(offer.inActiveBidding
+      ? [{ key: "clear-bidding", label: "Clear active bidding", icon: "🔨", onSelect: () => setBidding(false) } as RowAction]
+      : offer.state === "active"
+        ? [{ key: "mark-bidding", label: "Mark in active bidding", icon: "🔨", onSelect: () => setBidding(true) } as RowAction]
+        : []),
     { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
@@ -273,6 +288,7 @@ export function OfferDetailPanel({
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
+            {offer.inActiveBidding && <InActiveBiddingChip />}
             <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
           </span>
         </div>

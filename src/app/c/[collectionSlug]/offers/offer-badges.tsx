@@ -59,3 +59,13 @@ export function NeedsActionChip({ soldCopyCount }: { soldCopyCount: number }) {
     `${copies} in this offer sold elsewhere — remove the sold set(s) on the platform, or withdraw`
   );
 }
+
+/** "In active bidding" (#215): an auction bid has been placed on this offer, committing the
+ * collector before the sale is actually recorded. */
+export function InActiveBiddingChip() {
+  return tinted(
+    "warning",
+    "In bidding",
+    "A bid has been placed — withdraw this copy from other platforms before the auction closes"
+  );
+}

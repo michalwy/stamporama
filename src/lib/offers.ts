@@ -228,7 +228,7 @@ async function generateConfiguredTitle(
  * One batched `sale_line_item` lookup across every candidate copy — no per-offer query.
  */
 async function needsActionCounts(
-  offers: { id: string; state: string; sets: OfferSetRow[] }[]
+  offers: { id: string; state: string; inActiveBidding: boolean; sets: OfferSetRow[] }[]
 ): Promise<Map<string, number>> {
   const active = offers.filter((o) => o.state === "active");
   const allIds = [...new Set(active.flatMap((o) => o.sets.flatMap((s) => s.items.map((li) => li.itemId))))];
@@ -242,13 +242,27 @@ async function needsActionCounts(
   const soldViaSet = new Map<string, string>(); // itemId -> the offerSetId it sold through
   for (const r of soldRows) soldViaSet.set(r.itemId, r.saleLine.offerSetId);
 
+  // Copies held by an offer currently "in active bidding" (#215) — every OTHER active offer
+  // holding the same copy needs to withdraw before the auction closes, same collision mechanism
+  // as an actual sale (ADR-0013 §4), without a sale line existing yet.
+  const biddingItemToOfferId = new Map<string, string>();
+  for (const o of active) {
+    if (!o.inActiveBidding) continue;
+    for (const s of o.sets) for (const li of s.items) biddingItemToOfferId.set(li.itemId, o.id);
+  }
+
   const counts = new Map<string, number>();
   for (const o of active) {
     let dead = 0;
     for (const s of o.sets) {
       for (const li of s.items) {
         const soldSet = soldViaSet.get(li.itemId);
-        if (soldSet && soldSet !== s.id) dead++;
+        if (soldSet && soldSet !== s.id) {
+          dead++;
+          continue;
+        }
+        const biddingOfferId = biddingItemToOfferId.get(li.itemId);
+        if (biddingOfferId && biddingOfferId !== o.id) dead++;
       }
     }
     if (dead > 0) counts.set(o.id, dead);
@@ -340,6 +354,9 @@ export interface OfferListItem {
   needsAction: boolean;
   /** How many of its copies have sold elsewhere (drives the badge tooltip). */
   soldCopyCount: number;
+  /** "In active bidding" (#215): an auction bid has been placed, committing the collector before
+   * the sale is recorded. Independent of `state`/`sold`; freely revertible. */
+  inActiveBidding: boolean;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
   createdAt: Date;
@@ -353,6 +370,7 @@ const OFFER_SELECT = {
   price: true,
   currency: true,
   state: true,
+  inActiveBidding: true,
   listingDate: true,
   createdAt: true,
   platform: { select: { name: true } },
@@ -367,6 +385,7 @@ type OfferRow = {
   price: Decimal;
   currency: string;
   state: string;
+  inActiveBidding: boolean;
   listingDate: Date | null;
   createdAt: Date;
   platform: { name: string };
@@ -390,6 +409,7 @@ function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): Off
     itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
     needsAction: soldCopyCount > 0,
     soldCopyCount,
+    inActiveBidding: row.inActiveBidding,
     listingDate: row.listingDate,
     createdAt: row.createdAt,
   };
@@ -427,7 +447,7 @@ async function withNeedsAction(
   collectionId: string,
   baseCurrency: string
 ): Promise<OfferListItem[]> {
-  const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, sets: r.sets })));
+  const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, inActiveBidding: r.inActiveBidding, sets: r.sets })));
   const items = rows.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
@@ -472,7 +492,7 @@ export async function listOffersPaginated(
       orderBy: { createdAt: "desc" },
       select: OFFER_SELECT,
     });
-    const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, sets: r.sets })));
+    const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, inActiveBidding: r.inActiveBidding, sets: r.sets })));
     const flagged = rows.filter((r) => counts.has(r.id));
     const page = flagged.slice(offset, offset + pageSize);
     const items = page.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
@@ -556,6 +576,9 @@ export interface OfferDetail {
   priceBase: string | null;
   state: OfferState;
   needsAction: boolean;
+  /** "In active bidding" (#215): an auction bid has been placed, committing the collector before
+   * the sale is recorded. Independent of `state`/`sold`; freely revertible. */
+  inActiveBidding: boolean;
   /** Derived suggested asking price **in the offer's currency**: the average catalog value per set
    * (a buyer takes one set), converted from base at the current FX rate. Null when nothing is
    * valued or no rate is available. */
@@ -582,6 +605,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       price: true,
       currency: true,
       state: true,
+      inActiveBidding: true,
       listingDate: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
@@ -612,6 +636,20 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       : [];
   const soldViaSet = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
 
+  // Copies held by another active offer currently "in active bidding" (#215) — same collision
+  // treatment as an actual sale, without a sale line existing yet.
+  const biddingRows =
+    allIds.length > 0
+      ? await prisma.offerSetItem.findMany({
+          where: {
+            itemId: { in: allIds },
+            offerSet: { offer: { id: { not: offerId }, inActiveBidding: true, state: "active" } },
+          },
+          select: { itemId: true },
+        })
+      : [];
+  const biddingElsewhere = new Set(biddingRows.map((r) => r.itemId));
+
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
     const sold = s.saleLines.length > 0;
     const needs =
@@ -619,7 +657,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       !sold &&
       s.items.some((li) => {
         const via = soldViaSet.get(li.itemId);
-        return via != null && via !== s.id;
+        if (via != null && via !== s.id) return true;
+        return biddingElsewhere.has(li.itemId);
       });
     return {
       id: s.id,
@@ -690,6 +729,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     priceBase,
     state,
     needsAction: sets.some((s) => s.needsAction),
+    inActiveBidding: offer.inActiveBidding,
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,
@@ -1112,6 +1152,26 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     }
   }
   await prisma.offer.update({ where: { id: offerId }, data: { state: to } });
+}
+
+/** Set (or clear) "in active bidding" (#215): an auction-platform offer that has received a bid,
+ * committing the collector before the sale is actually recorded. Independent axis from `state` —
+ * no transition rules, freely revertible (the auction can still fail to close). Only meaningful on
+ * a live (`active`) offer; setting it elsewhere is a no-op guard, not an error, since the collector
+ * may toggle it around other lifecycle changes. */
+export async function setOfferInActiveBidding(
+  ownerId: string,
+  offerId: string,
+  value: boolean
+): Promise<void> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  if (value && ref.state !== "active") {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      "Only an active offer can be marked in active bidding."
+    );
+  }
+  await prisma.offer.update({ where: { id: offerId }, data: { inActiveBidding: value } });
 }
 
 /** Delete an offer and all its sets (the underlying copies are untouched). Blocked when any set

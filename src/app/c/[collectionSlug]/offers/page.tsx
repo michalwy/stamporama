@@ -23,6 +23,10 @@ export default async function OffersPage({ params }: OffersPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
+  // Compute "today" at request time so the quick-sell flow's new-sale step (#225) defaults the
+  // date without SSR clock use — mirrors the sales page.
+  const today = new Date().toISOString().slice(0, 10);
+
   // Loaded here (like the Inventory page) so the quick-offer flow's add-copy step (#241) has the
   // taxonomy it needs without a client round-trip.
   const [conditions, certificateStatuses, areas, locations] = await Promise.all([
@@ -55,6 +59,7 @@ export default async function OffersPage({ params }: OffersPageProps) {
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         baseCurrency={collection.baseCurrency}
+        today={today}
         areas={areas}
         locations={locations}
         conditions={conditions}

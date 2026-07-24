@@ -8,6 +8,7 @@ import {
   duplicateOffer,
   updateOffer,
   setOfferState,
+  setOfferInActiveBidding,
   deleteOffer,
   patchOffer,
   regenerateOfferName,
@@ -277,6 +278,20 @@ export async function setOfferStateAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the offer state.");
+  }
+}
+
+/** Set (or clear) "in active bidding" (#215) from the offer list or detail screen. */
+export async function setOfferInActiveBiddingAction(
+  offerId: string,
+  value: boolean
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await setOfferInActiveBidding(session.user.id, offerId, value);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update the offer's bidding state.");
   }
 }
 

@@ -155,12 +155,42 @@ Both offers now list the overlapping copies, which is exactly the cross-platform
 [needs-action](#keeping-platforms-in-sync--needs-action) sync is built for: selling on one platform
 flags the twin on the other.
 
+## Selling directly from the list
+
+The row's **⋮** menu carries a **Sell** action on any non-terminal offer that lists at least one
+set — a shortcut into recording a [sale](sales.md) without opening the offer's compose screen
+first. Choose where the sold sets go:
+
+- **an existing sale** already recorded on this offer's platform (in the same currency), or
+- **a new sale** — the header form opens pre-filled with the offer's platform (locked, since a
+  sale is single-platform); fill in the buyer and date and continue.
+
+Either way, every set the offer still has left to sell is added at its current asking price, and
+you land on the sale's detail screen to review or adjust it. An offer with nothing left to sell (
+every set already sold) has no **Sell** action to offer.
+
+## In active bidding — auction platforms
+
+On auction-style platforms (Allegro and similar), a bid commits you before the auction actually
+closes — well before a sale is recorded. Mark an **active** offer **In active bidding** (from its
+**⋮** menu) the moment it receives a bid: this flags every **other** active offer holding the same
+copies as **Needs action**, exactly like an actual sale collision, so you know to withdraw them
+from other marketplaces right away.
+
+**In active bidding** is independent of the offer's state — it never marks the offer **Sold** by
+itself. If the auction doesn't close (no bids meet the reserve, the buyer doesn't pay), **Clear
+active bidding** from the same menu; the "needs action" flags on the other offers clear
+immediately. When the auction does close successfully, record the sale as usual — the offer
+becomes **Sold** through the normal [sale](sales.md) flow, same as any other platform.
+
 ## Keeping platforms in sync — "needs action"
 
-Because a copy can be listed on several platforms, selling it in one place leaves the other
-listings stale. Stamporama surfaces this automatically: an **active** offer holding a **set whose
-copy has sold elsewhere** is flagged **Needs action** — a red badge on the offer row and on the
-affected set, plus a **Needs action** filter in the toolbar.
+Because a copy can be listed on several platforms, selling it in one place — or, on an auction
+platform, just placing a bid (see [In active bidding](#in-active-bidding--auction-platforms)
+above) — leaves the other listings stale. Stamporama surfaces this automatically: an **active**
+offer holding a **set whose copy has sold, or is in active bidding, elsewhere** is flagged **Needs
+action** — a red badge on the offer row and on the affected set, plus a **Needs action** filter in
+the toolbar.
 
 To resolve one, open the offer and:
 
@@ -194,10 +224,12 @@ Changing a platform's currency later leaves existing offers and sales untouched 
 currency it was created with as a permanent record; only new offers and sales use the new currency.
 
 From the row's **⋮** menu you can **edit** the price / platform / URL, **mark ready** a preparing
-offer, **activate** a ready one, **pause** / **resume**, **withdraw**, open the live listing, or
-**delete** the offer. The detail header's **⋮** menu adds **Regenerate title** (see
-[Listing title](#listing-title)). Deleting removes the offer and its
-sets; the copies stay in your inventory. An offer with a sold set can't be deleted — withdraw it.
+offer, **activate** a ready one, **pause** / **resume**, **withdraw**, **sell** (see [Selling
+directly from the list](#selling-directly-from-the-list)), mark or clear **in active bidding** (see
+[above](#in-active-bidding--auction-platforms)), open the live listing, or **delete** the offer.
+The detail header's **⋮** menu adds **Regenerate title** (see [Listing title](#listing-title)).
+Deleting removes the offer and its sets; the copies stay in your inventory. An offer with a sold
+set can't be deleted — withdraw it.
 
 ## Filtering
 

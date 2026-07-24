@@ -492,6 +492,11 @@ model Offer {
   // across creations. Distinct from `createdAt` (when the record was made); null when not recorded.
   listingDate  DateTime? @db.Date
   createdAt    DateTime @default(now())
+  // "In active bidding" (#215): an auction-platform offer that has received a bid, committing the
+  // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely
+  // revertible if the auction doesn't close. Setting it flags every other active offer holding the
+  // same copies as needing action, same as an actual sale collision (ADR-0013 §4).
+  inActiveBidding Boolean @default(false)
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)

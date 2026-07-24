@@ -84,6 +84,15 @@ state and no acknowledgement watermark:
 The signal clears the moment the offer no longer holds a sold copy — nothing to "mark done"
 because the resolving edit *is* the record.
 
+**Extended for auction platforms (#215).** A bid on an auction listing commits the collector
+before a sale is actually recorded — well before the derivation above has anything to key off.
+`Offer.inActiveBidding` is a stored boolean, independent of `state`/`sold` and freely revertible,
+that the collector sets by hand the moment a bid lands. It plugs into the *same* derivation as a
+second source alongside `sale_line_item`: a copy held by another active offer with
+`inActiveBidding = true` counts as "needs action" for every *other* active offer holding it, with
+no separate flag or watermark on the flagged offers — resolving it (withdraw / remove the set) or
+reverting the bidding flag both clear it live, same as the sold case.
+
 ### 5. Selling "1 of N interchangeable" binds a specific copy
 
 When a quantity offer sells one of several interchangeable sets, the seller picks which physical

@@ -15,6 +15,7 @@ import {
 } from "./use-offers-query";
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
+import { SellOfferFlowDialog } from "./sell-offer-flow-dialog";
 import { OfferRow } from "./offer-row";
 import { QuickOfferFlow } from "./quick-offer-flow";
 import { useLastUsedPlatform } from "./use-last-used-platform";
@@ -30,6 +31,7 @@ type DialogState =
   | { kind: "add" }
   | { kind: "edit"; offer: OfferListItem }
   | { kind: "duplicate"; offer: OfferListItem }
+  | { kind: "sell"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
   | { kind: "delete"; offer: OfferListItem }
   | { kind: "quickOffer" };
@@ -48,6 +50,8 @@ interface OffersListPanelProps {
   collectionId: string;
   collectionSlug: string;
   baseCurrency: string;
+  /** Today's date (server-computed), for the quick-sell flow's new-sale step (#225). */
+  today: string;
   /** Taxonomy for the quick-offer flow's add-copy step (#241). */
   areas: CollectionAreaData[];
   locations: LocationData[];
@@ -59,6 +63,7 @@ export function OffersListPanel({
   collectionId,
   collectionSlug,
   baseCurrency,
+  today,
   areas,
   locations,
   conditions,
@@ -133,6 +138,16 @@ export function OffersListPanel({
     setDialog({ kind: "none" });
     setActionError(undefined);
     invalidateAll(collectionId);
+  }
+
+  function setOfferBidding(offer: OfferListItem, value: boolean) {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { setOfferInActiveBiddingAction } = await import("@/app/actions/offers");
+      const result = await setOfferInActiveBiddingAction(offer.id, value);
+      if (result.status === "success") invalidateAll(collectionId);
+      else setActionError(result.message);
+    });
   }
 
   function setOfferState(offer: OfferListItem, next: ManualOfferTarget) {
@@ -267,6 +282,8 @@ export function OffersListPanel({
                 onEdit={(row) => setDialog({ kind: "edit", offer: row })}
                 onSetState={setOfferState}
                 onDuplicate={(row) => setDialog({ kind: "duplicate", offer: row })}
+                onSell={(row) => setDialog({ kind: "sell", offer: row })}
+                onSetInActiveBidding={setOfferBidding}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
               />
             ))}
@@ -321,6 +338,18 @@ export function OffersListPanel({
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           source={{ id: dialog.offer.id, label: dialog.offer.label, setCount: dialog.offer.setCount, price: dialog.offer.price, currency: dialog.offer.currency }}
+          onClose={closeDialog}
+        />
+      )}
+
+      {/* Quick-sell (#225): record a sale straight from the offer list. */}
+      {dialog.kind === "sell" && (
+        <SellOfferFlowDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          today={today}
+          offer={dialog.offer}
           onClose={closeDialog}
         />
       )}
