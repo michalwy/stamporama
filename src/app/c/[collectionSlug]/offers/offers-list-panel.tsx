@@ -18,6 +18,7 @@ import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { OfferRow } from "./offer-row";
 import { QuickOfferFlow } from "./quick-offer-flow";
 import { useLastUsedPlatform } from "./use-last-used-platform";
+import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -75,6 +76,7 @@ export function OffersListPanel({
   const { invalidateContacts } = useInvalidatePurchases();
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
+  const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
   const needsAction = searchParams.get("needsAction") === "1";
   const stateParam = searchParams.get("state") as OfferState | null;
@@ -295,6 +297,7 @@ export function OffersListPanel({
                 const result = await createOfferAction(collectionId, fd);
                 if (result.status === "success") {
                   if (submittedPlatformId) rememberPlatform(submittedPlatformId);
+                  rememberOfferDefaults(offerDefaultsFromForm(fd));
                   invalidateAll(collectionId);
                   invalidateContacts(collectionId);
                   // Straight to the compose screen — a fresh offer has no sets yet.

@@ -19,7 +19,14 @@ import {
   type OfferInput,
 } from "@/lib/offers";
 import { resolvePurchaseContact } from "@/lib/contacts";
-import { isOfferState, parsePrice, normalizeUrl, type OfferState } from "@/lib/offer-rules";
+import {
+  isOfferState,
+  isCreatableOfferState,
+  parsePrice,
+  parseOfferDate,
+  normalizeUrl,
+  type OfferState,
+} from "@/lib/offer-rules";
 
 // Server actions for offer-owned composition (ADR-0013). Thin wrappers over the `offers` domain
 // module; each returns a discriminated `{ status }` union the client dialogs render. Domain guards
@@ -76,6 +83,15 @@ async function readOfferInput(
   // platform already has a currency. The domain resolves and locks it.
   const currency = str(formData, "currency");
 
+  // Listing date (#257): optional; blank means not recorded.
+  const listing = parseOfferDate(str(formData, "listingDate"));
+  if (!listing.ok) return { ok: false, message: listing.message };
+
+  // Initial status (#257): defaults to `preparing`; a live `ready` / `active` is honoured by the
+  // domain only when the offer lists something. `updateOffer` ignores it.
+  const rawState = str(formData, "state");
+  const state: OfferState = isCreatableOfferState(rawState) ? rawState : "preparing";
+
   const platformId = await resolvePurchaseContact(collectionId, {
     id: str(formData, "platformId") || null,
     name: str(formData, "platformName") || null,
@@ -90,19 +106,22 @@ async function readOfferInput(
       url: normalizeUrl(str(formData, "url")),
       price,
       currency,
+      listingDate: listing.value,
+      state,
     },
   };
 }
 
 export async function createOfferAction(
   collectionId: string,
-  formData: FormData
+  formData: FormData,
+  seedItemIds?: string[]
 ): Promise<CreateOfferActionState> {
   const session = await getSession();
   const parsed = await readOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
-    const id = await createOffer(session.user.id, collectionId, parsed.input);
+    const id = await createOffer(session.user.id, collectionId, parsed.input, { seedItemIds });
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to create the offer. Please try again.");

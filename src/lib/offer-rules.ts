@@ -128,3 +128,29 @@ export function normalizeUrl(raw: string): string | null {
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+/** Parse a `YYYY-MM-DD` listing date into a UTC `Date` (#257). Blank → `null` (not recorded);
+ * malformed / impossible → an error the caller surfaces. Mirrors the sale date parser. */
+export function parseOfferDate(
+  raw: string
+): { ok: true; value: Date | null } | { ok: false; message: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, value: null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return { ok: false, message: "Enter a valid listing date." };
+  const d = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return { ok: false, message: "Enter a valid listing date." };
+  // Guard against JS date rollover (e.g. 2026-02-31 → Mar 3).
+  if (d.toISOString().slice(0, 10) !== trimmed) return { ok: false, message: "Enter a valid listing date." };
+  return { ok: true, value: d };
+}
+
+/** The non-terminal states an offer may be *created* directly in (#257): the collector states the
+ * listing's real-world status up front rather than stepping the draft through the lifecycle. `ready`
+ * and `active` still require the offer to list something (see {@link requiresSets}); the caller
+ * gates on that. Terminal states (`sold` / `withdrawn`) and `paused` are excluded — you don't open
+ * a listing already closed or paused. */
+export const CREATABLE_OFFER_STATES: readonly OfferState[] = ["preparing", "ready", "active"];
+
+export function isCreatableOfferState(value: unknown): value is OfferState {
+  return value === "preparing" || value === "ready" || value === "active";
+}

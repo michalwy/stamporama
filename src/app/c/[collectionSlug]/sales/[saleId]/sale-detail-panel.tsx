@@ -436,6 +436,12 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           locations={locations}
           issueHeaderById={issueHeaderById}
           onRemove={(lineId, label) => setDialog({ kind: "removeLine", lineId, label })}
+          onEditPrice={(lineId, price) =>
+            run(async () => {
+              const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
+              return updateSaleLinePriceAction(lineId, price);
+            })
+          }
         />
       )}
 

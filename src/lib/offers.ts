@@ -308,6 +308,8 @@ export interface OfferListItem {
   needsAction: boolean;
   /** How many of its copies have sold elsewhere (drives the badge tooltip). */
   soldCopyCount: number;
+  /** The date the listing went live (#257), or null when not recorded. */
+  listingDate: Date | null;
   createdAt: Date;
 }
 
@@ -318,6 +320,7 @@ const OFFER_SELECT = {
   price: true,
   currency: true,
   state: true,
+  listingDate: true,
   createdAt: true,
   platform: { select: { name: true } },
   sets: { select: OFFER_SETS_SELECT },
@@ -330,6 +333,7 @@ type OfferRow = {
   price: Decimal;
   currency: string;
   state: string;
+  listingDate: Date | null;
   createdAt: Date;
   platform: { name: string };
   sets: OfferSetRow[];
@@ -351,6 +355,7 @@ function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): Off
     itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
     needsAction: soldCopyCount > 0,
     soldCopyCount,
+    listingDate: row.listingDate,
     createdAt: row.createdAt,
   };
 }
@@ -520,6 +525,8 @@ export interface OfferDetail {
   /** Sets with no computable catalog value (excluded from the average). */
   suggestedUnpricedSets: number;
   sets: OfferDetailSet[];
+  /** The date the listing went live (#257), or null when not recorded. */
+  listingDate: Date | null;
   createdAt: Date;
 }
 
@@ -536,6 +543,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       price: true,
       currency: true,
       state: true,
+      listingDate: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: { select: { name: true } },
@@ -645,6 +653,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,
+    listingDate: offer.listingDate,
     createdAt: offer.createdAt,
   };
 }
@@ -794,32 +803,76 @@ export interface OfferInput {
   /** First-offer fallback currency (#196): used only to set the platform's currency when it has
    * none yet. Ignored once the platform has a currency — the offer is locked to the platform's. */
   currency: string;
+  /** The date the listing went live (#257), or null when not recorded. Stored on create + edit. */
+  listingDate: Date | null;
+  /** The status to create the offer in (#257): `preparing` (default), or a live `ready` / `active`
+   * when the offer lists something. Ignored by {@link updateOffer} — an existing offer's lifecycle is
+   * driven by its dedicated controls, not the header form. */
+  state: OfferState;
 }
 
-/** Create a `preparing` offer on a platform (ADR-0013, #188): composed but not yet published — the
- * collector activates it by hand once its sets are in. Its currency is inherited from the platform
- * (#196) — locked to the platform's currency, or, on the first offer/sale, set from `input.currency`
- * and stored as this offer's snapshot. Its sets are composed afterwards on the offer detail screen. */
+/**
+ * Create an offer on a platform (ADR-0013, #188). It starts `preparing` unless the collector states
+ * a live status up front (#257): `ready` / `active` are honoured only when the offer lists something,
+ * so `opts.seedItemIds` (the quick-start / add-to-offer create path, #189/#241) seeds its first set
+ * **atomically** — offer + set + live status commit together, or nothing does. Currency is inherited
+ * from the platform (#196) — locked to the platform's, or set from `input.currency` on the first
+ * offer/sale and snapshotted here. Sets beyond the seed are composed on the detail screen.
+ */
 export async function createOffer(
   ownerId: string,
   collectionId: string,
-  input: OfferInput
+  input: OfferInput,
+  opts: { seedItemIds?: string[] } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
-  const offer = await prisma.offer.create({
-    data: {
-      collectionId,
-      platformId: input.platformId,
-      url: input.url,
-      price: input.price,
-      currency,
-      state: "preparing",
-    },
-    select: { id: true },
+
+  const targetState = input.state;
+  if (isTerminalState(targetState)) {
+    throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
+  }
+
+  // Seed copies for the quick-start / add-to-offer create path (#189/#241): validate addability up
+  // front, then write the first set inside the transaction. A chosen live status can then be honoured.
+  const seedIds = opts.seedItemIds?.length
+    ? await assertAddableCopies(collectionId, opts.seedItemIds)
+    : [];
+  if (opts.seedItemIds?.length && seedIds.length === 0) {
+    throw new OfferActionBlockedError("empty", "That copy can't be listed — it may have already sold.");
+  }
+  // A live status (ready / active) requires the offer to actually list something (#246). Reject it
+  // before creating anything, so no half-open draft is left behind.
+  if (requiresSets(targetState) && seedIds.length === 0) {
+    throw new OfferActionBlockedError(
+      "empty",
+      `An offer can't start ${targetState} with no sets — compose it first, then advance it.`
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const offer = await tx.offer.create({
+      data: {
+        collectionId,
+        platformId: input.platformId,
+        url: input.url,
+        price: input.price,
+        currency,
+        listingDate: input.listingDate,
+        // Set the target state directly (creation states the real-world status; the step-through
+        // graph governs later manual changes). Guarded above against terminal / set-less-live.
+        state: targetState,
+      },
+      select: { id: true },
+    });
+    if (seedIds.length > 0) {
+      await tx.offerSet.create({
+        data: { offerId: offer.id, items: { create: seedIds.map((itemId) => ({ itemId })) } },
+      });
+    }
+    return offer.id;
   });
-  return offer.id;
 }
 
 export interface DuplicateOfferResult {
@@ -868,6 +921,19 @@ export async function duplicateOffer(
     })
     .filter((s) => s.itemIds.length > 0);
 
+  const targetState = input.state;
+  if (isTerminalState(targetState)) {
+    throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
+  }
+  // A live status (ready / active) requires ≥1 set (#246): reject when every source copy had sold and
+  // the clone would be empty, before creating anything.
+  if (requiresSets(targetState) && cloneSets.length === 0) {
+    throw new OfferActionBlockedError(
+      "empty",
+      `Nothing left to list — every copy has sold elsewhere, so the copy can't start ${targetState}.`
+    );
+  }
+
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
@@ -876,7 +942,8 @@ export async function duplicateOffer(
         url: input.url,
         price: input.price,
         currency,
-        state: "preparing",
+        listingDate: input.listingDate,
+        state: targetState,
       },
       select: { id: true },
     });
@@ -914,6 +981,9 @@ export async function updateOffer(
       platformId: input.platformId,
       url: input.url,
       price: input.price,
+      // Listing date is editable on the header form (#257); the status is not — an existing offer's
+      // lifecycle is driven by its dedicated controls, so `input.state` is ignored here.
+      listingDate: input.listingDate,
     },
   });
 }

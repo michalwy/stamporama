@@ -478,6 +478,9 @@ model Offer {
   price        Decimal  @db.Decimal(10, 2)
   currency     String
   state        String   @default("preparing")
+  // The date the listing went live on the platform (#257), captured at offer creation and remembered
+  // across creations. Distinct from `createdAt` (when the record was made); null when not recorded.
+  listingDate  DateTime? @db.Date
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

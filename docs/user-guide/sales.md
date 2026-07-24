@@ -54,8 +54,15 @@ set, or catalog number. Each set is a whole sellable piece:
   its copies together.
 
 Tick every set that sold and set each one's **sale price** in the sale currency (the offer's
-asking price pre-fills, since the offer and the sale share the platform's currency). **Add** records
-them all at once. You can come back and add more sets later, or **Remove** one from its row menu.
+asking price pre-fills, since the offer and the sale share the platform's currency). The price is
+just a starting point — **override it** whenever the set actually sold for a different amount (say
+you gave the buyer a discount). The override belongs to **this sale only**; the offer's own asking
+price is never changed. **Add** records them all at once. You can come back and add more sets later,
+or **Remove** one from its row menu.
+
+Already added a unit at the wrong price? On the **Sold units** list, click a unit's price to **edit
+it in place** (Enter or click away saves, Escape reverts) — again, only the sale record changes, and
+the gross, net, and any total-based buyer handling recompute automatically.
 
 A sale is **single-currency**, so only offers in the sale's currency can be added. If you changed
 the platform's currency after listing, any offer still on the **old** currency is shown flagged

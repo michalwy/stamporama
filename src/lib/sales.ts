@@ -651,6 +651,26 @@ export async function addSaleLines(
   }
 }
 
+/** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which
+ * can differ from the offer's asking price (e.g. a discount given to the buyer). The override lives
+ * only on this sale line — the originating offer's own asking price is never touched. Gross, net, and
+ * any total-anchored buyer handling (#205) recompute from the line prices on the next read, so the
+ * math stays consistent. */
+export async function updateSaleLinePrice(
+  ownerId: string,
+  lineId: string,
+  price: string
+): Promise<void> {
+  const line = await prisma.saleLine.findUnique({
+    where: { id: lineId },
+    select: { sale: { select: { collection: { select: { ownerId: true } } } } },
+  });
+  if (!line || line.sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale line not found or access denied.");
+  }
+  await prisma.saleLine.update({ where: { id: lineId }, data: { price } });
+}
+
 /** Remove a sold set from a sale (ADR-0013). Its copies become available again (their sold state
  * is derived), and if the line's offer had been flipped to `sold` but is no longer fully sold, the
  * offer reverts to `active`. */

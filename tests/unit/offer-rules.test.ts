@@ -10,8 +10,11 @@ import {
   quickAdvanceTarget,
   parsePrice,
   normalizeUrl,
+  parseOfferDate,
+  isCreatableOfferState,
   OFFER_STATES,
   CLOSED_OFFER_STATES,
+  CREATABLE_OFFER_STATES,
 } from "../../src/lib/offer-rules";
 
 // Type guard ----------------------------------------------------------------
@@ -174,5 +177,38 @@ describe("normalizeUrl", () => {
     assert.equal(normalizeUrl("  https://x.test/1  "), "https://x.test/1");
     assert.equal(normalizeUrl("   "), null);
     assert.equal(normalizeUrl(""), null);
+  });
+});
+
+// Listing date + creatable status (#257) -----------------------------------
+
+describe("parseOfferDate", () => {
+  it("parses a valid YYYY-MM-DD to a UTC date", () => {
+    const r = parseOfferDate("2026-07-24");
+    assert.equal(r.ok, true);
+    assert.equal(r.ok && r.value?.toISOString(), "2026-07-24T00:00:00.000Z");
+  });
+
+  it("treats blank as not recorded (null)", () => {
+    assert.deepEqual(parseOfferDate(""), { ok: true, value: null });
+    assert.deepEqual(parseOfferDate("   "), { ok: true, value: null });
+  });
+
+  it("rejects malformed and impossible dates", () => {
+    assert.equal(parseOfferDate("2026-7-4").ok, false);
+    assert.equal(parseOfferDate("24-07-2026").ok, false);
+    assert.equal(parseOfferDate("2026-02-31").ok, false); // JS rollover guard
+  });
+});
+
+describe("isCreatableOfferState", () => {
+  it("accepts only preparing / ready / active", () => {
+    assert.deepEqual([...CREATABLE_OFFER_STATES], ["preparing", "ready", "active"]);
+    assert.equal(isCreatableOfferState("preparing"), true);
+    assert.equal(isCreatableOfferState("active"), true);
+    assert.equal(isCreatableOfferState("paused"), false);
+    assert.equal(isCreatableOfferState("sold"), false);
+    assert.equal(isCreatableOfferState("withdrawn"), false);
+    assert.equal(isCreatableOfferState("nope"), false);
   });
 });

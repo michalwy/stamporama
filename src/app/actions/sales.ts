@@ -9,6 +9,7 @@ import {
   updateSaleAmount,
   updateSaleShipping,
   addSaleLines,
+  updateSaleLinePrice,
   removeSaleLine,
   deleteSale,
   setSaleStatus,
@@ -255,6 +256,23 @@ export async function addSaleLinesAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the sold sets.");
+  }
+}
+
+/** Override a sold unit's line sale price in place (#258). Independent of the offer's asking price —
+ * only this sale record changes. Blank / invalid is rejected (a sold set always has a price). */
+export async function updateSaleLinePriceAction(
+  lineId: string,
+  rawPrice: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  const priced = parsePrice(rawPrice);
+  if (!priced.ok) return { status: "error", message: priced.message };
+  try {
+    await updateSaleLinePrice(session.user.id, lineId, priced.value);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update the sale price.");
   }
 }
 

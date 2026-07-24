@@ -26,9 +26,17 @@ sets". A plain single-stamp offer is just the one-set case.
    (remembered per collection); change it freely. The **currency** comes from the platform — it
    is shown locked and applies to every offer and sale there. The first time you list or sell on a
    platform that has no currency yet, you pick one inline and it is saved to the platform. That's
-   all you need — you usually don't know the asking price yet (it follows from the copies you add)
-   and there's no listing URL until the auction is up. A new offer starts as **Preparing** (still
-   being composed, not yet live). Creating the offer opens its detail screen.
+   all you need — you usually don't know the asking price yet (it follows from the copies you add).
+   The dialog also captures three optional fields: the **status** to create the offer in
+   (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
+   **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
+   status and listing date are **remembered per collection** and pre-filled the next time you create
+   an offer, so listing many items in a row is fast; the URL is never remembered — it's always
+   specific to the individual offer. Leaving everything at its default creates a **Preparing** offer
+   (still being composed, not yet live). Marking a fresh, set-less offer **Ready** or **Active** isn't
+   possible — it needs at least one set first — so those statuses apply when you list a copy at
+   creation (see *Sell a new item* and *Listing on another platform*). Creating the offer opens its
+   detail screen.
 2. On the detail screen, use **Add set** to pick copies from your inventory. When you pick more
    than one copy you choose how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
@@ -41,7 +49,9 @@ sets". A plain single-stamp offer is just the one-set case.
    beside it to change the URL. The listing URL stays editable in **every** state — including a
    **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
-   in the header's **⋮** menu.
+   in the header's **⋮** menu. When a **listing date** was recorded it shows as a **📅** chip on the
+   detail header; to change it, use **Edit offer** (the header form) — where the listing date and URL
+   are both editable.
 5. Once the offer is assembled, **Mark ready** to move it from **Preparing** to **Ready** — fully
    prepared, waiting to be posted. When the listing is actually up on the platform, **Activate** it to
    move **Ready** → **Active**. A **quick-advance button** beside the offer's state chip — on both the

@@ -25,6 +25,10 @@ import {
   useComposeTargets,
   useInvalidateOffers,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import {
+  useLastOfferDefaults,
+  offerDefaultsFromForm,
+} from "@/app/c/[collectionSlug]/offers/use-last-offer-defaults";
 import { useInvalidateInventory } from "./use-inventory-query";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 
@@ -201,6 +205,7 @@ export function AddToOfferDialog({
   // Creating the first offer for a platform sets its currency (#196); the platform picker reads the
   // currency from the cached contact search, so it must be invalidated too (#212).
   const { invalidateContacts } = useInvalidatePurchases();
+  const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
   const { data, isLoading } = useComposeTargets(collectionId, item.id, true);
   const offers = useMemo(() => data?.offers ?? [], [data]);
@@ -283,30 +288,26 @@ export function AddToOfferDialog({
     });
   }
 
-  // Create a brand-new offer from its header and seed it with this copy as a single-item set (#189).
-  // Stays on the inventory list — same as adding to an existing offer — rather than navigating to
-  // the new offer, so the collector keeps their place in the list.
+  // Create a brand-new offer from its header, seeding it with this copy as its first single-item set
+  // in one atomic step (#189) — so a chosen live status (#257) is honoured (Ready / Active need the
+  // offer to list something). Stays on the inventory list — same as adding to an existing offer —
+  // rather than navigating to the new offer, so the collector keeps their place in the list.
   function createOffer(formData: FormData) {
     setCreateError(undefined);
     const usedPlatformId = (formData.get("platformId") as string | null) ?? "";
     startTransition(async () => {
       const actions = await import("@/app/actions/offers");
-      const created = await actions.createOfferAction(collectionId, formData);
+      const created = await actions.createOfferAction(collectionId, formData, [item.id]);
       if (created.status !== "success") {
+        // Nothing was created (the create + seed commit together), so the picker stays open to retry.
         setCreateError(created.message);
         return;
       }
       if (usedPlatformId) onPlatformUsed?.(usedPlatformId);
-      const seeded = await actions.addOfferSetAction(created.id, [item.id], { perCopy: false });
+      rememberOfferDefaults(offerDefaultsFromForm(formData));
       invalidateAll(collectionId);
       invalidateList(collectionId);
       invalidateContacts(collectionId);
-      if (seeded.status !== "success") {
-        // The offer exists but the copy didn't land — surface it and keep the picker open. The new
-        // (empty) offer now shows in the list, so the collector can retry via "New set" on it.
-        setCreateError(seeded.message);
-        return;
-      }
       onDone();
     });
   }
@@ -452,16 +453,18 @@ export function AddToOfferDialog({
         isPending={isPending}
         error={createError}
         zIndexBase={110}
-        // Pre-fill the asking price with this copy's catalog value (#230), converted to the offer's
-        // currency and still fully editable. Shown only when the copy has a catalog value.
-        showPrice={!!catalogBase}
+        // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
+        // price is set up front rather than deferred to the detail screen. When the copy has a catalog
+        // value it pre-fills (#230), converted to the offer's currency and still fully editable;
+        // otherwise the field starts blank for the collector to fill in.
+        showPrice
         priceValue={catalogBase ? suggestedPrice : undefined}
         onPriceValueChange={setSuggestedPrice}
         onCurrencyChange={handlePriceCurrencyChange}
         sourceNote={
           catalogBase
             ? "The asking price is pre-filled from this copy's catalog value — adjust it as needed, then add the listing URL once you have it."
-            : undefined
+            : "Set the asking price, and add the listing URL once you have it."
         }
         onClose={() => {
           if (!isPending) {

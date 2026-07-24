@@ -257,6 +257,14 @@ export function OfferDetailPanel({
             {offer.currency}
           </span>
 
+          {/* Listing date (#257): when the listing went live, captured at creation. Read-only here —
+              editable from the offer header form. Hidden when not recorded. */}
+          {offer.listingDate && (
+            <span style={CHIP} title="Listing date — when this listing went live">
+              📅 {new Date(offer.listingDate).toISOString().slice(0, 10)}
+            </span>
+          )}
+
           {/* Listing URL — editable in any state, including sold/withdrawn, for record-keeping
               (#213). When a URL is set the link opens on click and a separate pencil edits it, so
               the click-to-open never gets hijacked by editing (#214). */}

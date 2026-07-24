@@ -257,7 +257,8 @@ export function Autocomplete<T>({
         value={value}
         disabled={disabled}
         onChange={(e) => handleChange(e.target.value)}
-        onFocus={() => { if (canOpen(value)) setIsOpen(true); }}
+        // No open-on-focus: the dropdown opens only when the user types (or presses ↓), so a
+        // pre-filled/auto-focused field never pops its suggestions unprompted.
         onKeyDown={handleKeyDown}
         style={inputStyle ?? SEARCH_INPUT_STYLE}
       />

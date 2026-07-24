@@ -9,8 +9,10 @@ import {
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { OfferDetail } from "@/lib/offers";
+import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { useLastOfferDefaults } from "./use-last-offer-defaults";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -25,11 +27,24 @@ const INPUT_STYLE: React.CSSProperties = {
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
 
+/** Today as `YYYY-MM-DD` in the local timezone — the listing-date default for a fresh offer. */
+function todayIso(): string {
+  const now = new Date();
+  const tz = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - tz).toISOString().slice(0, 10);
+}
+
+/** A stored listing date (UTC `@db.Date`) as `YYYY-MM-DD`, or "" when not recorded. */
+function formatListingDate(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  return new Date(d).toISOString().slice(0, 10);
+}
+
 export interface OfferFormDialogProps {
   collectionId: string;
   baseCurrency: string;
   /** The offer being edited (edit mode). Omit for create. */
-  offer?: Pick<OfferDetail, "platformId" | "platformName" | "url" | "price" | "currency">;
+  offer?: Pick<OfferDetail, "platformId" | "platformName" | "url" | "price" | "currency" | "listingDate">;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
    * show a misleading editable picker. */
@@ -88,6 +103,14 @@ export function OfferFormDialog({
   const isEdit = !!offer;
   // Whether the price field shows: always when editing, opt-in (duplicate) otherwise.
   const showPriceField = isEdit || showPrice;
+  // Status + listing date pre-fills (#257): remembered per collection for a fresh offer; an edit
+  // seeds the date from the offer itself and has no status field (lifecycle controls own it). The URL
+  // is never remembered — always specific to the individual offer.
+  const [lastDefaults] = useLastOfferDefaults(collectionId);
+  const defaultState = lastDefaults?.state ?? "preparing";
+  const defaultListingDate = isEdit
+    ? formatListingDate(offer!.listingDate)
+    : lastDefaults?.listingDate || todayIso();
   const priceControlled = priceValue !== undefined;
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
@@ -210,33 +233,62 @@ export function OfferFormDialog({
             </div>
           </div>
 
-          {/* Listing URL — only when editing; a fresh offer has no live listing yet. */}
-          {isEdit && (
-            <div>
-              <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
+          {/* Status + listing date (#257). Status is create-only — an existing offer's lifecycle is
+              driven by its own controls. A live status (Ready / Active) needs the offer to list
+              something; the server rejects it on a set-less offer. Both pre-fill from the last created
+              offer so repeated listings are fast. */}
+          <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+            {!isEdit && (
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="offer-state">Status</LabelWithError>
+                <select
+                  id="offer-state"
+                  name="state"
+                  defaultValue={defaultState}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  {CREATABLE_OFFER_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {OFFER_STATE_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="offer-listing-date">Listing date (optional)</LabelWithError>
               <input
-                id="offer-url"
-                name="url"
-                type="url"
-                placeholder="https://…"
-                defaultValue={offer?.url ?? ""}
+                id="offer-listing-date"
+                name="listingDate"
+                type="date"
+                defaultValue={defaultListingDate}
                 disabled={isPending}
                 style={INPUT_STYLE}
               />
             </div>
-          )}
+          </div>
 
-          {!isEdit &&
-            (sourceNote ? (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                {sourceNote}
-              </p>
-            ) : (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                Add the copies (sets) next, then set the asking price and listing URL once you know
-                them.
-              </p>
-            ))}
+          {/* Listing URL — always available; a fresh offer may not have a live listing yet, so it's
+              optional (#213 keeps it editable later). Never pre-filled from the last offer. */}
+          <div>
+            <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
+            <input
+              id="offer-url"
+              name="url"
+              type="url"
+              placeholder="https://…"
+              defaultValue={offer?.url ?? ""}
+              disabled={isPending}
+              style={INPUT_STYLE}
+            />
+          </div>
+
+          {!isEdit && sourceNote && (
+            <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              {sourceNote}
+            </p>
+          )}
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

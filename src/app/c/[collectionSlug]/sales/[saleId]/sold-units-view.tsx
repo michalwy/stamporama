@@ -8,6 +8,7 @@ import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetailLine } from "@/lib/sales";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
@@ -466,6 +467,8 @@ interface SoldUnitsViewProps {
   issueHeaderById: Record<string, IssueHeader>;
   baseCurrency: string;
   onRemove: (lineId: string, label: string) => void;
+  /** Override a sold unit's line sale price in place (#258) — independent of the offer's price. */
+  onEditPrice: (lineId: string, price: string) => void;
 }
 
 /** The sold-units list for the packing view (ADR-0012, #166): the same rich, sortable copy
@@ -483,6 +486,7 @@ export function SoldUnitsView({
   issueHeaderById,
   baseCurrency,
   onRemove,
+  onEditPrice,
 }: SoldUnitsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
@@ -614,6 +618,7 @@ export function SoldUnitsView({
               ctx={ctx}
               onToggle={() => toggle(line.id)}
               onRemove={() => onRemove(line.id, line.setLabel)}
+              onEditPrice={(price) => onEditPrice(line.id, price)}
             />
           ))}
         </div>
@@ -664,6 +669,106 @@ function ToggleChip({ label, on, onClick }: { label: string; on: boolean; onClic
   );
 }
 
+/** Inline editor for a sold unit's line sale price (#258): the price defaults to the offer's asking
+ * price when the line is added, but the actual sale price can differ (e.g. a buyer discount). Click
+ * the value to edit; commit on blur / Enter, cancel on Escape. Mirrors the header amount rows. The
+ * override is on the sale line only — the offer's own price is untouched. */
+function EditableLinePrice({
+  value,
+  currency,
+  onSave,
+}: {
+  value: string;
+  currency: string;
+  onSave: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [draft, setDraft] = useState("");
+  const cancelRef = useRef(false);
+
+  function open() {
+    setDraft(value);
+    cancelRef.current = false;
+    setEditing(true);
+  }
+  function commit() {
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      setEditing(false);
+      return;
+    }
+    setEditing(false);
+    if (draft.trim() === value) return; // skip a no-op write
+    onSave(draft);
+  }
+
+  if (editing) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+        <NumericInput
+          placeholder="0.00"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              cancelRef.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+          style={{
+            width: "5.5rem",
+            textAlign: "right",
+            padding: "0.125rem 0.375rem",
+            border: "1px solid var(--color-border-strong)",
+            borderRadius: "0.375rem",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-primary)",
+            background: "var(--color-bg-elevated)",
+            boxSizing: "border-box",
+          }}
+        />
+        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{currency}</span>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={open}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="Click to edit the sale price"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.3rem",
+        border: "none",
+        background: hovered ? "var(--color-bg-muted)" : "transparent",
+        cursor: "pointer",
+        padding: "0.05rem 0.3rem",
+        borderRadius: "0.25rem",
+        fontVariantNumeric: "tabular-nums",
+        fontSize: "0.875rem",
+        fontWeight: 600,
+        color: "var(--color-text-primary)",
+      }}
+    >
+      <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+        ✎
+      </span>
+      <span>
+        {value} {currency}
+      </span>
+    </button>
+  );
+}
+
 function SoldUnitCard({
   currency,
   line,
@@ -674,6 +779,7 @@ function SoldUnitCard({
   ctx,
   onToggle,
   onRemove,
+  onEditPrice,
 }: {
   currency: string;
   line: SaleDetailLine;
@@ -684,6 +790,7 @@ function SoldUnitCard({
   ctx: CopyCtx;
   onToggle: () => void;
   onRemove: () => void;
+  onEditPrice: (price: string) => void;
 }) {
   const { sentinelRef, stuck } = useStuck(0);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
@@ -729,9 +836,10 @@ function SoldUnitCard({
             </span>
           </div>
         </div>
-        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+        {/* Click stops the card toggle so editing the price doesn't collapse the card (#258). */}
+        <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <div style={{ fontSize: "0.875rem", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)" }}>
-            {line.price} {currency}
+            <EditableLinePrice value={line.price} currency={currency} onSave={onEditPrice} />
             {line.priceBase && (
               <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                 ≈ {line.priceBase} {ctx.baseCurrency}
