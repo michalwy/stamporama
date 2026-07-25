@@ -265,7 +265,7 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 ### Photo storage used
 
-**Settings → General** shows the **total space used by all photos in the collection** — both copy photos and stamp photos, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
+**Settings → General** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
 
 ## Catalog prices
 

@@ -38,6 +38,7 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
+import { deleteOfferPhotoBytes } from "./offer-photo-generation";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -1680,6 +1681,9 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
       "This offer has sold sets and cannot be deleted. Withdraw it instead."
     );
   }
+  // Generated listing images (#311) hang off the offer. The cascade drops their rows but never the
+  // files, so their bytes go first, while the rows can still be read.
+  await deleteOfferPhotoBytes(offerId);
   await prisma.offer.delete({ where: { id: offerId } });
 }
 

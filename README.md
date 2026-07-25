@@ -38,7 +38,7 @@ Optional auto-update via [Watchtower](https://containrrr.dev/watchtower/):
 docker compose --profile autoupdate up -d
 ```
 
-Uploaded photos are stored in the `stamporama-data` Docker volume (mounted at `/data`) by default. Back it up alongside your database — losing the volume loses the images.
+Uploaded photos — and the listing images generated for offers — are stored in the `stamporama-data` Docker volume (mounted at `/data`) by default. Back it up alongside your database — losing the volume loses the images.
 
 Alternatively, photos can be stored in **Google Cloud Storage** — the installer asks for the bucket and service-account key and sets it up for you (or configure it by hand via the GCS section of `.env.prod.example`). Photos are served via short-lived signed URLs so bytes bypass the app. Switching is safe at any time — existing filesystem photos keep serving from the volume while new photos write to GCS, and the optional `pnpm photos:migrate:gcs` command moves old photos across so the volume can be retired.
 

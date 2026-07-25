@@ -96,3 +96,21 @@ export async function processImage(
 
   return { full, thumb };
 }
+
+/**
+ * Thumbnail an image the app itself produced — a rendered offer collage (#311). Distinct from
+ * `processImage`, which also re-encodes the `full` derivative: a collage's `full` bytes are the
+ * renderer's own output, already sized and encoded to the platform's limits (#310), so re-encoding
+ * them would undo that work. Only the `thumb` is derived here, at the same `THUMB_MAX_EDGE` as
+ * uploads so display code cannot tell the two apart.
+ */
+export async function thumbnailFor(
+  input: Buffer,
+  mime: AcceptedMime
+): Promise<ProcessedVariant> {
+  const { data, info } = await sharp(input, { failOn: "error" })
+    .resize(THUMB_MAX_EDGE, THUMB_MAX_EDGE, { fit: "inside", withoutEnlargement: true })
+    .toFormat(OUTPUT[mime].format)
+    .toBuffer({ resolveWithObject: true });
+  return { buffer: data, width: info.width, height: info.height, mime: OUTPUT[mime].mime };
+}

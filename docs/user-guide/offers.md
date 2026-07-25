@@ -246,6 +246,41 @@ Because these values live on the offer, changing a platform's defaults — or ed
 template — never alters an offer you have already prepared. That matters most for the tile label: a
 buyer referring to a label on an image you have already uploaded keeps getting the same label.
 
+## Generating the photos
+
+Below the sets, the **Photos** card turns the offer's copies into the images you upload to the
+platform. Press **Generate** and the work happens **in the background** — you can leave the screen,
+and the card shows the run's state on its own (*Queued*, *Rendering 2/4*, *Ready*, or *Failed* with
+the reason). Pressing Generate while a run is already going does nothing; it will not render twice.
+
+What gets made follows the offer, not a choice you make here:
+
+- Each **multi-copy set** becomes its own collage. **Single-copy sets** are combined into shared
+  collages, because a collage of one stamp is pointless.
+- A set holding more copies than the collage fits is split across consecutive images, so nothing is
+  dropped silently.
+- With *Front and back*, each group gives two images — but only if **every** copy in it has that
+  scan. One missing back means no back image for that group, rather than one with a hole in it.
+- If the platform caps how many photos a listing takes, whole groups are dropped from the end (a
+  front/back pair always goes together). The card says how many.
+
+Generate is unavailable, with the reason on the card, when the offer has no collage numbers yet, or
+when none of its copies have scans for the chosen sides.
+
+The images are **stored**, not made again on demand: what you download tomorrow is the same file you
+uploaded to the platform today.
+
+### When the offer changes afterwards
+
+Change the composition, reorder sets or copies, replace a scan, edit the photo settings, or change
+the platform's limits, and the card marks the stored images **Out of date**. Nothing happens to them:
+they stay exactly as they are and keep being served, because they may already be live in a listing
+whose buyers are looking at them. It is a reminder, not an action — press **Regenerate** when you are
+ready to re-upload.
+
+Regenerating replaces the whole set of images at once. If a run fails, the previous images are still
+there.
+
 ## One active offer per copy, per platform
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp

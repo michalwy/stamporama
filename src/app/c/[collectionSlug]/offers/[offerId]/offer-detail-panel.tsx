@@ -15,6 +15,7 @@ import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translatio
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
+import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText } from "./offer-listing-text";
@@ -535,6 +536,12 @@ export function OfferDetailPanel({
         baseCurrency={baseCurrency}
         onRemoveSet={setRemoveSet}
       />
+
+      {/* Generated listing images (#311). Below the sets, because what gets rendered *is* the sets:
+          the plan groups their copies, and the card's counts only make sense once you have read them.
+          Photo settings stay in the ⋮ menu — configuration is edited rarely, generation is pressed
+          often. */}
+      <OfferPhotosCard collectionId={collectionId} offerId={offerId} />
 
       {actionError && <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</p>}
 

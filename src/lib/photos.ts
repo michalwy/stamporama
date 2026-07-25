@@ -21,9 +21,15 @@ import {
 // storage interface — this module is the only place that reconciles `Photo`/`PhotoUpload` rows
 // with stored bytes so there are never orphaned files.
 //
-// A `Photo` is **polymorphic**: it hangs off exactly one owner, an `Item` or a `Stamp`. The
-// change-set apply / list / byte-cleanup logic is written once over a `PhotoOwner` and exposed
+// A `Photo` is **polymorphic**: it hangs off exactly one owner, an `Item`, a `Stamp` or an `Offer`.
+// The change-set apply / list / byte-cleanup logic is written once over a `PhotoOwner` and exposed
 // through thin per-owner wrappers so callers stay explicit about what they own.
+//
+// Offer-owned images (#311) deliberately do **not** go through `PhotoOwner`: they are not uploaded
+// and edited through a dialog change-set but *generated* from a plan, so their whole lifecycle
+// (render, replace, staleness, byte cleanup) lives in `offer-photo-generation.ts`. What is shared is
+// everything below that owner seam — serving (`getPhotoForServing`) and the collection's storage
+// total both handle all three owners.
 
 /** The single owner a photo belongs to. Exactly one field is set (DB CHECK enforces XOR). */
 export type PhotoOwner = { itemId: string } | { stampId: string };
@@ -625,14 +631,16 @@ export async function getPhotoForServing(photoId: string): Promise<{
       storageBackend: true,
       storageKey: true,
       mime: true,
-      // Polymorphic owner (#137): exactly one of item/stamp is set — resolve the owning
-      // collection + owner from whichever it is.
+      // Polymorphic owner (#137, #311): exactly one of item/stamp/offer is set — resolve the
+      // owning collection + owner from whichever it is. Generated offer images (#311) are served
+      // through this same route, unchanged.
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      offer: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
     },
   });
   if (!photo) return null;
-  const owner = photo.item ?? photo.stamp;
+  const owner = photo.item ?? photo.stamp ?? photo.offer;
   if (!owner) return null;
   return {
     collectionId: owner.collectionId,
@@ -665,16 +673,18 @@ async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
   );
 }
 
-/** Total bytes of all committed photos in a collection (#144). Photos are polymorphic — each
- * hangs off an `Item` or a `Stamp`, both collection-scoped — so we sum `sizeBytes` across both
- * owners. Staged `PhotoUpload` rows are transient (orphan-GC sweeps them) and excluded. Only the
- * `full` variant size is tracked on the row; thumbnails are not counted. Owner-checked. */
+/** Total bytes of all committed photos in a collection (#144). Photos are polymorphic — each hangs
+ * off an `Item`, a `Stamp` or an `Offer` (#311), all collection-scoped — so we sum `sizeBytes` across
+ * the three owners. Generated offer images count: they occupy the volume like any other file, even
+ * though they could be recreated. Staged `PhotoUpload` rows are transient (orphan-GC sweeps them) and
+ * excluded. Only the `full` variant size is tracked on the row; thumbnails are not counted.
+ * Owner-checked. */
 export async function getCollectionPhotoStorageBytes(
   ownerId: string,
   collectionId: string
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [copyPhotos, stampPhotos] = await Promise.all([
+  const [copyPhotos, stampPhotos, offerPhotos] = await Promise.all([
     prisma.photo.aggregate({
       where: { item: { collectionId } },
       _sum: { sizeBytes: true },
@@ -683,8 +693,16 @@ export async function getCollectionPhotoStorageBytes(
       where: { stamp: { collectionId } },
       _sum: { sizeBytes: true },
     }),
+    prisma.photo.aggregate({
+      where: { offer: { collectionId } },
+      _sum: { sizeBytes: true },
+    }),
   ]);
-  return (copyPhotos._sum.sizeBytes ?? 0) + (stampPhotos._sum.sizeBytes ?? 0);
+  return (
+    (copyPhotos._sum.sizeBytes ?? 0) +
+    (stampPhotos._sum.sizeBytes ?? 0) +
+    (offerPhotos._sum.sizeBytes ?? 0)
+  );
 }
 
 /** Default orphan-GC TTL: staged uploads not attached within this window are swept. A few

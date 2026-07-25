@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { OfferListItem, OfferCollision, OfferDetail, ComposeTargets } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
+import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
 // (offer copies for the rich sets view)
 import type { OfferState } from "@/lib/offer-rules";
@@ -27,6 +28,8 @@ export const offerKeys = {
     ["offers", collectionId, "list", filters] as const,
   detail: (collectionId: string, offerId: string) =>
     ["offers", collectionId, "detail", offerId] as const,
+  photoPlan: (collectionId: string, offerId: string) =>
+    ["offers", collectionId, "photo-plan", offerId] as const,
 };
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
@@ -57,6 +60,25 @@ export function useOfferDetail(collectionId: string, offerId: string) {
       if (!res.ok) throw new Error("Failed to fetch offer");
       return res.json();
     },
+  });
+}
+
+/** The offer's photo plan (#311) as the Photos card reads it. Timestamps arrive as JSON strings; the
+ * card shows state and counts, so they are typed away rather than revived. */
+export type OfferPhotoPlanView = Omit<OfferPhotoPlanState, "startedAt" | "finishedAt">;
+
+/** Generation state + stored images for an offer's photos (#311). Polls while a run is queued or in
+ * flight — rendering happens in a background worker, so the card has no completion event to await. */
+export function useOfferPhotoPlan(collectionId: string, offerId: string) {
+  return useQuery<OfferPhotoPlanView>({
+    queryKey: offerKeys.photoPlan(collectionId, offerId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/offers/${offerId}/photos`);
+      if (!res.ok) throw new Error("Failed to load the photo plan");
+      return res.json();
+    },
+    refetchInterval: (query) =>
+      query.state.data?.status === "queued" || query.state.data?.status === "running" ? 2000 : false,
   });
 }
 

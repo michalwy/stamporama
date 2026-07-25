@@ -30,6 +30,8 @@ import {
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
+import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
+import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
   isOfferState,
@@ -347,6 +349,24 @@ export async function updateOfferPhotoConfigAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the photo settings.");
+  }
+}
+
+/**
+ * Queue this offer's photo generation (#311). Generation is explicit and never implicit, and it does
+ * **not** happen in this request: the action validates and enqueues, an in-process worker renders, and
+ * the panel polls the resulting state. Pressing it again while a run is queued or in flight is a no-op,
+ * so a double click renders once.
+ */
+export async function generateOfferPhotosAction(offerId: string): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await enqueueOfferPhotoGeneration(session.user.id, offerId);
+    // Best-effort nudge so rendering starts now rather than on the worker's next poll.
+    kickOfferPhotoWorker();
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to start photo generation.");
   }
 }
 

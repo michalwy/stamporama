@@ -5,11 +5,16 @@
 // never pulled into the Edge bundle. A `!== "nodejs"` early-return inside the entry did NOT
 // achieve that elimination, which is why webpack failed to resolve `stream` for the Edge target.
 //
-// Starts the in-process orphan-GC sweep for abandoned photo staging uploads (#112) — an hourly,
-// idempotent `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion. Reuses the
-// app's existing DB + storage clients, so there is no separate compose service.
+// Starts the in-process background work, both reusing the app's existing DB + storage clients so
+// there is no separate compose service:
+//
+//   - the orphan-GC sweep for abandoned photo staging uploads (#112) — an hourly, idempotent
+//     `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion;
+//   - the offer photo generation worker (#311) — drains the render queue one job at a time and
+//     requeues anything a previous process left mid-render.
 
 import { gcStaleUploads } from "@/lib/photos";
+import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
@@ -41,4 +46,10 @@ export async function start(): Promise<void> {
   const interval = setInterval(sweep, SWEEP_INTERVAL_MS);
   initial.unref?.();
   interval.unref?.();
+
+  // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
+  // action only enqueues, and this worker renders. Never lets a startup failure abort boot.
+  await startOfferPhotoWorker().catch((err) => {
+    console.error("[offer-photos] worker failed to start", err);
+  });
 }
