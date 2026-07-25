@@ -10,8 +10,10 @@ import {
   reorderCertificateStatuses,
   getCertificateStatuses,
   CertificateStatusInUseError,
+  CERTIFICATE_STATUS_TRANSLATION_FIELDS,
   type CertificateStatusData,
 } from "@/lib/certificate-statuses";
+import { parseTranslationValues } from "@/lib/translations";
 
 export type CertificateStatusActionState =
   | { status: "idle" }
@@ -47,7 +49,11 @@ export async function createCertificateStatusAction(
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await createCertificateStatus(session.user.id, collectionId, { name, abbreviation });
+    await createCertificateStatus(session.user.id, collectionId, {
+      name,
+      abbreviation,
+      translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create certificate status. Please try again." };
@@ -63,7 +69,11 @@ export async function updateCertificateStatusAction(
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await updateCertificateStatus(session.user.id, statusId, { name, abbreviation });
+    await updateCertificateStatus(session.user.id, statusId, {
+      name,
+      abbreviation,
+      translations: parseTranslationValues(formData, CERTIFICATE_STATUS_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update certificate status. Please try again." };

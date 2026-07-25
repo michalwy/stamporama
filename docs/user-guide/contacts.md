@@ -37,8 +37,10 @@ written in. Pick the one it uses; platforms that write in your collection's
 on **— default language —**. The language does two things: generated titles for this platform use the
 text you entered for that language, and the languages that *differ* from your default are the ones the
 entity forms offer translation fields for. Nothing is translated automatically — where you have not
-entered text for a language, the default text is used, so a title is never left with a gap. Today only
-the area **title name** is translatable; conditions, issues and stamp names follow later.
+entered text for a language, the default text is used, so a title is never left with a gap. Every
+token that renders text you typed is translatable: the area
+[title name](#title-names-per-language), [condition and certificate status](collections.md#conditions-in-other-languages)
+names and abbreviations, and [issue and stamp names](collections.md#issue-and-stamp-names-in-other-languages).
 
 Ticking **Platform** also reveals a **Listing title template** — a free-text template that decides how
 [offer](offers.md) and set titles are pre-filled for this platform. Click **Edit template…** to open
@@ -125,8 +127,10 @@ languages you add. A small number on the button counts the languages still **mis
 
 **Done** closes the translations dialog and carries your entries back to the area — they are written
 only when you save the **area** itself, so cancelling the area dialog discards the translations along
-with everything else you changed there. The same dialog will handle conditions, issues and stamp names
-as those become translatable.
+with everything else you changed there. The same dialog handles conditions, certificate statuses,
+issue names and stamp names, always beside the field it translates: where an entity has **two**
+translatable fields (a condition's name and its abbreviation), each gets its own 🌐 and its own
+dialog, so a badge always tells you about exactly one field.
 
 The roll-up and the language are independent: the roll-up decides **which area** names the title, and
 the language only decides **how that area is written**. So with `Poland` set to `Poland` plus a Polish

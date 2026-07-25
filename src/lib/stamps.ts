@@ -24,6 +24,16 @@ import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classifica
 import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
+import type { Prisma } from "@/generated/prisma/client";
+
+/** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
+ * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
+export const STAMP_TRANSLATION_FIELDS = ["name"] as const;
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -45,6 +55,46 @@ async function resolveStampCollection(stampId: string): Promise<string> {
   });
   if (!stamp) throw new Error("Stamp not found.");
   return stamp.collectionId;
+}
+
+/**
+ * Per-language `name` rows for a stamp (#296). Runs on the caller's transaction client — both the
+ * edit path here and `addStampToIssue` already wrap their writes in one. Shared blank / delete /
+ * untouched rules live in {@link syncEntityTranslations}.
+ */
+export async function syncStampTranslations(
+  tx: Prisma.TransactionClient,
+  stampId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const name = fields.name ?? null;
+      await tx.stampTranslation.upsert({
+        where: { stampId_language: { stampId, language } },
+        create: { stampId, language, name },
+        update: { name },
+      });
+    },
+    remove: async (language) => {
+      await tx.stampTranslation.deleteMany({ where: { stampId, language } });
+    },
+  });
+}
+
+/** A stamp's stored per-language names (#296), for seeding the edit dialog's translation fields.
+ * Owner-scoped through {@link resolveStampCollection} + {@link assertCollectionOwner}. */
+export async function getStampTranslations(
+  ownerId: string,
+  stampId: string
+): Promise<Record<string, string>> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.stampTranslation.findMany({
+    where: { stampId },
+    select: { language: true, name: true },
+  });
+  return translationsByLanguage(rows, (t) => t.name);
 }
 
 export interface StampCatalogNumberData {
@@ -803,6 +853,9 @@ export async function updateStampWithCatalog(
     // Colnect item-ID (#247). `undefined` leaves the stored value untouched (callers whose
     // form doesn't render the field); a string sets it; `null`/"" clears it.
     colnectId?: string | null;
+    /** Per-language `name` overrides (#296), keyed by ISO 639-1 code then field key. Omitted
+     * (undefined) by callers whose form doesn't render them, leaving every row untouched. */
+    translations?: TranslationValueMap;
     requiredForCompleteness?: boolean;
     // Child-only subtype classification (ADR-0010). `undefined` leaves the current
     // value untouched; for a child, `subtypeId: null` falls back to the collection
@@ -862,6 +915,7 @@ export async function updateStampWithCatalog(
         ...subtypeData,
       },
     });
+    await syncStampTranslations(tx, stampId, data.translations);
     if (data.requiredForCompleteness !== undefined) {
       await tx.issueMember.updateMany({
         where: { stampId },

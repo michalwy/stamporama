@@ -10,8 +10,10 @@ import {
   reorderStampConditions,
   getStampConditions,
   ConditionInUseError,
+  CONDITION_TRANSLATION_FIELDS,
   type StampConditionData,
 } from "@/lib/conditions";
+import { parseTranslationValues } from "@/lib/translations";
 
 export type ConditionActionState =
   | { status: "idle" }
@@ -47,7 +49,11 @@ export async function createStampConditionAction(
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await createStampCondition(session.user.id, collectionId, { name, abbreviation });
+    await createStampCondition(session.user.id, collectionId, {
+      name,
+      abbreviation,
+      translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create condition. Please try again." };
@@ -63,7 +69,11 @@ export async function updateStampConditionAction(
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await updateStampCondition(session.user.id, conditionId, { name, abbreviation });
+    await updateStampCondition(session.user.id, conditionId, {
+      name,
+      abbreviation,
+      translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update condition. Please try again." };

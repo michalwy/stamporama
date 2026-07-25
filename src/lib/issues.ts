@@ -14,6 +14,16 @@ import {
   recomputeIssueSortKeys,
   recomputeStampSortKeys,
 } from "./catalog-sort-key-recompute";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
+import { syncStampTranslations } from "./stamps";
+
+/** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
+ * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
+export const ISSUE_TRANSLATION_FIELDS = ["name"] as const;
 
 export type { IssueRangeSuggestion } from "./catalog-number";
 
@@ -122,7 +132,10 @@ export interface IssueData {
   id: string;
   collectionId: string;
   collectionAreaId: string;
+  /** Default-language name (#295); {@link nameByLanguage} overrides it per language. */
   name: string | null;
+  /** Per-language overrides of {@link name} (#295), keyed by ISO 639-1 code. */
+  nameByLanguage: Record<string, string>;
   year: number | null;
   isAutoCreated: boolean;
   createdAt: Date;
@@ -292,6 +305,9 @@ const ISSUE_SELECT = {
   year: true,
   isAutoCreated: true,
   createdAt: true,
+  // Per-language names (#295), so an issue edited from the inventory stamp picker seeds its
+  // translation fields the same way the issues list does.
+  translations: { select: { language: true, name: true } },
   members: { select: MEMBER_SELECT },
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
 } as const;
@@ -304,6 +320,7 @@ function toIssueData(issue: {
   year: number | null;
   isAutoCreated: boolean;
   createdAt: Date;
+  translations: { language: string; name: string | null }[];
   members: {
     stampId: string;
     requiredForCompleteness: boolean;
@@ -333,6 +350,7 @@ function toIssueData(issue: {
     collectionId: issue.collectionId,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
+    nameByLanguage: translationsByLanguage(issue.translations, (t) => t.name),
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
@@ -458,7 +476,11 @@ export interface IssueListItem {
   id: string;
   collectionId: string;
   collectionAreaId: string;
+  /** Default-language name (#295); {@link nameByLanguage} overrides it per language. */
   name: string | null;
+  /** Per-language overrides of {@link name} (#295), keyed by ISO 639-1 code. Only languages with a
+   * stored, non-blank value appear — the edit dialog seeds its translation fields from this. */
+  nameByLanguage: Record<string, string>;
   year: number | null;
   isAutoCreated: boolean;
   createdAt: string;
@@ -490,6 +512,9 @@ const ISSUE_LIST_SELECT = {
   isAutoCreated: true,
   createdAt: true,
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+  // Per-language names (#295), so the edit dialog can seed its translation fields from the row it
+  // already has. At most one row per translation language — a handful, not a payload concern.
+  translations: { select: { language: true, name: true } },
   members: {
     select: {
       stampId: true,
@@ -595,6 +620,29 @@ function computeRequiredPriceTotal(
   return null;
 }
 
+/** Per-language `name` rows for an issue (#295). Runs on the caller's transaction client, since
+ * both create and update already wrap their writes in one. Shared blank / delete / untouched rules
+ * live in {@link syncEntityTranslations}. */
+async function syncIssueTranslations(
+  tx: Prisma.TransactionClient,
+  issueId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const name = fields.name ?? null;
+      await tx.issueTranslation.upsert({
+        where: { issueId_language: { issueId, language } },
+        create: { issueId, language, name },
+        update: { name },
+      });
+    },
+    remove: async (language) => {
+      await tx.issueTranslation.deleteMany({ where: { issueId, language } });
+    },
+  });
+}
+
 function toIssueListItem(
   issue: {
     id: string;
@@ -604,6 +652,7 @@ function toIssueListItem(
     year: number | null;
     isAutoCreated: boolean;
     createdAt: Date;
+    translations: { language: string; name: string | null }[];
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
     members: {
       stampId: string;
@@ -655,6 +704,7 @@ function toIssueListItem(
     collectionId: issue.collectionId,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
+    nameByLanguage: translationsByLanguage(issue.translations, (t) => t.name),
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt.toISOString(),
@@ -1361,6 +1411,9 @@ export async function createIssue(
     name?: string | null;
     year?: number | null;
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+    /** Per-language `name` overrides (#295), keyed by ISO 639-1 code then field key. A blank / null
+     * value removes that language's row; languages absent from the record are left untouched. */
+    translations?: TranslationValueMap;
     autoCreateStamps?: AutoCreateStampsInput;
   }
 ): Promise<{ id: string }> {
@@ -1390,6 +1443,7 @@ export async function createIssue(
       },
       select: { id: true },
     });
+    await syncIssueTranslations(tx, issue.id, data.translations);
     if (data.catalogNumbers && data.catalogNumbers.length > 0) {
       await tx.issueCatalogNumber.createMany({
         data: data.catalogNumbers.map((cn) => ({
@@ -1464,6 +1518,8 @@ export async function updateIssue(
     name?: string | null;
     year?: number | null;
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+    /** Per-language `name` overrides (#295); see {@link createIssue}. */
+    translations?: TranslationValueMap;
   }
 ): Promise<void> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
@@ -1474,6 +1530,7 @@ export async function updateIssue(
       where: { id: issueId },
       data: { name: data.name ?? null, year: data.year ?? null },
     });
+    await syncIssueTranslations(tx, issueId, data.translations);
     if (data.catalogNumbers !== undefined) {
       await tx.issueCatalogNumber.deleteMany({ where: { issueId } });
       if (data.catalogNumbers.length > 0) {
@@ -1684,6 +1741,9 @@ export interface AddStampData {
   requiredForCompleteness: boolean;
   /** Colnect item-ID (#247), or null/omitted when unset. */
   colnectId?: string | null;
+  /** Per-language `name` overrides (#296), keyed by ISO 639-1 code then field key. See
+   * {@link syncStampTranslations}. */
+  translations?: TranslationValueMap;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   catalogPrices?: {
     catalogEditionId: string;
@@ -1750,6 +1810,8 @@ export async function addStampToIssue(
       },
       select: { id: true },
     });
+
+    await syncStampTranslations(tx, stamp.id, data.translations);
 
     await tx.stampCollectionArea.create({
       data: { stampId: stamp.id, collectionAreaId, isPrimary: true },

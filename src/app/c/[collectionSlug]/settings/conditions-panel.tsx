@@ -18,6 +18,13 @@ import {
 } from "@/app/actions/conditions";
 import type { StampConditionData } from "@/lib/conditions";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -42,6 +49,11 @@ const FORM_STYLE: React.CSSProperties = {
 interface ConditionsPanelProps {
   collectionId: string;
   initialConditions: StampConditionData[];
+  /** Languages needing a translation (#294): the platforms' listing languages minus the
+   * collection's default language. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain Name / Abbreviation fields are written in (#294). */
+  defaultLanguage: string;
 }
 
 type DialogState =
@@ -50,42 +62,123 @@ type DialogState =
   | { kind: "edit"; condition: StampConditionData }
   | { kind: "delete"; condition: StampConditionData };
 
-function ConditionForm({ defaultName, defaultAbbreviation, isPending }: {
+// A condition has two translatable fields (#294) and each gets its **own** 🌐 button opening a
+// single-field dialog, rather than one button covering both: the badge then counts what is missing
+// for that field alone, and translating a name never means scrolling past abbreviations you left
+// deliberately untranslated. Together they mirror `CONDITION_TRANSLATION_FIELDS`, which the action
+// parses the submitted `<field>:<lang>` inputs with.
+const NAME_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+const ABBREVIATION_FIELDS: TranslationField[] = [{ key: "abbreviation", label: "Abbreviation" }];
+
+function ConditionForm({
+  defaultName,
+  defaultAbbreviation,
+  defaultTranslations,
+  titleLanguages,
+  defaultLanguage,
+  isPending,
+}: {
   defaultName?: string;
   defaultAbbreviation?: string;
+  /** Stored per-language values, field-major (#294); absent when adding. */
+  defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
+  titleLanguages: string[];
+  defaultLanguage: string;
   isPending: boolean;
 }) {
+  const translatable = titleLanguages.length > 0;
+  // Controlled so the translations dialog's placeholders show the *live* default-language text a
+  // blank entry falls back to, rather than whatever the field held when the dialog opened.
+  const [name, setName] = useState(defaultName ?? "");
+  const [abbreviation, setAbbreviation] = useState(defaultAbbreviation ?? "");
+  // Staged per-language values (#294), one record per field: edited in the shared dialog, submitted
+  // as hidden `name:<lang>` / `abbreviation:<lang>` inputs, written only when the condition itself
+  // is saved. The two are independent — a language may translate the name and keep the
+  // abbreviation, and the row is dropped only once both are blank.
+  const [nameTranslations, setNameTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, NAME_FIELDS, defaultTranslations)
+  );
+  const [abbrTranslations, setAbbrTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, ABBREVIATION_FIELDS, defaultTranslations)
+  );
+
   return (
     <>
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-cond-abbr">Abbreviation</LabelWithError>
-        <input
-          id="f-cond-abbr"
-          name="abbreviation"
-          type="text"
-          defaultValue={defaultAbbreviation}
-          disabled={isPending}
-          placeholder="e.g. MNH"
-          style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
-        />
+        <LabelWithError htmlFor="f-cond-abbr">
+          {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-cond-abbr"
+            name="abbreviation"
+            type="text"
+            value={abbreviation}
+            onChange={(e) => setAbbreviation(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. MNH"
+            style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Condition abbreviation translations"
+              description={`How this condition is abbreviated on each language's platforms. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} abbreviation above — abbreviations are often left untranslated. Saved together with the condition.`}
+              languages={titleLanguages}
+              fields={[{ ...ABBREVIATION_FIELDS[0], defaultValue: abbreviation }]}
+              values={abbrTranslations}
+              onChange={setAbbrTranslations}
+              ariaLabel="Edit condition abbreviation translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
       </div>
       <div>
-        <LabelWithError htmlFor="f-cond-name">Name</LabelWithError>
-        <input
-          id="f-cond-name"
-          name="name"
-          type="text"
-          defaultValue={defaultName}
-          disabled={isPending}
-          placeholder="e.g. Mint Never Hinged"
-          style={INPUT_STYLE}
-        />
+        <LabelWithError htmlFor="f-cond-name">
+          {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
+        </LabelWithError>
+        {/* Each field carries its own 🌐 (#294), so a badge always refers to exactly one field. */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-cond-name"
+            name="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Mint Never Hinged"
+            style={INPUT_STYLE}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Condition name translations"
+              description={`The name each language's platforms use for this condition. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the condition.`}
+              languages={titleLanguages}
+              fields={[{ ...NAME_FIELDS[0], defaultValue: name }]}
+              values={nameTranslations}
+              onChange={setNameTranslations}
+              ariaLabel="Edit condition name translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
+        {translatable && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+            Used for the <code>{"{condition}"}</code> and <code>{"{conditionAbbr}"}</code> tokens in
+            listing titles. Translations (🌐) are saved together with the condition.
+          </p>
+        )}
       </div>
     </>
   );
 }
 
-export function ConditionsPanel({ collectionId, initialConditions }: ConditionsPanelProps) {
+export function ConditionsPanel({
+  collectionId,
+  initialConditions,
+  titleLanguages,
+  defaultLanguage,
+}: ConditionsPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<ConditionActionState>({ status: "idle" });
@@ -268,7 +361,11 @@ export function ConditionsPanel({ collectionId, initialConditions }: ConditionsP
         <DialogShell title="Add condition" onClose={closeDialog}>
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => createStampConditionAction(collectionId, fd), e)}>
             <DialogBody>
-              <ConditionForm isPending={isPending} />
+              <ConditionForm
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                isPending={isPending}
+              />
             </DialogBody>
             <DialogActions actionLabel={isPending ? "Saving…" : "Save"} onCancel={closeDialog} disabled={isPending} error={error} />
           </form>
@@ -282,6 +379,12 @@ export function ConditionsPanel({ collectionId, initialConditions }: ConditionsP
               <ConditionForm
                 defaultName={dialog.condition.name}
                 defaultAbbreviation={dialog.condition.abbreviation}
+                defaultTranslations={{
+                  name: dialog.condition.nameByLanguage,
+                  abbreviation: dialog.condition.abbreviationByLanguage,
+                }}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
                 isPending={isPending}
               />
             </DialogBody>

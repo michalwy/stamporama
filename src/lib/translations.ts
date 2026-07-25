@@ -1,0 +1,133 @@
+import { normalizeLanguage } from "./languages";
+
+// Shared rules for per-language entity text (#265, #293–#296). Five entities now carry translation
+// child tables — area title name, condition and certificate status (name + abbreviation), issue name
+// and stamp name — and every one of them parses the same form fields, writes rows the same way, and
+// resolves the same fallback. That logic lives here once.
+//
+// Pure — no Prisma, no React, no `server-only`. Persistence is supplied by the caller as two
+// callbacks in {@link syncEntityTranslations}, so this module stays unit-testable and the per-entity
+// domain modules keep their own typed Prisma delegates.
+
+/**
+ * Per-language values for one entity: language code → field key → text. `null` and blank both mean
+ * "no translation — fall back to the entity's default-language column", so a cleared input and a
+ * never-filled one are one state.
+ */
+export type TranslationValueMap = Record<string, Record<string, string | null>>;
+
+/** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */
+export function translationFieldName(fieldKey: string, language: string): string {
+  return `${fieldKey}:${language}`;
+}
+
+/**
+ * Read `<field>:<lang>` inputs out of a submitted form into a {@link TranslationValueMap}. The entity
+ * forms render one hidden input per (field, language) — including blank ones — so a language present
+ * in the form but blank in every field is reported with null values and its row is **deleted** rather
+ * than left stale. Languages absent from the form are absent from the result and left untouched.
+ *
+ * `fieldKeys` are the entity's translatable columns; anything else in the form is ignored, which
+ * matters because these forms also carry the plain default-language `name` / `titleName` inputs.
+ */
+export function parseTranslationValues(
+  formData: FormData,
+  fieldKeys: readonly string[]
+): TranslationValueMap {
+  const out: TranslationValueMap = {};
+  for (const fieldKey of fieldKeys) {
+    const prefix = `${fieldKey}:`;
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith(prefix) || typeof value !== "string") continue;
+      const language = normalizeLanguage(key.slice(prefix.length));
+      if (!language) continue;
+      out[language] ??= {};
+      out[language][fieldKey] = value.trim() || null;
+    }
+  }
+  return out;
+}
+
+/**
+ * Write an entity's translation rows through caller-supplied persistence.
+ *
+ * A language whose fields are **all** blank has its row removed — that is what "fall back to the
+ * default" is stored as. Any non-blank field upserts the row, with the blank siblings written as
+ * null so each field falls back on its own (a Polish condition may translate `Mint Never Hinged`
+ * while leaving `MNH` alone). Languages missing from `values` are never touched, so a form that only
+ * renders the languages currently in use cannot drop translations for a language that was
+ * temporarily removed from the platform list.
+ *
+ * Sequential rather than concurrent: these are a handful of rows per save, and callers pass a
+ * transaction client that must not be used from parallel promises.
+ */
+export async function syncEntityTranslations(
+  values: TranslationValueMap | undefined,
+  handlers: {
+    upsert: (language: string, fields: Record<string, string | null>) => Promise<void>;
+    remove: (language: string) => Promise<void>;
+  }
+): Promise<void> {
+  if (!values) return;
+  for (const [rawLanguage, rawFields] of Object.entries(values)) {
+    const language = normalizeLanguage(rawLanguage);
+    if (!language) continue;
+    const fields: Record<string, string | null> = {};
+    let hasValue = false;
+    for (const [key, value] of Object.entries(rawFields)) {
+      const trimmed = (value ?? "").trim();
+      fields[key] = trimmed || null;
+      if (trimmed) hasValue = true;
+    }
+    if (hasValue) await handlers.upsert(language, fields);
+    else await handlers.remove(language);
+  }
+}
+
+/**
+ * Collapse fetched translation rows into the `Record<language, value>` shape the entity's read model
+ * and its form expose. Only languages with a non-blank value appear, so "row exists but this field is
+ * null" is indistinguishable from "no row" — which is exactly the fallback semantics.
+ */
+export function translationsByLanguage<T extends { language: string }>(
+  rows: readonly T[],
+  pick: (row: T) => string | null | undefined
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const value = pick(row)?.trim();
+    if (value) out[row.language] = value;
+  }
+  return out;
+}
+
+/**
+ * Resolve one translatable field for `language`, falling back to the entity's default-language
+ * value. Falls back on a null language, a missing row, and a blank value alike — the token always
+ * renders something rather than leaving a gap in a generated title. Surfacing that a fallback
+ * happened is #298.
+ */
+export function resolveTranslation<T extends { language: string }>(
+  rows: readonly T[] | undefined,
+  language: string | null,
+  pick: (row: T) => string | null | undefined,
+  fallback: string
+): string;
+/** A nullable fallback (an optional relation, e.g. an item with no certificate status) stays null —
+ * there is nothing to translate. */
+export function resolveTranslation<T extends { language: string }>(
+  rows: readonly T[] | undefined,
+  language: string | null,
+  pick: (row: T) => string | null | undefined,
+  fallback: string | null
+): string | null;
+export function resolveTranslation<T extends { language: string }>(
+  rows: readonly T[] | undefined,
+  language: string | null,
+  pick: (row: T) => string | null | undefined,
+  fallback: string | null
+): string | null {
+  if (!language || !rows) return fallback;
+  const value = rows.find((r) => r.language === language);
+  return (value && pick(value)?.trim()) || fallback;
+}

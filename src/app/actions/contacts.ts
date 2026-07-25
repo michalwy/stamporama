@@ -9,8 +9,10 @@ import {
   deleteContact,
   ContactNameTakenError,
   ContactInUseError,
+  getCollectionTranslationContext,
   type ContactCreateInput,
   type ContactData,
+  type CollectionTranslationContext,
 } from "@/lib/contacts";
 
 export type ContactActionState =
@@ -27,6 +29,15 @@ async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   return session;
+}
+
+/** The collection's translation languages + default language, for client dialogs that render
+ * per-language entity inputs (#295, #296). Cheap and rarely changing, so callers cache it. */
+export async function getCollectionTranslationContextAction(
+  collectionId: string
+): Promise<CollectionTranslationContext> {
+  const session = await getSession();
+  return getCollectionTranslationContext(session.user.id, collectionId);
 }
 
 function str(formData: FormData, key: string): string {

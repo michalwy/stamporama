@@ -17,6 +17,8 @@ import {
   getStampPriceDetails,
   getQuickCatalogPriceContext,
   quickSetCatalogPrices,
+  getStampTranslations,
+  STAMP_TRANSLATION_FIELDS,
 } from "@/lib/stamps";
 import type { StampSubtypeAssignment, QuickCatalogPriceContext } from "@/lib/stamps";
 import {
@@ -34,6 +36,7 @@ import type {
 } from "@/lib/stamps";
 import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { parseTranslationValues } from "@/lib/translations";
 
 export type StampActionState =
   | { status: "idle" }
@@ -298,6 +301,7 @@ export async function updateStampWithCatalogAction(
       requiredForCompleteness,
       subtypeId,
       actsAsVariantOverride,
+      translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
     });
     if (photoChangeSet) {
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
@@ -306,6 +310,16 @@ export async function updateStampWithCatalogAction(
   } catch {
     return { status: "error", message: "Failed to update stamp. Please try again." };
   }
+}
+
+/** A stamp's stored per-language names (#296), for seeding the edit dialog's translation fields.
+ * Fetched by id like the subtype assignment and the photos, so no caller's row shape has to carry
+ * them. */
+export async function getStampTranslationsAction(
+  stampId: string
+): Promise<Record<string, string>> {
+  const session = await getSession();
+  return getStampTranslations(session.user.id, stampId);
 }
 
 /** Load a stamp's committed photos for the edit dialog's photo tab (#137). Metadata only — the

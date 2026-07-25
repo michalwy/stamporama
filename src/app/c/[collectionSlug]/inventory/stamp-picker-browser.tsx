@@ -50,6 +50,7 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     collectionId: issue.collectionId,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
+    nameByLanguage: issue.nameByLanguage,
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: String(issue.createdAt),

@@ -24,6 +24,19 @@ import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalo
 import { Segmented } from "./segmented";
 import { CatalogDuplicateWarningIcon } from "./catalog-duplicate-warning";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "./translations-dialog";
+import { TranslationsField } from "./translations-field";
+import { useTitleLanguages } from "./use-title-languages";
+
+/** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
+ * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
+ * `STAMP_TRANSLATION_FIELDS`, which the action parses the submitted values with. */
+const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -124,6 +137,22 @@ export function StampFormDialog(props: StampFormDialogProps) {
   // Existing stamp photos (edit only); add mode starts empty.
   const [initialPhotos, setInitialPhotos] = useState<PhotoSummary[]>([]);
   const [photosLoaded, setPhotosLoaded] = useState(props.mode === "add");
+
+  // ── Per-language names (#296) ──
+  // Fetched rather than drilled: this dialog opens from five call sites (issues, stamps, inventory,
+  // stamp picker, purchase detail), and the answer is cached per collection.
+  const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
+  const translatable = titleLanguages.length > 0;
+  // The Name input stays uncontrolled (it is read off the form on submit like the rest); its text
+  // is mirrored here so the translations dialog shows the live default-language name as the
+  // placeholder each blank entry falls back to.
+  const [nameText, setNameText] = useState(props.mode === "edit" ? (props.stamp.name ?? "") : "");
+  // Staged values, submitted as hidden `name:<lang>` inputs and written only when the stamp itself
+  // is saved. `null` until the user edits them or (in edit mode) the stored rows arrive; the render
+  // falls back to blanks meanwhile, which is also add mode's permanent state.
+  const [translations, setTranslations] = useState<TranslationValues | null>(null);
+  // While the translations dialog is up, this dialog must not close on Esc / backdrop click.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
   const vendors = Array.from(
     new Map(areaVendors.map((v) => [v.catalogVendorId, v])).values()
@@ -275,6 +304,25 @@ export function StampFormDialog(props: StampFormDialogProps) {
     });
     return () => { cancelled = true; };
   }, [collectionId, editStampId]);
+
+  // Load the stamp's stored per-language names (#296), by id — the same way the subtype assignment
+  // and the photos are, so no caller's row shape has to carry them. Add mode has nothing to load.
+  useEffect(() => {
+    if (!editStampId || titleLanguages.length === 0) return;
+    let cancelled = false;
+    import("@/app/actions/stamps")
+      .then((m) => m.getStampTranslationsAction(editStampId))
+      .then((nameByLanguage) => {
+        if (cancelled) return;
+        setTranslations(
+          fillTranslationValues(titleLanguages, NAME_TRANSLATION_FIELDS, { name: nameByLanguage })
+        );
+      });
+    return () => { cancelled = true; };
+  }, [editStampId, titleLanguages]);
+
+  const translationValues =
+    translations ?? fillTranslationValues(titleLanguages, NAME_TRANSLATION_FIELDS, undefined);
 
   // Load the stamp's committed photos for the edit dialog's Photos tab.
   useEffect(() => {
@@ -458,7 +506,13 @@ export function StampFormDialog(props: StampFormDialogProps) {
     (hasRangeExtension && rangeChoice === null);
 
   return (
-    <DialogShell title={title} onClose={onClose} minHeight="22rem" maxWidth="52rem">
+    <DialogShell
+      title={title}
+      onClose={onClose}
+      dismissable={!nestedDialogOpen}
+      minHeight="22rem"
+      maxWidth="52rem"
+    >
       {/* Tab bar only when the area has catalogs to price. Photos are inline on the Details
           tab (like the copy dialog), not a separate tab. */}
       {hasPricesTab && (
@@ -771,21 +825,45 @@ export function StampFormDialog(props: StampFormDialogProps) {
             <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
               {/* Name */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <LabelWithError htmlFor="f-stamp-name">Name (optional)</LabelWithError>
-                <input
-                  id="f-stamp-name"
-                  name="name"
-                  type="text"
-                  disabled={isPending}
-                  defaultValue={editProps?.stamp.name ?? ""}
-                  placeholder="e.g. 5 kr blue"
-                  data-autofocus={
-                    props.mode === "edit"
-                      ? true
-                      : (skipToFields && vendors.length === 0) || undefined
-                  }
-                  style={INPUT_STYLE}
-                />
+                <LabelWithError htmlFor="f-stamp-name">
+                  {translatable
+                    ? `Name — ${languageLabel(defaultLanguage)} (optional)`
+                    : "Name (optional)"}
+                </LabelWithError>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <input
+                    id="f-stamp-name"
+                    name="name"
+                    type="text"
+                    disabled={isPending}
+                    defaultValue={editProps?.stamp.name ?? ""}
+                    placeholder="e.g. 5 kr blue"
+                    data-autofocus={
+                      props.mode === "edit"
+                        ? true
+                        : (skipToFields && vendors.length === 0) || undefined
+                    }
+                    onChange={(e) => setNameText(e.target.value)}
+                    style={INPUT_STYLE}
+                  />
+                  {/* Per-language names (#296) live behind the shared translations dialog, so the
+                      form keeps one Name field however many languages are in use. In edit mode the
+                      stored values are fetched by stampId (like the subtype and the photos), so no
+                      caller's row shape has to carry them. */}
+                  {translatable && (
+                    <TranslationsField
+                      dialogTitle="Stamp name translations"
+                      description={`The name each language's platforms use for this stamp. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the stamp.`}
+                      languages={titleLanguages}
+                      fields={[{ ...NAME_TRANSLATION_FIELDS[0], defaultValue: nameText }]}
+                      values={translationValues}
+                      onChange={setTranslations}
+                      onOpenChange={setNestedDialogOpen}
+                      ariaLabel="Edit stamp name translations"
+                      disabled={isPending}
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Issued date */}

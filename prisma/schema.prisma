@@ -72,9 +72,27 @@ model StampCondition {
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
   items         Item[]
+  translations  StampConditionTranslation[]
 
   @@index([collectionId])
   @@map("stamp_condition")
+}
+
+// Per-language `name` / `abbreviation` for a condition (#294), behind the `{condition}` and
+// `{conditionAbbr}` title tokens. Same shape as `CollectionAreaTranslation` (#293): the parent's
+// own columns stay the default-language values, a row here overrides them for one language, and
+// each field falls back **independently** — a language may translate the name but keep the
+// abbreviation (`MNH` is often left as-is).
+model StampConditionTranslation {
+  stampConditionId String
+  language         String
+  name             String?
+  abbreviation     String?
+
+  stampCondition StampCondition @relation(fields: [stampConditionId], references: [id], onDelete: Cascade)
+
+  @@id([stampConditionId, language])
+  @@map("stamp_condition_translation")
 }
 
 model CertificateStatus {
@@ -87,9 +105,24 @@ model CertificateStatus {
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
   items         Item[]
+  translations  CertificateStatusTranslation[]
 
   @@index([collectionId])
   @@map("certificate_status")
+}
+
+// Per-language `name` / `abbreviation` for a certificate status (#294), behind `{certificate}` and
+// `{certificateAbbr}`. See {@link StampConditionTranslation} — identical shape and fallback rules.
+model CertificateStatusTranslation {
+  certificateStatusId String
+  language            String
+  name                String?
+  abbreviation        String?
+
+  certificateStatus CertificateStatus @relation(fields: [certificateStatusId], references: [id], onDelete: Cascade)
+
+  @@id([certificateStatusId, language])
+  @@map("certificate_status_translation")
 }
 
 model StampSubtype {
@@ -317,11 +350,27 @@ model Stamp {
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
   photos             Photo[]
+  translations       StampTranslation[]
 
   @@index([subtypeId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
   @@map("stamp")
+}
+
+// Per-language `name` for a stamp (#296), behind the `{name}` title token. Same shape as
+// `CollectionAreaTranslation` (#293): `Stamp.name` stays the default-language value and a row here
+// overrides it for one language. The highest-row-count translation table — every value is typed by
+// hand, so most stamps carry no rows at all and simply fall back.
+model StampTranslation {
+  stampId  String
+  language String
+  name     String?
+
+  stamp Stamp @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([stampId, language])
+  @@map("stamp_translation")
 }
 
 model StampCatalogNumber {
@@ -896,10 +945,25 @@ model Issue {
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   members        IssueMember[]
   catalogNumbers IssueCatalogNumber[]
+  translations   IssueTranslation[]
 
   @@index([collectionId, year, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
   @@map("issue")
+}
+
+// Per-language `name` for an issue (#295), behind the `{issueName}` title token. Same shape as
+// `CollectionAreaTranslation` (#293): `Issue.name` stays the default-language value and a row here
+// overrides it for one language.
+model IssueTranslation {
+  issueId  String
+  language String
+  name     String?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, language])
+  @@map("issue_translation")
 }
 
 model IssueCatalogNumber {

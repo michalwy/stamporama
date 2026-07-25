@@ -21,8 +21,12 @@ const INPUT_STYLE: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-/** One translatable field of the entity, e.g. the area's title name, or a condition's name and
- * abbreviation (#294). Each is rendered once per language. */
+/** One translatable field of the entity, e.g. the area's title name or a condition's abbreviation.
+ * Rendered once per language. In practice callers pass exactly one: an entity with several
+ * translatable fields gives **each** its own 🌐 button and its own single-field dialog (#294), so a
+ * badge always refers to one field and translating names never means scrolling past abbreviations
+ * left deliberately untranslated. The array shape stays for a field that only makes sense edited
+ * alongside another. */
 export interface TranslationField {
   /** Stable key the values record is keyed by (matches the entity's own column name). */
   key: string;
@@ -35,6 +39,28 @@ export interface TranslationField {
 /** Translated values: language code → field key → text. Blank / missing means "fall back to the
  * entity's default-language value". */
 export type TranslationValues = Record<string, Record<string, string>>;
+
+/**
+ * Seed a form's staged {@link TranslationValues} from an entity's stored translations.
+ *
+ * `byField` is field-major — `{ name: condition.nameByLanguage, abbreviation:
+ * condition.abbreviationByLanguage }` — because that is the shape the read models expose (one
+ * `<field>ByLanguage` record each). The result is language-major and **complete**: every language ×
+ * every field, blank where unset, so the controlled inputs and hidden form fields never see
+ * `undefined` and a language cleared to blank still submits (and therefore deletes its row).
+ */
+export function fillTranslationValues(
+  languages: string[],
+  fields: readonly TranslationField[],
+  byField: Record<string, Record<string, string> | undefined> | undefined
+): TranslationValues {
+  return Object.fromEntries(
+    languages.map((lang) => [
+      lang,
+      Object.fromEntries(fields.map((f) => [f.key, byField?.[f.key]?.[lang] ?? ""])),
+    ])
+  );
+}
 
 export interface TranslationsDialogProps {
   /** Dialog title, e.g. "Title name translations". */
@@ -71,11 +97,13 @@ export function countTranslated(languages: string[], values: TranslationValues):
  * entity — which has no id yet — is handled the same way as an existing one). The confirm button is
  * labelled "Done" rather than "Save" to match.
  *
- * Generic over the entity's translatable `fields`, so the same dialog serves the area title name
- * now and condition / certificate status (two fields each), issue and stamp names later
- * (#294–#296). `languages` is the set needing a translation — the platforms' listing languages
- * minus the collection's default language, since text in that language already lives in the
- * entity's own column. When it is empty the caller does not offer the button at all.
+ * Generic over the entity's translatable `fields`, so one dialog serves every translatable entity:
+ * area title name (#293), condition and certificate status name / abbreviation (#294), issue name
+ * (#295) and stamp name (#296). Entities with more than one translatable field open it once per
+ * field rather than showing both at once — see {@link TranslationField}. `languages` is the set
+ * needing a translation — the platforms' listing languages minus the collection's default language,
+ * since text in that language already lives in the entity's own column. When it is empty the caller
+ * does not offer the button at all.
  *
  * The panel height is **fixed** and the language grid scrolls inside it, so adding languages never
  * stretches the dialog.

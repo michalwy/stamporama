@@ -325,6 +325,28 @@ export async function getCollectionTitleLanguages(
   ownerId: string,
   collectionId: string
 ): Promise<string[]> {
+  return (await getCollectionTranslationContext(ownerId, collectionId)).titleLanguages;
+}
+
+/** What an entity form needs to render its per-language inputs (#293–#296): the languages to offer,
+ * and the language its plain fields are labelled with. */
+export interface CollectionTranslationContext {
+  /** See {@link getCollectionTitleLanguages}. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The collection's `defaultLanguage` — the language its entity columns are written in. */
+  defaultLanguage: string;
+}
+
+/**
+ * {@link getCollectionTitleLanguages} plus the default language, in one round trip. Server-rendered
+ * screens (Settings, Areas) get both from their page loader; the issue and stamp dialogs (#295,
+ * #296) are opened from six different client call sites, so they fetch this instead of having it
+ * drilled through every one of them.
+ */
+export async function getCollectionTranslationContext(
+  ownerId: string,
+  collectionId: string
+): Promise<CollectionTranslationContext> {
   await assertCollectionOwner(ownerId, collectionId);
   const [collection, rows] = await Promise.all([
     prisma.collection.findUniqueOrThrow({
@@ -343,7 +365,10 @@ export async function getCollectionTitleLanguages(
     const code = normalizeLanguage(r.titleLanguage);
     if (code && code !== defaultLanguage) codes.add(code);
   }
-  return Array.from(codes).sort();
+  return {
+    titleLanguages: Array.from(codes).sort(),
+    defaultLanguage: defaultLanguage ?? collection.defaultLanguage,
+  };
 }
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still

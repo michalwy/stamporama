@@ -1,7 +1,15 @@
 import "server-only";
 import { prisma } from "./db";
 import { recomputeSortKeysForAreas } from "./catalog-sort-key-recompute";
-import { normalizeLanguage } from "./languages";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
+
+/** The area's translatable fields (#293). Kept beside the domain module so the action parsing the
+ * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
+export const AREA_TRANSLATION_FIELDS = ["titleName"] as const;
 
 /** The area plus every area nested under it, within a collection. Used to scope a catalog
  * sort-key recompute to a subtree when an area's effective primary catalog shifts (#181). */
@@ -147,11 +155,7 @@ export async function getCollectionAreas(
     description: a.description,
     primaryCatalogNameId: a.primaryCatalogNameId,
     titleName: a.titleName,
-    titleNameByLanguage: Object.fromEntries(
-      a.translations
-        .filter((t): t is { language: string; titleName: string } => !!t.titleName?.trim())
-        .map((t) => [t.language, t.titleName])
-    ),
+    titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
     assignable: a.assignable,
     sortOrder: a.sortOrder,
     stampCount: a._count.stampAreaLinks,
@@ -181,9 +185,10 @@ export async function createCollectionArea(
     description?: string | null;
     primaryCatalogNameId?: string | null;
     titleName?: string | null;
-    /** Per-language `titleName` overrides (#293), keyed by ISO 639-1 code. A blank / null value
-     * removes that language's row. Languages absent from the record are left untouched. */
-    titleNameByLanguage?: Record<string, string | null>;
+    /** Per-language `titleName` overrides (#293), keyed by ISO 639-1 code then field key. A blank
+     * / null value removes that language's row. Languages absent from the record are left
+     * untouched. */
+    translations?: TranslationValueMap;
     assignable?: boolean;
   }
 ): Promise<{ id: string }> {
@@ -218,38 +223,35 @@ export async function createCollectionArea(
     },
     select: { id: true },
   });
-  await syncAreaTranslations(created.id, data.titleNameByLanguage);
+  await syncAreaTranslations(created.id, data.translations);
   return { id: created.id };
 }
 
 /**
- * Write an area's per-language `titleName` rows (#293). A non-blank value upserts the row, a blank
- * or null one deletes it (so "cleared" and "never set" are one state — fall back to the default
- * `titleName`). Languages missing from `values` are left as they are, so a form that only renders
- * the languages currently in use never drops translations for a language that was removed from the
- * platform list and might come back.
+ * Write an area's per-language `titleName` rows (#293). Blank / null deletes the row (so "cleared"
+ * and "never set" are one state — fall back to the default `titleName`); languages missing from
+ * `values` are left alone. The rules are shared with the other translatable entities (#294–#296) in
+ * {@link syncEntityTranslations}; this supplies the area's own Prisma delegate.
  */
 async function syncAreaTranslations(
   areaId: string,
-  values: Record<string, string | null> | undefined
+  values: TranslationValueMap | undefined
 ): Promise<void> {
-  if (!values) return;
-  for (const [rawLanguage, rawValue] of Object.entries(values)) {
-    const language = normalizeLanguage(rawLanguage);
-    if (!language) continue;
-    const titleName = (rawValue ?? "").trim();
-    if (titleName) {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const titleName = fields.titleName ?? null;
       await prisma.collectionAreaTranslation.upsert({
         where: { collectionAreaId_language: { collectionAreaId: areaId, language } },
         create: { collectionAreaId: areaId, language, titleName },
         update: { titleName },
       });
-    } else {
+    },
+    remove: async (language) => {
       await prisma.collectionAreaTranslation.deleteMany({
         where: { collectionAreaId: areaId, language },
       });
-    }
-  }
+    },
+  });
 }
 
 /** Next sortOrder for a new area appended to its sibling group (#78): max sibling + 1, else 0. */
@@ -274,7 +276,7 @@ export async function updateCollectionArea(
     primaryCatalogNameId?: string | null;
     titleName?: string | null;
     /** Per-language `titleName` overrides (#293); see {@link createCollectionArea}. */
-    titleNameByLanguage?: Record<string, string | null>;
+    translations?: TranslationValueMap;
     assignable?: boolean;
   }
 ): Promise<void> {
@@ -353,7 +355,7 @@ export async function updateCollectionArea(
     },
   });
 
-  await syncAreaTranslations(areaId, data.titleNameByLanguage);
+  await syncAreaTranslations(areaId, data.translations);
 
   // Changing an area's own primary catalog or its parent shifts the *effective* primary catalog
   // (and thus the catalog sort key, #181) for this area and every descendant that inherits it.

@@ -1,6 +1,14 @@
 import "server-only";
 import { prisma } from "./db";
 import type { PrismaClient } from "@/generated/prisma/client";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
+
+/** The condition's translatable fields (#294), in the order the translations dialog renders them. */
+export const CONDITION_TRANSLATION_FIELDS = ["name", "abbreviation"] as const;
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -26,8 +34,16 @@ async function resolveConditionCollection(conditionId: string): Promise<string> 
 
 export interface StampConditionData {
   id: string;
+  /** Default-language name (#294); {@link nameByLanguage} overrides it per language. */
   name: string;
+  /** Default-language abbreviation; {@link abbreviationByLanguage} overrides it per language. */
   abbreviation: string;
+  /** Per-language overrides of {@link name} (#294), keyed by ISO 639-1 code. Only languages with a
+   * stored, non-blank value appear. */
+  nameByLanguage: Record<string, string>;
+  /** Per-language overrides of {@link abbreviation} (#294). Falls back independently of the name —
+   * a language often translates `Mint Never Hinged` but keeps `MNH`. */
+  abbreviationByLanguage: Record<string, string>;
   sortOrder: number;
 }
 
@@ -70,17 +86,55 @@ export async function getStampConditions(
   collectionId: string
 ): Promise<StampConditionData[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.stampCondition.findMany({
+  const rows = await prisma.stampCondition.findMany({
     where: { collectionId },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, abbreviation: true, sortOrder: true },
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      sortOrder: true,
+      translations: { select: { language: true, name: true, abbreviation: true } },
+    },
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    abbreviation: c.abbreviation,
+    nameByLanguage: translationsByLanguage(c.translations, (t) => t.name),
+    abbreviationByLanguage: translationsByLanguage(c.translations, (t) => t.abbreviation),
+    sortOrder: c.sortOrder,
+  }));
+}
+
+/** Per-language `name` / `abbreviation` rows for a condition (#294). Shared rules — blank clears the
+ * field, an all-blank language drops the row, unlisted languages are untouched — live in
+ * {@link syncEntityTranslations}. */
+async function syncConditionTranslations(
+  stampConditionId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const data = { name: fields.name ?? null, abbreviation: fields.abbreviation ?? null };
+      await prisma.stampConditionTranslation.upsert({
+        where: { stampConditionId_language: { stampConditionId, language } },
+        create: { stampConditionId, language, ...data },
+        update: data,
+      });
+    },
+    remove: async (language) => {
+      await prisma.stampConditionTranslation.deleteMany({
+        where: { stampConditionId, language },
+      });
+    },
   });
 }
 
 export async function createStampCondition(
   ownerId: string,
   collectionId: string,
-  data: { name: string; abbreviation: string }
+  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampCondition.findFirst({
@@ -89,15 +143,17 @@ export async function createStampCondition(
     select: { sortOrder: true },
   });
   const sortOrder = last ? last.sortOrder + 1 : 0;
-  await prisma.stampCondition.create({
+  const created = await prisma.stampCondition.create({
     data: { collectionId, name: data.name, abbreviation: data.abbreviation, sortOrder },
+    select: { id: true },
   });
+  await syncConditionTranslations(created.id, data.translations);
 }
 
 export async function updateStampCondition(
   ownerId: string,
   conditionId: string,
-  data: { name: string; abbreviation: string }
+  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
 ): Promise<void> {
   const collectionId = await resolveConditionCollection(conditionId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -105,6 +161,7 @@ export async function updateStampCondition(
     where: { id: conditionId },
     data: { name: data.name, abbreviation: data.abbreviation },
   });
+  await syncConditionTranslations(conditionId, data.translations);
 }
 
 /**

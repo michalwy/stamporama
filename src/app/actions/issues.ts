@@ -21,6 +21,7 @@ import {
   getIssueAreaId,
   getIssueRangeSuggestions,
   setIssueCatalogRange,
+  ISSUE_TRANSLATION_FIELDS,
 } from "@/lib/issues";
 import type {
   AutoCreateStampsInput,
@@ -31,6 +32,8 @@ import type {
   IssueRangeSuggestion,
 } from "@/lib/issues";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
+import { parseTranslationValues } from "@/lib/translations";
+import { STAMP_TRANSLATION_FIELDS } from "@/lib/stamps";
 import {
   resolveCatalogRange,
   generateCatalogNumbers,
@@ -194,7 +197,13 @@ export async function createIssueAction(
   }
 
   try {
-    const result = await createIssue(session.user.id, collectionId, areaId, { name, year, catalogNumbers, autoCreateStamps });
+    const result = await createIssue(session.user.id, collectionId, areaId, {
+      name,
+      year,
+      catalogNumbers,
+      translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
+      autoCreateStamps,
+    });
     return { status: "success", issueId: result.id };
   } catch {
     return { status: "error", message: "Failed to create issue. Please try again." };
@@ -215,7 +224,12 @@ export async function updateIssueAction(
   }
   const catalogNumbers = parseCatalogNumbers(formData);
   try {
-    await updateIssue(session.user.id, collectionId, issueId, { name, year, catalogNumbers });
+    await updateIssue(session.user.id, collectionId, issueId, {
+      name,
+      year,
+      catalogNumbers,
+      translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update issue. Please try again." };
@@ -340,6 +354,7 @@ export async function addStampToIssueAction(
       colnectId,
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
+      translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
     });
     // Direct photo upload in add mode (#137): apply the dialog's staged change-set to the
     // freshly created stamp, mirroring how `createItemAction` attaches copy photos on add.

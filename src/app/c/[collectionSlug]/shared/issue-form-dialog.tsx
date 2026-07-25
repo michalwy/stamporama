@@ -28,6 +28,14 @@ import {
   effectivePrimaryVendorId,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
+import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
 
@@ -184,6 +192,11 @@ function useIssueNameCheck(collectionId: string, areaId: string, name: string) {
 
 // ── IssueForm ───────────────────────────────────────────────────────────────
 
+/** The issue's one translatable field (#295). `defaultValue` is filled in at render time from the
+ * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
+ * `ISSUE_TRANSLATION_FIELDS`, which the action parses the submitted values with. */
+const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+
 interface IssueFormProps {
   vendors: AreaCatalogEntry[];
   primaryVendorId?: string | null;
@@ -202,6 +215,15 @@ interface IssueFormProps {
   onNameChange?: (value: string) => void;
   /** Non-blocking warning rendered directly beneath the name field (#178). */
   nameWarning?: React.ReactNode;
+  /** Languages needing a translation (#295); empty renders no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain Name field is written in (#295). */
+  defaultLanguage: string;
+  /** Stored per-language names, field-major (#295); absent when creating. */
+  defaultTranslations?: { name: Record<string, string> };
+  /** Told when the nested translations dialog opens/closes, so the issue dialog can stop
+   * dismissing itself on Esc / backdrop click while it is up. */
+  onNestedDialogOpenChange?: (open: boolean) => void;
   /** Duplicate-catalog warning icon shown inside a vendor's First field when its
    * auto-generated range collides with existing stamps (#85). */
   catalogWarningFor?: (vendorId: string) => React.ReactNode;
@@ -222,6 +244,10 @@ function IssueForm({
   onVendorToggle,
   onNameChange,
   nameWarning,
+  titleLanguages,
+  defaultLanguage,
+  defaultTranslations,
+  onNestedDialogOpenChange,
   catalogWarningFor,
 }: IssueFormProps) {
   const sortedVendors = useMemo(() => {
@@ -233,35 +259,70 @@ function IssueForm({
     });
   }, [vendors, primaryVendorId]);
 
+  const translatable = titleLanguages.length > 0;
+  // The name input stays uncontrolled (the duplicate-name check and the catalog form both read the
+  // DOM), but its text is mirrored here so the translations dialog can show the *live* default
+  // -language name as the placeholder each blank entry falls back to.
+  const [nameText, setNameText] = useState(defaultName ?? "");
+  // Staged per-language names (#295): edited in the shared dialog, submitted as hidden `name:<lang>`
+  // inputs, written only when the issue itself is saved.
+  const [translations, setTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, NAME_TRANSLATION_FIELDS, defaultTranslations)
+  );
+
   return (
     <>
       <div style={SECTION_HEADER_STYLE}>Details</div>
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-issue-name">Name (optional)</LabelWithError>
-        <div style={{ position: "relative" }}>
-          <input
-            id="f-issue-name"
-            name="name"
-            type="text"
-            defaultValue={defaultName}
-            disabled={isPending}
-            placeholder="e.g. First Issue"
-            style={{ ...INPUT_STYLE, paddingRight: nameWarning ? "2rem" : undefined }}
-            data-autofocus={autoFocusName || undefined}
-            onChange={(e) => onNameChange?.(e.target.value)}
-          />
-          {nameWarning && (
-            <span
-              style={{
-                position: "absolute",
-                right: "0.5rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                display: "inline-flex",
+        <LabelWithError htmlFor="f-issue-name">
+          {translatable
+            ? `Name — ${languageLabel(defaultLanguage)} (optional)`
+            : "Name (optional)"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            <input
+              id="f-issue-name"
+              name="name"
+              type="text"
+              defaultValue={defaultName}
+              disabled={isPending}
+              placeholder="e.g. First Issue"
+              style={{ ...INPUT_STYLE, paddingRight: nameWarning ? "2rem" : undefined }}
+              data-autofocus={autoFocusName || undefined}
+              onChange={(e) => {
+                setNameText(e.target.value);
+                onNameChange?.(e.target.value);
               }}
-            >
-              {nameWarning}
-            </span>
+            />
+            {nameWarning && (
+              <span
+                style={{
+                  position: "absolute",
+                  right: "0.5rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  display: "inline-flex",
+                }}
+              >
+                {nameWarning}
+              </span>
+            )}
+          </div>
+          {/* Per-language names (#295) live behind the shared translations dialog, so the form keeps
+              one field however many languages are in use. */}
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Issue name translations"
+              description={`The name each language's platforms use for this issue. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the issue.`}
+              languages={titleLanguages}
+              fields={[{ ...NAME_TRANSLATION_FIELDS[0], defaultValue: nameText }]}
+              values={translations}
+              onChange={setTranslations}
+              onOpenChange={onNestedDialogOpenChange}
+              ariaLabel="Edit issue name translations"
+              disabled={isPending}
+            />
           )}
         </div>
       </div>
@@ -532,6 +593,12 @@ export function IssueDialog(props: IssueDialogProps) {
   const { areas, collectionId, isPending, error, onClose } = props;
   const isCreate = props.mode === "create";
 
+  // Per-language names (#295). Fetched rather than drilled: this dialog is opened from the issues
+  // list and from the inventory stamp picker, and the answer is cached per collection.
+  const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
+  // While the translations dialog is up, the issue dialog must not close on Esc / backdrop click.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
+
   const [selectedAreaId, setSelectedAreaId] = useState(() => {
     if (isCreate) {
       // Grouping-only areas (#263) can't hold issues, so never default to one — prefer the
@@ -684,6 +751,7 @@ export function IssueDialog(props: IssueDialogProps) {
     <DialogShell
       title={isCreate ? "Add issue" : "Edit issue"}
       onClose={onClose}
+      dismissable={!nestedDialogOpen}
       minHeight="32rem"
     >
       <form
@@ -728,6 +796,10 @@ export function IssueDialog(props: IssueDialogProps) {
             onVendorToggle={handleVendorToggle}
             onNameChange={isCreate ? setNameValue : undefined}
             nameWarning={nameWarning}
+            titleLanguages={titleLanguages}
+            defaultLanguage={defaultLanguage}
+            defaultTranslations={isCreate ? undefined : { name: props.issue.nameByLanguage }}
+            onNestedDialogOpenChange={setNestedDialogOpen}
             catalogWarningFor={
               isCreate && autoCreate
                 ? (vendorId) => {

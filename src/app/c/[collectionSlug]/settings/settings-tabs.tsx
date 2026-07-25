@@ -165,6 +165,8 @@ export function SettingsTabs({
             <ConditionsPanel
               collectionId={collectionId}
               initialConditions={initialConditions}
+              titleLanguages={titleLanguages}
+              defaultLanguage={defaultLanguage}
             />
           </section>
           <section>
@@ -172,6 +174,8 @@ export function SettingsTabs({
             <CertificateStatusesPanel
               collectionId={collectionId}
               initialStatuses={initialCertificateStatuses}
+              titleLanguages={titleLanguages}
+              defaultLanguage={defaultLanguage}
             />
           </section>
         </div>

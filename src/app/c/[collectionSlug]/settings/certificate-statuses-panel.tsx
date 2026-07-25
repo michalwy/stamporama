@@ -18,6 +18,13 @@ import {
 } from "@/app/actions/certificate-statuses";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -42,7 +49,18 @@ const FORM_STYLE: React.CSSProperties = {
 interface CertificateStatusesPanelProps {
   collectionId: string;
   initialStatuses: CertificateStatusData[];
+  /** Languages needing a translation (#294): the platforms' listing languages minus the
+   * collection's default language. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain Name / Abbreviation fields are written in (#294). */
+  defaultLanguage: string;
 }
+
+// Each translatable field gets its own 🌐 button opening a single-field dialog (#294) — see the
+// conditions panel for why. Together they mirror `CERTIFICATE_STATUS_TRANSLATION_FIELDS`, which the
+// action parses the submitted `<field>:<lang>` inputs with.
+const NAME_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+const ABBREVIATION_FIELDS: TranslationField[] = [{ key: "abbreviation", label: "Abbreviation" }];
 
 type DialogState =
   | { kind: "none" }
@@ -50,42 +68,113 @@ type DialogState =
   | { kind: "edit"; status: CertificateStatusData }
   | { kind: "delete"; status: CertificateStatusData };
 
-function CertificateStatusForm({ defaultName, defaultAbbreviation, isPending }: {
+function CertificateStatusForm({
+  defaultName,
+  defaultAbbreviation,
+  defaultTranslations,
+  titleLanguages,
+  defaultLanguage,
+  isPending,
+}: {
   defaultName?: string;
   defaultAbbreviation?: string;
+  /** Stored per-language values, field-major (#294); absent when adding. */
+  defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
+  titleLanguages: string[];
+  defaultLanguage: string;
   isPending: boolean;
 }) {
+  const translatable = titleLanguages.length > 0;
+  // Controlled so the translations dialog's placeholders show the *live* default-language text a
+  // blank entry falls back to. Mirrors the conditions panel.
+  const [name, setName] = useState(defaultName ?? "");
+  const [abbreviation, setAbbreviation] = useState(defaultAbbreviation ?? "");
+  // One staged record per field; the two fall back independently and the row is dropped only once
+  // both are blank.
+  const [nameTranslations, setNameTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, NAME_FIELDS, defaultTranslations)
+  );
+  const [abbrTranslations, setAbbrTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, ABBREVIATION_FIELDS, defaultTranslations)
+  );
+
   return (
     <>
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-cert-abbr">Abbreviation</LabelWithError>
-        <input
-          id="f-cert-abbr"
-          name="abbreviation"
-          type="text"
-          defaultValue={defaultAbbreviation}
-          disabled={isPending}
-          placeholder="e.g. Cert"
-          style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
-        />
+        <LabelWithError htmlFor="f-cert-abbr">
+          {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-cert-abbr"
+            name="abbreviation"
+            type="text"
+            value={abbreviation}
+            onChange={(e) => setAbbreviation(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Cert"
+            style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Certificate status abbreviation translations"
+              description={`How this certificate status is abbreviated on each language's platforms. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} abbreviation above. Saved together with the status.`}
+              languages={titleLanguages}
+              fields={[{ ...ABBREVIATION_FIELDS[0], defaultValue: abbreviation }]}
+              values={abbrTranslations}
+              onChange={setAbbrTranslations}
+              ariaLabel="Edit certificate status abbreviation translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
       </div>
       <div>
-        <LabelWithError htmlFor="f-cert-name">Name</LabelWithError>
-        <input
-          id="f-cert-name"
-          name="name"
-          type="text"
-          defaultValue={defaultName}
-          disabled={isPending}
-          placeholder="e.g. Certificate"
-          style={INPUT_STYLE}
-        />
+        <LabelWithError htmlFor="f-cert-name">
+          {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
+        </LabelWithError>
+        {/* Each field carries its own 🌐 (#294), so a badge always refers to exactly one field. */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-cert-name"
+            name="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Certificate"
+            style={INPUT_STYLE}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Certificate status name translations"
+              description={`The name each language's platforms use for this certificate status. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the status.`}
+              languages={titleLanguages}
+              fields={[{ ...NAME_FIELDS[0], defaultValue: name }]}
+              values={nameTranslations}
+              onChange={setNameTranslations}
+              ariaLabel="Edit certificate status name translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
+        {translatable && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+            Used for the <code>{"{certificate}"}</code> and <code>{"{certificateAbbr}"}</code> tokens
+            in listing titles. Translations (🌐) are saved together with the status.
+          </p>
+        )}
       </div>
     </>
   );
 }
 
-export function CertificateStatusesPanel({ collectionId, initialStatuses }: CertificateStatusesPanelProps) {
+export function CertificateStatusesPanel({
+  collectionId,
+  initialStatuses,
+  titleLanguages,
+  defaultLanguage,
+}: CertificateStatusesPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<CertificateStatusActionState>({ status: "idle" });
@@ -268,7 +357,11 @@ export function CertificateStatusesPanel({ collectionId, initialStatuses }: Cert
         <DialogShell title="Add certificate status" onClose={closeDialog}>
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => createCertificateStatusAction(collectionId, fd), e)}>
             <DialogBody>
-              <CertificateStatusForm isPending={isPending} />
+              <CertificateStatusForm
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                isPending={isPending}
+              />
             </DialogBody>
             <DialogActions actionLabel={isPending ? "Saving…" : "Save"} onCancel={closeDialog} disabled={isPending} error={error} />
           </form>
@@ -282,6 +375,12 @@ export function CertificateStatusesPanel({ collectionId, initialStatuses }: Cert
               <CertificateStatusForm
                 defaultName={dialog.status.name}
                 defaultAbbreviation={dialog.status.abbreviation}
+                defaultTranslations={{
+                  name: dialog.status.nameByLanguage,
+                  abbreviation: dialog.status.abbreviationByLanguage,
+                }}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
                 isPending={isPending}
               />
             </DialogBody>

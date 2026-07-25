@@ -19,10 +19,11 @@ import {
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import { languageLabel } from "@/lib/languages";
 import {
-  TranslationsDialog,
-  countTranslated,
+  fillTranslationValues,
+  type TranslationField,
   type TranslationValues,
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -171,42 +172,9 @@ const catalogBadgeStyle: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
-// Icon button opening the translations dialog (#293), sized to sit beside a text input, plus the
-// badge counting languages still falling back to the default text.
-const translationsButtonStyle: React.CSSProperties = {
-  position: "relative",
-  flexShrink: 0,
-  width: "2.25rem",
-  height: "2.25rem",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "1rem",
-  lineHeight: 1,
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  background: "var(--color-bg-elevated)",
-  cursor: "pointer",
-};
-
-const translationsBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "-0.3rem",
-  right: "-0.3rem",
-  minWidth: "1rem",
-  height: "1rem",
-  padding: "0 0.2rem",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "0.625rem",
-  fontWeight: 700,
-  lineHeight: 1,
-  color: "var(--color-bg-elevated)",
-  background: "var(--color-text-muted)",
-  borderRadius: "0.5rem",
-  boxSizing: "border-box",
-};
+/** The area's one translatable field (#293). `defaultValue` is filled in at render time from the
+ * live default-language input, so the dialog's placeholders show what a blank entry falls back to. */
+const TITLE_NAME_FIELDS: TranslationField[] = [{ key: "titleName", label: "Title name" }];
 
 const groupingBadgeStyle: React.CSSProperties = {
   fontSize: "0.6875rem",
@@ -308,21 +276,11 @@ function CollectionAreaForm({
   // They are held here and submitted through hidden `titleName:<lang>` inputs, so the existing
   // form-data save path is unchanged. Unlike the default title name they never mirror `name` — a
   // translation is only ever typed deliberately, and a blank one falls back to the default.
-  const [titleNameByLanguage, setTitleNameByLanguage] = useState<Record<string, string>>(() =>
-    Object.fromEntries(titleLanguages.map((l) => [l, defaultTitleNameByLanguage?.[l] ?? ""]))
+  const [translations, setTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, TITLE_NAME_FIELDS, {
+      titleName: defaultTitleNameByLanguage,
+    })
   );
-  const [translationsOpen, setTranslationsOpen] = useState(false);
-  function openTranslations(open: boolean) {
-    setTranslationsOpen(open);
-    onNestedDialogOpenChange?.(open);
-  }
-  const translationValues = Object.fromEntries(
-    titleLanguages.map((l) => [l, { titleName: titleNameByLanguage[l] ?? "" }])
-  );
-  // The badge counts what is still *missing*, so it reads as "these languages will fall back to
-  // the default title name" and disappears once every language is filled in.
-  const missingTranslations =
-    titleLanguages.length - countTranslated(titleLanguages, translationValues);
 
   const [entries, setEntries] = useState<EntryState[]>(
     (defaultCatalogEntries ?? []).map((e) => ({
@@ -419,33 +377,19 @@ function CollectionAreaForm({
               missing a translation. Values ride along as hidden inputs; a cleared one submits
               blank, which drops that language's translation. */}
           {titleLanguages.length > 0 && (
-            <>
-              {titleLanguages.map((lang) => (
-                <input
-                  key={lang}
-                  type="hidden"
-                  name={`titleName:${lang}`}
-                  value={titleNameByLanguage[lang] ?? ""}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={() => openTranslations(true)}
-                disabled={isPending}
-                title={
-                  missingTranslations > 0
-                    ? `Translations — ${missingTranslations} of ${titleLanguages.length} language${titleLanguages.length !== 1 ? "s" : ""} still using the default`
-                    : "Translations — every language set"
-                }
-                aria-label="Edit title name translations"
-                style={translationsButtonStyle}
-              >
-                🌐
-                {missingTranslations > 0 && (
-                  <span style={translationsBadgeStyle}>{missingTranslations}</span>
-                )}
-              </button>
-            </>
+            <TranslationsField
+              dialogTitle="Title name translations"
+              description={`The title name each language's platforms use for this area. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} title name above. They are saved together with the area.`}
+              languages={titleLanguages}
+              fields={[
+                { ...TITLE_NAME_FIELDS[0], defaultValue: titleName || name },
+              ]}
+              values={translations}
+              onChange={setTranslations}
+              onOpenChange={onNestedDialogOpenChange}
+              ariaLabel="Edit title name translations"
+              disabled={isPending}
+            />
           )}
         </div>
         <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
@@ -457,31 +401,6 @@ function CollectionAreaForm({
           )}
         </p>
       </div>
-
-      {translationsOpen && (
-        <TranslationsDialog
-          title="Title name translations"
-          description={`The title name each language's platforms use for this area. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} title name above. They are saved together with the area.`}
-          languages={titleLanguages}
-          fields={[
-            {
-              key: "titleName",
-              label: "Title name",
-              defaultValue: titleName || name,
-            },
-          ]}
-          values={translationValues}
-          onCancel={() => openTranslations(false)}
-          onSave={(next: TranslationValues) => {
-            setTitleNameByLanguage(
-              Object.fromEntries(
-                titleLanguages.map((l) => [l, next[l]?.titleName ?? ""])
-              )
-            );
-            openTranslations(false);
-          }}
-        />
-      )}
 
       {/* Grouping-only areas (#263): organize children but can't receive issues directly. */}
       <div style={{ marginBottom: "1rem" }}>

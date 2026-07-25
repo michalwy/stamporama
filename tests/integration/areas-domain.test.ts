@@ -444,7 +444,7 @@ describe("area title translations", () => {
     const { id } = await createCollectionArea(userId, collectionId, {
       name: "Poland",
       titleName: "Poland",
-      titleNameByLanguage: { pl: "Polska", de: "Polen" },
+      translations: { pl: { titleName: "Polska" }, de: { titleName: "Polen" } },
       assignable: false,
     });
     const area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
@@ -457,13 +457,13 @@ describe("area title translations", () => {
     const { id } = await createCollectionArea(userId, collectionId, {
       name: "Germany",
       titleName: "Germany",
-      titleNameByLanguage: { pl: "Niemcy" },
+      translations: { pl: { titleName: "Niemcy" } },
       assignable: false,
     });
     await updateCollectionArea(userId, id, {
       name: "Germany",
       titleName: "Germany",
-      titleNameByLanguage: { pl: "Rzesza Niemiecka" },
+      translations: { pl: { titleName: "Rzesza Niemiecka" } },
       assignable: false,
     });
     let area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
@@ -472,7 +472,7 @@ describe("area title translations", () => {
     await updateCollectionArea(userId, id, {
       name: "Germany",
       titleName: "Germany",
-      titleNameByLanguage: { pl: "  " },
+      translations: { pl: { titleName: "  " } },
       assignable: false,
     });
     area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
@@ -482,12 +482,12 @@ describe("area title translations", () => {
   it("leaves languages absent from the update untouched", async () => {
     const { id } = await createCollectionArea(userId, collectionId, {
       name: "Austria",
-      titleNameByLanguage: { pl: "Austria", de: "Österreich" },
+      translations: { pl: { titleName: "Austria" }, de: { titleName: "Österreich" } },
       assignable: false,
     });
     await updateCollectionArea(userId, id, {
       name: "Austria",
-      titleNameByLanguage: { pl: "Austro-Węgry" },
+      translations: { pl: { titleName: "Austro-Węgry" } },
       assignable: false,
     });
     const area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
@@ -497,7 +497,7 @@ describe("area title translations", () => {
   it("cascade-deletes translations with the area", async () => {
     const { id } = await createCollectionArea(userId, collectionId, {
       name: "Hungary",
-      titleNameByLanguage: { pl: "Węgry" },
+      translations: { pl: { titleName: "Węgry" } },
       assignable: false,
     });
     await deleteCollectionArea(userId, id);

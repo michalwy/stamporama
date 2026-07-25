@@ -9,7 +9,9 @@ import {
   deleteCollectionArea,
   syncAreaCatalogEntries,
   reorderCollectionAreas,
+  AREA_TRANSLATION_FIELDS,
 } from "@/lib/areas";
+import { parseTranslationValues } from "@/lib/translations";
 
 export type AreaActionState =
   | { status: "idle" }
@@ -33,19 +35,6 @@ function optionalStr(formData: FormData, key: string): string | null {
 
 function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
-}
-
-/** Per-language area title names (#293) submitted as `titleName:<lang>` fields, one per language
- * the collection uses. A blank value is kept (as null) so clearing an input removes that
- * language's translation row. */
-function parseTitleNameByLanguage(formData: FormData): Record<string, string | null> {
-  const out: Record<string, string | null> = {};
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("titleName:") || typeof value !== "string") continue;
-    const language = key.slice("titleName:".length).trim().toLowerCase();
-    if (language) out[language] = value.trim() || null;
-  }
-  return out;
 }
 
 function parseCatalogEntries(
@@ -84,7 +73,7 @@ export async function createCollectionAreaAction(
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       titleName: optionalStr(formData, "titleName"),
-      titleNameByLanguage: parseTitleNameByLanguage(formData),
+      translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
     await syncAreaCatalogEntries(session.user.id, id, parseCatalogEntries(formData));
@@ -111,7 +100,7 @@ export async function updateCollectionAreaAction(
       description: optionalStr(formData, "description"),
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       titleName: optionalStr(formData, "titleName"),
-      titleNameByLanguage: parseTitleNameByLanguage(formData),
+      translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
     await syncAreaCatalogEntries(session.user.id, areaId, parseCatalogEntries(formData));

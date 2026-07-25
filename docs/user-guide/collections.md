@@ -91,6 +91,12 @@ If the added stamps fall **outside the issue's declared catalog range**, a follo
 
 To add a **single** stamp instead, expand an issue row on the **Issues** list (the **▶** toggle) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
+### Issue and stamp names in other languages
+
+The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).
+
+Stamp names are the largest set of text to translate and every entry is typed by hand, so treat it as something you fill in for the stamps you actually list, not a job to finish up front — an untranslated stamp simply lists under its default name.
+
 ### Colnect ID
 
 The **Add stamp** and **Edit stamp** dialogs include a **Colnect** field in the catalog-numbers section, filled in like any other number. It holds the stamp's [Colnect](https://colnect.com) Marketplace **item-ID** — the number in a catalog page's address (`…/stamps/stamp/123456-…`). It is an external reference, not a catalog number, so it has no vendor prefix and is not checked for duplicates; leave it blank if you don't use Colnect. When a stamp has one, a small dashed **Colnect** tag, with an open-in-new-tab icon, appears next to the stamp's catalog numbers — on the **Stamps** list, on the stamps inside an issue on the **Issues** list, and on the copy rows in **Inventory**. Click it to open that stamp's page on colnect.com in a new tab; hover it to see the recorded item-ID. The ID itself is not printed on the row, so it doesn't crowd out the catalog numbers.
@@ -172,6 +178,12 @@ Each collection keeps its own list of **conditions** — the grades used when va
 
 Certificate and guarantee status is tracked as a separate dimension, not as part of condition — see below. Both lists live on the same **Settings → Conditions** tab.
 
+### Conditions in other languages
+
+Once a platform lists in a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields each grow their own 🌐 button, and both are labelled with your default language (e.g. *Name — English (en)*). Click one to enter that **single** field per language — the two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. Each button's small number counts the languages still missing **that** field, and a blank entry always falls back to the default text, so a title never ends up with a gap. The entries save together with the condition, so cancelling the condition dialog discards them too.
+
+These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](contacts.md#adding-and-editing).
+
 ## Certificate statuses
 
 Each collection keeps its own list of **certificate statuses** — the certificate or guarantee status used when valuing stamps (for example Certificate or Guarantee). This is an independent dimension from condition, so a stamp's grade and its certificate status are recorded separately rather than combined. Manage them in the **Certificate statuses** section of the **Settings → Conditions** tab.
@@ -180,6 +192,8 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 - **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
+
+Certificate statuses translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button on each of **Name** and **Abbreviation**, feeding the `{certificate}` and `{certificateAbbr}` title tokens.
 
 ## Stamp subtypes
 
