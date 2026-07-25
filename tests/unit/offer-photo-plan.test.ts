@@ -223,6 +223,93 @@ describe("planOfferPhotos sides", () => {
   });
 });
 
+// Skipped sides (#314) -------------------------------------------------------
+
+describe("planOfferPhotos skipped sides", () => {
+  const skips = (plan: ReturnType<typeof planOfferPhotos>) =>
+    plan.skipped.map((s) => `${s.groupKey}:${s.side}:${s.missingItemIds.join(",")}`);
+
+  it("reports nothing when every planned side is complete", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")])],
+      photoSides: "both",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(plan.skipped, []);
+  });
+
+  it("names every copy whose back scan is missing, not just the first", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b", { back: false }), copy("c", { back: false })])],
+      photoSides: "both",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b,c"]);
+    assert.deepEqual(skips(plan), ["g0:back:b,c"]);
+    assert.deepEqual(plan.skipped[0].itemIds, ["a", "b", "c"]);
+    assert.deepEqual(plan.skipped[0].setIds, ["s1"]);
+  });
+
+  it("reports both sides for a group that has no scans at all", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a", { front: false, back: false }), copy("b")])],
+      photoSides: "both",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(plan.images, []);
+    assert.deepEqual(skips(plan), ["g0:front:a", "g0:back:a"]);
+  });
+
+  it("stays silent about a side of a group the photo limit dropped outright", () => {
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a"), copy("b")]),
+        set("s2", 1, [copy("c"), copy("d", { back: false })]),
+      ],
+      photoSides: "both",
+      collage,
+      maxPhotos: 2,
+    });
+
+    // s2's group is the one truncated, so its missing back is not worth a second notice.
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g0:back:a,b"]);
+    assert.equal(plan.droppedGroups, 1);
+    assert.deepEqual(plan.skipped, []);
+  });
+
+  it("keeps the notice when the incomplete group survives truncation", () => {
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a"), copy("b", { back: false })]),
+        set("s2", 1, [copy("c"), copy("d")]),
+      ],
+      photoSides: "both",
+      collage,
+      maxPhotos: 1,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b"]);
+    assert.deepEqual(skips(plan), ["g0:back:b"]);
+  });
+
+  it("reports only the side the offer asked for", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b", { front: false, back: false })])],
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+    });
+
+    assert.deepEqual(skips(plan), ["g0:front:b"]);
+  });
+});
+
 // Truncation ----------------------------------------------------------------
 
 describe("planOfferPhotos truncation", () => {

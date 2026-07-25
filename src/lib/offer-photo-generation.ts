@@ -2,12 +2,16 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "./db";
 import {
+  extForMime,
   getActiveStorage,
   getStorage,
   permanentPrefix,
   variantKey,
   type PhotoVariant,
 } from "./storage";
+import { deriveSetLabel } from "./offer-set-rules";
+import { sortSetItems } from "./offer-set-order";
+import { zip } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
@@ -48,6 +52,15 @@ export type OfferPhotoGenerationStatus = "none" | "queued" | "running" | "ready"
 
 const ACTIVE_STATUSES = ["queued", "running"] as const;
 
+/** Stands in for a set or copy the plan was rendered from that the offer no longer holds. The image
+ * is a snapshot; the mismatch is what `outOfDate` reports, not something to hide. */
+const REMOVED_LABEL = "removed";
+
+/** `01.jpg`, `02.jpg`… — plan position, 1-based, zero-padded so a file manager sorts them right. */
+function planFileName(index: number, mime: string): string {
+  return `${String(index + 1).padStart(2, "0")}.${extForMime(mime)}`;
+}
+
 /** Raised by {@link enqueueOfferPhotoGeneration} when there is nothing sensible to render. */
 export class OfferPhotoGenerationError extends Error {}
 
@@ -61,10 +74,32 @@ export interface OfferPhotoImage {
   /** Links the front/back pair rendered from the same copies. */
   pairKey: string | null;
   setIds: string[];
+  itemIds: string[];
+  /**
+   * The name this image takes when downloaded, on its own or inside the plan's ZIP (#314):
+   * `01.jpg`, `02.jpg`… Plain numbers in plan order, because the whole point is a folder that
+   * sorts into upload order in any file manager. Our numbering is not the platform's — position
+   * there is whatever was uploaded — and that is fine: labels identify copies independently (#312).
+   */
+  fileName: string;
+  /** The copies the image shows, in tile order. Ids no longer in the offer resolve to a placeholder
+   * rather than vanishing: the image really does show something that has since been removed. */
+  copyLabels: string[];
+  setLabels: string[];
   mime: string;
   width: number;
   height: number;
   sizeBytes: number;
+}
+
+/** A side the current plan cannot produce, named so it can be fixed (#314). */
+export interface OfferPhotoSkippedSide {
+  side: "front" | "back";
+  setLabels: string[];
+  /** How many copies are in the group. */
+  copyCount: number;
+  /** The copies with no scan for this side — what to go and scan. */
+  missingCopyLabels: string[];
 }
 
 /** What pressing Generate right now would produce — the plan, not the stored images. */
@@ -76,6 +111,9 @@ export interface OfferPhotoPlanPreview {
   droppedGroups: number;
   /** The plan exceeds the platform's limit through protected attachments alone (#309). */
   exceedsLimit: boolean;
+  /** Sides no group can produce for want of a complete set of scans. A set of eight losing its back
+   * collage over one missing reverse is easy to overlook, so the panel says so out loud (#314). */
+  skipped: OfferPhotoSkippedSide[];
 }
 
 export interface OfferPhotoPlanState {
@@ -102,12 +140,20 @@ interface SourcePhoto {
   mime: string;
 }
 
+/** Display labels for the ids a plan is written in terms of — the panel's only job for them. */
+interface PlanLabels {
+  copies: Map<string, string>;
+  sets: Map<string, string>;
+}
+
 /** Everything one run reads, gathered once so the plan and the fingerprint cannot disagree. */
 interface GenerationInputs {
   offerId: string;
+  offerName: string | null;
   collectionId: string;
   ownerId: string;
   sets: PlanSet[];
+  labels: PlanLabels;
   photoSides: ReturnType<typeof normalizePhotoSides>;
   photoLabelTemplate: string | null;
   collage: OfferCollageValues | null;
@@ -122,6 +168,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     where: { id: offerId },
     select: {
       id: true,
+      name: true,
       collectionId: true,
       photoSides: true,
       photoLabelTemplate: true,
@@ -138,6 +185,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       sets: {
         select: {
           id: true,
+          title: true,
           sortOrder: true,
           items: {
             select: {
@@ -145,7 +193,14 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
               sortOrder: true,
               item: {
                 select: {
-                  stamp: { select: { primaryCatalogSortKey: true } },
+                  stamp: {
+                    select: {
+                      primaryCatalogSortKey: true,
+                      // Labels are for the panel only; they never reach the plan or the fingerprint.
+                      name: true,
+                      catalogNumbers: { select: { number: true }, take: 1 },
+                    },
+                  },
                   photos: {
                     where: { role: { in: SIDE_ROLES } },
                     select: {
@@ -167,11 +222,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   if (!offer) return null;
 
   const sourceById = new Map<string, SourcePhoto>();
+  const labels: PlanLabels = { copies: new Map(), sets: new Map() };
   const sets: PlanSet[] = offer.sets.map((set) => ({
     id: set.id,
     sortOrder: set.sortOrder,
     items: set.items.map((li): PlanCopy => {
       const bySide = new Map(li.item.photos.map((p) => [p.role, p]));
+      labels.copies.set(
+        li.itemId,
+        li.item.stamp.catalogNumbers[0]?.number ?? li.item.stamp.name ?? "Copy"
+      );
       for (const photo of li.item.photos) {
         sourceById.set(photo.id, {
           id: photo.id,
@@ -190,6 +250,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     }),
   }));
 
+  for (const [index, set] of offer.sets.entries()) {
+    labels.sets.set(
+      set.id,
+      deriveSetLabel(
+        set.title,
+        sortSetItems(sets[index].items).map((c) => labels.copies.get(c.itemId) ?? "Copy")
+      )
+    );
+  }
+
   const hasCollage =
     offer.collageRows != null &&
     offer.collageColumns != null &&
@@ -199,9 +269,11 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
 
   return {
     offerId: offer.id,
+    offerName: offer.name,
     collectionId: offer.collectionId,
     ownerId: offer.collection.ownerId,
     sets,
+    labels,
     photoSides: normalizePhotoSides(offer.photoSides),
     photoLabelTemplate: offer.photoLabelTemplate,
     collage: hasCollage
@@ -279,19 +351,26 @@ export async function getOfferPhotoPlanState(
         side: true,
         pairKey: true,
         setIds: true,
+        itemIds: true,
         photo: { select: { mime: true, width: true, height: true, sizeBytes: true } },
       },
     }),
   ]);
 
   const plan = planFor(inputs);
-  const images: OfferPhotoImage[] = entries.map((e) => ({
+  const images: OfferPhotoImage[] = entries.map((e, index) => ({
     photoId: e.photoId,
     sortOrder: e.sortOrder,
     source: e.source,
     side: e.side === "front" || e.side === "back" ? e.side : null,
     pairKey: e.pairKey,
     setIds: e.setIds,
+    itemIds: e.itemIds,
+    // Numbered by position in the stored plan, not by `sortOrder`: the file names have to be a dense
+    // 1..n run for a bulk upload, and a plan that ever renders partially would leave gaps.
+    fileName: planFileName(index, e.photo.mime),
+    copyLabels: e.itemIds.map((id) => inputs.labels.copies.get(id) ?? REMOVED_LABEL),
+    setLabels: e.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
     mime: e.photo.mime,
     width: e.photo.width,
     height: e.photo.height,
@@ -316,8 +395,68 @@ export async function getOfferPhotoPlanState(
       imageCount: plan.images.length,
       droppedGroups: plan.droppedGroups,
       exceedsLimit: plan.exceedsLimit,
+      skipped: plan.skipped.map((s) => ({
+        side: s.side,
+        setLabels: s.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
+        copyCount: s.itemIds.length,
+        missingCopyLabels: s.missingItemIds.map(
+          (id) => inputs.labels.copies.get(id) ?? REMOVED_LABEL
+        ),
+      })),
     },
   };
+}
+
+// ── Archive ──────────────────────────────────────────────────────────────────
+
+/**
+ * The offer's stored images as one ZIP, in plan order, named `01.jpg`, `02.jpg`… — the file the
+ * collector drops into a marketplace's bulk upload (#314). Owner-checked.
+ *
+ * Buffered rather than streamed: the archive is bounded by the platform's own photo-count and
+ * per-file limits (#308), which is a handful of megabytes, and a stream would have to hold the same
+ * central directory anyway.
+ *
+ * @throws {OfferPhotoGenerationError} when the offer has no generated images to archive.
+ */
+export async function buildOfferPhotoArchive(
+  ownerId: string,
+  offerId: string
+): Promise<{ fileName: string; bytes: Buffer }> {
+  await assertOfferOwner(ownerId, offerId);
+  const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { name: true } });
+  const entries = await prisma.offerPhotoEntry.findMany({
+    where: { offerId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      photo: { select: { storageBackend: true, storageKey: true, mime: true } },
+    },
+  });
+  if (entries.length === 0) {
+    throw new OfferPhotoGenerationError("This offer has no generated images yet.");
+  }
+
+  const files = await Promise.all(
+    entries.map(async (e, index) => ({
+      name: planFileName(index, e.photo.mime),
+      contents: await readFullBytes(e.photo),
+    }))
+  );
+
+  return { fileName: `${archiveSlug(offer?.name)}-photos.zip`, bytes: zip(files) };
+}
+
+/** A safe, recognisable archive name from the offer's own name. */
+function archiveSlug(name: string | null | undefined): string {
+  const slug = (name ?? "")
+    // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .toLowerCase();
+  return slug || "offer";
 }
 
 // ── Enqueue ──────────────────────────────────────────────────────────────────
@@ -406,8 +545,9 @@ export async function requeueStalledOfferPhotoGenerations(): Promise<number> {
 
 // ── Bytes ────────────────────────────────────────────────────────────────────
 
-/** Read a stored photo's `full` bytes into memory — a collage tile has to be decoded as a whole. */
-async function readFullBytes(photo: SourcePhoto): Promise<Buffer> {
+/** Read a stored photo's `full` bytes into memory — a collage tile has to be decoded as a whole, and
+ * an archived image has to be handed over whole. */
+async function readFullBytes(photo: Omit<SourcePhoto, "id">): Promise<Buffer> {
   const object = await getStorage(photo.storageBackend).get(
     variantKey(photo.storageKey, "full", photo.mime),
     photo.mime
@@ -457,6 +597,7 @@ interface RenderedImage {
   side: "front" | "back";
   pairKey: string;
   setIds: string[];
+  itemIds: string[];
 }
 
 async function renderPlannedCollage(
@@ -523,6 +664,7 @@ async function renderPlannedCollage(
     side: image.side,
     pairKey: image.groupKey,
     setIds: image.setIds,
+    itemIds: image.tiles.map((t) => t.itemId),
   };
 }
 
@@ -601,6 +743,7 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
           side: image.side,
           pairKey: image.pairKey,
           setIds: image.setIds,
+          itemIds: image.itemIds,
         },
       });
     }

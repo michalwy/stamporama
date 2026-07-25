@@ -248,10 +248,14 @@ buyer referring to a label on an image you have already uploaded keeps getting t
 
 ## Generating the photos
 
-Below the sets, the **Photos** card turns the offer's copies into the images you upload to the
+Under the listing texts, the **Photos** card turns the offer's copies into the images you upload to the
 platform. Press **Generate** and the work happens **in the background** — you can leave the screen,
 and the card shows the run's state on its own (*Queued*, *Rendering 2/4*, *Ready*, or *Failed* with
 the reason). Pressing Generate while a run is already going does nothing; it will not render twice.
+
+The card starts **collapsed** — click its heading to open it. Generate and Download all sit in the
+header and work either way, and anything you would want to notice while it is shut (the run's state,
+*Out of date*, a side that could not be rendered) stays there as a chip.
 
 What gets made follows the offer, not a choice you make here:
 
@@ -260,7 +264,9 @@ What gets made follows the offer, not a choice you make here:
 - A set holding more copies than the collage fits is split across consecutive images, so nothing is
   dropped silently.
 - With *Front and back*, each group gives two images — but only if **every** copy in it has that
-  scan. One missing back means no back image for that group, rather than one with a hole in it.
+  scan. One missing back means no back image for that group, rather than one with a hole in it. The
+  card says so out loud, naming the copies to scan — a set of eight quietly losing its back image
+  over one missing reverse is easy to miss.
 - If the platform caps how many photos a listing takes, whole groups are dropped from the end (a
   front/back pair always goes together). The card says how many.
 
@@ -280,6 +286,22 @@ ready to re-upload.
 
 Regenerating replaces the whole set of images at once. If a run fails, the previous images are still
 there.
+
+### Reviewing and downloading them
+
+Expand the card and it shows the plan in upload order: every image with its number, its side, and the
+copies it was made from. Click a thumbnail to see it full size.
+
+Getting the files to the marketplace is a manual upload — Stamporama's job is handing you the right
+files in the right order:
+
+- **Download all** gives you the whole plan as a ZIP, with the files named `01.jpg`, `02.jpg` and so
+  on in upload order. Unpack it and select the lot in your platform's bulk upload; they go up in
+  order.
+- Each image also has its own **↓ 01.jpg** link in the preview, when you only need to replace one.
+
+The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
+is fine: nothing depends on the numbers matching afterwards.
 
 ## One active offer per copy, per platform
 

@@ -9,7 +9,9 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, addOfferSet, deleteOffer, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
+import { inflateRawSync } from "node:zlib";
 import {
+  buildOfferPhotoArchive,
   claimNextOfferPhotoGeneration,
   deleteOfferPhotoBytes,
   enqueueOfferPhotoGeneration,
@@ -61,6 +63,27 @@ async function bytesExist(photo: {
   } catch {
     return false;
   }
+}
+
+/** Read a ZIP back by walking its local file headers, in written order (#314). */
+function readZipEntries(archive: Buffer): { name: string; contents: Buffer }[] {
+  const entries: { name: string; contents: Buffer }[] = [];
+  let offset = 0;
+  while (offset + 4 <= archive.length && archive.readUInt32LE(offset) === 0x04034b50) {
+    const method = archive.readUInt16LE(offset + 8);
+    const compressedSize = archive.readUInt32LE(offset + 18);
+    const nameLength = archive.readUInt16LE(offset + 26);
+    const extraLength = archive.readUInt16LE(offset + 28);
+    const name = archive.subarray(offset + 30, offset + 30 + nameLength).toString("utf8");
+    const start = offset + 30 + nameLength + extraLength;
+    const payload = archive.subarray(start, start + compressedSize);
+    entries.push({
+      name,
+      contents: method === 0 ? Buffer.from(payload) : inflateRawSync(payload),
+    });
+    offset = start + compressedSize;
+  }
+  return entries;
 }
 
 describe("offer photo generation (#311)", () => {
@@ -357,6 +380,93 @@ describe("offer photo generation (#311)", () => {
     await runOfferPhotoGeneration(offerId);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "ready");
     assert.equal(await claimNextOfferPhotoGeneration(), null, "the queue is drained");
+  });
+
+  // ── The panel (#314) ───────────────────────────────────────────────────────
+
+  it("says what each image was rendered from, and numbers the files for upload", async () => {
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.images.length, 1, "front-only, one group");
+    const [image] = state.images;
+
+    assert.equal(image.fileName, "01.jpg", "plan position, padded, with the stored mime's extension");
+    assert.equal(image.itemIds.length, 3, "the three copies the collage actually shows");
+    assert.deepEqual(image.copyLabels, ["Stamp 0", "Stamp 1", "Stamp 2"]);
+    assert.deepEqual([...image.setLabels].sort(), ["Stamp 0", "Stamp 1", "Stamp 2"]);
+  });
+
+  it("hands the whole plan over as one ordered ZIP", async () => {
+    const archive = await buildOfferPhotoArchive(userId, offerId);
+    assert.match(archive.fileName, /-photos\.zip$/);
+
+    const entries = readZipEntries(archive.bytes);
+    assert.deepEqual(
+      entries.map((e) => e.name),
+      ["01.jpg"],
+      "one file per stored image, numbered in plan order"
+    );
+
+    // The archived bytes are the stored bytes — nothing is re-rendered on download (#311).
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    const photo = await prisma.photo.findUniqueOrThrow({
+      where: { id: state.images[0].photoId },
+      select: { storageBackend: true, storageKey: true, mime: true },
+    });
+    const stored = await getStorage(photo.storageBackend).get(
+      variantKey(photo.storageKey, "full", photo.mime),
+      photo.mime
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of stored.stream) chunks.push(Buffer.from(chunk));
+    assert.deepEqual(entries[0].contents, Buffer.concat(chunks));
+  });
+
+  it("reports a side skipped for want of a complete set of scans", async () => {
+    const back = await prisma.photo.findFirstOrThrow({
+      where: {
+        role: "back",
+        item: { offerSetMemberships: { some: { offerSet: { offerId } } } },
+      },
+      select: { id: true, itemId: true },
+    });
+    await applyPhotoChangeSet(userId, back.itemId!, { add: [], update: [], remove: [back.id] });
+    await updateOfferPhotoConfig(userId, offerId, {
+      photoSides: "both",
+      photoLabelTemplate: null,
+      collage: {
+        collageRows: 2,
+        collageColumns: 2,
+        collageGap: 10,
+        collageBackground: "#ffffff",
+        collageLabelStripHeight: 12,
+      },
+    });
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.plan.imageCount, 1, "the front collage survives; the back one cannot be made");
+    assert.equal(state.plan.skipped.length, 1);
+    const [skipped] = state.plan.skipped;
+    assert.equal(skipped.side, "back");
+    assert.equal(skipped.copyCount, 3);
+    assert.equal(skipped.missingCopyLabels.length, 1, "one copy is the reason the group is short");
+    assert.ok(skipped.setLabels.length > 0, "the notice names the sets it is about");
+  });
+
+  it("refuses to archive an offer that has nothing generated", async () => {
+    const empty = await createOffer(userId, collectionId, {
+      platformId: barePlatformId,
+      url: null,
+      price: "1.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    await assert.rejects(
+      () => buildOfferPhotoArchive(userId, empty),
+      OfferPhotoGenerationError,
+      "there is no archive to build before a run has produced images"
+    );
+    await deleteOffer(userId, empty);
   });
 
   it("leaves no files behind when the offer is deleted", async () => {

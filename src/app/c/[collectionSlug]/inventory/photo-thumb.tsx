@@ -284,11 +284,12 @@ export function PhotoStrip({
   );
 }
 
-/** Full-size photo overlay with prev/next + Esc, shared by `PhotoThumb` and `PhotoStrip`.
+/** Full-size photo overlay with prev/next + Esc, shared by `PhotoThumb`, `PhotoStrip` and the
+ * offer photos panel (#314), which previews generated images that are not an owner's gallery.
  * Rendered through a portal to `document.body` so it fills the viewport instead of being clipped
  * by an ancestor that establishes a containing block (e.g. a transformed/`overflow:hidden` dialog
  * shell), which would otherwise crop a plain `position: fixed` overlay. */
-function PhotoLightbox({
+export function PhotoLightbox({
   collectionId,
   photos,
   index,

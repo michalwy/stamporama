@@ -24,7 +24,9 @@
 // - Which sides are attempted comes from the offer's `photoSides` (#308).
 // - A side's collage is produced **only if every copy in the group has a photo for that side** —
 //   all or nothing, no gaps. Stated for backs, applied to both sides for the same reason: a collage
-//   with a hole in it is worse than one image fewer.
+//   with a hole in it is worse than one image fewer. A side dropped this way is *reported*
+//   (`skipped`), never silently omitted: a set of eight losing its back collage over one missing
+//   reverse scan is exactly the kind of absence nobody notices (#314).
 // - Front and back have identical contents and are emitted interleaved (front, back, front, back…),
 //   so a group yields two images — or one, when the other side is incomplete. Nothing may assume a
 //   group has two members.
@@ -123,9 +125,27 @@ export interface PlannedAttachment {
 
 export type PlannedImage = PlannedCollage | PlannedAttachment;
 
+/**
+ * A side a group could not produce, because at least one of its copies has no scan for that side
+ * (#314). Reported rather than dropped in silence: the collector's fix is to scan the missing
+ * reverses, and they can only do that if they are told which ones.
+ */
+export interface SkippedSide {
+  side: PlanSide;
+  /** The group's key — the same value the group's other side carries as `groupKey`. */
+  groupKey: string;
+  setIds: string[];
+  /** Every copy in the group, in tile order. */
+  itemIds: string[];
+  /** The copies that have no photo for this side. Always a non-empty subset of `itemIds`. */
+  missingItemIds: string[];
+}
+
 export interface OfferPhotoPlan {
   /** The planned images, in upload order. */
   images: PlannedImage[];
+  /** Sides no group could produce for want of a complete set of scans, in group order. */
+  skipped: SkippedSide[];
   /** How many generated groups the photo-count limit dropped from the end. */
   droppedGroups: number;
   /** True when the plan still exceeds the platform's limit because protected attachments alone
@@ -194,21 +214,40 @@ function buildGroups(sets: readonly PlanSet[], capacity: number): CopyGroup[] {
   return groups;
 }
 
-/** The images one group yields: one per side whose photos are complete, front before back. */
-function renderGroup(group: CopyGroup, sides: PlanSide[], groupKey: string): PlannedCollage[] {
+/** What one group yields: an image per side whose photos are complete, front before back, plus the
+ * sides it could not produce. */
+interface GroupPlan {
+  key: string;
+  images: PlannedCollage[];
+  skipped: SkippedSide[];
+}
+
+function renderGroup(group: CopyGroup, sides: PlanSide[], groupKey: string): GroupPlan {
   const images: PlannedCollage[] = [];
+  const skipped: SkippedSide[] = [];
   for (const side of sides) {
     const tiles: PlannedTile[] = [];
+    const missingItemIds: string[] = [];
     for (const copy of group.copies) {
       const photoId = photoFor(copy, side);
-      // All or nothing: one missing photo cancels this side for the whole group.
-      if (!photoId) break;
-      tiles.push({ itemId: copy.itemId, photoId });
+      // All or nothing: one missing photo cancels this side for the whole group. Every copy is still
+      // examined, so the report can name all of them and not just the first.
+      if (photoId) tiles.push({ itemId: copy.itemId, photoId });
+      else missingItemIds.push(copy.itemId);
     }
-    if (tiles.length !== group.copies.length) continue;
+    if (missingItemIds.length > 0) {
+      skipped.push({
+        side,
+        groupKey,
+        setIds: group.setIds,
+        itemIds: group.copies.map((c) => c.itemId),
+        missingItemIds,
+      });
+      continue;
+    }
     images.push({ kind: "collage", side, groupKey, setIds: group.setIds, tiles });
   }
-  return images;
+  return { key: groupKey, images, skipped };
 }
 
 /** Places attachments at their explicit positions, appending anything out of range. */
@@ -253,22 +292,31 @@ export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
 
   // Truncation drops whole groups from the end — a front/back pair always goes together — and never
   // touches attachments, which hold their slots.
-  let kept = groups.filter((images) => images.length > 0);
+  let kept = groups.filter((group) => group.images.length > 0);
+  const truncated = new Set<string>();
   let droppedGroups = 0;
   if (input.maxPhotos != null) {
     const allowance = Math.max(0, input.maxPhotos - attachments.length);
-    let count = kept.reduce((sum, images) => sum + images.length, 0);
+    let count = kept.reduce((sum, group) => sum + group.images.length, 0);
     while (count > allowance && kept.length > 0) {
-      count -= kept[kept.length - 1].length;
+      const last = kept[kept.length - 1];
+      count -= last.images.length;
+      truncated.add(last.key);
       kept = kept.slice(0, -1);
       droppedGroups += 1;
     }
   }
 
-  const images = placeAttachments(kept.flat(), attachments);
+  const images = placeAttachments(
+    kept.flatMap((group) => group.images),
+    attachments
+  );
 
   return {
     images,
+    // A group the photo limit removed outright is already reported as a drop; its missing back side
+    // would be a second notice about an image nobody is getting either way.
+    skipped: groups.flatMap((group) => (truncated.has(group.key) ? [] : group.skipped)),
     droppedGroups,
     exceedsLimit: input.maxPhotos != null && images.length > input.maxPhotos,
     configured,

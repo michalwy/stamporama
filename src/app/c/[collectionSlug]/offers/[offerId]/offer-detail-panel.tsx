@@ -500,6 +500,13 @@ export function OfferDetailPanel({
         </div>
       )}
 
+      {/* Generated listing images (#311, #314) — under the listing texts, because the texts and the
+          images are the two halves of what actually goes to the platform, and this is where you leave
+          the screen from. Collapsed by default: expanded it previews the whole plan and would push
+          the sets far down. Photo settings stay in the ⋮ menu — configuration is edited rarely,
+          generation is pressed often. */}
+      <OfferPhotosCard collectionId={collectionId} offerId={offerId} />
+
       {/* Sets */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -536,12 +543,6 @@ export function OfferDetailPanel({
         baseCurrency={baseCurrency}
         onRemoveSet={setRemoveSet}
       />
-
-      {/* Generated listing images (#311). Below the sets, because what gets rendered *is* the sets:
-          the plan groups their copies, and the card's counts only make sense once you have read them.
-          Photo settings stay in the ⋮ menu — configuration is edited rarely, generation is pressed
-          often. */}
-      <OfferPhotosCard collectionId={collectionId} offerId={offerId} />
 
       {actionError && <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</p>}
 

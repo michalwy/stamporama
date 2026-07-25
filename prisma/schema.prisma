@@ -816,6 +816,9 @@ model OfferPhotoEntry {
   pairKey String?
   /** The sets that contributed copies, in plan order. */
   setIds  String[]
+  /** The copies this image actually shows, in tile order (#314). `setIds` cannot answer that on its
+   * own: a set larger than the collage's capacity is split into several groups that all name it. */
+  itemIds String[]
   createdAt DateTime @default(now())
 
   offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
