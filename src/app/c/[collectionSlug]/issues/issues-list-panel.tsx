@@ -207,10 +207,20 @@ export function IssuesListPanel({
   const effectiveCatalogVendorId = parsedCatalog.vendorId ?? catalogVendorId;
   const effectiveCatalogNumber = parsedCatalog.number;
 
+  // The quick search box gets the same prefix parsing (#289): "Mi PL 200" or "BL31" is
+  // never stored verbatim, so alongside the plain text we send the parsed vendor (when an
+  // abbreviation led the input) and the bare number, which the server ORs into the search.
+  const parsedSearch = useMemo(
+    () => parseCatalogSearch(search, catalogVendors),
+    [search, catalogVendors]
+  );
+
   const filters: IssueListFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       year: year || undefined,
@@ -218,17 +228,19 @@ export function IssuesListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, year, displayConditionId, sortBy, sortDir]
+    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, year, displayConditionId, sortBy, sortDir]
   );
 
   const yearFacetFilters: IssueYearFacetFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber]
+    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(

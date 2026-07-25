@@ -13,6 +13,7 @@ import {
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
+import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import {
@@ -247,23 +248,7 @@ export function StampRow({
               {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
             </span>
           ))}
-          {stamp.colnectId && (
-            <span
-              title={`Colnect item-ID ${stamp.colnectId}`}
-              style={{
-                fontSize: "0.75rem",
-                fontFamily: "monospace",
-                color: "var(--color-text-muted)",
-                background: "var(--color-bg-page)",
-                border: "1px dashed var(--color-border-strong)",
-                borderRadius: "0.25rem",
-                padding: "0.1rem 0.4rem",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Colnect {stamp.colnectId}
-            </span>
-          )}
+          <ColnectChip colnectId={stamp.colnectId} size="medium" />
           {stamp.mainCatalogPrice && (
             <span
               style={{

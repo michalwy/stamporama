@@ -20,6 +20,7 @@ import {
   formatStampCN,
 } from "./chip-styles";
 import { StalePriceIcon } from "./stale-price-icon";
+import { ColnectChip } from "./colnect-chip";
 
 // Shared presentational building blocks for an issue and its stamp/variant tree,
 // so the main issues list (issue-row.tsx) and the inventory stamp-picker popup
@@ -196,7 +197,8 @@ export function StampDetailLine({
   const secondaryCNs = node.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId);
   const notRequired = !node.requiredForCompleteness;
 
-  if (!primaryCN && secondaryCNs.length === 0 && !node.mainCatalogPrice) return null;
+  if (!primaryCN && secondaryCNs.length === 0 && !node.colnectId && !node.mainCatalogPrice)
+    return null;
 
   return (
     <div
@@ -218,6 +220,7 @@ export function StampDetailLine({
           {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
         </span>
       ))}
+      <ColnectChip colnectId={node.colnectId} />
       {node.mainCatalogPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
           {node.mainCatalogPriceStale && <StalePriceIcon />}

@@ -20,6 +20,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { PhotoThumb } from "./photo-thumb";
@@ -461,6 +462,7 @@ export function InventoryItemRow({
               {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
             </span>
           ))}
+          <ColnectChip colnectId={item.colnectId} />
           {!hasCatalog && !item.stampName && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
           )}

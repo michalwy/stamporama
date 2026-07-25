@@ -15,6 +15,10 @@ interface IssuesPage {
 export interface IssueListFilters {
   areaIds?: string[];
   search?: string;
+  /** Vendor + bare number parsed out of the quick search text (#289), so a prefixed
+   *  catalog number ("Mi PL 200") matches even though that spelling is never stored. */
+  searchCatalogVendorId?: string;
+  searchCatalogNumber?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
   /** "none" for the no-year bucket, otherwise a numeric year string. */
@@ -29,6 +33,8 @@ export interface IssueListFilters {
 export interface IssueYearFacetFilters {
   areaIds?: string[];
   search?: string;
+  searchCatalogVendorId?: string;
+  searchCatalogNumber?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
 }
@@ -55,6 +61,10 @@ export function useIssuesInfinite(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchCatalogVendorId)
+        params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
+      if (filters.searchCatalogNumber)
+        params.set("searchCatalogNumber", filters.searchCatalogNumber);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.year) params.set("year", filters.year);
@@ -83,6 +93,10 @@ export function useIssueYears(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchCatalogVendorId)
+        params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
+      if (filters.searchCatalogNumber)
+        params.set("searchCatalogNumber", filters.searchCatalogNumber);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       const res = await fetch(

@@ -681,6 +681,9 @@ export interface ItemListItem {
   issuedMonth: number | null;
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
+  /** The stamp's Colnect Marketplace item-ID (#247), or null when unset — shown as a
+   *  link to its Colnect page next to the catalog numbers (#290). */
+  colnectId: string | null;
   /** Area the stamp is primarily linked to, used to resolve catalog-vendor display. */
   areaId: string | null;
   issueId: string | null;
@@ -752,6 +755,7 @@ const ITEM_LIST_SELECT = {
       issuedMonth: true,
       issuedYear: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      colnectId: true,
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
       variants: { select: VARIANT_FLAG_SELECT },
       issueMemberships: {
@@ -794,6 +798,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     issuedMonth: row.stamp.issuedMonth,
     issuedYear: row.stamp.issuedYear,
     catalogNumbers: row.stamp.catalogNumbers,
+    colnectId: row.stamp.colnectId,
     areaId,
     issueId: firstIssue?.id ?? null,
     issueName: firstIssue?.name ?? null,

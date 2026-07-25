@@ -726,6 +726,13 @@ export interface IssueListFilterOpts {
   offset?: number;
   pageSize?: number;
   search?: string;
+  /** Vendor resolved from a catalog prefix typed into the *quick search* box (#289),
+   *  e.g. the "Mi" of "Mi PL 200". Narrows {@link searchCatalogNumber} to one vendor;
+   *  without it the number matches across every vendor. */
+  searchCatalogVendorId?: string;
+  /** Bare catalog number parsed out of the quick search text (#289) — "Mi PL 200" and
+   *  "PL200" both yield "200". Widens the quick search, never narrows it. */
+  searchCatalogNumber?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
   /** Restrict to a single year. A number matches `issue.year`; `"none"`
@@ -752,15 +759,33 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
 
   if (opts.search) {
     const s = opts.search;
-    conditions.push({
-      OR: [
-        { name: { contains: s, mode: "insensitive" } },
-        { members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } },
-        { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
-        { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
-        { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } },
-      ],
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const or: any[] = [
+      { name: { contains: s, mode: "insensitive" } },
+      { members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } },
+      { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
+      { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
+      { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } },
+    ];
+
+    // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
+    // never appears in a stored number, so the caller also hands us the number parsed out
+    // of it (`parseCatalogSearch`, #146) plus the vendor when its abbreviation led the
+    // input. Matching stays `contains`, like the rest of the quick search — that is what
+    // lets "Fi BL31" reach a stored "BL31" through its digit run.
+    if (opts.searchCatalogNumber) {
+      const n = { contains: opts.searchCatalogNumber, mode: "insensitive" as const };
+      const vendorClause = opts.searchCatalogVendorId
+        ? { catalogVendorId: opts.searchCatalogVendorId }
+        : {};
+      or.push(
+        { catalogNumbers: { some: { ...vendorClause, firstNumber: n } } },
+        { catalogNumbers: { some: { ...vendorClause, lastNumber: n } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { ...vendorClause, number: n } } } } } }
+      );
+    }
+
+    conditions.push({ OR: or });
   }
 
   // Catalog filter (#146): a number narrows to a vendor when one is set, else it

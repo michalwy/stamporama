@@ -22,6 +22,8 @@ export async function GET(
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
   const search = sp.get("search") || undefined;
+  const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
+  const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const displayConditionId = sp.get("displayConditionId") || undefined;
@@ -42,6 +44,8 @@ export async function GET(
       offset,
       areaIds,
       search,
+      searchCatalogVendorId,
+      searchCatalogNumber,
       catalogVendorId,
       catalogNumber,
       year,
