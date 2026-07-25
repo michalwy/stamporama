@@ -123,15 +123,49 @@ function cardImageUrl(card: Element): string | undefined {
   }
 }
 
-/** The `dd` holding catalog codes: the one whose preceding/associated `dt` reads "Catalog codes". */
-function catalogCodesDd(card: Element): Element | null {
-  for (const dt of Array.from(card.querySelectorAll("dt"))) {
-    if ((dt.textContent ?? "").trim().toLowerCase().startsWith("catalog codes")) {
+/** The `dd` of the first dt/dd pair whose label starts with `label` (lowercase), or null. */
+function ddFor(root: Element | Document, label: string): Element | null {
+  for (const dt of Array.from(root.querySelectorAll("dt"))) {
+    if ((dt.textContent ?? "").trim().toLowerCase().startsWith(label)) {
       const dd = dt.nextElementSibling;
       if (dd && dd.tagName === "DD") return dd;
     }
   }
   return null;
+}
+
+/** The `dd` holding catalog codes: the one whose preceding/associated `dt` reads "Catalog codes". */
+function catalogCodesDd(card: Element): Element | null {
+  return ddFor(card, "catalog codes");
+}
+
+/** Text of a labelled dt/dd pair, trimmed. */
+function labelledText(root: Element | Document, label: string): string | undefined {
+  return (ddFor(root, label)?.textContent ?? "").trim() || undefined;
+}
+
+/** Year of issue from an "Issued on" row ("1945-01-22" → 1945). */
+function issuedYearOf(root: Element | Document): number | undefined {
+  const year = labelledText(root, "issued on")?.match(/\d{4}/)?.[0];
+  return year ? Number(year) : undefined;
+}
+
+/**
+ * Country and year for an item, so the Colnect side can show the same kind of detail as our stamp
+ * (year · area). `fallback` is consulted only for variant rows, which state neither themselves —
+ * both belong to the stamp whose page they are listed on. A card must never fall back to the
+ * document, or it would inherit a neighbouring card's values.
+ */
+function itemContext(
+  root: Element,
+  fallback: Document | null
+): { issuedYear?: number; country?: string } {
+  const issuedYear = issuedYearOf(root) ?? (fallback ? issuedYearOf(fallback) : undefined);
+  const country = labelledText(root, "country") ?? (fallback ? labelledText(fallback, "country") : undefined);
+  return {
+    ...(issuedYear !== undefined ? { issuedYear } : {}),
+    ...(country ? { country } : {}),
+  };
 }
 
 /** Extract one card, or null when it lacks an item-ID or any usable catalog ref. */
@@ -148,6 +182,7 @@ export function extractCard(card: Element): ExtractedItem | null {
     catalogRefs,
     ...(name ? { name } : {}),
     ...(imageUrl ? { imageUrl } : {}),
+    ...itemContext(card, null),
   };
 }
 
@@ -189,6 +224,8 @@ export function extractVariant(li: Element): ExtractedItem | null {
     catalogRefs,
     ...(name ? { name } : {}),
     ...(imageUrl ? { imageUrl } : {}),
+    // A variant states neither country nor date: both belong to the stamp whose page lists it.
+    ...itemContext(li, li.ownerDocument),
   };
 }
 

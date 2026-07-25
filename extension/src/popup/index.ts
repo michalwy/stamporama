@@ -15,7 +15,7 @@ import type {
   MatchResponse,
 } from "../core/messages";
 import type { ExtractedItem } from "../platform/types";
-import type { Candidate, MatchResult } from "../core/decisions";
+import type { Candidate, MatchResult, RefView } from "../core/decisions";
 
 // Popup controller. On open it detects whether the active tab is a page one of our platform modules
 // handles and extracts it straight away — the user only sees "Found N stamps" and decides whether to
@@ -37,6 +37,7 @@ const scanEl = $("scan");
 const foundEl = $("found");
 const statusEl = $("status");
 const chipsEl = $("chips");
+const legendEl = $("legend");
 const resultsEl = $("results");
 const progressEl = $("progress");
 const barEl = $("bar");
@@ -363,6 +364,8 @@ function renderChips(): void {
   ].filter(Boolean);
   chipsEl.innerHTML = parts.join("");
   chipsEl.hidden = parts.length === 0;
+  // The colour key only means anything once there are marked numbers on screen.
+  legendEl.hidden = results.length === 0;
 }
 
 async function preview(): Promise<void> {
@@ -404,6 +407,8 @@ function markWritten(colnectId: string, stamp: Candidate): void {
     written: true,
     alreadySet: false,
     stamp: { ...stamp, existingColnectId: colnectId },
+    // The refs keep their classification: it described this stamp, which is the one just linked.
+    refs: results[i].refs,
   };
   render();
 }
@@ -471,29 +476,110 @@ function sourceOf(colnectId: string): ExtractedItem | undefined {
   return items.find((i) => i.platformItemId === colnectId);
 }
 
-function refsLine(item: ExtractedItem | undefined): string {
-  if (!item || item.catalogRefs.length === 0) return "";
-  return `<div class="refs">${esc(item.catalogRefs.map((r) => `${r.catalog}: ${r.number}`).join("  ·  "))}</div>`;
+// Both columns render through the same skeleton — label, then a row of picture + the same four
+// lines (name / sub / catalog numbers / meta) — so a Colnect item and the stamp it resolved to can
+// be read across, line against line. Only the picture's side differs: the Colnect one sits at the
+// end of its column and the stamp's at the start of the next, so the two images meet in the middle.
+
+interface SideLines {
+  name: string;
+  /** Second line: the Colnect id on one side, the issue name on the other. */
+  sub?: string;
+  /** Third line: catalog numbers, already escaped and marked up. */
+  cats?: string;
+  /** Fourth line: year · area, warnings. */
+  meta?: string;
 }
 
+function sideBody(
+  lines: SideLines,
+  thumb: string,
+  opts: { mirror?: boolean; action?: string; label?: string } = {}
+): string {
+  // The label sits inside the text column, beside the picture rather than above it, so the picture
+  // gets the full height of the row.
+  const text =
+    `<span class="grow">` +
+    `${opts.label ? `<div class="lbl">${opts.label}</div>` : ""}` +
+    `<div class="nm">${lines.name}</div>` +
+    `${lines.sub ? `<div class="sub">${lines.sub}</div>` : ""}` +
+    `${lines.cats ? `<div class="cats">${lines.cats}</div>` : ""}` +
+    `${lines.meta ? `<div class="meta">${lines.meta}</div>` : ""}</span>`;
+  const inner = opts.mirror ? `${text}${thumb}` : `${thumb}${text}`;
+  return `<div class="body">${inner}${opts.action ?? ""}</div>`;
+}
+
+const REF_TITLE: Record<string, string> = {
+  matched: "Matches your stamp — this is what the match was made on",
+  missing: "You keep this catalog, but your stamp has no number for it",
+  conflict: "Your stamp has a different number in this catalog",
+  unmapped: "No catalog of yours corresponds to this one",
+  unknown: "Not comparable until a single stamp is chosen",
+};
+
+/** The Colnect refs, each marked with what it means for us. */
+function refsMarkup(refs: RefView[] | undefined, fallback: ExtractedItem | undefined): string {
+  if (refs?.length) {
+    return refs
+      .map(
+        (r) =>
+          `<span class="ref ${r.status}" title="${esc(REF_TITLE[r.status] ?? "")}">${esc(
+            `${r.catalog}: ${r.number}`
+          )}</span>`
+      )
+      .join(" ");
+  }
+  // Before a match has run we only have what the page printed, with nothing to compare it to.
+  if (!fallback?.catalogRefs.length) return "";
+  return fallback.catalogRefs
+    .map((r) => `<span class="ref unknown">${esc(`${r.catalog}: ${r.number}`)}</span>`)
+    .join(" ");
+}
+
+/** A column with a label but nothing to show under it — keeps the two sides' labels on one line. */
+function labelledNote(label: string, note: string): string {
+  return `<div class="body"><span class="grow"><div class="lbl">${esc(
+    label
+  )}</div><div class="empty">${note}</div></span></div>`;
+}
+
+const MINE_TITLE: Record<string, string> = {
+  matched: "Colnect prints this same number — this is what the match was made on",
+  conflict: "Colnect prints a different number in this catalog",
+  "only-mine": "Colnect doesn't list this catalog for the item",
+};
+
 /** One of our stamps, with enough detail to tell it from a sibling. */
-function stampBlock(c: Candidate, actionIndex?: number): string {
-  const meta = [
-    c.issuedYear ? String(c.issuedYear) : null,
-    c.areaName,
-    c.catalogNumbers.length ? `<span class="cat">${esc(c.catalogNumbers.join(", "))}</span>` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
+  const meta = [c.issuedYear ? String(c.issuedYear) : null, c.areaName].filter(Boolean).join(" · ");
   const warn = c.existingColnectId
     ? `<div class="warnline">already has Colnect ID ${esc(c.existingColnectId)}</div>`
     : "";
-  const issue = c.issueName ? `<div class="issue">${esc(c.issueName)}</div>` : "";
-  const btn = actionIndex !== undefined ? `<button class="small" data-pick="${actionIndex}">Use this</button>` : "";
+  const action =
+    actionIndex !== undefined ? `<button class="small" data-pick="${actionIndex}">Use this</button>` : "";
   // Placeholder only — the bytes need an auth header, so hydrateStampPhotos() fills src later.
-  const thumb = c.photoId ? `<img class="thumb" data-photo="${esc(c.photoId)}" alt="">` : "";
-  return `<div class="stamp">${thumb}<span class="grow"><div class="nm">${esc(c.name || "(unnamed stamp)")}</div>` +
-    `${issue}<div class="meta">${meta || "no details"}</div>${warn}</span>${btn}</div>`;
+  const thumb = c.photoId
+    ? `<img class="thumb" data-photo="${esc(c.photoId)}" alt="">`
+    : `<span class="thumb thumb--none"></span>`;
+  return sideBody(
+    {
+      name: esc(c.name || "(unnamed stamp)"),
+      sub: c.issueName ? `<em>${esc(c.issueName)}</em>` : undefined,
+      cats: c.catalogNumbers.length
+        ? c.catalogNumbers
+            .map(
+              (n) =>
+                `<span class="ref ${n.status}" title="${esc(MINE_TITLE[n.status] ?? "")}">${esc(
+                  n.label
+                )}</span>`
+            )
+            .join(" ")
+        : undefined,
+      meta: [meta, warn].filter(Boolean).join(""),
+    },
+    thumb,
+    { action, label: esc(label) }
+  );
 }
 
 /** Click targets for "Use this", indexed so we can hand back the full candidate object. */
@@ -501,40 +587,57 @@ let picks: { colnectId: string; stamp: Candidate; overwrite: boolean }[] = [];
 
 function itemCard(r: MatchResult): string {
   const src = sourceOf(r.colnectId);
-  const title = esc(src?.name || "(unnamed)");
   let tag: string;
-  let match: string;
+  let matchLabel: string;
+  let matchBody: string;
 
   if (r.status === "auto") {
     const state = r.alreadySet ? "already linked" : r.written ? "written ✓" : "will write";
     tag = `<span class="tag auto">${state}</span>`;
-    match = `<div class="match"><div class="lbl">Matches your stamp</div>${
-      r.stamp ? stampBlock(r.stamp) : `<div class="empty">stamp ${esc(r.stampId)}</div>`
-    }</div>`;
+    matchLabel = "Your stamp";
+    matchBody = r.stamp
+      ? stampBlock(r.stamp, matchLabel)
+      : labelledNote(matchLabel, `stamp ${esc(r.stampId)}`);
   } else if (r.status === "needs-confirm") {
     tag = `<span class="tag needs">${esc(REASON_LABEL[r.reason] || r.reason)}</span>`;
+    matchLabel = r.candidates.length > 1 ? "Pick the right stamp" : "Your stamp";
     const overwrite = r.reason === "existing-different";
-    match = `<div class="match"><div class="lbl">Pick the right stamp</div>${r.candidates
+    matchBody = r.candidates
       .map((c) => {
         picks.push({ colnectId: r.colnectId, stamp: c, overwrite });
-        return stampBlock(c, picks.length - 1);
+        return stampBlock(c, matchLabel, picks.length - 1);
       })
-      .join("")}</div>`;
+      .join("");
   } else {
     tag = `<span class="tag skip">skipped</span>`;
-    match = `<div class="match"><div class="empty">${esc(REASON_LABEL[r.reason] || r.reason)}</div></div>`;
+    matchLabel = "No match";
+    matchBody = labelledNote(matchLabel, esc(REASON_LABEL[r.reason] || r.reason));
   }
 
   // Prefer the canvas-captured data URL; the raw Colnect URL is a hotlink the site may refuse.
   const picture = src?.imageData ?? src?.imageUrl;
-  const thumb = picture ? `<img class="thumb" src="${esc(picture)}" alt="">` : "";
+  const thumb = picture
+    ? `<img class="thumb" src="${esc(picture)}" alt="">`
+    : `<span class="thumb thumb--none"></span>`;
 
-  // The Colnect thumbnail sits at the *end* of its column and the stamp photo at the start of the
-  // next, so in the two-column layout the two pictures meet in the middle — image beside image.
-  return `<div class="item"><div class="src"><div class="head"><span class="title">${title}</span>${tag}</div>` +
-    `<div class="srcrow"><span class="grow"><div class="id">Colnect #${esc(r.colnectId)}</div>${refsLine(
-      src
-    )}</span>${thumb}</div></div>${match}</div>`;
+  // Same field order as our side: name / (issue — Colnect has no counterpart) / numbers / year·area.
+  const colnect =
+    `<div class="side src">` +
+    sideBody(
+      {
+        name: esc(src?.name || "(unnamed)"),
+        cats: refsMarkup(r.refs, src),
+        meta: [src?.issuedYear ? String(src.issuedYear) : null, src?.country]
+          .filter(Boolean)
+          .map((v) => esc(String(v)))
+          .join(" · "),
+      },
+      thumb,
+      { mirror: true, label: `Colnect: #${esc(r.colnectId)} ${tag}` }
+    ) +
+    `</div>`;
+
+  return `<div class="item">${colnect}<div class="side match">${matchBody}</div></div>`;
 }
 
 function section(title: string, rows: MatchResult[], collapsed: boolean): string {

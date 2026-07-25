@@ -63,6 +63,7 @@ const STAMP_PAGE = `
     </div>
     <div class="i_d"><dl>
       <dt>Country:</dt><dd><a href="/en/stamps/years/country/172-Poland">Poland</a></dd>
+      <dt>Issued on:</dt><dd><a href="/en/stamps/countries/year/1945">1945</a>-01-22</dd>
       <dt>Catalog codes:</dt>
       <dd><strong>Michel</strong> PL 389<br><strong>Stamp Number</strong> PL 362<br><strong>Polish Stamps Catalog (Fischer)</strong> PL 347a</dd>
     </dl></div>
@@ -181,7 +182,13 @@ describe("extractColnect on a single stamp's page", () => {
         { catalog: "Pol", number: "PL 347nz" },
       ],
       imageUrl: "//i.colnect.net/t/8240/676/V1.jpg",
+      country: "Poland",
+      issuedYear: 1945,
     });
+
+    // Country and issue year come from the stamp page: a variant states neither of its own.
+    assert.equal(items[0].country, "Poland");
+    assert.equal(items[0].issuedYear, 1945);
 
     // Unlisted is skipped, and a value containing a space survives intact.
     assert.deepEqual(items[1].catalogRefs, [{ catalog: "Pol", number: "PL 347a B10" }]);

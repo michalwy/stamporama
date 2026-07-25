@@ -176,7 +176,8 @@ describe("matchColnectItems", () => {
       assert.equal(auto.written, true);
       // The matched stamp travels with the result so callers can show what the ID landed on (#249).
       assert.equal(auto.stamp?.stampId, s.stamps.auto);
-      assert.ok(auto.stamp?.catalogNumbers.includes("Mi·PL 200"));
+      // Our own number is marked too: Colnect prints the same one, so it reads as matched.
+      assert.deepEqual(auto.stamp?.catalogNumbers, [{ label: "Mi·PL 200", status: "matched" }]);
       assert.ok(auto.stamp?.issueName?.startsWith("Birds-"), "issue name travels with the candidate");
     }
 
@@ -195,7 +196,7 @@ describe("matchColnectItems", () => {
         [s.stamps.dupA, s.stamps.dupB].sort()
       );
       // Labels reflect the effective area prefix.
-      assert.ok(multi.candidates[0].catalogNumbers.includes("Mi·PL 400"));
+      assert.ok(multi.candidates[0].catalogNumbers.some((n) => n.label === "Mi·PL 400"));
     }
 
     // 444 — agrees on Michel, conflicts on Scott → partial confirm.
@@ -230,6 +231,39 @@ describe("matchColnectItems", () => {
     assert.equal(mappingStamp?.colnectId, "222");
     const existingStamp = await prisma.stamp.findUnique({ where: { id: s.stamps.existing }, select: { colnectId: true } });
     assert.equal(existingStamp?.colnectId, "old-600");
+  });
+
+  it("classifies each printed ref against the matched stamp", async () => {
+    // The stamp holds Michel 500 and Scott 55. Colnect prints the matching Michel, a Scott that
+    // differs, a Fischer (mapped via "Pol") the stamp has no number for, and an unmapped catalog.
+    const results = byColnect(
+      await matchColnectItems(
+        s.userId,
+        s.collectionId,
+        [
+          {
+            colnectId: "700",
+            catalogRefs: [
+              { catalog: "Mi", number: "PL 500" },
+              { catalog: "Sc", number: "99" },
+              { catalog: "Pol", number: "1234" },
+              { catalog: "Zz", number: "7" },
+            ],
+          },
+        ],
+        { dryRun: true }
+      )
+    );
+
+    const r = results.get("700");
+    assert.ok(r);
+    const status = new Map(r.refs.map((x) => [x.catalog, x.status]));
+    assert.equal(status.get("Mi"), "matched", "the Michel number is the matching evidence");
+    assert.equal(status.get("Sc"), "conflict", "Scott differs from ours");
+    assert.equal(status.get("Pol"), "missing", "we keep Fischer but this stamp has no number");
+    assert.equal(status.get("Zz"), "unmapped", "no catalog of ours corresponds");
+    // Values travel verbatim for display.
+    assert.equal(r.refs.find((x) => x.catalog === "Mi")?.number, "PL 500");
   });
 
   it("is idempotent: re-running a written match reports alreadySet with no write", async () => {

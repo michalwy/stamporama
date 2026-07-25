@@ -43,7 +43,7 @@
         background: var(--bg);
         color: var(--fg);
       }
-      .pad { padding: 18px 20px 28px; max-width: 900px; margin: 0 auto; }
+      .pad { padding: 20px 24px 32px; max-width: 1240px; margin: 0 auto; }
       h1 { font-size: 17px; margin: 0 0 12px; }
       /* The target badge. Always visible, and always carrying the active profile's own colour (derived
          from the instance + collection it points at) — the whole point is that you cannot mistake
@@ -107,44 +107,65 @@
 
       .item {
         border: 1px solid var(--border); border-radius: 8px;
-        margin-bottom: 8px; background: var(--panel); overflow: hidden;
+        margin-bottom: 12px; background: var(--panel); overflow: hidden;
       }
       /* With room to spare, put the Colnect item and the stamp it resolved to side by side so the
          "this ↔ that" reading is immediate. Falls back to stacked on a narrow window. */
       @media (min-width: 720px) {
         .item { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
-        .item > .match { border-top: none; border-left: 1px solid var(--border); }
+        /* Needs to out-specify `.side.match`'s stacked-layout top border, which is defined later. */
+        .item > .side.match { border-top: none; border-left: 1px solid var(--border); }
       }
-      .item > .src { padding: 10px 12px; }
-      .item .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-      .item .title { font-weight: 600; }
-      .item .id { font-family: monospace; color: var(--muted); font-size: 12px; }
-      .refs { margin-top: 4px; font-family: monospace; font-size: 12px; color: var(--muted); }
       .tag { font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
       .tag.auto { background: rgba(21,128,61,0.15); color: var(--ok); }
       .tag.needs { background: rgba(180,83,9,0.15); color: var(--warn); }
       .tag.skip { background: rgba(107,114,128,0.15); color: var(--muted); }
 
-      .match { border-top: 1px solid var(--border); background: var(--sunk); }
-      .match .lbl {
+      /* Both columns share one skeleton — label, then picture + the same four lines — so the two
+         sides can be read across, line against line. */
+      .side { padding: 14px 16px; }
+      .side.match { background: var(--sunk); border-top: 1px solid var(--border); }
+      /* The label lives inside the text column, beside the picture rather than above it, so the
+         picture gets the row's full height. */
+      .side .lbl {
         font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
-        color: var(--muted); padding: 6px 10px 0;
+        color: var(--muted); display: flex; align-items: center; gap: 8px;
+        margin-bottom: 6px; flex-wrap: wrap;
       }
-      .stamp { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px 8px; }
-      .srcrow { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+      .body { display: flex; align-items: center; gap: 14px; }
+      .body + .body { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
       .grow { flex: 1; min-width: 0; }
-      /* Thumbnails: fixed box, letterboxed, so rows stay aligned whatever the image aspect. */
+      .body .nm { font-weight: 600; line-height: 1.35; }
+      .body .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+      .body .cats { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+      .body .meta { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.45; }
+
+      /* Thumbnails: fixed box, letterboxed, so rows stay aligned whatever the image aspect.
+         An absent picture keeps its slot, so both columns' lines stay on the same baseline. */
       .thumb {
-        flex: 0 0 auto; width: 56px; height: 56px; object-fit: contain;
+        flex: 0 0 auto; width: 116px; height: 116px; object-fit: contain;
         background: var(--sunk); border: 1px solid var(--border); border-radius: 4px;
       }
-      .stamp + .stamp { border-top: 1px dashed var(--border); }
-      .stamp .nm { font-weight: 600; }
-      .stamp .issue { font-size: 12px; margin-top: 2px; font-style: italic; }
-      .stamp .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-      .stamp .cat { font-family: monospace; }
-      .warnline { color: var(--warn); font-size: 12px; margin-top: 2px; }
-      .empty { color: var(--muted); padding: 6px 10px 8px; }
+      .thumb--none { border-style: dashed; opacity: 0.5; }
+      .side.match .thumb { background: var(--panel); }
+
+      /* Catalog numbers, marked by what each one means. */
+      .ref {
+        font-family: monospace; font-size: 12px; padding: 1px 6px; border-radius: 4px;
+        border: 1px solid transparent; white-space: nowrap;
+      }
+      .ref.only-mine { background: var(--panel); border-color: var(--border); color: var(--muted); }
+      .ref.matched { background: rgba(21,128,61,0.16); border-color: rgba(21,128,61,0.35); color: var(--ok); font-weight: 600; }
+      .ref.missing { background: rgba(37,99,235,0.14); border-color: rgba(37,99,235,0.35); color: var(--primary); }
+      .ref.conflict { background: rgba(220,38,38,0.14); border-color: rgba(220,38,38,0.35); color: var(--danger); }
+      .ref.unmapped, .ref.unknown { color: var(--muted); border-color: var(--border); }
+      .ref.unmapped { opacity: 0.6; }
+
+      .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+      .legend .ref { font-family: inherit; }
+
+      .warnline { color: var(--warn); font-size: 12px; margin-top: 4px; }
+      .empty { color: var(--muted); margin-top: 10px; }
 
       .overlay {
         position: fixed; inset: 0; background: var(--scrim);
@@ -184,6 +205,13 @@
       <div id="progress" class="progress" hidden><div id="bar" class="bar"></div></div>
       <div id="status" class="status"></div>
       <div id="chips" class="chips" hidden></div>
+      <div id="legend" class="legend" hidden>
+        <span><span class="ref matched">Mi 1</span> same on both sides</span>
+        <span><span class="ref missing">Sn 2</span> only on Colnect — you keep this catalog</span>
+        <span><span class="ref conflict">Yt 3</span> the two sides differ</span>
+        <span><span class="ref only-mine">Fi 4</span> only on your stamp</span>
+        <span><span class="ref unmapped">AFA 5</span> catalog you don't keep</span>
+      </div>
       <div id="results"></div>
     </div>
 

@@ -13,6 +13,10 @@ export interface ExtractedItem {
   platformItemId: string;
   name?: string;
   catalogRefs: CatalogRef[];
+  /** Year of issue, when the page states one — shown against our stamp's own year. */
+  issuedYear?: number;
+  /** Issuing country, when stated. The counterpart of our collecting area, near enough to compare. */
+  country?: string;
   /** Absolute URL of the card's thumbnail as found in the page, when it has one. */
   imageUrl?: string;
   /** The thumbnail re-encoded as a `data:` URL, captured from the already-rendered image in the

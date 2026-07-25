@@ -221,10 +221,43 @@ export interface ColnectCandidate {
    *  Assistant window (#282). Null when the stamp has no photos. Addressed through the
    *  collection-scoped serving route; bytes are never inlined here. */
   photoId: string | null;
-  /** Formatted catalog labels, e.g. ["Mi·PL 200"]. */
-  catalogNumbers: string[];
+  /** The stamp's catalog numbers, each marked against what the Colnect item prints (#284). */
+  catalogNumbers: ColnectNumberView[];
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
   existingColnectId: string | null;
+}
+
+/**
+ * What one catalog reference printed on the Colnect page means for us (#284 display):
+ *   - `matched`  — it equals a number on the stamp we resolved to; this is the matching evidence.
+ *   - `missing`  — we know this catalog, but the stamp carries no number for it: Colnect knows
+ *                  something we don't (the backfill candidate of #280).
+ *   - `conflict` — we know this catalog and the stamp has a *different* number for it.
+ *   - `unmapped` — the Colnect abbreviation maps to no catalog of ours (#248), so it is unusable.
+ *   - `unknown`  — mapped, but there is no single stamp to compare against (several candidates, or
+ *                  nothing matched), so claiming missing/conflict would be a guess.
+ */
+export type ColnectRefStatus = "matched" | "missing" | "conflict" | "unmapped" | "unknown";
+
+export interface ColnectRefView {
+  /** The abbreviation as printed on Colnect. */
+  catalog: string;
+  /** The value as printed, verbatim. */
+  number: string;
+  status: ColnectRefStatus;
+}
+
+/**
+ * The mirror of {@link ColnectRefStatus}, for one of *our* stamp's numbers seen from the Colnect
+ * item: `matched` (Colnect prints the same), `conflict` (Colnect prints a different number in that
+ * catalog), `only-mine` (Colnect doesn't mention that catalog at all).
+ */
+export type ColnectMineStatus = "matched" | "conflict" | "only-mine";
+
+export interface ColnectNumberView {
+  /** Human label, e.g. "Mi·PL 200". */
+  label: string;
+  status: ColnectMineStatus;
 }
 
 export type ColnectMatchResult =
@@ -236,14 +269,17 @@ export type ColnectMatchResult =
       alreadySet: boolean;
       /** The matched stamp, so callers can show *which* stamp the ID landed on (#249 preview). */
       stamp: ColnectCandidate | null;
+      /** Every ref printed on the page, classified against the matched stamp. */
+      refs: ColnectRefView[];
     }
   | {
       colnectId: string;
       status: "needs-confirm";
       reason: ColnectNeedsConfirmReason;
       candidates: ColnectCandidate[];
+      refs: ColnectRefView[];
     }
-  | { colnectId: string; status: "skipped"; reason: ColnectSkippedReason };
+  | { colnectId: string; status: "skipped"; reason: ColnectSkippedReason; refs: ColnectRefView[] };
 
 /** Raised by {@link confirmColnectMatch} when the target stamp already carries a different Colnect
  *  ID and the caller did not pass `allowOverwrite`. */
@@ -256,7 +292,44 @@ export class ColnectMatchConflictError extends Error {
 
 /** Internal shape for a discovered candidate stamp: decision keys plus display fields. */
 interface CandidateEntry extends CandidateStampRefs {
-  candidate: ColnectCandidate;
+  /** Everything about the stamp that doesn't depend on which Colnect item it is compared to. */
+  base: Omit<ColnectCandidate, "catalogNumbers">;
+  /** Its numbers, carrying the keys needed to compare each against a Colnect item. */
+  numbers: { label: string; catalogVendorId: string; key: string }[];
+}
+
+/** Group resolved refs by vendor, for comparing one side's numbers against the other's. */
+function keysByVendor(refs: readonly ResolvedRef[]): Map<string, Set<string>> {
+  const byVendor = new Map<string, Set<string>>();
+  for (const r of refs) {
+    let set = byVendor.get(r.catalogVendorId);
+    if (!set) byVendor.set(r.catalogVendorId, (set = new Set()));
+    set.add(r.key);
+  }
+  return byVendor;
+}
+
+/**
+ * A candidate as shown against one specific Colnect item: its own numbers marked with whether that
+ * item prints the same number, a different one, or nothing at all for that catalog. The marking is
+ * per-item, which is why candidates are stored unmarked and viewed through this.
+ */
+function candidateView(
+  entry: CandidateEntry,
+  itemByVendor: Map<string, Set<string>>
+): ColnectCandidate {
+  return {
+    ...entry.base,
+    catalogNumbers: entry.numbers.map((n) => {
+      const theirs = itemByVendor.get(n.catalogVendorId);
+      const status: ColnectMineStatus = !theirs
+        ? "only-mine"
+        : theirs.has(n.key)
+          ? "matched"
+          : "conflict";
+      return { label: n.label, status };
+    }),
+  };
 }
 
 /** The stamp's lead photo id — same ordering the rest of the app shows (front/main first). */
@@ -326,16 +399,59 @@ export async function matchColnectItems(
   };
 
   // ── Resolve each item's refs to full keys; collect the recall conditions. ──
+  // Unresolvable refs are kept (with a null vendor) rather than dropped: the matcher ignores them,
+  // but the caller still shows them, marked as belonging to a catalog we don't keep.
   const resolvedItems = items.map((item) => {
-    const itemRefs: ResolvedRef[] = [];
-    for (const ref of item.catalogRefs) {
+    const annotated = item.catalogRefs.map((ref) => {
       const vendorId = resolveVendorId(ref.catalog);
-      if (!vendorId) continue;
-      const abbr = vendorAbbrById.get(vendorId) ?? "";
-      itemRefs.push({ catalogVendorId: vendorId, key: colnectRefKey(abbr, ref.number) });
-    }
-    return { item, itemRefs };
+      const abbr = vendorId ? (vendorAbbrById.get(vendorId) ?? "") : "";
+      return {
+        catalog: ref.catalog,
+        number: ref.number,
+        catalogVendorId: vendorId,
+        key: vendorId ? colnectRefKey(abbr, ref.number) : null,
+      };
+    });
+    const itemRefs: ResolvedRef[] = annotated
+      .filter((r): r is typeof r & { catalogVendorId: string; key: string } => !!r.catalogVendorId && !!r.key)
+      .map((r) => ({ catalogVendorId: r.catalogVendorId, key: r.key }));
+    return { item, itemRefs, annotated };
   });
+
+  /**
+   * Classify each printed ref for display. Against a single resolved stamp we can be precise
+   * (matched / missing / conflict); with several candidates or none, a mapped ref that matched
+   * nothing stays `unknown` rather than pretending we know which stamp it should belong to.
+   */
+  const classifyRefs = (
+    annotated: (typeof resolvedItems)[number]["annotated"],
+    target: CandidateStampRefs | null,
+    candidates: readonly CandidateStampRefs[]
+  ): ColnectRefView[] => {
+    const byVendor = keysByVendor(target?.refs ?? []);
+    return annotated.map((ref) => {
+      if (!ref.catalogVendorId || !ref.key) {
+        return { catalog: ref.catalog, number: ref.number, status: "unmapped" as const };
+      }
+      if (target) {
+        const mine = byVendor.get(ref.catalogVendorId);
+        const status: ColnectRefStatus = !mine
+          ? "missing"
+          : mine.has(ref.key)
+            ? "matched"
+            : "conflict";
+        return { catalog: ref.catalog, number: ref.number, status };
+      }
+      const matchedAny = candidates.some((c) =>
+        c.refs.some((r) => r.catalogVendorId === ref.catalogVendorId && r.key === ref.key)
+      );
+      return {
+        catalog: ref.catalog,
+        number: ref.number,
+        status: matchedAny ? ("matched" as const) : ("unknown" as const),
+      };
+    });
+  };
 
   // Recall net: for every distinct (vendor, number-digits) pair, pull stamps holding that vendor's
   // number containing those digits. Precision (the strict full-key check) happens in memory below.
@@ -381,25 +497,30 @@ export async function matchColnectItems(
     const primaryLink = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
     const areaId = primaryLink?.collectionAreaId ?? null;
     const refs: ResolvedRef[] = [];
-    const labels: string[] = [];
+    const numbers: CandidateEntry["numbers"] = [];
     for (const cn of s.catalogNumbers) {
       const abbr = vendorAbbrById.get(cn.catalogVendorId) ?? "";
       const prefix = areaId ? resolveEffectivePrefix(areaId, cn.catalogVendorId, areaNodes) : null;
-      refs.push({ catalogVendorId: cn.catalogVendorId, key: catalogMatchKey(abbr, prefix, cn.number) });
-      labels.push(formatCatalogNumber(abbr, prefix, cn.number));
+      const key = catalogMatchKey(abbr, prefix, cn.number);
+      refs.push({ catalogVendorId: cn.catalogVendorId, key });
+      numbers.push({
+        label: formatCatalogNumber(abbr, prefix, cn.number),
+        catalogVendorId: cn.catalogVendorId,
+        key,
+      });
     }
     candidatesById.set(s.id, {
       stampId: s.id,
       existingColnectId: s.colnectId,
       refs,
-      candidate: {
+      numbers,
+      base: {
         stampId: s.id,
         name: s.name,
         issuedYear: s.issuedYear,
         areaName: areaId ? (areaNames.get(areaId) ?? null) : null,
         issueName: s.issueMemberships[0]?.issue.name ?? null,
         photoId: pickPhotoId(s.photos),
-        catalogNumbers: labels,
         existingColnectId: s.colnectId,
       },
     });
@@ -411,18 +532,34 @@ export async function matchColnectItems(
   const writes: { stampId: string; colnectId: string }[] = [];
   const dryRun = opts.dryRun ?? false;
 
-  for (const { item, itemRefs } of resolvedItems) {
+  for (const { item, itemRefs, annotated } of resolvedItems) {
     const decision = decideColnectItem(item.colnectId, itemRefs, allCandidates);
+    // What this Colnect item prints, for marking our stamps' numbers against it.
+    const itemByVendor = keysByVendor(itemRefs);
     if (decision.status === "skipped") {
-      results.push({ colnectId: item.colnectId, status: "skipped", reason: decision.reason });
+      results.push({
+        colnectId: item.colnectId,
+        status: "skipped",
+        reason: decision.reason,
+        refs: classifyRefs(annotated, null, allCandidates),
+      });
     } else if (decision.status === "needs-confirm") {
+      // One candidate is a definite target, so missing/conflict are knowable; several are not.
+      const only =
+        decision.candidateStampIds.length === 1
+          ? (candidatesById.get(decision.candidateStampIds[0]) ?? null)
+          : null;
       results.push({
         colnectId: item.colnectId,
         status: "needs-confirm",
         reason: decision.reason,
         candidates: decision.candidateStampIds
-          .map((id) => candidatesById.get(id)?.candidate)
+          .map((id) => {
+            const entry = candidatesById.get(id);
+            return entry ? candidateView(entry, itemByVendor) : undefined;
+          })
           .filter((c): c is ColnectCandidate => c !== undefined),
+        refs: classifyRefs(annotated, only, allCandidates),
       });
     } else {
       const willWrite = !dryRun && !decision.alreadySet;
@@ -433,7 +570,11 @@ export async function matchColnectItems(
         stampId: decision.stampId,
         written: willWrite,
         alreadySet: decision.alreadySet,
-        stamp: candidatesById.get(decision.stampId)?.candidate ?? null,
+        stamp: (() => {
+          const entry = candidatesById.get(decision.stampId);
+          return entry ? candidateView(entry, itemByVendor) : null;
+        })(),
+        refs: classifyRefs(annotated, candidatesById.get(decision.stampId) ?? null, allCandidates),
       });
     }
   }

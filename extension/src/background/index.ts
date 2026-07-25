@@ -136,8 +136,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // the URL, because a separate window is its own "current window" — querying the active tab there
 // would find the Assistant itself, not the Colnect page.
 
-const WINDOW_WIDTH = 920;
-const WINDOW_HEIGHT = 760;
+// Sized for comparing a stamp against its candidates: wide enough for the two columns to hold an
+// image plus its details without crowding, tall enough to see several rows at once. `centredBounds`
+// clamps to the parent window, so a smaller screen just gets as much as it has.
+const WINDOW_WIDTH = 1280;
+const WINDOW_HEIGHT = 980;
 
 let assistantWindowId: number | null = null;
 

@@ -78,6 +78,15 @@ with a progress bar) — so you land directly on the decisions. That call only r
 written until you confirm. **Re-match** re-runs it; **Rescan** re-reads the page and matches again
 after you navigate.
 
+Both sides of a row use the **same layout** — label, then picture plus name / secondary line /
+catalog numbers — so the Colnect item and your stamp can be read across, line against line, with the
+two pictures meeting in the middle.
+
+The Colnect catalog numbers are **marked by what each one means** for you: green = matched your
+stamp (the evidence the match was made on), blue = you keep that catalog but your stamp has no number
+for it (Colnect knows something you don't — the backfill of #280), red = your stamp has a different
+number there, grey = a catalog you don't keep. A colour key sits above the results.
+
 Each row also shows a **picture on both sides** (#282): the Colnect thumbnail and the stamp's own
 photo from your collection. The Colnect one is captured from the already-rendered image in the page
 (canvas → `data:` URL) rather than hotlinked, since the extension page is a different origin; the
