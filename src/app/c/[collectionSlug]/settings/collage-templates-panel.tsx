@@ -20,8 +20,10 @@ import {
   DEFAULT_COLLAGE_BACKGROUND,
   MIN_COLLAGE_AXIS,
   MAX_COLLAGE_AXIS,
-  MIN_COLLAGE_PIXELS,
-  MAX_COLLAGE_PIXELS,
+  MIN_COLLAGE_PERCENT,
+  MAX_COLLAGE_PERCENT,
+  DEFAULT_COLLAGE_GAP_PERCENT,
+  DEFAULT_COLLAGE_LABEL_PERCENT,
 } from "@/lib/collage-template-rules";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 
@@ -150,25 +152,33 @@ function CollageTemplateForm({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <NumberField
           id="f-collage-gap"
-          name="gap"
-          label="Gap (px)"
-          defaultValue={template?.gap ?? 24}
-          min={MIN_COLLAGE_PIXELS}
-          max={MAX_COLLAGE_PIXELS}
-          hint="Between columns and rows alike."
+          name="gapPercent"
+          label="Gap (% of stamp)"
+          defaultValue={template?.gapPercent ?? DEFAULT_COLLAGE_GAP_PERCENT}
+          min={MIN_COLLAGE_PERCENT}
+          max={MAX_COLLAGE_PERCENT}
+          hint="Between columns and rows alike, and around the collage."
           isPending={isPending}
         />
         <NumberField
           id="f-collage-strip"
-          name="labelStripHeight"
-          label="Label strip height (px)"
-          defaultValue={template?.labelStripHeight ?? 0}
-          min={MIN_COLLAGE_PIXELS}
-          max={MAX_COLLAGE_PIXELS}
+          name="labelPercent"
+          label="Label strip (% of stamp)"
+          defaultValue={template?.labelPercent ?? DEFAULT_COLLAGE_LABEL_PERCENT}
+          min={MIN_COLLAGE_PERCENT}
+          max={MAX_COLLAGE_PERCENT}
           hint="Strip below each stamp for its label. 0 for none."
           isPending={isPending}
         />
       </div>
+      {/* Percentages rather than pixels (#312): the collector cannot know the scan resolution or how
+          far the platform's limits will shrink the finished image, but "a seventh of the stamp" reads
+          the same at every size. */}
+      <span style={{ ...HINT_STYLE, marginTop: "-0.75rem" }}>
+        Both are shares of the stamp&rsquo;s height, so one template works for any scan resolution:
+        a 14% strip writes its label at roughly a tenth of the stamp&rsquo;s height, whatever size
+        the finished image ends up at.
+      </span>
 
       <div>
         <LabelWithError htmlFor="f-collage-background">Background</LabelWithError>
@@ -320,10 +330,8 @@ export function CollageTemplatesPanel({
             </span>
 
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {template.rows} × {template.columns} · gap {template.gap} px ·{" "}
-              {template.labelStripHeight > 0
-                ? `strip ${template.labelStripHeight} px`
-                : "no label strip"}
+              {template.rows} × {template.columns} · gap {template.gapPercent}% ·{" "}
+              {template.labelPercent > 0 ? `strip ${template.labelPercent}%` : "no label strip"}
             </span>
 
             <RowActionsMenu

@@ -43,7 +43,7 @@ token that renders text you typed is translatable: the area
 names and abbreviations, and [issue and stamp names](collections.md#issue-and-stamp-names-in-other-languages).
 
 Ticking **Platform** also reveals **Listing templates** — what this platform's [offer](offers.md)
-texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all four,
+texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all five,
 one under another:
 
 | Template | Fills in | Left blank |
@@ -51,7 +51,8 @@ one under another:
 | **Listing title** | the offer name and set/lot titles | falls back to the catalog/copy label |
 | **Listing description** | the offer's long listing description | no description is generated |
 | **Private note** | the seller-only note some platforms allow on a listing | no note is generated |
-| **Photo tile label** | the label written under each stamp on a generated collage | tiles stay unlabelled |
+| **Photo tile label (left)** | the annotation written under each stamp, flush left — usually its location ref | that side stays blank |
+| **Photo tile label (right)** | a second annotation on the same strip, flush right, at the same size | that side stays blank |
 
 At the top of the dialog is **Preview on** — the inventory copies every preview below runs on, shared
 by all three so they always describe the same stamps. **🎲 Random** reshuffles them and **Pick copy…**
@@ -62,8 +63,8 @@ writing has the room — a collapsed row still shows its template on one line, w
 breaks. **Save templates** saves them all at once; platforms that have no private note simply leave
 that one empty.
 
-The photo tile label behaves a little differently from the other three: it is **copied onto each new
-offer** on this platform rather than read from here when photos are generated (see
+The two photo tile labels behave a little differently from the other three: they are **copied onto
+each new offer** on this platform rather than read from here when photos are generated (see
 [Offer photos](#offer-photos) below), so a buyer asking about a label on an image you already
 uploaded keeps getting the same label.
 
@@ -215,7 +216,7 @@ Below them sit the two defaults each **new** offer on this platform is seeded fr
   supplies the render numbers (rows, columns, gap, background, label strip). Leave it on *none* and
   new offers simply start without collage numbers until you pick a template on the offer itself.
 
-These two — plus the **photo tile label** from the templates dialog — are **copied onto the offer**
+These two — plus the **photo tile labels** from the templates dialog — are **copied onto the offer**
 when it is created, not looked up later. Changing them here therefore affects only offers you create
 from now on; offers already prepared or listed keep exactly the photos they were set up with. Adjust
 one of those on the offer itself, with the **⚙** button in its Photos card (see

@@ -12,22 +12,24 @@ const NO_LIMITS = { maxPhotos: "", maxPhotoEdge: "", maxPhotoFileSizeMib: "" };
 
 const BLANK_CONFIG = {
   photoSides: "front",
-  photoLabelTemplate: "",
+  photoLabelLeftTemplate: "",
+  photoLabelRightTemplate: "",
   collageRows: "",
   collageColumns: "",
-  collageGap: "",
+  collageGapPercent: "",
   collageBackground: "",
-  collageLabelStripHeight: "",
+  collageLabelPercent: "",
 };
 
 const FULL_CONFIG = {
   photoSides: "both",
-  photoLabelTemplate: "{catalog}",
+  photoLabelLeftTemplate: "{ref}",
+  photoLabelRightTemplate: "{catalog}",
   collageRows: "5",
   collageColumns: "4",
-  collageGap: "24",
+  collageGapPercent: "5",
   collageBackground: "#FFF",
-  collageLabelStripHeight: "40",
+  collageLabelPercent: "14",
 };
 
 describe("normalizePhotoSides", () => {
@@ -88,13 +90,14 @@ describe("parseOfferPhotoConfigInput", () => {
     const result = parseOfferPhotoConfigInput(FULL_CONFIG);
     assert.ok(result.ok);
     assert.equal(result.value.photoSides, "both");
-    assert.equal(result.value.photoLabelTemplate, "{catalog}");
+    assert.equal(result.value.photoLabelLeftTemplate, "{ref}");
+    assert.equal(result.value.photoLabelRightTemplate, "{catalog}");
     assert.deepEqual(result.value.collage, {
       collageRows: 5,
       collageColumns: 4,
-      collageGap: 24,
+      collageGapPercent: 5,
       collageBackground: "#ffffff",
-      collageLabelStripHeight: 40,
+      collageLabelPercent: 14,
     });
   });
 
@@ -102,7 +105,8 @@ describe("parseOfferPhotoConfigInput", () => {
     const result = parseOfferPhotoConfigInput(BLANK_CONFIG);
     assert.ok(result.ok);
     assert.equal(result.value.collage, null);
-    assert.equal(result.value.photoLabelTemplate, null);
+    assert.equal(result.value.photoLabelLeftTemplate, null);
+    assert.equal(result.value.photoLabelRightTemplate, null);
   });
 
   it("rejects a half-filled collage group", () => {
@@ -116,6 +120,10 @@ describe("parseOfferPhotoConfigInput", () => {
 
     const badRows = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageRows: "0" });
     assert.equal(badRows.ok, false);
+
+    // The sizes are percentages of the stamp, so anything past 100% is refused (#312).
+    const badStrip = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageLabelPercent: "140" });
+    assert.equal(badStrip.ok, false);
   });
 
   it("falls back to the default side rather than failing on an unknown one", () => {

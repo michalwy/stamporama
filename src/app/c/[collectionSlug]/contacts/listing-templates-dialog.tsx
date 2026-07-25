@@ -21,7 +21,8 @@ export type TemplateKey =
   | "titleTemplate"
   | "descriptionTemplate"
   | "privateNoteTemplate"
-  | "tileLabelTemplate";
+  | "tileLabelLeftTemplate"
+  | "tileLabelRightTemplate";
 
 /** The three templates as the contact form holds them (blank = not configured). */
 export type ListingTemplates = Record<TemplateKey, string>;
@@ -77,17 +78,27 @@ const TEMPLATE_FIELDS: readonly {
     emptyPreview: "Empty — offers on this platform get no generated private note.",
   },
   {
-    // The label written under each stamp on a generated collage (#312). It configures a photo
-    // rather than a text, but it is the same one-line {token} template over one copy, so it belongs
-    // in the same builder rather than in a form field of its own.
-    key: "tileLabelTemplate",
-    label: "Photo tile label",
+    // The two labels written under each stamp on a generated collage (#312). They configure a photo
+    // rather than a text, but they are the same one-line {token} template over one copy, so they
+    // belong in the same builder rather than in form fields of their own.
+    key: "tileLabelLeftTemplate",
+    label: "Photo tile label (left)",
+    multiline: false,
+    tokens: AVAILABLE_TITLE_TOKENS,
+    placeholder: "{ref}",
+    description:
+      "Written under each stamp on a generated collage, flush left — usually the location ref, so a buyer can name one copy out of several. Copied onto new offers on this platform; blank leaves that side undrawn.",
+    emptyPreview: "Empty — nothing is drawn on the left of the strip.",
+  },
+  {
+    key: "tileLabelRightTemplate",
+    label: "Photo tile label (right)",
     multiline: false,
     tokens: AVAILABLE_TITLE_TOKENS,
     placeholder: "{catalog}",
     description:
-      "Written under each stamp on a generated collage. Copied onto new offers on this platform; blank leaves the tiles unlabelled.",
-    emptyPreview: "Empty — collage tiles on this platform stay unlabelled.",
+      "The second annotation on the same strip, flush right, at the same size as the left one. With only one side configured, that one is centred instead.",
+    emptyPreview: "Empty — nothing is drawn on the right of the strip.",
   },
 ];
 
@@ -123,7 +134,8 @@ export function ListingTemplatesDialog({
     titleTemplate: true,
     descriptionTemplate: !!templates.descriptionTemplate.trim(),
     privateNoteTemplate: !!templates.privateNoteTemplate.trim(),
-    tileLabelTemplate: !!templates.tileLabelTemplate.trim(),
+    tileLabelLeftTemplate: !!templates.tileLabelLeftTemplate.trim(),
+    tileLabelRightTemplate: !!templates.tileLabelRightTemplate.trim(),
   });
   // Two samples so a `{#set}` block in a multi-line template visibly repeats; the title previews on
   // the first. Loaded once for the whole dialog — every preview describes the same stamps.
@@ -169,7 +181,8 @@ export function ListingTemplatesDialog({
             titleTemplate: draft.titleTemplate.trim(),
             descriptionTemplate: draft.descriptionTemplate.trim(),
             privateNoteTemplate: draft.privateNoteTemplate.trim(),
-            tileLabelTemplate: draft.tileLabelTemplate.trim(),
+            tileLabelLeftTemplate: draft.tileLabelLeftTemplate.trim(),
+            tileLabelRightTemplate: draft.tileLabelRightTemplate.trim(),
           })
         }
       />

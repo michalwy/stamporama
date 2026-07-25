@@ -20,8 +20,17 @@
  *   look, each row stretched to full width) are explicitly rejected — they scale each row by a
  *   different factor and would destroy the true proportions that are the point of the feature.
  * - `gap` separates tiles and rows and also serves as the outer margin, so nothing touches the edge.
- * - Every tile gets a **label strip** below it, `labelStripHeight` tall and as wide as the tile. The
- *   strip is reserved here and drawn in #312; a height of 0 simply reserves nothing.
+ * - Every tile gets a **label strip** below it, as wide as the tile, drawn by `collage-label.ts`
+ *   (#312); a height of 0 simply reserves nothing.
+ *
+ * Sizes relative to the stamps
+ * ----------------------------
+ * The gap and the label strip are configured as **percentages of the stamp height** (#312), not in
+ * pixels, and are resolved here against the **median tile height** of this collage. A pixel number
+ * would have to be chosen without knowing the scan DPI or how far the platform's limits will shrink
+ * the finished image; a percentage needs neither, because "readable next to the stamp" is a relative
+ * property that survives the shared downscale. The median rather than the tallest tile, so a single
+ * oversized souvenir sheet cannot inflate the strips of a whole page.
  *
  * A single stamp is a 1×1 collage, so this is the only layout path there is.
  */
@@ -36,10 +45,12 @@ export interface CollageTileSize {
 export interface CollageLayoutStyle {
   /** Tiles per row — the collage template's `columns`. */
   columns: number;
-  /** Pixels between tiles, between rows, and around the whole collage. */
-  gap: number;
-  /** Pixels reserved below each tile for its label (#312). */
-  labelStripHeight: number;
+  /** Space between tiles, between rows and around the whole collage, as a percent of the stamp
+   * height (#312). */
+  gapPercent: number;
+  /** Height of the label strip reserved below each tile (#312), as a percent of the stamp height.
+   * 0 reserves nothing, which is how a collage without labels is configured. */
+  labelPercent: number;
 }
 
 /** Where one tile — and its label strip — ends up on the canvas. */
@@ -55,10 +66,24 @@ export interface PlacedCollageTile {
 export interface CollageLayout {
   width: number;
   height: number;
+  /** The pixels the percentages resolved to for this collage — reported so the renderer and the
+   * tests can talk about the geometry that was actually used. */
+  gap: number;
+  labelStripHeight: number;
+  /** The median tile height the percentages were taken of. */
+  referenceHeight: number;
   /** Placed tiles in input order (plan order — copy order within a group, #309). */
   tiles: PlacedCollageTile[];
   /** How many rows the tiles actually occupy — always ≤ the template's `rows`, and often fewer. */
   rowCount: number;
+}
+
+/** The tile height the percentages are taken of: the median, so one outsized tile among many cannot
+ * decide the geometry of the whole collage. An even count takes the lower of the two middles —
+ * arbitrary, but stable. */
+function medianHeight(sizes: readonly CollageTileSize[]): number {
+  const heights = sizes.map((s) => Math.max(0, s.height)).sort((a, b) => a - b);
+  return heights[Math.floor((heights.length - 1) / 2)];
 }
 
 function chunk<T>(rows: readonly T[], size: number): T[][] {
@@ -75,10 +100,23 @@ export function layOutCollage(
   sizes: readonly CollageTileSize[],
   style: CollageLayoutStyle
 ): CollageLayout {
-  if (sizes.length === 0) return { width: 0, height: 0, tiles: [], rowCount: 0 };
+  if (sizes.length === 0) {
+    return {
+      width: 0,
+      height: 0,
+      gap: 0,
+      labelStripHeight: 0,
+      referenceHeight: 0,
+      tiles: [],
+      rowCount: 0,
+    };
+  }
 
-  const gap = Math.max(0, Math.round(style.gap));
-  const labelStripHeight = Math.max(0, Math.round(style.labelStripHeight));
+  const referenceHeight = medianHeight(sizes);
+  const percentOf = (percent: number) =>
+    Math.max(0, Math.round((referenceHeight * Math.max(0, percent)) / 100));
+  const gap = percentOf(style.gapPercent);
+  const labelStripHeight = percentOf(style.labelPercent);
   const columns = Math.max(1, Math.round(style.columns));
 
   const rows = chunk(sizes, columns).map((row) => ({
@@ -120,5 +158,5 @@ export function layOutCollage(
     y += row.contentHeight + labelStripHeight + gap;
   }
 
-  return { width, height, tiles, rowCount: rows.length };
+  return { width, height, gap, labelStripHeight, referenceHeight, tiles, rowCount: rows.length };
 }

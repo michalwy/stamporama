@@ -6,9 +6,9 @@ import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
   MAX_COLLAGE_AXIS,
-  MAX_COLLAGE_PIXELS,
+  MAX_COLLAGE_PERCENT,
   MIN_COLLAGE_AXIS,
-  MIN_COLLAGE_PIXELS,
+  MIN_COLLAGE_PERCENT,
 } from "@/lib/collage-template-rules";
 import {
   PHOTO_SIDES,
@@ -48,17 +48,17 @@ const SECTION_LABEL: React.CSSProperties = {
 interface CollageDraft {
   collageRows: string;
   collageColumns: string;
-  collageGap: string;
+  collageGapPercent: string;
   collageBackground: string;
-  collageLabelStripHeight: string;
+  collageLabelPercent: string;
 }
 
 const EMPTY_COLLAGE: CollageDraft = {
   collageRows: "",
   collageColumns: "",
-  collageGap: "",
+  collageGapPercent: "",
   collageBackground: "",
-  collageLabelStripHeight: "",
+  collageLabelPercent: "",
 };
 
 function toDraft(config: OfferPhotoConfigInput): CollageDraft {
@@ -67,9 +67,9 @@ function toDraft(config: OfferPhotoConfigInput): CollageDraft {
   return {
     collageRows: String(c.collageRows),
     collageColumns: String(c.collageColumns),
-    collageGap: String(c.collageGap),
+    collageGapPercent: String(c.collageGapPercent),
     collageBackground: c.collageBackground,
-    collageLabelStripHeight: String(c.collageLabelStripHeight),
+    collageLabelPercent: String(c.collageLabelPercent),
   };
 }
 
@@ -150,7 +150,8 @@ export function PhotoSettingsDialog({
   onSubmit,
 }: PhotoSettingsDialogProps) {
   const [photoSides, setPhotoSides] = useState(config.photoSides);
-  const [labelTemplate, setLabelTemplate] = useState(config.photoLabelTemplate ?? "");
+  const [labelLeft, setLabelLeft] = useState(config.photoLabelLeftTemplate ?? "");
+  const [labelRight, setLabelRight] = useState(config.photoLabelRightTemplate ?? "");
   const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config));
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
 
@@ -177,9 +178,9 @@ export function PhotoSettingsDialog({
     setCollage({
       collageRows: String(t.rows),
       collageColumns: String(t.columns),
-      collageGap: String(t.gap),
+      collageGapPercent: String(t.gapPercent),
       collageBackground: t.background,
-      collageLabelStripHeight: String(t.labelStripHeight),
+      collageLabelPercent: String(t.labelPercent),
     });
   }
 
@@ -229,21 +230,39 @@ export function PhotoSettingsDialog({
                 ))}
               </select>
             </div>
+            {/* Two annotations on one strip (#312): an identifier on the left, something
+                descriptive on the right, drawn at one shared size. */}
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-photo-label">Tile label</LabelWithError>
+              <LabelWithError htmlFor="offer-photo-label-left">Tile label (left)</LabelWithError>
               <input
-                id="offer-photo-label"
-                name="photoLabelTemplate"
+                id="offer-photo-label-left"
+                name="photoLabelLeftTemplate"
                 type="text"
-                value={labelTemplate}
-                onChange={(e) => setLabelTemplate(e.target.value)}
+                value={labelLeft}
+                onChange={(e) => setLabelLeft(e.target.value)}
+                placeholder="{ref}"
+                disabled={isPending}
+                style={INPUT_STYLE}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="offer-photo-label-right">Tile label (right)</LabelWithError>
+              <input
+                id="offer-photo-label-right"
+                name="photoLabelRightTemplate"
+                type="text"
+                value={labelRight}
+                onChange={(e) => setLabelRight(e.target.value)}
                 placeholder="{catalog}"
                 disabled={isPending}
                 style={INPUT_STYLE}
               />
-              <span style={HINT}>Written under each stamp. Blank leaves tiles unlabelled.</span>
             </div>
           </div>
+          <span style={{ ...HINT, display: "block", margin: "-0.75rem 0 1.25rem" }}>
+            Written under each stamp, one flush left and one flush right at the same size. A single
+            one is centred; both blank leaves the tiles unlabelled.
+          </span>
 
           <p style={SECTION_LABEL}>Collage</p>
 
@@ -315,24 +334,25 @@ export function PhotoSettingsDialog({
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
             <NumberField
               id="offer-collage-gap"
-              name="collageGap"
-              label="Gap (px)"
-              value={collage.collageGap}
-              min={MIN_COLLAGE_PIXELS}
-              max={MAX_COLLAGE_PIXELS}
+              name="collageGapPercent"
+              label="Gap (%)"
+              value={collage.collageGapPercent}
+              min={MIN_COLLAGE_PERCENT}
+              max={MAX_COLLAGE_PERCENT}
+              hint="Of the stamp."
               isPending={isPending}
-              onChange={(v) => set("collageGap", v)}
+              onChange={(v) => set("collageGapPercent", v)}
             />
             <NumberField
               id="offer-collage-strip"
-              name="collageLabelStripHeight"
-              label="Label strip (px)"
-              value={collage.collageLabelStripHeight}
-              min={MIN_COLLAGE_PIXELS}
-              max={MAX_COLLAGE_PIXELS}
-              hint="0 for none."
+              name="collageLabelPercent"
+              label="Label strip (%)"
+              value={collage.collageLabelPercent}
+              min={MIN_COLLAGE_PERCENT}
+              max={MAX_COLLAGE_PERCENT}
+              hint="Of the stamp; 0 for none."
               isPending={isPending}
-              onChange={(v) => set("collageLabelStripHeight", v)}
+              onChange={(v) => set("collageLabelPercent", v)}
             />
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-collage-background">Background</LabelWithError>

@@ -29,9 +29,9 @@ function readForm(formData: FormData) {
     name: str("name"),
     rows: str("rows"),
     columns: str("columns"),
-    gap: str("gap"),
+    gapPercent: str("gapPercent"),
     background: str("background"),
-    labelStripHeight: str("labelStripHeight"),
+    labelPercent: str("labelPercent"),
   });
 }
 

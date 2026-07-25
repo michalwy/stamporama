@@ -8,7 +8,7 @@
  *    size). All optional (`null` = no limit) and never seeded onto an offer: they describe the
  *    platform, so the renderer reads them live (#310).
  *  - **Offer configuration** — what this listing's photos should look like: which scan sides to
- *    include, the per-tile label template (#312) and the collage numbers copied from a collage
+ *    include, the two per-tile label templates (#312) and the collage numbers copied from a collage
  *    template (#307). Seeded at creation from the platform, then freely editable.
  *
  * The collage numbers are all-or-nothing: an offer either carries a complete set copied from a
@@ -17,9 +17,9 @@
 
 import {
   MAX_COLLAGE_AXIS,
-  MAX_COLLAGE_PIXELS,
+  MAX_COLLAGE_PERCENT,
   MIN_COLLAGE_AXIS,
-  MIN_COLLAGE_PIXELS,
+  MIN_COLLAGE_PERCENT,
   normalizeHexColor,
   parseBoundedInteger,
 } from "./collage-template-rules";
@@ -110,19 +110,23 @@ export function parsePlatformPhotoLimits(raw: {
 
 // ── Offer configuration ──────────────────────────────────────────────────────
 
-/** The collage numbers an offer carries, copied from a collage template (#307). */
+/** The collage numbers an offer carries, copied from a collage template (#307). The two sizes are
+ * percentages of the stamp height, not pixels (#312) — see `collage-template-rules.ts`. */
 export interface OfferCollageValues {
   collageRows: number;
   collageColumns: number;
-  collageGap: number;
+  collageGapPercent: number;
   collageBackground: string;
-  collageLabelStripHeight: number;
+  collageLabelPercent: number;
 }
 
 /** An offer's own photo configuration. `collage` is null while no template has been copied in. */
 export interface OfferPhotoConfigInput {
   photoSides: PhotoSides;
-  photoLabelTemplate: string | null;
+  /** The two per-tile annotations (#312): left and right on one strip. Null means that side is not
+   * drawn; both null leaves every tile unlabelled. */
+  photoLabelLeftTemplate: string | null;
+  photoLabelRightTemplate: string | null;
   collage: OfferCollageValues | null;
 }
 
@@ -133,25 +137,30 @@ export interface OfferPhotoConfigInput {
  */
 export function parseOfferPhotoConfigInput(raw: {
   photoSides: string;
-  photoLabelTemplate: string;
+  photoLabelLeftTemplate: string;
+  photoLabelRightTemplate: string;
   collageRows: string;
   collageColumns: string;
-  collageGap: string;
+  collageGapPercent: string;
   collageBackground: string;
-  collageLabelStripHeight: string;
+  collageLabelPercent: string;
 }): PhotoConfigParseResult<OfferPhotoConfigInput> {
   const photoSides = normalizePhotoSides(raw.photoSides);
-  const photoLabelTemplate = raw.photoLabelTemplate.trim() || null;
+  const photoLabelLeftTemplate = raw.photoLabelLeftTemplate.trim() || null;
+  const photoLabelRightTemplate = raw.photoLabelRightTemplate.trim() || null;
 
   const collageFields = [
     raw.collageRows,
     raw.collageColumns,
-    raw.collageGap,
+    raw.collageGapPercent,
     raw.collageBackground,
-    raw.collageLabelStripHeight,
+    raw.collageLabelPercent,
   ];
   if (collageFields.every((f) => !f.trim())) {
-    return { ok: true, value: { photoSides, photoLabelTemplate, collage: null } };
+    return {
+      ok: true,
+      value: { photoSides, photoLabelLeftTemplate, photoLabelRightTemplate, collage: null },
+    };
   }
 
   const rows = parseBoundedInteger(raw.collageRows, "Rows", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
@@ -165,16 +174,21 @@ export function parseOfferPhotoConfigInput(raw: {
   );
   if (!columns.ok) return columns;
 
-  const gap = parseBoundedInteger(raw.collageGap, "Gap", MIN_COLLAGE_PIXELS, MAX_COLLAGE_PIXELS);
-  if (!gap.ok) return gap;
-
-  const labelStripHeight = parseBoundedInteger(
-    raw.collageLabelStripHeight,
-    "Label strip height",
-    MIN_COLLAGE_PIXELS,
-    MAX_COLLAGE_PIXELS
+  const gapPercent = parseBoundedInteger(
+    raw.collageGapPercent,
+    "Gap",
+    MIN_COLLAGE_PERCENT,
+    MAX_COLLAGE_PERCENT
   );
-  if (!labelStripHeight.ok) return labelStripHeight;
+  if (!gapPercent.ok) return gapPercent;
+
+  const labelPercent = parseBoundedInteger(
+    raw.collageLabelPercent,
+    "Label strip",
+    MIN_COLLAGE_PERCENT,
+    MAX_COLLAGE_PERCENT
+  );
+  if (!labelPercent.ok) return labelPercent;
 
   const background = normalizeHexColor(raw.collageBackground);
   if (!background) {
@@ -185,13 +199,14 @@ export function parseOfferPhotoConfigInput(raw: {
     ok: true,
     value: {
       photoSides,
-      photoLabelTemplate,
+      photoLabelLeftTemplate,
+      photoLabelRightTemplate,
       collage: {
         collageRows: rows.value,
         collageColumns: columns.value,
-        collageGap: gap.value,
+        collageGapPercent: gapPercent.value,
         collageBackground: background,
-        collageLabelStripHeight: labelStripHeight.value,
+        collageLabelPercent: labelPercent.value,
       },
     },
   };

@@ -24,13 +24,19 @@ const base: OfferPhotoFingerprintInput = {
     { id: "s2", sortOrder: 1, items: [copy("c")] },
   ],
   photoSides: "both",
-  photoLabelTemplate: "{catalogNumber}",
+  photoLabelLeftTemplate: "{ref}",
+  photoLabelRightTemplate: "{catalog}",
+  tileLabels: [
+    ["a", "A234", "Mi 1"],
+    ["b", "A235", "Mi 2"],
+    ["c", "B100", "Mi 3"],
+  ],
   collage: {
     collageRows: 2,
     collageColumns: 2,
-    collageGap: 12,
+    collageGapPercent: 5,
     collageBackground: "#ffffff",
-    collageLabelStripHeight: 24,
+    collageLabelPercent: 14,
   },
   limits: { maxPhotos: 8, maxPhotoEdge: 1600, maxPhotoFileSizeMib: 4 },
 };
@@ -75,6 +81,16 @@ describe("fingerprintOfferPhotoInputs stability", () => {
       ],
     };
     assert.equal(fp(explicit), fp(derived));
+  });
+
+  it("ignores the order the tile labels were read in", () => {
+    assert.equal(
+      fp({
+        ...base,
+        tileLabels: [["c", "B100", "Mi 3"], ["a", "A234", "Mi 1"], ["b", "A235", "Mi 2"]],
+      }),
+      fp(base)
+    );
   });
 });
 
@@ -131,12 +147,21 @@ describe("fingerprintOfferPhotoInputs sensitivity", () => {
 
   it("changes with every part of the offer's photo configuration", () => {
     assert.ok(differs({ photoSides: "front" }));
-    assert.ok(differs({ photoLabelTemplate: null }));
+    assert.ok(differs({ photoLabelLeftTemplate: null }));
+    assert.ok(differs({ photoLabelRightTemplate: null }));
     assert.ok(differs({ collage: null }));
-    assert.ok(differs({ collage: { ...base.collage!, collageGap: 13 } }));
+    assert.ok(differs({ collage: { ...base.collage!, collageGapPercent: 6 } }));
     assert.ok(differs({ collage: { ...base.collage!, collageBackground: "#eeeeee" } }));
-    assert.ok(differs({ collage: { ...base.collage!, collageLabelStripHeight: 0 } }));
+    assert.ok(differs({ collage: { ...base.collage!, collageLabelPercent: 0 } }));
     assert.ok(differs({ collage: { ...base.collage!, collageColumns: 3 } }));
+  });
+
+  it("changes when a tile's label changes, because the label is drawn into the image", () => {
+    // Editing a copy's location ref changes no scan and no setting — only the pixels of the strip.
+    assert.ok(differs({ tileLabels: [["a", "A999", "Mi 1"], ["b", "A235", "Mi 2"], ["c", "B100", "Mi 3"]] }));
+    // The right-hand annotation counts the same as the left one.
+    assert.ok(differs({ tileLabels: [["a", "A234", "Mi 9"], ["b", "A235", "Mi 2"], ["c", "B100", "Mi 3"]] }));
+    assert.ok(differs({ tileLabels: [["b", "A235", "Mi 2"], ["c", "B100", "Mi 3"]] }));
   });
 
   it("changes with the platform's output limits, which the renderer reads live", () => {

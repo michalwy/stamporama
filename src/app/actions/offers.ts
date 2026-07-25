@@ -336,12 +336,13 @@ export async function updateOfferPhotoConfigAction(
   const session = await getSession();
   const parsed = parseOfferPhotoConfigInput({
     photoSides: str(formData, "photoSides"),
-    photoLabelTemplate: str(formData, "photoLabelTemplate"),
+    photoLabelLeftTemplate: str(formData, "photoLabelLeftTemplate"),
+    photoLabelRightTemplate: str(formData, "photoLabelRightTemplate"),
     collageRows: str(formData, "collageRows"),
     collageColumns: str(formData, "collageColumns"),
-    collageGap: str(formData, "collageGap"),
+    collageGapPercent: str(formData, "collageGapPercent"),
     collageBackground: str(formData, "collageBackground"),
-    collageLabelStripHeight: str(formData, "collageLabelStripHeight"),
+    collageLabelPercent: str(formData, "collageLabelPercent"),
   });
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {

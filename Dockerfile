@@ -2,6 +2,13 @@ FROM node:24.18.0-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
+# Collage tile labels (#312) are drawn as SVG text by sharp. sharp ships its own libvips (pango,
+# fontconfig, freetype), but the base image carries no font *files* and no fontconfig config: without
+# them fontconfig errors out at render time and the labels come out as whatever fallback glyphs
+# libvips can find. One real font is enough; DejaVu Sans is what `LABEL_FONT_FAMILY` in
+# src/lib/collage-label.ts asks for first.
+RUN apk add --no-cache font-dejavu fontconfig
+ENV FONTCONFIG_PATH=/etc/fonts
 
 # Install dependencies only
 # pnpm-workspace.yaml carries onlyBuiltDependencies/allowBuilds; without it pnpm 11

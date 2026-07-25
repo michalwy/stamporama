@@ -230,12 +230,17 @@ Offer photos put several stamps on one image. How many fit sensibly is a propert
 A template holds:
 
 - **Rows** and **Columns** — the collage's capacity.
-- **Gap** — the spacing between stamps, in pixels of the finished image, used between columns and rows alike.
-- **Label strip height** — the height of the strip drawn below each stamp for its label, in the same pixels. Set it to **0** for no strip.
+- **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.
+- **Label strip (% of stamp)** — the height of the strip drawn below each stamp for its labels. Set it to **0** for no strip.
 - **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on.
 
-Two things are worth knowing:
+Three things are worth knowing:
 
+- **The two sizes are shares of the stamp, not pixels.** You cannot know in advance how many pixels a
+  scan will have, nor how far a platform's size limit will shrink the finished image — so a strip
+  measured in pixels comes out unreadable on one listing and enormous on the next. A share of the
+  stamp holds: at 14% the label reads at roughly a tenth of the stamp's height whatever resolution
+  you scan at, because the label and the stamp are always scaled together.
 - **Rows × columns is a maximum, not a frame.** A set of four copies under a 5 × 4 template produces a one-row image sized to its contents, not a padded 5 × 4 canvas.
 - **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
 

@@ -55,9 +55,9 @@ describe("offer photo configuration (#308)", () => {
           name: "Small definitives",
           rows: 5,
           columns: 4,
-          gap: 24,
+          gapPercent: 5,
           background: "#f0f0f0",
-          labelStripHeight: 40,
+          labelPercent: 14,
         },
       })
     ).id;
@@ -73,7 +73,7 @@ describe("offer photo configuration (#308)", () => {
           maxPhotoEdge: 1600,
           maxPhotoFileSizeMib: 10,
           photoSides: "both",
-          tileLabelTemplate: "{catalog}",
+          tileLabelLeftTemplate: "{catalog}",
           defaultCollageTemplateId: templateId,
         },
       })
@@ -104,13 +104,13 @@ describe("offer photo configuration (#308)", () => {
   it("seeds a new offer from the platform's defaults and its collage template", async () => {
     const detail = await getOfferDetail(userId, await offerOn(configuredPlatformId));
     assert.equal(detail?.photoConfig.photoSides, "both");
-    assert.equal(detail?.photoConfig.photoLabelTemplate, "{catalog}");
+    assert.equal(detail?.photoConfig.photoLabelLeftTemplate, "{catalog}");
     assert.deepEqual(detail?.photoConfig.collage, {
       collageRows: 5,
       collageColumns: 4,
-      collageGap: 24,
+      collageGapPercent: 5,
       collageBackground: "#f0f0f0",
-      collageLabelStripHeight: 40,
+      collageLabelPercent: 14,
     });
   });
 
@@ -130,7 +130,7 @@ describe("offer photo configuration (#308)", () => {
   it("leaves the collage numbers unset when the platform has no default template", async () => {
     const detail = await getOfferDetail(userId, await offerOn(barePlatformId));
     assert.equal(detail?.photoConfig.collage, null);
-    assert.equal(detail?.photoConfig.photoLabelTemplate, null);
+    assert.equal(detail?.photoConfig.photoLabelLeftTemplate, null);
     // The default side, not a null — an offer always photographs something.
     assert.equal(detail?.photoConfig.photoSides, "front");
   });
@@ -139,19 +139,19 @@ describe("offer photo configuration (#308)", () => {
     const offerId = await offerOn(configuredPlatformId);
     await prisma.contact.update({
       where: { id: configuredPlatformId },
-      data: { photoSides: "front", tileLabelTemplate: "{name}" },
+      data: { photoSides: "front", tileLabelLeftTemplate: "{name}" },
     });
     await prisma.collageTemplate.update({ where: { id: templateId }, data: { rows: 9 } });
 
     const detail = await getOfferDetail(userId, offerId);
     assert.equal(detail?.photoConfig.photoSides, "both");
-    assert.equal(detail?.photoConfig.photoLabelTemplate, "{catalog}");
+    assert.equal(detail?.photoConfig.photoLabelLeftTemplate, "{catalog}");
     assert.equal(detail?.photoConfig.collage?.collageRows, 5);
 
     // Restore, so the ordering of the remaining cases doesn't depend on this one.
     await prisma.contact.update({
       where: { id: configuredPlatformId },
-      data: { photoSides: "both", tileLabelTemplate: "{catalog}" },
+      data: { photoSides: "both", tileLabelLeftTemplate: "{catalog}" },
     });
     await prisma.collageTemplate.update({ where: { id: templateId }, data: { rows: 5 } });
   });
@@ -175,13 +175,14 @@ describe("offer photo configuration (#308)", () => {
     const offerId = await offerOn(configuredPlatformId);
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "back",
-      photoLabelTemplate: "{name}",
+      photoLabelLeftTemplate: "{name}",
+      photoLabelRightTemplate: null,
       collage: {
         collageRows: 2,
         collageColumns: 2,
-        collageGap: 10,
+        collageGapPercent: 8,
         collageBackground: "#000000",
-        collageLabelStripHeight: 0,
+        collageLabelPercent: 0,
       },
     });
     let detail = await getOfferDetail(userId, offerId);
@@ -190,17 +191,18 @@ describe("offer photo configuration (#308)", () => {
 
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
-      photoLabelTemplate: null,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
       collage: null,
     });
     detail = await getOfferDetail(userId, offerId);
-    assert.equal(detail?.photoConfig.photoLabelTemplate, null);
+    assert.equal(detail?.photoConfig.photoLabelLeftTemplate, null);
     assert.equal(detail?.photoConfig.collage, null);
   });
 
   it("keeps a platform deletable-free of its template: deleting the template only clears the default", async () => {
     const doomed = await prisma.collageTemplate.create({
-      data: { collectionId, name: "Doomed", rows: 2, columns: 2, gap: 8, labelStripHeight: 0 },
+      data: { collectionId, name: "Doomed", rows: 2, columns: 2, gapPercent: 8, labelPercent: 0 },
     });
     await prisma.contact.update({
       where: { id: barePlatformId },
@@ -222,7 +224,7 @@ describe("offer photo configuration (#308)", () => {
       },
     });
     const foreign = await prisma.collageTemplate.create({
-      data: { collectionId: other.id, name: "Foreign", rows: 2, columns: 2, gap: 8, labelStripHeight: 0 },
+      data: { collectionId: other.id, name: "Foreign", rows: 2, columns: 2, gapPercent: 8, labelPercent: 0 },
     });
     const saved = await updateContact(userId, barePlatformId, {
       name: "Delcampe",

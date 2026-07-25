@@ -30,7 +30,8 @@ async function noise(width: number, height: number): Promise<CollageTileSource> 
   return { buffer };
 }
 
-const style = { columns: 2, gap: 10, labelStripHeight: 20, background: "#ffffff" };
+// 10% and 20% of the stamp: with the 100-tall tiles below that is a 10 px gap and a 20 px strip.
+const style = { columns: 2, gapPercent: 10, labelPercent: 20, background: "#ffffff" };
 
 const noLimits = { maxEdge: null, maxBytes: null };
 
@@ -40,14 +41,15 @@ describe("renderCollage", () => {
 
     assert.equal(rendered.mime, COLLAGE_MIME);
     assert.equal(rendered.quality, COLLAGE_QUALITY_MAX);
-    assert.equal(rendered.width, 120);
-    assert.equal(rendered.height, 180);
+    // One 140-tall stamp: gap 14, strip 28.
+    assert.equal(rendered.width, 100 + 14 * 2);
+    assert.equal(rendered.height, 140 + 28 + 14 * 2);
     assert.equal(rendered.layout.rowCount, 1);
     assert.equal(rendered.exceedsFileSizeLimit, false);
 
     const meta = await sharp(rendered.buffer).metadata();
     assert.equal(meta.format, "jpeg");
-    assert.equal(meta.width, 120);
+    assert.equal(meta.width, 128);
   });
 
   it("preserves true relative sizes — a stamp twice as wide stays twice as wide", async () => {
@@ -88,13 +90,14 @@ describe("renderCollage", () => {
       maxBytes: null,
     });
     assert.equal(Math.max(capped.width, capped.height), 200);
-    assert.equal(capped.layout.width, 620); // the layout still reports native geometry
+    // The layout still reports native geometry: a 300-tall stamp gives a 30 px gap.
+    assert.equal(capped.layout.width, 600 + 30 * 2);
 
     const small = await renderCollage([await scan(60, 40)], style, {
       maxEdge: 4000,
       maxBytes: null,
     });
-    assert.equal(small.width, 80);
+    assert.equal(small.width, 60 + 4 * 2);
   });
 
   it("drops quality until the encoded bytes fit the platform's file-size limit", async () => {
@@ -137,7 +140,37 @@ describe("renderCollage", () => {
     const rendered = await renderCollage([await noise(400, 400)], style, noLimits);
 
     assert.equal(rendered.quality, COLLAGE_QUALITY_MAX);
-    assert.equal(rendered.width, 420);
+    assert.equal(rendered.width, 400 + 40 * 2);
+  });
+
+  it("draws each tile's labels on the strip below it, and nothing on an unlabelled one", async () => {
+    // Needs a font on the host to draw anything at all — the app image installs DejaVu Sans (#312).
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(100, 100)), labels: { left: "A234", right: "Mi 200" } },
+        { ...(await scan(100, 100)), labels: null },
+      ],
+      { ...style, background: "#ffffff", labelPercent: 30 },
+      noLimits
+    );
+
+    const ink = async (tile: (typeof rendered.layout.tiles)[number]) => {
+      const data = await sharp(rendered.buffer)
+        .extract({
+          left: tile.label.x,
+          top: tile.label.y,
+          width: tile.label.width,
+          height: tile.label.height,
+        })
+        .raw()
+        .toBuffer();
+      let dark = 0;
+      for (let i = 0; i < data.length; i += 3) if (data[i] < 128) dark += 1;
+      return dark;
+    };
+
+    assert.ok((await ink(rendered.layout.tiles[0])) > 20, "the labelled tile's strip has no text");
+    assert.equal(await ink(rendered.layout.tiles[1]), 0);
   });
 
   it("rejects an empty collage", async () => {

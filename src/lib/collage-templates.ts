@@ -29,9 +29,9 @@ export interface CollageTemplateData {
   name: string;
   rows: number;
   columns: number;
-  gap: number;
+  gapPercent: number;
   background: string;
-  labelStripHeight: number;
+  labelPercent: number;
 }
 
 /** The collection's collage templates (#307), ordered by name. */
@@ -48,9 +48,9 @@ export async function getCollageTemplates(
       name: true,
       rows: true,
       columns: true,
-      gap: true,
+      gapPercent: true,
       background: true,
-      labelStripHeight: true,
+      labelPercent: true,
     },
   });
 }

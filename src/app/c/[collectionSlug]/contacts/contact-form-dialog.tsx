@@ -111,7 +111,8 @@ export function ContactFormDialog({
     titleTemplate: contact?.titleTemplate ?? "",
     descriptionTemplate: contact?.descriptionTemplate ?? "",
     privateNoteTemplate: contact?.privateNoteTemplate ?? "",
-    tileLabelTemplate: contact?.tileLabelTemplate ?? "",
+    tileLabelLeftTemplate: contact?.tileLabelLeftTemplate ?? "",
+    tileLabelRightTemplate: contact?.tileLabelRightTemplate ?? "",
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const configuredTemplates = Object.values(templates).filter((t) => t.trim()).length;
@@ -294,7 +295,16 @@ export function ContactFormDialog({
               <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
               <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
               <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
-              <input type="hidden" name="tileLabelTemplate" value={templates.tileLabelTemplate} />
+              <input
+                type="hidden"
+                name="tileLabelLeftTemplate"
+                value={templates.tileLabelLeftTemplate}
+              />
+              <input
+                type="hidden"
+                name="tileLabelRightTemplate"
+                value={templates.tileLabelRightTemplate}
+              />
               <LabelWithError>Listing templates</LabelWithError>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <div

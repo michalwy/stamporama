@@ -4,27 +4,55 @@ import { layOutCollage, type CollageTileSize } from "../../src/lib/collage-layou
 
 const size = (width: number, height: number): CollageTileSize => ({ width, height });
 
-const style = (over: Partial<{ columns: number; gap: number; labelStripHeight: number }> = {}) => ({
+/** 10% and 20% of the stamp — with 100-tall tiles that is 10 px of gap and a 20 px strip, which is
+ * what most of these cases are written against. */
+const style = (over: Partial<{ columns: number; gapPercent: number; labelPercent: number }> = {}) => ({
   columns: 2,
-  gap: 10,
-  labelStripHeight: 20,
+  gapPercent: 10,
+  labelPercent: 20,
   ...over,
 });
 
 describe("layOutCollage", () => {
   it("packs a single tile as a 1×1 collage with margin and label strip", () => {
+    // One 140-tall tile: the percentages resolve against it, so gap 14 and strip 28.
     const layout = layOutCollage([size(100, 140)], style({ columns: 3 }));
 
     assert.equal(layout.rowCount, 1);
-    assert.equal(layout.width, 100 + 10 * 2);
-    assert.equal(layout.height, 140 + 20 + 10 * 2);
+    assert.equal(layout.referenceHeight, 140);
+    assert.equal(layout.gap, 14);
+    assert.equal(layout.labelStripHeight, 28);
+    assert.equal(layout.width, 100 + 14 * 2);
+    assert.equal(layout.height, 140 + 28 + 14 * 2);
     assert.deepEqual(layout.tiles[0], {
-      x: 10,
-      y: 10,
+      x: 14,
+      y: 14,
       width: 100,
       height: 140,
-      label: { x: 10, y: 150, width: 100, height: 20 },
+      label: { x: 14, y: 154, width: 100, height: 28 },
     });
+  });
+
+  it("scales the whole geometry with the stamps, so one template fits any scan resolution", () => {
+    const small = layOutCollage([size(100, 100), size(100, 100)], style());
+    const large = layOutCollage([size(400, 400), size(400, 400)], style());
+
+    assert.equal(large.gap, small.gap * 4);
+    assert.equal(large.labelStripHeight, small.labelStripHeight * 4);
+    assert.equal(large.width, small.width * 4);
+    assert.equal(large.height, small.height * 4);
+  });
+
+  it("takes the percentages of the median tile, not the tallest", () => {
+    // One souvenir sheet among four ordinary stamps must not inflate the whole page's strips.
+    const layout = layOutCollage(
+      [size(100, 100), size(100, 100), size(100, 100), size(300, 900)],
+      style({ columns: 4 })
+    );
+
+    assert.equal(layout.referenceHeight, 100);
+    assert.equal(layout.gap, 10);
+    assert.equal(layout.labelStripHeight, 20);
   });
 
   it("shrinks the canvas to the contents rather than to the template's capacity", () => {
@@ -86,7 +114,7 @@ describe("layOutCollage", () => {
   it("reserves nothing when gap and label strip are zero", () => {
     const layout = layOutCollage(
       [size(100, 100), size(100, 100)],
-      style({ gap: 0, labelStripHeight: 0 })
+      style({ gapPercent: 0, labelPercent: 0 })
     );
 
     assert.equal(layout.width, 200);
@@ -102,6 +130,9 @@ describe("layOutCollage", () => {
     assert.deepEqual(layOutCollage([], style()), {
       width: 0,
       height: 0,
+      gap: 0,
+      labelStripHeight: 0,
+      referenceHeight: 0,
       tiles: [],
       rowCount: 0,
     });

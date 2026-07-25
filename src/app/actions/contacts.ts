@@ -109,7 +109,8 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // the collection server-side.
     ...limits.value,
     photoSides: isPlatform ? str(formData, "photoSides") : null,
-    tileLabelTemplate: isPlatform ? str(formData, "tileLabelTemplate") || null : null,
+    tileLabelLeftTemplate: isPlatform ? str(formData, "tileLabelLeftTemplate") || null : null,
+    tileLabelRightTemplate: isPlatform ? str(formData, "tileLabelRightTemplate") || null : null,
     defaultCollageTemplateId: isPlatform
       ? str(formData, "defaultCollageTemplateId") || null
       : null,

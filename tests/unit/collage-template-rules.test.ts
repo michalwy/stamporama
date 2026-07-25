@@ -4,16 +4,16 @@ import {
   normalizeHexColor,
   parseCollageTemplateInput,
   MAX_COLLAGE_AXIS,
-  MAX_COLLAGE_PIXELS,
+  MAX_COLLAGE_PERCENT,
 } from "../../src/lib/collage-template-rules";
 
 const VALID = {
   name: "Small definitives",
   rows: "5",
   columns: "4",
-  gap: "24",
+  gapPercent: "5",
   background: "#ffffff",
-  labelStripHeight: "40",
+  labelPercent: "14",
 };
 
 describe("normalizeHexColor", () => {
@@ -43,9 +43,9 @@ describe("parseCollageTemplateInput", () => {
       name: "Small definitives",
       rows: 5,
       columns: 4,
-      gap: 24,
+      gapPercent: 5,
       background: "#ffffff",
-      labelStripHeight: 40,
+      labelPercent: 14,
     });
   });
 
@@ -74,29 +74,29 @@ describe("parseCollageTemplateInput", () => {
     }
   });
 
-  // 0 is a meaningful value for both pixel fields: no spacing, no label strip.
-  it("allows zero gap and zero label strip height", () => {
-    const result = parseCollageTemplateInput({ ...VALID, gap: "0", labelStripHeight: "0" });
+  // 0 is a meaningful value for both size fields: no spacing, no label strip.
+  it("allows zero gap and zero label strip", () => {
+    const result = parseCollageTemplateInput({ ...VALID, gapPercent: "0", labelPercent: "0" });
     assert.ok(result.ok);
-    assert.equal(result.value.gap, 0);
-    assert.equal(result.value.labelStripHeight, 0);
+    assert.equal(result.value.gapPercent, 0);
+    assert.equal(result.value.labelPercent, 0);
   });
 
-  it("rejects negative or oversized pixel values", () => {
-    const negative = parseCollageTemplateInput({ ...VALID, gap: "-1" });
+  it("rejects negative or oversized percentages", () => {
+    const negative = parseCollageTemplateInput({ ...VALID, gapPercent: "-1" });
     assert.ok(!negative.ok);
     assert.match(negative.message, /Gap/);
 
     const huge = parseCollageTemplateInput({
       ...VALID,
-      labelStripHeight: String(MAX_COLLAGE_PIXELS + 1),
+      labelPercent: String(MAX_COLLAGE_PERCENT + 1),
     });
     assert.ok(!huge.ok);
-    assert.match(huge.message, /Label strip height/);
+    assert.match(huge.message, /Label strip/);
   });
 
   it("rejects non-integer numbers", () => {
-    const result = parseCollageTemplateInput({ ...VALID, gap: "12.5" });
+    const result = parseCollageTemplateInput({ ...VALID, gapPercent: "12.5" });
     assert.ok(!result.ok);
     assert.match(result.message, /whole number/);
   });

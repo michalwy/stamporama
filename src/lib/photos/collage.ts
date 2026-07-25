@@ -4,6 +4,7 @@ import {
   type CollageLayout,
   type CollageLayoutStyle,
 } from "../collage-layout";
+import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
 
 /**
  * Collage compositing for offer photos (#310) — the only genuinely new mechanism in the image
@@ -32,6 +33,12 @@ import {
  *
  * Stamps coming out small after a downscale is not warned about: picking a collage template suited
  * to the platform is the collector's call.
+ *
+ * Labels
+ * ------
+ * Each tile's two annotations (#312) are drawn on the strip the layout reserves below it, from the
+ * text the caller resolved against that copy. Text layout lives in `src/lib/collage-label.ts`; here it is one
+ * more composite, applied before the output limits so labels scale with the stamps.
  */
 
 /** The encoded output format for every collage. */
@@ -49,6 +56,10 @@ const MAX_SHRINK_ROUNDS = 4;
 /** One tile's source bytes. `sharp` decodes and EXIF-rotates it before anything is measured. */
 export interface CollageTileSource {
   buffer: Buffer;
+  /** The two annotations drawn on the tile's label strip (#312), already resolved from the offer's
+   * left / right label templates against this copy. Blank or absent leaves that side undrawn — a
+   * copy with no value for a template's tokens is not special-cased. */
+  labels?: TileLabelTexts | null;
 }
 
 /** The offer's collage values (#308) that affect rendering. `rows` is capacity and never appears
@@ -108,14 +119,21 @@ async function decodeTile(source: CollageTileSource): Promise<DecodedTile> {
 }
 
 /**
- * Composites the tiles onto the background and returns the finished canvas as raw pixels, so the
- * file-size search can re-encode it as often as it likes without compositing again.
+ * Composites the tiles — and the label strips over them (#312) — onto the background and returns the
+ * finished canvas as raw pixels, so the file-size search can re-encode it as often as it likes
+ * without compositing again.
+ *
+ * The labels are one canvas-sized SVG layer rather than one overlay per strip: a single composite
+ * keeps the text at the layout's native scale, where it shrinks with the stamps under the output
+ * limits instead of growing relative to them.
  */
 async function compositeCanvas(
   tiles: readonly DecodedTile[],
+  labels: readonly (TileLabelTexts | null | undefined)[],
   layout: CollageLayout,
   background: string
 ): Promise<{ data: Buffer; width: number; height: number; channels: 1 | 2 | 3 | 4 }> {
+  const svg = collageLabelSvg(layout, labels, background);
   const canvas = sharp({
     create: {
       width: layout.width,
@@ -123,14 +141,15 @@ async function compositeCanvas(
       channels: 3,
       background,
     },
-  }).composite(
-    tiles.map((tile, index) => ({
+  }).composite([
+    ...tiles.map((tile, index) => ({
       input: tile.data,
       raw: { width: tile.width, height: tile.height, channels: tile.channels },
       left: layout.tiles[index].x,
       top: layout.tiles[index].y,
-    }))
-  );
+    })),
+    ...(svg ? [{ input: Buffer.from(svg), left: 0, top: 0 }] : []),
+  ]);
 
   const { data, info } = await canvas.raw().toBuffer({ resolveWithObject: true });
   return { data, width: info.width, height: info.height, channels: info.channels };
@@ -153,7 +172,12 @@ export async function renderCollage(
 
   const tiles = await Promise.all(sources.map(decodeTile));
   const layout = layOutCollage(tiles, style);
-  const canvas = await compositeCanvas(tiles, layout, style.background);
+  const canvas = await compositeCanvas(
+    tiles,
+    sources.map((s) => s.labels),
+    layout,
+    style.background
+  );
 
   const nativeEdge = Math.max(canvas.width, canvas.height);
   // One shared factor for the whole collage: the longest-edge limit only ever shrinks, so the true

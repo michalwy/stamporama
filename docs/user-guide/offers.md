@@ -233,9 +233,16 @@ edge, file size). Those are the platform's limits, not the offer's — change th
 listing:
 
 - **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
-- **Tile label** — the `{token}` template written under each stamp on a collage. Blank leaves the
-  tiles unlabelled.
-- **Collage** — **Rows**, **Columns**, **Gap**, **Label strip** and **Background**. Use **Copy from
+- **Tile label (left)** and **Tile label (right)** — two `{token}` templates written under each
+  stamp, one flush left and one flush right at the same size. Each is resolved **per stamp**, so
+  `{ref}` writes that copy's own location ref (`A234`) under it and a buyer asking for "the one
+  labelled A234" names exactly one copy; put something descriptive like `{catalog}` on the other
+  side. Fill only one and it is centred instead. A copy with nothing to write for a side — no ref,
+  say — simply leaves that side blank, and both blank leaves the stamp unlabelled.
+- **Collage** — **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and **Background**. The two
+  percentages are shares of the stamp's height rather than pixels, so one setting reads the same
+  whatever resolution you scan at (see
+  [collage templates](collections.md#collage-templates)). Use **Copy from
   template** to fill them from one of your
   [collage templates](collections.md#collage-templates), then adjust the numbers for this listing if
   you like; the offer does not follow the template afterwards. **Clear** empties them, leaving the
@@ -244,7 +251,7 @@ listing:
 Rows × columns is a maximum, not a frame: fewer stamps simply make a smaller image.
 
 Because these values live on the offer, changing a platform's defaults — or editing a collage
-template — never alters an offer you have already prepared. That matters most for the tile label: a
+template — never alters an offer you have already prepared. That matters most for the tile labels: a
 buyer referring to a label on an image you have already uploaded keeps getting the same label.
 
 ## Generating the photos
@@ -279,8 +286,9 @@ uploaded to the platform today.
 
 ### When the offer changes afterwards
 
-Change the composition, reorder sets or copies, replace a scan, edit the photo settings, or change
-the platform's limits, and the card marks the stored images **Out of date**. Nothing happens to them:
+Change the composition, reorder sets or copies, replace a scan, edit the photo settings, change a
+copy's location ref (the labels are drawn into the images), or change the platform's limits, and the
+card marks the stored images **Out of date**. Nothing happens to them:
 they stay exactly as they are and keep being served, because they may already be live in a listing
 whose buyers are looking at them. It is a reminder, not an action — press **Regenerate** when you are
 ready to re-upload.

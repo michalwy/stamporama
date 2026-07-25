@@ -153,13 +153,14 @@ describe("offer photo generation (#311)", () => {
     // Sides + collage numbers: without them there is nothing to lay out.
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "both",
-      photoLabelTemplate: null,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
       collage: {
         collageRows: 2,
         collageColumns: 2,
-        collageGap: 10,
+        collageGapPercent: 8,
         collageBackground: "#ffffff",
-        collageLabelStripHeight: 12,
+        collageLabelPercent: 16,
       },
     });
 
@@ -265,13 +266,14 @@ describe("offer photo generation (#311)", () => {
     // Editing the photo configuration is exactly the case #308 promised would mark the plan stale.
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
-      photoLabelTemplate: null,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
       collage: {
         collageRows: 2,
         collageColumns: 2,
-        collageGap: 10,
+        collageGapPercent: 8,
         collageBackground: "#ffffff",
-        collageLabelStripHeight: 12,
+        collageLabelPercent: 16,
       },
     });
 
@@ -329,13 +331,14 @@ describe("offer photo generation (#311)", () => {
     // Configured, but its copy has no scans for the chosen side.
     await updateOfferPhotoConfig(userId, bare, {
       photoSides: "front",
-      photoLabelTemplate: null,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
       collage: {
         collageRows: 1,
         collageColumns: 1,
-        collageGap: 4,
+        collageGapPercent: 4,
         collageBackground: "#ffffff",
-        collageLabelStripHeight: 0,
+        collageLabelPercent: 0,
       },
     });
     const stamp = await prisma.stamp.create({ data: { collectionId, name: "Unscanned" } });
@@ -380,6 +383,68 @@ describe("offer photo generation (#311)", () => {
     await runOfferPhotoGeneration(offerId);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "ready");
     assert.equal(await claimNextOfferPhotoGeneration(), null, "the queue is drained");
+  });
+
+  // ── Tile labels (#312) ─────────────────────────────────────────────────────
+
+  it("labels tiles from the offer's templates, and restamps them when a copy's ref changes", async () => {
+    const frontOnly = {
+      photoSides: "front" as const,
+      collage: {
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    };
+    const items = await prisma.item.findMany({
+      where: { offerSetMemberships: { some: { offerSet: { offerId } } } },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    await prisma.item.updateMany({
+      where: { id: { in: items.map((i) => i.id) } },
+      data: { locationRef: "A234" },
+    });
+
+    // The label template is part of the configuration, so setting it makes the stored images stale.
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...frontOnly,
+      photoLabelLeftTemplate: "{ref}",
+      photoLabelRightTemplate: "{name}",
+    });
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
+
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+    const labelled = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(labelled.status, "ready");
+    assert.equal(labelled.outOfDate, false);
+
+    // The label is drawn into the pixels, so editing the ref of one copy — no scan replaced, no
+    // setting touched — leaves images that no longer say what the inventory says.
+    await prisma.item.update({ where: { id: items[0].id }, data: { locationRef: "B999" } });
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
+
+    // A copy with nothing to render for the template's tokens is not a change to anything else.
+    await prisma.item.updateMany({
+      where: { id: { in: items.map((i) => i.id) } },
+      data: { locationRef: null },
+    });
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...frontOnly,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
+    });
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+    const unlabelled = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(unlabelled.status, "ready");
+    assert.equal(unlabelled.images.length, 1, "unlabelled tiles still render");
+    assert.equal(unlabelled.outOfDate, false);
   });
 
   // ── The panel (#314) ───────────────────────────────────────────────────────
@@ -432,13 +497,14 @@ describe("offer photo generation (#311)", () => {
     await applyPhotoChangeSet(userId, back.itemId!, { add: [], update: [], remove: [back.id] });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "both",
-      photoLabelTemplate: null,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
       collage: {
         collageRows: 2,
         collageColumns: 2,
-        collageGap: 10,
+        collageGapPercent: 8,
         collageBackground: "#ffffff",
-        collageLabelStripHeight: 12,
+        collageLabelPercent: 16,
       },
     });
 

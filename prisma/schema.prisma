@@ -171,14 +171,16 @@ model CollageTemplate {
   // rendering path as any other collage.
   rows         Int
   columns      Int
-  // Spacing between tiles, in **output pixels** — one value used both between columns and between
-  // rows. Pixels rather than millimetres because stamps are scanned at a constant DPI, so the
-  // renderer already works in a pixel space that carries true relative sizes (#310).
-  gap          Int
+  // Spacing between tiles — one value used both between columns and between rows — as a **percent
+  // of the stamp height**, resolved by the renderer against the median tile of the collage it is
+  // laying out (#310, #312). Not pixels: a pixel number cannot be chosen without knowing the scan
+  // DPI and how far the platform's limits will shrink the finished image, and neither is known when
+  // the template is written.
+  gapPercent   Int
   // Canvas colour behind the tiles, `#rrggbb`. Also what the label strip is drawn on.
   background   String @default("#ffffff")
-  // Height of the label strip drawn below each tile (#312), in output pixels. 0 = no strip.
-  labelStripHeight Int @default(0)
+  // Height of the label strip drawn below each tile (#312), same units as `gapPercent`. 0 = no strip.
+  labelPercent Int @default(0)
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
@@ -730,17 +732,19 @@ model Offer {
   //
   // Scan sides to include: `front` | `back` | `both`.
   photoSides   String  @default("front")
-  // Per-tile label template (#312); null when the platform had none configured.
-  photoLabelTemplate String?
+  // Per-tile label templates (#312), left and right annotation; null when the platform had none
+  // configured. Both resolve per copy, share one strip and one font size.
+  photoLabelLeftTemplate String?
+  photoLabelRightTemplate String?
   // The collage numbers copied from the chosen template (#307). All null together when the platform
   // had no default template and none has been picked on the offer yet — there is no collage to
-  // render until they are set. Units follow the template: output pixels for `collageGap` and
-  // `collageLabelStripHeight`, `#rrggbb` for `collageBackground`.
+  // render until they are set. Units follow the template: percent of the stamp height for
+  // `collageGapPercent` and `collageLabelPercent`, `#rrggbb` for `collageBackground`.
   collageRows  Int?
   collageColumns Int?
-  collageGap   Int?
+  collageGapPercent Int?
   collageBackground String?
-  collageLabelStripHeight Int?
+  collageLabelPercent Int?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -1047,10 +1051,13 @@ model Contact {
   maxPhotoFileSizeMib Int?
   // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
   // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both`) and
-  // the per-tile label template (#312). Changing either here never touches an offer already
-  // prepared — a buyer referring to a label on an uploaded image must keep getting that label.
+  // the two per-tile label templates (#312). Changing any of them here never touches an offer
+  // already prepared — a buyer referring to a label on an uploaded image must keep getting that
+  // label. A tile's strip carries two independent annotations, drawn flush left and flush right;
+  // either may be null, and a lone one is centred.
   photoSides       String  @default("front")
-  tileLabelTemplate String?
+  tileLabelLeftTemplate String?
+  tileLabelRightTemplate String?
   // Which collage template (#307) a new offer on this platform copies its render numbers from.
   // Null — or a template later deleted — leaves the offer without collage numbers until one is
   // picked on the offer itself.

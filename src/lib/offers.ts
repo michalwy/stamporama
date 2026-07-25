@@ -158,7 +158,8 @@ interface PlatformTemplates {
  * accepts and are read live at render time (#310). */
 interface PlatformPhotoDefaults {
   photoSides: string;
-  tileLabelTemplate: string | null;
+  tileLabelLeftTemplate: string | null;
+  tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
 }
 
@@ -170,17 +171,18 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
   const template = platform.defaultCollageTemplateId
     ? await prisma.collageTemplate.findUnique({
         where: { id: platform.defaultCollageTemplateId },
-        select: { rows: true, columns: true, gap: true, background: true, labelStripHeight: true },
+        select: { rows: true, columns: true, gapPercent: true, background: true, labelPercent: true },
       })
     : null;
   return {
     photoSides: normalizePhotoSides(platform.photoSides),
-    photoLabelTemplate: platform.tileLabelTemplate?.trim() || null,
+    photoLabelLeftTemplate: platform.tileLabelLeftTemplate?.trim() || null,
+    photoLabelRightTemplate: platform.tileLabelRightTemplate?.trim() || null,
     collageRows: template?.rows ?? null,
     collageColumns: template?.columns ?? null,
-    collageGap: template?.gap ?? null,
+    collageGapPercent: template?.gapPercent ?? null,
     collageBackground: template?.background ?? null,
-    collageLabelStripHeight: template?.labelStripHeight ?? null,
+    collageLabelPercent: template?.labelPercent ?? null,
   };
 }
 
@@ -199,7 +201,8 @@ async function assertPlatform(
       privateNoteTemplate: true,
       titleLanguage: true,
       photoSides: true,
-      tileLabelTemplate: true,
+      tileLabelLeftTemplate: true,
+      tileLabelRightTemplate: true,
       defaultCollageTemplateId: true,
     },
   });
@@ -213,7 +216,8 @@ async function assertPlatform(
     privateNoteTemplate: contact.privateNoteTemplate,
     titleLanguage: contact.titleLanguage,
     photoSides: contact.photoSides,
-    tileLabelTemplate: contact.tileLabelTemplate,
+    tileLabelLeftTemplate: contact.tileLabelLeftTemplate,
+    tileLabelRightTemplate: contact.tileLabelRightTemplate,
     defaultCollageTemplateId: contact.defaultCollageTemplateId,
   };
 }
@@ -954,12 +958,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       listingDate: true,
       createdAt: true,
       photoSides: true,
-      photoLabelTemplate: true,
+      photoLabelLeftTemplate: true,
+      photoLabelRightTemplate: true,
       collageRows: true,
       collageColumns: true,
-      collageGap: true,
+      collageGapPercent: true,
       collageBackground: true,
-      collageLabelStripHeight: true,
+      collageLabelPercent: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: {
         select: {
@@ -1109,21 +1114,22 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     listingDate: offer.listingDate,
     photoConfig: {
       photoSides: normalizePhotoSides(offer.photoSides),
-      photoLabelTemplate: offer.photoLabelTemplate,
+      photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
+      photoLabelRightTemplate: offer.photoLabelRightTemplate,
       // The collage numbers are written as a group, so one non-null column means the whole set is
       // there; a platform with no default template leaves them all null (no collage to render yet).
       collage:
         offer.collageRows != null &&
         offer.collageColumns != null &&
-        offer.collageGap != null &&
+        offer.collageGapPercent != null &&
         offer.collageBackground != null &&
-        offer.collageLabelStripHeight != null
+        offer.collageLabelPercent != null
           ? {
               collageRows: offer.collageRows,
               collageColumns: offer.collageColumns,
-              collageGap: offer.collageGap,
+              collageGapPercent: offer.collageGapPercent,
               collageBackground: offer.collageBackground,
-              collageLabelStripHeight: offer.collageLabelStripHeight,
+              collageLabelPercent: offer.collageLabelPercent,
             }
           : null,
     },
@@ -1576,12 +1582,13 @@ export async function updateOfferPhotoConfig(
     where: { id: offerId },
     data: {
       photoSides: config.photoSides,
-      photoLabelTemplate: config.photoLabelTemplate,
+      photoLabelLeftTemplate: config.photoLabelLeftTemplate,
+      photoLabelRightTemplate: config.photoLabelRightTemplate,
       collageRows: config.collage?.collageRows ?? null,
       collageColumns: config.collage?.collageColumns ?? null,
-      collageGap: config.collage?.collageGap ?? null,
+      collageGapPercent: config.collage?.collageGapPercent ?? null,
       collageBackground: config.collage?.collageBackground ?? null,
-      collageLabelStripHeight: config.collage?.collageLabelStripHeight ?? null,
+      collageLabelPercent: config.collage?.collageLabelPercent ?? null,
     },
   });
 }

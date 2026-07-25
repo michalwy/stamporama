@@ -21,8 +21,11 @@
  *   effective order (#306);
  * - the **source photo ids** per copy and side. Photo rows are immutable per id (replacing a front
  *   scan writes a new row), so an id captures the bytes;
- * - the **offer's photo configuration** (#308) — sides, the tile label template (#312) and the
+ * - the **offer's photo configuration** (#308) — sides, the two tile label templates (#312) and the
  *   collage numbers;
+ * - the **rendered tile labels** (#312), not just their template: the labels are drawn into the
+ *   images, so editing the location ref of a copy changes the pixels exactly as replacing its scan
+ *   does, and has to read as out of date for the same reason;
  * - the **platform's output limits** (#308), which the renderer reads live: raising the file-size cap
  *   changes the encoded result, so it belongs here even though it lives on the platform.
  *
@@ -38,8 +41,10 @@ import { createHash } from "node:crypto";
 import type { OfferCollageValues, PhotoSides, PlatformPhotoLimits } from "./offer-photo-config";
 import { compareSets, sortSetItems, type SetItemOrderRow, type SetOrderRow } from "./offer-set-order";
 
-/** Bumped when the renderer's output changes, invalidating every stored fingerprint. */
-export const FINGERPRINT_VERSION = 1;
+/** Bumped when the renderer's output changes, invalidating every stored fingerprint. `2`: tiles
+ * carry their label (#312). `3`: the gap and the label strip became percentages of the stamp rather
+ * than pixels (#312), so the same numbers describe a different geometry. */
+export const FINGERPRINT_VERSION = 3;
 
 /** One copy as the fingerprint sees it: its order fields (#306) plus the scans its tiles come from. */
 export interface FingerprintCopy extends SetItemOrderRow {
@@ -55,7 +60,11 @@ export interface FingerprintSet extends SetOrderRow {
 export interface OfferPhotoFingerprintInput {
   sets: readonly FingerprintSet[];
   photoSides: PhotoSides;
-  photoLabelTemplate: string | null;
+  photoLabelLeftTemplate: string | null;
+  photoLabelRightTemplate: string | null;
+  /** The two annotations each copy's tile is drawn with (#312), as `[itemId, left, right]` rows in
+   * any order. A side with nothing to say is an empty string; copies with neither are absent. */
+  tileLabels: readonly (readonly [string, string, string])[];
   collage: OfferCollageValues | null;
   limits: PlatformPhotoLimits;
 }
@@ -73,16 +82,21 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
     sortSetItems(set.items).map((copy) => [copy.itemId, copy.frontPhotoId, copy.backPhotoId]),
   ]);
 
+  // Sorted by copy id: which order the labels were read in is not a change to the images.
+  const tileLabels = [...input.tileLabels].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+
   const config = [
     input.photoSides,
-    input.photoLabelTemplate,
+    input.photoLabelLeftTemplate,
+    input.photoLabelRightTemplate,
+    tileLabels,
     input.collage
       ? [
           input.collage.collageRows,
           input.collage.collageColumns,
-          input.collage.collageGap,
+          input.collage.collageGapPercent,
           input.collage.collageBackground,
-          input.collage.collageLabelStripHeight,
+          input.collage.collageLabelPercent,
         ]
       : null,
   ];

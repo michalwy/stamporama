@@ -13,10 +13,13 @@ import { deriveSetLabel } from "./offer-set-rules";
 import { sortSetItems } from "./offer-set-order";
 import { zip } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
+import type { TileLabelTexts } from "./collage-label";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
 import { planOfferPhotos, type PlannedCollage } from "./offer-photo-plan";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
+import { renderTitleTemplate } from "./offer-title-template";
+import { makeTitleCopyMapper, TITLE_COPY_SELECT, type TitleCopyRow } from "./title-copy";
 import type { PlanCopy, PlanSet } from "./offer-photo-plan";
 
 /**
@@ -146,6 +149,46 @@ interface PlanLabels {
   sets: Map<string, string>;
 }
 
+/**
+ * The two annotations drawn on each tile's label strip (#312), keyed by copy id — the offer's own
+ * left / right label templates resolved against that copy by the title-template engine, in the
+ * platform's listing language. Empty when the offer carries neither template, and a side is left
+ * empty for a copy whose tokens all came out empty: an unlabelled tile is the intended result, not
+ * a special case.
+ *
+ * Resolved per copy rather than per group, because a token resolved across the copies of a collage
+ * would render the same joined value under every stamp — the opposite of identifying one of them.
+ */
+async function readTileLabels(
+  ownerId: string,
+  collectionId: string,
+  itemIds: readonly string[],
+  templates: { left: string | null; right: string | null },
+  language: string | null
+): Promise<Map<string, TileLabelTexts>> {
+  const labels = new Map<string, TileLabelTexts>();
+  const left = templates.left?.trim() || null;
+  const right = templates.right?.trim() || null;
+  if ((!left && !right) || itemIds.length === 0) return labels;
+
+  const [rows, mapCopy] = await Promise.all([
+    prisma.item.findMany({
+      where: { id: { in: [...itemIds] }, collectionId },
+      select: TITLE_COPY_SELECT,
+    }),
+    makeTitleCopyMapper(ownerId, collectionId, language),
+  ]);
+  for (const row of rows as TitleCopyRow[]) {
+    const copy = [mapCopy(row)];
+    const texts: TileLabelTexts = {
+      left: left ? renderTitleTemplate(left, copy).trim() : "",
+      right: right ? renderTitleTemplate(right, copy).trim() : "",
+    };
+    if (texts.left || texts.right) labels.set(row.id, texts);
+  }
+  return labels;
+}
+
 /** Everything one run reads, gathered once so the plan and the fingerprint cannot disagree. */
 interface GenerationInputs {
   offerId: string;
@@ -155,7 +198,10 @@ interface GenerationInputs {
   sets: PlanSet[];
   labels: PlanLabels;
   photoSides: ReturnType<typeof normalizePhotoSides>;
-  photoLabelTemplate: string | null;
+  photoLabelLeftTemplate: string | null;
+  photoLabelRightTemplate: string | null;
+  /** The rendered tile annotations per copy id (#312) — what is actually drawn, not the template. */
+  tileLabels: Map<string, TileLabelTexts>;
   collage: OfferCollageValues | null;
   limits: PlatformPhotoLimits;
   sourceById: Map<string, SourcePhoto>;
@@ -171,16 +217,23 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       name: true,
       collectionId: true,
       photoSides: true,
-      photoLabelTemplate: true,
+      photoLabelLeftTemplate: true,
+      photoLabelRightTemplate: true,
       collageRows: true,
       collageColumns: true,
-      collageGap: true,
+      collageGapPercent: true,
       collageBackground: true,
-      collageLabelStripHeight: true,
+      collageLabelPercent: true,
       collection: { select: { ownerId: true } },
-      // Limits are read **live** from the platform (#308): they say what it accepts today.
+      // Limits are read **live** from the platform (#308): they say what it accepts today. The
+      // listing language comes along so a tile label reads the way the listing does (#293).
       platform: {
-        select: { maxPhotos: true, maxPhotoEdge: true, maxPhotoFileSizeMib: true },
+        select: {
+          maxPhotos: true,
+          maxPhotoEdge: true,
+          maxPhotoFileSizeMib: true,
+          titleLanguage: true,
+        },
       },
       sets: {
         select: {
@@ -263,9 +316,17 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   const hasCollage =
     offer.collageRows != null &&
     offer.collageColumns != null &&
-    offer.collageGap != null &&
+    offer.collageGapPercent != null &&
     offer.collageBackground != null &&
-    offer.collageLabelStripHeight != null;
+    offer.collageLabelPercent != null;
+
+  const tileLabels = await readTileLabels(
+    offer.collection.ownerId,
+    offer.collectionId,
+    sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
+    { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
+    offer.platform.titleLanguage
+  );
 
   return {
     offerId: offer.id,
@@ -275,14 +336,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     sets,
     labels,
     photoSides: normalizePhotoSides(offer.photoSides),
-    photoLabelTemplate: offer.photoLabelTemplate,
+    photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
+    photoLabelRightTemplate: offer.photoLabelRightTemplate,
+    tileLabels,
     collage: hasCollage
       ? {
           collageRows: offer.collageRows!,
           collageColumns: offer.collageColumns!,
-          collageGap: offer.collageGap!,
+          collageGapPercent: offer.collageGapPercent!,
           collageBackground: offer.collageBackground!,
-          collageLabelStripHeight: offer.collageLabelStripHeight!,
+          collageLabelPercent: offer.collageLabelPercent!,
         }
       : null,
     limits: {
@@ -308,7 +371,11 @@ function fingerprintFor(inputs: GenerationInputs): string {
   return fingerprintOfferPhotoInputs({
     sets: inputs.sets,
     photoSides: inputs.photoSides,
-    photoLabelTemplate: inputs.photoLabelTemplate,
+    photoLabelLeftTemplate: inputs.photoLabelLeftTemplate,
+    photoLabelRightTemplate: inputs.photoLabelRightTemplate,
+    tileLabels: [...inputs.tileLabels].map(
+      ([itemId, texts]) => [itemId, texts.left ?? "", texts.right ?? ""] as const
+    ),
     collage: inputs.collage,
     limits: inputs.limits,
   });
@@ -612,7 +679,10 @@ async function renderPlannedCollage(
       // The plan was built from the same read, so a missing source is a bug, not a race.
       throw new Error(`Planned tile references unknown photo ${tile.photoId}.`);
     }
-    sources.push({ buffer: await readFullBytes(source) });
+    sources.push({
+      buffer: await readFullBytes(source),
+      labels: inputs.tileLabels.get(tile.itemId) ?? null,
+    });
   }
 
   const collage = inputs.collage!;
@@ -620,8 +690,8 @@ async function renderPlannedCollage(
     sources,
     {
       columns: collage.collageColumns,
-      gap: collage.collageGap,
-      labelStripHeight: collage.collageLabelStripHeight,
+      gapPercent: collage.collageGapPercent,
+      labelPercent: collage.collageLabelPercent,
       background: collage.collageBackground,
     },
     {
