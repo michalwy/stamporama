@@ -17,17 +17,21 @@ import {
 } from "@/app/c/[collectionSlug]/shared/template-builder";
 
 /** The generated listing texts a platform configures a template for — also the `Contact` columns. */
-export type TemplateKey = "titleTemplate" | "descriptionTemplate" | "privateNoteTemplate";
+export type TemplateKey =
+  | "titleTemplate"
+  | "descriptionTemplate"
+  | "privateNoteTemplate"
+  | "tileLabelTemplate";
 
 /** The three templates as the contact form holds them (blank = not configured). */
 export type ListingTemplates = Record<TemplateKey, string>;
 
 /**
- * The one-line listing title (#210) and the two multi-line texts an offer carries — its public
- * description (#266) and its seller-only private note (#267). Blank means different things per
- * field: the title falls back to the built-in default (and ultimately the derived catalog/copy
- * label), while the other two are simply not generated — which is also how a platform without
- * private notes is left.
+ * The one-line listing title (#210), the two multi-line texts an offer carries — its public
+ * description (#266) and its seller-only private note (#267) — and the label written under each
+ * stamp on a generated collage (#308/#312). Blank means different things per field: the title falls
+ * back to the built-in default (and ultimately the derived catalog/copy label), while the others are
+ * simply not generated — which is also how a platform without private notes is left.
  */
 const TEMPLATE_FIELDS: readonly {
   key: TemplateKey;
@@ -72,6 +76,19 @@ const TEMPLATE_FIELDS: readonly {
       "A note only you see on the platform's listing — handy for storage locations. Blank generates none, which is also how a platform without private notes is left.",
     emptyPreview: "Empty — offers on this platform get no generated private note.",
   },
+  {
+    // The label written under each stamp on a generated collage (#312). It configures a photo
+    // rather than a text, but it is the same one-line {token} template over one copy, so it belongs
+    // in the same builder rather than in a form field of its own.
+    key: "tileLabelTemplate",
+    label: "Photo tile label",
+    multiline: false,
+    tokens: AVAILABLE_TITLE_TOKENS,
+    placeholder: "{catalog}",
+    description:
+      "Written under each stamp on a generated collage. Copied onto new offers on this platform; blank leaves the tiles unlabelled.",
+    emptyPreview: "Empty — collage tiles on this platform stay unlabelled.",
+  },
 ];
 
 export interface ListingTemplatesDialogProps {
@@ -86,8 +103,8 @@ export interface ListingTemplatesDialogProps {
 }
 
 /**
- * Every listing template a platform configures, in **one** dialog off the contact form (#266/#267):
- * the sample copies the previews run on are chosen once at the top, then the three templates stack
+ * Every listing template a platform configures, in **one** dialog off the contact form (#266/#267,
+ * #308): the sample copies the previews run on are chosen once at the top, then the templates stack
  * below — each its own field, token chips and live preview, and each collapsible to a one-line row.
  * The panel is a fixed size with the templates scrolling inside it, so typing (or a long preview)
  * never resizes the dialog.
@@ -106,6 +123,7 @@ export function ListingTemplatesDialog({
     titleTemplate: true,
     descriptionTemplate: !!templates.descriptionTemplate.trim(),
     privateNoteTemplate: !!templates.privateNoteTemplate.trim(),
+    tileLabelTemplate: !!templates.tileLabelTemplate.trim(),
   });
   // Two samples so a `{#set}` block in a multi-line template visibly repeats; the title previews on
   // the first. Loaded once for the whole dialog — every preview describes the same stamps.
@@ -151,6 +169,7 @@ export function ListingTemplatesDialog({
             titleTemplate: draft.titleTemplate.trim(),
             descriptionTemplate: draft.descriptionTemplate.trim(),
             privateNoteTemplate: draft.privateNoteTemplate.trim(),
+            tileLabelTemplate: draft.tileLabelTemplate.trim(),
           })
         }
       />

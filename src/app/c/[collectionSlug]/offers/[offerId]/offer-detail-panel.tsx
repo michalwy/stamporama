@@ -14,6 +14,7 @@ import {
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
+import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText } from "./offer-listing-text";
@@ -138,6 +139,8 @@ export function OfferDetailPanel({
   const { invalidateAll } = useInvalidateOffers();
   const [composing, setComposing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  // This listing's own photo configuration (#308) — sides, tile label and collage numbers.
+  const [photoSettings, setPhotoSettings] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
@@ -257,6 +260,7 @@ export function OfferDetailPanel({
       : offer.state === "active"
         ? [{ key: "mark-bidding", label: "Mark in active bidding", icon: "🔨", onSelect: () => setBidding(true) } as RowAction]
         : []),
+    { key: "photo-settings", label: "Photo settings…", icon: "🖼", onSelect: () => setPhotoSettings(true) },
     { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
@@ -547,6 +551,29 @@ export function OfferDetailPanel({
           onDone={() => {
             setComposing(false);
             invalidateAll(collectionId);
+          }}
+        />
+      )}
+
+      {photoSettings && (
+        <PhotoSettingsDialog
+          collectionId={collectionId}
+          config={offer.photoConfig}
+          limits={offer.platformPhotoLimits}
+          platformName={offer.platformName}
+          isPending={isPending}
+          error={actionError}
+          onClose={() => !isPending && setPhotoSettings(false)}
+          onSubmit={(formData) => {
+            setActionError(undefined);
+            startTransition(async () => {
+              const { updateOfferPhotoConfigAction } = await import("@/app/actions/offers");
+              const result = await updateOfferPhotoConfigAction(offerId, formData);
+              if (result.status === "success") {
+                setPhotoSettings(false);
+                invalidateAll(collectionId);
+              } else setActionError(result.message);
+            });
           }}
         />
       )}

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
+import { normalizePhotoSides } from "./offer-photo-config";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -96,6 +97,17 @@ export interface ContactData extends ContactRoles {
    * unset. Only meaningful for the `platform` role; drives which entity translations the title
    * tokens resolve. */
   titleLanguage: string | null;
+  /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
+   * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
+  maxPhotos: number | null;
+  maxPhotoEdge: number | null;
+  maxPhotoFileSizeMib: number | null;
+  /** Photo defaults seeded onto every offer created on this platform (#308): which scan sides to
+   * include, the per-tile label template (#312), and which collage template (#307) supplies the
+   * render numbers. Changing them never touches an offer already prepared. */
+  photoSides: string;
+  tileLabelTemplate: string | null;
+  defaultCollageTemplateId: string | null;
   createdAt: Date;
 }
 
@@ -117,6 +129,12 @@ const CONTACT_SELECT = {
   descriptionTemplate: true,
   privateNoteTemplate: true,
   titleLanguage: true,
+  maxPhotos: true,
+  maxPhotoEdge: true,
+  maxPhotoFileSizeMib: true,
+  photoSides: true,
+  tileLabelTemplate: true,
+  defaultCollageTemplateId: true,
   createdAt: true,
 } as const;
 
@@ -141,6 +159,17 @@ export interface ContactCreateInput {
   privateNoteTemplate?: string | null;
   /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
   titleLanguage?: string | null;
+  /** The platform's photo limits (#308) — null each means "no limit stated". */
+  maxPhotos?: number | null;
+  maxPhotoEdge?: number | null;
+  maxPhotoFileSizeMib?: number | null;
+  /** The photo defaults new offers on this platform are seeded from (#308). `photoSides` is
+   * normalised; an unknown value falls back to the default side. */
+  photoSides?: string | null;
+  tileLabelTemplate?: string | null;
+  /** The collage template (#307) new offers copy their render numbers from, or null for none. A
+   * template id from another collection is rejected. */
+  defaultCollageTemplateId?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -247,6 +276,36 @@ export async function resolvePurchaseContact(
   }
 }
 
+/** The photo columns (#308) as Prisma writes them, with the collage-template reference verified to
+ * belong to the same collection — a tampered id from another collection is simply dropped. */
+async function photoData(
+  collectionId: string,
+  data: ContactCreateInput
+): Promise<{
+  maxPhotos: number | null;
+  maxPhotoEdge: number | null;
+  maxPhotoFileSizeMib: number | null;
+  photoSides: string;
+  tileLabelTemplate: string | null;
+  defaultCollageTemplateId: string | null;
+}> {
+  const templateId = data.defaultCollageTemplateId?.trim() || null;
+  const template = templateId
+    ? await prisma.collageTemplate.findFirst({
+        where: { id: templateId, collectionId },
+        select: { id: true },
+      })
+    : null;
+  return {
+    maxPhotos: data.maxPhotos ?? null,
+    maxPhotoEdge: data.maxPhotoEdge ?? null,
+    maxPhotoFileSizeMib: data.maxPhotoFileSizeMib ?? null,
+    photoSides: normalizePhotoSides(data.photoSides),
+    tileLabelTemplate: data.tileLabelTemplate ?? null,
+    defaultCollageTemplateId: template?.id ?? null,
+  };
+}
+
 /** Create a contact. `name` is required; roles are optional and independent, so a
  * contact may be created with no roles at all (create-on-type, #103b). Throws
  * {@link ContactNameTakenError} when the name already exists in the collection. */
@@ -258,11 +317,13 @@ export async function createContact(
   await assertCollectionOwner(ownerId, collectionId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
+  const photos = await photoData(collectionId, data);
   try {
     return await prisma.contact.create({
       data: {
         collectionId,
         name,
+        ...photos,
         notes: data.notes ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
@@ -297,14 +358,16 @@ export async function updateContact(
   contactId: string,
   data: ContactUpdateInput
 ): Promise<ContactData> {
-  await assertContactOwner(ownerId, contactId);
+  const { collectionId } = await assertContactOwner(ownerId, contactId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
+  const photos = await photoData(collectionId, data);
   try {
     return await prisma.contact.update({
       where: { id: contactId },
       data: {
         name,
+        ...photos,
         notes: data.notes ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,

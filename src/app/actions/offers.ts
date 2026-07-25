@@ -12,6 +12,7 @@ import {
   deleteOffer,
   patchOffer,
   regenerateOfferText,
+  updateOfferPhotoConfig,
   type OfferTextField,
   addOfferSet,
   addOfferSetsPerCopy,
@@ -28,6 +29,7 @@ import {
   type OfferInput,
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
+import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
   isOfferState,
@@ -319,6 +321,32 @@ export async function patchOfferAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the change.");
+  }
+}
+
+/** Save the offer's photo configuration (#308) from its photo-settings dialog: sides, tile label
+ * template and the collage numbers copied from a template. One dialog, one save — the whole
+ * configuration is replaced, and an all-blank collage group clears the numbers. */
+export async function updateOfferPhotoConfigAction(
+  offerId: string,
+  formData: FormData
+): Promise<OfferActionState> {
+  const session = await getSession();
+  const parsed = parseOfferPhotoConfigInput({
+    photoSides: str(formData, "photoSides"),
+    photoLabelTemplate: str(formData, "photoLabelTemplate"),
+    collageRows: str(formData, "collageRows"),
+    collageColumns: str(formData, "collageColumns"),
+    collageGap: str(formData, "collageGap"),
+    collageBackground: str(formData, "collageBackground"),
+    collageLabelStripHeight: str(formData, "collageLabelStripHeight"),
+  });
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    await updateOfferPhotoConfig(session.user.id, offerId, parsed.value);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to save the photo settings.");
   }
 }
 

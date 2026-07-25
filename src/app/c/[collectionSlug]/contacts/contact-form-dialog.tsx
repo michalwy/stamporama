@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -15,6 +15,16 @@ import {
   type ListingTemplates,
 } from "./listing-templates-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
+import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
+import type { CollageTemplateData } from "@/lib/collage-templates";
+import {
+  DEFAULT_PHOTO_SIDES,
+  MAX_PHOTO_COUNT_LIMIT,
+  MAX_PHOTO_EDGE_LIMIT,
+  MAX_PHOTO_FILE_SIZE_MIB_LIMIT,
+  PHOTO_SIDES,
+  PHOTO_SIDES_LABELS,
+} from "@/lib/offer-photo-config";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -28,6 +38,44 @@ const INPUT_STYLE: React.CSSProperties = {
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
+
+/** How many listing templates the platform can configure — the summary row counts against it. */
+const TEMPLATE_COUNT = 4;
+
+/** One optional platform photo limit (#308): blank means the platform states no limit. */
+function PhotoLimitField({
+  id,
+  name,
+  label,
+  max,
+  defaultValue,
+  isPending,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  max: number;
+  defaultValue: number | null | undefined;
+  isPending: boolean;
+}) {
+  return (
+    <div style={{ flex: 1 }}>
+      <LabelWithError htmlFor={id}>{label}</LabelWithError>
+      <input
+        id={id}
+        name={name}
+        type="number"
+        step={1}
+        min={1}
+        max={max}
+        defaultValue={defaultValue ?? ""}
+        placeholder="no limit"
+        disabled={isPending}
+        style={INPUT_STYLE}
+      />
+    </div>
+  );
+}
 
 
 export interface ContactFormDialogProps {
@@ -63,12 +111,31 @@ export function ContactFormDialog({
     titleTemplate: contact?.titleTemplate ?? "",
     descriptionTemplate: contact?.descriptionTemplate ?? "",
     privateNoteTemplate: contact?.privateNoteTemplate ?? "",
+    tileLabelTemplate: contact?.tileLabelTemplate ?? "",
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const configuredTemplates = Object.values(templates).filter((t) => t.trim()).length;
   // The listing language (#293) is tracked so the builder's preview renders in the language being
   // configured, not the default one.
   const [titleLanguage, setTitleLanguage] = useState(contact?.titleLanguage ?? "");
+  // The collection's collage templates (#307), for the platform's default-template picker (#308).
+  // Loaded only once the platform role is on — a non-platform contact never shows the field.
+  const [collageTemplates, setCollageTemplates] = useState<CollageTemplateData[]>([]);
+  const [defaultCollageTemplateId, setDefaultCollageTemplateId] = useState(
+    contact?.defaultCollageTemplateId ?? ""
+  );
+  useEffect(() => {
+    if (!isPlatform) return;
+    let cancelled = false;
+    getCollageTemplatesAction(collectionId)
+      .then((rows) => {
+        if (!cancelled) setCollageTemplates(rows);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlatform, collectionId]);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -227,6 +294,7 @@ export function ContactFormDialog({
               <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
               <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
               <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+              <input type="hidden" name="tileLabelTemplate" value={templates.tileLabelTemplate} />
               <LabelWithError>Listing templates</LabelWithError>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <div
@@ -240,7 +308,7 @@ export function ContactFormDialog({
                   }}
                 >
                   {configuredTemplates
-                    ? `${configuredTemplates} of 3 configured`
+                    ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured`
                     : "None — listings use the catalog/copy label"}
                 </div>
                 <button
@@ -260,8 +328,99 @@ export function ContactFormDialog({
                 </button>
               </div>
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-                Title, description and private note for this platform&apos;s listings, each generated
-                from a {"{token}"} template with a live preview.
+                Title, description, private note and photo tile label for this platform&apos;s
+                listings, each generated from a {"{token}"} template with a live preview.
+              </p>
+            </div>
+          )}
+
+          {/* Offer photos (#308), platform-only and on two levels. The limits are what the platform
+              physically accepts — read live when photos are generated, so tightening one applies at
+              once. The two defaults below are *seeded* onto every new offer on this platform and
+              never reach back into offers already prepared. */}
+          {isPlatform && (
+            <div style={FIELD_GAP}>
+              <LabelWithError>Offer photos</LabelWithError>
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <PhotoLimitField
+                  id="contact-max-photos"
+                  name="maxPhotos"
+                  label="Max photos"
+                  max={MAX_PHOTO_COUNT_LIMIT}
+                  defaultValue={contact?.maxPhotos}
+                  isPending={isPending}
+                />
+                <PhotoLimitField
+                  id="contact-max-photo-edge"
+                  name="maxPhotoEdge"
+                  label="Max longest edge (px)"
+                  max={MAX_PHOTO_EDGE_LIMIT}
+                  defaultValue={contact?.maxPhotoEdge}
+                  isPending={isPending}
+                />
+                <PhotoLimitField
+                  id="contact-max-photo-size"
+                  name="maxPhotoFileSizeMib"
+                  label="Max file size (MiB)"
+                  max={MAX_PHOTO_FILE_SIZE_MIB_LIMIT}
+                  defaultValue={contact?.maxPhotoFileSizeMib}
+                  isPending={isPending}
+                />
+              </div>
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0.75rem" }}>
+                What this platform accepts. Leave a field blank when it states no limit.
+              </p>
+
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-photo-sides">Sides to photograph</LabelWithError>
+                  <select
+                    id="contact-photo-sides"
+                    name="photoSides"
+                    defaultValue={contact?.photoSides ?? DEFAULT_PHOTO_SIDES}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {PHOTO_SIDES.map((side) => (
+                      <option key={side} value={side}>
+                        {PHOTO_SIDES_LABELS[side]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-default-collage">Collage template</LabelWithError>
+                  {/* Controlled, because the options arrive from the server after the first render:
+                      an uncontrolled select would have already fallen back to "— none —" by then and
+                      would save the platform's template away. */}
+                  {/* The value travels in a hidden field: the select is disabled until the templates
+                      load, and a disabled control submits nothing — which would clear the setting. */}
+                  <input
+                    type="hidden"
+                    name="defaultCollageTemplateId"
+                    value={defaultCollageTemplateId}
+                  />
+                  <select
+                    id="contact-default-collage"
+                    value={defaultCollageTemplateId}
+                    onChange={(e) => setDefaultCollageTemplateId(e.target.value)}
+                    disabled={isPending || collageTemplates.length === 0}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    <option value="">
+                      {collageTemplates.length === 0 ? "— none defined yet —" : "— none —"}
+                    </option>
+                    {collageTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.rows} × {t.columns})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                Copied onto every new offer on this platform, along with the photo tile label from
+                the templates above. Changing them here leaves prepared offers untouched.
               </p>
             </div>
           )}

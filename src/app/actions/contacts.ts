@@ -14,6 +14,7 @@ import {
   type ContactData,
   type CollectionTranslationContext,
 } from "@/lib/contacts";
+import { parsePlatformPhotoLimits } from "@/lib/offer-photo-config";
 
 export type ContactActionState =
   | { status: "idle" }
@@ -48,9 +49,25 @@ function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
 }
 
+/** Raised when the platform's photo limits (#308) don't parse, so the caller can surface the rule's
+ * own message instead of a generic failure. */
+class PhotoLimitsError extends Error {}
+
 /** Read the contact fields from a form. `name` is validated by the caller so a friendly
  * message can be returned; roles are optional checkboxes/hidden inputs. */
 function parseContactFields(formData: FormData, name: string): ContactCreateInput {
+  // Photo configuration (#308) is platform-only, like the currency and the templates: dropped
+  // entirely when the role is not set. Blank limits mean "no limit stated".
+  const isPlatform = bool(formData, "platform");
+  const limits = isPlatform
+    ? parsePlatformPhotoLimits({
+        maxPhotos: str(formData, "maxPhotos"),
+        maxPhotoEdge: str(formData, "maxPhotoEdge"),
+        maxPhotoFileSizeMib: str(formData, "maxPhotoFileSizeMib"),
+      })
+    : ({ ok: true, value: { maxPhotos: null, maxPhotoEdge: null, maxPhotoFileSizeMib: null } } as const);
+  if (!limits.ok) throw new PhotoLimitsError(limits.message);
+
   return {
     name,
     notes: str(formData, "notes") || null,
@@ -87,6 +104,15 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     titleLanguage: bool(formData, "platform")
       ? str(formData, "titleLanguage") || null
       : null,
+    // The platform's photo limits, and the defaults new offers on this platform are seeded from
+    // (#308). `photoSides` normalises to the default side; the collage template is verified against
+    // the collection server-side.
+    ...limits.value,
+    photoSides: isPlatform ? str(formData, "photoSides") : null,
+    tileLabelTemplate: isPlatform ? str(formData, "tileLabelTemplate") || null : null,
+    defaultCollageTemplateId: isPlatform
+      ? str(formData, "defaultCollageTemplateId") || null
+      : null,
   };
 }
 
@@ -108,7 +134,7 @@ export async function createContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError) {
+    if (err instanceof ContactNameTakenError || err instanceof PhotoLimitsError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to add contact. Please try again." };
@@ -131,7 +157,7 @@ export async function updateContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError) {
+    if (err instanceof ContactNameTakenError || err instanceof PhotoLimitsError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save contact. Please try again." };

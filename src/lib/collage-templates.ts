@@ -75,9 +75,10 @@ export async function updateCollageTemplate(
 }
 
 /**
- * Deletes a template. Nothing references it: a template seeds its numbers onto an offer (#308)
+ * Deletes a template. No offer references it: a template seeds its numbers onto an offer (#308)
  * rather than being pointed at, so deleting one cannot affect offers already prepared and there is
- * no in-use check to make.
+ * no in-use check to make. A platform pointing at it as its default (`Contact.defaultCollageTemplateId`)
+ * is `onDelete: SetNull` — it simply loses its default and new offers start without collage numbers.
  */
 export async function deleteCollageTemplate(
   ownerId: string,

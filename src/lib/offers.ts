@@ -33,6 +33,11 @@ import {
   type TitleTemplateCopy,
 } from "./offer-title-template";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
+import {
+  normalizePhotoSides,
+  type OfferPhotoConfigInput,
+  type PlatformPhotoLimits,
+} from "./offer-photo-config";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -146,12 +151,44 @@ interface PlatformTemplates {
   titleLanguage: string | null;
 }
 
+/** The photo defaults a platform seeds onto every offer created on it (#308): which scan sides to
+ * include, the per-tile label template (#312), and the collage template (#307) whose render numbers
+ * are copied in. The platform's *limits* are deliberately not here — they describe what the platform
+ * accepts and are read live at render time (#310). */
+interface PlatformPhotoDefaults {
+  photoSides: string;
+  tileLabelTemplate: string | null;
+  defaultCollageTemplateId: string | null;
+}
+
+/** The offer photo columns a newly created offer starts with (#308) — the platform's sides and label
+ * template, plus the collage numbers copied from its default template. A platform with no default
+ * template (or one deleted since) leaves the collage numbers null: there is nothing to render until
+ * a template is picked on the offer itself. */
+async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
+  const template = platform.defaultCollageTemplateId
+    ? await prisma.collageTemplate.findUnique({
+        where: { id: platform.defaultCollageTemplateId },
+        select: { rows: true, columns: true, gap: true, background: true, labelStripHeight: true },
+      })
+    : null;
+  return {
+    photoSides: normalizePhotoSides(platform.photoSides),
+    photoLabelTemplate: platform.tileLabelTemplate?.trim() || null,
+    collageRows: template?.rows ?? null,
+    collageColumns: template?.columns ?? null,
+    collageGap: template?.gap ?? null,
+    collageBackground: template?.background ?? null,
+    collageLabelStripHeight: template?.labelStripHeight ?? null,
+  };
+}
+
 /** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
  * currency (#196), which may be null when not set yet, alongside its listing templates + language. */
 async function assertPlatform(
   collectionId: string,
   platformId: string
-): Promise<PlatformTemplates & { platformCurrency: string | null }> {
+): Promise<PlatformTemplates & PlatformPhotoDefaults & { platformCurrency: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
     select: {
@@ -160,6 +197,9 @@ async function assertPlatform(
       descriptionTemplate: true,
       privateNoteTemplate: true,
       titleLanguage: true,
+      photoSides: true,
+      tileLabelTemplate: true,
+      defaultCollageTemplateId: true,
     },
   });
   if (!contact) {
@@ -171,6 +211,9 @@ async function assertPlatform(
     descriptionTemplate: contact.descriptionTemplate,
     privateNoteTemplate: contact.privateNoteTemplate,
     titleLanguage: contact.titleLanguage,
+    photoSides: contact.photoSides,
+    tileLabelTemplate: contact.tileLabelTemplate,
+    defaultCollageTemplateId: contact.defaultCollageTemplateId,
   };
 }
 
@@ -881,6 +924,12 @@ export interface OfferDetail {
   sets: OfferDetailSet[];
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
+  /** This listing's own photo configuration (#308) — sides, tile label template and the collage
+   * numbers copied from a template. Seeded at creation, edited from the photo-settings dialog. */
+  photoConfig: OfferPhotoConfigInput;
+  /** The platform's hard photo limits (#308), read **live** rather than from the offer: they say
+   * what the platform accepts today, and the renderer (#310) obeys the current values. */
+  platformPhotoLimits: PlatformPhotoLimits;
   createdAt: Date;
 }
 
@@ -903,6 +952,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       inActiveBidding: true,
       listingDate: true,
       createdAt: true,
+      photoSides: true,
+      photoLabelTemplate: true,
+      collageRows: true,
+      collageColumns: true,
+      collageGap: true,
+      collageBackground: true,
+      collageLabelStripHeight: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: {
         select: {
@@ -911,6 +967,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           titleTemplate: true,
           descriptionTemplate: true,
           privateNoteTemplate: true,
+          maxPhotos: true,
+          maxPhotoEdge: true,
+          maxPhotoFileSizeMib: true,
         },
       },
       sets: {
@@ -1047,6 +1106,31 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,
     listingDate: offer.listingDate,
+    photoConfig: {
+      photoSides: normalizePhotoSides(offer.photoSides),
+      photoLabelTemplate: offer.photoLabelTemplate,
+      // The collage numbers are written as a group, so one non-null column means the whole set is
+      // there; a platform with no default template leaves them all null (no collage to render yet).
+      collage:
+        offer.collageRows != null &&
+        offer.collageColumns != null &&
+        offer.collageGap != null &&
+        offer.collageBackground != null &&
+        offer.collageLabelStripHeight != null
+          ? {
+              collageRows: offer.collageRows,
+              collageColumns: offer.collageColumns,
+              collageGap: offer.collageGap,
+              collageBackground: offer.collageBackground,
+              collageLabelStripHeight: offer.collageLabelStripHeight,
+            }
+          : null,
+    },
+    platformPhotoLimits: {
+      maxPhotos: offer.platform.maxPhotos,
+      maxPhotoEdge: offer.platform.maxPhotoEdge,
+      maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
+    },
     createdAt: offer.createdAt,
   };
 }
@@ -1256,6 +1340,11 @@ export async function createOffer(
     platform.titleLanguage
   );
 
+  // The offer's own photo configuration (#308), copied from the platform's defaults and its default
+  // collage template. Held on the offer from here on, so changing a platform setting later never
+  // alters this listing's photos.
+  const photoConfig = await seedPhotoConfig(platform);
+
   return prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
@@ -1264,6 +1353,7 @@ export async function createOffer(
         name,
         description,
         privateNote,
+        ...photoConfig,
         url: input.url,
         price: input.price,
         currency,
@@ -1358,6 +1448,10 @@ export async function duplicateOffer(
     platform.titleLanguage
   );
 
+  // Photo configuration follows the same rule as the texts (#308): the clone is a listing on another
+  // platform, so it is seeded from *that* platform's defaults rather than copied from the source.
+  const photoConfig = await seedPhotoConfig(platform);
+
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
@@ -1366,6 +1460,7 @@ export async function duplicateOffer(
         name,
         description,
         privateNote,
+        ...photoConfig,
         url: input.url,
         price: input.price,
         currency,
@@ -1458,6 +1553,34 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.privateNote !== undefined ? { privateNote: patch.privateNote } : {}),
+    },
+  });
+}
+
+/**
+ * Replace an offer's photo configuration (#308) — sides, tile label template and the collage numbers
+ * copied from a template. The whole configuration is written at once, mirroring the dialog's single
+ * save; a null `collage` clears the numbers back to "none picked yet".
+ *
+ * Allowed in every state: like the listing texts, this is preparation and record-keeping, never a
+ * live claim about the listing. Editing it marks the generated photo plan out of date (#311).
+ */
+export async function updateOfferPhotoConfig(
+  ownerId: string,
+  offerId: string,
+  config: OfferPhotoConfigInput
+): Promise<void> {
+  await assertOfferOwner(ownerId, offerId);
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: {
+      photoSides: config.photoSides,
+      photoLabelTemplate: config.photoLabelTemplate,
+      collageRows: config.collage?.collageRows ?? null,
+      collageColumns: config.collage?.collageColumns ?? null,
+      collageGap: config.collage?.collageGap ?? null,
+      collageBackground: config.collage?.collageBackground ?? null,
+      collageLabelStripHeight: config.collage?.collageLabelStripHeight ?? null,
     },
   });
 }

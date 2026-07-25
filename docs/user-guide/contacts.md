@@ -43,7 +43,7 @@ token that renders text you typed is translatable: the area
 names and abbreviations, and [issue and stamp names](collections.md#issue-and-stamp-names-in-other-languages).
 
 Ticking **Platform** also reveals **Listing templates** — what this platform's [offer](offers.md)
-texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all three,
+texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all four,
 one under another:
 
 | Template | Fills in | Left blank |
@@ -51,6 +51,7 @@ one under another:
 | **Listing title** | the offer name and set/lot titles | falls back to the catalog/copy label |
 | **Listing description** | the offer's long listing description | no description is generated |
 | **Private note** | the seller-only note some platforms allow on a listing | no note is generated |
+| **Photo tile label** | the label written under each stamp on a generated collage | tiles stay unlabelled |
 
 At the top of the dialog is **Preview on** — the inventory copies every preview below runs on, shared
 by all three so they always describe the same stamps. **🎲 Random** reshuffles them and **Pick copy…**
@@ -58,8 +59,13 @@ searches out a specific one. Two copies are used, each treated as its own set, s
 (see below) previews the way it will read on a real offer. The dialog is a fixed size and scrolls
 inside, and each template **collapses to a single row** (click its heading) so the one you are
 writing has the room — a collapsed row still shows its template on one line, with `⏎` for the line
-breaks. **Save templates** saves all three at once; platforms that have no private note simply leave
+breaks. **Save templates** saves them all at once; platforms that have no private note simply leave
 that one empty.
+
+The photo tile label behaves a little differently from the other three: it is **copied onto each new
+offer** on this platform rather than read from here when photos are generated (see
+[Offer photos](#offer-photos) below), so a buyer asking about a label on an image you already
+uploaded keeps getting the same label.
 
 Each template is the same **template builder**: a field, its token chips, and a live preview
 underneath. You write the template with **tokens** in curly braces mixed with any literal text you
@@ -191,6 +197,29 @@ platforms have different title conventions and length limits, so each keeps its 
 it blank** to fall back to Stamporama's plain catalog/copy label. Generated titles are only a
 starting point — you can always edit an offer's title by hand afterwards (see
 [Offers → Listing title](offers.md#listing-title)).
+
+### Offer photos
+
+Ticking **Platform** also reveals an **Offer photos** group. It works on two levels.
+
+The three fields on the first row — **Max photos**, **Max longest edge (px)** and **Max file size
+(MiB)** — are the platform's hard limits: what it will physically accept when you upload. Leave a
+field blank when the platform states no limit for it. These are read **live** whenever photos are
+generated, so tightening a limit applies to every offer at once, including ones you prepared
+earlier.
+
+Below them sit the two defaults each **new** offer on this platform is seeded from:
+
+- **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
+- **Collage template** — which of your [collage templates](collections.md#collage-templates)
+  supplies the render numbers (rows, columns, gap, background, label strip). Leave it on *none* and
+  new offers simply start without collage numbers until you pick a template on the offer itself.
+
+These two — plus the **photo tile label** from the templates dialog — are **copied onto the offer**
+when it is created, not looked up later. Changing them here therefore affects only offers you create
+from now on; offers already prepared or listed keep exactly the photos they were set up with. Adjust
+one of those on the offer itself, under **⋮ → Photo settings…** (see
+[Offers → Photo settings](offers.md#photo-settings)).
 
 Every contact row has a **⋮** menu with **Edit** and **Delete**. Editing replaces all the
 details and roles with whatever the dialog shows when you save.

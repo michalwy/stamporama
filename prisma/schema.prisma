@@ -156,8 +156,10 @@ model StampSubtype {
 //    template produces a one-row collage sized to its contents, not a padded 5×4 canvas (#310).
 //  - **Seeded, not referenced.** A template is chosen on an offer and its values are *copied* onto
 //    the offer (#308), exactly as `Contact.descriptionTemplate` seeds `Offer.description`. Editing
-//    a template therefore never retroactively changes offers that were already prepared, and
-//    nothing points back here — the offer holds no template reference.
+//    a template therefore never retroactively changes offers that were already prepared, and no
+//    *offer* points back here. The single reference is `Contact.defaultCollageTemplateId` (#308) —
+//    which template a new offer on that platform seeds from — and it is `onDelete: SetNull`, so a
+//    template stays freely deletable.
 //
 // Templates carry no platform limits (max photos / edge / file size); those live on `Contact` and
 // are read live at render time (#308, #310).
@@ -179,6 +181,9 @@ model CollageTemplate {
   labelStripHeight Int @default(0)
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
+  // template deleted while a platform points at it simply leaves the platform without a default.
+  defaultForPlatforms Contact[] @relation("PlatformDefaultCollage")
 
   @@index([collectionId])
   @@map("collage_template")
@@ -703,6 +708,27 @@ model Offer {
   // revertible if the auction doesn't close. Setting it flags every other active offer holding the
   // same copies as needing action, same as an actual sale collision (ADR-0013 §4).
   inActiveBidding Boolean @default(false)
+  // ── Photo configuration (#308) ─────────────────────────────────────────────────────────────
+  // What *this listing's* photos should look like, seeded at creation from the platform's defaults
+  // and its default collage template (#307), then freely editable. Stored on the offer rather than
+  // read from the platform so that changing a platform setting never silently alters offers already
+  // prepared or listed — most of all the label template, since a buyer referring to a label on an
+  // uploaded image must keep getting the same label after a regeneration (#315). Editing any of
+  // these marks the generated photo plan out of date (#311).
+  //
+  // Scan sides to include: `front` | `back` | `both`.
+  photoSides   String  @default("front")
+  // Per-tile label template (#312); null when the platform had none configured.
+  photoLabelTemplate String?
+  // The collage numbers copied from the chosen template (#307). All null together when the platform
+  // had no default template and none has been picked on the offer yet — there is no collage to
+  // render until they are set. Units follow the template: output pixels for `collageGap` and
+  // `collageLabelStripHeight`, `#rrggbb` for `collageBackground`.
+  collageRows  Int?
+  collageColumns Int?
+  collageGap   Int?
+  collageBackground String?
+  collageLabelStripHeight Int?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -921,9 +947,30 @@ model Contact {
   // translation is missing. The collection's language set is the distinct set of these values, so
   // entity forms only offer per-language inputs for languages actually in use.
   titleLanguage    String?
+  // ── Offer photos (#308) ────────────────────────────────────────────────────────────────────
+  // Hard technical limits on what this platform physically accepts. All optional (null = no limit),
+  // and **not** seeded onto offers: they describe the platform, so the renderer reads them live
+  // (#310). They say nothing about how many stamps go on one collage — that is the collage
+  // template's job (#307).
+  maxPhotos        Int?
+  // Longest edge of an uploaded image, in pixels.
+  maxPhotoEdge     Int?
+  // Maximum file size per image, in mebibytes — the unit platforms actually quote, never bytes.
+  maxPhotoFileSizeMib Int?
+  // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
+  // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both`) and
+  // the per-tile label template (#312). Changing either here never touches an offer already
+  // prepared — a buyer referring to a label on an uploaded image must keep getting that label.
+  photoSides       String  @default("front")
+  tileLabelTemplate String?
+  // Which collage template (#307) a new offer on this platform copies its render numbers from.
+  // Null — or a template later deleted — leaves the offer without collage numbers until one is
+  // picked on the offer itself.
+  defaultCollageTemplateId String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  defaultCollageTemplate CollageTemplate? @relation("PlatformDefaultCollage", fields: [defaultCollageTemplateId], references: [id], onDelete: SetNull)
   // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
   // (from `Purchase`) means a referenced contact cannot be deleted without first
   // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
@@ -943,6 +990,7 @@ model Contact {
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])
   @@index([collectionId])
+  @@index([defaultCollageTemplateId])
   @@map("contact")
 }
 

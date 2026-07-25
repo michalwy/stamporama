@@ -239,7 +239,9 @@ Two things are worth knowing:
 - **Rows × columns is a maximum, not a frame.** A set of four copies under a 5 × 4 template produces a one-row image sized to its contents, not a padded 5 × 4 canvas.
 - **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
 
-A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the platform itself.
+A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the [platform itself](contacts.md#offer-photos).
+
+Set one of these as a platform's **collage template** and every new offer on that platform starts with its numbers already filled in; you can still adjust them per offer under **⋮ → Photo settings…** ([Offers → Photo settings](offers.md#photo-settings)).
 
 New collections start with no templates — add the ones that match the material you actually sell.
 

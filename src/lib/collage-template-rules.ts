@@ -42,7 +42,9 @@ export function normalizeHexColor(raw: string): string | null {
   return null;
 }
 
-function parseIntegerField(raw: string, label: string, min: number, max: number):
+/** Parses a required whole number within bounds. Exported for the offer-side photo configuration
+ * (#308), which validates the same numbers once they are copied onto an offer. */
+export function parseBoundedInteger(raw: string, label: string, min: number, max: number):
   | { ok: true; value: number }
   | { ok: false; message: string } {
   const trimmed = raw.trim();
@@ -72,16 +74,16 @@ export function parseCollageTemplateInput(raw: {
   const name = raw.name.trim();
   if (!name) return { ok: false, message: "Name is required." };
 
-  const rows = parseIntegerField(raw.rows, "Rows", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
+  const rows = parseBoundedInteger(raw.rows, "Rows", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
   if (!rows.ok) return rows;
 
-  const columns = parseIntegerField(raw.columns, "Columns", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
+  const columns = parseBoundedInteger(raw.columns, "Columns", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
   if (!columns.ok) return columns;
 
-  const gap = parseIntegerField(raw.gap, "Gap", MIN_COLLAGE_PIXELS, MAX_COLLAGE_PIXELS);
+  const gap = parseBoundedInteger(raw.gap, "Gap", MIN_COLLAGE_PIXELS, MAX_COLLAGE_PIXELS);
   if (!gap.ok) return gap;
 
-  const labelStripHeight = parseIntegerField(
+  const labelStripHeight = parseBoundedInteger(
     raw.labelStripHeight,
     "Label strip height",
     MIN_COLLAGE_PIXELS,

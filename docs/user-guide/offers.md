@@ -221,6 +221,31 @@ behind the offer's generated texts in the platform's own language. Saving one th
 rewrite texts you already have — they may have been edited by hand — so use each field's **↻** when
 you want the new wording.
 
+## Photo settings
+
+Every offer carries its **own** photo configuration, seeded from its platform when the offer is
+created and edited afterwards from the **⋮** menu → **Photo settings…**.
+
+The dialog opens with a one-line reminder of what the platform accepts (how many photos, longest
+edge, file size). Those are the platform's limits, not the offer's — change them on the
+[platform contact](contacts.md#offer-photos). Below that sit the settings that belong to this
+listing:
+
+- **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
+- **Tile label** — the `{token}` template written under each stamp on a collage. Blank leaves the
+  tiles unlabelled.
+- **Collage** — **Rows**, **Columns**, **Gap**, **Label strip** and **Background**. Use **Copy from
+  template** to fill them from one of your
+  [collage templates](collections.md#collage-templates), then adjust the numbers for this listing if
+  you like; the offer does not follow the template afterwards. **Clear** empties them, leaving the
+  offer with no collage.
+
+Rows × columns is a maximum, not a frame: fewer stamps simply make a smaller image.
+
+Because these values live on the offer, changing a platform's defaults — or editing a collage
+template — never alters an offer you have already prepared. That matters most for the tile label: a
+buyer referring to a label on an image you have already uploaded keeps getting the same label.
+
 ## One active offer per copy, per platform
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp
