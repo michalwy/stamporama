@@ -115,20 +115,25 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
 }
 
 /** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
- * currency (#196), which may be null when not set yet, and its listing title template (#210), null
- * when unset (the renderer then falls back to the built-in default). */
+ * currency (#196), which may be null when not set yet, its listing title template (#210), null
+ * when unset (the renderer then falls back to the built-in default), and its listing language
+ * (#293), null when unset (entity text then stays in its default language). */
 async function assertPlatform(
   collectionId: string,
   platformId: string
-): Promise<{ platformCurrency: string | null; titleTemplate: string | null }> {
+): Promise<{ platformCurrency: string | null; titleTemplate: string | null; titleLanguage: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
-    select: { platformCurrency: true, titleTemplate: true },
+    select: { platformCurrency: true, titleTemplate: true, titleLanguage: true },
   });
   if (!contact) {
     throw new OfferActionBlockedError("no-platform", "Choose a platform to list on.");
   }
-  return { platformCurrency: contact.platformCurrency, titleTemplate: contact.titleTemplate };
+  return {
+    platformCurrency: contact.platformCurrency,
+    titleTemplate: contact.titleTemplate,
+    titleLanguage: contact.titleLanguage,
+  };
 }
 
 /**
@@ -198,18 +203,20 @@ function offerLabel(sets: OfferSetRow[]): string {
  * "fall back to the derived label" (#209 — the offer name defaults to the lot label, a set to its
  * copies), so this returns null and the caller leaves the stored title unset. Loads the copies'
  * fields in one query and preserves the caller's order, so a regenerated title is stable. Returns
- * null when nothing resolves (no copies / all fields empty).
+ * null when nothing resolves (no copies / all fields empty). Token values resolve in the platform's
+ * listing `language` where a translation exists (#293), falling back to the default text.
  */
 async function generateConfiguredTitle(
   ownerId: string,
   collectionId: string,
   itemIds: string[],
-  template: string | null
+  template: string | null,
+  language: string | null = null
 ): Promise<string | null> {
   if (!template?.trim() || itemIds.length === 0) return null;
   const [rows, mapCopy] = await Promise.all([
     prisma.item.findMany({ where: { id: { in: itemIds }, collectionId }, select: TITLE_COPY_SELECT }),
-    makeTitleCopyMapper(ownerId, collectionId),
+    makeTitleCopyMapper(ownerId, collectionId, language),
   ]);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const ordered = itemIds.map((id) => byId.get(id)).filter((r): r is TitleCopyRow => r != null);
@@ -906,7 +913,7 @@ export async function createOffer(
   opts: { seedItemIds?: string[] } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
-  const { platformCurrency, titleTemplate } = await assertPlatform(collectionId, input.platformId);
+  const { platformCurrency, titleTemplate, titleLanguage } = await assertPlatform(collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   const targetState = input.state;
@@ -934,7 +941,7 @@ export async function createOffer(
   // Generate the listing title (#209/#210) from the platform's configured template over the seed
   // copies. With no template configured, or no seed copies yet, the name stays null and the UI falls
   // back to the derived label until the collector composes and regenerates.
-  const name = await generateConfiguredTitle(ownerId, collectionId, seedIds, titleTemplate);
+  const name = await generateConfiguredTitle(ownerId, collectionId, seedIds, titleTemplate, titleLanguage);
 
   return prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
@@ -980,7 +987,7 @@ export async function duplicateOffer(
   input: OfferInput
 ): Promise<DuplicateOfferResult> {
   const ref = await assertOfferOwner(ownerId, sourceOfferId);
-  const { platformCurrency, titleTemplate } = await assertPlatform(ref.collectionId, input.platformId);
+  const { platformCurrency, titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   // Source composition + which of its copies have sold elsewhere (dropped from the clone).
@@ -1023,7 +1030,7 @@ export async function duplicateOffer(
   // Generate the clone's title from the *new* platform's configured template over its kept copies
   // (#209/#210); null when that platform has no template (falls back to the derived label).
   const cloneItemIds = [...new Set(cloneSets.flatMap((s) => s.itemIds))];
-  const name = await generateConfiguredTitle(ownerId, ref.collectionId, cloneItemIds, titleTemplate);
+  const name = await generateConfiguredTitle(ownerId, ref.collectionId, cloneItemIds, titleTemplate, titleLanguage);
 
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
@@ -1119,7 +1126,7 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
  * record-keeping, never a live claim. */
 export async function regenerateOfferName(ownerId: string, offerId: string): Promise<string | null> {
   const ref = await assertOfferOwner(ownerId, offerId);
-  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
+  const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
   const rows = await prisma.offerSetItem.findMany({
     where: { offerSet: { offerId } },
     select: { itemId: true, offerSet: { select: { id: true } } },
@@ -1128,7 +1135,7 @@ export async function regenerateOfferName(ownerId: string, offerId: string): Pro
   // Distinct copies in set order (an offer never lists a copy twice, but a copy can recur across
   // sets — dedupe so the template doesn't repeat it).
   const itemIds = [...new Set(rows.map((r) => r.itemId))];
-  const name = await generateConfiguredTitle(ownerId, ref.collectionId, itemIds, titleTemplate);
+  const name = await generateConfiguredTitle(ownerId, ref.collectionId, itemIds, titleTemplate, titleLanguage);
   await prisma.offer.update({ where: { id: offerId }, data: { name } });
   return name;
 }
@@ -1241,8 +1248,8 @@ export async function addOfferSet(
   // Set/lot title (#210): an explicit title wins; otherwise pre-fill from the platform's configured
   // template over this set's copies. Null (no template) leaves the label derived from the copies.
   const explicit = title?.trim() || null;
-  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
-  const setTitle = explicit ?? (await generateConfiguredTitle(ownerId, ref.collectionId, addable, titleTemplate));
+  const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
+  const setTitle = explicit ?? (await generateConfiguredTitle(ownerId, ref.collectionId, addable, titleTemplate, titleLanguage));
   const set = await prisma.offerSet.create({
     data: {
       offerId,
@@ -1271,10 +1278,10 @@ export async function addOfferSetsPerCopy(
   }
   // Pre-fill each single-copy set's title from the platform's configured template (#210), computed
   // per copy so each stands alone. Null (no template) leaves each label derived from its copy.
-  const { titleTemplate } = await assertPlatform(ref.collectionId, ref.platformId);
+  const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
   const titles = new Map<string, string | null>();
   for (const itemId of addable) {
-    titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate));
+    titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate, titleLanguage));
   }
   const ids: string[] = [];
   await prisma.$transaction(async (tx) => {

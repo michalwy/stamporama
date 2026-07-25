@@ -9,6 +9,7 @@ import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getColnectMappings } from "@/lib/colnect";
+import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getAppVersionLabel } from "@/lib/version";
@@ -39,6 +40,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     colnectMappings,
     assistantTokens,
     photoStorageBytes,
+    titleLanguages,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getCatalogNames(session.user.id, collection.id),
@@ -49,6 +51,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getColnectMappings(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
+    getCollectionTitleLanguages(session.user.id, collection.id),
   ]);
 
   return (
@@ -58,9 +61,11 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           collectionId={collection.id}
           collectionName={collection.name}
           baseCurrency={collection.baseCurrency}
+          defaultLanguage={collection.defaultLanguage}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}
+          titleLanguages={titleLanguages}
           initialTree={catalogTree}
           initialConditions={conditions}
           initialCertificateStatuses={certificateStatuses}

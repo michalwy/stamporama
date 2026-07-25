@@ -8,6 +8,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
+import { COMMON_LANGUAGES } from "@/lib/languages";
 import type { ContactListItem } from "@/lib/contacts";
 import { AVAILABLE_TITLE_TOKENS, DEFAULT_TITLE_TEMPLATE } from "@/lib/offer-title-template";
 import { TemplateBuilderDialog } from "@/app/c/[collectionSlug]/shared/template-builder-dialog";
@@ -57,6 +58,9 @@ export function ContactFormDialog({
   // hidden field so the existing save flow is unchanged.
   const [titleTemplate, setTitleTemplate] = useState(contact?.titleTemplate ?? "");
   const [builderOpen, setBuilderOpen] = useState(false);
+  // The listing language (#293) is tracked so the builder's preview renders in the language being
+  // configured, not the default one.
+  const [titleLanguage, setTitleLanguage] = useState(contact?.titleLanguage ?? "");
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -181,6 +185,37 @@ export function ContactFormDialog({
             </div>
           )}
 
+          {/* Listing language (#293): the language this platform's generated titles are written
+              in. Entity text (area title names today; conditions, issues and stamps to follow) can
+              carry a value per language, and a missing translation falls back to the entity's
+              default text. Setting a language here is also what makes the matching per-language
+              inputs appear on the entity forms. */}
+          {isPlatform && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="contact-title-language">Listing language</LabelWithError>
+              <select
+                id="contact-title-language"
+                name="titleLanguage"
+                value={titleLanguage}
+                onChange={(e) => setTitleLanguage(e.target.value)}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                <option value="">— default language —</option>
+                {COMMON_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label} ({l.code})
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                Generated titles for this platform use text in this language, falling back to the
+                default text where no translation is set. Areas then offer a title name per language
+                in use.
+              </p>
+            </div>
+          )}
+
           {/* Title template (#210): a free-text template with {tokens} that pre-fills the offer name
               (#209) and set/lot titles for this platform's listings. Only shown for the platform
               role; edited in the dedicated builder (with a live preview) and carried on submit via a
@@ -252,6 +287,7 @@ export function ContactFormDialog({
     {builderOpen && (
       <TemplateBuilderDialog
         collectionId={collectionId}
+        language={titleLanguage || null}
         title="Listing title template"
         description="Tokens fill in from the copies an offer (or set) lists. Leave blank to fall back to the catalog/copy label."
         initialValue={titleTemplate}

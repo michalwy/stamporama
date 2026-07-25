@@ -31,13 +31,23 @@ so an offer and its sale can never disagree. You can set it here, or leave it un
 inline the first time you list or sell on the platform. Changing it later leaves existing offers
 and sales untouched — each keeps the currency it was created with.
 
+Ticking **Platform** also reveals a **Listing language** — the language this platform's listings are
+written in. Pick the one it uses; platforms that write in your collection's
+[default language](collections.md#default-language) need nothing further, and neither does leaving it
+on **— default language —**. The language does two things: generated titles for this platform use the
+text you entered for that language, and the languages that *differ* from your default are the ones the
+entity forms offer translation fields for. Nothing is translated automatically — where you have not
+entered text for a language, the default text is used, so a title is never left with a gap. Today only
+the area **title name** is translatable; conditions, issues and stamp names follow later.
+
 Ticking **Platform** also reveals a **Listing title template** — a free-text template that decides how
 [offer](offers.md) and set titles are pre-filled for this platform. Click **Edit template…** to open
 the **template builder**, where you write it with **tokens** in curly braces mixed with any literal
 text you like, for example `{catalog} {name} {year} {condition}`. Click a token chip to drop it in at
 the cursor. The builder shows a **live preview** of the resulting title rendered against a real
 inventory copy — **🎲 Random** shuffles to another copy, and **Pick copy…** lets you preview on a
-specific one you search out. The tokens fill in from the copies in the offer (or set):
+specific one you search out. The preview also renders in the platform's **listing language**, so you
+see the title as its listings will read. The tokens fill in from the copies in the offer (or set):
 
 - `{name}` — stamp name
 - `{catalog}` — catalog number (configurable, see below)
@@ -102,6 +112,28 @@ out of the box. To make an internal grouping level defer to its parent, **clear 
 So for `Poland › { Second Republic, Third Republic, General Gouvernement }`: leave `Poland` and
 `General Gouvernement` as-is (they show themselves), and clear the title name on `Second Republic` and
 `Third Republic` so both roll up to `Poland`. You never touch the parent or the siblings.
+
+#### Title names per language
+
+Once a platform lists in a language **other than** your collection's
+[default language](collections.md#default-language), a 🌐 button appears **beside** the area's
+**Title name** field (which is then labelled with your default language, e.g. *Title name — English
+(en)*). It opens a fixed-size dialog listing those languages — fill in the ones you care about and
+leave the rest blank; the list scrolls inside the dialog, so it stays the same size however many
+languages you add. A small number on the button counts the languages still **missing** a translation
+(they fall back to the plain title name); fill them all in and the number disappears.
+
+**Done** closes the translations dialog and carries your entries back to the area — they are written
+only when you save the **area** itself, so cancelling the area dialog discards the translations along
+with everything else you changed there. The same dialog will handle conditions, issues and stamp names
+as those become translatable.
+
+The roll-up and the language are independent: the roll-up decides **which area** names the title, and
+the language only decides **how that area is written**. So with `Poland` set to `Poland` plus a Polish
+`Polska`, a Polish platform lists `Second Republic` copies as `Polska` (it rolls up to `Poland`, then
+uses the Polish spelling), while `General Gouvernement` — which has its own title name but no Polish
+one — stays `General Gouvernement` rather than borrowing its parent's `Polska`. A blank language field
+always means "use the plain title name", never "use the parent".
 
 When an offer or set covers several copies, each token lists the distinct values it finds. Different
 platforms have different title conventions and length limits, so each keeps its own template. **Leave

@@ -17,6 +17,12 @@ import {
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import { languageLabel } from "@/lib/languages";
+import {
+  TranslationsDialog,
+  countTranslated,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -31,6 +37,12 @@ interface AreasPanelProps {
   collectionSlug: string;
   initialAreas: CollectionAreaData[];
   catalogNames: CatalogNameFlat[];
+  /** Languages needing a translation (#293): the platforms' listing languages minus the
+   * collection's default language. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain `titleName` is written in (#293); labels the field once translations
+   * are in play. */
+  defaultLanguage: string;
 }
 
 type DialogState =
@@ -159,6 +171,43 @@ const catalogBadgeStyle: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
+// Icon button opening the translations dialog (#293), sized to sit beside a text input, plus the
+// badge counting languages still falling back to the default text.
+const translationsButtonStyle: React.CSSProperties = {
+  position: "relative",
+  flexShrink: 0,
+  width: "2.25rem",
+  height: "2.25rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "1rem",
+  lineHeight: 1,
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+};
+
+const translationsBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "-0.3rem",
+  right: "-0.3rem",
+  minWidth: "1rem",
+  height: "1rem",
+  padding: "0 0.2rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "0.625rem",
+  fontWeight: 700,
+  lineHeight: 1,
+  color: "var(--color-bg-elevated)",
+  background: "var(--color-text-muted)",
+  borderRadius: "0.5rem",
+  boxSizing: "border-box",
+};
+
 const groupingBadgeStyle: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -184,6 +233,7 @@ interface CollectionAreaFormProps {
   defaultParentId?: string | null;
   defaultDescription?: string | null;
   defaultTitleName?: string | null;
+  defaultTitleNameByLanguage?: Record<string, string>;
   defaultPrimaryCatalogNameId?: string | null;
   defaultCatalogEntries?: AreaCatalogEntry[];
   defaultAssignable?: boolean;
@@ -192,6 +242,14 @@ interface CollectionAreaFormProps {
   areas: CollectionAreaData[];
   currentAreaId?: string;
   catalogNames: CatalogNameFlat[];
+  /** Languages needing a translation (#293); edited in the translations dialog opened from
+   * this form. */
+  titleLanguages: string[];
+  /** The language the plain `titleName` field holds (#293). */
+  defaultLanguage: string;
+  /** Told when the nested translations dialog opens/closes, so the enclosing dialog can stop
+   * dismissing itself on Esc / backdrop click while it is up. */
+  onNestedDialogOpenChange?: (open: boolean) => void;
   isPending: boolean;
 }
 
@@ -200,6 +258,7 @@ function CollectionAreaForm({
   defaultParentId,
   defaultDescription,
   defaultTitleName,
+  defaultTitleNameByLanguage,
   defaultPrimaryCatalogNameId,
   defaultCatalogEntries,
   defaultAssignable = true,
@@ -208,6 +267,9 @@ function CollectionAreaForm({
   areas,
   currentAreaId,
   catalogNames,
+  titleLanguages,
+  defaultLanguage,
+  onNestedDialogOpenChange,
   isPending,
 }: CollectionAreaFormProps) {
   const catalogById = useMemo(() => {
@@ -240,6 +302,27 @@ function CollectionAreaForm({
     setTitleName((tn) => (tn === name ? next : tn));
     setName(next);
   }
+
+  // Per-language title names (#293) are edited in the shared translations dialog rather than as a
+  // field per language on this form, which would grow it without bound as languages are added.
+  // They are held here and submitted through hidden `titleName:<lang>` inputs, so the existing
+  // form-data save path is unchanged. Unlike the default title name they never mirror `name` — a
+  // translation is only ever typed deliberately, and a blank one falls back to the default.
+  const [titleNameByLanguage, setTitleNameByLanguage] = useState<Record<string, string>>(() =>
+    Object.fromEntries(titleLanguages.map((l) => [l, defaultTitleNameByLanguage?.[l] ?? ""]))
+  );
+  const [translationsOpen, setTranslationsOpen] = useState(false);
+  function openTranslations(open: boolean) {
+    setTranslationsOpen(open);
+    onNestedDialogOpenChange?.(open);
+  }
+  const translationValues = Object.fromEntries(
+    titleLanguages.map((l) => [l, { titleName: titleNameByLanguage[l] ?? "" }])
+  );
+  // The badge counts what is still *missing*, so it reads as "these languages will fall back to
+  // the default title name" and disappears once every language is filled in.
+  const missingTranslations =
+    titleLanguages.length - countTranslated(titleLanguages, translationValues);
 
   const [entries, setEntries] = useState<EntryState[]>(
     (defaultCatalogEntries ?? []).map((e) => ({
@@ -314,23 +397,91 @@ function CollectionAreaForm({
           rolls up to the nearest ancestor that sets one, else the area's own name — so internal
           grouping levels can defer to a public parent. */}
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-title-name">Title name (optional)</LabelWithError>
-        <input
-          id="f-area-title-name"
-          name="titleName"
-          type="text"
-          value={titleName}
-          onChange={(e) => setTitleName(e.target.value)}
-          disabled={isPending}
-          placeholder="e.g. Poland"
-          style={INPUT_STYLE}
-        />
+        <LabelWithError htmlFor="f-area-title-name">
+          {titleLanguages.length > 0
+            ? `Title name — ${languageLabel(defaultLanguage)} (optional)`
+            : "Title name (optional)"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-area-title-name"
+            name="titleName"
+            type="text"
+            value={titleName}
+            onChange={(e) => setTitleName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Poland"
+            style={INPUT_STYLE}
+          />
+          {/* Per-language title names (#293) live behind the shared translations dialog, opened
+              from this icon so the form keeps one field however many languages are in use. Only
+              rendered once a platform has a listing language. The badge counts languages still
+              missing a translation. Values ride along as hidden inputs; a cleared one submits
+              blank, which drops that language's translation. */}
+          {titleLanguages.length > 0 && (
+            <>
+              {titleLanguages.map((lang) => (
+                <input
+                  key={lang}
+                  type="hidden"
+                  name={`titleName:${lang}`}
+                  value={titleNameByLanguage[lang] ?? ""}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => openTranslations(true)}
+                disabled={isPending}
+                title={
+                  missingTranslations > 0
+                    ? `Translations — ${missingTranslations} of ${titleLanguages.length} language${titleLanguages.length !== 1 ? "s" : ""} still using the default`
+                    : "Translations — every language set"
+                }
+                aria-label="Edit title name translations"
+                style={translationsButtonStyle}
+              >
+                🌐
+                {missingTranslations > 0 && (
+                  <span style={translationsBadgeStyle}>{missingTranslations}</span>
+                )}
+              </button>
+            </>
+          )}
+        </div>
         <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
           Used for the <code>{"{area}"}</code> token in listing titles. Defaults to (and stays in sync
           with) this area&apos;s name. <strong>Clear it</strong> to roll this area up to the nearest
           parent that has a title name — handy for internal grouping levels.
+          {titleLanguages.length > 0 && (
+            <> Translations (🌐) are saved together with the area.</>
+          )}
         </p>
       </div>
+
+      {translationsOpen && (
+        <TranslationsDialog
+          title="Title name translations"
+          description={`The title name each language's platforms use for this area. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} title name above. They are saved together with the area.`}
+          languages={titleLanguages}
+          fields={[
+            {
+              key: "titleName",
+              label: "Title name",
+              defaultValue: titleName || name,
+            },
+          ]}
+          values={translationValues}
+          onCancel={() => openTranslations(false)}
+          onSave={(next: TranslationValues) => {
+            setTitleNameByLanguage(
+              Object.fromEntries(
+                titleLanguages.map((l) => [l, next[l]?.titleName ?? ""])
+              )
+            );
+            openTranslations(false);
+          }}
+        />
+      )}
 
       {/* Grouping-only areas (#263): organize children but can't receive issues directly. */}
       <div style={{ marginBottom: "1rem" }}>
@@ -518,9 +669,14 @@ export function AreasPanel({
   collectionSlug,
   initialAreas,
   catalogNames,
+  titleLanguages,
+  defaultLanguage,
 }: AreasPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  // The area form can open the translations dialog on top of the area dialog (#293); while it is
+  // up the area dialog must not close on Esc / backdrop click.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<AreaActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
 
@@ -645,11 +801,15 @@ export function AreasPanel({
   }
 
   function closeDialog() {
-    if (!isPending) setDialog({ kind: "none" });
+    if (!isPending) {
+      setDialog({ kind: "none" });
+      setNestedDialogOpen(false);
+    }
   }
 
   function handleSuccess() {
     setDialog({ kind: "none" });
+    setNestedDialogOpen(false);
     router.refresh();
   }
 
@@ -954,7 +1114,7 @@ export function AreasPanel({
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add-area" && (
-        <DialogShell title="Add area" onClose={closeDialog}>
+        <DialogShell title="Add area" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) =>
@@ -968,6 +1128,9 @@ export function AreasPanel({
                 inheritedPrefixes={dialog.inheritedPrefixes}
                 areas={initialAreas}
                 catalogNames={catalogNames}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                onNestedDialogOpenChange={setNestedDialogOpen}
                 isPending={isPending}
               />
             </DialogBody>
@@ -982,7 +1145,7 @@ export function AreasPanel({
       )}
 
       {dialog.kind === "edit-area" && (
-        <DialogShell title="Edit area" onClose={closeDialog}>
+        <DialogShell title="Edit area" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) =>
@@ -995,6 +1158,7 @@ export function AreasPanel({
                 defaultParentId={dialog.area.parentId}
                 defaultDescription={dialog.area.description}
                 defaultTitleName={dialog.area.titleName}
+                defaultTitleNameByLanguage={dialog.area.titleNameByLanguage}
                 defaultPrimaryCatalogNameId={dialog.area.primaryCatalogNameId}
                 defaultCatalogEntries={dialog.area.catalogEntries}
                 defaultAssignable={dialog.area.assignable}
@@ -1003,6 +1167,9 @@ export function AreasPanel({
                 areas={initialAreas}
                 currentAreaId={dialog.area.id}
                 catalogNames={catalogNames}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                onNestedDialogOpenChange={setNestedDialogOpen}
                 isPending={isPending}
               />
             </DialogBody>

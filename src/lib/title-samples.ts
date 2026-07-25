@@ -38,10 +38,12 @@ function sampleLabel(copy: TitleTemplateCopy): string {
 
 /** One random copy from the collection, for the builder's default preview. Null when the collection
  * has no copies yet (the builder then previews against an empty copy). Uses a random offset over the
- * live count — good enough for a "give me an example" shuffle. */
+ * live count — good enough for a "give me an example" shuffle. `language` (#293) previews the copy
+ * in the platform's listing language. */
 export async function randomTitleSampleCopy(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  language: string | null = null
 ): Promise<TitleSampleCopy | null> {
   await assertCollectionOwner(ownerId, collectionId);
   const count = await prisma.item.count({ where: { collectionId } });
@@ -49,7 +51,7 @@ export async function randomTitleSampleCopy(
   const skip = Math.floor(Math.random() * count);
   const [row, mapCopy] = await Promise.all([
     prisma.item.findFirst({ where: { collectionId }, orderBy: { createdAt: "asc" }, skip, select: TITLE_COPY_SELECT }),
-    makeTitleCopyMapper(ownerId, collectionId),
+    makeTitleCopyMapper(ownerId, collectionId, language),
   ]);
   if (!row) return null;
   const copy = mapCopy(row);
@@ -57,11 +59,12 @@ export async function randomTitleSampleCopy(
 }
 
 /** Copies matching `search` (by stamp name or catalog number), for the builder's "pick a specific
- * copy" list. A blank search returns the most recent copies. Capped at `limit` (default 12). */
+ * copy" list. A blank search returns the most recent copies. Capped at `limit` (default 12).
+ * `language` (#293) previews the copy in the platform's listing language. */
 export async function listTitleSampleCopies(
   ownerId: string,
   collectionId: string,
-  opts: { search?: string; limit?: number } = {}
+  opts: { search?: string; limit?: number; language?: string | null } = {}
 ): Promise<TitleSampleCopy[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const search = opts.search?.trim();
@@ -82,7 +85,7 @@ export async function listTitleSampleCopies(
       take: opts.limit ?? 12,
       select: TITLE_COPY_SELECT,
     }),
-    makeTitleCopyMapper(ownerId, collectionId),
+    makeTitleCopyMapper(ownerId, collectionId, opts.language ?? null),
   ]);
   return rows.map((row) => {
     const copy = mapCopy(row);

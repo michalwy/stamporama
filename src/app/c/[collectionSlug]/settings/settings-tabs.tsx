@@ -23,9 +23,14 @@ interface SettingsTabsProps {
   collectionId: string;
   collectionName: string;
   baseCurrency: string;
+  /** The collection's default language (#293), edited in the General tab. */
+  defaultLanguage: string;
   collectionSlug: string;
   initialAreas: CollectionAreaData[];
   catalogNames: CatalogNameFlat[];
+  /** Listing languages in use across the collection's platforms (#293); drives the per-language
+   * title-name inputs on the area form. */
+  titleLanguages: string[];
   initialTree: CatalogVendorData[];
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
@@ -61,9 +66,11 @@ export function SettingsTabs({
   collectionId,
   collectionName,
   baseCurrency,
+  defaultLanguage,
   collectionSlug,
   initialAreas,
   catalogNames,
+  titleLanguages,
   initialTree,
   initialConditions,
   initialCertificateStatuses,
@@ -143,6 +150,7 @@ export function SettingsTabs({
           collectionId={collectionId}
           collectionName={collectionName}
           baseCurrency={baseCurrency}
+          defaultLanguage={defaultLanguage}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
         />
@@ -183,6 +191,8 @@ export function SettingsTabs({
           collectionSlug={collectionSlug}
           initialAreas={initialAreas}
           catalogNames={catalogNames}
+          titleLanguages={titleLanguages}
+          defaultLanguage={defaultLanguage}
         />
       )}
       {activeTab === "duplicates" && (

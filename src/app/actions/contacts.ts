@@ -62,6 +62,11 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     titleTemplate: bool(formData, "platform")
       ? str(formData, "titleTemplate") || null
       : null,
+    // The platform's listing language (#293), same platform-only handling. Blank normalises to
+    // null, meaning entity text stays in its default language.
+    titleLanguage: bool(formData, "platform")
+      ? str(formData, "titleLanguage") || null
+      : null,
   };
 }
 

@@ -3,7 +3,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { createCollection, resetCollectionToDemo } from "@/lib/collections";
+import {
+  createCollection,
+  resetCollectionToDemo,
+  setCollectionDefaultLanguage,
+} from "@/lib/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
 export type CreateCollectionState =
@@ -65,5 +69,28 @@ export async function resetToDemoDataAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Reset failed. Please try again." };
+  }
+}
+
+export type DefaultLanguageState =
+  | { status: "idle" }
+  | { status: "success"; language: string }
+  | { status: "error"; message: string };
+
+/** Set the collection's default language (#293) from the Settings → General picker. */
+export async function updateCollectionDefaultLanguageAction(
+  collectionId: string,
+  language: string
+): Promise<DefaultLanguageState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionDefaultLanguage(session.user.id, collectionId, language);
+    return { status: "success", language };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the default language.",
+    };
   }
 }

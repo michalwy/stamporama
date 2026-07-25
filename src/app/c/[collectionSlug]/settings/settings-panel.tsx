@@ -4,22 +4,42 @@ import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
+  updateCollectionDefaultLanguageAction,
   type ResetToDemoState,
 } from "@/app/actions/collections";
+import { COMMON_LANGUAGES } from "@/lib/languages";
 import { formatBytes } from "@/lib/format-bytes";
 
 interface SettingsPanelProps {
   collectionId: string;
   collectionName: string;
   baseCurrency: string;
+  /** The language this collection's own entity text is written in (#293). */
+  defaultLanguage: string;
   photoStorageBytes: number;
   appVersion: string;
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, photoStorageBytes, appVersion }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, photoStorageBytes, appVersion }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
+
+  const [language, setLanguage] = useState(defaultLanguage);
+  const [languageError, setLanguageError] = useState<string | null>(null);
+
+  function handleLanguageChange(next: string) {
+    const previous = language;
+    setLanguage(next);
+    setLanguageError(null);
+    startTransition(async () => {
+      const result = await updateCollectionDefaultLanguageAction(collectionId, next);
+      if (result.status === "error") {
+        setLanguage(previous);
+        setLanguageError(result.message);
+      }
+    });
+  }
 
   function openDialog() {
     setActionState({ status: "idle" });
@@ -88,6 +108,77 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, phot
           >
             {baseCurrency}
           </span>
+        </div>
+      </section>
+
+      {/* Default language (#293): the language the collection's own entity text is written in.
+          Platforms listing in it need no translations at all. */}
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Default language
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              The language your names and title names are written in. Platforms listing in it need
+              no translations.
+            </p>
+            {languageError && (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                {languageError}
+              </p>
+            )}
+          </div>
+          <select
+            aria-label="Default language"
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+            disabled={isPending}
+            style={{
+              padding: "0.4rem 0.625rem",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "0.375rem",
+              fontSize: "0.875rem",
+              color: "var(--color-text-primary)",
+              background: "var(--color-bg-elevated)",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {COMMON_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label} ({l.code})
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 

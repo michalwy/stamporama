@@ -9,6 +9,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     description: null,
     primaryCatalogNameId: null,
     titleName: null,
+    titleNameByLanguage: {},
     assignable: true,
     sortOrder: 0,
     stampCount: 0,
@@ -55,5 +56,64 @@ describe("buildAreaTitleMap", () => {
     const leaf = area({ id: "l", name: "Leaf", parentId: "r", titleName: "   " });
     const m = buildAreaTitleMap([root, leaf]);
     assert.equal(m.get("l"), "Root");
+  });
+});
+
+// Per-language resolution (#293): the roll-up picks the area, the language picks its spelling.
+describe("buildAreaTitleMap with a language", () => {
+  const poland = area({
+    id: "pl",
+    name: "Poland",
+    titleName: "Poland",
+    titleNameByLanguage: { pl: "Polska" },
+  });
+  const second = area({ id: "sr", name: "Second Republic", parentId: "pl" });
+  const gg = area({
+    id: "gg",
+    name: "General Gouvernement",
+    parentId: "pl",
+    titleName: "General Gouvernement",
+  });
+  const areas = [poland, second, gg];
+
+  it("uses an area's translated title name for that language", () => {
+    assert.equal(buildAreaTitleMap(areas, "pl").get("pl"), "Polska");
+  });
+
+  it("keeps the default title name for a language with no translation", () => {
+    assert.equal(buildAreaTitleMap(areas, "de").get("pl"), "Poland");
+    assert.equal(buildAreaTitleMap(areas, null).get("pl"), "Poland");
+  });
+
+  it("carries the translation through the ancestor roll-up", () => {
+    assert.equal(buildAreaTitleMap(areas, "pl").get("sr"), "Polska");
+  });
+
+  it("falls back per node, not per chain — an untranslated area keeps its own default", () => {
+    // "General Gouvernement" sets its own title name but no Polish one: it must keep that text
+    // rather than deferring to its translated parent ("Polska"), which names a different area.
+    assert.equal(buildAreaTitleMap(areas, "pl").get("gg"), "General Gouvernement");
+  });
+
+  it("lets a translation alone make an area public in that language", () => {
+    const root = area({ id: "r", name: "Root", titleName: "Root" });
+    const leaf = area({
+      id: "l",
+      name: "Leaf",
+      parentId: "r",
+      titleNameByLanguage: { pl: "Liść" },
+    });
+    assert.equal(buildAreaTitleMap([root, leaf], "pl").get("l"), "Liść");
+    assert.equal(buildAreaTitleMap([root, leaf], "en").get("l"), "Root");
+  });
+
+  it("treats a whitespace-only translation as missing", () => {
+    const root = area({ id: "r", name: "Root", titleName: "Root", titleNameByLanguage: { pl: "  " } });
+    assert.equal(buildAreaTitleMap([root], "pl").get("r"), "Root");
+  });
+
+  it("falls back to the area's own name when nothing is set in any language", () => {
+    const a = area({ id: "a", name: "Germany" });
+    assert.equal(buildAreaTitleMap([a], "pl").get("a"), "Germany");
   });
 });

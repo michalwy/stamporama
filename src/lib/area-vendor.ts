@@ -73,8 +73,17 @@ export interface AreaVendorMaps {
  * when set, else the nearest ancestor that sets one, else the area's own `name`. So internal
  * grouping levels (blank `titleName`) roll up to a public parent, while a sibling with its own
  * `titleName` keeps it. Returns a map of area id → effective title name.
+ *
+ * With a `language` (#293), each area on the way up resolves to its translated `titleName` for
+ * that language, falling back to its default-language `titleName`. The fallback is **per node**,
+ * not per chain: an area that carries a title name but no translation keeps its own text rather
+ * than deferring to a translated ancestor — the roll-up decides *which* area names the title, and
+ * the language only decides how that area is spelled.
  */
-export function buildAreaTitleMap(areas: CollectionAreaData[]): Map<string, string> {
+export function buildAreaTitleMap(
+  areas: CollectionAreaData[],
+  language?: string | null
+): Map<string, string> {
   const byId = new Map(areas.map((a) => [a.id, a]));
   const out = new Map<string, string>();
   for (const area of areas) {
@@ -82,7 +91,8 @@ export function buildAreaTitleMap(areas: CollectionAreaData[]): Map<string, stri
     let depth = 0;
     let resolved: string | null = null;
     while (current && depth < 50) {
-      const t = current.titleName?.trim();
+      const translated = language ? current.titleNameByLanguage[language]?.trim() : undefined;
+      const t = translated || current.titleName?.trim();
       if (t) {
         resolved = t;
         break;

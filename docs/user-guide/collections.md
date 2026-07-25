@@ -43,6 +43,17 @@ All filtering and sorting happens on the server, and the active area, year, sear
 
 Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
+## Default language
+
+**Settings → General** carries a **Default language** — the language the names and title names you
+type into Stamporama are written in. It starts as **English** and only matters once you list on
+platforms writing in another language: a platform set to your default language needs no translations
+at all, so it never adds fields anywhere. See
+[Contacts → Listing language](contacts.md#adding-and-editing) for how translations work.
+
+Changing it later does not rewrite anything — your existing text stays exactly as typed; you are only
+telling Stamporama what language that text is in.
+
 ## Organizing collecting areas
 
 Areas are managed in **Settings → Areas**, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves.

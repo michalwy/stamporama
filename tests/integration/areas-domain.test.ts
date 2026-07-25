@@ -8,6 +8,8 @@ import {
   deleteCollectionArea,
   syncAreaCatalogEntries,
 } from "../../src/lib/areas";
+import { getCollectionTitleLanguages } from "../../src/lib/contacts";
+import { setCollectionDefaultLanguage } from "../../src/lib/collections";
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -418,5 +420,111 @@ describe("syncAreaCatalogEntries", () => {
       () => syncAreaCatalogEntries("wrong-user", areaId, []),
       /access denied/i
     );
+  });
+});
+
+// Per-language area title names (#293): translation rows are additive on top of the default
+// `titleName` column, and the collection's language set is derived from its platforms.
+describe("area title translations", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`tr-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `tr-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("stores per-language title names on create and reads them back", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, {
+      name: "Poland",
+      titleName: "Poland",
+      titleNameByLanguage: { pl: "Polska", de: "Polen" },
+      assignable: false,
+    });
+    const area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
+    assert.ok(area);
+    assert.equal(area.titleName, "Poland");
+    assert.deepEqual(area.titleNameByLanguage, { pl: "Polska", de: "Polen" });
+  });
+
+  it("updates a translation and drops it when cleared", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, {
+      name: "Germany",
+      titleName: "Germany",
+      titleNameByLanguage: { pl: "Niemcy" },
+      assignable: false,
+    });
+    await updateCollectionArea(userId, id, {
+      name: "Germany",
+      titleName: "Germany",
+      titleNameByLanguage: { pl: "Rzesza Niemiecka" },
+      assignable: false,
+    });
+    let area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
+    assert.equal(area?.titleNameByLanguage.pl, "Rzesza Niemiecka");
+
+    await updateCollectionArea(userId, id, {
+      name: "Germany",
+      titleName: "Germany",
+      titleNameByLanguage: { pl: "  " },
+      assignable: false,
+    });
+    area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
+    assert.deepEqual(area?.titleNameByLanguage, {});
+  });
+
+  it("leaves languages absent from the update untouched", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, {
+      name: "Austria",
+      titleNameByLanguage: { pl: "Austria", de: "Österreich" },
+      assignable: false,
+    });
+    await updateCollectionArea(userId, id, {
+      name: "Austria",
+      titleNameByLanguage: { pl: "Austro-Węgry" },
+      assignable: false,
+    });
+    const area = (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
+    assert.deepEqual(area?.titleNameByLanguage, { pl: "Austro-Węgry", de: "Österreich" });
+  });
+
+  it("cascade-deletes translations with the area", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, {
+      name: "Hungary",
+      titleNameByLanguage: { pl: "Węgry" },
+      assignable: false,
+    });
+    await deleteCollectionArea(userId, id);
+    const rows = await prisma.collectionAreaTranslation.findMany({
+      where: { collectionAreaId: id },
+    });
+    assert.equal(rows.length, 0);
+  });
+
+  it("derives the translation languages from the platforms, minus the default language", async () => {
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), []);
+    await prisma.contact.createMany({
+      data: [
+        { collectionId, name: "Allegro", platform: true, titleLanguage: "pl" },
+        { collectionId, name: "Delcampe", platform: true, titleLanguage: "en" },
+        { collectionId, name: "Delcampe FR", platform: true, titleLanguage: "en" },
+        { collectionId, name: "Ricardo", platform: true, titleLanguage: "de" },
+        { collectionId, name: "Jan Kowalski", seller: true, titleLanguage: null },
+      ],
+    });
+    // The collection's own text is English (the migration default), so the English platforms need
+    // no translation row — only the genuinely foreign languages show up.
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["de", "pl"]);
+
+    // Switching the default language moves which platform is the "free" one.
+    await setCollectionDefaultLanguage(userId, collectionId, "pl");
+    assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["de", "en"]);
+    await setCollectionDefaultLanguage(userId, collectionId, "en");
   });
 });

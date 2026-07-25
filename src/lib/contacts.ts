@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { normalizeLanguage } from "./languages";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -86,6 +87,10 @@ export interface ContactData extends ContactRoles {
   /** Free-text title template for this platform's listings (#210), or null (falls back to the
    * built-in default). Only meaningful for the `platform` role. */
   titleTemplate: string | null;
+  /** ISO 639-1 language the platform's generated listing text is written in (#293), or null when
+   * unset. Only meaningful for the `platform` role; drives which entity translations the title
+   * tokens resolve. */
+  titleLanguage: string | null;
   createdAt: Date;
 }
 
@@ -104,6 +109,7 @@ const CONTACT_SELECT = {
   other: true,
   platformCurrency: true,
   titleTemplate: true,
+  titleLanguage: true,
   createdAt: true,
 } as const;
 
@@ -122,6 +128,8 @@ export interface ContactCreateInput {
   platformCurrency?: string | null;
   /** The platform's title template (#210), or null. Set/edited on the platform's contact form. */
   titleTemplate?: string | null;
+  /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
+  titleLanguage?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -255,6 +263,7 @@ export async function createContact(
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
         titleTemplate: data.titleTemplate ?? null,
+        titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
     });
@@ -294,6 +303,7 @@ export async function updateContact(
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
         titleTemplate: data.titleTemplate ?? null,
+        titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
     });
@@ -301,6 +311,39 @@ export async function updateContact(
     if (isUniqueViolation(err)) throw new ContactNameTakenError(name);
     throw err;
   }
+}
+
+/**
+ * The languages a collection actually needs **translations** for (#293): the distinct listing
+ * languages across its platforms, minus the collection's own `defaultLanguage` — text in that
+ * language already lives in the entity's default column, so a translation row would duplicate it.
+ * This *is* the collection's translation language set (there is no separate language configuration,
+ * #265): entity forms offer a per-language input for exactly these codes, and an empty result
+ * means no translation UI at all.
+ */
+export async function getCollectionTitleLanguages(
+  ownerId: string,
+  collectionId: string
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [collection, rows] = await Promise.all([
+    prisma.collection.findUniqueOrThrow({
+      where: { id: collectionId },
+      select: { defaultLanguage: true },
+    }),
+    prisma.contact.findMany({
+      where: { collectionId, platform: true, titleLanguage: { not: null } },
+      select: { titleLanguage: true },
+      distinct: ["titleLanguage"],
+    }),
+  ]);
+  const defaultLanguage = normalizeLanguage(collection.defaultLanguage);
+  const codes = new Set<string>();
+  for (const r of rows) {
+    const code = normalizeLanguage(r.titleLanguage);
+    if (code && code !== defaultLanguage) codes.add(code);
+  }
+  return Array.from(codes).sort();
 }
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still

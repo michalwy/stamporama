@@ -50,6 +50,9 @@ const SMALL_BTN: React.CSSProperties = {
 
 export interface TemplateBuilderDialogProps {
   collectionId: string;
+  /** Language the preview renders entity text in (#293), or null for the default language. Lets a
+   * platform's template be previewed the way its listings will actually read. */
+  language?: string | null;
   /** Dialog title (e.g. "Listing title template"). */
   title: string;
   /** One-line explanation shown under the field. */
@@ -75,6 +78,7 @@ export interface TemplateBuilderDialogProps {
  */
 export function TemplateBuilderDialog({
   collectionId,
+  language = null,
   title,
   description,
   initialValue,
@@ -98,7 +102,7 @@ export function TemplateBuilderDialog({
     let alive = true;
     (async () => {
       const { randomTitleSampleAction } = await import("@/app/actions/title-template");
-      const next = await randomTitleSampleAction(collectionId);
+      const next = await randomTitleSampleAction(collectionId, language);
       if (alive) {
         setSample(next);
         setSampleLoading(false);
@@ -107,7 +111,7 @@ export function TemplateBuilderDialog({
     return () => {
       alive = false;
     };
-  }, [collectionId]);
+  }, [collectionId, language]);
 
   // Debounced copy search for the "pick a specific copy" list.
   useEffect(() => {
@@ -115,20 +119,20 @@ export function TemplateBuilderDialog({
     let alive = true;
     const handle = setTimeout(async () => {
       const { searchTitleSamplesAction } = await import("@/app/actions/title-template");
-      const rows = await searchTitleSamplesAction(collectionId, search);
+      const rows = await searchTitleSamplesAction(collectionId, search, language);
       if (alive) setCandidates(rows);
     }, 200);
     return () => {
       alive = false;
       clearTimeout(handle);
     };
-  }, [collectionId, search, picking]);
+  }, [collectionId, search, picking, language]);
 
   function shuffle() {
     setSampleLoading(true);
     (async () => {
       const { randomTitleSampleAction } = await import("@/app/actions/title-template");
-      const next = await randomTitleSampleAction(collectionId);
+      const next = await randomTitleSampleAction(collectionId, language);
       setSample(next);
       setSampleLoading(false);
     })();

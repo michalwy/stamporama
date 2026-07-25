@@ -100,13 +100,20 @@ export function toTitleCopy(
 
 /** Build a row→`TitleTemplateCopy` mapper for a collection, loading its area-vendor maps once (they
  * resolve per-area catalog prefixes and primary vendors with ancestor inheritance). Owner-scoped via
- * {@link getCollectionAreas}. Callers fetch their own rows with {@link TITLE_COPY_SELECT} and map. */
+ * {@link getCollectionAreas}. Callers fetch their own rows with {@link TITLE_COPY_SELECT} and map.
+ *
+ * `language` (#293) is the listing language of the platform the title is generated for — an ISO
+ * 639-1 code, or null for the default language. Entity text resolves to that language where a
+ * translation exists and falls back silently to the default value otherwise (surfacing the
+ * fallback in the preview is #298). Today only `{area}` is translatable; the other tokens follow
+ * in #294–#296. */
 export async function makeTitleCopyMapper(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  language: string | null = null
 ): Promise<(row: TitleCopyRow) => TitleTemplateCopy> {
   const areas = await getCollectionAreas(ownerId, collectionId);
   const maps = buildAreaVendorMaps(areas);
-  const areaTitleById = buildAreaTitleMap(areas);
+  const areaTitleById = buildAreaTitleMap(areas, language);
   return (row) => toTitleCopy(row, maps, areaTitleById);
 }

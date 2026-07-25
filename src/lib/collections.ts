@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
+import { normalizeLanguage } from "./languages";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -95,6 +96,33 @@ export async function resetCollectionToDemo(
   await recomputeCollectionSortKeys(collectionId);
 }
 
+/**
+ * Set the language the collection's own entity text is written in (#293). Platforms listing in
+ * this language need no translations — it is excluded from the per-language inputs and resolves
+ * straight to each entity's default column. Changing it does not move any text: existing
+ * translation rows stay as they are, so the new default language's rows (if any) simply become
+ * redundant rather than being merged in.
+ */
+export async function setCollectionDefaultLanguage(
+  ownerId: string,
+  collectionId: string,
+  language: string
+): Promise<void> {
+  const code = normalizeLanguage(language);
+  if (!code) throw new Error("A default language is required.");
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { defaultLanguage: code },
+  });
+}
+
 export async function getCollectionsByOwner(ownerId: string) {
   return prisma.collection.findMany({
     where: { ownerId },
@@ -106,6 +134,13 @@ export async function getCollectionsByOwner(ownerId: string) {
 export async function getCollectionBySlug(ownerId: string, slug: string) {
   return prisma.collection.findUnique({
     where: { ownerId_slug: { ownerId, slug } },
-    select: { id: true, name: true, slug: true, baseCurrency: true, duplicateCatalogMode: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      baseCurrency: true,
+      defaultLanguage: true,
+      duplicateCatalogMode: true,
+    },
   });
 }

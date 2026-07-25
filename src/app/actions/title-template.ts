@@ -20,16 +20,20 @@ async function getSession() {
 }
 
 /** A random copy from the collection for the builder's default / shuffled preview. */
-export async function randomTitleSampleAction(collectionId: string): Promise<TitleSampleCopy | null> {
+export async function randomTitleSampleAction(
+  collectionId: string,
+  language: string | null = null
+): Promise<TitleSampleCopy | null> {
   const session = await getSession();
-  return randomTitleSampleCopy(session.user.id, collectionId);
+  return randomTitleSampleCopy(session.user.id, collectionId, language);
 }
 
 /** Copies matching `search` (by name or catalog number) for the builder's "pick a copy" list. */
 export async function searchTitleSamplesAction(
   collectionId: string,
-  search: string
+  search: string,
+  language: string | null = null
 ): Promise<TitleSampleCopy[]> {
   const session = await getSession();
-  return listTitleSampleCopies(session.user.id, collectionId, { search });
+  return listTitleSampleCopies(session.user.id, collectionId, { search, language });
 }
