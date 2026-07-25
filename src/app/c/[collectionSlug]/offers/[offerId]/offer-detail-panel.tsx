@@ -520,6 +520,7 @@ export function OfferDetailPanel({
 
       <OfferSetsView
         collectionId={collectionId}
+        offerId={offerId}
         sets={offer.sets}
         copies={copies}
         isLoading={copiesLoading}

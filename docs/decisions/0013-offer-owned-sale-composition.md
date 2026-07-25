@@ -36,8 +36,8 @@ model's `Purchase ⊃ PurchaseLot ⊃ Item` containment:
 ```
 Offer   (platformId, url, price, currency, state, …)          — a listing on ONE platform
   1:N
-OfferSet (offerId, title?)                                     — one atomic sellable unit
-  N:M ── Item        via OfferSetItem(offerSetId, itemId)      — the copies in that unit
+OfferSet (offerId, title?, sortOrder)                          — one atomic sellable unit
+  N:M ── Item   via OfferSetItem(offerSetId, itemId, sortOrder?) — the copies in that unit
 Sale / SaleLine → offerSetId        (+ sale_line_item.itemId UNIQUE — no-double-sale, unchanged)
 ```
 
@@ -100,6 +100,24 @@ set ships; the sale binds that set's exact copies (whole-set integrity, as today
 the picker: any still-available set. On *other* offers, the now-sold copy makes its containing
 set the one to remove (§4) — since the sets are interchangeable, the collector may remove any
 equivalent set to decrement.
+
+### 6. Composition is ordered (#306)
+
+Both levels carry an explicit order, because "the second lot" and "second from the left in the
+collage" are things a buyer sees, and the generated listing texts and the offer photo plan (#309)
+both enumerate the composition:
+
+- `OfferSet.sortOrder` — non-null, dense, 0-based within the offer. Purely explicit: the collector
+  drags sets into place, new sets append.
+- `OfferSetItem.sortOrder` — **nullable on purpose**. `null` means "derive from the catalog sort
+  key" (`stamp.primaryCatalogSortKey`, ADR-0014); a value means the collector hand-corrected it.
+  Without the distinction there is no way to tell "this is how catalog order came out" from "this
+  is how I want it", and no safe rule for where a newly added copy goes. A set is kept
+  all-or-nothing: reordering writes a position for every copy in it, resetting clears them all, and
+  a copy added to a hand-ordered set appends while one added to a derived set stays derived.
+
+The comparators live in the pure `offer-set-order.ts` so server reads, duplication, the sale flow
+and (later) the photo planner all order a set identically. No read may fall back to cuid order.
 
 ## Consequences
 

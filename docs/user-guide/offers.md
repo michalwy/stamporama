@@ -107,6 +107,31 @@ missing catalog prices without leaving the offer — which also feeds the sugges
 that still need a catalog value, a photo, or their variant identified, so you can clear them before
 listing.
 
+### Ordering sets and copies
+
+An offer has a **canonical order**: which set a buyer reads first, and in what order the copies
+inside a set appear. It is what the generated listing texts follow, and what future offer photos
+will follow too, so it is worth getting right.
+
+- **Sets** are ordered by hand. Grab a set by its **header** — the bar with the **⠿** mark, the set
+  name and the copy count — and drag; the whole card comes with you, while the copies below stay
+  free. Drop anywhere in the list: the card you are dragging dims, and a coloured **line appears in
+  the gap** it will land in, so you never have to aim at a thin strip. The new order saves straight
+  away. New sets are added at the end.
+- **Copies inside a set** start in **catalog order** — no work needed, they simply come out in the
+  order their catalog numbers suggest. Drag a whole copy row to correct it, with the same line
+  marking where it lands; from then on that set keeps the order you gave it, and a copy you add
+  later joins at the end. A copy only ever moves within its own set — moving it between sets is
+  adding and removing, not reordering.
+- To go back, use **Reset to catalog order** in the set's **⋮** menu. It only appears on a set you
+  actually reordered.
+
+The **Sort copies** dropdown starts on **Set order**, which is this canonical order. Choosing any
+other key (Catalog, Location ref, …) is a temporary way of looking at the copies — it changes
+nothing that is stored, and dragging is switched off until you go back to **Set order**. Dragging is
+also off while an **Only** filter is hiding rows, while copies are sub-grouped by **Issue**, and on
+sold or withdrawn offers, which are read-only.
+
 ## Listing title
 
 Every offer has its own **title** — shown large on the detail header and as the offer's name in the

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
@@ -19,18 +19,39 @@ import { useInvalidateOffers } from "../use-offers-query";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
-// The offer sets view adds "Location ref" to the shared copy sort keys — handy for pulling a copy
-// off the shelf while composing. Offer-local so other views are unaffected.
-const SET_SORT_KEYS = [...COPY_SORT_KEYS, "ref"] as const;
-const SET_SORT_LABELS: Record<string, string> = { ...COPY_SORT_LABELS, ref: "Location ref" };
+// The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
+// canonical copy order (#306), which is the default and the only key copies can be dragged in —
+// and "Location ref", handy for pulling a copy off the shelf while composing. Offer-local so other
+// views are unaffected.
+const SET_ORDER_KEY = "set";
+const SET_SORT_KEYS = [SET_ORDER_KEY, ...COPY_SORT_KEYS, "ref"] as const;
+const SET_SORT_LABELS: Record<string, string> = {
+  ...COPY_SORT_LABELS,
+  [SET_ORDER_KEY]: "Set order",
+  ref: "Location ref",
+};
 const REF_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 function sortSetCopies(
   items: ItemListItem[],
   sortKey: string,
   sortDir: string,
-  primaryVendorByArea: Map<string, string | null>
+  primaryVendorByArea: Map<string, string | null>,
+  /** Copy id → its position in the offer's canonical order (#306); drives the "Set order" key. */
+  canonicalIndex?: Map<string, number>
 ): ItemListItem[] {
+  if (sortKey === SET_ORDER_KEY) {
+    if (!canonicalIndex) return items;
+    const dir = sortDir === "desc" ? -1 : 1;
+    return items
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => {
+        const cmp = ((canonicalIndex.get(a.it.id) ?? Number.MAX_SAFE_INTEGER) -
+          (canonicalIndex.get(b.it.id) ?? Number.MAX_SAFE_INTEGER)) * dir;
+        return cmp === 0 ? a.i - b.i : cmp;
+      })
+      .map((d) => d.it);
+  }
   if (sortKey !== "ref") return sortCopies(items, sortKey, sortDir, primaryVendorByArea);
   const dir = sortDir === "desc" ? -1 : 1;
   return items
@@ -158,11 +179,200 @@ function useStuck(topOffset: number) {
   return { sentinelRef, stuck };
 }
 
-function CopyRow({ item, ctx, isLast }: { item: ItemListItem; ctx: CopyCtx; isLast: boolean }) {
+// ── Drag-to-reorder (#306) ──────────────────────────────────────────────────
+// The **container** is the drop target, not the individual cards / rows: the landing gap is derived
+// from the pointer's position against each element's midpoint. That way the gaps between elements,
+// the insertion line itself, and the outer halves of the first and last element all drop where the
+// user expects — there is no thin strip to hit.
+
+/** Everything a reorderable list needs: spread `containerProps` on the scrolling list, `itemProps`
+ * on each element, and draw an {@link InsertionLine} wherever {@link showLineAt} says so. */
+interface DragList {
+  /** Index being dragged, or null when idle. */
+  fromIndex: number | null;
+  /** The gap the drop lands in — the index the line is drawn *before* (`count` means "at the end"). */
+  insertAt: number | null;
+  containerProps: {
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+  };
+  itemProps: (index: number) => {
+    ref: (el: HTMLElement | null) => void;
+    draggable: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
+  /** With `handleOnly`, spread these on the part that starts a drag (a card's header). The element
+   * itself stays the drag source, so the ghost is the whole card, not just the strip you grabbed. */
+  handleProps: (index: number) => { onMouseDown: () => void; onMouseUp: () => void };
+}
+
+/** Wires one reorderable list. `onMove(from, to)` gets list indexes; it fires only for a real move.
+ * Returns null when reordering is off, so the caller can spread nothing. With `handleOnly`, an
+ * element only becomes draggable while the pointer went down on its handle. */
+function useReorderList(
+  enabled: boolean,
+  onMove: (from: number, to: number) => void,
+  { handleOnly = false }: { handleOnly?: boolean } = {}
+): DragList | null {
+  const [fromIndex, setFromIndex] = useState<number | null>(null);
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  /** Index whose handle is currently held down — only that element is draggable (handle mode). */
+  const [armed, setArmed] = useState<number | null>(null);
+  const els = useRef(new Map<number, HTMLElement>());
+
+  // A press that never became a drag (pointer released off the handle) must disarm too, or the card
+  // would stay grabbable anywhere until the next click.
+  useEffect(() => {
+    if (armed == null) return;
+    const disarm = () => setArmed(null);
+    window.addEventListener("mouseup", disarm);
+    return () => window.removeEventListener("mouseup", disarm);
+  }, [armed]);
+
+  /** Which gap the pointer sits in: before the first element whose midpoint it has not passed. */
+  const gapAt = useCallback((clientY: number) => {
+    const entries = [...els.current.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [index, el] of entries) {
+      const r = el.getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return index;
+    }
+    return entries.length;
+  }, []);
+
+  const reset = useCallback(() => {
+    setFromIndex(null);
+    setInsertAt(null);
+    setArmed(null);
+  }, []);
+
+  const containerProps = useMemo(
+    () => ({
+      // Claim the event only while *this* list is the one being dragged, so a set dragged over an
+      // expanded card's copies still reaches the set list, and vice versa.
+      onDragOver: (e: React.DragEvent) => {
+        if (fromIndex == null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        const at = gapAt(e.clientY);
+        setInsertAt((prev) => (prev === at ? prev : at));
+      },
+      onDrop: (e: React.DragEvent) => {
+        if (fromIndex == null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const at = gapAt(e.clientY);
+        // A gap below the source shifts down by one once the source is lifted out.
+        const to = at > fromIndex ? at - 1 : at;
+        const from = fromIndex;
+        reset();
+        if (to !== from) onMove(from, to);
+      },
+    }),
+    [fromIndex, gapAt, onMove, reset]
+  );
+
+  const itemProps = useCallback(
+    (index: number) => ({
+      ref: (el: HTMLElement | null) => {
+        if (el) els.current.set(index, el);
+        else els.current.delete(index);
+      },
+      draggable: handleOnly ? armed === index : true,
+      onDragStart: (e: React.DragEvent) => {
+        e.stopPropagation();
+        // Firefox only starts a drag when some data is set.
+        e.dataTransfer.setData("text/plain", String(index));
+        e.dataTransfer.effectAllowed = "move";
+        setFromIndex(index);
+        setInsertAt(null);
+      },
+      onDragEnd: reset,
+    }),
+    [armed, handleOnly, reset]
+  );
+
+  const handleProps = useCallback(
+    (index: number) => ({
+      onMouseDown: () => setArmed(index),
+      onMouseUp: () => setArmed(null),
+    }),
+    []
+  );
+
+  if (!enabled) return null;
+  return { fromIndex, insertAt, containerProps, itemProps, handleProps };
+}
+
+/** Whether the insertion line belongs before `index` — suppressed either side of the source, where
+ * dropping would change nothing. */
+function showLineAt(drag: DragList | null, index: number): boolean {
+  if (!drag || drag.fromIndex == null || drag.insertAt !== index) return false;
+  return index !== drag.fromIndex && index !== drag.fromIndex + 1;
+}
+
+/** The line drawn in the gap between two elements to mark where the drop lands. Negative margins
+ * cancel its own height, so the list does not jump while dragging. */
+function InsertionLine({ inset = 0 }: { inset?: number }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        height: "3px",
+        margin: `-1.5px ${inset}px`,
+        borderRadius: "999px",
+        background: "var(--color-accent)",
+      }}
+    />
+  );
+}
+
+/** Lifted-source styling: only the element being dragged is marked, the target is left alone (the
+ * insertion line carries that job). */
+function dragStyle(drag: DragList | null, index: number): React.CSSProperties {
+  if (!drag || drag.fromIndex !== index) return {};
+  return { opacity: 0.4, outline: "2px dashed var(--color-accent)", outlineOffset: "-2px" };
+}
+
+/** The grab affordance. Purely visual — the whole card / row is the draggable element, so there is
+ * no thin handle to hit. */
+function DragGrip({ label }: { label: string }) {
+  return (
+    <span
+      aria-hidden
+      title={label}
+      style={{
+        flexShrink: 0,
+        padding: "0 0.25rem",
+        color: "var(--color-text-muted)",
+        fontSize: "0.75rem",
+        lineHeight: 1,
+        userSelect: "none",
+      }}
+    >
+      ⠿
+    </span>
+  );
+}
+
+function CopyRow({
+  item,
+  ctx,
+  isLast,
+  index,
+  drag,
+}: {
+  item: ItemListItem;
+  ctx: CopyCtx;
+  isLast: boolean;
+  index: number;
+  drag: DragList | null;
+}) {
   const areaId = item.areaId;
   const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
   const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
-  return (
+  const row = (
     <InventoryItemRow
       collectionId={ctx.collectionId}
       item={item}
@@ -177,6 +387,23 @@ function CopyRow({ item, ctx, isLast }: { item: ItemListItem; ctx: CopyCtx; isLa
       onSetCatalogPrice={ctx.onSetPrice ? () => ctx.onSetPrice!(item) : undefined}
     />
   );
+  if (!drag) return row;
+  return (
+    <div
+      {...drag.itemProps(index)}
+      style={{
+        display: "flex",
+        alignItems: "stretch",
+        cursor: "grab",
+        ...dragStyle(drag, index),
+      }}
+    >
+      <span style={{ display: "flex", alignItems: "center", borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
+        <DragGrip label="Drag to reorder this copy" />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+    </div>
+  );
 }
 
 /** Copies rendered flat, or (when `byIssue`) as collapsible issue sub-sections. */
@@ -185,11 +412,13 @@ function IssueOrFlat({
   byIssue,
   issueStickyTop,
   ctx,
+  drag = null,
 }: {
   items: ItemListItem[];
   byIssue: boolean;
   issueStickyTop: number | null;
   ctx: CopyCtx;
+  drag?: DragList | null;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   function toggle(key: string) {
@@ -201,7 +430,17 @@ function IssueOrFlat({
     });
   }
   if (!byIssue) {
-    return <>{items.map((item, i) => <CopyRow key={item.id} item={item} ctx={ctx} isLast={i === items.length - 1} />)}</>;
+    return (
+      <>
+        {items.map((item, i) => (
+          <Fragment key={item.id}>
+            {showLineAt(drag, i) && <InsertionLine inset={8} />}
+            <CopyRow item={item} ctx={ctx} isLast={i === items.length - 1} index={i} drag={drag} />
+          </Fragment>
+        ))}
+        {showLineAt(drag, items.length) && <InsertionLine inset={8} />}
+      </>
+    );
   }
   return (
     <>
@@ -233,7 +472,9 @@ function IssueOrFlat({
             )}
             {!isCollapsed && (
               <div style={{ borderTop: "1px solid var(--color-border)", marginLeft: "1.25rem", borderLeft: "2px solid var(--color-border)" }}>
-                {group.items.map((item, i) => <CopyRow key={item.id} item={item} ctx={ctx} isLast={i === group.items.length - 1} />)}
+                {group.items.map((item, i) => (
+                  <CopyRow key={item.id} item={item} ctx={ctx} isLast={i === group.items.length - 1} index={i} drag={null} />
+                ))}
               </div>
             )}
           </div>
@@ -250,6 +491,8 @@ function CopiesBody({
   sortDir,
   stickyTop,
   ctx,
+  canonicalIndex,
+  drag = null,
 }: {
   items: ItemListItem[];
   byIssue: boolean;
@@ -257,13 +500,15 @@ function CopiesBody({
   sortDir: string;
   stickyTop: number;
   ctx: CopyCtx;
+  canonicalIndex?: Map<string, number>;
+  drag?: DragList | null;
 }) {
   const sorted = useMemo(
-    () => sortSetCopies(items, sortKey, sortDir, ctx.primaryVendorByArea),
-    [items, sortKey, sortDir, ctx.primaryVendorByArea]
+    () => sortSetCopies(items, sortKey, sortDir, ctx.primaryVendorByArea, canonicalIndex),
+    [items, sortKey, sortDir, ctx.primaryVendorByArea, canonicalIndex]
   );
   if (sorted.length === 0) return <div style={MUTED_BOX}>No copies.</div>;
-  return <IssueOrFlat items={sorted} byIssue={byIssue} issueStickyTop={stickyTop} ctx={ctx} />;
+  return <IssueOrFlat items={sorted} byIssue={byIssue} issueStickyTop={stickyTop} ctx={ctx} drag={drag} />;
 }
 
 /** One set as a collapsible card: sticky header (caret · label · count · state) over its copies. */
@@ -276,8 +521,13 @@ function SetCard({
   sortDir,
   editable,
   ctx,
+  index,
+  setDrag,
+  copyDragEnabled,
+  onReorderCopies,
   onToggle,
   onRemove,
+  onResetCopyOrder,
 }: {
   set: OfferDetailSet;
   copies: ItemListItem[];
@@ -287,16 +537,44 @@ function SetCard({
   sortDir: string;
   editable: boolean;
   ctx: CopyCtx;
+  /** Position among the rendered set cards, for set-level dragging (#306). */
+  index: number;
+  setDrag: DragList | null;
+  /** Copies inside this set can be hand-reordered (#306). */
+  copyDragEnabled: boolean;
+  onReorderCopies: (from: number, to: number) => void;
   onToggle: () => void;
   onRemove: () => void;
+  onResetCopyOrder: () => void;
 }) {
   const { sentinelRef, stuck } = useStuck(0);
-  const actions: RowAction[] = [{ key: "remove", label: "Remove set", icon: "✕", danger: true, onSelect: onRemove }];
+  // Each card owns its copy list's drag state — copies never move between sets by dragging.
+  const copyDrag = useReorderList(copyDragEnabled, onReorderCopies);
+  const actions: RowAction[] = [
+    // Only offered once the order was actually hand-corrected — a derived set has nothing to reset.
+    ...(set.manualCopyOrder
+      ? [{ key: "reset-order", label: "Reset to catalog order", icon: "↕", onSelect: onResetCopyOrder }]
+      : []),
+    { key: "remove", label: "Remove set", icon: "✕", danger: true, separatorBefore: set.manualCopyOrder, onSelect: onRemove },
+  ];
   return (
-    <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "clip", background: "var(--color-bg-elevated)", opacity: set.sold ? 0.7 : 1 }}>
+    <div
+      {...(setDrag ? setDrag.itemProps(index) : {})}
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        overflow: "clip",
+        background: "var(--color-bg-elevated)",
+        opacity: set.sold ? 0.7 : 1,
+        ...dragStyle(setDrag, index),
+      }}
+    >
       <div ref={sentinelRef} style={{ height: 0 }} />
       <div
         onClick={onToggle}
+        // The header is the grab area (#306): pressing here arms the card as the drag source, so
+        // the copies below stay free for selecting text and for their own dragging.
+        {...(setDrag ? setDrag.handleProps(index) : {})}
         style={{
           position: "sticky",
           top: 0,
@@ -305,12 +583,13 @@ function SetCard({
           alignItems: "center",
           gap: "0.625rem",
           padding: "0.75rem 1rem",
-          cursor: "pointer",
+          cursor: setDrag ? "grab" : "pointer",
           background: "var(--color-bg-elevated)",
           borderBottom: expanded ? "1px solid var(--color-border)" : undefined,
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
+        {setDrag && <DragGrip label="Drag to reorder this set" />}
         <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
           {expanded ? "▼" : "▶"}
         </span>
@@ -334,7 +613,19 @@ function SetCard({
           </span>
         )}
       </div>
-      {expanded && <CopiesBody items={copies} byIssue={byIssue} sortKey={sortKey} sortDir={sortDir} stickyTop={0} ctx={ctx} />}
+      {expanded && (
+        <div {...(copyDrag?.containerProps ?? {})}>
+          <CopiesBody
+            items={copies}
+            byIssue={byIssue}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            stickyTop={0}
+            ctx={ctx}
+            drag={copyDrag}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -378,6 +669,7 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
 
 interface OfferSetsViewProps {
   collectionId: string;
+  offerId: string;
   sets: OfferDetailSet[];
   copies: ItemListItem[];
   isLoading: boolean;
@@ -394,6 +686,7 @@ interface OfferSetsViewProps {
  * sub-groups copies within whichever primary is chosen. */
 export function OfferSetsView({
   collectionId,
+  offerId,
   sets,
   copies,
   isLoading,
@@ -413,6 +706,20 @@ export function OfferSetsView({
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const allCollapsed = collapsed.size === sets.length && sets.length > 0;
+
+  // Optimistic overrides while a reorder (#306) is in flight; cleared as soon as the server's own
+  // order arrives. `setOrder` is a list of set ids, `copyOrder` a per-set list of copy ids.
+  const [setOrder, setSetOrder] = useState<string[] | null>(null);
+  const [copyOrder, setCopyOrder] = useState<Record<string, string[]>>({});
+  const [orderError, setOrderError] = useState<string | null>(null);
+  // Drop the optimistic overrides the moment fresh sets arrive from the server (the documented
+  // adjust-state-during-render pattern — an effect here would cascade a second render).
+  const [lastSets, setLastSets] = useState(sets);
+  if (lastSets !== sets) {
+    setLastSets(sets);
+    setSetOrder(null);
+    setCopyOrder({});
+  }
 
   const [onlyUnpriced, setOnlyUnpriced] = useState(false);
   const [onlyNoPhoto, setOnlyNoPhoto] = useState(false);
@@ -449,13 +756,115 @@ export function OfferSetsView({
     onSetPrice: setQuickPriceItem,
   };
 
+  // The offer's canonical order (#306) after any optimistic override: sets in order, each set's
+  // copies in order. Drives both the cards and the "Set order" sort key in the flat / location views.
+  const orderedSets = useMemo(() => {
+    if (!setOrder) return sets;
+    const byId = new Map(sets.map((s) => [s.id, s]));
+    const listed = setOrder.map((id) => byId.get(id)).filter((s): s is OfferDetailSet => !!s);
+    const seen = new Set(listed.map((s) => s.id));
+    return [...listed, ...sets.filter((s) => !seen.has(s.id))];
+  }, [sets, setOrder]);
+  const setItemIds = useCallback(
+    (set: OfferDetailSet) => copyOrder[set.id] ?? set.itemIds,
+    [copyOrder]
+  );
+  const canonicalIndex = useMemo(() => {
+    const index = new Map<string, number>();
+    let n = 0;
+    for (const set of orderedSets) for (const id of setItemIds(set)) index.set(id, n++);
+    return index;
+  }, [orderedSets, setItemIds]);
+
+  // Dragging only makes sense against the canonical order itself, so it is off while a filter hides
+  // rows, while copies are grouped by issue, and for read-only (terminal) offers.
+  const canDragSets = editable && !filterActive;
+  const canDragCopies = editable && !filterActive && !byIssue && sortKey === SET_ORDER_KEY;
+
   const filteredCopies = copies.filter(matches);
   const flatSorted = useMemo(
-    () => sortSetCopies(filteredCopies, sortKey, sortDir, primaryVendorByArea),
+    () => sortSetCopies(filteredCopies, sortKey, sortDir, primaryVendorByArea, canonicalIndex),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [copies, onlyUnpriced, onlyNoPhoto, onlyUnknownVariant, sortKey, sortDir, primaryVendorByArea]
+    [copies, onlyUnpriced, onlyNoPhoto, onlyUnknownVariant, sortKey, sortDir, primaryVendorByArea, canonicalIndex]
   );
   const locationGroups = useMemo(() => groupByLocation(flatSorted, locations), [flatSorted, locations]);
+
+  // The set cards actually on screen — with a filter on, sets with nothing matching are dropped, so
+  // this (not `orderedSets`) is what drag indexes refer to.
+  const renderedSets = orderedSets
+    .map((set) => ({
+      set,
+      copies: setItemIds(set)
+        .map((id) => byId.get(id))
+        .filter((c): c is ItemListItem => !!c && matches(c)),
+    }))
+    .filter(({ copies }) => !filterActive || copies.length > 0);
+
+
+  /** Move `from` to `to` in `ids`, returning null when the move is a no-op. */
+  function moved(ids: string[], from: number, to: number): string[] | null {
+    if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) return null;
+    const next = [...ids];
+    const [id] = next.splice(from, 1);
+    next.splice(to, 0, id);
+    return next;
+  }
+
+  /** Apply a reorder optimistically, then persist it; a rejected write rolls the view back. */
+  function persist(apply: () => void, rollback: () => void, run: () => Promise<{ status: string; message?: string }>) {
+    setOrderError(null);
+    apply();
+    startTransition(async () => {
+      const r = await run();
+      if (r.status === "error") {
+        rollback();
+        setOrderError(r.message ?? "Failed to save the new order.");
+      } else {
+        invalidateAll(collectionId);
+      }
+    });
+  }
+
+  function reorderSets(from: number, to: number) {
+    const next = moved(orderedSets.map((s) => s.id), from, to);
+    if (!next) return;
+    const before = setOrder;
+    persist(
+      () => setSetOrder(next),
+      () => setSetOrder(before),
+      async () => {
+        const { reorderOfferSetsAction } = await import("@/app/actions/offers");
+        return reorderOfferSetsAction(offerId, next);
+      }
+    );
+  }
+
+  function reorderCopies(set: OfferDetailSet, from: number, to: number) {
+    const next = moved(setItemIds(set), from, to);
+    if (!next) return;
+    const before = copyOrder;
+    persist(
+      () => setCopyOrder({ ...copyOrder, [set.id]: next }),
+      () => setCopyOrder(before),
+      async () => {
+        const { reorderOfferSetItemsAction } = await import("@/app/actions/offers");
+        return reorderOfferSetItemsAction(set.id, next);
+      }
+    );
+  }
+
+  // Sets are grabbed by their header only; copy rows have no header, so the whole row grabs.
+  const setDrag = useReorderList(canDragSets, reorderSets, { handleOnly: true });
+
+  function resetCopyOrder(set: OfferDetailSet) {
+    setOrderError(null);
+    startTransition(async () => {
+      const { resetOfferSetItemOrderAction } = await import("@/app/actions/offers");
+      const r = await resetOfferSetItemOrderAction(set.id);
+      if (r.status === "error") setOrderError(r.message);
+      else invalidateAll(collectionId);
+    });
+  }
 
   function toggle(setId: string) {
     setCollapsed((prev) => {
@@ -552,22 +961,21 @@ export function OfferSetsView({
         )}
       </div>
 
+      {orderError && (
+        <div style={{ marginBottom: "0.75rem", fontSize: "0.8125rem", color: "var(--color-error)" }}>{orderError}</div>
+      )}
+
       {isLoading ? (
         <div style={MUTED_BOX}>Loading copies…</div>
       ) : primary === "set" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {sets
-            .map((set) => ({
-              set,
-              copies: set.itemIds
-                .map((id) => byId.get(id))
-                .filter((c): c is ItemListItem => !!c && matches(c)),
-            }))
-            // With a filter on, drop sets that have nothing matching.
-            .filter(({ copies }) => !filterActive || copies.length > 0)
-            .map(({ set, copies }) => (
+        <div
+          {...(setDrag?.containerProps ?? {})}
+          style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+        >
+          {renderedSets.map(({ set, copies }, index) => (
+            <Fragment key={set.id}>
+              {showLineAt(setDrag, index) && <InsertionLine />}
               <SetCard
-                key={set.id}
                 set={set}
                 copies={copies}
                 expanded={hydrated && !collapsed.has(set.id)}
@@ -576,12 +984,19 @@ export function OfferSetsView({
                 sortDir={sortDir}
                 editable={editable}
                 ctx={ctx}
+                index={index}
+                setDrag={setDrag}
+                copyDragEnabled={canDragCopies && !set.sold}
+                onReorderCopies={(from, to) => reorderCopies(set, from, to)}
                 onToggle={() => toggle(set.id)}
                 onRemove={() => onRemoveSet(set)}
+                onResetCopyOrder={() => resetCopyOrder(set)}
               />
-            ))}
+            </Fragment>
+          ))}
+          {showLineAt(setDrag, renderedSets.length) && <InsertionLine />}
           {filterActive &&
-            sets.every((set) => set.itemIds.every((id) => { const c = byId.get(id); return !c || !matches(c); })) && (
+            orderedSets.every((set) => setItemIds(set).every((id) => { const c = byId.get(id); return !c || !matches(c); })) && (
               <div style={MUTED_BOX}>No copies match the filter.</div>
             )}
         </div>
@@ -593,7 +1008,15 @@ export function OfferSetsView({
         </div>
       ) : (
         <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "clip", background: "var(--color-bg-elevated)" }}>
-          <CopiesBody items={filteredCopies} byIssue={byIssue} sortKey={sortKey} sortDir={sortDir} stickyTop={0} ctx={ctx} />
+          <CopiesBody
+            items={filteredCopies}
+            byIssue={byIssue}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            stickyTop={0}
+            ctx={ctx}
+            canonicalIndex={canonicalIndex}
+          />
         </div>
       )}
 

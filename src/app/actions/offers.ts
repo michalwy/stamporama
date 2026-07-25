@@ -18,6 +18,9 @@ import {
   addItemToOfferSet,
   updateOfferSet,
   removeOfferSet,
+  reorderOfferSets,
+  reorderOfferSetItems,
+  resetOfferSetItemOrder,
   previewOfferTitle,
   offerTranslationGaps,
   type OfferTitlePreview,
@@ -235,6 +238,45 @@ export async function updateOfferSetAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to rename the set.");
+  }
+}
+
+/** Persist a hand-dragged set order for an offer (#306). `setIds` is the full new order. */
+export async function reorderOfferSetsAction(
+  offerId: string,
+  setIds: string[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await reorderOfferSets(session.user.id, offerId, setIds);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to reorder the sets.");
+  }
+}
+
+/** Hand-correct the copy order inside one set (#306). `itemIds` is the full new order. */
+export async function reorderOfferSetItemsAction(
+  setId: string,
+  itemIds: string[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await reorderOfferSetItems(session.user.id, setId, itemIds);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to reorder the copies.");
+  }
+}
+
+/** Drop a set's hand-corrected copy order back to derived catalog order (#306). */
+export async function resetOfferSetItemOrderAction(setId: string): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await resetOfferSetItemOrder(session.user.id, setId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to reset the copy order.");
   }
 }
 

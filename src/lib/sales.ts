@@ -6,6 +6,7 @@ import { type OfferState, isOfferState } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
+import { sortSetItems } from "./offer-set-order";
 import { listItemsPaginated, type ItemListItem } from "./items";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
@@ -132,8 +133,31 @@ function copyLabel(stamp: {
 }
 
 const STAMP_LABEL_SELECT = {
-  stamp: { select: { name: true, catalogNumbers: { select: { number: true }, take: 1 } } },
+  stamp: {
+    select: {
+      name: true,
+      catalogNumbers: { select: { number: true }, take: 1 },
+      // The catalog sort key a set's derived copy order falls back to (#306, ADR-0014).
+      primaryCatalogSortKey: true,
+    },
+  },
 } as const;
+
+/** An offer set's copies in effective order (#306): hand-corrected positions first, then catalog
+ * order. Shared by the sellable-offer expansion and the sale detail's set labels, so a set reads
+ * the same here as it does on the offer screen. */
+function orderedSetItems<
+  T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } },
+>(items: readonly T[]): T[] {
+  const byId = new Map(items.map((li) => [li.itemId, li]));
+  return sortSetItems(
+    items.map((li) => ({
+      itemId: li.itemId,
+      sortOrder: li.sortOrder,
+      catalogSortKey: li.item.stamp.primaryCatalogSortKey,
+    }))
+  ).map((r) => byId.get(r.itemId)!);
+}
 
 /** Item ids already retired on a sale line, from a candidate set (no-double-sale). */
 async function soldItemIds(itemIds: string[]): Promise<Set<string>> {
@@ -171,6 +195,12 @@ export interface SellableOffer {
   sets: SaleSetOption[];
 }
 
+/** Explicit set order (#306); `id` keeps equal positions stable. */
+const OFFER_SETS_ORDER_BY: Prisma.OfferSetOrderByWithRelationInput[] = [
+  { sortOrder: "asc" },
+  { id: "asc" },
+];
+
 const SELLABLE_OFFER_SELECT = {
   id: true,
   platformId: true,
@@ -180,11 +210,11 @@ const SELLABLE_OFFER_SELECT = {
   createdAt: true,
   platform: { select: { name: true } },
   sets: {
-    orderBy: { id: "asc" as const },
+    orderBy: OFFER_SETS_ORDER_BY,
     select: {
       id: true,
       title: true,
-      items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+      items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
     },
   },
 } as const;
@@ -223,11 +253,12 @@ export async function listSellableOffers(
       // A set is available only when it holds ≥1 copy and none has already sold — a set is
       // atomic, so a single already-sold copy retires the whole set.
       if (s.items.length === 0 || s.items.some((li) => sold.has(li.itemId))) continue;
-      const itemLabels = s.items.map((li) => copyLabel(li.item.stamp));
+      const items = orderedSetItems(s.items);
+      const itemLabels = items.map((li) => copyLabel(li.item.stamp));
       sets.push({
         offerSetId: s.id,
         label: deriveSetLabel(s.title, itemLabels),
-        itemIds: s.items.map((li) => li.itemId),
+        itemIds: items.map((li) => li.itemId),
         itemLabels,
       });
     }
@@ -238,7 +269,7 @@ export async function listSellableOffers(
       platformId: r.platformId,
       platformName: r.platform.name,
       offerLabel: deriveOfferLabel(
-        r.sets.map((s) => deriveSetLabel(s.title, s.items.map((li) => copyLabel(li.item.stamp))))
+        r.sets.map((s) => deriveSetLabel(s.title, orderedSetItems(s.items).map((li) => copyLabel(li.item.stamp))))
       ),
       price: Number(r.price).toFixed(2),
       currency: r.currency,
@@ -1004,7 +1035,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           offerSet: {
             select: {
               title: true,
-              items: { select: { item: { select: STAMP_LABEL_SELECT } } },
+              items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
             },
           },
           items: { select: { packed: true, item: { select: STAMP_LABEL_SELECT } } },
@@ -1051,7 +1082,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
     const setLbl = deriveSetLabel(
       l.offerSet.title,
-      l.offerSet.items.map((li) => copyLabel(li.item.stamp))
+      orderedSetItems(l.offerSet.items).map((li) => copyLabel(li.item.stamp))
     );
     const net = netById.get(l.id);
     return {

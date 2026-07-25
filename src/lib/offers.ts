@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { listItemsPaginated, valuateItemsByIds, type ItemListItem } from "./items";
@@ -13,6 +14,12 @@ import {
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
+import {
+  compareSetItems,
+  hasManualItemOrder,
+  nextItemSortOrder,
+  sortSetItems,
+} from "./offer-set-order";
 import {
   renderTitleTemplate,
   renderTitleTemplateSegments,
@@ -49,7 +56,9 @@ export type OfferBlockReason =
   | "no-platform"
   | "no-currency"
   | "empty"
-  | "sold-set";
+  | "sold-set"
+  /** A reorder (#306) did not carry the current composition — the client is stale. */
+  | "bad-order";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -199,25 +208,77 @@ function copyLabel(stamp: { name: string | null; catalogNumbers: { number: strin
 }
 
 const STAMP_LABEL_SELECT = {
-  stamp: { select: { name: true, catalogNumbers: { select: { number: true }, take: 1 } } },
+  stamp: {
+    select: {
+      name: true,
+      catalogNumbers: { select: { number: true }, take: 1 },
+      // The denormalized catalog sort key (ADR-0014) a set's derived copy order falls back to (#306).
+      primaryCatalogSortKey: true,
+    },
+  },
 } as const;
+
+/** Sets in their explicit order (#306); `id` keeps the result stable across equal positions. */
+const OFFER_SETS_ORDER_BY: Prisma.OfferSetOrderByWithRelationInput[] = [
+  { sortOrder: "asc" },
+  { id: "asc" },
+];
 
 const OFFER_SETS_SELECT = {
   id: true,
   title: true,
-  items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+  items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
   saleLines: { select: { id: true }, take: 1 },
 } as const;
+
+type OfferSetItemRow = {
+  itemId: string;
+  sortOrder: number | null;
+  item: { stamp: { name: string | null; catalogNumbers: { number: string }[]; primaryCatalogSortKey: number | null } };
+};
 
 type OfferSetRow = {
   id: string;
   title: string | null;
-  items: { itemId: string; item: { stamp: { name: string | null; catalogNumbers: { number: string }[] } } }[];
+  items: OfferSetItemRow[];
   saleLines: { id: string }[];
 };
 
+/** The minimum a query needs to put a set's copies in effective order (#306), for the callers that
+ * only care about the copy ids (composition, duplication) and not the labels. */
+const SET_ITEM_ORDER_SELECT = {
+  itemId: true,
+  sortOrder: true,
+  item: { select: { stamp: { select: { primaryCatalogSortKey: true } } } },
+} as const;
+
+/** Copy ids of a set, in effective order (#306). */
+function orderedItemIds(
+  items: readonly { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } }[]
+): string[] {
+  return sortSetItems(
+    items.map((li) => ({
+      itemId: li.itemId,
+      sortOrder: li.sortOrder,
+      catalogSortKey: li.item.stamp.primaryCatalogSortKey,
+    }))
+  ).map((r) => r.itemId);
+}
+
+/** A set's copies in effective order (#306) — explicit positions first, then catalog order. */
+function orderedItems<T extends { itemId: string; sortOrder: number | null; item: { stamp: { primaryCatalogSortKey: number | null } } }>(
+  items: readonly T[]
+): T[] {
+  return [...items].sort((a, b) =>
+    compareSetItems(
+      { itemId: a.itemId, sortOrder: a.sortOrder, catalogSortKey: a.item.stamp.primaryCatalogSortKey },
+      { itemId: b.itemId, sortOrder: b.sortOrder, catalogSortKey: b.item.stamp.primaryCatalogSortKey }
+    )
+  );
+}
+
 function setLabel(set: OfferSetRow): string {
-  return deriveSetLabel(set.title, set.items.map((li) => copyLabel(li.item.stamp)));
+  return deriveSetLabel(set.title, orderedItems(set.items).map((li) => copyLabel(li.item.stamp)));
 }
 
 function offerLabel(sets: OfferSetRow[]): string {
@@ -321,10 +382,10 @@ async function templateSets(
 async function offerComposition(offerId: string): Promise<OfferComposition[]> {
   const sets = await prisma.offerSet.findMany({
     where: { offerId },
-    select: { title: true, items: { select: { itemId: true } } },
-    orderBy: { id: "asc" },
+    select: { title: true, items: { select: SET_ITEM_ORDER_SELECT } },
+    orderBy: OFFER_SETS_ORDER_BY,
   });
-  return sets.map((s) => ({ title: s.title, itemIds: s.items.map((i) => i.itemId) }));
+  return sets.map((s) => ({ title: s.title, itemIds: orderedItemIds(s.items) }));
 }
 
 /** The copies `itemIds` normalised for the title engine, in the caller's order (so a regenerated
@@ -524,7 +585,7 @@ export async function findOfferCollisions(
     select: {
       id: true,
       platform: { select: { name: true } },
-      sets: { select: OFFER_SETS_SELECT },
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
     },
   });
 
@@ -591,7 +652,7 @@ const OFFER_SELECT = {
   listingDate: true,
   createdAt: true,
   platform: { select: { name: true } },
-  sets: { select: OFFER_SETS_SELECT },
+  sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
 } as const;
 
 type OfferRow = {
@@ -766,8 +827,13 @@ export interface OfferDetailSet {
   id: string;
   title: string | null;
   label: string;
+  /** The set's copies in effective order (#306) — hand-corrected when the collector reordered
+   * them, otherwise derived from catalog order. `copyLabels` follows the same order. */
   itemIds: string[];
   copyLabels: string[];
+  /** The copy order was hand-corrected rather than derived from catalog order (#306). Drives the
+   * "Reset to catalog order" action. */
+  manualCopyOrder: boolean;
   /** This set has left on a sale (sold through this offer). */
   sold: boolean;
   /** A copy of this set has sold **elsewhere** — the set is stale and should be removed. */
@@ -848,11 +914,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         },
       },
       sets: {
-        orderBy: { id: "asc" },
+        orderBy: OFFER_SETS_ORDER_BY,
         select: {
           id: true,
           title: true,
-          items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+          items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
           saleLines: { select: { id: true }, take: 1 },
         },
       },
@@ -888,6 +954,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const biddingElsewhere = new Set(biddingRows.map((r) => r.itemId));
 
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
+    const items = orderedItems(s.items);
     const sold = s.saleLines.length > 0;
     const needs =
       state === "active" &&
@@ -901,8 +968,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       id: s.id,
       title: s.title,
       label: setLabel(s),
-      itemIds: s.items.map((li) => li.itemId),
-      copyLabels: s.items.map((li) => copyLabel(li.item.stamp)),
+      itemIds: items.map((li) => li.itemId),
+      copyLabels: items.map((li) => copyLabel(li.item.stamp)),
+      manualCopyOrder: hasManualItemOrder(s.items),
       sold,
       needsAction: needs,
     };
@@ -1208,7 +1276,8 @@ export async function createOffer(
     });
     if (seedIds.length > 0) {
       await tx.offerSet.create({
-        data: { offerId: offer.id, items: { create: seedIds.map((itemId) => ({ itemId })) } },
+        // The seed is the new offer's first set (#306); its copies start derived (catalog order).
+        data: { offerId: offer.id, sortOrder: 0, items: { create: seedIds.map((itemId) => ({ itemId })) } },
       });
     }
     return offer.id;
@@ -1238,12 +1307,16 @@ export async function duplicateOffer(
   const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
 
   // Source composition + which of its copies have sold elsewhere (dropped from the clone).
-  const sets = await prisma.offerSet.findMany({
-    where: { offerId: sourceOfferId },
-    select: { title: true, items: { select: { itemId: true } } },
-    orderBy: { id: "asc" },
-  });
-  const allItemIds = sets.flatMap((s) => s.items.map((i) => i.itemId));
+  const sets = (
+    await prisma.offerSet.findMany({
+      where: { offerId: sourceOfferId },
+      select: { title: true, items: { select: SET_ITEM_ORDER_SELECT } },
+      orderBy: OFFER_SETS_ORDER_BY,
+    })
+    // The clone keeps the source's order at both levels (#306): sets in their explicit order, copies
+    // in effective order — carrying the "hand-corrected" flag so a derived set stays derived.
+  ).map((s) => ({ title: s.title, itemIds: orderedItemIds(s.items), manualItemOrder: hasManualItemOrder(s.items) }));
+  const allItemIds = sets.flatMap((s) => s.itemIds);
   const soldRows = allItemIds.length
     ? await prisma.saleLineItem.findMany({
         where: { itemId: { in: allItemIds } },
@@ -1255,9 +1328,9 @@ export async function duplicateOffer(
   let skippedCopies = 0;
   const cloneSets = sets
     .map((s) => {
-      const keep = s.items.map((i) => i.itemId).filter((id) => !soldIds.has(id));
-      skippedCopies += s.items.length - keep.length;
-      return { title: s.title, itemIds: keep };
+      const keep = s.itemIds.filter((id) => !soldIds.has(id));
+      skippedCopies += s.itemIds.length - keep.length;
+      return { title: s.title, itemIds: keep, manualItemOrder: s.manualItemOrder };
     })
     .filter((s) => s.itemIds.length > 0);
 
@@ -1301,12 +1374,20 @@ export async function duplicateOffer(
       },
       select: { id: true },
     });
-    for (const s of cloneSets) {
+    for (const [index, s] of cloneSets.entries()) {
       await tx.offerSet.create({
         data: {
           offerId: offer.id,
           title: s.title,
-          items: { create: s.itemIds.map((itemId) => ({ itemId })) },
+          sortOrder: index,
+          items: {
+            create: s.itemIds.map((itemId, i) => ({
+              itemId,
+              // `itemIds` is already in effective order: a hand-corrected set is cloned with
+              // explicit positions, a derived one stays derived (#306).
+              sortOrder: s.manualItemOrder ? i : null,
+            })),
+          },
         },
       });
     }
@@ -1513,6 +1594,15 @@ async function itemsInOffer(offerId: string, itemIds: string[]): Promise<Set<str
   return new Set(rows.map((r) => r.itemId));
 }
 
+/** The position a set added to `offerId` takes (#306): the end of the offer's current order. */
+async function nextSetSortOrder(offerId: string): Promise<number> {
+  const last = await prisma.offerSet.aggregate({
+    where: { offerId },
+    _max: { sortOrder: true },
+  });
+  return (last._max.sortOrder ?? -1) + 1;
+}
+
 /** Add one set (holding `itemIds`, sold together) to an offer. A single copy makes a single-item
  * set; several copies make a komplet. Returns the new set id. */
 export async function addOfferSet(
@@ -1542,6 +1632,7 @@ export async function addOfferSet(
     data: {
       offerId,
       title: setTitle,
+      sortOrder: await nextSetSortOrder(offerId),
       items: { create: addable.map((itemId) => ({ itemId })) },
     },
     select: { id: true },
@@ -1574,10 +1665,16 @@ export async function addOfferSetsPerCopy(
     titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate, effectiveLanguage));
   }
   const ids: string[] = [];
+  const firstSortOrder = await nextSetSortOrder(offerId);
   await prisma.$transaction(async (tx) => {
-    for (const itemId of addable) {
+    for (const [index, itemId] of addable.entries()) {
       const set = await tx.offerSet.create({
-        data: { offerId, title: titles.get(itemId) ?? null, items: { create: [{ itemId }] } },
+        data: {
+          offerId,
+          title: titles.get(itemId) ?? null,
+          sortOrder: firstSortOrder + index,
+          items: { create: [{ itemId }] },
+        },
         select: { id: true },
       });
       ids.push(set.id);
@@ -1601,7 +1698,92 @@ export async function addItemToOfferSet(ownerId: string, setId: string, itemId: 
       "That copy can't be added — it may have sold or already be in this offer."
     );
   }
-  await prisma.offerSetItem.create({ data: { offerSetId: setId, itemId: addable[0] } });
+  // Where the copy lands (#306): a derived set stays derived (it slots into its catalog position),
+  // a hand-corrected one appends the copy at the end.
+  const existing = await prisma.offerSetItem.findMany({
+    where: { offerSetId: setId },
+    select: { sortOrder: true },
+  });
+  await prisma.offerSetItem.create({
+    data: { offerSetId: setId, itemId: addable[0], sortOrder: nextItemSortOrder(existing) },
+  });
+}
+
+/** Reorder an offer's sets (#306). `setIds` must be a **full permutation** of the offer's current
+ * sets — a partial list is rejected rather than silently applied, so a stale client (a set added or
+ * removed in another tab) cannot half-write an order. Positions are rewritten dense and 0-based. */
+export async function reorderOfferSets(
+  ownerId: string,
+  offerId: string,
+  setIds: string[]
+): Promise<void> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  if (isTerminalState(ref.state)) {
+    throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only.`);
+  }
+  const current = await prisma.offerSet.findMany({ where: { offerId }, select: { id: true } });
+  assertPermutation(
+    current.map((s) => s.id),
+    setIds,
+    "The offer's sets changed — reload and try reordering again."
+  );
+  await prisma.$transaction(
+    setIds.map((id, index) =>
+      prisma.offerSet.update({ where: { id }, data: { sortOrder: index } })
+    )
+  );
+}
+
+/** Reorder the copies inside one set (#306), hand-correcting it away from derived catalog order.
+ * `itemIds` must be a full permutation of the set's current copies; every copy gets an explicit
+ * position, so the set becomes hand-corrected as a whole. */
+export async function reorderOfferSetItems(
+  ownerId: string,
+  setId: string,
+  itemIds: string[]
+): Promise<void> {
+  const ref = await assertOfferSetOwner(ownerId, setId);
+  if (isTerminalState(ref.offerState)) {
+    throw new OfferActionBlockedError("terminal", `A ${ref.offerState} offer is read-only.`);
+  }
+  const current = await prisma.offerSetItem.findMany({
+    where: { offerSetId: setId },
+    select: { itemId: true },
+  });
+  assertPermutation(
+    current.map((li) => li.itemId),
+    itemIds,
+    "The set's copies changed — reload and try reordering again."
+  );
+  await prisma.$transaction(
+    itemIds.map((itemId, index) =>
+      prisma.offerSetItem.update({
+        where: { offerSetId_itemId: { offerSetId: setId, itemId } },
+        data: { sortOrder: index },
+      })
+    )
+  );
+}
+
+/** Drop a set's hand-corrected copy order (#306): every position back to null, so the set derives
+ * its order from the catalog sort key again. */
+export async function resetOfferSetItemOrder(ownerId: string, setId: string): Promise<void> {
+  const ref = await assertOfferSetOwner(ownerId, setId);
+  if (isTerminalState(ref.offerState)) {
+    throw new OfferActionBlockedError("terminal", `A ${ref.offerState} offer is read-only.`);
+  }
+  await prisma.offerSetItem.updateMany({ where: { offerSetId: setId }, data: { sortOrder: null } });
+}
+
+/** Guard for the reorder mutations: `next` must contain exactly the ids in `current`, once each. */
+function assertPermutation(current: string[], next: string[], message: string): void {
+  const have = new Set(current);
+  const seen = new Set<string>();
+  for (const id of next) {
+    if (!have.has(id) || seen.has(id)) throw new OfferActionBlockedError("bad-order", message);
+    seen.add(id);
+  }
+  if (seen.size !== have.size) throw new OfferActionBlockedError("bad-order", message);
 }
 
 /** Rename a set (its label falls back to its copies when blank). */

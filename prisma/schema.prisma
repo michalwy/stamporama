@@ -683,6 +683,10 @@ model OfferSet {
   offerId String
   // Optional free-text label; the UI derives one from the copies when blank.
   title   String?
+  // Explicit, user-controlled position within the offer (#306), 0-based and dense. Sets are what a
+  // buyer sees as "the second lot" and what the photo plan (#309) renders as image groups, so the
+  // order is canonical and persisted rather than incidental creation order. New sets append.
+  sortOrder Int @default(0)
 
   offer     Offer          @relation(fields: [offerId], references: [id], onDelete: Cascade)
   items     OfferSetItem[]
@@ -700,6 +704,13 @@ model OfferSet {
 model OfferSetItem {
   offerSetId String
   itemId     String
+  // Position of the copy inside its set (#306) — the tile order in a collage, the copy order in a
+  // generated listing text. **Nullable on purpose**: `null` means "derive from the catalog sort
+  // key" (`stamp.primaryCatalogSortKey`), a value means the collector hand-corrected it. The
+  // distinction is what tells "this is how catalog order came out" from "this is how I want it".
+  // Kept all-or-nothing per set: reordering writes a value for every copy in the set, and the
+  // reset action clears the whole set back to null. A copy added to a hand-ordered set appends.
+  sortOrder  Int?
 
   offerSet OfferSet @relation(fields: [offerSetId], references: [id], onDelete: Cascade)
   item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
