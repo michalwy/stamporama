@@ -16,6 +16,7 @@
 // `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
 
 import { parseCatalogNumberParts } from "./catalog-number";
+import type { TranslatableEntity } from "./translations";
 
 /** One of a copy's catalog numbers, with the parts needed to render it under `{catalog}` options
  * (#210): the vendor's abbreviation (the "catalog prefix", e.g. `Mi`), the per-area prefix (e.g.
@@ -51,9 +52,28 @@ export interface TitleTemplateCopy {
   /** Year of that issue, or null. */
   issueYear: number | null;
   /** Which of the translatable fields above rendered **untranslated** text for the language the copy
-   * was resolved in (#298) — the field keys of this interface, e.g. `condition`, `area`. Absent /
-   * empty when nothing fell back, which is also the case for a copy resolved without a language. */
-  fallbacks?: readonly string[];
+   * was resolved in (#298), and which entity row each one came from (#299). Absent / empty when
+   * nothing fell back, which is also the case for a copy resolved without a language. */
+  fallbacks?: readonly TitleFallback[];
+}
+
+/** One translatable field of one copy that rendered the default language's text (#298), named down
+ * to the entity row that would fix it (#299).
+ *
+ * `field` is the {@link TitleTemplateCopy} key the token renders from (`conditionAbbr`);
+ * `entityField` is the translation column on the entity itself (`abbreviation`). They differ because
+ * one copy flattens five entities: `{condition}` and `{conditionAbbr}` are both the condition's
+ * `name` / `abbreviation`, and `{area}` is a `titleName` possibly inherited from an ancestor area —
+ * `entityId` is then that ancestor, the row a translation must actually be written on. */
+export interface TitleFallback {
+  /** The {@link TitleTemplateCopy} field whose token rendered untranslated text. */
+  field: string;
+  entityType: TranslatableEntity;
+  entityId: string;
+  /** The entity's own translatable column, e.g. `name`, `abbreviation`, `titleName`. */
+  entityField: string;
+  /** The default-language text that rendered — what the missing translation would replace. */
+  defaultValue: string;
 }
 
 /** The translatable fields of a {@link TitleTemplateCopy} — the ones that can appear in
@@ -250,7 +270,7 @@ function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]):
   const order: string[] = [];
   for (const copy of copies) {
     for (const cn of selectCatalogNumbers(copy, vendorsArg)) {
-      const key = `${cn.vendorId} ${cn.areaPrefix ?? ""}`;
+      const key = `${cn.vendorId}\u0000${cn.areaPrefix ?? ""}`;
       let g = groups.get(key);
       if (!g) {
         g = { vendorAbbr: cn.vendorAbbr, areaPrefix: cn.areaPrefix, numbers: [] };
@@ -314,21 +334,29 @@ function resolveTokenValue(
   }
 }
 
-/** Whether the token `spec` renders text that fell back to the default language on **any** copy in
- * scope (#298). Untranslatable tokens (`{catalog}`, `{year}`, …) never do. */
-function tokenFellBack(spec: string, copies: readonly TitleTemplateCopy[]): boolean {
-  const field = FALLBACK_FIELD_BY_TOKEN[spec.split(":")[0].trim().toLowerCase()];
-  if (!field) return false;
-  return copies.some((c) => c.fallbacks?.includes(field));
+/** The {@link TitleTemplateCopy} field a token spec renders from, or null when the token is not
+ * translatable (`{catalog}`, `{year}`, …) and so can never flag. */
+function tokenField(spec: string): string | null {
+  return FALLBACK_FIELD_BY_TOKEN[spec.split(":")[0].trim().toLowerCase()] ?? null;
+}
+
+/** The fallbacks the token `spec` renders across the copies in scope (#298) — empty when the token
+ * is untranslatable or every copy's value really is translated. */
+function tokenFallbacks(spec: string, copies: readonly TitleTemplateCopy[]): TitleFallback[] {
+  const field = tokenField(spec);
+  if (!field) return [];
+  return copies.flatMap((c) => (c.fallbacks ?? []).filter((f) => f.field === field));
 }
 
 /** A resolved placeholder: its rendered text, which token produced it (the winning alternative of a
- * fallback group), and whether that token's text fell back to the default language. */
+ * fallback group), and the untranslated entity text it rendered, if any. */
 interface ResolvedPlaceholder {
   value: string;
   /** The token spec that produced `value`, or null for an empty / unknown placeholder. */
   spec: string | null;
   fellBack: boolean;
+  /** The entity fields behind `fellBack` (#299) — empty whenever `fellBack` is false. */
+  fallbacks: readonly TitleFallback[];
 }
 
 /**
@@ -343,18 +371,22 @@ function resolvePlaceholder(
   setTitle: string | null = null
 ): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
+  const resolved = (value: string, spec: string): ResolvedPlaceholder => {
+    const fallbacks = value ? tokenFallbacks(spec, copies) : [];
+    return { value, spec, fellBack: fallbacks.length > 0, fallbacks };
+  };
   if (parts.length === 1) {
     const v = resolveTokenValue(parts[0], copies, setTitle);
     // unknown → literal (no token produced it); known → value (maybe "")
-    if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false };
-    return { value: v, spec: parts[0], fellBack: !!v && tokenFellBack(parts[0], copies) };
+    if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false, fallbacks: [] };
+    return resolved(v, parts[0]);
   }
   for (const p of parts) {
     const v = resolveTokenValue(p, copies, setTitle);
     // first non-empty (skips unknown → null and empty → "")
-    if (v) return { value: v, spec: p, fellBack: tokenFellBack(p, copies) };
+    if (v) return resolved(v, p);
   }
-  return { value: "", spec: null, fellBack: false };
+  return { value: "", spec: null, fellBack: false, fallbacks: [] };
 }
 
 /** Markers left in the rendered string before it is tidied. {@link EMPTY_MARK} stands in for a
@@ -363,8 +395,8 @@ function resolvePlaceholder(
  * values that are present. {@link VALUE_MARK} prefixes every value that *did* resolve, which is how
  * {@link tidyMultiline} tells a line whose placeholders all came out empty (scaffolding, dropped)
  * from a purely literal line (kept). Both are control characters that never occur in real data. */
-const EMPTY_MARK = " ";
-const VALUE_MARK = "";
+const EMPTY_MARK = "\u0000";
+const VALUE_MARK = "\u0003";
 
 /** Collapse whitespace, trim, and remove only the dangling glue an **empty** placeholder left
  * behind: a separator (`- – · / , : ;`) that sat directly next to the emptied slot, and any now-empty
@@ -378,7 +410,7 @@ function tidyLine(rendered: string): string {
     // Otherwise drop a separator immediately before an empty slot, then one immediately after it.
     .replace(/\s*[-–·/,:;]\s* /g, EMPTY_MARK)
     .replace(/ \s*[-–·/,:;]\s*/g, EMPTY_MARK)
-    .replace(/[ ]/g, "") // remove the markers themselves
+    .replace(/[\u0000\u0003]/g, "") // remove the markers themselves
     .replace(/\(\s*\)/g, "") // empty parens left by an emptied token
     .replace(/\[\s*\]/g, "") // empty brackets
     .replace(/\s+([)\]])/g, "$1")
@@ -472,7 +504,10 @@ function renderTextRun(text: string, scope: TemplateScope): string {
     const { value, spec, fellBack } = resolvePlaceholder(inner, scope.copies, scope.setTitle);
     if (value === "") return EMPTY_MARK;
     if (spec === null) return value; // unknown token → literal
-    return VALUE_MARK + (fellBack ? `${FB_OPEN}${value}${FB_CLOSE}` : value);
+    // A fallen-back value carries the copy field that produced it, so the preview can offer to fix
+    // that very token (#300) — see {@link FB_FIELD}.
+    const field = fellBack ? tokenField(spec) : null;
+    return VALUE_MARK + (field ? `${FB_OPEN}${field}${FB_FIELD}${value}${FB_CLOSE}` : value);
   });
 }
 
@@ -480,7 +515,7 @@ function renderTextRun(text: string, scope: TemplateScope): string {
  * a repeating block that renders blank contributes nothing, so a set with nothing to say leaves no
  * stray line behind. */
 function isBlankRender(rendered: string): boolean {
-  return rendered.replace(/[ -]/g, "").trim() === "";
+  return rendered.replace(/[\u0000-\u0004]/g, "").trim() === "";
 }
 
 /** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
@@ -527,14 +562,19 @@ function rootScope(sets: readonly TemplateSet[]): TemplateScope {
 export interface TitleSegment {
   text: string;
   fellBack: boolean;
+  /** The {@link TitleTemplateCopy} field the token rendered from, on a fallen-back run only (#300) —
+   * what lets the preview open the right translation editor for the run that was clicked. */
+  field?: string;
 }
 
 /** Sentinels wrapping a fallen-back placeholder's value while the tidy passes run, so the segments
  * and the plain string can never disagree about the final text. Like {@link EMPTY_MARK} these are
  * control characters that never occur in real data; unlike it they survive tidying untouched (they
- * are not whitespace and no rule matches them) and are split out afterwards. */
-const FB_OPEN = "";
-const FB_CLOSE = "";
+ * are not whitespace and no rule matches them) and are split out afterwards. `FB_FIELD` separates
+ * the copy field name a sentinel carries (#300) from the value itself. */
+const FB_OPEN = "\u0001";
+const FB_CLOSE = "\u0002";
+const FB_FIELD = "\u0004";
 
 /** Shared renderer behind every public entry point: parse, render against the set-grouped scope,
  * tidy (one line or many), then split the fallback sentinels out into segments. `fallbackTemplate`
@@ -553,8 +593,15 @@ function renderSegments(
   if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
   return tidied
     .split(new RegExp(`[${FB_OPEN}${FB_CLOSE}]`))
-    // A split on the sentinels alternates outside / inside runs, starting outside.
-    .map((text, i) => ({ text, fellBack: i % 2 === 1 }))
+    // A split on the sentinels alternates outside / inside runs, starting outside. An inside run
+    // still carries `field${FB_FIELD}` in front of its text (#300).
+    .map((run, i) => {
+      if (i % 2 === 0) return { text: run, fellBack: false };
+      const at = run.indexOf(FB_FIELD);
+      return at < 0
+        ? { text: run, fellBack: true }
+        : { text: run.slice(at + 1), fellBack: true, field: run.slice(0, at) };
+    })
     .filter((s) => s.text !== "");
 }
 
@@ -658,4 +705,52 @@ export function listingFallbackTokens(
   sets: readonly TemplateSet[]
 ): string[] {
   return templateFallbackTokens(template, sets);
+}
+
+/**
+ * The **entity fields** behind a template's fallbacks (#299) — one entry per (entity, field) whose
+ * untranslated text this template actually renders for these sets, de-duplicated across the copies
+ * that share it (a condition used by ten copies is one gap) and in first-seen order.
+ *
+ * The same walk as {@link templateFallbackTokens}, kept beside it deliberately: a gap the panel
+ * offers to fill and a token the summary line names are the same thing seen from two ends, so they
+ * can never disagree about what counts. A template that renders none of an entity's translatable
+ * tokens yields nothing for it, however untranslated that entity is.
+ */
+export function templateFallbacks(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  fallbackTemplate: string | null = null
+): TitleFallback[] {
+  const tpl = template?.trim() || fallbackTemplate?.trim() || "";
+  if (!tpl) return [];
+  const scope = rootScope(sets);
+  const out: TitleFallback[] = [];
+  const seen = new Set<string>();
+  for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
+    const { fallbacks } = resolvePlaceholder(m[1], scope.copies, scope.setTitle);
+    for (const f of fallbacks) {
+      const key = `${f.entityType}:${f.entityId}:${f.entityField}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(f);
+    }
+  }
+  return out;
+}
+
+/** {@link templateFallbacks} for a one-line title over a flat copy list (#299). */
+export function titleFallbacks(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): TitleFallback[] {
+  return templateFallbacks(template, [{ title: null, copies }], DEFAULT_TITLE_TEMPLATE);
+}
+
+/** {@link templateFallbacks} for a multi-line listing text over an offer's sets (#299). */
+export function listingFallbacks(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[]
+): TitleFallback[] {
+  return templateFallbacks(template, sets);
 }

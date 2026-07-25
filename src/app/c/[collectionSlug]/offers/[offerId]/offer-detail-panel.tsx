@@ -5,7 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "../offer-badges";
-import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offers-query";
+import {
+  useOfferDetail,
+  useOfferCopies,
+  useOfferTranslationGaps,
+  useInvalidateOffers,
+} from "../use-offers-query";
+import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
@@ -27,6 +33,14 @@ const CHIP: React.CSSProperties = {
   color: "var(--color-text-secondary)",
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
+};
+
+/** The same card the listing texts sit in, for the translation-gaps panel below them. */
+const CARD: React.CSSProperties = {
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.75rem",
+  background: "var(--color-bg-elevated)",
+  padding: "1rem 1.5rem 1.25rem",
 };
 
 const BTN: React.CSSProperties = {
@@ -140,6 +154,11 @@ export function OfferDetailPanel({
     titleLanguages.length > 0
       ? [null, ...titleLanguages].filter((code) => (code ?? defaultLanguage) !== platformLanguage)
       : [];
+  // Translations missing behind the generated texts (#299). Only worth asking for once the
+  // collection lists in a second language at all.
+  const { data: gapData } = useOfferTranslationGaps(collectionId, offerId, titleLanguages.length > 0);
+  const gapLanguage = gapData?.language ?? null;
+  const gaps = gapData?.gaps ?? [];
 
   if (isLoading || !offer) {
     return (
@@ -458,6 +477,23 @@ export function OfferDetailPanel({
         onSave={(field, value) => patch(field, value)}
         onRegenerate={(field) => regenerate(field)}
       />
+
+      {/* Missing translations behind those texts (#299) — filled here rather than by touring
+          Settings and the stamp / issue screens. Each save is an entity mutation of its own; the
+          generated texts are *not* re-rendered by it, since they may have been edited by hand — the
+          field's own ↻ regenerates when you want the new wording. */}
+      {gaps.length > 0 && (
+        <div style={CARD}>
+          <TranslationGapsPanel
+            collectionId={collectionId}
+            language={gapLanguage}
+            gaps={gaps}
+            onSaved={() => invalidateAll(collectionId)}
+            note={`Used by this platform's generated texts. Regenerate a text (↻) to pick up a new translation.`}
+            maxHeight="14rem"
+          />
+        </div>
+      )}
 
       {/* Sets */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

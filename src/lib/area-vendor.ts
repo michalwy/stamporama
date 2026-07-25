@@ -95,6 +95,10 @@ export function buildAreaTitleMap(
 export interface AreaTitleEntry {
   title: string;
   fellBack: boolean;
+  /** The area the winning name came from — this area, or the ancestor whose `titleName` rolled up to
+   * it. That is the row a missing `{area}` translation has to be written on (#299), which is not
+   * always the copy's own area. */
+  sourceAreaId: string;
 }
 
 /** {@link buildAreaTitleMap}, additionally reporting the per-area fallback (#298) so the title
@@ -110,18 +114,26 @@ export function buildAreaTitleEntries(
     let depth = 0;
     let resolved: string | null = null;
     let translated = false;
+    // The area the winning name belongs to. Defaults to the leaf: when nothing rolls up, the title
+    // *is* the leaf's own `name`, and a `titleName` translation written on the leaf would win.
+    let sourceAreaId = area.id;
     while (current && depth < 50) {
       const t = language ? current.titleNameByLanguage[language]?.trim() : undefined;
       const value = t || current.titleName?.trim();
       if (value) {
         resolved = value;
         translated = !!t;
+        sourceAreaId = current.id;
         break;
       }
       current = current.parentId ? byId.get(current.parentId) : undefined;
       depth++;
     }
-    out.set(area.id, { title: resolved ?? area.name, fellBack: !!language && !translated });
+    out.set(area.id, {
+      title: resolved ?? area.name,
+      fellBack: !!language && !translated,
+      sourceAreaId,
+    });
   }
   return out;
 }

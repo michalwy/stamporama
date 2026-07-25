@@ -1,5 +1,10 @@
 import "server-only";
-import type { TitleTemplateCopy, TitleCatalogNumber } from "./offer-title-template";
+import type {
+  TitleTemplateCopy,
+  TitleCatalogNumber,
+  TitleFallback,
+} from "./offer-title-template";
+import type { TranslatableEntity } from "./translations";
 import { prisma } from "./db";
 import { getCollectionAreas } from "./areas";
 import {
@@ -28,6 +33,8 @@ export const TITLE_COPY_SELECT = {
   id: true,
   stamp: {
     select: {
+      // Entity ids ride along so a fallback can name the row a missing translation goes on (#299).
+      id: true,
       name: true,
       issuedYear: true,
       translations: { select: { language: true, name: true } },
@@ -41,6 +48,7 @@ export const TITLE_COPY_SELECT = {
         select: {
           issue: {
             select: {
+              id: true,
               name: true,
               year: true,
               translations: { select: { language: true, name: true } },
@@ -53,6 +61,7 @@ export const TITLE_COPY_SELECT = {
   },
   condition: {
     select: {
+      id: true,
       name: true,
       abbreviation: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
@@ -60,6 +69,7 @@ export const TITLE_COPY_SELECT = {
   },
   certificateStatus: {
     select: {
+      id: true,
       name: true,
       abbreviation: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
@@ -77,15 +87,23 @@ type LabelTranslation = { language: string; name: string | null; abbreviation: s
 export type TitleCopyRow = {
   id: string;
   stamp: {
+    id: string;
     name: string | null;
     issuedYear: number | null;
     translations: NameTranslation[];
     catalogNumbers: { catalogVendorId: string; number: string; catalogVendor: { abbreviation: string } }[];
     stampAreaLinks: { isPrimary: boolean; collectionAreaId: string; collectionArea: { name: string } }[];
-    issueMemberships: { issue: { name: string | null; year: number | null; translations: NameTranslation[] } }[];
+    issueMemberships: {
+      issue: { id: string; name: string | null; year: number | null; translations: NameTranslation[] };
+    }[];
   };
-  condition: { name: string; abbreviation: string; translations: LabelTranslation[] };
-  certificateStatus: { name: string; abbreviation: string; translations: LabelTranslation[] } | null;
+  condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] };
+  certificateStatus: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    translations: LabelTranslation[];
+  } | null;
   location: { name: string } | null;
   locationRef: string | null;
 };
@@ -136,31 +154,49 @@ export function toTitleCopy(
   catalogNumbers.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
   // Each translatable field resolves *and* reports whether it fell back; `fallbacks` collects the
-  // ones that did, keyed by the `TitleTemplateCopy` field the token renders from.
-  const fallbacks: string[] = [];
+  // ones that did, keyed by the `TitleTemplateCopy` field the token renders from and carrying the
+  // entity row a missing translation would be written on (#299).
+  const fallbacks: TitleFallback[] = [];
   const resolve = <T extends { language: string }>(
     field: string,
+    entity: { type: TranslatableEntity; id: string; field: string },
     rows: readonly T[] | undefined,
     pick: (row: T) => string | null | undefined,
     fallback: string | null
   ): string | null => {
     const { value, fellBack } = resolveTranslationWithFallback(rows, language, pick, fallback);
-    if (fellBack) fallbacks.push(field);
+    if (fellBack && value) {
+      fallbacks.push({
+        field,
+        entityType: entity.type,
+        entityId: entity.id,
+        entityField: entity.field,
+        defaultValue: value,
+      });
+    }
     return value;
   };
 
   const copy: TitleTemplateCopy = {
-    name: resolve("name", row.stamp.translations, (t: NameTranslation) => t.name, row.stamp.name),
+    name: resolve(
+      "name",
+      { type: "stamp", id: row.stamp.id, field: "name" },
+      row.stamp.translations,
+      (t: NameTranslation) => t.name,
+      row.stamp.name
+    ),
     catalogNumbers,
     year: row.stamp.issuedYear,
     condition: resolve(
       "condition",
+      { type: "condition", id: row.condition.id, field: "name" },
       row.condition.translations,
       (t: LabelTranslation) => t.name,
       row.condition.name
     ),
     conditionAbbr: resolve(
       "conditionAbbr",
+      { type: "condition", id: row.condition.id, field: "abbreviation" },
       row.condition.translations,
       (t: LabelTranslation) => t.abbreviation,
       row.condition.abbreviation
@@ -168,6 +204,7 @@ export function toTitleCopy(
     certificate: row.certificateStatus
       ? resolve(
           "certificate",
+          { type: "certificateStatus", id: row.certificateStatus.id, field: "name" },
           row.certificateStatus.translations,
           (t: LabelTranslation) => t.name,
           row.certificateStatus.name
@@ -176,6 +213,7 @@ export function toTitleCopy(
     certificateAbbr: row.certificateStatus
       ? resolve(
           "certificateAbbr",
+          { type: "certificateStatus", id: row.certificateStatus.id, field: "abbreviation" },
           row.certificateStatus.translations,
           (t: LabelTranslation) => t.abbreviation,
           row.certificateStatus.abbreviation
@@ -185,12 +223,27 @@ export function toTitleCopy(
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
     issueName: issue
-      ? resolve("issueName", issue.translations, (t: NameTranslation) => t.name, issue.name)
+      ? resolve(
+          "issueName",
+          { type: "issue", id: issue.id, field: "name" },
+          issue.translations,
+          (t: NameTranslation) => t.name,
+          issue.name
+        )
       : null,
     issueYear: issue?.year ?? null,
   };
-  // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately.
-  if (areaTitle && areaEntry?.fellBack) fallbacks.push("area");
+  // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately — and
+  // against the area the winning name came from, which may be an ancestor of the copy's own (#299).
+  if (areaTitle && areaEntry?.fellBack) {
+    fallbacks.push({
+      field: "area",
+      entityType: "area",
+      entityId: areaEntry.sourceAreaId,
+      entityField: "titleName",
+      defaultValue: areaTitle,
+    });
+  }
   return fallbacks.length > 0 ? { ...copy, fallbacks } : copy;
 }
 

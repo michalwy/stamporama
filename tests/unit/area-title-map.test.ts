@@ -126,6 +126,7 @@ describe("buildAreaTitleEntries fallback reporting (#298)", () => {
     assert.deepEqual(buildAreaTitleEntries([root, leaf], "pl").get("l"), {
       title: "Korzeń",
       fellBack: false,
+      sourceAreaId: "r",
     });
   });
 
@@ -133,15 +134,29 @@ describe("buildAreaTitleEntries fallback reporting (#298)", () => {
     assert.deepEqual(buildAreaTitleEntries([root, leaf], "de").get("l"), {
       title: "Root",
       fellBack: true,
+      sourceAreaId: "r",
     });
   });
 
   it("reports a fallback when nothing is configured and the area's own name is used", () => {
     const a = area({ id: "a", name: "Germany" });
-    assert.deepEqual(buildAreaTitleEntries([a], "pl").get("a"), { title: "Germany", fellBack: true });
+    assert.deepEqual(buildAreaTitleEntries([a], "pl").get("a"), { title: "Germany", fellBack: true, sourceAreaId: "a" });
   });
 
   it("never reports a fallback without a language", () => {
     assert.equal(buildAreaTitleEntries([root, leaf], null).get("l")?.fellBack, false);
+  });
+});
+
+describe("buildAreaTitleEntries source area (#299)", () => {
+  it("names the ancestor whose title rolled up, since that is the row to translate", () => {
+    const root = area({ id: "r", name: "Root", titleName: "Root" });
+    const leaf = area({ id: "l", name: "Leaf", parentId: "r" });
+    assert.equal(buildAreaTitleEntries([root, leaf], "pl").get("l")?.sourceAreaId, "r");
+  });
+
+  it("names the area itself when nothing rolls up and its own name is used", () => {
+    const a = area({ id: "a", name: "Germany" });
+    assert.equal(buildAreaTitleEntries([a], "pl").get("a")?.sourceAreaId, "a");
   });
 });

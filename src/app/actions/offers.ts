@@ -19,10 +19,12 @@ import {
   updateOfferSet,
   removeOfferSet,
   previewOfferTitle,
+  offerTranslationGaps,
+  type OfferTitlePreview,
   OfferActionBlockedError,
   type OfferInput,
 } from "@/lib/offers";
-import type { TitleSegment } from "@/lib/offer-title-template";
+import type { TitleFallback } from "@/lib/offer-title-template";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
   isOfferState,
@@ -177,19 +179,34 @@ export async function addOfferSetAction(
 
 /** The title `itemIds` would be given on this offer's platform, for the compose dialog's live
  * preview (#297) — read-only, writes nothing. `language` previews another language than the
- * platform's; the segments flagged `fellBack` render untranslated text (#298). Null when the
- * platform has no title template, i.e. there is no generated title to preview. */
+ * platform's; the segments flagged `fellBack` render untranslated text (#298) and `gaps` names the
+ * entity fields behind them, for filling in place (#299). Null when the platform has no title
+ * template, i.e. there is no generated title to preview. */
 export async function previewOfferTitleAction(
   offerId: string,
   itemIds: string[],
   language?: string | null
-): Promise<{ segments: TitleSegment[]; fallbackTokens: string[] } | null> {
+): Promise<OfferTitlePreview | null> {
   const session = await getSession();
   try {
     return await previewOfferTitle(session.user.id, offerId, itemIds, language);
   } catch {
     // A preview is never worth an error banner — the compose dialog simply shows nothing.
     return null;
+  }
+}
+
+/** The translations missing behind an offer's generated texts, in the platform's listing language
+ * (#299) — what the offer detail screen offers to fill in place. Empty rather than an error when
+ * anything goes wrong: this is an assist, never a blocker. */
+export async function offerTranslationGapsAction(
+  offerId: string
+): Promise<{ language: string | null; gaps: TitleFallback[] }> {
+  const session = await getSession();
+  try {
+    return await offerTranslationGaps(session.user.id, offerId);
+  } catch {
+    return { language: null, gaps: [] };
   }
 }
 

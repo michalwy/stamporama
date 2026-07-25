@@ -317,6 +317,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
     return {
       id: "item-1",
       stamp: {
+        id: "stamp-1",
         name: "5 kr blue",
         issuedYear: 1918,
         translations: [{ language: "pl", name: "5 kr niebieski" }],
@@ -325,6 +326,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         issueMemberships: [
           {
             issue: {
+              id: "issue-1",
               name: "First Issue",
               year: 1918,
               translations: [{ language: "pl", name: "Pierwsze wydanie" }],
@@ -333,12 +335,14 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         ],
       },
       condition: {
+        id: "cond-1",
         name: "Mint Never Hinged",
         abbreviation: "MNH",
         // Polish translates the name but deliberately keeps the abbreviation.
         translations: [{ language: "pl", name: "Czyste bez podlepki", abbreviation: null }],
       },
       certificateStatus: {
+        id: "cert-1",
         name: "Certificate",
         abbreviation: "Cert",
         translations: [{ language: "pl", name: "Atest", abbreviation: "At." }],

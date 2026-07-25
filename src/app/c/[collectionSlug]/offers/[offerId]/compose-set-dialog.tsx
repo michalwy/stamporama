@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -20,8 +20,12 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { TitlePreviewText, TitleFallbackNote } from "@/app/c/[collectionSlug]/shared/title-preview";
+import {
+  TranslationGapsPanel,
+  TranslationGapPopover,
+} from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
-import type { TitleSegment } from "@/lib/offer-title-template";
+import type { OfferTitlePreview } from "@/lib/offers";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 
 const SEARCH_STYLE: React.CSSProperties = {
@@ -96,9 +100,14 @@ export function ComposeSetDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
 
+  // Set while the translation popover (#300) is up. This dialog's Escape handler is registered
+  // first, so it would run *before* the popover's and close the whole dialog out from under it —
+  // it defers instead, and the popover closes itself.
+  const popoverOpen = useRef(false);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !popoverOpen.current) {
         e.stopImmediatePropagation();
         onClose();
       }
@@ -187,7 +196,10 @@ export function ComposeSetDialog({
 
   // Live preview of the title the selection will get, rendered by the server (only it can resolve
   // translated entity text). Debounced, because it re-runs on every checkbox click.
-  const [rawPreview, setPreview] = useState<{ segments: TitleSegment[]; fallbackTokens: string[] } | null>(null);
+  const [rawPreview, setPreview] = useState<OfferTitlePreview | null>(null);
+  // Bumped after a translation is saved (#299), so the preview re-runs against the new text even
+  // though neither the selection nor the language changed.
+  const [previewNonce, setPreviewNonce] = useState(0);
   // Dropping the last copy clears the preview a beat before the debounce would.
   const preview = selectedIds.length > 0 ? rawPreview : null;
   const previewKey = `${language}:${selectedIds.join(",")}`;
@@ -208,7 +220,25 @@ export function ComposeSetDialog({
     };
     // `previewKey` stands in for the selection + language; `selectedIds` is a fresh array each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offerId, previewKey, languageOverride]);
+  }, [offerId, previewKey, languageOverride, previewNonce]);
+
+  // The token whose translation the popover is editing (#300), with where its run sits on screen.
+  const [fixing, setFixing] = useState<{ field: string; anchor: { left: number; bottom: number } } | null>(null);
+  // Filling a gap changes entity data, not the offer — so the only thing to do afterwards is
+  // re-render the title it feeds. The gap leaves the list because the new preview no longer reports
+  // it, which is also what keeps the panel honest if a save is rejected.
+  const refreshPreview = useCallback(() => setPreviewNonce((n) => n + 1), []);
+  const previewLanguage = preview?.language ?? null;
+  const fixingGaps = useMemo(
+    () => (fixing ? (preview?.gaps ?? []).filter((g) => g.field === fixing.field) : []),
+    [fixing, preview]
+  );
+  // A token whose gaps were all just filled has nothing left to edit, so the popover closes itself
+  // as soon as the refreshed preview stops reporting them.
+  const openFix = fixing && fixingGaps.length > 0 ? fixing : null;
+  useEffect(() => {
+    popoverOpen.current = openFix !== null;
+  }, [openFix]);
 
   function submit(perCopy: boolean) {
     if (selectedIds.length === 0) {
@@ -330,7 +360,14 @@ export function ComposeSetDialog({
             </span>
             <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", wordBreak: "break-word", marginTop: "0.25rem" }}>
               {preview ? (
-                <TitlePreviewText segments={preview.segments} />
+                <TitlePreviewText
+                  segments={preview.segments}
+                  onFixField={
+                    previewLanguage
+                      ? (field, anchor) => setFixing({ field, anchor })
+                      : undefined
+                  }
+                />
               ) : (
                 <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
                   {selectedIds.length === 0
@@ -340,6 +377,18 @@ export function ComposeSetDialog({
               )}
             </div>
             {preview && <TitleFallbackNote tokens={preview.fallbackTokens} />}
+            {/* Fill the gaps right here (#299) — each saves on its own, so they survive Cancel. */}
+            {preview && (
+              <div style={{ marginTop: "0.5rem" }}>
+                <TranslationGapsPanel
+                  collectionId={collectionId}
+                  language={previewLanguage}
+                  gaps={preview.gaps}
+                  onSaved={refreshPreview}
+                  note="Saved straight away — they stay even if you cancel this dialog."
+                />
+              </div>
+            )}
             {preview && multi && (
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
                 Adding as separate sets titles each one from its own copy.
@@ -371,6 +420,17 @@ export function ComposeSetDialog({
             </label>
           )}
         </div>
+      )}
+
+      {openFix && previewLanguage && (
+        <TranslationGapPopover
+          collectionId={collectionId}
+          language={previewLanguage}
+          gaps={fixingGaps}
+          anchor={openFix.anchor}
+          onSaved={refreshPreview}
+          onClose={() => setFixing(null)}
+        />
       )}
 
       <DialogFooter>

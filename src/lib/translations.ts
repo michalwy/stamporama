@@ -16,6 +16,26 @@ import { normalizeLanguage } from "./languages";
  */
 export type TranslationValueMap = Record<string, Record<string, string | null>>;
 
+/** The entities that carry a translation child table (#293–#296). Names the row a missing
+ * translation is filled on (#299), which is why it lives here rather than in any one entity's
+ * module — the gap-filling path dispatches over it. */
+export type TranslatableEntity =
+  | "stamp"
+  | "issue"
+  | "condition"
+  | "certificateStatus"
+  | "area";
+
+/** The translatable columns of each entity, in the order their forms show them. Also the guard the
+ * single-field save path validates an incoming field name against. */
+export const TRANSLATABLE_ENTITY_FIELDS: Readonly<Record<TranslatableEntity, readonly string[]>> = {
+  stamp: ["name"],
+  issue: ["name"],
+  condition: ["name", "abbreviation"],
+  certificateStatus: ["name", "abbreviation"],
+  area: ["titleName"],
+};
+
 /** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */
 export function translationFieldName(fieldKey: string, language: string): string {
   return `${fieldKey}:${language}`;

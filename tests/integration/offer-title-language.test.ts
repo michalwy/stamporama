@@ -173,7 +173,7 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
     assert.deepEqual(
       preview?.segments,
       [
-        { text: "Pegasus", fellBack: true },
+        { text: "Pegasus", fellBack: true, field: "name" },
         { text: " Kasowane Polska", fellBack: false },
       ]
     );

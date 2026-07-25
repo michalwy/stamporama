@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { OfferListItem, OfferCollision, OfferDetail, ComposeTargets } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
+import type { TitleFallback } from "@/lib/offer-title-template";
 // (offer copies for the rich sets view)
 import type { OfferState } from "@/lib/offer-rules";
 
@@ -142,6 +143,21 @@ export function useComposeTargets(collectionId: string, itemId: string, enabled:
       );
       if (!res.ok) throw new Error("Failed to load offers");
       return res.json();
+    },
+    enabled,
+  });
+}
+
+/** The entity translations missing behind an offer's generated texts, in the platform's listing
+ * language (#299) — the offer screen's "fill it here" panel. Read through the server action rather
+ * than a route handler: it is a small, screen-specific read, and it lives under the offers key so
+ * `invalidateAll` refreshes it whenever the composition or a translation changes. */
+export function useOfferTranslationGaps(collectionId: string, offerId: string, enabled: boolean) {
+  return useQuery<{ language: string | null; gaps: TitleFallback[] }>({
+    queryKey: ["offers", collectionId, "translation-gaps", offerId] as const,
+    queryFn: async () => {
+      const { offerTranslationGapsAction } = await import("@/app/actions/offers");
+      return offerTranslationGapsAction(offerId);
     },
     enabled,
   });

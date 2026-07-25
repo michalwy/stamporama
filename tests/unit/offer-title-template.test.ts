@@ -4,11 +4,38 @@ import {
   renderTitleTemplate,
   renderTitleTemplateSegments,
   titleFallbackTokens,
+  titleFallbacks,
   DEFAULT_TITLE_TEMPLATE,
   AVAILABLE_TITLE_TOKENS,
   type TitleTemplateCopy,
   type TitleCatalogNumber,
+  type TitleFallback,
 } from "../../src/lib/offer-title-template";
+import type { TranslatableEntity } from "../../src/lib/translations";
+
+/** A fallen-back field of a test copy (#298/#299). The entity behind it defaults to a row named
+ * after the field, which is all most assertions care about; `over` names a specific one where the
+ * test is about *which* entity a gap points at. */
+function fb(field: string, over: Partial<TitleFallback> = {}): TitleFallback {
+  const entityByField: Record<string, { type: TranslatableEntity; field: string }> = {
+    name: { type: "stamp", field: "name" },
+    condition: { type: "condition", field: "name" },
+    conditionAbbr: { type: "condition", field: "abbreviation" },
+    certificate: { type: "certificateStatus", field: "name" },
+    certificateAbbr: { type: "certificateStatus", field: "abbreviation" },
+    area: { type: "area", field: "titleName" },
+    issueName: { type: "issue", field: "name" },
+  };
+  const entity = entityByField[field];
+  return {
+    field,
+    entityType: entity.type,
+    entityId: `${entity.type}-1`,
+    entityField: entity.field,
+    defaultValue: field,
+    ...over,
+  };
+}
 
 /** Build one catalog number for a test copy. */
 function cn(
@@ -350,7 +377,7 @@ describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
     condition: "Mint never hinged",
     area: "Polska",
     catalogNumbers: [cn("Mi", "12", { isPrimary: true })],
-    fallbacks: ["condition"],
+    fallbacks: [fb("condition", { defaultValue: "Mint never hinged" })],
   });
 
   it("concatenates to exactly what renderTitleTemplate returns", () => {
@@ -364,7 +391,7 @@ describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
   it("marks only the fallen-back token's text", () => {
     assert.deepEqual(renderTitleTemplateSegments("{name} {condition} {area}", [c]), [
       { text: "Merkury ", fellBack: false },
-      { text: "Mint never hinged", fellBack: true },
+      { text: "Mint never hinged", fellBack: true, field: "condition" },
       { text: " Polska", fellBack: false },
     ]);
   });
@@ -377,10 +404,10 @@ describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
 
   it("still trims the glue separator of an empty token next to a marked one", () => {
     assert.deepEqual(renderTitleTemplateSegments("{year} - {condition}", [c]), [
-      { text: "Mint never hinged", fellBack: true },
+      { text: "Mint never hinged", fellBack: true, field: "condition" },
     ]);
     assert.deepEqual(renderTitleTemplateSegments("{condition} - {year}", [c]), [
-      { text: "Mint never hinged", fellBack: true },
+      { text: "Mint never hinged", fellBack: true, field: "condition" },
     ]);
   });
 
@@ -388,7 +415,7 @@ describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
     const numbers = copy({
       catalogNumbers: [cn("Mi", "12", { isPrimary: true })],
       year: 1950,
-      fallbacks: ["condition"],
+      fallbacks: [fb("condition", { defaultValue: "Mint never hinged" })],
     });
     assert.deepEqual(renderTitleTemplateSegments("{catalog} {year}", [numbers]), [
       { text: "Mi 12 1950", fellBack: false },
@@ -403,18 +430,66 @@ describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
   });
 
   it("reports the winning alternative of a fallback group, in legend spelling", () => {
-    const grouped = copy({ issueName: null, name: "Merkury", fallbacks: ["name"] });
+    const grouped = copy({ issueName: null, name: "Merkury", fallbacks: [fb("name", { defaultValue: "Merkury" })] });
     assert.deepEqual(titleFallbackTokens("{issuename|name}", [grouped]), ["{name}"]);
     // The group's first alternative wins when it resolves, and it is translated here.
-    const withIssue = copy({ issueName: "Wydanie", name: "Merkury", fallbacks: ["name"] });
+    const withIssue = copy({ issueName: "Wydanie", name: "Merkury", fallbacks: [fb("name", { defaultValue: "Merkury" })] });
     assert.deepEqual(titleFallbackTokens("{issueName|name}", [withIssue]), []);
   });
 
   it("lists each fallen-back token once, in template order", () => {
-    const both = copy({ condition: "Mint", area: "Poland", fallbacks: ["condition", "area"] });
+    const both = copy({ condition: "Mint", area: "Poland", fallbacks: [fb("condition", { defaultValue: "Mint" }), fb("area", { defaultValue: "Poland" })] });
     assert.deepEqual(titleFallbackTokens("{area} {condition} {condition}", [both]), [
       "{area}",
       "{condition}",
+    ]);
+  });
+});
+
+describe("titleFallbacks — the entity gaps a template surfaces (#299)", () => {
+  const condition = fb("condition", { entityId: "cond-1", defaultValue: "Mint never hinged" });
+  const stampName = fb("name", { entityId: "stamp-1", defaultValue: "Merkury" });
+  const c = copy({
+    name: "Merkury",
+    condition: "Mint never hinged",
+    area: "Polska",
+    catalogNumbers: [cn("Mi", "12", { isPrimary: true })],
+    fallbacks: [stampName, condition],
+  });
+
+  it("reports the entity row behind each token the template renders", () => {
+    assert.deepEqual(titleFallbacks("{name} - {condition}", [c]), [stampName, condition]);
+  });
+
+  it("ignores a gap no token in the template renders", () => {
+    assert.deepEqual(titleFallbacks("{condition}", [c]), [condition]);
+    assert.deepEqual(titleFallbacks("{catalog} {year}", [c]), []);
+  });
+
+  it("lists an entity shared by several copies once", () => {
+    const other = copy({ condition: "Mint never hinged", fallbacks: [condition] });
+    assert.deepEqual(titleFallbacks("{condition}", [c, other]), [condition]);
+  });
+
+  it("lists the same entity's two fields separately", () => {
+    const abbr = fb("conditionAbbr", { entityId: "cond-1", defaultValue: "MNH" });
+    const both = copy({
+      condition: "Mint never hinged",
+      conditionAbbr: "MNH",
+      fallbacks: [condition, abbr],
+    });
+    assert.deepEqual(titleFallbacks("{condition} ({conditionAbbr})", [both]), [condition, abbr]);
+  });
+
+  it("reports nothing when nothing fell back", () => {
+    assert.deepEqual(titleFallbacks("{name} {condition}", [copy({ name: "Merkury" })]), []);
+  });
+
+  it("names the field on the segment it flagged, so the run can be fixed in place (#300)", () => {
+    assert.deepEqual(renderTitleTemplateSegments("{name} {condition}", [c]), [
+      { text: "Merkury", fellBack: true, field: "name" },
+      { text: " ", fellBack: false },
+      { text: "Mint never hinged", fellBack: true, field: "condition" },
     ]);
   });
 });

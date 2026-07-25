@@ -18,7 +18,10 @@ import {
   renderTitleTemplateSegments,
   renderListingTemplate,
   titleFallbackTokens,
+  titleFallbacks,
+  listingFallbacks,
   type TitleSegment,
+  type TitleFallback,
   type TemplateSet,
   type TitleTemplateCopy,
 } from "./offer-title-template";
@@ -356,7 +359,8 @@ async function titleCopiesById(
 
 /** The title a set of `itemIds` would be given on this offer's platform, without writing anything
  * (#297/#298). Returns the title split into segments — the ones resolved from untranslated text are
- * flagged (#298) — plus the tokens that fell back, for the preview's summary line.
+ * flagged (#298) — the tokens that fell back, for the preview's summary line, and the entity fields
+ * behind them, which the dialog offers to fill in place (#299).
  *
  * `language` overrides the platform's listing language, which is how the compose dialog previews a
  * title in another language (#297). Null `segments` means the platform has no template configured:
@@ -366,19 +370,66 @@ export async function previewOfferTitle(
   offerId: string,
   itemIds: string[],
   language?: string | null
-): Promise<{ segments: TitleSegment[]; fallbackTokens: string[] } | null> {
+): Promise<OfferTitlePreview | null> {
   const ref = await assertOfferOwner(ownerId, offerId);
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
   if (!titleTemplate?.trim() || itemIds.length === 0) return null;
-  const copies = await titleCopies(
-    ownerId,
-    ref.collectionId,
-    itemIds,
-    language === undefined ? titleLanguage : language
-  );
+  const effectiveLanguage = language === undefined ? titleLanguage : language;
+  const copies = await titleCopies(ownerId, ref.collectionId, itemIds, effectiveLanguage);
   return {
     segments: renderTitleTemplateSegments(titleTemplate, copies),
     fallbackTokens: titleFallbackTokens(titleTemplate, copies),
+    language: effectiveLanguage,
+    gaps: titleFallbacks(titleTemplate, copies),
+  };
+}
+
+/** What {@link previewOfferTitle} hands the compose dialog: the flagged title (#298) plus the gaps
+ * it can fill in place (#299). */
+export interface OfferTitlePreview {
+  segments: TitleSegment[];
+  fallbackTokens: string[];
+  /** The language the preview resolved in — null for the collection's default, where nothing can
+   * fall back and `gaps` is therefore always empty. */
+  language: string | null;
+  gaps: TitleFallback[];
+}
+
+/** The entity translations missing behind an offer's **already generated** texts (#299): every gap
+ * the platform's title, description and private-note templates surface over the offer's present
+ * composition, in the platform's own listing language.
+ *
+ * That language rather than a per-regeneration override (#297): what the offer is listed in is the
+ * platform's language, and a one-off regeneration in another language is exactly that — one-off.
+ * Empty for a platform with no templates, an empty offer, or a collection listing only in its own
+ * default language. */
+export async function offerTranslationGaps(
+  ownerId: string,
+  offerId: string
+): Promise<{ language: string | null; gaps: TitleFallback[] }> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  const templates = await assertPlatform(ref.collectionId, ref.platformId);
+  const language = templates.titleLanguage;
+  const composition = await offerComposition(offerId);
+  if (!language || composition.length === 0) return { language, gaps: [] };
+  const sets = await templateSets(ownerId, ref.collectionId, composition, language);
+  const copies = sets.flatMap((s) => [...s.copies]);
+  const gaps: TitleFallback[] = [
+    ...(templates.titleTemplate?.trim() ? titleFallbacks(templates.titleTemplate, copies) : []),
+    ...listingFallbacks(templates.descriptionTemplate, sets),
+    ...listingFallbacks(templates.privateNoteTemplate, sets),
+  ];
+  // The three templates overlap heavily — a description usually repeats the title's tokens — so the
+  // union is deduplicated on the entity row, exactly as each template's own list is.
+  const seen = new Set<string>();
+  return {
+    language,
+    gaps: gaps.filter((g) => {
+      const key = `${g.entityType}:${g.entityId}:${g.entityField}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
   };
 }
 

@@ -5,12 +5,23 @@ import {
   renderListingTemplateSegments,
   renderTitleTemplate,
   listingFallbackTokens,
+  listingFallbacks,
   AVAILABLE_LISTING_TOKENS,
   AVAILABLE_LISTING_BLOCKS,
   type TemplateSet,
   type TitleTemplateCopy,
   type TitleCatalogNumber,
+  type TitleFallback,
 } from "../../src/lib/offer-title-template";
+
+/** The condition of the test copies below, untranslated for the language in play (#298/#299). */
+const conditionFallback: TitleFallback = {
+  field: "condition",
+  entityType: "condition",
+  entityId: "cond-1",
+  entityField: "name",
+  defaultValue: "Mint",
+};
 
 // The multi-line listing texts an offer carries (#266 description, #267 private note): the same
 // token engine as the title, plus preserved line breaks, all-empty lines dropped and the repeating
@@ -137,17 +148,17 @@ describe("renderListingTemplate — repeating blocks", () => {
 
 describe("renderListingTemplateSegments / listingFallbackTokens", () => {
   it("flags text that fell back to the default language, inside and outside a block", () => {
-    const fallen = copy({ name: "Mercury", condition: "Mint", fallbacks: ["condition"] });
+    const fallen = copy({ name: "Mercury", condition: "Mint", fallbacks: [conditionFallback] });
     const sets: TemplateSet[] = [{ title: null, copies: [fallen] }];
     assert.deepEqual(renderListingTemplateSegments("{name}\n{#set}{condition}{/set}", sets), [
       { text: "Mercury\n", fellBack: false },
-      { text: "Mint", fellBack: true },
+      { text: "Mint", fellBack: true, field: "condition" },
     ]);
     assert.deepEqual(listingFallbackTokens("{name}\n{#set}{condition}{/set}", sets), ["{condition}"]);
   });
 
   it("concatenated segments equal the plain render", () => {
-    const fallen = copy({ name: "Merkury", condition: "Mint", year: 1850, fallbacks: ["condition"] });
+    const fallen = copy({ name: "Merkury", condition: "Mint", year: 1850, fallbacks: [conditionFallback] });
     const sets: TemplateSet[] = [{ title: "Lot", copies: [fallen] }];
     const template = "{setTitle}\n{#set}{name} - {certificate} - {condition} ({year})\n{/set}";
     const segments = renderListingTemplateSegments(template, sets);
@@ -167,5 +178,20 @@ describe("listing token legend", () => {
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),
       ["{#set}{/set}", "{#copy}{/copy}"]
     );
+  });
+});
+
+describe("listingFallbacks (#299)", () => {
+  it("reports the entity behind a gap inside a repeating block", () => {
+    const fallen = copy({ name: "Mercury", condition: "Mint", fallbacks: [conditionFallback] });
+    const sets: TemplateSet[] = [{ title: null, copies: [fallen] }];
+    assert.deepEqual(listingFallbacks("{#set}{name} — {condition}\n{/set}", sets), [
+      conditionFallback,
+    ]);
+  });
+
+  it("reports nothing for a template that renders none of the untranslated tokens", () => {
+    const fallen = copy({ name: "Mercury", condition: "Mint", year: 1850, fallbacks: [conditionFallback] });
+    assert.deepEqual(listingFallbacks("{name} {year}", [{ title: null, copies: [fallen] }]), []);
   });
 });

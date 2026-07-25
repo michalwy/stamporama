@@ -168,8 +168,33 @@ titles the sets you are adding in that language. Like regenerating, it applies t
 
 Where you have not entered text for the chosen language, the title still generates from your default
 text — those words are marked with a dotted underline and listed beneath the preview, so you can see
-what is missing without being blocked. Fill the gap in from the entity's 🌐 button (see
-[Contacts](contacts.md#title-names-per-language)) and regenerate.
+what is missing without being blocked.
+
+### Filling a missing translation without leaving the dialog
+
+You do not have to go hunting through Settings and the stamp and issue screens to fix those gaps.
+Under the preview, **Missing … translations** lists each one — what it is (Stamp, Condition, Area, …),
+the default text that was used, and a box for the language you are titling in. Type the translation
+and press Enter (or click away) and it is saved **straight away**, on its own:
+
+- It is saved on the stamp, issue, condition, certificate status or area itself — the same text the
+  entity's own 🌐 button edits — so it applies everywhere that entity is used from now on, in this
+  offer and every future one.
+- It is **not** part of the offer: cancelling the Add set dialog keeps the translation you typed.
+- The preview re-renders as soon as it saves, and the gap leaves the list.
+
+You can also click a dotted-underlined word in the preview itself to edit just that one, in a small
+popover. Clearing a box again removes the translation and the default text comes back.
+
+An **{area}** gap is filled on the area whose title name actually appears in your titles, which is
+not always the copy's own area: with title names rolled up from a parent (see
+[Area names in titles](contacts.md#area-names-in-titles)), the parent is the one that needs the
+translation, and that is the row the panel writes to.
+
+The same panel appears on the offer screen, under the listing text, for the translations missing
+behind the offer's generated texts in the platform's own language. Saving one there does **not**
+rewrite texts you already have — they may have been edited by hand — so use each field's **↻** when
+you want the new wording.
 
 ## One active offer per copy, per platform
 
