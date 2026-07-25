@@ -75,6 +75,7 @@ function CertificateStatusForm({
   titleLanguages,
   defaultLanguage,
   isPending,
+  onNestedDialogOpenChange,
 }: {
   defaultName?: string;
   defaultAbbreviation?: string;
@@ -83,6 +84,9 @@ function CertificateStatusForm({
   titleLanguages: string[];
   defaultLanguage: string;
   isPending: boolean;
+  /** Raised while a translations dialog is open on top of this form, so the enclosing dialog stops
+   * dismissing itself on Esc / backdrop click — otherwise one Esc closes both. */
+  onNestedDialogOpenChange?: (open: boolean) => void;
 }) {
   const translatable = titleLanguages.length > 0;
   // Controlled so the translations dialog's placeholders show the *live* default-language text a
@@ -123,6 +127,7 @@ function CertificateStatusForm({
               fields={[{ ...ABBREVIATION_FIELDS[0], defaultValue: abbreviation }]}
               values={abbrTranslations}
               onChange={setAbbrTranslations}
+              onOpenChange={onNestedDialogOpenChange}
               ariaLabel="Edit certificate status abbreviation translations"
               disabled={isPending}
             />
@@ -153,6 +158,7 @@ function CertificateStatusForm({
               fields={[{ ...NAME_FIELDS[0], defaultValue: name }]}
               values={nameTranslations}
               onChange={setNameTranslations}
+              onOpenChange={onNestedDialogOpenChange}
               ariaLabel="Edit certificate status name translations"
               disabled={isPending}
             />
@@ -179,6 +185,9 @@ export function CertificateStatusesPanel({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<CertificateStatusActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
+  // A translations dialog (🌐) opens *on top of* this one; while it is up this dialog must stop
+  // dismissing itself, or one Esc would close both.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
   // Local ordering for optimistic drag-and-drop; re-synced on server refresh
   // via the render-phase "reset state when a prop changes" pattern.
@@ -354,13 +363,14 @@ export function CertificateStatusesPanel({
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add" && (
-        <DialogShell title="Add certificate status" onClose={closeDialog}>
+        <DialogShell title="Add certificate status" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => createCertificateStatusAction(collectionId, fd), e)}>
             <DialogBody>
               <CertificateStatusForm
                 titleLanguages={titleLanguages}
                 defaultLanguage={defaultLanguage}
                 isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
               />
             </DialogBody>
             <DialogActions actionLabel={isPending ? "Saving…" : "Save"} onCancel={closeDialog} disabled={isPending} error={error} />
@@ -369,7 +379,7 @@ export function CertificateStatusesPanel({
       )}
 
       {dialog.kind === "edit" && (
-        <DialogShell title="Edit certificate status" onClose={closeDialog}>
+        <DialogShell title="Edit certificate status" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form style={FORM_STYLE} onSubmit={(e) => submitAction((fd) => updateCertificateStatusAction(dialog.status.id, fd), e)}>
             <DialogBody>
               <CertificateStatusForm
@@ -382,6 +392,7 @@ export function CertificateStatusesPanel({
                 titleLanguages={titleLanguages}
                 defaultLanguage={defaultLanguage}
                 isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
               />
             </DialogBody>
             <DialogActions actionLabel={isPending ? "Saving…" : "Save"} onCancel={closeDialog} disabled={isPending} error={error} />
