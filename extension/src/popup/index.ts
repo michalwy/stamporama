@@ -1,4 +1,11 @@
-import { getActiveProfile, type Profile } from "../core/profile";
+import {
+  assignProfileColors,
+  getProfileStore,
+  profileSubtitle,
+  profileTarget,
+  setActiveProfileId,
+  type Profile,
+} from "../core/profile";
 import { findModuleForUrl } from "../platform/modules";
 import type {
   BackgroundRequest,
@@ -23,6 +30,9 @@ const BATCH_SIZE = 25;
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const badge = $("badge");
+const badgeName = $("badgeName");
+const badgeUrl = $("badgeUrl");
+const profileSelect = $<HTMLSelectElement>("profileSelect");
 const scanEl = $("scan");
 const foundEl = $("found");
 const statusEl = $("status");
@@ -40,6 +50,8 @@ let profile: Profile | null = null;
 let items: ExtractedItem[] = [];
 let results: MatchResult[] = [];
 let busy = false;
+/** Bumped on every profile switch, so a match still in flight for the previous target is discarded. */
+let generation = 0;
 
 // The page we operate on. The service worker passes the source tab's id when it opens this window;
 // we must not fall back to "active tab in the current window", because in a separate window that is
@@ -148,25 +160,97 @@ document.addEventListener("keydown", (e) => {
 function targetLine(): string {
   return `<div>Target: <span class="target">${esc(profile?.name ?? "?")}</span></div>` +
     `<div class="target" style="font-weight:400;color:var(--muted);font-size:11px">${esc(
-      profile?.apiBaseUrl ?? ""
-    )} · ${esc(profile?.collectionName || profile?.collectionId || "")}</div>`;
+      profile ? profileSubtitle(profile) : ""
+    )}</div>`;
 }
 
-// ── Profile + page scan ──────────────────────────────────────────────────────
+// ── Profile badge + selector ─────────────────────────────────────────────────
+// The badge names the active target and wears its colour, and the selector beside it switches target
+// without leaving the window. Switching is a real re-point: results from the previous instance are
+// dropped and the page is matched again, so what is on screen always belongs to what the badge says.
+
+/** False right after a switch: the background's per-tab cache was computed for the previous target. */
+let mayUseCachedResults = true;
+/** Set once the initial load has read the profile, so storage events can't race the first render. */
+let ready = false;
 
 async function refreshProfile(): Promise<void> {
-  profile = await getActiveProfile();
+  const { profiles, activeProfileId } = await getProfileStore();
+  const colors = assignProfileColors(profiles);
+  profile = profiles.find((p) => p.id === activeProfileId) ?? null;
+
+  profileSelect.hidden = profiles.length === 0;
+  profileSelect.replaceChildren(
+    ...profiles.map((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.name || "Profile"} — ${profileSubtitle(p)}`;
+      opt.selected = p.id === activeProfileId;
+      return opt;
+    })
+  );
+
   if (profile) {
     badge.classList.remove("none");
-    badge.innerHTML = `<span class="name">${esc(profile.name || "Profile")}</span><span class="url">${esc(
-      profile.apiBaseUrl
-    )} · ${esc(profile.collectionName || profile.collectionId)}</span>`;
+    badge.style.setProperty("--accent", colors.get(profile.id) ?? "");
+    badgeName.textContent = profile.name || "Profile";
+    badgeUrl.textContent = profileSubtitle(profile);
   } else {
     badge.classList.add("none");
-    badge.textContent = "No active profile — set one in Options, then click the toolbar icon again.";
+    badge.style.removeProperty("--accent");
+    badgeName.textContent = "No active profile";
+    badgeUrl.textContent = "Add one in Options, then click the toolbar icon again.";
   }
   syncButtons();
 }
+
+/** Everything on screen belongs to the old target — drop it, then match the page against the new one. */
+async function switchTarget(): Promise<void> {
+  for (const url of photoUrls.values()) if (url) URL.revokeObjectURL(url);
+  photoUrls.clear();
+  results = [];
+  picks = [];
+  resultsEl.replaceChildren();
+  chipsEl.hidden = true;
+  setStatus("");
+  mayUseCachedResults = false;
+  generation++;
+  await refreshProfile();
+  await scanAndMatch();
+}
+
+profileSelect.addEventListener("change", () => {
+  // Persist only: the storage listener below drives the re-match, so switching from here and
+  // switching from the Options page take exactly the same path.
+  void setActiveProfileId(profileSelect.value);
+});
+
+$("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
+
+// Options may be open in another tab; a profile edited, deleted, or activated there must not leave
+// this window describing a target it is no longer pointed at.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (!ready) return; // the first read may itself migrate #253's key, which writes both keys
+  if (!("activeProfileId" in changes) && !("profiles" in changes)) return;
+  void (async () => {
+    const previous = profile;
+    const { profiles, activeProfileId } = await getProfileStore();
+    const next = profiles.find((p) => p.id === activeProfileId) ?? null;
+    // A rename only redraws the badge; anything that changes where or how we call re-runs the match.
+    const sameTarget =
+      next !== null &&
+      previous !== null &&
+      next.id === previous.id &&
+      profileTarget(next) === profileTarget(previous) &&
+      next.token === previous.token;
+    if (sameTarget) {
+      await refreshProfile();
+      return;
+    }
+    await switchTarget();
+  })();
+});
 
 function pendingAutoCount(): number {
   return results.filter((r) => r.status === "auto" && !r.written && !r.alreadySet).length;
@@ -286,8 +370,9 @@ async function preview(): Promise<void> {
     setStatus("Set an active profile first.", true);
     return;
   }
+  const gen = generation;
   const out = await runMatch(true);
-  if (!out) return;
+  if (!out || gen !== generation) return; // the target changed while this ran
   results = out;
   render();
   setStatus("Preview only — nothing written.");
@@ -488,16 +573,19 @@ function render(): void {
  * dry-run immediately — the user lands on the decisions without clicking. This is read-only: the
  * matcher only computes, and every write still goes through an explicit in-window confirm.
  *
- * This runs once per window load. There is deliberately no rescan/re-match button: clicking the
- * toolbar icon re-points and reloads this window, which re-runs the whole thing.
+ * This runs once per window load, and again whenever the active profile changes. There is
+ * deliberately no rescan/re-match button: clicking the toolbar icon re-points and reloads this
+ * window, which re-runs the whole thing.
  */
 async function scanAndMatch(): Promise<void> {
+  const gen = generation;
   await scanPage();
-  if (items.length === 0 || !profile) return;
+  if (items.length === 0 || !profile || gen !== generation) return;
 
   // The page was very likely already matched as it loaded (#283); reuse that instead of running the
-  // whole batch again, so the window opens instantly.
-  if (sourceTabId !== null) {
+  // whole batch again, so the window opens instantly. Never after a profile switch, though — that
+  // cache describes the instance we just left.
+  if (sourceTabId !== null && mayUseCachedResults) {
     const cached = (await chrome.runtime.sendMessage({
       type: "cached-results",
       tabId: sourceTabId,
@@ -506,6 +594,7 @@ async function scanAndMatch(): Promise<void> {
     // (lazy-loaded cards) since it was matched, and a partial list would read as the whole truth.
     const ids = new Set(items.map((i) => i.platformItemId));
     if (
+      gen === generation &&
       cached?.results?.length === items.length &&
       cached.results.every((r) => ids.has(r.colnectId))
     ) {
@@ -523,5 +612,6 @@ writeAutoBtn.addEventListener("click", writeAuto);
 
 void (async () => {
   await refreshProfile();
+  ready = true;
   await scanAndMatch();
 })();

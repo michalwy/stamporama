@@ -2,8 +2,8 @@
 
 Platform-neutral MV3 extension shell (#253, part of #155). It matches marketplace catalog pages
 against a Stamporama collection via the Colnect matcher endpoints (#250). Colnect DOM extraction is a
-pluggable **platform module** added separately (#249); this package is the shell those modules and
-the connection profiles (#251) plug into.
+pluggable **platform module** added separately (#249); connection profiles (#251) say which instance
+and collection a match is written to.
 
 ## Build
 
@@ -13,6 +13,7 @@ pnpm install        # first time (from the repo root works too)
 pnpm build          # → extension/dist
 pnpm dev            # rebuild on change
 pnpm typecheck
+pnpm test
 ```
 
 ## Load unpacked (Chrome)
@@ -21,7 +22,37 @@ pnpm typecheck
 2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, choose
    `extension/dist`.
 3. In Stamporama: **Settings → Colnect → Assistant tokens → Generate** and copy the token.
-4. Open the extension **Options** and enter the instance URL, collection id, and token.
+4. Open the extension **Options** and add a profile: instance URL, collection id, and token.
+
+## Connection profiles (#251)
+
+A **profile** is one instance plus one collection — `{ name, apiBaseUrl, collectionId,
+collectionName, token }`. A dev server and the Raspberry Pi are separate profiles, and so are two
+collections on the same instance. Only the **active** profile is ever contacted, and its
+`apiBaseUrl` + token are what every request uses.
+
+The target is never inferred: both instances are driven from the same browser on the same
+`colnect.com` origin, so it has to be an explicit choice. That choice is:
+
+- **persisted** in `chrome.storage.local` (the list under `profiles`, the choice under
+  `activeProfileId`; #253's single-profile key is migrated on first read),
+- **switchable from both surfaces** — Options creates, edits and deletes profiles; the Assistant
+  window has a selector in its header, because that is where picking the wrong target costs
+  something,
+- **always visible** as the badge at the top of the Assistant window, and named again in every write
+  confirm.
+
+Each profile carries a **colour derived from its target** (`apiBaseUrl` + collection, hashed, then
+de-collided across the stored set) rather than a configured one: the Raspberry Pi always looks the
+same, no two profiles look alike, and renaming a profile doesn't change how it looks. Two profiles
+pointing at the same instance *and* collection are rejected — they would be indistinguishable in the
+badge, which is the confusion profiles exist to prevent.
+
+Switching profile is a real re-point: the results on screen, the cached stamp photos, and the
+background's per-tab match cache all belong to the instance being left, so they are dropped and the
+page is matched again against the new target.
+
+Profiles are typed in by hand for now; registering one straight from Stamporama's settings is #252.
 
 ## The flow
 
@@ -71,13 +102,14 @@ immediately. **Rescan** re-reads the page after you navigate.
 
 - `src/platform/` — the `PlatformModule` interface + registry; `colnect/` is the first module (#249),
   registered by the content bootstrap.
-- `src/core/` — profile store (single-profile stub for #251), decision types, message contracts.
+- `src/core/` — profile store + colour derivation (#251), decision types, message contracts.
 - `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background fetch).
 - `src/content/` — extractor bootstrap: runs declaratively on `colnect.com` (for the badge) and is
   also injected on demand by the popup (covers tabs already open before an extension reload).
-- `src/popup/`, `src/options/` — the generic flow UI and the profile form.
+- `src/popup/`, `src/options/` — the generic flow UI (with the target badge + profile selector) and
+  the profile manager.
 
 ## Boundaries
 
-Multi-profile management / selector / registration (#251, #252), Colnect DOM specifics (#249),
+Profile registration from Stamporama's settings (#252), Colnect DOM specifics (#249), and
 packaging/distribution (#254) are intentionally out of scope here.

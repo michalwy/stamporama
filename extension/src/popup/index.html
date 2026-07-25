@@ -45,15 +45,31 @@
       }
       .pad { padding: 18px 20px 28px; max-width: 900px; margin: 0 auto; }
       h1 { font-size: 17px; margin: 0 0 12px; }
+      /* The target badge. Always visible, and always carrying the active profile's own colour (derived
+         from the instance + collection it points at) — the whole point is that you cannot mistake
+         which instance a write is about to land on. */
       .badge {
         display: flex; flex-direction: column; gap: 2px;
         padding: 8px 10px; border-radius: 8px;
         background: var(--panel); border: 1px solid var(--border);
+        border-left: 5px solid var(--accent, var(--border));
         margin-bottom: 10px;
       }
-      .badge .name { font-weight: 600; }
+      .badge .top { display: flex; align-items: center; gap: 8px; }
+      .badge .dot {
+        flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%;
+        background: var(--accent, var(--muted));
+      }
+      .badge .name { font-weight: 600; flex: 1; min-width: 0; }
       .badge .url { color: var(--muted); font-size: 12px; word-break: break-all; }
       .badge.none { color: var(--warn); }
+      .badge.none .dot { display: none; }
+      .badge select {
+        font: inherit; font-size: 12px; max-width: 260px;
+        padding: 3px 6px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      }
+      .badge select[hidden] { display: none; }
       .scan {
         display: flex; align-items: center; justify-content: space-between; gap: 8px;
         padding: 8px 10px; margin-bottom: 8px;
@@ -147,7 +163,15 @@
   <body>
     <div class="pad">
       <h1>Stamporama Assistant</h1>
-      <div id="badge" class="badge none">No active profile — open Options.</div>
+      <div id="badge" class="badge none">
+        <div class="top">
+          <span class="dot"></span>
+          <span id="badgeName" class="name">No active profile</span>
+          <select id="profileSelect" title="Active profile — where matches are written" hidden></select>
+          <button id="openOptions" class="small">Options</button>
+        </div>
+        <span id="badgeUrl" class="url">Add one in Options, then click the toolbar icon again.</span>
+      </div>
 
       <div id="scan" class="scan empty">
         <span id="found" class="found">Scanning page…</span>

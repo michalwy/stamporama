@@ -119,6 +119,16 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   resultCache.delete(tabId);
 });
 
+// Switching profile (#251) re-points everything: every cached result and every badge was computed
+// against the instance we just left, so they are dropped rather than left to describe the wrong
+// collection. The next page load (or the Assistant window) matches afresh against the new target.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (!("activeProfileId" in changes) && !("profiles" in changes)) return;
+  for (const tabId of resultCache.keys()) void setBadge(tabId, 0, BADGE_DETECTED);
+  resultCache.clear();
+});
+
 // ── The Assistant window ─────────────────────────────────────────────────────
 // A toolbar popup can't be sized past 800×600 and is always anchored to the icon, which is too
 // cramped to compare a Colnect item against candidate stamps. Clicking the icon therefore opens the

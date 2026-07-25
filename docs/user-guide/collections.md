@@ -90,7 +90,7 @@ You only need a row where the abbreviations **differ**. Any Colnect abbreviation
 
 ### Assistant tokens
 
-The same **Settings → Colnect** screen has an **Assistant tokens** section. The Stamporama Assistant browser extension uses a token to match Colnect pages against this collection on your behalf. Click **Generate Assistant token**, optionally label it, and copy the value into the extension's options — it is shown **only once**, so if you lose it, revoke it and generate a new one. A token grants write access to this collection's Colnect matching, so treat it like a password; revoke any you no longer use.
+The same **Settings → Colnect** screen has an **Assistant tokens** section. The Stamporama Assistant browser extension uses a token to match Colnect pages against this collection on your behalf. Click **Generate Assistant token**, optionally label it, and copy the value into the extension's options — it is shown **only once**, so if you lose it, revoke it and generate a new one. In the extension, a token belongs to a **profile**: one Stamporama instance plus one collection. If you run more than one instance (say a test server and your everyday one), or match against more than one collection, add a profile per combination and switch between them — the extension only ever talks to the **active** profile, and names it, in its own colour, above every match it is about to write. A token grants write access to this collection's Colnect matching, so treat it like a password; revoke any you no longer use.
 
 ## Merging two issues
 

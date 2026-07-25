@@ -64,6 +64,13 @@ lives in **Settings → Colnect**; the full registration/code-exchange issuance 
   holds before the popup is opened. That detection is entirely local — no instance call is made for
   it — and the popup still injects on demand as well, covering tabs opened before an extension
   reload. Per the #249 ToS note this only ever touches pages the user themselves opened.
-- The shell is intentionally partial: a single-profile stub (multi-profile + selector is #251), no
-  real extractor (Colnect DOM is #249), no packaging/distribution (#254). A "Load sample refs" path in
-  the popup makes the dry-run → confirm → write flow testable before #249 exists.
+- The extension holds **several connection profiles** (#251), each one instance + one collection +
+  its token, with the active one persisted and switchable from both Options and the Assistant
+  window's header. The target is an explicit choice, never inferred, because dev and production are
+  driven from the same browser on the same `colnect.com` origin; the active one is named in an
+  always-visible badge and again in every write confirm, and wears a colour derived from its target
+  (hashed, de-collided) so the instance is recognisable rather than merely readable. Switching drops
+  the on-screen results and the background's per-tab match cache — they describe the instance being
+  left.
+- The shell remains partial where the work is scheduled elsewhere: profiles are typed in by hand
+  until the registration/code exchange lands (#252), and there is no packaging/distribution (#254).
