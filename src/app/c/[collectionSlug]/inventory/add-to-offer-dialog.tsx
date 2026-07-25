@@ -332,6 +332,9 @@ export function AddToOfferDialog({
     <DialogShell
       title="Add to offer"
       onClose={onClose}
+      // The quick-create offer form stacks above this picker (#189); while it is up this dialog
+      // must stop dismissing itself, or one Esc would close both.
+      dismissable={!creating}
       maxWidth="min(94vw, 62rem)"
       height="min(90vh, 48rem)"
     >

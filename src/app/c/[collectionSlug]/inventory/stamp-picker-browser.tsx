@@ -264,6 +264,9 @@ export function StampPickerBrowser({
       <DialogShell
         title="Browse stamps"
         onClose={onClose}
+        // A create dialog stacks above this one; while it is up this dialog must stop dismissing
+        // itself, or one Esc would close both.
+        dismissable={!create}
         maxWidth="min(94vw, 88rem)"
         height="min(90vh, 60rem)"
       >

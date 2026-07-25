@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import { StampPickerAutocomplete } from "./stamp-picker-autocomplete";
 import { StampPickerBrowser } from "./stamp-picker-browser";
@@ -46,6 +46,7 @@ export function StampSelect({
   initial,
   scopeIssue,
   disabled,
+  onPickerOpenChange,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
@@ -54,12 +55,27 @@ export function StampSelect({
   initial?: PickedStamp;
   scopeIssue?: IssuePickerContext;
   disabled?: boolean;
+  /** Raised while one of the picker popups is open, so the enclosing dialog can stop dismissing
+   * itself on Esc / backdrop click — otherwise one Esc closes the picker *and* the copy form. */
+  onPickerOpenChange?: (open: boolean) => void;
 }) {
   const [selected, setSelected] = useState<PickedStamp | null>(initial ?? null);
   const [browsing, setBrowsing] = useState(false);
   // Issue-scoped and nothing picked yet → open the scoped popup straight away, so choosing a
   // stamp is the first thing you do (the dialog was opened from that issue for this purpose).
   const [pickingScoped, setPickingScoped] = useState(() => !!scopeIssue && !initial);
+
+  // Reported from one place rather than at every setter: either popup opens and closes from several
+  // call sites (pick, cancel, the scoped popup's own initial state), and the enclosing dialog only
+  // cares whether *something* is stacked above it.
+  const pickerOpen = browsing || (pickingScoped && !!scopeIssue);
+  const onPickerOpenChangeRef = useRef(onPickerOpenChange);
+  useEffect(() => {
+    onPickerOpenChangeRef.current = onPickerOpenChange;
+  });
+  useEffect(() => {
+    onPickerOpenChangeRef.current?.(pickerOpen);
+  }, [pickerOpen]);
 
   function pick(picked: PickedStamp) {
     setSelected(picked);

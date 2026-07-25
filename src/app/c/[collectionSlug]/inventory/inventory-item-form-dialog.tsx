@@ -207,6 +207,9 @@ export function InventoryItemFormDialog({
     uploading: false,
   });
   const [photosUploading, setPhotosUploading] = useState(false);
+  // A stamp picker popup stacks above this dialog; while one is up this dialog must stop dismissing
+  // itself, or one Esc would close both (and the create dialogs the browser itself stacks on top).
+  const [pickerOpen, setPickerOpen] = useState(false);
   const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
@@ -236,7 +239,7 @@ export function InventoryItemFormDialog({
   const actionDisabled = isPending || !stampId || photosUploading;
 
   return (
-    <DialogShell title={title} onClose={onClose} maxWidth="52rem">
+    <DialogShell title={title} onClose={onClose} maxWidth="52rem" dismissable={!pickerOpen}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
@@ -255,6 +258,7 @@ export function InventoryItemFormDialog({
                 initial={pickerInitial}
                 scopeIssue={scopeIssue}
                 disabled={isPending}
+                onPickerOpenChange={setPickerOpen}
               />
             </div>
 
