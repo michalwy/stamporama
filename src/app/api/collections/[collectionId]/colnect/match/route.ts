@@ -10,9 +10,13 @@ import { matchColnectItems, type ColnectMatchItemInput } from "@/lib/colnect";
 /** Parse and validate the request body into matcher input; returns null on a malformed shape. */
 function parseBody(
   body: unknown
-): { items: ColnectMatchItemInput[]; dryRun: boolean } | null {
+): { items: ColnectMatchItemInput[]; dryRun: boolean; backfill: boolean } | null {
   if (typeof body !== "object" || body === null) return null;
-  const { items, dryRun } = body as { items?: unknown; dryRun?: unknown };
+  const { items, dryRun, backfill } = body as {
+    items?: unknown;
+    dryRun?: unknown;
+    backfill?: unknown;
+  };
   if (!Array.isArray(items)) return null;
 
   const parsed: ColnectMatchItemInput[] = [];
@@ -30,7 +34,9 @@ function parseBody(
     }
     parsed.push({ colnectId: colnectId.trim(), catalogRefs: refs });
   }
-  return { items: parsed, dryRun: dryRun === true };
+  // Backfill is opt-in on the wire (#280): an older client that doesn't know about it never writes
+  // catalog numbers by accident.
+  return { items: parsed, dryRun: dryRun === true, backfill: backfill === true };
 }
 
 export async function POST(
@@ -58,6 +64,7 @@ export async function POST(
   try {
     const results = await matchColnectItems(ownerId, collectionId, parsed.items, {
       dryRun: parsed.dryRun,
+      backfill: parsed.backfill,
     });
     return NextResponse.json({ results });
   } catch {

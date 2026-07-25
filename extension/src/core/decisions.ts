@@ -12,7 +12,36 @@ export interface Candidate {
   photoId: string | null;
   /** Our numbers, each marked against what the Colnect item prints. */
   catalogNumbers: NumberView[];
+  /** What the item would add to this stamp, and what it disagrees on (#280). Empty when the
+   *  backfill is switched off. */
+  backfill: BackfillProposal[];
   existingColnectId: string | null;
+}
+
+/**
+ * One decided backfill reference (#280): a catalog number Colnect prints that we could add, or the
+ * reason we won't. `would-fill`/`filled` carry the bare number to store; the rest carry none.
+ */
+export type BackfillStatus =
+  | "would-fill"
+  | "filled"
+  | "conflict"
+  | "skipped-no-area-prefix"
+  | "prefix-mismatch"
+  | "duplicate";
+
+export interface BackfillProposal {
+  catalog: string;
+  printedNumber: string;
+  catalogVendorId: string;
+  vendorAbbreviation: string;
+  status: BackfillStatus;
+  number: string | null;
+  label: string;
+  existingNumber?: string;
+  /** Written despite colliding with an existing catalog identity (collection is in warn mode). */
+  duplicateWarning?: boolean;
+  duplicateStampNames?: string[];
 }
 
 /** The mirror of {@link RefStatus}, for one of our own numbers seen from the Colnect item. */

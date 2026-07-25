@@ -1,5 +1,5 @@
 import { getActiveProfile } from "../core/profile";
-import { getMatchOnLoad } from "../core/settings";
+import { CATALOG_BACKFILL, getCatalogBackfill, getMatchOnLoad } from "../core/settings";
 import type {
   BackgroundMessage,
   BackgroundRequest,
@@ -54,7 +54,7 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
       platformItemId: r.platformItemId,
       catalogRefs: r.catalogRefs,
     }));
-    const results = await callMatch(profile, items, true);
+    const results = await callMatch(profile, items, true, await getCatalogBackfill());
     resultCache.set(tabId, results);
 
     const needsConfirm = results.filter((r) => r.status === "needs-confirm").length;
@@ -72,13 +72,21 @@ async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmRe
     return { ok: false, error: "No active profile. Set one in the extension options." };
   }
 
+  // The backfill flag is read here rather than taken from the caller, so the load-time match, the
+  // window's preview and every write all describe the same setting (#280).
+  const backfill = await getCatalogBackfill();
+
   if (msg.type === "match") {
-    const results = await callMatch(profile, msg.items, msg.dryRun);
+    const results = await callMatch(profile, msg.items, msg.dryRun, backfill);
     return { ok: true, results };
   }
 
-  const outcome = await callConfirm(profile, msg.colnectId, msg.stampId, msg.allowOverwrite);
-  if (outcome.ok) return { ok: true };
+  const outcome = await callConfirm(profile, msg.colnectId, msg.stampId, {
+    allowOverwrite: msg.allowOverwrite,
+    backfill,
+    catalogRefs: msg.catalogRefs,
+  });
+  if (outcome.ok) return { ok: true, backfill: outcome.backfill };
   if (outcome.conflict) {
     return { ok: false, error: "conflict", conflict: true, existingColnectId: outcome.existingColnectId };
   }
@@ -123,9 +131,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // Switching profile (#251) re-points everything: every cached result and every badge was computed
 // against the instance we just left, so they are dropped rather than left to describe the wrong
 // collection. The next page load (or the Assistant window) matches afresh against the new target.
+// Switching the backfill setting (#280) invalidates the cache for the same reason: the cached
+// results were computed with the other setting and would show the wrong proposals.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (!("activeProfileId" in changes) && !("profiles" in changes)) return;
+  if (!("activeProfileId" in changes) && !("profiles" in changes) && !(CATALOG_BACKFILL in changes)) {
+    return;
+  }
   for (const tabId of resultCache.keys()) void setBadge(tabId, 0, BADGE_DETECTED);
   resultCache.clear();
 });

@@ -23,22 +23,39 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { colnectId, stampId, allowOverwrite } = (body ?? {}) as {
+  const { colnectId, stampId, allowOverwrite, backfill, catalogRefs } = (body ?? {}) as {
     colnectId?: unknown;
     stampId?: unknown;
     allowOverwrite?: unknown;
+    backfill?: unknown;
+    catalogRefs?: unknown;
   };
   if (typeof colnectId !== "string" || !colnectId.trim() || typeof stampId !== "string" || !stampId) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // The item's printed catalog refs travel with the confirmation so the chosen stamp can be
+  // backfilled (#280) in the same call. Malformed entries are dropped, never fatal — the match
+  // itself must still commit.
+  const refs: { catalog: string; number: string }[] = Array.isArray(catalogRefs)
+    ? catalogRefs.flatMap((r) => {
+        if (typeof r !== "object" || r === null) return [];
+        const { catalog, number } = r as { catalog?: unknown; number?: unknown };
+        return typeof catalog === "string" && typeof number === "string"
+          ? [{ catalog, number }]
+          : [];
+      })
+    : [];
+
   try {
-    await confirmColnectMatch(ownerId, collectionId, {
+    const backfilled = await confirmColnectMatch(ownerId, collectionId, {
       colnectId: colnectId.trim(),
       stampId,
       allowOverwrite: allowOverwrite === true,
+      backfill: backfill === true,
+      catalogRefs: refs,
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, backfill: backfilled });
   } catch (err) {
     if (err instanceof ColnectMatchConflictError) {
       return NextResponse.json(

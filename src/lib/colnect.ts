@@ -1,8 +1,24 @@
 import "server-only";
 import { prisma } from "./db";
-import { catalogDigits, catalogMatchKey, formatCatalogNumber } from "./catalog-number";
-import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
+import {
+  catalogDigits,
+  catalogIdentityKey,
+  catalogMatchKey,
+  formatCatalogNumber,
+} from "./catalog-number";
+import {
+  buildAreaPrefixNodes,
+  resolveEffectivePrefix,
+  type AreaPrefixNode,
+} from "./area-prefix";
 import { sortPhotos } from "./photos";
+import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
+import type { DuplicateCatalogMode } from "./duplicate-catalog";
+import {
+  proposeBackfill,
+  type BackfillRefInput,
+  type ColnectBackfillProposal,
+} from "./colnect-backfill";
 import {
   colnectRefKey,
   decideColnectItem,
@@ -203,6 +219,198 @@ export async function resolveColnectAbbreviation(
 // `catalogMatchKey`). The write target is the plain `Stamp.colnectId` field (#247). All decisions
 // follow the agreed matrix in {@link decideColnectItem}; `dryRun` computes them without persisting.
 
+/** The per-collection lookups both the matcher and the backfill need, loaded once per request. */
+interface ColnectContext {
+  vendorAbbrById: Map<string, string>;
+  /** Colnect abbreviation → local vendor id, applying the same precedence as
+   *  {@link resolveColnectAbbreviation} (explicit mapping, then equal local abbreviation). */
+  resolveVendorId: (colnectAbbrev: string) => string | null;
+  areaNodes: Map<string, AreaPrefixNode>;
+  areaNames: Map<string, string>;
+  /** The collection's duplicate-catalog policy (#85), which the backfill has to respect. */
+  duplicateMode: DuplicateCatalogMode;
+}
+
+async function loadColnectContext(collectionId: string): Promise<ColnectContext> {
+  const [vendors, mappings, areaRows, collection] = await Promise.all([
+    prisma.catalogVendor.findMany({
+      where: { collectionId },
+      select: { id: true, abbreviation: true },
+    }),
+    prisma.colnectCatalogMapping.findMany({
+      where: { collectionId },
+      select: { colnectAbbrev: true, catalogVendorId: true },
+    }),
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+      },
+    }),
+    prisma.collection.findUnique({
+      where: { id: collectionId },
+      select: { duplicateCatalogMode: true },
+    }),
+  ]);
+
+  const explicitByAbbrev = new Map(
+    mappings.map((m) => [m.colnectAbbrev.trim().toLowerCase(), m.catalogVendorId])
+  );
+  const exactByAbbrev = new Map(vendors.map((v) => [v.abbreviation.trim().toLowerCase(), v.id]));
+
+  return {
+    vendorAbbrById: new Map(vendors.map((v) => [v.id, v.abbreviation])),
+    resolveVendorId: (colnectAbbrev: string) => {
+      const key = colnectAbbrev.trim().toLowerCase();
+      if (!key) return null;
+      return explicitByAbbrev.get(key) ?? exactByAbbrev.get(key) ?? null;
+    },
+    areaNodes: buildAreaPrefixNodes(areaRows),
+    areaNames: new Map(areaRows.map((a) => [a.id, a.name])),
+    duplicateMode: collection?.duplicateCatalogMode === "block" ? "block" : "warn",
+  };
+}
+
+// ── Catalog-number backfill (#280) ───────────────────────────────────────────
+//
+// A matched stamp is filled from the Colnect page for every catalog it has *no* number for. The
+// decision per reference is pure ({@link proposeBackfill}); what lives here is the collection
+// context around it: resolving Colnect abbreviations, the stamp's effective area prefixes, the
+// duplicate policy (#85), and the write itself.
+
+/** The stamp a backfill is computed against: its area (for prefixes) and current numbers. */
+interface BackfillStamp {
+  stampId: string;
+  areaId: string | null;
+  numbersByVendor: Map<string, string>;
+}
+
+/** Propose fills for one stamp from the resolvable references of one Colnect item. */
+function backfillFor(
+  stamp: BackfillStamp,
+  refs: readonly { catalog: string; number: string; catalogVendorId: string | null }[],
+  ctx: ColnectContext
+): ColnectBackfillProposal[] {
+  const usable: BackfillRefInput[] = refs
+    .filter((r): r is typeof r & { catalogVendorId: string } => r.catalogVendorId !== null)
+    .map((r) => ({
+      catalog: r.catalog,
+      printedNumber: r.number,
+      catalogVendorId: r.catalogVendorId,
+      vendorAbbreviation: ctx.vendorAbbrById.get(r.catalogVendorId) ?? "",
+    }));
+  if (usable.length === 0) return [];
+  const prefixByVendor = new Map(
+    [...new Set(usable.map((r) => r.catalogVendorId))].map((vendorId) => [
+      vendorId,
+      stamp.areaId ? resolveEffectivePrefix(stamp.areaId, vendorId, ctx.areaNodes) : null,
+    ])
+  );
+  return proposeBackfill(usable, { numbersByVendor: stamp.numbersByVendor, prefixByVendor });
+}
+
+/** A proposal together with the stamp it would land on, for the collection-wide duplicate check. */
+interface PendingFill {
+  stamp: BackfillStamp;
+  proposal: ColnectBackfillProposal;
+}
+
+/**
+ * Apply the collection's duplicate-catalog policy (#85) to every proposed fill: a fill whose
+ * resulting identity (vendor + effective area prefix + number) already exists on another stamp is
+ * turned into `duplicate` under `block`, or kept and flagged under `warn`. Mutates the proposals in
+ * place — they are the same objects the results already reference.
+ */
+async function markBackfillDuplicates(
+  collectionId: string,
+  pending: readonly PendingFill[],
+  ctx: ColnectContext
+): Promise<void> {
+  const fills = pending.filter((p) => p.proposal.status === "would-fill" && p.proposal.number);
+  if (fills.length === 0) return;
+
+  const rows = await prisma.stampCatalogNumber.findMany({
+    where: {
+      catalogVendorId: { in: [...new Set(fills.map((f) => f.proposal.catalogVendorId))] },
+      number: { in: [...new Set(fills.map((f) => f.proposal.number!))] },
+      stamp: { collectionId },
+    },
+    select: {
+      catalogVendorId: true,
+      number: true,
+      stamp: {
+        select: {
+          id: true,
+          name: true,
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        },
+      },
+    },
+  });
+
+  const holdersByIdentity = new Map<string, { id: string; name: string | null }[]>();
+  for (const row of rows) {
+    const link = row.stamp.stampAreaLinks.find((l) => l.isPrimary) ?? row.stamp.stampAreaLinks[0];
+    const areaId = link?.collectionAreaId ?? null;
+    const prefix = areaId
+      ? resolveEffectivePrefix(areaId, row.catalogVendorId, ctx.areaNodes)
+      : null;
+    const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
+    const list = holdersByIdentity.get(key);
+    if (list) list.push({ id: row.stamp.id, name: row.stamp.name });
+    else holdersByIdentity.set(key, [{ id: row.stamp.id, name: row.stamp.name }]);
+  }
+
+  for (const { stamp, proposal } of fills) {
+    const prefix = stamp.areaId
+      ? resolveEffectivePrefix(stamp.areaId, proposal.catalogVendorId, ctx.areaNodes)
+      : null;
+    const key = catalogIdentityKey(proposal.catalogVendorId, prefix, proposal.number!);
+    const holders = (holdersByIdentity.get(key) ?? []).filter((h) => h.id !== stamp.stampId);
+    if (holders.length === 0) continue;
+    proposal.duplicateStampNames = holders.map((h) => h.name ?? "(unnamed stamp)");
+    if (ctx.duplicateMode === "block") {
+      proposal.status = "duplicate";
+      proposal.number = null;
+    } else {
+      proposal.duplicateWarning = true;
+    }
+  }
+}
+
+/**
+ * Write every still-proposed fill, flipping its status to `filled`. Rows are deduplicated per
+ * (stamp, vendor) — the table holds one number per pair, and two Colnect items in one batch can
+ * resolve to the same stamp. Recomputes `primaryCatalogSortKey` for the touched stamps (#181).
+ */
+async function applyBackfill(
+  collectionId: string,
+  pending: readonly PendingFill[]
+): Promise<void> {
+  const rows: { stampId: string; catalogVendorId: string; number: string }[] = [];
+  const seen = new Set<string>();
+  for (const { stamp, proposal } of pending) {
+    if (proposal.status !== "would-fill" || !proposal.number) continue;
+    const key = `${stamp.stampId}~${proposal.catalogVendorId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      stampId: stamp.stampId,
+      catalogVendorId: proposal.catalogVendorId,
+      number: proposal.number,
+    });
+    proposal.status = "filled";
+  }
+  if (rows.length === 0) return;
+
+  await prisma.$transaction(rows.map((data) => prisma.stampCatalogNumber.create({ data })));
+  // A new number can change which number is primary for sorting (#181, ADR-0014).
+  await recomputeStampSortKeys(collectionId, [...new Set(rows.map((r) => r.stampId))]);
+}
+
 /** One Colnect item to match: its Colnect ID and the catalog references extracted from the page. */
 export interface ColnectMatchItemInput {
   colnectId: string;
@@ -223,9 +431,14 @@ export interface ColnectCandidate {
   photoId: string | null;
   /** The stamp's catalog numbers, each marked against what the Colnect item prints (#284). */
   catalogNumbers: ColnectNumberView[];
+  /** What the Colnect item would add to (or disagrees with on) this stamp (#280). Empty unless the
+   *  caller asked for the backfill. */
+  backfill: ColnectBackfillProposal[];
   /** The stamp's current Colnect ID, so the UI can flag a would-be overwrite. */
   existingColnectId: string | null;
 }
+
+export type { ColnectBackfillProposal, ColnectBackfillStatus } from "./colnect-backfill";
 
 /**
  * What one catalog reference printed on the Colnect page means for us (#284 display):
@@ -293,9 +506,11 @@ export class ColnectMatchConflictError extends Error {
 /** Internal shape for a discovered candidate stamp: decision keys plus display fields. */
 interface CandidateEntry extends CandidateStampRefs {
   /** Everything about the stamp that doesn't depend on which Colnect item it is compared to. */
-  base: Omit<ColnectCandidate, "catalogNumbers">;
+  base: Omit<ColnectCandidate, "catalogNumbers" | "backfill">;
   /** Its numbers, carrying the keys needed to compare each against a Colnect item. */
   numbers: { label: string; catalogVendorId: string; key: string }[];
+  /** What the backfill (#280) needs: the area whose prefixes apply, and the raw stored numbers. */
+  backfillStamp: BackfillStamp;
 }
 
 /** Group resolved refs by vendor, for comparing one side's numbers against the other's. */
@@ -316,10 +531,12 @@ function keysByVendor(refs: readonly ResolvedRef[]): Map<string, Set<string>> {
  */
 function candidateView(
   entry: CandidateEntry,
-  itemByVendor: Map<string, Set<string>>
+  itemByVendor: Map<string, Set<string>>,
+  backfill: ColnectBackfillProposal[] = []
 ): ColnectCandidate {
   return {
     ...entry.base,
+    backfill,
     catalogNumbers: entry.numbers.map((n) => {
       const theirs = itemByVendor.get(n.catalogVendorId);
       const status: ColnectMineStatus = !theirs
@@ -360,49 +577,27 @@ export async function matchColnectItems(
   ownerId: string,
   collectionId: string,
   items: ColnectMatchItemInput[],
-  opts: { dryRun?: boolean } = {}
+  opts: { dryRun?: boolean; backfill?: boolean } = {}
 ): Promise<ColnectMatchResult[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
   // ── Load the collection's catalog + area context once, build in-memory resolvers. ──
-  const [vendors, mappings, areaRows] = await Promise.all([
-    prisma.catalogVendor.findMany({
-      where: { collectionId },
-      select: { id: true, abbreviation: true },
-    }),
-    prisma.colnectCatalogMapping.findMany({
-      where: { collectionId },
-      select: { colnectAbbrev: true, catalogVendorId: true },
-    }),
-    prisma.collectionArea.findMany({
-      where: { collectionId },
-      select: {
-        id: true,
-        name: true,
-        parentId: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
-      },
-    }),
-  ]);
+  const ctx = await loadColnectContext(collectionId);
+  const { vendorAbbrById, resolveVendorId, areaNodes, areaNames } = ctx;
 
-  const vendorAbbrById = new Map(vendors.map((v) => [v.id, v.abbreviation]));
-  const explicitByAbbrev = new Map(
-    mappings.map((m) => [m.colnectAbbrev.trim().toLowerCase(), m.catalogVendorId])
-  );
-  const exactByAbbrev = new Map(
-    vendors.map((v) => [v.abbreviation.trim().toLowerCase(), v.id])
-  );
-  const resolveVendorId = (colnectAbbrev: string): string | null => {
-    const key = colnectAbbrev.trim().toLowerCase();
-    if (!key) return null;
-    return explicitByAbbrev.get(key) ?? exactByAbbrev.get(key) ?? null;
-  };
+  /** One printed reference plus what it resolved to (null vendor = a catalog we don't keep). */
+  interface ResolvedAnnotation {
+    catalog: string;
+    number: string;
+    catalogVendorId: string | null;
+    key: string | null;
+  }
 
   // ── Resolve each item's refs to full keys; collect the recall conditions. ──
   // Unresolvable refs are kept (with a null vendor) rather than dropped: the matcher ignores them,
   // but the caller still shows them, marked as belonging to a catalog we don't keep.
   const resolvedItems = items.map((item) => {
-    const annotated = item.catalogRefs.map((ref) => {
+    const annotated: ResolvedAnnotation[] = item.catalogRefs.map((ref) => {
       const vendorId = resolveVendorId(ref.catalog);
       const abbr = vendorId ? (vendorAbbrById.get(vendorId) ?? "") : "";
       return {
@@ -424,7 +619,7 @@ export async function matchColnectItems(
    * nothing stays `unknown` rather than pretending we know which stamp it should belong to.
    */
   const classifyRefs = (
-    annotated: (typeof resolvedItems)[number]["annotated"],
+    annotated: ResolvedAnnotation[],
     target: CandidateStampRefs | null,
     candidates: readonly CandidateStampRefs[]
   ): ColnectRefView[] => {
@@ -489,9 +684,6 @@ export async function matchColnectItems(
       })
     : [];
 
-  const areaNodes = buildAreaPrefixNodes(areaRows);
-  const areaNames = new Map(areaRows.map((a) => [a.id, a.name]));
-
   const candidatesById = new Map<string, CandidateEntry>();
   for (const s of candidateStamps) {
     const primaryLink = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
@@ -514,6 +706,11 @@ export async function matchColnectItems(
       existingColnectId: s.colnectId,
       refs,
       numbers,
+      backfillStamp: {
+        stampId: s.id,
+        areaId,
+        numbersByVendor: new Map(s.catalogNumbers.map((cn) => [cn.catalogVendorId, cn.number])),
+      },
       base: {
         stampId: s.id,
         name: s.name,
@@ -531,6 +728,20 @@ export async function matchColnectItems(
   const results: ColnectMatchResult[] = [];
   const writes: { stampId: string; colnectId: string }[] = [];
   const dryRun = opts.dryRun ?? false;
+  const wantBackfill = opts.backfill ?? false;
+  // Proposals for stamps we are confident about (`auto`), which is what a real run may write. The
+  // objects are shared with the results, so marking/applying them updates what the caller sees.
+  const autoFills: PendingFill[] = [];
+  // Everything proposed anywhere, including the candidates of a `needs-confirm` item: the duplicate
+  // check runs over all of it so the preview tells the truth before the user picks.
+  const allFills: PendingFill[] = [];
+
+  const proposalsFor = (entry: CandidateEntry, annotated: ResolvedAnnotation[]) => {
+    if (!wantBackfill) return [];
+    const proposals = backfillFor(entry.backfillStamp, annotated, ctx);
+    for (const proposal of proposals) allFills.push({ stamp: entry.backfillStamp, proposal });
+    return proposals;
+  };
 
   for (const { item, itemRefs, annotated } of resolvedItems) {
     const decision = decideColnectItem(item.colnectId, itemRefs, allCandidates);
@@ -556,7 +767,7 @@ export async function matchColnectItems(
         candidates: decision.candidateStampIds
           .map((id) => {
             const entry = candidatesById.get(id);
-            return entry ? candidateView(entry, itemByVendor) : undefined;
+            return entry ? candidateView(entry, itemByVendor, proposalsFor(entry, annotated)) : undefined;
           })
           .filter((c): c is ColnectCandidate => c !== undefined),
         refs: classifyRefs(annotated, only, allCandidates),
@@ -572,7 +783,14 @@ export async function matchColnectItems(
         alreadySet: decision.alreadySet,
         stamp: (() => {
           const entry = candidatesById.get(decision.stampId);
-          return entry ? candidateView(entry, itemByVendor) : null;
+          if (!entry) return null;
+          // Backfilling is not conditional on the Colnect ID write: a stamp already carrying this
+          // ID is just as confidently matched, and Colnect may have added catalogs since.
+          const proposals = proposalsFor(entry, annotated);
+          for (const proposal of proposals) {
+            autoFills.push({ stamp: entry.backfillStamp, proposal });
+          }
+          return candidateView(entry, itemByVendor, proposals);
         })(),
         refs: classifyRefs(annotated, candidatesById.get(decision.stampId) ?? null, allCandidates),
       });
@@ -588,6 +806,11 @@ export async function matchColnectItems(
     );
   }
 
+  if (wantBackfill) {
+    await markBackfillDuplicates(collectionId, allFills, ctx);
+    if (!dryRun) await applyBackfill(collectionId, autoFills);
+  }
+
   return results;
 }
 
@@ -595,16 +818,31 @@ export async function matchColnectItems(
  * Commit a user-chosen Colnect match: set `Stamp.colnectId` for a stamp the user picked from a
  * `needs-confirm` result. Owner-authorized and collection-scoped. Refuses to overwrite a different
  * existing Colnect ID unless `allowOverwrite` is set (throws {@link ColnectMatchConflictError}).
+ *
+ * When `catalogRefs` are supplied and `backfill` is set, the item's numbers also fill the catalogs
+ * the chosen stamp lacks (#280) — the same rules as the batch path, applied to the one stamp the
+ * user picked. The applied/skipped proposals are returned so the caller can report them.
  */
 export async function confirmColnectMatch(
   ownerId: string,
   collectionId: string,
-  input: { colnectId: string; stampId: string; allowOverwrite?: boolean }
-): Promise<void> {
+  input: {
+    colnectId: string;
+    stampId: string;
+    allowOverwrite?: boolean;
+    catalogRefs?: { catalog: string; number: string }[];
+    backfill?: boolean;
+  }
+): Promise<ColnectBackfillProposal[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const stamp = await prisma.stamp.findFirst({
     where: { id: input.stampId, collectionId },
-    select: { id: true, colnectId: true },
+    select: {
+      id: true,
+      colnectId: true,
+      catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+    },
   });
   if (!stamp) throw new Error("Stamp not found in this collection.");
   if (
@@ -618,4 +856,27 @@ export async function confirmColnectMatch(
     where: { id: stamp.id },
     data: { colnectId: input.colnectId },
   });
+
+  if (!input.backfill || !input.catalogRefs?.length) return [];
+
+  const ctx = await loadColnectContext(collectionId);
+  const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
+  const target: BackfillStamp = {
+    stampId: stamp.id,
+    areaId: link?.collectionAreaId ?? null,
+    numbersByVendor: new Map(stamp.catalogNumbers.map((cn) => [cn.catalogVendorId, cn.number])),
+  };
+  const proposals = backfillFor(
+    target,
+    input.catalogRefs.map((r) => ({
+      catalog: r.catalog,
+      number: r.number,
+      catalogVendorId: ctx.resolveVendorId(r.catalog),
+    })),
+    ctx
+  );
+  const pending = proposals.map((proposal) => ({ stamp: target, proposal }));
+  await markBackfillDuplicates(collectionId, pending, ctx);
+  await applyBackfill(collectionId, pending);
+  return proposals;
 }

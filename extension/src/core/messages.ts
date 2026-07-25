@@ -1,5 +1,5 @@
 import type { ExtractedItem } from "../platform/types";
-import type { MatchResult } from "./decisions";
+import type { BackfillProposal, MatchResult } from "./decisions";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -28,9 +28,12 @@ export interface ConfirmRequest {
   colnectId: string;
   stampId: string;
   allowOverwrite?: boolean;
+  /** What the page printed for this item, so the chosen stamp can be backfilled in the same call
+   *  (#280). Whether the backfill actually runs is the extension setting, applied by the worker. */
+  catalogRefs?: { catalog: string; number: string }[];
 }
 export type ConfirmResponse =
-  | { ok: true }
+  | { ok: true; backfill: BackfillProposal[] }
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
 export type BackgroundRequest = MatchRequest | ConfirmRequest;

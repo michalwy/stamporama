@@ -14,8 +14,9 @@ import type {
   ExtractResponse,
   MatchResponse,
 } from "../core/messages";
+import { CATALOG_BACKFILL, getCatalogBackfill, setCatalogBackfill } from "../core/settings";
 import type { ExtractedItem } from "../platform/types";
-import type { Candidate, MatchResult, RefView } from "../core/decisions";
+import type { BackfillProposal, Candidate, MatchResult, RefView } from "../core/decisions";
 
 // Popup controller. On open it detects whether the active tab is a page one of our platform modules
 // handles and extracts it straight away — the user only sees "Found N stamps" and decides whether to
@@ -42,6 +43,7 @@ const resultsEl = $("results");
 const progressEl = $("progress");
 const barEl = $("bar");
 const writeAutoBtn = $<HTMLButtonElement>("writeAuto");
+const backfillEl = $<HTMLInputElement>("backfill");
 const overlay = $("overlay");
 const confirmMsg = $("confirmMsg");
 const confirmOk = $<HTMLButtonElement>("confirmOk");
@@ -233,6 +235,15 @@ $("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage(
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (!ready) return; // the first read may itself migrate #253's key, which writes both keys
+  // The backfill setting is also editable in Options; keep this window's toggle and preview honest.
+  if (CATALOG_BACKFILL in changes) {
+    void (async () => {
+      const enabled = await getCatalogBackfill();
+      if (enabled === backfillEl.checked) return; // our own write
+      backfillEl.checked = enabled;
+      if (items.length > 0 && profile) await preview();
+    })();
+  }
   if (!("activeProfileId" in changes) && !("profiles" in changes)) return;
   void (async () => {
     const previous = profile;
@@ -257,10 +268,29 @@ function pendingAutoCount(): number {
   return results.filter((r) => r.status === "auto" && !r.written && !r.alreadySet).length;
 }
 
+/**
+ * Catalog numbers the pending write would add (#280). Already-linked stamps count too: the backfill
+ * applies to every confidently matched stamp, so a page matched months ago can still gain numbers
+ * Colnect has published since.
+ */
+function fillsOf(r: MatchResult): number {
+  if (r.status !== "auto" || r.written) return 0;
+  return r.stamp?.backfill.filter((p) => p.status === "would-fill").length ?? 0;
+}
+
+function pendingFillCount(): number {
+  return results.reduce((n, r) => n + fillsOf(r), 0);
+}
+
 function syncButtons(): void {
   const pending = pendingAutoCount();
-  writeAutoBtn.disabled = busy || pending === 0 || !profile;
-  writeAutoBtn.textContent = pending > 0 ? `Write ${pending} auto-match${pending === 1 ? "" : "es"}` : "Write auto-matches";
+  const fills = pendingFillCount();
+  writeAutoBtn.disabled = busy || (pending === 0 && fills === 0) || !profile;
+  const parts = [
+    pending > 0 ? `${pending} auto-match${pending === 1 ? "" : "es"}` : "",
+    fills > 0 ? `${fills} catalog number${fills === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  writeAutoBtn.textContent = parts.length ? `Write ${parts.join(" + ")}` : "Write auto-matches";
 }
 
 function setFound(text: string, hasItems: boolean): void {
@@ -356,9 +386,11 @@ function renderChips(): void {
   const ask = results.filter((r) => r.status === "needs-confirm").length;
   const linked = results.filter((r) => r.status === "auto" && r.alreadySet).length;
   const skipped = results.filter((r) => r.status === "skipped").length;
+  const fills = pendingFillCount();
   const parts = [
     auto ? `<span class="chip auto">${auto} auto</span>` : "",
     ask ? `<span class="chip needs">${ask} to confirm</span>` : "",
+    fills ? `<span class="chip auto">${fills} number${fills === 1 ? "" : "s"} to add</span>` : "",
     linked ? `<span class="chip">${linked} already linked</span>` : "",
     skipped ? `<span class="chip">${skipped} skipped</span>` : "",
   ].filter(Boolean);
@@ -384,8 +416,14 @@ async function preview(): Promise<void> {
 async function writeAuto(): Promise<void> {
   if (!profile) return;
   const n = pendingAutoCount();
+  const fills = pendingFillCount();
+  const fillLine = fills
+    ? `<div>…and add <strong>${fills}</strong> missing catalog number${
+        fills === 1 ? "" : "s"
+      } from Colnect. Existing numbers are never changed.</div>`
+    : "";
   const ok = await askConfirm(
-    `<div>Write <strong>${n}</strong> unambiguous match${n === 1 ? "" : "es"}?</div>${targetLine()}`
+    `<div>Write <strong>${n}</strong> unambiguous match${n === 1 ? "" : "es"}?</div>${fillLine}${targetLine()}`
   );
   if (!ok) return;
   const out = await runMatch(false);
@@ -393,11 +431,20 @@ async function writeAuto(): Promise<void> {
   results = out;
   render();
   const written = results.filter((r) => r.status === "auto" && r.written).length;
-  setStatus(`Wrote ${written} auto-match${written === 1 ? "" : "es"} to ${profile.name}.`);
+  const filled = results.reduce(
+    (acc, r) =>
+      acc + (r.status === "auto" ? (r.stamp?.backfill.filter((p) => p.status === "filled").length ?? 0) : 0),
+    0
+  );
+  setStatus(
+    `Wrote ${written} auto-match${written === 1 ? "" : "es"}${
+      filled ? ` and ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
+    } to ${profile.name}.`
+  );
 }
 
 /** Swap one item's result in place after an individual write, so it leaves the to-do list. */
-function markWritten(colnectId: string, stamp: Candidate): void {
+function markWritten(colnectId: string, stamp: Candidate, backfill: BackfillProposal[]): void {
   const i = results.findIndex((r) => r.colnectId === colnectId);
   if (i === -1) return;
   results[i] = {
@@ -406,7 +453,8 @@ function markWritten(colnectId: string, stamp: Candidate): void {
     stampId: stamp.stampId,
     written: true,
     alreadySet: false,
-    stamp: { ...stamp, existingColnectId: colnectId },
+    // The server reports what it actually filled; before a write we only had proposals.
+    stamp: { ...stamp, backfill, existingColnectId: colnectId },
     // The refs keep their classification: it described this stamp, which is the one just linked.
     refs: results[i].refs,
   };
@@ -419,10 +467,14 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
   const warn = stamp.existingColnectId
     ? `<div class="warnline">This stamp already has Colnect ID ${esc(stamp.existingColnectId)} — it will be replaced.</div>`
     : "";
+  const fills = stamp.backfill.filter((p) => p.status === "would-fill");
+  const fillLine = fills.length
+    ? `<div>Also adds ${fills.map((p) => `<strong>${esc(p.label)}</strong>`).join(", ")}.</div>`
+    : "";
   const ok = await askConfirm(
     `<div>Link Colnect <strong>#${esc(colnectId)}</strong>${
       src?.name ? ` (${esc(src.name)})` : ""
-    } to <strong>${esc(stamp.name || "this stamp")}</strong>?</div>${warn}${targetLine()}`
+    } to <strong>${esc(stamp.name || "this stamp")}</strong>?</div>${fillLine}${warn}${targetLine()}`
   );
   if (!ok) return;
 
@@ -432,10 +484,16 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     colnectId,
     stampId: stamp.stampId,
     allowOverwrite: overwrite,
+    catalogRefs: src?.catalogRefs,
   });
   if (res.ok) {
-    markWritten(colnectId, stamp);
-    setStatus(`Linked #${colnectId} → ${stamp.name || stamp.stampId}.`);
+    markWritten(colnectId, stamp, res.backfill);
+    const filled = res.backfill.filter((p) => p.status === "filled").length;
+    setStatus(
+      `Linked #${colnectId} → ${stamp.name || stamp.stampId}${
+        filled ? `, added ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
+      }.`
+    );
     return;
   }
   if (res.conflict) {
@@ -450,9 +508,10 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
       colnectId,
       stampId: stamp.stampId,
       allowOverwrite: true,
+      catalogRefs: src?.catalogRefs,
     });
     if (retry.ok) {
-      markWritten(colnectId, stamp);
+      markWritten(colnectId, stamp, retry.backfill);
       setStatus(`Overwrote → #${colnectId}.`);
     } else {
       setStatus(retry.error, true);
@@ -549,6 +608,58 @@ const MINE_TITLE: Record<string, string> = {
   "only-mine": "Colnect doesn't list this catalog for the item",
 };
 
+// ── Backfill (#280) ──────────────────────────────────────────────────────────
+// Under the stamp's own numbers: what the Colnect item would add to it, and — in one muted line —
+// what it offered that we deliberately won't write.
+
+const FILL_TITLE: Record<string, string> = {
+  "would-fill": "Missing from your stamp — will be added, with the area prefix stripped",
+  filled: "Added to your stamp",
+};
+
+/** Why a printed number is not being written, phrased for the person reading it. */
+function noFillReason(p: BackfillProposal): string {
+  switch (p.status) {
+    case "conflict":
+      return `you have ${p.label}`;
+    case "skipped-no-area-prefix":
+      return "your area sets no prefix for this catalog";
+    case "prefix-mismatch":
+      return "a different country prefix than your area's";
+    case "duplicate":
+      return `already on ${(p.duplicateStampNames ?? []).join(", ") || "another stamp"}`;
+    default:
+      return "";
+  }
+}
+
+function backfillMarkup(proposals: BackfillProposal[]): string {
+  if (proposals.length === 0) return "";
+  const fills = proposals.filter((p) => p.status === "would-fill" || p.status === "filled");
+  const rest = proposals.filter((p) => p.status !== "would-fill" && p.status !== "filled");
+
+  const chips = fills.length
+    ? `<div class="fills">${fills
+        .map((p) => {
+          const dupe = p.duplicateWarning
+            ? ` — also on ${(p.duplicateStampNames ?? []).join(", ")}`
+            : "";
+          return `<span class="ref fill${p.status === "filled" ? " done" : ""}" title="${esc(
+            (FILL_TITLE[p.status] ?? "") + dupe
+          )}">${esc(`${p.status === "filled" ? "✓ " : "+ "}${p.label}`)}</span>`;
+        })
+        .join(" ")}</div>`
+    : "";
+
+  const skipped = rest.length
+    ? `<div class="nofill">not added: ${rest
+        .map((p) => esc(`${p.catalog} ${p.printedNumber} (${noFillReason(p)})`))
+        .join(", ")}</div>`
+    : "";
+
+  return `${chips}${skipped}`;
+}
+
 /** One of our stamps, with enough detail to tell it from a sibling. */
 function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
   const meta = [c.issuedYear ? String(c.issuedYear) : null, c.areaName].filter(Boolean).join(" · ");
@@ -575,7 +686,7 @@ function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
             )
             .join(" ")
         : undefined,
-      meta: [meta, warn].filter(Boolean).join(""),
+      meta: [backfillMarkup(c.backfill), meta, warn].filter(Boolean).join(""),
     },
     thumb,
     { action, label: esc(label) }
@@ -640,12 +751,30 @@ function itemCard(r: MatchResult): string {
   return `<div class="item">${colnect}<div class="side match">${matchBody}</div></div>`;
 }
 
-function section(title: string, rows: MatchResult[], collapsed: boolean): string {
+/**
+ * One titled group of results. `kind` picks the heading's accent colour, matching the tag colour of
+ * the rows underneath. A collapsible section starts folded unless `open` — but stays collapsible,
+ * so it can be folded back once its contents have been read.
+ */
+function section(
+  title: string,
+  rows: MatchResult[],
+  kind: "needs" | "will" | "done" | "skip",
+  collapsible: boolean,
+  open = false
+): string {
   if (rows.length === 0) return "";
   const body = rows.map(itemCard).join("");
-  return collapsed
-    ? `<details class="sec"><summary>${esc(title)} (${rows.length})</summary>${body}</details>`
-    : `<div class="sec"><div class="hdr">${esc(title)} (${rows.length})</div>${body}</div>`;
+  const fills = rows.reduce((n, r) => n + fillsOf(r), 0);
+  // Say what a folded section is hiding, so a section worth opening announces itself.
+  const heading =
+    `<span class="ttl">${esc(title)}</span><span class="cnt">${rows.length}</span>` +
+    (fills > 0
+      ? `<span class="add">+${fills} catalog number${fills === 1 ? "" : "s"}</span>`
+      : "");
+  return collapsible
+    ? `<details class="sec ${kind}"${open ? " open" : ""}><summary>${heading}</summary>${body}</details>`
+    : `<div class="sec ${kind}"><div class="hdr">${heading}</div>${body}</div>`;
 }
 
 function render(): void {
@@ -656,10 +785,12 @@ function render(): void {
   const skipped = results.filter((r) => r.status === "skipped");
 
   resultsEl.innerHTML =
-    section("Needs your decision", needsConfirm, false) +
-    section("Will link automatically", willWrite, false) +
-    section("Already linked", done, true) +
-    section("Skipped", skipped, true);
+    section("Needs your decision", needsConfirm, "needs", false) +
+    section("Will link automatically", willWrite, "will", false) +
+    // "Already linked" normally folds away as noise — but a stamp that is linked *and* still gains
+    // catalog numbers (#280) is about to be written to, so that section opens itself.
+    section("Already linked", done, "done", true, done.some((r) => fillsOf(r) > 0)) +
+    section("Skipped", skipped, "skip", true);
 
   resultsEl.querySelectorAll<HTMLButtonElement>("button[data-pick]").forEach((btn) => {
     const pick = picks[Number(btn.dataset.pick)];
@@ -713,7 +844,17 @@ async function scanAndMatch(): Promise<void> {
 
 writeAutoBtn.addEventListener("click", writeAuto);
 
+// Toggling the backfill changes what a write would do, so the preview on screen is re-computed
+// against the new setting rather than left describing the old one. Still read-only: a dry-run.
+backfillEl.addEventListener("change", () => {
+  void (async () => {
+    await setCatalogBackfill(backfillEl.checked);
+    if (items.length > 0 && profile) await preview();
+  })();
+});
+
 void (async () => {
+  backfillEl.checked = await getCatalogBackfill();
   await refreshProfile();
   ready = true;
   await scanAndMatch();

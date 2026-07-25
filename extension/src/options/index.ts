@@ -10,7 +10,12 @@ import {
   type Profile,
   type ProfileInput,
 } from "../core/profile";
-import { getMatchOnLoad, setMatchOnLoad } from "../core/settings";
+import {
+  getCatalogBackfill,
+  getMatchOnLoad,
+  setCatalogBackfill,
+  setMatchOnLoad,
+} from "../core/settings";
 
 // Profile management (#251): the list of instances/collections the extension can talk to, which one is
 // active, plus the behaviour toggle. This is the only surface that creates and deletes profiles; the
@@ -24,6 +29,7 @@ const editorTitleEl = $("editorTitle");
 const formErrEl = $("formErr");
 const savedEl = $("saved");
 const matchOnLoadEl = $<HTMLInputElement>("matchOnLoad");
+const catalogBackfillEl = $<HTMLInputElement>("catalogBackfill");
 
 const fields = {
   name: $<HTMLInputElement>("name"),
@@ -195,6 +201,10 @@ void (async () => {
   matchOnLoadEl.checked = await getMatchOnLoad();
   matchOnLoadEl.addEventListener("change", () => {
     void setMatchOnLoad(matchOnLoadEl.checked).then(flashSaved);
+  });
+  catalogBackfillEl.checked = await getCatalogBackfill();
+  catalogBackfillEl.addEventListener("change", () => {
+    void setCatalogBackfill(catalogBackfillEl.checked).then(flashSaved);
   });
 
   const { profiles } = await getProfileStore();

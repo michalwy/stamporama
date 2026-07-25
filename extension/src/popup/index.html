@@ -95,14 +95,39 @@
       .chip.auto { background: rgba(21,128,61,0.15); color: var(--ok); }
       .chip.needs { background: rgba(180,83,9,0.15); color: var(--warn); }
 
-      .sec { margin-bottom: 12px; }
-      .sec > .hdr {
-        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
-        color: var(--muted); margin-bottom: 6px; font-weight: 600;
+      /* Section headings carry a coloured band and stick to the top while their cards scroll past,
+         so the list never leaves you wondering which group you are looking at. The accent repeats
+         the tag colour of the rows underneath (amber = decide, green = will write, grey = done). */
+      .sec { margin-bottom: 22px; }
+      .sec > .hdr, details.sec > summary {
+        position: sticky; top: 0; z-index: 2;
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 10px; margin-bottom: 10px;
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+        color: var(--fg); background: var(--sunk);
+        border: 1px solid var(--border); border-left: 4px solid var(--accent, var(--border));
+        border-radius: 6px;
       }
-      details.sec > summary {
-        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
-        color: var(--muted); font-weight: 600; cursor: pointer; margin-bottom: 6px;
+      details.sec > summary { cursor: pointer; }
+      /* A flex summary drops the native marker, so the chevron is drawn here and follows the state. */
+      details.sec > summary::before { content: "▸"; font-size: 10px; color: var(--muted); }
+      details.sec[open] > summary::before { content: "▾"; }
+
+      .sec.needs { --accent: var(--warn); }
+      .sec.will { --accent: var(--ok); }
+      .sec.done, .sec.skip { --accent: var(--muted); }
+      .sec.done > .hdr, details.sec.skip > summary, details.sec.done > summary { color: var(--muted); }
+
+      /* How many rows the section holds, and — when it holds work — what that work is. */
+      .sec .cnt {
+        font-size: 11px; font-weight: 700; letter-spacing: 0;
+        padding: 1px 7px; border-radius: 999px;
+        background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+      }
+      .sec .add {
+        font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none;
+        padding: 1px 8px; border-radius: 999px;
+        background: rgba(21,128,61,0.15); color: var(--ok);
       }
 
       .item {
@@ -160,6 +185,17 @@
       .ref.conflict { background: rgba(220,38,38,0.14); border-color: rgba(220,38,38,0.35); color: var(--danger); }
       .ref.unmapped, .ref.unknown { color: var(--muted); border-color: var(--border); }
       .ref.unmapped { opacity: 0.6; }
+      /* A number the backfill (#280) would add to our stamp — dashed, because it isn't ours yet. */
+      .ref.fill {
+        background: rgba(21,128,61,0.08); border-color: rgba(21,128,61,0.45);
+        border-style: dashed; color: var(--ok);
+      }
+      .ref.fill.done { border-style: solid; background: rgba(21,128,61,0.16); font-weight: 600; }
+
+      .fills { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+      .nofill { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.45; }
+      .opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+      .opt input { margin: 0; }
 
       .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
       .legend .ref { font-family: inherit; }
@@ -200,6 +236,10 @@
 
       <div class="row">
         <button id="writeAuto" class="primary" disabled>Write auto-matches</button>
+        <label class="opt" title="Add catalog numbers Colnect lists for catalogs your stamp has none of. Existing numbers are never overwritten.">
+          <input type="checkbox" id="backfill" checked />
+          Fill missing catalog numbers
+        </label>
       </div>
 
       <div id="progress" class="progress" hidden><div id="bar" class="bar"></div></div>
@@ -211,6 +251,7 @@
         <span><span class="ref conflict">Yt 3</span> the two sides differ</span>
         <span><span class="ref only-mine">Fi 4</span> only on your stamp</span>
         <span><span class="ref unmapped">AFA 5</span> catalog you don't keep</span>
+        <span><span class="ref fill">+ Sn·PL 6</span> will be added to your stamp</span>
       </div>
       <div id="results"></div>
     </div>
