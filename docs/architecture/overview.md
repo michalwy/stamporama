@@ -251,6 +251,16 @@ Photo configuration sits on **two levels**, following the `titleTemplate` / `des
 - **Truncation.** With `maxPhotos` set, whole groups drop from the end and a pair always drops together; manual attachments (#313) hold explicit positions and are protected, so they never drop. The result reports `droppedGroups` and `exceedsLimit` (attachments alone over the limit — the collector's call, not the engine's). With no `maxPhotos` there is no truncation at all.
 - An offer with no collage numbers yet plans no collages (`configured: false`); its attachments still appear.
 
+### Collage renderer (#310)
+
+The only genuinely new mechanism in the image pipeline: `src/lib/collage-layout.ts` (pure geometry, unit-tested on plain numbers) plus `src/lib/photos/collage.ts` (`renderCollage()`, the `sharp` compositing), turning a planned image (#309) into bytes ready to upload.
+
+- **True proportions.** Stamps are scanned, not photographed, so scanner DPI is constant and pixel sizes already carry true relative sizes. Tiles are composited at their **native** size and only the finished canvas is scaled — one shared factor for the whole collage, never per tile or per row. No millimetres anywhere.
+- **Row-based packing.** Rows hold up to `columns` tiles; a row is as tall as its tallest stamp and tiles are vertically centred in it, with the label strip (#312) reserved below each tile on one shared baseline. Rows are **centred** against the widest row, and `gap` doubles as the outer margin. Justified rows (each row stretched to full width) are rejected: they scale each row differently and would destroy the proportions that are the point of the feature. `rows × columns` is capacity — the canvas shrinks to the actual contents (#307) — and a single stamp is a 1×1 collage, so there is one rendering path.
+- **Output limits** (#308, read live from the platform, each skipped when null): longest edge via `fit: "inside"` — the `FULL_MAX_EDGE` convention from `process.ts` — then the file-size target. The byte target is what `process.ts` cannot do: it encodes once at a fixed quality and never checks the result, which is fine for one small scan. `renderCollage` bisects JPEG quality between `COLLAGE_QUALITY_MIN`/`MAX` and, only when even the floor is too heavy, shrinks the canvas by the measured overshoot and searches again (bounded rounds, floor scale). An unreachable limit returns the best effort with `exceedsFileSizeLimit: true` rather than throwing or looping.
+- **Always JPEG.** Collages are photo-like and the quality knob is what makes a byte target reachable at all (PNG has none, WebP is still refused by some marketplaces). Source scans keep their own format; this is the offer-photo output only.
+- Stamps coming out small after a downscale is not warned about — picking a collage template suited to the platform is the collector's call.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:
