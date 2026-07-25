@@ -233,11 +233,28 @@ export function OfferFormDialog({
             </div>
           </div>
 
+          {/* Listing URL — always available; a fresh offer may not have a live listing yet, so it's
+              optional (#213 keeps it editable later). Never pre-filled from the last offer. Sits
+              ahead of status and date (#287): the URL is what you paste in from the listing, the
+              other two are usually left at their remembered values. */}
+          <div style={FIELD_GAP}>
+            <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
+            <input
+              id="offer-url"
+              name="url"
+              type="url"
+              placeholder="https://…"
+              defaultValue={offer?.url ?? ""}
+              disabled={isPending}
+              style={INPUT_STYLE}
+            />
+          </div>
+
           {/* Status + listing date (#257). Status is create-only — an existing offer's lifecycle is
               driven by its own controls. A live status (Ready / Active) needs the offer to list
               something; the server rejects it on a set-less offer. Both pre-fill from the last created
               offer so repeated listings are fast. */}
-          <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+          <div style={{ display: "flex", gap: "0.75rem" }}>
             {!isEdit && (
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="offer-state">Status</LabelWithError>
@@ -267,21 +284,6 @@ export function OfferFormDialog({
                 style={INPUT_STYLE}
               />
             </div>
-          </div>
-
-          {/* Listing URL — always available; a fresh offer may not have a live listing yet, so it's
-              optional (#213 keeps it editable later). Never pre-filled from the last offer. */}
-          <div>
-            <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
-            <input
-              id="offer-url"
-              name="url"
-              type="url"
-              placeholder="https://…"
-              defaultValue={offer?.url ?? ""}
-              disabled={isPending}
-              style={INPUT_STYLE}
-            />
           </div>
 
           {!isEdit && sourceNote && (
