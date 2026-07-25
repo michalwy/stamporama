@@ -7,4 +7,5 @@
 - After creating the GitHub Release, move the `latest` git tag to the same commit and force-push it: `git tag -f latest vX.Y.Z && git push origin latest --force`.
 - If, after reviewing the changes since the previous tag, a new release does not seem warranted, ask the user for confirmation before deciding either way.
 - Always write a proper, human-readable release description instead of relying on bare `--generate-notes` output. Group changes into sections (e.g. Highlights/Fixes/Other), summarize each commit/PR in plain English with its reference number, and keep the auto-generated "Full Changelog" compare link at the end.
+- Every release tag also packages the Assistant extension: CI signs a CRX stamped with the release version and bakes it into the image, so each release is what auto-updates every force-installed browser (#254, ADR-0016). That job needs the `ASSISTANT_CRX_KEY` repository secret — if it fails, the release build fails with it, and the fix is the secret, not a retry.
 - In backlog-review sessions, only suggest a release — do not prepare, tag, push, or create it yourself. Release preparation is handled by a separate dedicated agent.
