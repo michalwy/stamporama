@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Force-install the Stamporama Assistant in Chrome on macOS (#254).
+
+	Chrome takes mandatory policy from /Library/Managed Preferences, which only a configuration
+	profile or an MDM creates — `defaults write` cannot put anything there on an unenrolled Mac.
+
+	Before installing:
+	  1. Replace <your-instance> with the address you open Stamporama at (HTTPS if you have it).
+	  2. Replace BOTH PayloadUUID values with fresh ones from `uuidgen` — a profile is identified by
+	     them, so reusing these across machines or profiles causes overwrites.
+	  3. `plutil -lint` it, then `open` it and approve under
+	     System Settings → General → Device Management.
+
+	The extension id below is the released build's, fixed by the signing key. A dev build loaded
+	unpacked has a different id and is unaffected by this profile.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>com.google.Chrome</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadIdentifier</key>
+			<string>org.stamporama.assistant.chrome</string>
+			<key>PayloadUUID</key>
+			<string>REPLACE-WITH-UUIDGEN-1</string>
+			<key>PayloadDisplayName</key>
+			<string>Chrome — Stamporama Assistant</string>
+			<key>ExtensionInstallForcelist</key>
+			<array>
+				<string>afaeadeheelibafbmhobdnkblmbckehn;https://&lt;your-instance&gt;/assistant/update.xml</string>
+			</array>
+		</dict>
+	</array>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+	<key>PayloadIdentifier</key>
+	<string>org.stamporama.assistant</string>
+	<key>PayloadUUID</key>
+	<string>REPLACE-WITH-UUIDGEN-2</string>
+	<key>PayloadDisplayName</key>
+	<string>Stamporama Assistant</string>
+	<key>PayloadDescription</key>
+	<string>Installs the Stamporama Assistant extension in Chrome from your Stamporama instance and keeps it updated from there.</string>
+	<key>PayloadOrganization</key>
+	<string>Stamporama</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadRemovalDisallowed</key>
+	<false/>
+</dict>
+</plist>

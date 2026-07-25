@@ -20,8 +20,8 @@ You need two values:
 - **Update URL** — `https://<your-instance>/assistant/update.xml`, using the address you normally
   open Stamporama at.
 
-Setting the policy is one command per machine, and it differs per operating system — the exact
-commands for macOS, Windows and Linux are in
+Setting the policy is a one-time step per machine and differs per operating system — a configuration
+profile on macOS, a registry value on Windows, a JSON file on Linux. The exact steps are in
 [`extension/README.md`](../../extension/README.md#install-for-daily-use-254). Afterwards, restart
 Chrome and check `chrome://policy`: the entry should be listed with status OK, and the Assistant
 appears in `chrome://extensions` marked as installed by your organisation.

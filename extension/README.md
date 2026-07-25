@@ -85,13 +85,21 @@ A 404 means this instance has no packaged extension (a source or dev build) — 
 
 Then add the policy, as `<extension id>;<update url>`:
 
-**macOS**
+**macOS** — a **configuration profile**, not `defaults`. Chrome reads mandatory policy from
+`/Library/Managed Preferences`, which only a profile or an MDM creates; writing there by hand does
+nothing on a machine that was never enrolled (the directory does not even exist).
+
+Copy `policy/stamporama-assistant.mobileconfig.example`, put your instance URL in it, give both
+`PayloadUUID`s fresh values from `uuidgen`, then:
 
 ```bash
-sudo defaults write "/Library/Managed Preferences/com.google.Chrome" ExtensionInstallForcelist -array "afaeadeheelibafbmhobdnkblmbckehn;https://<your-instance>/assistant/update.xml"
-sudo plutil -convert xml1 "/Library/Managed Preferences/com.google.Chrome.plist"
-sudo killall cfprefsd
+plutil -lint stamporama-assistant.mobileconfig   # catch typos before macOS does
+open stamporama-assistant.mobileconfig
 ```
+
+Approve it under **System Settings → General → Device Management** — since Ventura a manually
+downloaded profile installs only after that confirmation. Removing the profile there uninstalls the
+extension.
 
 **Windows** (elevated prompt)
 
