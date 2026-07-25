@@ -1,5 +1,5 @@
 dist/
 dist-release/
-dist-crx/
+dist-store/
 keys/
 node_modules/

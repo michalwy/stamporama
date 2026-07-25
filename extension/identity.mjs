@@ -1,15 +1,16 @@
-// Who the extension is, per build flavour (#254).
+// Who the extension is, per build flavour (#254, #288).
 //
 // The dev build and the released build are deliberately *two different extensions*. That is what
-// lets both live in one browser: an unpacked copy pointed at a dev instance, and the policy-
-// installed copy pointed at the production collection. Same ID would make Chrome refuse the second
-// one, and shared storage would let a dev profile reach the production database.
+// lets both live in one browser: an unpacked copy pointed at a dev instance, and the store-installed
+// copy pointed at the production collection. Same ID would make Chrome refuse the second one, and
+// shared storage would let a dev profile reach the production database.
 //
-// A Chrome extension's ID is the hash of its public key. For a CRX that key comes from the
-// signature, so the release ID follows `extension/keys/assistant.pem`. An unpacked build has no
-// signature, so it needs `key` in the manifest to get a stable ID — hence the dev key below. Only
-// the *public* half exists: nothing is ever signed with it, and there is no dev private key to
-// lose. It is committed on purpose, so every machine's unpacked build is the same extension.
+// A Chrome extension's ID is the hash of its public key. The released build gets its key — and so
+// its ID — from the Chrome Web Store when the item is created, which is why no release ID appears
+// here. An unpacked build has no store and no signature, so it needs `key` in the manifest to get a
+// stable ID — hence the dev key below. Only the *public* half exists: nothing is ever signed with
+// it, and there is no dev private key to lose. It is committed on purpose, so every machine's
+// unpacked build is the same extension.
 
 /** Public key (base64 DER SPKI) stamped into the unpacked dev build's manifest. */
 export const DEV_KEY =
@@ -17,13 +18,6 @@ export const DEV_KEY =
 
 /** The unpacked dev build's extension ID — `chrome://extensions` shows this one. */
 export const DEV_EXTENSION_ID = "idmgaeimkafaifpfbjonmjdfbmgffcbh";
-
-/**
- * The released build's extension ID, from `extension/keys/assistant.pem`. This is the one that goes
- * into every machine's `ExtensionInstallForcelist` policy entry, so it must not change casually —
- * `crx.test.ts` asserts the signing key still produces it.
- */
-export const RELEASE_EXTENSION_ID = "afaeadeheelibafbmhobdnkblmbckehn";
 
 /** Appended to the dev build's name, so the two are told apart in `chrome://extensions`. */
 export const DEV_NAME_SUFFIX = " (dev)";

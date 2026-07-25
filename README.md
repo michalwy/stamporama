@@ -42,7 +42,7 @@ Uploaded photos are stored in the `stamporama-data` Docker volume (mounted at `/
 
 Alternatively, photos can be stored in **Google Cloud Storage** — the installer asks for the bucket and service-account key and sets it up for you (or configure it by hand via the GCS section of `.env.prod.example`). Photos are served via short-lived signed URLs so bytes bypass the app. Switching is safe at any time — existing filesystem photos keep serving from the volume while new photos write to GCS, and the optional `pnpm photos:migrate:gcs` command moves old photos across so the volume can be retired.
 
-Released images also serve the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from your own instance through a one-time Chrome policy entry and updates itself whenever you upgrade Stamporama — see the [user guide](docs/user-guide/assistant.md) for the setup, and [`extension/README.md`](extension/README.md) for the per-OS commands.
+There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
 ## Development
 

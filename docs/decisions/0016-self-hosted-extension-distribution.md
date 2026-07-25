@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+**Superseded by [ADR-0017](0017-chrome-web-store-distribution.md).** The self-hosted force-install
+below cannot work on an unmanaged machine: Chrome honours a non-store `update_url` only where it
+detects enterprise management, and a manually installed configuration profile does not provide that.
+What survives is the two-identity build split (dev vs release), which ADR-0017 keeps.
 
 ## Context
 

@@ -12,9 +12,6 @@ tsconfig.tsbuildinfo
 dist/
 build/
 
-# packaged Assistant extension (#254) — built and signed by CI into the release image, never committed
-public/assistant/
-
 # env
 .env
 .env.local

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Stamporama Assistant",
   "version": "0.1.0",
-  "description": "Match marketplace catalog pages (Colnect first) against your Stamporama collection.",
+  "description": "Connect stamp marketplace and catalog pages (Colnect first) to your self-hosted Stamporama collection.",
   "permissions": ["storage", "activeTab", "scripting"],
   "background": {
     "service_worker": "background.js"

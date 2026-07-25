@@ -1,54 +1,35 @@
-// Package the built extension as a signed CRX3 for self-hosted distribution (#254, part of #155).
+// Package the built extension for the Chrome Web Store (#288, part of #155).
 //
-// Run after `node build.mjs` (or via `pnpm pack:crx`, which does both):
+// Run after `node build.mjs --release` (or via `pnpm pack:store`, which does both):
 //
-//   node pack.mjs --key keys/assistant.pem --version 0.28.0
+//   node pack.mjs --version 0.28.0
 //
-// Inputs: `dist/` (the unpacked extension), an RSA private key, a version. Outputs, into
-// `dist-crx/`: `stamporama-assistant.crx` and `crx-metadata.json` — the pair the app serves, the
-// latter being what `/assistant/update.xml` reports to Chrome.
+// Inputs: `dist-release/` and a version. Output: `dist-store/stamporama-assistant.zip`, the archive
+// CI uploads to the store — and the same file to attach by hand for the very first submission,
+// which the API cannot create.
 //
-// The key is not the extension's identity by accident: the same public key sits in `manifest.json`
-// as `key`, so an unpacked dev load and a signed CRX share one extension ID, and a machine's Chrome
-// policy entry keeps working across both.
-import { createHash, createPrivateKey } from "node:crypto";
+// The store assigns the extension's identity and signs the package itself, so nothing here is
+// signed and no key is involved. The unpacked dev build is the only flavour that carries a `key`
+// (see identity.mjs); an uploaded package must not, or the store rejects the mismatch.
+import { createHash } from "node:crypto";
 import { readdir, readFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { crx3, normalizeVersion, publicKeyDer, zip } from "./crx.mjs";
+import { normalizeVersion, zip } from "./archive.mjs";
 import { DEV_NAME_SUFFIX } from "./identity.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
 // `build.mjs --release` writes here; `dist/` is always the dev build and is never packed.
 const distdir = resolve(root, "dist-release");
-const crxName = "stamporama-assistant.crx";
+const zipName = "stamporama-assistant.zip";
 
 function arg(name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-// `--out` writes straight into what the app serves (`../public/assistant`), which is how CI stages
-// the pair into the image build context and how a local instance is tested.
-const outdir = resolve(root, arg("out") ?? "dist-crx");
-
-/**
- * The private key comes from a file (`--key`, local packing) or from `ASSISTANT_CRX_KEY` (CI — a
- * base64-encoded PEM, so the secret survives being a single-line repository secret).
- */
-async function loadPrivateKey() {
-  const keyPath = arg("key");
-  if (keyPath) return createPrivateKey(await readFile(resolve(root, keyPath)));
-
-  const encoded = process.env.ASSISTANT_CRX_KEY?.trim();
-  if (!encoded) {
-    throw new Error(
-      "No signing key. Pass --key <path/to/assistant.pem> or set ASSISTANT_CRX_KEY to a base64-encoded PEM."
-    );
-  }
-  const pem = encoded.includes("BEGIN") ? encoded : Buffer.from(encoded, "base64").toString("utf8");
-  return createPrivateKey(pem);
-}
+// `--out` writes straight into a directory of the caller's choosing; CI leaves the default.
+const outdir = resolve(root, arg("out") ?? "dist-store");
 
 /** Every file under `dir`, sorted, as ZIP-style forward-slash relative paths. */
 async function collect(dir) {
@@ -63,19 +44,15 @@ async function collect(dir) {
 }
 
 const version = normalizeVersion(arg("version") ?? process.env.STAMPORAMA_VERSION);
-const privateKey = await loadPrivateKey();
 
 const files = await collect(distdir);
 if (!files.some(([name]) => name === "manifest.json")) {
   throw new Error(`No manifest.json in ${distdir}. Run \`node build.mjs --release\` first.`);
 }
 
-// Stamp the release identity into the copy of the manifest that goes into the archive:
-//
-// - the **version** mirrors the app release, so upgrading the instance is what makes Chrome see a
-//   newer extension (`manifest.json` in the repo keeps its placeholder);
-// - the **key** is the public half of the signing key, so the manifest states the same ID the
-//   signature already proves — and can never drift from it, being derived here rather than copied.
+// Stamp the version into the archived manifest. It mirrors the app release, so cutting a release is
+// what gives the store a version to accept — an upload whose version did not increase is rejected.
+// `manifest.json` in the repo keeps its placeholder.
 const entries = [];
 for (const [name, absolute] of files) {
   const contents = await readFile(absolute);
@@ -83,37 +60,25 @@ for (const [name, absolute] of files) {
     const manifest = JSON.parse(contents.toString("utf8"));
     if (manifest.name.includes(DEV_NAME_SUFFIX)) {
       throw new Error(
-        `${distdir} holds a dev build (${manifest.name}). Run \`pnpm pack:crx\`, which builds with --release.`
+        `${distdir} holds a dev build (${manifest.name}). Run \`pnpm pack:store\`, which builds with --release.`
       );
     }
     manifest.version = version;
-    manifest.key = publicKeyDer(privateKey).toString("base64");
     entries.push([name, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8")]);
   } else {
     entries.push([name, contents]);
   }
 }
 
-const { crx, extensionId } = crx3(zip(entries), privateKey);
+const archive = zip(entries);
 
-// Only the packer's own output directory is cleared; a `--out` target belongs to someone else
-// (the app's `public/assistant`), so there we just write the two files.
-if (outdir === resolve(root, "dist-crx")) await rm(outdir, { recursive: true, force: true });
+if (outdir === resolve(root, "dist-store")) await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
-await writeFile(join(outdir, crxName), crx);
-await writeFile(
-  join(outdir, "crx-metadata.json"),
-  `${JSON.stringify(
-    {
-      extensionId,
-      version,
-      file: crxName,
-      bytes: crx.length,
-      sha256: createHash("sha256").update(crx).digest("hex"),
-    },
-    null,
-    2
-  )}\n`
-);
+await writeFile(join(outdir, zipName), archive);
 
-console.log(`[assistant] packed ${crxName} — id ${extensionId}, version ${version}, ${crx.length} bytes`);
+console.log(
+  `[assistant] packed ${zipName} — version ${version}, ${archive.length} bytes, sha256 ${createHash("sha256")
+    .update(archive)
+    .digest("hex")
+    .slice(0, 16)}…`
+);

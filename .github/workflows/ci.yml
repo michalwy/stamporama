@@ -163,17 +163,24 @@ jobs:
       - name: Build
         run: pnpm --filter @stamporama/assistant build
 
-  # Build and sign the CRX once, for release tags, and hand it to both image builds as an artifact.
-  # Packing here rather than in the Dockerfile keeps the signing key out of the image layers, and
-  # packing once means both architectures ship byte-identical extension bytes.
-  package-extension:
-    name: Package extension (CRX)
+  # Publish the extension to its unlisted Chrome Web Store listing on release tags (#288). The
+  # store assigns the identity and signs the package, so there is nothing to bake into the image and
+  # nothing for the app to serve — this job is the whole distribution path.
+  #
+  # It can only *update* an item that already exists: the listing, its Privacy tab and its unlisted
+  # visibility are set up by hand once, and publishing keeps whatever visibility is configured there.
+  publish-extension:
+    name: Publish extension (Chrome Web Store)
     runs-on: ubuntu-latest
     needs: [static-checks, unit, integration, extension]
     if: >-
       github.event_name == 'push'
       && startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 10
+
+    env:
+      CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+      CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
 
     steps:
       - name: Check out repository
@@ -193,35 +200,66 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The extension version mirrors the app release, so upgrading the instance is what makes
-      # Chrome see a newer extension. Fails loudly without the signing key: an image that quietly
-      # shipped no extension would look like a broken auto-update to every force-installed browser.
-      - name: Build and sign the CRX
+      # The packaged version mirrors the app release. The store rejects an upload whose version did
+      # not increase, so cutting a release is what makes a new version publishable.
+      - name: Build the store package
+        run: pnpm assistant:zip --version "${GITHUB_REF_NAME#v}"
+
+      - name: Upload and publish
         env:
-          ASSISTANT_CRX_KEY: ${{ secrets.ASSISTANT_CRX_KEY }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
         run: |
-          if [ -z "$ASSISTANT_CRX_KEY" ]; then
-            echo "::error::ASSISTANT_CRX_KEY is not set — see extension/README.md (Signing key)."
+          set -euo pipefail
+
+          for name in CWS_CLIENT_ID CWS_CLIENT_SECRET CWS_REFRESH_TOKEN CWS_PUBLISHER_ID CWS_EXTENSION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set — see extension/README.md (Publishing)."
+              exit 1
+            fi
+          done
+
+          # Access tokens live an hour; the refresh token is the long-lived credential. It expires
+          # every 7 days while the OAuth consent screen sits in "Testing" — publish that app.
+          token=$(curl -sS --fail-with-body https://oauth2.googleapis.com/token \
+            -d "client_id=$CWS_CLIENT_ID" \
+            -d "client_secret=$CWS_CLIENT_SECRET" \
+            -d "refresh_token=$CWS_REFRESH_TOKEN" \
+            -d "grant_type=refresh_token" | jq -r .access_token)
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::error::Could not exchange the refresh token for an access token."
             exit 1
           fi
-          version="${GITHUB_REF_NAME#v}"
-          pnpm assistant:pack --version "$version"
-          cat public/assistant/crx-metadata.json
 
-      - name: Upload packaged extension
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: assistant-crx
-          path: public/assistant/*
-          if-no-files-found: error
-          retention-days: 1
+          base="https://chromewebstore.googleapis.com"
+          item="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
+
+          upload=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $token" \
+            -T extension/dist-store/stamporama-assistant.zip \
+            "$base/upload/v2/$item:upload")
+          echo "$upload" | jq .
+          # A rejected package still answers 200 — the verdict is in uploadState, not the status code.
+          if [ "$(echo "$upload" | jq -r '.uploadState // empty')" != "SUCCESS" ]; then
+            echo "::error::Upload rejected by the Chrome Web Store."
+            exit 1
+          fi
+
+          publish=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Length: 0" \
+            "$base/v2/$item:publish")
+          echo "$publish" | jq .
+
+          echo "::notice::Submitted for review. It goes live once the store approves it."
 
   # Build each architecture on its own native runner and push by digest. Emulating
   # arm64 via QEMU used to deadlock `pnpm install` for hours; native runners avoid it.
   build-image:
     name: Build image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    needs: [static-checks, unit, integration, extension, package-extension]
+    needs: [static-checks, unit, integration, extension]
     # Publish only for release tags (vX.Y.Z) — never for every main commit or PRs.
     if: >-
       github.event_name == 'push'
@@ -252,14 +290,6 @@ jobs:
 
       - name: Check out repository
         uses: actions/checkout@v7.0.1
-
-      # Into the build context, so the Dockerfile's existing `COPY public` bakes the signed CRX and
-      # its metadata into the image. `/assistant/update.xml` reads them at runtime.
-      - name: Download packaged extension
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: assistant-crx
-          path: public/assistant
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.2.0

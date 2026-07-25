@@ -3,14 +3,14 @@
 // copied into dist/. `node build.mjs` for a one-shot build, `--watch` for incremental rebuilds.
 import { build, context } from "esbuild";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEV_ICON_DIR, DEV_KEY, DEV_NAME_SUFFIX } from "./identity.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes("--watch");
-// `--release` builds what gets signed into a CRX (#254): the plain manifest and the blue icons,
-// with the identity left to the signing key. Without it — the default, and what you load unpacked —
+// `--release` builds what gets uploaded to the Chrome Web Store (#288): the plain manifest and the
+// blue icons, with the identity left to the store. Without it — the default, and what you load unpacked —
 // the build is a *separate extension*: its own key, its own name, amber icons, so it can sit in the
 // browser next to the policy-installed one without a collision.
 const release = process.argv.includes("--release");
@@ -78,5 +78,5 @@ if (watch) {
 } else {
   await build(options);
   await copyStatic();
-  console.log(`[assistant] build complete → dist/ (${release ? "release" : "dev"})`);
+  console.log(`[assistant] build complete → ${relative(root, outdir)}/ (${release ? "release" : "dev"})`);
 }

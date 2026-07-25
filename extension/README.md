@@ -16,32 +16,33 @@ pnpm typecheck
 pnpm test
 ```
 
-`node build.mjs --release` produces the flavour that gets signed, into **`dist-release/`** — the two
+`node build.mjs --release` produces the flavour that goes to the store, into **`dist-release/`** — the two
 flavours never share an output directory, so `dist/` is always the dev build and "Load unpacked"
-cannot silently pick up a release build left behind by packaging. `pnpm pack:crx` runs both steps.
+cannot silently pick up a release build left behind by packaging. `pnpm pack:store` runs both steps.
 The amber dev icons are generated once, from the release ones, by
 `node extension/scripts/make-dev-icons.mjs` (run from the repo root — it borrows the app's `sharp`)
 and are committed; regenerate them only if the real icons change.
 
 ## Two builds, two extensions
 
-The unpacked dev build and the released build are **separate extensions**, on purpose (#254):
+The unpacked dev build and the released build are **separate extensions**, on purpose (#254, #288):
 
-| | Unpacked (`pnpm build`) | Released (`pnpm pack:crx`) |
+| | Unpacked (`pnpm build`) | Released (`pnpm pack:store`) |
 |---|---|---|
 | Name | Stamporama Assistant (dev) | Stamporama Assistant |
 | Icon | amber | blue |
-| Extension ID | `idmgaeimkafaifpfbjonmjdfbmgffcbh` | `afaeadeheelibafbmhobdnkblmbckehn` |
-| Identity from | `DEV_KEY` in `identity.mjs` | the signature (`keys/assistant.pem`) |
+| Extension ID | `idmgaeimkafaifpfbjonmjdfbmgffcbh` | assigned by the Chrome Web Store |
+| Identity from | `DEV_KEY` in `identity.mjs` | the store |
 
-So you can run both in one browser: the amber one pointed at a dev instance, the blue one
-force-installed from your Pi and pointed at the production collection. They cannot collide (Chrome
-refuses two extensions with one ID) and cannot leak into each other — profiles and tokens live in
-per-extension `chrome.storage.local`, so a dev profile is invisible to the released build.
+So you can run both in one browser: the amber one pointed at a dev instance, the blue one installed
+from the store and pointed at the production collection. They cannot collide (Chrome refuses two
+extensions with one ID) and cannot leak into each other — profiles and tokens live in per-extension
+`chrome.storage.local`, so a dev profile is invisible to the released build.
 
-`manifest.json` itself carries no `key` and no suffix; each flavour stamps its own in
-(`build.mjs`, `pack.mjs`). Nothing signs with the dev key — only its public half exists, committed
-so every machine's unpacked build is the same extension.
+`manifest.json` itself carries no `key` and no suffix; the dev flavour stamps its own in
+(`build.mjs`), and the release flavour leaves the field empty because an uploaded package must not
+claim an identity the store is about to assign. Nothing signs with the dev key — only its public
+half exists, committed so every machine's unpacked build is the same extension.
 
 ## Load unpacked (Chrome)
 
@@ -56,116 +57,60 @@ Adding a profile by hand (Options → *Add profile*: instance URL, collection id
 **Settings → Assistant → Generate token by hand**) still works, for a browser or a script that cannot
 register.
 
-Unpacked is the **development** path, and stays available alongside the installed one — see *Two
-builds, two extensions* above. For daily use, install from your own instance — below.
+Unpacked is the **development** path, and stays available alongside the store build — see *Two
+builds, two extensions* above. For daily use, install from the store listing — below.
 
-## Install for daily use (#254)
+## Install for daily use (#288)
 
-Chrome no longer installs a loose `.crx`, so a non-store extension arrives through **enterprise
-policy**. Your Stamporama instance is the distribution channel: release images ship a signed CRX and
-an update manifest, and one policy entry per machine points Chrome at them. Auto-update then comes
-for free — `docker compose pull && up -d` on the instance is what ships a new extension version
-(ADR-0016).
+The Assistant is published as an **unlisted Chrome Web Store listing**: not searchable, installed
+from a link, updated by the store. Open the listing, click **Add to Chrome**, then connect it —
+**Settings → Assistant → Connect Stamporama Assistant** in Stamporama, and click the toolbar icon
+with that page in front.
 
-Two constants:
+There is no policy, profile or MDM anywhere in this, and nothing to set up per machine. Chrome
+handles updates on its own.
 
-| | |
-|---|---|
-| Extension ID | `afaeadeheelibafbmhobdnkblmbckehn` |
-| Update URL | `https://<your-instance>/assistant/update.xml` |
+> Self-hosting the extension was tried first (#254) and does not work: Chrome only force-installs
+> from a non-store update URL on an enterprise-managed machine. See ADR-0017.
 
-This is the *released* extension's ID, fixed by the signing key. A dev build loaded unpacked has a
-different one and installs alongside it. Check the instance serves the pair first:
-
-```bash
-curl https://<your-instance>/assistant/update.xml
-```
-
-A 404 means this instance has no packaged extension (a source or dev build) — use unpacked there.
-
-Then add the policy, as `<extension id>;<update url>`:
-
-**macOS** — a **configuration profile**, not `defaults`. Chrome reads mandatory policy from
-`/Library/Managed Preferences`, which only a profile or an MDM creates; writing there by hand does
-nothing on a machine that was never enrolled (the directory does not even exist).
-
-Copy `policy/stamporama-assistant.mobileconfig.example`, put your instance URL in it, give both
-`PayloadUUID`s fresh values from `uuidgen`, then:
-
-```bash
-plutil -lint stamporama-assistant.mobileconfig   # catch typos before macOS does
-open stamporama-assistant.mobileconfig
-```
-
-Approve it under **System Settings → General → Device Management** — since Ventura a manually
-downloaded profile installs only after that confirmation. Removing the profile there uninstalls the
-extension.
-
-**Windows** (elevated prompt)
-
-```bat
-reg add "HKLM\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist" /v 1 /t REG_SZ /d "afaeadeheelibafbmhobdnkblmbckehn;https://<your-instance>/assistant/update.xml" /f
-```
-
-**Linux** — write `/etc/opt/chrome/policies/managed/stamporama-assistant.json` (Chromium:
-`/etc/chromium/policies/managed/`):
-
-```json
-{
-  "ExtensionInstallForcelist": [
-    "afaeadeheelibafbmhobdnkblmbckehn;https://<your-instance>/assistant/update.xml"
-  ]
-}
-```
-
-Restart Chrome, open `chrome://policy` → **Reload policies**, and confirm the entry is listed and
-its status is OK. The Assistant then appears in `chrome://extensions` as installed by policy — the
-user cannot disable or remove it, which is the trade for auto-update without a store. Finish with
-the normal one-click registration: **Settings → Assistant → Connect Stamporama Assistant**, then
-click the toolbar icon.
-
-Remove it by deleting the same policy value (`sudo defaults delete …`, `reg delete …`, or removing
-the JSON file) and reloading policies.
-
-## Packaging (#254)
+## Packaging (#288)
 
 ```bash
 cd extension
-pnpm pack:crx --key keys/assistant.pem --version 0.28.0   # → extension/dist-crx/
+pnpm pack:store --version 0.28.0   # → extension/dist-store/stamporama-assistant.zip
 ```
 
-…or, from the repo root, straight into what the app serves:
+…or `pnpm assistant:zip --version 0.28.0` from the repo root. The version is stamped into the
+archived manifest only; `manifest.json` in the repo keeps its placeholder, because the published
+version always mirrors the app release — and the store rejects an upload whose version did not
+increase. Omitting `--version` produces `0.0.0`.
 
-```bash
-pnpm assistant:pack --key keys/assistant.pem --version 0.28.0   # → public/assistant/
-```
+The archive is written by hand (`archive.mjs` — a deterministic ZIP writer; `pack.mjs` — the CLI),
+with no dependencies and no signing: the store signs. `pnpm test` reads the bytes back out of an
+archive and pins the dev build's ID.
 
-Both write `stamporama-assistant.crx` and `crx-metadata.json` (id, version, size, sha256 — the
-metadata `/assistant/update.xml` reports to Chrome). The version is stamped into the archived
-manifest only; `manifest.json` in the repo keeps its placeholder, because the shipped version always
-mirrors the app release. Omitting `--version` produces `0.0.0`.
+### Publishing
 
-Packaging is hand-written and dependency-free (`crx.mjs` — a deterministic ZIP writer plus the CRX3
-protobuf header; `pack.mjs` — the CLI). `pnpm test` checks the container against the format's rules,
-including that the extension ID still matches the key in `manifest.json`.
+CI publishes on release tags — the `publish-extension` job builds the ZIP, exchanges the refresh
+token for an access token, and calls `:upload` then `:publish` on `chromewebstore.googleapis.com`.
+It needs repository **secrets** `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` and
+repository **variables** `CWS_PUBLISHER_ID`, `CWS_EXTENSION_ID`.
 
-### Signing key
+Three things have to be done by hand first, because the API can only update an item that exists:
 
-The private key is **not** in the repository. It lives in `extension/keys/assistant.pem` (gitignored)
-and, for CI, in the `ASSISTANT_CRX_KEY` repository secret as a base64-encoded PEM:
+1. **Create the listing.** Chrome Web Store developer account (one-off 5 USD) → new item → upload
+   `dist-store/stamporama-assistant.zip` → fill the *Store listing* and *Privacy* tabs → set
+   visibility to **Unlisted** → publish once. The item ID it gets is `CWS_EXTENSION_ID`; the
+   publisher ID is in the dashboard settings.
+2. **Enable the API.** A Google Cloud project with the Chrome Web Store API enabled and an OAuth
+   client (desktop app) for the same account that owns the listing.
+3. **Mint a refresh token** once, interactively, for the scope
+   `https://www.googleapis.com/auth/chromewebstore`. **Push the OAuth consent screen to
+   production** — left in *Testing*, the refresh token expires every 7 days and releases start
+   failing for reasons that have nothing to do with the release.
 
-```bash
-base64 -i extension/keys/assistant.pem | gh secret set ASSISTANT_CRX_KEY
-```
-
-Back it up. Losing it means no further updates for the installed extension ID — only a fresh install
-under a new one, with every machine's policy entry to redo. Rotating it has the same effect, which
-is why `crx.test.ts` asserts the ID whenever the key file is present: changing the key fails the
-tests until the ID is updated in `identity.mjs`, here, and in the ADR.
-
-Releases pack automatically: the `package-extension` CI job signs the CRX for a `v*` tag and both
-image builds bake it into `public/assistant/`. Without the secret set, the release build fails
-loudly rather than shipping an image with no extension.
+Publishing keeps whatever visibility the dashboard has; changing visibility there means publishing
+once by hand again. Every version goes through review, so a green job means *submitted*, not live.
 
 ## Connection profiles (#251)
 
@@ -295,5 +240,5 @@ immediately. **Rescan** re-reads the page after you navigate.
 
 ## Boundaries
 
-Colnect DOM specifics live in `src/platform/colnect/` (#249). Packaging and distribution
-(#254) are `crx.mjs` / `pack.mjs` plus the app's `/assistant/update.xml` route — see ADR-0016.
+Colnect DOM specifics live in `src/platform/colnect/` (#249). Packaging and distribution (#288) are
+`archive.mjs` / `pack.mjs` plus the `publish-extension` CI job — see ADR-0017.
