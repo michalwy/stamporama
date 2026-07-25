@@ -42,14 +42,30 @@ token that renders text you typed is translatable: the area
 [title name](#title-names-per-language), [condition and certificate status](collections.md#conditions-in-other-languages)
 names and abbreviations, and [issue and stamp names](collections.md#issue-and-stamp-names-in-other-languages).
 
-Ticking **Platform** also reveals a **Listing title template** — a free-text template that decides how
-[offer](offers.md) and set titles are pre-filled for this platform. Click **Edit template…** to open
-the **template builder**, where you write it with **tokens** in curly braces mixed with any literal
-text you like, for example `{catalog} {name} {year} {condition}`. Click a token chip to drop it in at
-the cursor. The builder shows a **live preview** of the resulting title rendered against a real
-inventory copy — **🎲 Random** shuffles to another copy, and **Pick copy…** lets you preview on a
-specific one you search out. The preview also renders in the platform's **listing language**, so you
-see the title as its listings will read — any word for which you have not entered text in that
+Ticking **Platform** also reveals **Listing templates** — what this platform's [offer](offers.md)
+texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all three,
+one under another:
+
+| Template | Fills in | Left blank |
+| --- | --- | --- |
+| **Listing title** | the offer name and set/lot titles | falls back to the catalog/copy label |
+| **Listing description** | the offer's long listing description | no description is generated |
+| **Private note** | the seller-only note some platforms allow on a listing | no note is generated |
+
+At the top of the dialog is **Preview on** — the inventory copies every preview below runs on, shared
+by all three so they always describe the same stamps. **🎲 Random** reshuffles them and **Pick copy…**
+searches out a specific one. Two copies are used, each treated as its own set, so a repeating block
+(see below) previews the way it will read on a real offer. The dialog is a fixed size and scrolls
+inside, and each template **collapses to a single row** (click its heading) so the one you are
+writing has the room — a collapsed row still shows its template on one line, with `⏎` for the line
+breaks. **Save templates** saves all three at once; platforms that have no private note simply leave
+that one empty.
+
+Each template is the same **template builder**: a field, its token chips, and a live preview
+underneath. You write the template with **tokens** in curly braces mixed with any literal text you
+like, for example `{catalog} {name} {year} {condition}`. Click a token chip to drop it in at the
+cursor. The preview renders in the platform's **listing language**, so you see the text as its
+listings will read — any word for which you have not entered text in that
 language is dotted-underlined and named in a line beneath the preview (*default language used for
 {condition}*), so you can spot the gaps while you write the template. Nothing is blocked: the title
 always generates, falling back to your default text. The tokens fill in from the copies in the offer (or set):
@@ -66,11 +82,39 @@ always generates, falling back to your default text. The tokens fill in from the
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
 - `{issueName}` — name of the issue the stamp belongs to
 - `{issueYear}` — year of that issue (also collapses to a range across copies)
+- `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
+  named the set, so pair it as `{setTitle|catalog}`)
 
-Literal text between tokens — spaces, `-`, `/` — is kept as written; it only disappears when it was
-gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several
+Literal text between tokens — spaces, `-`, `/`, `:` — is kept as written; it only disappears when it
+was gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several
 tokens: for example `{issueName|name|catalog}` prefers the issue name, falls back to the stamp name,
 then the catalog number.
+
+### Description and private note
+
+The **Description** and **Private note** tabs work the same way, with two additions for longer text:
+
+- **Line breaks are kept** as you write them, including blank lines between paragraphs. A line whose
+  tokens *all* come out empty is dropped whole, so a line like `Certificate: {certificate}` leaves no
+  stray `Certificate:` behind on a copy that has none.
+- **Repeating blocks** list an offer item by item. `{#set}…{/set}` repeats its body once per set in
+  the offer, and `{#copy}…{/copy}` once per copy — inside a set block, that set's copies; on its own,
+  every copy in the offer. Inside a block, the tokens describe *that* set or copy rather than the
+  offer as a whole. The chips insert a block around whatever you have selected.
+
+For example:
+
+```
+{name} {year} — {condition}
+
+Items in this lot:
+{#set}- {catalog} {name}
+{/set}
+Shipped tracked within 3 working days.
+```
+
+Blank means *no text is generated at all* for that field — unlike the title, there is no built-in
+default.
 
 ### Catalog numbers
 

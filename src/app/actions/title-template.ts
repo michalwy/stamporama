@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   randomTitleSampleCopy,
+  randomTitleSampleCopies,
   listTitleSampleCopies,
   type TitleSampleCopy,
 } from "@/lib/title-samples";
@@ -26,6 +27,17 @@ export async function randomTitleSampleAction(
 ): Promise<TitleSampleCopy | null> {
   const session = await getSession();
   return randomTitleSampleCopy(session.user.id, collectionId, language);
+}
+
+/** Several random copies at once, so a multi-line listing template previews with its `{#set}` block
+ * actually repeating (#266/#267). */
+export async function randomTitleSamplesAction(
+  collectionId: string,
+  count: number,
+  language: string | null = null
+): Promise<TitleSampleCopy[]> {
+  const session = await getSession();
+  return randomTitleSampleCopies(session.user.id, collectionId, count, language);
 }
 
 /** Copies matching `search` (by name or catalog number) for the builder's "pick a copy" list. */

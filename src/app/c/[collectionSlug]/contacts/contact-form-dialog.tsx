@@ -10,8 +10,10 @@ import {
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_LANGUAGES } from "@/lib/languages";
 import type { ContactListItem } from "@/lib/contacts";
-import { AVAILABLE_TITLE_TOKENS, DEFAULT_TITLE_TEMPLATE } from "@/lib/offer-title-template";
-import { TemplateBuilderDialog } from "@/app/c/[collectionSlug]/shared/template-builder-dialog";
+import {
+  ListingTemplatesDialog,
+  type ListingTemplates,
+} from "./listing-templates-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -26,6 +28,7 @@ const INPUT_STYLE: React.CSSProperties = {
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
+
 
 export interface ContactFormDialogProps {
   mode: "add" | "edit";
@@ -54,10 +57,15 @@ export function ContactFormDialog({
   // The platform currency field is only shown while the `platform` role is checked (#196), so the
   // platform checkbox is tracked here to reveal it.
   const [isPlatform, setIsPlatform] = useState(contact?.platform ?? false);
-  // The title template (#210) is edited in a dedicated builder dialog; held here and submitted via a
-  // hidden field so the existing save flow is unchanged.
-  const [titleTemplate, setTitleTemplate] = useState(contact?.titleTemplate ?? "");
-  const [builderOpen, setBuilderOpen] = useState(false);
+  // The three listing templates (#210, #266, #267) live in their own dialog rather than on this
+  // form — held here and submitted via hidden fields, so the existing save flow is unchanged.
+  const [templates, setTemplates] = useState<ListingTemplates>({
+    titleTemplate: contact?.titleTemplate ?? "",
+    descriptionTemplate: contact?.descriptionTemplate ?? "",
+    privateNoteTemplate: contact?.privateNoteTemplate ?? "",
+  });
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const configuredTemplates = Object.values(templates).filter((t) => t.trim()).length;
   // The listing language (#293) is tracked so the builder's preview renders in the language being
   // configured, not the default one.
   const [titleLanguage, setTitleLanguage] = useState(contact?.titleLanguage ?? "");
@@ -74,7 +82,7 @@ export function ContactFormDialog({
 
   return (
     <>
-    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="32rem" dismissable={!builderOpen}>
+    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="42rem" dismissable={!templatesOpen}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
@@ -124,7 +132,7 @@ export function ContactFormDialog({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "1fr 1fr 1fr",
                 gap: "0.375rem 1rem",
               }}
             >
@@ -158,91 +166,86 @@ export function ContactFormDialog({
             </div>
           </div>
 
-          {/* Platform currency (#196): a platform's fixed transaction currency, inherited and
-              locked by every offer and sale routed to it. Only shown for the platform role; it is
-              required before the first offer/sale, prompted inline there when still unset. */}
+          {/* Platform currency (#196) and listing language (#293), side by side — both are
+              platform-only, both are one small select. The currency is inherited and locked by every
+              offer and sale routed to the platform, and required before the first of them (prompted
+              inline there when still unset). The language decides which text this platform's
+              generated titles use, and which per-language inputs the entity forms offer. */}
           {isPlatform && (
-            <div style={FIELD_GAP}>
-              <LabelWithError htmlFor="contact-platform-currency">Platform currency</LabelWithError>
-              <select
-                id="contact-platform-currency"
-                name="platformCurrency"
-                defaultValue={contact?.platformCurrency ?? ""}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                <option value="">— not set yet —</option>
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                Every offer and sale on this platform uses this currency. Changing it later leaves
-                existing offers and sales untouched.
-              </p>
+            <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="contact-platform-currency">Platform currency</LabelWithError>
+                <select
+                  id="contact-platform-currency"
+                  name="platformCurrency"
+                  defaultValue={contact?.platformCurrency ?? ""}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  <option value="">— not set yet —</option>
+                  {COMMON_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                  Every offer and sale on this platform uses it. Changing it later leaves existing
+                  offers and sales untouched.
+                </p>
+              </div>
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="contact-title-language">Listing language</LabelWithError>
+                <select
+                  id="contact-title-language"
+                  name="titleLanguage"
+                  value={titleLanguage}
+                  onChange={(e) => setTitleLanguage(e.target.value)}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  <option value="">— default language —</option>
+                  {COMMON_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label} ({l.code})
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                  Generated text for this platform uses this language, falling back to the default text
+                  where no translation is set.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Listing language (#293): the language this platform's generated titles are written
-              in. Entity text (area title names today; conditions, issues and stamps to follow) can
-              carry a value per language, and a missing translation falls back to the entity's
-              default text. Setting a language here is also what makes the matching per-language
-              inputs appear on the entity forms. */}
+          {/* Listing templates (#210, #266, #267): what this platform's offer title, description
+              and private note are generated from. Kept in a dedicated dialog so the contact form
+              stays a contact form; carried on submit via hidden fields. */}
           {isPlatform && (
             <div style={FIELD_GAP}>
-              <LabelWithError htmlFor="contact-title-language">Listing language</LabelWithError>
-              <select
-                id="contact-title-language"
-                name="titleLanguage"
-                value={titleLanguage}
-                onChange={(e) => setTitleLanguage(e.target.value)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                <option value="">— default language —</option>
-                {COMMON_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label} ({l.code})
-                  </option>
-                ))}
-              </select>
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                Generated titles for this platform use text in this language, falling back to the
-                default text where no translation is set. Areas then offer a title name per language
-                in use.
-              </p>
-            </div>
-          )}
-
-          {/* Title template (#210): a free-text template with {tokens} that pre-fills the offer name
-              (#209) and set/lot titles for this platform's listings. Only shown for the platform
-              role; edited in the dedicated builder (with a live preview) and carried on submit via a
-              hidden field. Blank falls back to the derived catalog/copy label. */}
-          {isPlatform && (
-            <div style={FIELD_GAP}>
-              <input type="hidden" name="titleTemplate" value={titleTemplate} />
-              <LabelWithError>Listing title template</LabelWithError>
+              <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
+              <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
+              <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+              <LabelWithError>Listing templates</LabelWithError>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <div
                   style={{
                     flex: 1,
                     minWidth: 0,
                     ...INPUT_STYLE,
-                    fontFamily: titleTemplate ? "var(--font-mono, monospace)" : undefined,
-                    color: titleTemplate ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    color: configuredTemplates
+                      ? "var(--color-text-primary)"
+                      : "var(--color-text-muted)",
                   }}
-                  title={titleTemplate || undefined}
                 >
-                  {titleTemplate || "Catalog/copy label (default)"}
+                  {configuredTemplates
+                    ? `${configuredTemplates} of 3 configured`
+                    : "None — listings use the catalog/copy label"}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setBuilderOpen(true)}
+                  onClick={() => setTemplatesOpen(true)}
                   disabled={isPending}
                   style={{
                     ...INPUT_STYLE,
@@ -253,12 +256,12 @@ export function ContactFormDialog({
                     color: "var(--color-text-primary)",
                   }}
                 >
-                  Edit template…
+                  Templates…
                 </button>
               </div>
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-                Pre-fills offer and set titles for this platform, with a live preview. Leave blank to
-                fall back to the catalog/copy label.
+                Title, description and private note for this platform&apos;s listings, each generated
+                from a {"{token}"} template with a live preview.
               </p>
             </div>
           )}
@@ -284,19 +287,15 @@ export function ContactFormDialog({
       </form>
     </DialogShell>
 
-    {builderOpen && (
-      <TemplateBuilderDialog
+    {templatesOpen && (
+      <ListingTemplatesDialog
         collectionId={collectionId}
         language={titleLanguage || null}
-        title="Listing title template"
-        description="Tokens fill in from the copies an offer (or set) lists. Leave blank to fall back to the catalog/copy label."
-        initialValue={titleTemplate}
-        tokens={AVAILABLE_TITLE_TOKENS}
-        placeholder={DEFAULT_TITLE_TEMPLATE}
-        onCancel={() => setBuilderOpen(false)}
-        onSave={(v) => {
-          setTitleTemplate(v);
-          setBuilderOpen(false);
+        templates={templates}
+        onCancel={() => setTemplatesOpen(false)}
+        onSave={(next) => {
+          setTemplates(next);
+          setTemplatesOpen(false);
         }}
       />
     )}

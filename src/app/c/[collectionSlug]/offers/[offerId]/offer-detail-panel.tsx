@@ -10,9 +10,10 @@ import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
+import { OfferListingText } from "./offer-listing-text";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
-import type { OfferDetailSet } from "@/lib/offers";
+import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -98,6 +99,14 @@ interface OfferDetailPanelProps {
   issueHeaderById: Record<string, IssueHeader>;
 }
 
+/** The generated texts the ⋮ menu offers a "regenerate in <Language>" entry for (#297), in the order
+ * they read on screen. Each field's own ↻ handles the platform's own language. */
+const REGENERATABLE_TEXTS: readonly { field: OfferTextField; label: string }[] = [
+  { field: "name", label: "title" },
+  { field: "description", label: "description" },
+  { field: "privateNote", label: "private note" },
+];
+
 export function OfferDetailPanel({
   collectionId,
   collectionSlug,
@@ -148,7 +157,7 @@ export function OfferDetailPanel({
   const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0);
 
   /** Patch a single header field in place, then refresh. */
-  function patch(field: "price" | "url" | "name", value: string) {
+  function patch(field: "price" | "url" | OfferTextField, value: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
@@ -158,14 +167,15 @@ export function OfferDetailPanel({
     });
   }
 
-  /** Regenerate the listing title from the platform's template over the current composition (#210),
-   * overwriting any manual edit. `language` (#297) regenerates in a language other than the
-   * platform's — a one-off; nothing about the choice is stored. */
-  function regenerateTitle(language?: string | null) {
+  /** Regenerate one generated listing text — title (#210), description (#266) or private note
+   * (#267) — from the platform's template over the current composition, overwriting any manual edit.
+   * `language` (#297) regenerates in a language other than the platform's — a one-off; nothing about
+   * the choice is stored. */
+  function regenerate(field: OfferTextField, language?: string | null) {
     setActionError(undefined);
     startTransition(async () => {
-      const { regenerateOfferNameAction } = await import("@/app/actions/offers");
-      const result = await regenerateOfferNameAction(offerId, language);
+      const { regenerateOfferTextAction } = await import("@/app/actions/offers");
+      const result = await regenerateOfferTextAction(offerId, field, language);
       if (result.status === "success") invalidateAll(collectionId);
       else setActionError(result.message);
     });
@@ -209,16 +219,19 @@ export function OfferDetailPanel({
           onSelect: () => setState(s),
         };
       }),
-    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: () => regenerateTitle() },
-    // One entry per *other* language the collection lists in (#297) — plain "Regenerate title"
-    // already covers the platform's own. Absent for a single-language collection.
-    ...otherTitleLanguages.map(
-      (code): RowAction => ({
-        key: `regenerate-${code ?? "default"}`,
-        label: `Regenerate title in ${languageLabel(code ?? defaultLanguage)}`,
-        icon: "↻",
-        onSelect: () => regenerateTitle(code),
-      })
+    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: () => regenerate("name") },
+    // One entry per generated text × *other* language the collection lists in (#297/#266/#267) —
+    // each field's own ↻ on the screen already covers the platform's own language, and a field the
+    // platform has no template for is skipped. Absent for a single-language collection.
+    ...otherTitleLanguages.flatMap((code) =>
+      REGENERATABLE_TEXTS.filter((t) => offer.regeneratable[t.field]).map(
+        (t): RowAction => ({
+          key: `regenerate-${t.field}-${code ?? "default"}`,
+          label: `Regenerate ${t.label} in ${languageLabel(code ?? defaultLanguage)}`,
+          icon: "↻",
+          onSelect: () => regenerate(t.field, code),
+        })
+      )
     ),
     ...(offer.inActiveBidding
       ? [{ key: "clear-bidding", label: "Clear active bidding", icon: "🔨", onSelect: () => setBidding(false) } as RowAction]
@@ -436,6 +449,15 @@ export function OfferDetailPanel({
           </p>
         )}
       </div>
+
+      {/* Listing text (#266/#267): the offer's description and its seller-only private note, both
+          generated from the platform's templates and freely editable, each with its own ↻. */}
+      <OfferListingText
+        offer={offer}
+        isPending={isPending}
+        onSave={(field, value) => patch(field, value)}
+        onRegenerate={(field) => regenerate(field)}
+      />
 
       {/* Sets */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

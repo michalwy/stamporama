@@ -6,7 +6,7 @@ import {
   createOffer,
   addOfferSet,
   addOfferSetsPerCopy,
-  regenerateOfferName,
+  regenerateOfferText,
   previewOfferTitle,
   getOfferDetail,
 } from "../../src/lib/offers";
@@ -150,8 +150,8 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
   it("regenerates the offer title in an overridden language, leaving the platform untouched", async () => {
     const offerId = await offerOn(enPlatformId);
     await addOfferSet(userId, offerId, [copyId]);
-    assert.equal(await regenerateOfferName(userId, offerId), "Mercury Used Poland");
-    assert.equal(await regenerateOfferName(userId, offerId, "pl"), "Merkury Kasowane Polska");
+    assert.equal(await regenerateOfferText(userId, offerId, "name"), "Mercury Used Poland");
+    assert.equal(await regenerateOfferText(userId, offerId, "name", "pl"), "Merkury Kasowane Polska");
     // Nothing about the choice is stored — the platform still lists in English.
     const platform = await prisma.contact.findUniqueOrThrow({ where: { id: enPlatformId } });
     assert.equal(platform.titleLanguage, "en");

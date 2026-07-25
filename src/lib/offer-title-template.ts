@@ -8,6 +8,12 @@
 // joined by `/`. `{year}` collapses a set of years to a `min–max` span. A **fallback group**
 // `{a|b|c}` renders the first non-empty of its tokens. Unknown fields render empty, and leftover
 // separators from empty tokens are tidied so a partial match still reads cleanly.
+//
+// The same engine renders the longer **listing texts** an offer carries — its description (#266) and
+// its seller-only private note (#267) — from their own per-platform templates. Those are multi-line,
+// so rendering scope is grouped by `OfferSet` rather than flat: line breaks are preserved, a line
+// whose placeholders all came out empty is dropped whole, and the repeating blocks `{#set}…{/set}` /
+// `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
 
 import { parseCatalogNumberParts } from "./catalog-number";
 
@@ -84,6 +90,21 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{ref}", label: "Location ref", example: "A234" },
   { token: "{issueName}", label: "Issue name", example: "1850 First Issue" },
   { token: "{issueYear}", label: "Issue year", example: "1850" },
+];
+
+/** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
+ * `{setTitle}`, which only names something inside a `{#set}` block (or when the template renders one
+ * set's own title). */
+export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
+  ...AVAILABLE_TITLE_TOKENS,
+  { token: "{setTitle}", label: "Set title", example: "Complete series" },
+];
+
+/** The repeating blocks a listing text may use (#266), for the builder's chips: each renders its
+ * body once per set / per copy in scope. */
+export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; label: string }[] = [
+  { open: "{#set}", close: "{/set}", label: "Repeat once per set in the offer" },
+  { open: "{#copy}", close: "{/copy}", label: "Repeat once per copy (of the enclosing set)" },
 ];
 
 /** The fallback template when a platform has none set: catalog, name, year, condition. */
@@ -252,11 +273,18 @@ function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]):
 }
 
 /** Resolve one token spec (without braces), e.g. `name` or `catalog:Mi,Sc:vendor`. Returns the
- * rendered value (possibly `""` when absent), or `null` when the token name is not known. */
-function resolveTokenValue(spec: string, copies: readonly TitleTemplateCopy[]): string | null {
+ * rendered value (possibly `""` when absent), or `null` when the token name is not known.
+ * `setTitle` is the enclosing set's title, which only `{setTitle}` reads (null outside a set). */
+function resolveTokenValue(
+  spec: string,
+  copies: readonly TitleTemplateCopy[],
+  setTitle: string | null
+): string | null {
   const segments = spec.split(":");
   const name = segments[0].trim().toLowerCase();
   switch (name) {
+    case "settitle":
+      return setTitle?.trim() ?? "";
     case "name":
       return distinct(copies.map((c) => c.name)).join(" / ");
     case "catalog":
@@ -311,47 +339,227 @@ interface ResolvedPlaceholder {
  */
 function resolvePlaceholder(
   inner: string,
-  copies: readonly TitleTemplateCopy[]
+  copies: readonly TitleTemplateCopy[],
+  setTitle: string | null = null
 ): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
   if (parts.length === 1) {
-    const v = resolveTokenValue(parts[0], copies);
+    const v = resolveTokenValue(parts[0], copies, setTitle);
     // unknown → literal (no token produced it); known → value (maybe "")
     if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false };
     return { value: v, spec: parts[0], fellBack: !!v && tokenFellBack(parts[0], copies) };
   }
   for (const p of parts) {
-    const v = resolveTokenValue(p, copies);
+    const v = resolveTokenValue(p, copies, setTitle);
     // first non-empty (skips unknown → null and empty → "")
     if (v) return { value: v, spec: p, fellBack: tokenFellBack(p, copies) };
   }
   return { value: "", spec: null, fellBack: false };
 }
 
-/** Marker left in place of a placeholder that resolved to nothing, so {@link tidy} can strip only
- * the separators that were gluing *that* empty slot to its neighbour — never a literal separator the
- * user put between two values that are present. NUL never appears in real data. */
+/** Markers left in the rendered string before it is tidied. {@link EMPTY_MARK} stands in for a
+ * placeholder that resolved to nothing, so {@link tidyLine} strips only the separators that were
+ * gluing *that* empty slot to its neighbour — never a literal separator the user put between two
+ * values that are present. {@link VALUE_MARK} prefixes every value that *did* resolve, which is how
+ * {@link tidyMultiline} tells a line whose placeholders all came out empty (scaffolding, dropped)
+ * from a purely literal line (kept). Both are control characters that never occur in real data. */
 const EMPTY_MARK = " ";
+const VALUE_MARK = "";
 
 /** Collapse whitespace, trim, and remove only the dangling glue an **empty** placeholder left
- * behind: a separator (`- – · / ,`) that sat directly next to the emptied slot, and any now-empty
- * `()` / `[]`. A separator between two present values carries no marker, so it is kept verbatim. */
-function tidy(rendered: string): string {
+ * behind: a separator (`- – · / , : ;`) that sat directly next to the emptied slot, and any now-empty
+ * `()` / `[]`. A separator between two present values carries no marker, so it is kept verbatim.
+ * Runs over the whole render for a one-line title, and line by line for a multi-line text. */
+function tidyLine(rendered: string): string {
   return rendered
-    // Drop a separator immediately before an empty slot, then one immediately after it.
-    .replace(/\s*[-–·/,]\s* /g, EMPTY_MARK)
-    .replace(/ \s*[-–·/,]\s*/g, EMPTY_MARK)
-    .replace(/ /g, "") // remove the markers themselves
+    // An empty slot *between* two separators keeps the first one (with its original spacing) and
+    // loses the second — `{name} - {certificate} - {year}` must not collapse to `Mercury1850`.
+    .replace(/(\s*[-–·/,:;]\s*) \s*[-–·/,:;]\s*/g, "$1")
+    // Otherwise drop a separator immediately before an empty slot, then one immediately after it.
+    .replace(/\s*[-–·/,:;]\s* /g, EMPTY_MARK)
+    .replace(/ \s*[-–·/,:;]\s*/g, EMPTY_MARK)
+    .replace(/[ ]/g, "") // remove the markers themselves
     .replace(/\(\s*\)/g, "") // empty parens left by an emptied token
     .replace(/\[\s*\]/g, "") // empty brackets
     .replace(/\s+([)\]])/g, "$1")
     .replace(/([([])\s+/g, "$1")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
 
+/** {@link tidyLine} per line, for a multi-line listing text (#266/#267). Newlines the collector
+ * wrote are structure, so two extra rules keep a paragraph reading well when tokens come out empty:
+ *
+ * - a line carrying placeholders that **all** resolved empty is dropped whole, taking its literal
+ *   scaffolding with it — `Condition: {condition}` leaves no bare `Condition:` behind;
+ * - a line with no placeholders at all, including a deliberately blank paragraph separator, is kept
+ *   as written, and a kept line's leading indentation survives the per-line trim (list markers).
+ */
+function tidyMultiline(rendered: string): string {
+  const out: string[] = [];
+  for (const line of rendered.split("\n")) {
+    if (line.includes(EMPTY_MARK) && !line.includes(VALUE_MARK)) continue;
+    const indent = /^[ \t]*/.exec(line)![0];
+    const tidied = tidyLine(line);
+    out.push(tidied ? indent + tidied : "");
+  }
+  return out.join("\n").trim();
+}
+
+// ── Scope + repeating blocks (#266) ──────────────────────────────────────────
+
+/** One atomic sellable unit in template scope: a set's own title plus the copies it holds (an
+ * `OfferSet`, ADR-0013). Title generation renders over a single anonymous set; an offer description
+ * renders over all of them and a `{#set}` block iterates them. */
+export interface TemplateSet {
+  title: string | null;
+  copies: readonly TitleTemplateCopy[];
+}
+
+/** What tokens resolve against at one point in the template: the sets a `{#set}` block would
+ * iterate, every copy currently in scope (what a plain token aggregates over), and the enclosing
+ * set's title (read only by `{setTitle}`). */
+interface TemplateScope {
+  sets: readonly TemplateSet[];
+  copies: readonly TitleTemplateCopy[];
+  setTitle: string | null;
+}
+
+/** A parsed template: literal runs (still carrying `{token}` placeholders) and repeating blocks. */
+type TemplateNode =
+  | { kind: "text"; text: string }
+  | { kind: "block"; over: "set" | "copy"; body: TemplateNode[] };
+
+const BLOCK_TAG_RE = /\{(#set|#copy|\/set|\/copy)\}/g;
+
 /**
- * Render a template against the copies in scope (#210). Placeholders `{token}` (`{name}`,
+ * Split the repeating blocks `{#set}…{/set}` / `{#copy}…{/copy}` (#266) out of a template, leaving
+ * everything else as text runs. Returns null when the tags are unbalanced or mismatched — the caller
+ * then renders the template as one plain text run, so a stray `{#set}` shows up literally exactly as
+ * an unknown `{token}` does, keeping the typo visible instead of silently eating the body.
+ */
+function parseTemplateNodes(template: string): TemplateNode[] | null {
+  const root: TemplateNode[] = [];
+  const stack: { over: "set" | "copy"; body: TemplateNode[] }[] = [];
+  const push = (node: TemplateNode) => (stack.length > 0 ? stack[stack.length - 1].body : root).push(node);
+  let last = 0;
+  for (const m of template.matchAll(BLOCK_TAG_RE)) {
+    const text = template.slice(last, m.index);
+    if (text) push({ kind: "text", text });
+    last = m.index + m[0].length;
+    const tag = m[1];
+    if (tag === "#set" || tag === "#copy") {
+      stack.push({ over: tag === "#set" ? "set" : "copy", body: [] });
+    } else {
+      const open = stack.pop();
+      if (!open || open.over !== (tag === "/set" ? "set" : "copy")) return null;
+      // After the pop, `push` targets the parent — which is where the finished block belongs.
+      push({ kind: "block", over: open.over, body: open.body });
+    }
+  }
+  if (stack.length > 0) return null;
+  const tail = template.slice(last);
+  if (tail) push({ kind: "text", text: tail });
+  return root;
+}
+
+/** Substitute the `{...}` placeholders of one text run against `scope`, marking each result so the
+ * tidy passes can tell empty from present (see {@link EMPTY_MARK} / {@link VALUE_MARK}) and
+ * fallen-back text from translated ({@link FB_OPEN}). An unknown token keeps its literal braces and
+ * stays unmarked — it is authoring feedback, not a value. */
+function renderTextRun(text: string, scope: TemplateScope): string {
+  return text.replace(/\{([^{}]+)\}/g, (_m, inner: string) => {
+    const { value, spec, fellBack } = resolvePlaceholder(inner, scope.copies, scope.setTitle);
+    if (value === "") return EMPTY_MARK;
+    if (spec === null) return value; // unknown token → literal
+    return VALUE_MARK + (fellBack ? `${FB_OPEN}${value}${FB_CLOSE}` : value);
+  });
+}
+
+/** Whether a rendered fragment carries no actual text — only markers and whitespace. An iteration of
+ * a repeating block that renders blank contributes nothing, so a set with nothing to say leaves no
+ * stray line behind. */
+function isBlankRender(rendered: string): boolean {
+  return rendered.replace(/[ -]/g, "").trim() === "";
+}
+
+/** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
+ * with tokens narrowed to that set's copies; a `{#copy}` block once per copy in scope — nested in a
+ * set block that means that set's copies, at the top level every copy of the offer. */
+function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): string {
+  let out = "";
+  for (const node of nodes) {
+    if (node.kind === "text") {
+      out += renderTextRun(node.text, scope);
+      continue;
+    }
+    const iterations: TemplateScope[] =
+      node.over === "set"
+        ? scope.sets.map((s) => ({ sets: [s], copies: s.copies, setTitle: s.title }))
+        : scope.copies.map((c) => ({
+            sets: [{ title: scope.setTitle, copies: [c] }],
+            copies: [c],
+            setTitle: scope.setTitle,
+          }));
+    for (const iteration of iterations) {
+      const body = renderNodes(node.body, iteration);
+      if (!isBlankRender(body)) out += body;
+    }
+  }
+  return out;
+}
+
+/** The top-level scope for a render: plain tokens aggregate over every copy of every set. */
+function rootScope(sets: readonly TemplateSet[]): TemplateScope {
+  return {
+    sets,
+    copies: sets.flatMap((s) => [...s.copies]),
+    // `{setTitle}` outside a block only names something when the render *is* one set (generating a
+    // set's own title); across several sets there is no single title to use.
+    setTitle: sets.length === 1 ? sets[0].title : null,
+  };
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
+/** One run of a rendered text: `fellBack` marks text that came from a token resolved in the
+ * default language because the asked-for language has no translation for it (#298). */
+export interface TitleSegment {
+  text: string;
+  fellBack: boolean;
+}
+
+/** Sentinels wrapping a fallen-back placeholder's value while the tidy passes run, so the segments
+ * and the plain string can never disagree about the final text. Like {@link EMPTY_MARK} these are
+ * control characters that never occur in real data; unlike it they survive tidying untouched (they
+ * are not whitespace and no rule matches them) and are split out afterwards. */
+const FB_OPEN = "";
+const FB_CLOSE = "";
+
+/** Shared renderer behind every public entry point: parse, render against the set-grouped scope,
+ * tidy (one line or many), then split the fallback sentinels out into segments. `fallbackTemplate`
+ * is used when the template is blank — the title has a built-in default, the description and private
+ * note deliberately do not (blank there means "generate nothing"). */
+function renderSegments(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  opts: { multiline?: boolean; fallbackTemplate?: string | null } = {}
+): TitleSegment[] {
+  const tpl = template?.trim() || opts.fallbackTemplate?.trim() || "";
+  if (!tpl) return [];
+  const nodes: TemplateNode[] = parseTemplateNodes(tpl) ?? [{ kind: "text", text: tpl }];
+  const rendered = renderNodes(nodes, rootScope(sets));
+  const tidied = opts.multiline ? tidyMultiline(rendered) : tidyLine(rendered);
+  if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
+  return tidied
+    .split(new RegExp(`[${FB_OPEN}${FB_CLOSE}]`))
+    // A split on the sentinels alternates outside / inside runs, starting outside.
+    .map((text, i) => ({ text, fellBack: i % 2 === 1 }))
+    .filter((s) => s.text !== "");
+}
+
+/**
+ * Render a title template against the copies in scope (#210). Placeholders `{token}` (`{name}`,
  * `{catalog}`, `{year}`, `{condition}`, `{certificate}`, `{area}`, `{issueName}`, `{issueYear}`)
  * resolve to distinct values across the copies; a **fallback group** `{a|b|c}` resolves to the first
  * non-empty of its tokens. Everything else — including literal separators like `-` — is kept
@@ -369,20 +577,6 @@ export function renderTitleTemplate(
     .join("");
 }
 
-/** One run of a rendered title: `fellBack` marks text that came from a token resolved in the
- * default language because the asked-for language has no translation for it (#298). */
-export interface TitleSegment {
-  text: string;
-  fellBack: boolean;
-}
-
-/** Sentinels wrapping a fallen-back placeholder's value while {@link tidy} runs, so the segments and
- * the plain string can never disagree about the final text. Like {@link EMPTY_MARK} these are
- * control characters that never occur in real data; unlike it they survive `tidy` untouched (they
- * are not whitespace and no rule matches them) and are split out afterwards. */
-const FB_OPEN = "";
-const FB_CLOSE = "";
-
 /**
  * {@link renderTitleTemplate}, split into segments so a preview can mark the parts whose text is not
  * actually translated (#298). Concatenating the segments' `text` yields exactly what
@@ -392,42 +586,76 @@ export function renderTitleTemplateSegments(
   template: string | null | undefined,
   copies: readonly TitleTemplateCopy[]
 ): TitleSegment[] {
-  const tpl = template?.trim() || DEFAULT_TITLE_TEMPLATE;
-  const rendered = tpl.replace(/\{([^{}]+)\}/g, (_m, inner: string) => {
-    const { value, fellBack } = resolvePlaceholder(inner, copies);
-    // A placeholder that resolved to nothing becomes a marker so its glue separator is trimmed; a
-    // literal (unknown-token) result stays as-is.
-    if (value === "") return EMPTY_MARK;
-    return fellBack ? `${FB_OPEN}${value}${FB_CLOSE}` : value;
+  return renderSegments(template, [{ title: null, copies }], {
+    fallbackTemplate: DEFAULT_TITLE_TEMPLATE,
   });
-  const tidied = tidy(rendered);
-  if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
-  return tidied
-    .split(new RegExp(`[${FB_OPEN}${FB_CLOSE}]`))
-    // A split on the sentinels alternates outside / inside runs, starting outside.
-    .map((text, i) => ({ text, fellBack: i % 2 === 1 }))
-    .filter((s) => s.text !== "");
 }
 
 /**
- * The tokens of `template` whose text fell back to the default language for these copies (#298), as
- * they read in the token legend (`{condition}`), first-seen order, de-duplicated. Drives the
- * preview's summary line. Empty when nothing fell back — including whenever the copies were resolved
- * without a language.
+ * Render a **multi-line listing text** — an offer's description (#266) or private note (#267) — from
+ * a platform's template over the offer's sets. Same tokens, fallback groups and language resolution
+ * as the title, plus what a longer text needs: the collector's line breaks are preserved, a line
+ * whose placeholders all came out empty is dropped whole, and the repeating blocks `{#set}…{/set}` /
+ * `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
+ * A blank template renders "" — unlike the title there is no built-in default, because "no
+ * description template" means the offer simply gets none.
  */
-export function titleFallbackTokens(
+export function renderListingTemplate(
   template: string | null | undefined,
-  copies: readonly TitleTemplateCopy[]
+  sets: readonly TemplateSet[]
+): string {
+  return renderListingTemplateSegments(template, sets)
+    .map((s) => s.text)
+    .join("");
+}
+
+/** {@link renderListingTemplate}, split into fallback-flagged segments for the preview (#298). */
+export function renderListingTemplateSegments(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[]
+): TitleSegment[] {
+  return renderSegments(template, sets, { multiline: true });
+}
+
+/**
+ * The tokens of `template` whose text fell back to the default language for these sets (#298), as
+ * they read in the token legend (`{condition}`), first-seen order, de-duplicated. Drives a preview's
+ * summary line. Empty when nothing fell back — including whenever the copies were resolved without a
+ * language. Tokens inside a repeating block report against every copy in scope: the summary answers
+ * "which tokens are not really translated here", not "in which iteration".
+ */
+export function templateFallbackTokens(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  fallbackTemplate: string | null = null
 ): string[] {
-  const tpl = template?.trim() || DEFAULT_TITLE_TEMPLATE;
+  const tpl = template?.trim() || fallbackTemplate?.trim() || "";
+  if (!tpl) return [];
+  const scope = rootScope(sets);
   const out: string[] = [];
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
-    const { value, spec, fellBack } = resolvePlaceholder(m[1], copies);
+    const { value, spec, fellBack } = resolvePlaceholder(m[1], scope.copies, scope.setTitle);
     if (!value || !spec || !fellBack) continue;
     const token = `{${spec.split(":")[0].trim()}}`;
-    const canonical = AVAILABLE_TITLE_TOKENS.find((t) => t.token.toLowerCase() === token.toLowerCase());
+    const canonical = AVAILABLE_LISTING_TOKENS.find((t) => t.token.toLowerCase() === token.toLowerCase());
     const label = canonical?.token ?? token;
     if (!out.includes(label)) out.push(label);
   }
   return out;
+}
+
+/** {@link templateFallbackTokens} for a one-line title over a flat copy list (#298). */
+export function titleFallbackTokens(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): string[] {
+  return templateFallbackTokens(template, [{ title: null, copies }], DEFAULT_TITLE_TEMPLATE);
+}
+
+/** {@link templateFallbackTokens} for a multi-line listing text over an offer's sets (#266/#267). */
+export function listingFallbackTokens(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[]
+): string[] {
+  return templateFallbackTokens(template, sets);
 }

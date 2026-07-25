@@ -16,8 +16,11 @@ import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
 import {
   renderTitleTemplate,
   renderTitleTemplateSegments,
+  renderListingTemplate,
   titleFallbackTokens,
   type TitleSegment,
+  type TemplateSet,
+  type TitleTemplateCopy,
 } from "./offer-title-template";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 
@@ -119,17 +122,33 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
   };
 }
 
+/** The templates a platform generates its listing texts from, plus the language they are written in.
+ * A null / blank template means the field is not generated at all: the title then falls back to the
+ * derived label (#209), and the description (#266) / private note (#267) simply stay empty — which is
+ * also how a platform without a private-note feature is configured. */
+interface PlatformTemplates {
+  titleTemplate: string | null;
+  descriptionTemplate: string | null;
+  privateNoteTemplate: string | null;
+  /** Listing language (#293), null when the platform lists in the collection's default language. */
+  titleLanguage: string | null;
+}
+
 /** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
- * currency (#196), which may be null when not set yet, its listing title template (#210), null
- * when unset (the renderer then falls back to the built-in default), and its listing language
- * (#293), null when unset (entity text then stays in its default language). */
+ * currency (#196), which may be null when not set yet, alongside its listing templates + language. */
 async function assertPlatform(
   collectionId: string,
   platformId: string
-): Promise<{ platformCurrency: string | null; titleTemplate: string | null; titleLanguage: string | null }> {
+): Promise<PlatformTemplates & { platformCurrency: string | null }> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
-    select: { platformCurrency: true, titleTemplate: true, titleLanguage: true },
+    select: {
+      platformCurrency: true,
+      titleTemplate: true,
+      descriptionTemplate: true,
+      privateNoteTemplate: true,
+      titleLanguage: true,
+    },
   });
   if (!contact) {
     throw new OfferActionBlockedError("no-platform", "Choose a platform to list on.");
@@ -137,6 +156,8 @@ async function assertPlatform(
   return {
     platformCurrency: contact.platformCurrency,
     titleTemplate: contact.titleTemplate,
+    descriptionTemplate: contact.descriptionTemplate,
+    privateNoteTemplate: contact.privateNoteTemplate,
     titleLanguage: contact.titleLanguage,
   };
 }
@@ -223,6 +244,86 @@ async function generateConfiguredTitle(
   return renderTitleTemplate(template, copies) || null;
 }
 
+// ── Listing text generation (#266/#267) ──────────────────────────────────────
+
+/** One set of an offer's composition as the generators see it: its stored title (null when unnamed —
+ * `{setTitle}` then renders empty, and a template says `{setTitle|catalog}` to fall back) and the
+ * copies it holds, in order. */
+interface OfferComposition {
+  title: string | null;
+  itemIds: readonly string[];
+}
+
+/** The listing texts a platform's templates produce for a composition. Each is null when the platform
+ * has no template for it, or when nothing resolved. */
+export interface GeneratedListingTexts {
+  name: string | null;
+  description: string | null;
+  privateNote: string | null;
+}
+
+/** Which of an offer's generated texts a caller means (#266/#267). Also the `Offer` column name. */
+export type OfferTextField = "name" | "description" | "privateNote";
+
+/**
+ * Generate every listing text a platform has a template for (#209/#210, #266, #267) over one
+ * composition, in a single copy load. The title renders over all the copies flat; the description and
+ * private note render over the **set-grouped** scope, so their `{#set}` / `{#copy}` blocks enumerate
+ * the real listing. A field whose template is blank stays null — the offer name then falls back to the
+ * derived label and the longer texts stay empty. Token values resolve in the platform's listing
+ * `language` where a translation exists (#293), falling back to the default text.
+ */
+async function generateListingTexts(
+  ownerId: string,
+  collectionId: string,
+  composition: readonly OfferComposition[],
+  templates: PlatformTemplates,
+  language: string | null
+): Promise<GeneratedListingTexts> {
+  const configured = (t: string | null) => (t?.trim() ? t : null);
+  const title = configured(templates.titleTemplate);
+  const description = configured(templates.descriptionTemplate);
+  const privateNote = configured(templates.privateNoteTemplate);
+  const copyCount = composition.reduce((n, s) => n + s.itemIds.length, 0);
+  if (copyCount === 0 || (!title && !description && !privateNote)) {
+    return { name: null, description: null, privateNote: null };
+  }
+  const sets = await templateSets(ownerId, collectionId, composition, language);
+  const copies = sets.flatMap((s) => [...s.copies]);
+  return {
+    name: title ? renderTitleTemplate(title, copies) || null : null,
+    description: description ? renderListingTemplate(description, sets) || null : null,
+    privateNote: privateNote ? renderListingTemplate(privateNote, sets) || null : null,
+  };
+}
+
+/** A composition normalised into the engine's `TemplateSet`s — one query for every copy involved,
+ * preserving set order and each set's copy order (so a regenerated text is stable). */
+async function templateSets(
+  ownerId: string,
+  collectionId: string,
+  composition: readonly OfferComposition[],
+  language: string | null
+): Promise<TemplateSet[]> {
+  const itemIds = [...new Set(composition.flatMap((s) => [...s.itemIds]))];
+  const byId = await titleCopiesById(ownerId, collectionId, itemIds, language);
+  return composition.map((s) => ({
+    title: s.title,
+    copies: s.itemIds.map((id) => byId.get(id)).filter((c) => c != null),
+  }));
+}
+
+/** An offer's present composition, in set order, for regenerating its texts over what it really
+ * lists today. */
+async function offerComposition(offerId: string): Promise<OfferComposition[]> {
+  const sets = await prisma.offerSet.findMany({
+    where: { offerId },
+    select: { title: true, items: { select: { itemId: true } } },
+    orderBy: { id: "asc" },
+  });
+  return sets.map((s) => ({ title: s.title, itemIds: s.items.map((i) => i.itemId) }));
+}
+
 /** The copies `itemIds` normalised for the title engine, in the caller's order (so a regenerated
  * title is stable) and resolved in `language`. Shared by generation and preview so the two can
  * never drift. */
@@ -232,15 +333,25 @@ async function titleCopies(
   itemIds: string[],
   language: string | null
 ) {
+  const byId = await titleCopiesById(ownerId, collectionId, itemIds, language);
+  return itemIds.map((id) => byId.get(id)).filter((c) => c != null);
+}
+
+/** The same load, keyed by copy id — how the set-grouped generators (#266/#267) rebuild their
+ * composition without depending on the flat result's ordering. Copies that no longer exist (or are
+ * not in the collection) are simply absent. */
+async function titleCopiesById(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[],
+  language: string | null
+): Promise<Map<string, TitleTemplateCopy>> {
+  if (itemIds.length === 0) return new Map();
   const [rows, mapCopy] = await Promise.all([
     prisma.item.findMany({ where: { id: { in: itemIds }, collectionId }, select: TITLE_COPY_SELECT }),
     makeTitleCopyMapper(ownerId, collectionId, language),
   ]);
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  return itemIds
-    .map((id) => byId.get(id))
-    .filter((r): r is TitleCopyRow => r != null)
-    .map(mapCopy);
+  return new Map(rows.map((r: TitleCopyRow) => [r.id, mapCopy(r)]));
 }
 
 /** The title a set of `itemIds` would be given on this offer's platform, without writing anything
@@ -619,6 +730,13 @@ export interface OfferDetail {
   name: string | null;
   /** Label derived from the offer's sets — the display fallback when `name` is null. */
   label: string;
+  /** The listing description (#266) and the seller-only private note (#267), or null when the
+   * platform generated none and nothing was written by hand. */
+  description: string | null;
+  privateNote: string | null;
+  /** Which generated texts the platform actually has a template for (#266/#267) — each field's
+   * ↻ Regenerate control enables itself on this. */
+  regeneratable: Record<OfferTextField, boolean>;
   platformId: string;
   platformName: string;
   /** The platform's listing language (#293), or null when it lists in the collection's default
@@ -657,6 +775,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     select: {
       id: true,
       name: true,
+      description: true,
+      privateNote: true,
       collectionId: true,
       platformId: true,
       url: true,
@@ -667,7 +787,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       listingDate: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
-      platform: { select: { name: true, titleLanguage: true } },
+      platform: {
+        select: {
+          name: true,
+          titleLanguage: true,
+          titleTemplate: true,
+          descriptionTemplate: true,
+          privateNoteTemplate: true,
+        },
+      },
       sets: {
         orderBy: { id: "asc" },
         select: {
@@ -778,6 +906,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     collectionId: offer.collectionId,
     name: offer.name,
     label: offerLabel(offer.sets),
+    description: offer.description,
+    privateNote: offer.privateNote,
+    regeneratable: {
+      name: !!offer.platform.titleTemplate?.trim(),
+      description: !!offer.platform.descriptionTemplate?.trim(),
+      privateNote: !!offer.platform.privateNoteTemplate?.trim(),
+    },
     platformId: offer.platformId,
     platformName: offer.platform.name,
     platformTitleLanguage: offer.platform.titleLanguage,
@@ -965,8 +1100,8 @@ export async function createOffer(
   opts: { seedItemIds?: string[] } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
-  const { platformCurrency, titleTemplate, titleLanguage } = await assertPlatform(collectionId, input.platformId);
-  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
+  const platform = await assertPlatform(collectionId, input.platformId);
+  const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
 
   const targetState = input.state;
   if (isTerminalState(targetState)) {
@@ -990,10 +1125,17 @@ export async function createOffer(
     );
   }
 
-  // Generate the listing title (#209/#210) from the platform's configured template over the seed
-  // copies. With no template configured, or no seed copies yet, the name stays null and the UI falls
-  // back to the derived label until the collector composes and regenerates.
-  const name = await generateConfiguredTitle(ownerId, collectionId, seedIds, titleTemplate, titleLanguage);
+  // Generate the listing texts (#209/#210, #266, #267) from the platform's configured templates over
+  // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
+  // configured, or no seed copies yet, stays null: the name falls back to the derived label and the
+  // longer texts stay empty until the collector composes and regenerates.
+  const { name, description, privateNote } = await generateListingTexts(
+    ownerId,
+    collectionId,
+    [{ title: null, itemIds: seedIds }],
+    platform,
+    platform.titleLanguage
+  );
 
   return prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
@@ -1001,6 +1143,8 @@ export async function createOffer(
         collectionId,
         platformId: input.platformId,
         name,
+        description,
+        privateNote,
         url: input.url,
         price: input.price,
         currency,
@@ -1039,8 +1183,8 @@ export async function duplicateOffer(
   input: OfferInput
 ): Promise<DuplicateOfferResult> {
   const ref = await assertOfferOwner(ownerId, sourceOfferId);
-  const { platformCurrency, titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, input.platformId);
-  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
+  const platform = await assertPlatform(ref.collectionId, input.platformId);
+  const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
 
   // Source composition + which of its copies have sold elsewhere (dropped from the clone).
   const sets = await prisma.offerSet.findMany({
@@ -1079,10 +1223,16 @@ export async function duplicateOffer(
     );
   }
 
-  // Generate the clone's title from the *new* platform's configured template over its kept copies
-  // (#209/#210); null when that platform has no template (falls back to the derived label).
-  const cloneItemIds = [...new Set(cloneSets.flatMap((s) => s.itemIds))];
-  const name = await generateConfiguredTitle(ownerId, ref.collectionId, cloneItemIds, titleTemplate, titleLanguage);
+  // Generate the clone's listing texts from the *new* platform's configured templates over its kept
+  // sets (#209/#210, #266, #267) — the clone is a listing on another platform, so it gets that
+  // platform's wording, not the source offer's. Null for every field that platform has no template for.
+  const { name, description, privateNote } = await generateListingTexts(
+    ownerId,
+    ref.collectionId,
+    cloneSets,
+    platform,
+    platform.titleLanguage
+  );
 
   const id = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
@@ -1090,6 +1240,8 @@ export async function duplicateOffer(
         collectionId: ref.collectionId,
         platformId: input.platformId,
         name,
+        description,
+        privateNote,
         url: input.url,
         price: input.price,
         currency,
@@ -1146,6 +1298,10 @@ export interface OfferPatch {
   /** The listing title (#209). Blank clears it back to null (the UI then shows the derived label).
    * Editable in every state for record-keeping, like the URL. */
   name?: string | null;
+  /** The listing description (#266) and the seller-only private note (#267). Same contract as the
+   * title: blank clears back to null, editable in every state. */
+  description?: string | null;
+  privateNote?: string | null;
 }
 
 /** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits name / price
@@ -1168,41 +1324,53 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.description !== undefined ? { description: patch.description } : {}),
+      ...(patch.privateNote !== undefined ? { privateNote: patch.privateNote } : {}),
     },
   });
 }
 
-/** Regenerate the listing title (#209/#210) from the platform's current template over the offer's
- * present composition, overwriting any manual edit. Returns the new name (null when the offer lists
- * nothing yet, so the UI falls back to the derived label). Allowed in every state — the title is
- * record-keeping, never a live claim.
+/** Regenerate **one** of an offer's generated listing texts (#209/#210, #266, #267) — its title,
+ * description or private note — from the platform's current template over the offer's present
+ * composition, overwriting any manual edit. Returns the new value (null when the platform has no
+ * template for that field, or the offer lists nothing yet: the title then falls back to the derived
+ * label and the longer texts stay empty). Allowed in every state — these are record-keeping, never a
+ * live claim.
  *
  * `language` (#297) regenerates in a language other than the platform's own — a one-off override,
- * not remembered: only the resulting title is stored, and it stays editable (#209). */
-export async function regenerateOfferName(
+ * not remembered: only the resulting text is stored, and it stays editable (#209). */
+export async function regenerateOfferText(
   ownerId: string,
   offerId: string,
+  field: OfferTextField,
   language?: string | null
 ): Promise<string | null> {
   const ref = await assertOfferOwner(ownerId, offerId);
-  const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
-  const rows = await prisma.offerSetItem.findMany({
-    where: { offerSet: { offerId } },
-    select: { itemId: true, offerSet: { select: { id: true } } },
-    orderBy: [{ offerSet: { id: "asc" } }],
-  });
-  // Distinct copies in set order (an offer never lists a copy twice, but a copy can recur across
-  // sets — dedupe so the template doesn't repeat it).
-  const itemIds = [...new Set(rows.map((r) => r.itemId))];
-  const name = await generateConfiguredTitle(
+  const platform = await assertPlatform(ref.collectionId, ref.platformId);
+  const composition = await offerComposition(offerId);
+  // Only the asked-for field's template is handed to the generator, so the others are neither
+  // rendered nor written — a regenerated description never disturbs a hand-edited title.
+  const only: PlatformTemplates = {
+    titleTemplate: null,
+    descriptionTemplate: null,
+    privateNoteTemplate: null,
+    titleLanguage: platform.titleLanguage,
+    ...(field === "name"
+      ? { titleTemplate: platform.titleTemplate }
+      : field === "description"
+        ? { descriptionTemplate: platform.descriptionTemplate }
+        : { privateNoteTemplate: platform.privateNoteTemplate }),
+  };
+  const texts = await generateListingTexts(
     ownerId,
     ref.collectionId,
-    itemIds,
-    titleTemplate,
-    language === undefined ? titleLanguage : language
+    composition,
+    only,
+    language === undefined ? platform.titleLanguage : language
   );
-  await prisma.offer.update({ where: { id: offerId }, data: { name } });
-  return name;
+  const value = texts[field];
+  await prisma.offer.update({ where: { id: offerId }, data: { [field]: value } });
+  return value;
 }
 
 /** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,

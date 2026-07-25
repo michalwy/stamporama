@@ -73,6 +73,15 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     titleTemplate: bool(formData, "platform")
       ? str(formData, "titleTemplate") || null
       : null,
+    // The platform's description (#266) / private-note (#267) templates, same platform-only
+    // handling. Blank normalises to null, which here means "generate nothing for that field" —
+    // there is no built-in default, and it is also how a platform without private notes is left.
+    descriptionTemplate: bool(formData, "platform")
+      ? str(formData, "descriptionTemplate") || null
+      : null,
+    privateNoteTemplate: bool(formData, "platform")
+      ? str(formData, "privateNoteTemplate") || null
+      : null,
     // The platform's listing language (#293), same platform-only handling. Blank normalises to
     // null, meaning entity text stays in its default language.
     titleLanguage: bool(formData, "platform")

@@ -11,7 +11,8 @@ import {
   setOfferInActiveBidding,
   deleteOffer,
   patchOffer,
-  regenerateOfferName,
+  regenerateOfferText,
+  type OfferTextField,
   addOfferSet,
   addOfferSetsPerCopy,
   addItemToOfferSet,
@@ -232,11 +233,11 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
 
 /** In-place edit of a single offer header field from the detail screen. `price` accepts blank
  * (clears to 0); `url` blank clears the listing link; `name` blank clears the title back to the
- * derived label (#209). Currency is not editable here (#196) — it is inherited and locked from the
- * platform. */
+ * derived label (#209), and `description` / `privateNote` blank clear those texts (#266/#267).
+ * Currency is not editable here (#196) — it is inherited and locked from the platform. */
 export async function patchOfferAction(
   offerId: string,
-  field: "price" | "url" | "name",
+  field: "price" | "url" | OfferTextField,
   rawValue: string
 ): Promise<OfferActionState> {
   const session = await getSession();
@@ -250,10 +251,11 @@ export async function patchOfferAction(
         price = priced.value;
       }
       await patchOffer(session.user.id, offerId, { price });
-    } else if (field === "name") {
-      await patchOffer(session.user.id, offerId, { name: rawValue.trim() || null });
-    } else {
+    } else if (field === "url") {
       await patchOffer(session.user.id, offerId, { url: normalizeUrl(rawValue) });
+    } else {
+      // The three generated texts share one contract: trimmed, blank clears back to null.
+      await patchOffer(session.user.id, offerId, { [field]: rawValue.trim() || null });
     }
     return { status: "success" };
   } catch (e) {
@@ -261,19 +263,21 @@ export async function patchOfferAction(
   }
 }
 
-/** Regenerate the offer's listing title from the platform's template over its current composition
- * (#209/#210), overwriting any manual edit. `language` (#297) regenerates in another language —
- * a one-off, nothing about the choice is stored. */
-export async function regenerateOfferNameAction(
+/** Regenerate one of the offer's generated listing texts — title (#209/#210), description (#266) or
+ * private note (#267) — from the platform's template over its current composition, overwriting any
+ * manual edit. `language` (#297) regenerates in another language — a one-off, nothing about the
+ * choice is stored. */
+export async function regenerateOfferTextAction(
   offerId: string,
+  field: OfferTextField,
   language?: string | null
 ): Promise<OfferActionState> {
   const session = await getSession();
   try {
-    await regenerateOfferName(session.user.id, offerId, language);
+    await regenerateOfferText(session.user.id, offerId, field, language);
     return { status: "success" };
   } catch (e) {
-    return fail(e, "Failed to regenerate the title.");
+    return fail(e, "Failed to regenerate the listing text.");
   }
 }
 

@@ -126,13 +126,35 @@ The title is yours to change:
   hand.
 - **Regenerate it in another language** — once your platforms list in more than one
   [language](contacts.md#adding-and-editing), the same menu also offers **Regenerate title in …** for
-  each of the others. It is a one-off: the title is rebuilt using the text you entered for that
+  each of the others, and the same for the description and private note where the platform has a
+  template for them. It is a one-off: the text is rebuilt using the text you entered for that
   language, and nothing about the choice is remembered — the platform keeps its own listing language
   for everything generated later.
 
 The **sets** inside an offer are titled the same way: with a template configured, each set is
 pre-filled from it when you add it; otherwise a set reads as its copies. You can rename any set from
 its card.
+
+## Listing text: description and private note
+
+Under the header sits **Listing text** — the offer's long **description**, and a **private note** only
+you ever see (some platforms let you attach one to a listing for your own reference; it is never shown
+to a buyer). Both are generated when the offer is created, from the platform's
+[description and private-note templates](contacts.md#description-and-private-note), and both are
+optional: a platform with no template for a field generates nothing, and while both are empty the
+whole section collapses to a single **+ Add listing text** row.
+
+Each field carries its own two controls:
+
+- **✎** opens it for editing — a plain text box, so line breaks are yours to place. **⌘/Ctrl + Enter**
+  saves, **Esc** cancels, and saving an empty box clears the field. Editable in every state, like the
+  title.
+- **↻ Regenerate** rebuilds *that field only* from the platform's current template over whatever the
+  offer lists now, overwriting what is there — a hand-written title is never touched by regenerating
+  the description. It is greyed out when the platform has no template for that field.
+
+Because the templates can repeat a block per set, regenerating after you add or remove a set is what
+keeps an item-by-item description in step with the listing.
 
 ### Title preview when adding a set
 

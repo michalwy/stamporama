@@ -87,6 +87,11 @@ export interface ContactData extends ContactRoles {
   /** Free-text title template for this platform's listings (#210), or null (falls back to the
    * built-in default). Only meaningful for the `platform` role. */
   titleTemplate: string | null;
+  /** Templates for the platform's longer listing texts — the public description (#266) and the
+   * seller-only private note (#267) — or null, which means the field is simply not generated (there
+   * is no built-in default). Only meaningful for the `platform` role. */
+  descriptionTemplate: string | null;
+  privateNoteTemplate: string | null;
   /** ISO 639-1 language the platform's generated listing text is written in (#293), or null when
    * unset. Only meaningful for the `platform` role; drives which entity translations the title
    * tokens resolve. */
@@ -109,6 +114,8 @@ const CONTACT_SELECT = {
   other: true,
   platformCurrency: true,
   titleTemplate: true,
+  descriptionTemplate: true,
+  privateNoteTemplate: true,
   titleLanguage: true,
   createdAt: true,
 } as const;
@@ -128,6 +135,10 @@ export interface ContactCreateInput {
   platformCurrency?: string | null;
   /** The platform's title template (#210), or null. Set/edited on the platform's contact form. */
   titleTemplate?: string | null;
+  /** The platform's description (#266) / private-note (#267) templates, or null (generate none).
+   * Set/edited on the platform's contact form. */
+  descriptionTemplate?: string | null;
+  privateNoteTemplate?: string | null;
   /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
   titleLanguage?: string | null;
 }
@@ -263,6 +274,8 @@ export async function createContact(
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
         titleTemplate: data.titleTemplate ?? null,
+        descriptionTemplate: data.descriptionTemplate ?? null,
+        privateNoteTemplate: data.privateNoteTemplate ?? null,
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
@@ -303,6 +316,8 @@ export async function updateContact(
         other: data.other ?? false,
         platformCurrency: data.platformCurrency ?? null,
         titleTemplate: data.titleTemplate ?? null,
+        descriptionTemplate: data.descriptionTemplate ?? null,
+        privateNoteTemplate: data.privateNoteTemplate ?? null,
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,

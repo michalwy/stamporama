@@ -58,6 +58,40 @@ export async function randomTitleSampleCopy(
   return { id: row.id, label: sampleLabel(copy), copy };
 }
 
+/** Several random copies, for previewing a **multi-line listing template** (#266/#267) — each is
+ * shown as its own set so a `{#set}` block visibly repeats. Fewer are returned when the collection
+ * holds fewer copies, and duplicates are avoided by drawing distinct offsets. */
+export async function randomTitleSampleCopies(
+  ownerId: string,
+  collectionId: string,
+  count: number,
+  language: string | null = null
+): Promise<TitleSampleCopy[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const total = await prisma.item.count({ where: { collectionId } });
+  if (total === 0) return [];
+  const wanted = Math.min(count, total);
+  const offsets = new Set<number>();
+  while (offsets.size < wanted) offsets.add(Math.floor(Math.random() * total));
+  const mapCopy = await makeTitleCopyMapper(ownerId, collectionId, language);
+  const rows = await Promise.all(
+    [...offsets].map((skip) =>
+      prisma.item.findFirst({
+        where: { collectionId },
+        orderBy: { createdAt: "asc" },
+        skip,
+        select: TITLE_COPY_SELECT,
+      })
+    )
+  );
+  return rows
+    .filter((r) => r != null)
+    .map((row) => {
+      const copy = mapCopy(row);
+      return { id: row.id, label: sampleLabel(copy), copy };
+    });
+}
+
 /** Copies matching `search` (by stamp name or catalog number), for the builder's "pick a specific
  * copy" list. A blank search returns the most recent copies. Capped at `limit` (default 12).
  * `language` (#293) previews the copy in the platform's listing language. */
