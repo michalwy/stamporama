@@ -100,6 +100,16 @@ token for an access token, and calls `:upload` then `:publish` on `chromewebstor
 It needs repository **secrets** `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` and
 repository **variables** `CWS_PUBLISHER_ID`, `CWS_EXTENSION_ID`.
 
+The job only runs when the repository variable **`CWS_PUBLISH_ENABLED` is `true`**:
+
+```bash
+gh variable set CWS_PUBLISH_ENABLED --body 'true'    # or 'false' to pause publishing
+```
+
+Pausing exists because **the store refuses an upload while a previous version of the item is still
+in review**, which would otherwise turn every app release red until the reviewers get to it. App
+releases and store submissions run on different clocks, and the release must not wait on Google.
+
 Three things have to be done by hand first, because the API can only update an item that exists:
 
 1. **Create the listing.** Chrome Web Store developer account (one-off 5 USD) → new item → upload

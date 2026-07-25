@@ -169,6 +169,10 @@ jobs:
   #
   # It can only *update* an item that already exists: the listing, its Privacy tab and its unlisted
   # visibility are set up by hand once, and publishing keeps whatever visibility is configured there.
+  #
+  # Gated on the `CWS_PUBLISH_ENABLED` repository variable, because the store refuses an upload while
+  # a previous version of the item is still in review — and app releases must not wait on that. Set
+  # it to `true` once the listing is settled; anything else skips the job entirely.
   publish-extension:
     name: Publish extension (Chrome Web Store)
     runs-on: ubuntu-latest
@@ -176,6 +180,7 @@ jobs:
     if: >-
       github.event_name == 'push'
       && startsWith(github.ref, 'refs/tags/v')
+      && vars.CWS_PUBLISH_ENABLED == 'true'
     timeout-minutes: 10
 
     env:
@@ -220,37 +225,52 @@ jobs:
             fi
           done
 
+          # Every call reports its own status and prints the body when it goes wrong. Letting curl
+          # fail the step instead loses the response, and a bare "error: 400" says nothing about
+          # whether the token was rejected or the store refused the package.
+          call() {
+            local description=$1 expected=$2
+            shift 2
+            local response status body
+            response=$(curl -sS -w $'\n%{http_code}' "$@")
+            status=${response##*$'\n'}
+            body=${response%$'\n'*}
+            if [ "$status" != "$expected" ]; then
+              echo "::error::$description failed with HTTP $status"
+              echo "$body"
+              return 1
+            fi
+            printf '%s' "$body"
+          }
+
           # Access tokens live an hour; the refresh token is the long-lived credential. It expires
           # every 7 days while the OAuth consent screen sits in "Testing" — publish that app.
-          token=$(curl -sS --fail-with-body https://oauth2.googleapis.com/token \
+          token=$(call "Token exchange" 200 https://oauth2.googleapis.com/token \
             -d "client_id=$CWS_CLIENT_ID" \
             -d "client_secret=$CWS_CLIENT_SECRET" \
             -d "refresh_token=$CWS_REFRESH_TOKEN" \
             -d "grant_type=refresh_token" | jq -r .access_token)
-          if [ -z "$token" ] || [ "$token" = "null" ]; then
-            echo "::error::Could not exchange the refresh token for an access token."
-            exit 1
-          fi
 
           base="https://chromewebstore.googleapis.com"
           item="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
 
-          upload=$(curl -sS --fail-with-body -X POST \
+          # A previous version still in review makes this fail — that is the store's rule, not a
+          # broken pipeline, and the printed body says so.
+          upload=$(call "Upload" 200 -X POST \
             -H "Authorization: Bearer $token" \
             -T extension/dist-store/stamporama-assistant.zip \
             "$base/upload/v2/$item:upload")
           echo "$upload" | jq .
-          # A rejected package still answers 200 — the verdict is in uploadState, not the status code.
+          # A rejected package can still answer 200 — the verdict is in uploadState, not the status.
           if [ "$(echo "$upload" | jq -r '.uploadState // empty')" != "SUCCESS" ]; then
             echo "::error::Upload rejected by the Chrome Web Store."
             exit 1
           fi
 
-          publish=$(curl -sS --fail-with-body -X POST \
+          call "Publish" 200 -X POST \
             -H "Authorization: Bearer $token" \
             -H "Content-Length: 0" \
-            "$base/v2/$item:publish")
-          echo "$publish" | jq .
+            "$base/v2/$item:publish" | jq .
 
           echo "::notice::Submitted for review. It goes live once the store approves it."
 
