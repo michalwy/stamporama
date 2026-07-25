@@ -13,7 +13,12 @@ import {
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
-import { renderTitleTemplate } from "./offer-title-template";
+import {
+  renderTitleTemplate,
+  renderTitleTemplateSegments,
+  titleFallbackTokens,
+  type TitleSegment,
+} from "./offer-title-template";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
@@ -214,13 +219,56 @@ async function generateConfiguredTitle(
   language: string | null = null
 ): Promise<string | null> {
   if (!template?.trim() || itemIds.length === 0) return null;
+  const copies = await titleCopies(ownerId, collectionId, itemIds, language);
+  return renderTitleTemplate(template, copies) || null;
+}
+
+/** The copies `itemIds` normalised for the title engine, in the caller's order (so a regenerated
+ * title is stable) and resolved in `language`. Shared by generation and preview so the two can
+ * never drift. */
+async function titleCopies(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[],
+  language: string | null
+) {
   const [rows, mapCopy] = await Promise.all([
     prisma.item.findMany({ where: { id: { in: itemIds }, collectionId }, select: TITLE_COPY_SELECT }),
     makeTitleCopyMapper(ownerId, collectionId, language),
   ]);
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const ordered = itemIds.map((id) => byId.get(id)).filter((r): r is TitleCopyRow => r != null);
-  return renderTitleTemplate(template, ordered.map(mapCopy)) || null;
+  return itemIds
+    .map((id) => byId.get(id))
+    .filter((r): r is TitleCopyRow => r != null)
+    .map(mapCopy);
+}
+
+/** The title a set of `itemIds` would be given on this offer's platform, without writing anything
+ * (#297/#298). Returns the title split into segments — the ones resolved from untranslated text are
+ * flagged (#298) — plus the tokens that fell back, for the preview's summary line.
+ *
+ * `language` overrides the platform's listing language, which is how the compose dialog previews a
+ * title in another language (#297). Null `segments` means the platform has no template configured:
+ * there is nothing to preview and the set keeps its derived label (#209). */
+export async function previewOfferTitle(
+  ownerId: string,
+  offerId: string,
+  itemIds: string[],
+  language?: string | null
+): Promise<{ segments: TitleSegment[]; fallbackTokens: string[] } | null> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
+  if (!titleTemplate?.trim() || itemIds.length === 0) return null;
+  const copies = await titleCopies(
+    ownerId,
+    ref.collectionId,
+    itemIds,
+    language === undefined ? titleLanguage : language
+  );
+  return {
+    segments: renderTitleTemplateSegments(titleTemplate, copies),
+    fallbackTokens: titleFallbackTokens(titleTemplate, copies),
+  };
 }
 
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
@@ -573,6 +621,9 @@ export interface OfferDetail {
   label: string;
   platformId: string;
   platformName: string;
+  /** The platform's listing language (#293), or null when it lists in the collection's default
+   * language. Seeds the compose dialog's language selector (#297). */
+  platformTitleLanguage: string | null;
   url: string | null;
   price: string;
   currency: string;
@@ -616,7 +667,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       listingDate: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
-      platform: { select: { name: true } },
+      platform: { select: { name: true, titleLanguage: true } },
       sets: {
         orderBy: { id: "asc" },
         select: {
@@ -729,6 +780,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     label: offerLabel(offer.sets),
     platformId: offer.platformId,
     platformName: offer.platform.name,
+    platformTitleLanguage: offer.platform.titleLanguage,
     url: offer.url,
     price: offer.price.toFixed(2),
     currency: offer.currency,
@@ -1123,8 +1175,15 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
 /** Regenerate the listing title (#209/#210) from the platform's current template over the offer's
  * present composition, overwriting any manual edit. Returns the new name (null when the offer lists
  * nothing yet, so the UI falls back to the derived label). Allowed in every state — the title is
- * record-keeping, never a live claim. */
-export async function regenerateOfferName(ownerId: string, offerId: string): Promise<string | null> {
+ * record-keeping, never a live claim.
+ *
+ * `language` (#297) regenerates in a language other than the platform's own — a one-off override,
+ * not remembered: only the resulting title is stored, and it stays editable (#209). */
+export async function regenerateOfferName(
+  ownerId: string,
+  offerId: string,
+  language?: string | null
+): Promise<string | null> {
   const ref = await assertOfferOwner(ownerId, offerId);
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
   const rows = await prisma.offerSetItem.findMany({
@@ -1135,7 +1194,13 @@ export async function regenerateOfferName(ownerId: string, offerId: string): Pro
   // Distinct copies in set order (an offer never lists a copy twice, but a copy can recur across
   // sets — dedupe so the template doesn't repeat it).
   const itemIds = [...new Set(rows.map((r) => r.itemId))];
-  const name = await generateConfiguredTitle(ownerId, ref.collectionId, itemIds, titleTemplate, titleLanguage);
+  const name = await generateConfiguredTitle(
+    ownerId,
+    ref.collectionId,
+    itemIds,
+    titleTemplate,
+    language === undefined ? titleLanguage : language
+  );
   await prisma.offer.update({ where: { id: offerId }, data: { name } });
   return name;
 }
@@ -1235,7 +1300,8 @@ export async function addOfferSet(
   ownerId: string,
   offerId: string,
   itemIds: string[],
-  title?: string | null
+  title?: string | null,
+  language?: string | null
 ): Promise<string> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (isTerminalState(ref.state)) {
@@ -1249,7 +1315,10 @@ export async function addOfferSet(
   // template over this set's copies. Null (no template) leaves the label derived from the copies.
   const explicit = title?.trim() || null;
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
-  const setTitle = explicit ?? (await generateConfiguredTitle(ownerId, ref.collectionId, addable, titleTemplate, titleLanguage));
+  // `language` (#297) is the compose dialog's per-add override; without one the platform's own
+  // listing language applies. Nothing about the choice is stored — the title it produced is.
+  const effectiveLanguage = language === undefined ? titleLanguage : language;
+  const setTitle = explicit ?? (await generateConfiguredTitle(ownerId, ref.collectionId, addable, titleTemplate, effectiveLanguage));
   const set = await prisma.offerSet.create({
     data: {
       offerId,
@@ -1266,7 +1335,8 @@ export async function addOfferSet(
 export async function addOfferSetsPerCopy(
   ownerId: string,
   offerId: string,
-  itemIds: string[]
+  itemIds: string[],
+  language?: string | null
 ): Promise<string[]> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (isTerminalState(ref.state)) {
@@ -1279,9 +1349,10 @@ export async function addOfferSetsPerCopy(
   // Pre-fill each single-copy set's title from the platform's configured template (#210), computed
   // per copy so each stands alone. Null (no template) leaves each label derived from its copy.
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
+  const effectiveLanguage = language === undefined ? titleLanguage : language; // per-add override (#297)
   const titles = new Map<string, string | null>();
   for (const itemId of addable) {
-    titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate, titleLanguage));
+    titles.set(itemId, await generateConfiguredTitle(ownerId, ref.collectionId, [itemId], titleTemplate, effectiveLanguage));
   }
   const ids: string[] = [];
   await prisma.$transaction(async (tx) => {

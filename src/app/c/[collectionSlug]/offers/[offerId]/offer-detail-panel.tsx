@@ -9,6 +9,8 @@ import { useOfferDetail, useOfferCopies, useInvalidateOffers } from "../use-offe
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferSetsView } from "./offer-sets-view";
+import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
+import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
 import type { OfferDetailSet } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -120,6 +122,15 @@ export function OfferDetailPanel({
   const [skippedNote, setSkippedNote] = useState(skippedParam);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
+  // The languages this collection lists in (#293), for regenerating the title in one of them (#297).
+  const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
+  // Every language *other* than the platform's own — the plain "Regenerate title" covers that one.
+  // `null` stands for the collection's default language. Empty for a single-language collection.
+  const platformLanguage = normalizeLanguage(offer?.platformTitleLanguage) ?? defaultLanguage;
+  const otherTitleLanguages: (string | null)[] =
+    titleLanguages.length > 0
+      ? [null, ...titleLanguages].filter((code) => (code ?? defaultLanguage) !== platformLanguage)
+      : [];
 
   if (isLoading || !offer) {
     return (
@@ -148,12 +159,13 @@ export function OfferDetailPanel({
   }
 
   /** Regenerate the listing title from the platform's template over the current composition (#210),
-   * overwriting any manual edit. */
-  function regenerateTitle() {
+   * overwriting any manual edit. `language` (#297) regenerates in a language other than the
+   * platform's — a one-off; nothing about the choice is stored. */
+  function regenerateTitle(language?: string | null) {
     setActionError(undefined);
     startTransition(async () => {
       const { regenerateOfferNameAction } = await import("@/app/actions/offers");
-      const result = await regenerateOfferNameAction(offerId);
+      const result = await regenerateOfferNameAction(offerId, language);
       if (result.status === "success") invalidateAll(collectionId);
       else setActionError(result.message);
     });
@@ -197,7 +209,17 @@ export function OfferDetailPanel({
           onSelect: () => setState(s),
         };
       }),
-    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: regenerateTitle },
+    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: () => regenerateTitle() },
+    // One entry per *other* language the collection lists in (#297) — plain "Regenerate title"
+    // already covers the platform's own. Absent for a single-language collection.
+    ...otherTitleLanguages.map(
+      (code): RowAction => ({
+        key: `regenerate-${code ?? "default"}`,
+        label: `Regenerate title in ${languageLabel(code ?? defaultLanguage)}`,
+        icon: "↻",
+        onSelect: () => regenerateTitle(code),
+      })
+    ),
     ...(offer.inActiveBidding
       ? [{ key: "clear-bidding", label: "Clear active bidding", icon: "🔨", onSelect: () => setBidding(false) } as RowAction]
       : offer.state === "active"
@@ -458,6 +480,7 @@ export function OfferDetailPanel({
           collectionId={collectionId}
           offerId={offerId}
           platformId={offer.platformId}
+          platformTitleLanguage={offer.platformTitleLanguage}
           areas={areas}
           locations={locations}
           baseCurrency={baseCurrency}

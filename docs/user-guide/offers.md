@@ -124,10 +124,30 @@ The title is yours to change:
   platform's current template over whatever the offer lists now. Use it after adding or removing
   copies, or after changing the platform's template. Regenerating overwrites a title you edited by
   hand.
+- **Regenerate it in another language** — once your platforms list in more than one
+  [language](contacts.md#adding-and-editing), the same menu also offers **Regenerate title in …** for
+  each of the others. It is a one-off: the title is rebuilt using the text you entered for that
+  language, and nothing about the choice is remembered — the platform keeps its own listing language
+  for everything generated later.
 
 The **sets** inside an offer are titled the same way: with a template configured, each set is
 pre-filled from it when you add it; otherwise a set reads as its copies. You can rename any set from
 its card.
+
+### Title preview when adding a set
+
+The **Add set** dialog shows a **Title preview** of the title the copies you have ticked will be
+given, so you see the result before the set exists. With several copies ticked it previews the
+**one set** title; adding them as separate sets titles each one from its own copy.
+
+Beside the preview — and only once your platforms list in more than one language — is a **Language**
+selector, pre-set to the platform's own listing language. Switching it re-renders the preview and
+titles the sets you are adding in that language. Like regenerating, it applies to this one add only.
+
+Where you have not entered text for the chosen language, the title still generates from your default
+text — those words are marked with a dotted underline and listed beneath the preview, so you can see
+what is missing without being blocked. Fill the gap in from the entity's 🌐 button (see
+[Contacts](contacts.md#title-names-per-language)) and regenerate.
 
 ## One active offer per copy, per platform
 

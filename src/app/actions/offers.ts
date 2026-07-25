@@ -17,9 +17,11 @@ import {
   addItemToOfferSet,
   updateOfferSet,
   removeOfferSet,
+  previewOfferTitle,
   OfferActionBlockedError,
   type OfferInput,
 } from "@/lib/offers";
+import type { TitleSegment } from "@/lib/offer-title-template";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
   isOfferState,
@@ -150,23 +152,43 @@ export async function duplicateOfferAction(
 }
 
 /** Add one set (one or more copies that sell together) to an offer. `perCopy` splits the copies
- * into one single-copy set each — the fast path for a stock of duplicates. */
+ * into one single-copy set each — the fast path for a stock of duplicates. `language` (#297)
+ * generates the set titles in a language other than the platform's; omitted, the platform's own
+ * listing language applies. */
 export async function addOfferSetAction(
   offerId: string,
   itemIds: string[],
-  opts: { perCopy?: boolean; title?: string | null } = {}
+  opts: { perCopy?: boolean; title?: string | null; language?: string | null } = {}
 ): Promise<OfferActionState> {
   const session = await getSession();
   if (itemIds.length === 0) return { status: "error", message: "Pick at least one copy." };
   try {
     if (opts.perCopy) {
-      await addOfferSetsPerCopy(session.user.id, offerId, itemIds);
+      await addOfferSetsPerCopy(session.user.id, offerId, itemIds, opts.language);
     } else {
-      await addOfferSet(session.user.id, offerId, itemIds, opts.title ?? null);
+      await addOfferSet(session.user.id, offerId, itemIds, opts.title ?? null, opts.language);
     }
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the set.");
+  }
+}
+
+/** The title `itemIds` would be given on this offer's platform, for the compose dialog's live
+ * preview (#297) — read-only, writes nothing. `language` previews another language than the
+ * platform's; the segments flagged `fellBack` render untranslated text (#298). Null when the
+ * platform has no title template, i.e. there is no generated title to preview. */
+export async function previewOfferTitleAction(
+  offerId: string,
+  itemIds: string[],
+  language?: string | null
+): Promise<{ segments: TitleSegment[]; fallbackTokens: string[] } | null> {
+  const session = await getSession();
+  try {
+    return await previewOfferTitle(session.user.id, offerId, itemIds, language);
+  } catch {
+    // A preview is never worth an error banner — the compose dialog simply shows nothing.
+    return null;
   }
 }
 
@@ -240,11 +262,15 @@ export async function patchOfferAction(
 }
 
 /** Regenerate the offer's listing title from the platform's template over its current composition
- * (#209/#210), overwriting any manual edit. */
-export async function regenerateOfferNameAction(offerId: string): Promise<OfferActionState> {
+ * (#209/#210), overwriting any manual edit. `language` (#297) regenerates in another language —
+ * a one-off, nothing about the choice is stored. */
+export async function regenerateOfferNameAction(
+  offerId: string,
+  language?: string | null
+): Promise<OfferActionState> {
   const session = await getSession();
   try {
-    await regenerateOfferName(session.user.id, offerId);
+    await regenerateOfferName(session.user.id, offerId, language);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to regenerate the title.");

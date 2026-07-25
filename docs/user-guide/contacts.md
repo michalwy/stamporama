@@ -49,7 +49,10 @@ text you like, for example `{catalog} {name} {year} {condition}`. Click a token 
 the cursor. The builder shows a **live preview** of the resulting title rendered against a real
 inventory copy — **🎲 Random** shuffles to another copy, and **Pick copy…** lets you preview on a
 specific one you search out. The preview also renders in the platform's **listing language**, so you
-see the title as its listings will read. The tokens fill in from the copies in the offer (or set):
+see the title as its listings will read — any word for which you have not entered text in that
+language is dotted-underlined and named in a line beneath the preview (*default language used for
+{condition}*), so you can spot the gaps while you write the template. Nothing is blocked: the title
+always generates, falling back to your default text. The tokens fill in from the copies in the offer (or set):
 
 - `{name}` — stamp name
 - `{catalog}` — catalog number (configurable, see below)

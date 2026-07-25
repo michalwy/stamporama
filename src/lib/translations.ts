@@ -101,11 +101,37 @@ export function translationsByLanguage<T extends { language: string }>(
   return out;
 }
 
+/** A resolved translatable field: the text to render, and whether it came from the entity's
+ * default-language column instead of a translation for the asked-for language (#298). */
+export interface ResolvedTranslation {
+  value: string | null;
+  fellBack: boolean;
+}
+
+/**
+ * {@link resolveTranslation}, additionally reporting whether the value **fell back** to the
+ * default-language column (#298) — so a preview can flag the tokens that are not really translated.
+ *
+ * `fellBack` is only ever true when a language was actually asked for *and* something rendered:
+ * resolving without a language is not a fallback (nothing was expected to be translated), and an
+ * absent optional relation (a copy with no certificate status) has no text to translate either.
+ */
+export function resolveTranslationWithFallback<T extends { language: string }>(
+  rows: readonly T[] | undefined,
+  language: string | null,
+  pick: (row: T) => string | null | undefined,
+  fallback: string | null
+): ResolvedTranslation {
+  const value = resolveTranslation(rows, language, pick, fallback);
+  const translated = language && rows ? rows.find((r) => r.language === language) : undefined;
+  return { value, fellBack: !!language && !!value && !(translated && pick(translated)?.trim()) };
+}
+
 /**
  * Resolve one translatable field for `language`, falling back to the entity's default-language
  * value. Falls back on a null language, a missing row, and a blank value alike — the token always
- * renders something rather than leaving a gap in a generated title. Surfacing that a fallback
- * happened is #298.
+ * renders something rather than leaving a gap in a generated title. Use
+ * {@link resolveTranslationWithFallback} where the caller wants to *surface* the fallback (#298).
  */
 export function resolveTranslation<T extends { language: string }>(
   rows: readonly T[] | undefined,

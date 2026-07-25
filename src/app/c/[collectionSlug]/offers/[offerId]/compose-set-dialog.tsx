@@ -18,6 +18,10 @@ import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persiste
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
+import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
+import { TitlePreviewText, TitleFallbackNote } from "@/app/c/[collectionSlug]/shared/title-preview";
+import { languageLabel, normalizeLanguage } from "@/lib/languages";
+import type { TitleSegment } from "@/lib/offer-title-template";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 
 const SEARCH_STYLE: React.CSSProperties = {
@@ -42,6 +46,8 @@ interface ComposeSetDialogProps {
   collectionId: string;
   offerId: string;
   platformId: string;
+  /** The platform's listing language (#293) — the language selector's default (#297). */
+  platformTitleLanguage: string | null;
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
@@ -56,11 +62,17 @@ interface ComposeSetDialogProps {
  * checkbox row rendered with `InventoryItemRow`. Selected copies go in either as **one set per
  * copy** (a quantity of singles) or **one set holding all** (a series). A non-blocking collision
  * warning shows when another active offer on this platform already lists a chosen copy.
+ *
+ * With a title template configured, the footer previews the title the selection will be given and
+ * (once the collection has more than one listing language) lets that one add be generated in
+ * another language than the platform's (#297). The choice is not stored — only the titles it
+ * produced, which stay editable (#209).
  */
 export function ComposeSetDialog({
   collectionId,
   offerId,
   platformId,
+  platformTitleLanguage,
   areas,
   locations,
   baseCurrency,
@@ -165,6 +177,39 @@ export function ComposeSetDialog({
 
   const multi = selectedIds.length > 1;
 
+  // Title language for this add (#297). The collection's languages come from its platforms; when
+  // there is only the default one there is nothing to choose and no selector renders. "" means the
+  // collection's default language.
+  const { titleLanguages } = useTitleLanguages(collectionId);
+  const [language, setLanguage] = useState(() => normalizeLanguage(platformTitleLanguage) ?? "");
+  const choosable = titleLanguages.length > 0;
+  const languageOverride = choosable ? language || null : undefined;
+
+  // Live preview of the title the selection will get, rendered by the server (only it can resolve
+  // translated entity text). Debounced, because it re-runs on every checkbox click.
+  const [rawPreview, setPreview] = useState<{ segments: TitleSegment[]; fallbackTokens: string[] } | null>(null);
+  // Dropping the last copy clears the preview a beat before the debounce would.
+  const preview = selectedIds.length > 0 ? rawPreview : null;
+  const previewKey = `${language}:${selectedIds.join(",")}`;
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (selectedIds.length === 0) {
+        setPreview(null);
+        return;
+      }
+      const { previewOfferTitleAction } = await import("@/app/actions/offers");
+      const result = await previewOfferTitleAction(offerId, selectedIds, languageOverride);
+      if (!cancelled) setPreview(result);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // `previewKey` stands in for the selection + language; `selectedIds` is a fresh array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offerId, previewKey, languageOverride]);
+
   function submit(perCopy: boolean) {
     if (selectedIds.length === 0) {
       setError("Pick at least one copy.");
@@ -173,7 +218,10 @@ export function ComposeSetDialog({
     setError(undefined);
     startTransition(async () => {
       const { addOfferSetAction } = await import("@/app/actions/offers");
-      const result = await addOfferSetAction(offerId, selectedIds, { perCopy: multi ? perCopy : false });
+      const result = await addOfferSetAction(offerId, selectedIds, {
+        perCopy: multi ? perCopy : false,
+        ...(languageOverride !== undefined ? { language: languageOverride } : {}),
+      });
       if (result.status === "success") onDone();
       else setError(result.message);
     });
@@ -261,6 +309,67 @@ export function ComposeSetDialog({
       {collisions.length > 0 && (
         <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-warning-border, var(--color-border))", background: "var(--color-warning-soft)", color: "var(--color-warning)", fontSize: "0.8125rem" }}>
           ⚠ This platform already has an active offer sharing a copy — {collisions.map((c) => c.offerLabel).join(", ")}. You can still add it, but keep at most one active listing per copy on a platform.
+        </div>
+      )}
+
+      {/* Title preview for the current selection (#297/#298) — absent when the platform has no
+          title template, since then the sets keep their derived copy labels (#209). */}
+      {(preview || choosable) && (
+        <div
+          style={{
+            padding: "0.625rem 1rem",
+            borderTop: "1px solid var(--color-border)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "1rem",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
+              Title preview
+            </span>
+            <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", wordBreak: "break-word", marginTop: "0.25rem" }}>
+              {preview ? (
+                <TitlePreviewText segments={preview.segments} />
+              ) : (
+                <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
+                  {selectedIds.length === 0
+                    ? "Pick a copy to see the title it will be given."
+                    : "This platform has no title template — sets keep their copy label."}
+                </span>
+              )}
+            </div>
+            {preview && <TitleFallbackNote tokens={preview.fallbackTokens} />}
+            {preview && multi && (
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+                Adding as separate sets titles each one from its own copy.
+              </p>
+            )}
+          </div>
+          {choosable && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+              Language
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                style={{
+                  padding: "0.25rem 0.4rem",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.75rem",
+                  color: "var(--color-text-primary)",
+                  background: "var(--color-bg-elevated)",
+                }}
+              >
+                <option value="">— default language —</option>
+                {titleLanguages.map((code) => (
+                  <option key={code} value={code}>
+                    {languageLabel(code)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
 

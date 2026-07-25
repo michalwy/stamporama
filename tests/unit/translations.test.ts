@@ -5,6 +5,7 @@ import {
   syncEntityTranslations,
   translationsByLanguage,
   resolveTranslation,
+  resolveTranslationWithFallback,
   translationFieldName,
   type TranslationValueMap,
 } from "../../src/lib/translations";
@@ -154,5 +155,47 @@ describe("translationFieldName", () => {
       ["abbreviation"]
     );
     assert.deepEqual(values, { pl: { abbreviation: "**" } });
+  });
+});
+
+describe("resolveTranslationWithFallback", () => {
+  const rows = [
+    { language: "pl", name: "Czyste", abbreviation: null },
+    { language: "de", name: null, abbreviation: null },
+  ];
+
+  it("reports no fallback when the language has the translation", () => {
+    assert.deepEqual(resolveTranslationWithFallback(rows, "pl", (r) => r.name, "Mint Never Hinged"), {
+      value: "Czyste",
+      fellBack: false,
+    });
+  });
+
+  it("reports a fallback for a missing row, a blank field, and a row without that field", () => {
+    for (const language of ["fr", "de"]) {
+      assert.deepEqual(resolveTranslationWithFallback(rows, language, (r) => r.name, "MNH"), {
+        value: "MNH",
+        fellBack: true,
+      });
+    }
+    // Same row, the untranslated sibling field — each field falls back on its own.
+    assert.deepEqual(resolveTranslationWithFallback(rows, "pl", (r) => r.abbreviation, "MNH"), {
+      value: "MNH",
+      fellBack: true,
+    });
+  });
+
+  it("is not a fallback when no language was asked for", () => {
+    assert.deepEqual(resolveTranslationWithFallback(rows, null, (r) => r.name, "MNH"), {
+      value: "MNH",
+      fellBack: false,
+    });
+  });
+
+  it("is not a fallback when there is no text to translate at all", () => {
+    assert.deepEqual(resolveTranslationWithFallback(rows, "fr", (r) => r.name, null), {
+      value: null,
+      fellBack: false,
+    });
   });
 });

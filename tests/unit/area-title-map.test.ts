@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { CollectionAreaData } from "../../src/lib/areas";
-import { buildAreaTitleMap } from "../../src/lib/area-vendor";
+import { buildAreaTitleMap, buildAreaTitleEntries } from "../../src/lib/area-vendor";
 
 function area(over: Partial<CollectionAreaData> & { id: string; name: string }): CollectionAreaData {
   return {
@@ -115,5 +115,33 @@ describe("buildAreaTitleMap with a language", () => {
   it("falls back to the area's own name when nothing is set in any language", () => {
     const a = area({ id: "a", name: "Germany" });
     assert.equal(buildAreaTitleMap([a], "pl").get("a"), "Germany");
+  });
+});
+
+describe("buildAreaTitleEntries fallback reporting (#298)", () => {
+  const root = area({ id: "r", name: "Root", titleName: "Root", titleNameByLanguage: { pl: "Korzeń" } });
+  const leaf = area({ id: "l", name: "Leaf", parentId: "r" });
+
+  it("reports no fallback when the winning name is translated", () => {
+    assert.deepEqual(buildAreaTitleEntries([root, leaf], "pl").get("l"), {
+      title: "Korzeń",
+      fellBack: false,
+    });
+  });
+
+  it("reports a fallback when the winning name has no translation", () => {
+    assert.deepEqual(buildAreaTitleEntries([root, leaf], "de").get("l"), {
+      title: "Root",
+      fellBack: true,
+    });
+  });
+
+  it("reports a fallback when nothing is configured and the area's own name is used", () => {
+    const a = area({ id: "a", name: "Germany" });
+    assert.deepEqual(buildAreaTitleEntries([a], "pl").get("a"), { title: "Germany", fellBack: true });
+  });
+
+  it("never reports a fallback without a language", () => {
+    assert.equal(buildAreaTitleEntries([root, leaf], null).get("l")?.fellBack, false);
   });
 });

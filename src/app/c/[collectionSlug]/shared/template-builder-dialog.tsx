@@ -8,9 +8,11 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import {
-  renderTitleTemplate,
+  renderTitleTemplateSegments,
+  titleFallbackTokens,
   type TitleToken,
 } from "@/lib/offer-title-template";
+import { TitlePreviewText, TitleFallbackNote } from "./title-preview";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -158,7 +160,12 @@ export function TemplateBuilderDialog({
     setSearch("");
   }
 
-  const preview = renderTitleTemplate(value, sample ? [sample.copy] : []);
+  // Rendered as segments rather than a plain string so the parts that fell back to the default
+  // language can be marked (#298); the sample copy carries which of its fields did.
+  const previewCopies = sample ? [sample.copy] : [];
+  const segments = renderTitleTemplateSegments(value, previewCopies);
+  const fallbackTokens = titleFallbackTokens(value, previewCopies);
+  const preview = segments.map((s) => s.text).join("");
 
   const fieldProps = {
     ref: inputRef as React.Ref<HTMLInputElement & HTMLTextAreaElement>,
@@ -239,13 +246,16 @@ export function TemplateBuilderDialog({
             {sampleLoading ? (
               <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>Loading a sample copy…</span>
             ) : preview ? (
-              preview
+              <TitlePreviewText segments={segments} />
             ) : (
               <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
                 Empty — a listing would fall back to the catalog/copy label.
               </span>
             )}
           </div>
+
+          {/* Tokens that are not really translated in this language (#298). */}
+          {!sampleLoading && <TitleFallbackNote tokens={fallbackTokens} />}
 
           {/* Which copy the preview runs on. */}
           {!sampleLoading && (

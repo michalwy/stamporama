@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   renderTitleTemplate,
+  renderTitleTemplateSegments,
+  titleFallbackTokens,
   DEFAULT_TITLE_TEMPLATE,
   AVAILABLE_TITLE_TOKENS,
   type TitleTemplateCopy,
@@ -339,5 +341,80 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
     for (const { token } of AVAILABLE_TITLE_TOKENS) {
       assert.notEqual(renderTitleTemplate(token, [c]), token, `${token} should resolve`);
     }
+  });
+});
+
+describe("renderTitleTemplateSegments / titleFallbackTokens (#298)", () => {
+  const c = copy({
+    name: "Merkury",
+    condition: "Mint never hinged",
+    area: "Polska",
+    catalogNumbers: [cn("Mi", "12", { isPrimary: true })],
+    fallbacks: ["condition"],
+  });
+
+  it("concatenates to exactly what renderTitleTemplate returns", () => {
+    const tpl = "{catalog} {name} - {condition} ({area})";
+    assert.equal(
+      renderTitleTemplateSegments(tpl, [c]).map((s) => s.text).join(""),
+      renderTitleTemplate(tpl, [c])
+    );
+  });
+
+  it("marks only the fallen-back token's text", () => {
+    assert.deepEqual(renderTitleTemplateSegments("{name} {condition} {area}", [c]), [
+      { text: "Merkury ", fellBack: false },
+      { text: "Mint never hinged", fellBack: true },
+      { text: " Polska", fellBack: false },
+    ]);
+  });
+
+  it("returns one unmarked segment when nothing fell back", () => {
+    assert.deepEqual(renderTitleTemplateSegments("{name}", [copy({ name: "Merkury" })]), [
+      { text: "Merkury", fellBack: false },
+    ]);
+  });
+
+  it("still trims the glue separator of an empty token next to a marked one", () => {
+    assert.deepEqual(renderTitleTemplateSegments("{year} - {condition}", [c]), [
+      { text: "Mint never hinged", fellBack: true },
+    ]);
+    assert.deepEqual(renderTitleTemplateSegments("{condition} - {year}", [c]), [
+      { text: "Mint never hinged", fellBack: true },
+    ]);
+  });
+
+  it("never marks an untranslatable token", () => {
+    const numbers = copy({
+      catalogNumbers: [cn("Mi", "12", { isPrimary: true })],
+      year: 1950,
+      fallbacks: ["condition"],
+    });
+    assert.deepEqual(renderTitleTemplateSegments("{catalog} {year}", [numbers]), [
+      { text: "Mi 12 1950", fellBack: false },
+    ]);
+    assert.deepEqual(titleFallbackTokens("{catalog} {year}", [numbers]), []);
+  });
+
+  it("marks a token that fell back on any one of the copies in scope", () => {
+    const translated = copy({ condition: "Czyste" });
+    assert.deepEqual(titleFallbackTokens("{condition}", [translated, c]), ["{condition}"]);
+    assert.deepEqual(titleFallbackTokens("{condition}", [translated]), []);
+  });
+
+  it("reports the winning alternative of a fallback group, in legend spelling", () => {
+    const grouped = copy({ issueName: null, name: "Merkury", fallbacks: ["name"] });
+    assert.deepEqual(titleFallbackTokens("{issuename|name}", [grouped]), ["{name}"]);
+    // The group's first alternative wins when it resolves, and it is translated here.
+    const withIssue = copy({ issueName: "Wydanie", name: "Merkury", fallbacks: ["name"] });
+    assert.deepEqual(titleFallbackTokens("{issueName|name}", [withIssue]), []);
+  });
+
+  it("lists each fallen-back token once, in template order", () => {
+    const both = copy({ condition: "Mint", area: "Poland", fallbacks: ["condition", "area"] });
+    assert.deepEqual(titleFallbackTokens("{area} {condition} {condition}", [both]), [
+      "{area}",
+      "{condition}",
+    ]);
   });
 });

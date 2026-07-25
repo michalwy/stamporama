@@ -44,7 +44,24 @@ export interface TitleTemplateCopy {
   issueName: string | null;
   /** Year of that issue, or null. */
   issueYear: number | null;
+  /** Which of the translatable fields above rendered **untranslated** text for the language the copy
+   * was resolved in (#298) — the field keys of this interface, e.g. `condition`, `area`. Absent /
+   * empty when nothing fell back, which is also the case for a copy resolved without a language. */
+  fallbacks?: readonly string[];
 }
+
+/** The translatable fields of a {@link TitleTemplateCopy} — the ones that can appear in
+ * `fallbacks`, keyed by the lower-cased token name that renders them. `{catalog}`, `{year}`,
+ * `{issueYear}`, `{location}` and `{ref}` are not translatable and never flag. */
+const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
+  name: "name",
+  condition: "condition",
+  conditionabbr: "conditionAbbr",
+  certificate: "certificate",
+  certificateabbr: "certificateAbbr",
+  area: "area",
+  issuename: "issueName",
+};
 
 /** A token usable in a template, with the label + example the config UI shows as a legend. */
 export interface TitleToken {
@@ -269,23 +286,46 @@ function resolveTokenValue(spec: string, copies: readonly TitleTemplateCopy[]): 
   }
 }
 
+/** Whether the token `spec` renders text that fell back to the default language on **any** copy in
+ * scope (#298). Untranslatable tokens (`{catalog}`, `{year}`, …) never do. */
+function tokenFellBack(spec: string, copies: readonly TitleTemplateCopy[]): boolean {
+  const field = FALLBACK_FIELD_BY_TOKEN[spec.split(":")[0].trim().toLowerCase()];
+  if (!field) return false;
+  return copies.some((c) => c.fallbacks?.includes(field));
+}
+
+/** A resolved placeholder: its rendered text, which token produced it (the winning alternative of a
+ * fallback group), and whether that token's text fell back to the default language. */
+interface ResolvedPlaceholder {
+  value: string;
+  /** The token spec that produced `value`, or null for an empty / unknown placeholder. */
+  spec: string | null;
+  fellBack: boolean;
+}
+
 /**
  * Resolve the contents of one `{...}` placeholder. A plain `{token}` renders that token (an unknown
  * key keeps its literal `{token}` so a typo stays visible). A **fallback group** `{a|b|c}` renders
  * the **first non-empty** of its tokens — e.g. `{issueName|name|catalog}` — and empty when every
  * alternative is empty. Unknown keys inside a group are simply skipped.
  */
-function resolvePlaceholder(inner: string, copies: readonly TitleTemplateCopy[]): string {
+function resolvePlaceholder(
+  inner: string,
+  copies: readonly TitleTemplateCopy[]
+): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
   if (parts.length === 1) {
     const v = resolveTokenValue(parts[0], copies);
-    return v === null ? `{${parts[0]}}` : v; // unknown → literal; known → value (maybe "")
+    // unknown → literal (no token produced it); known → value (maybe "")
+    if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false };
+    return { value: v, spec: parts[0], fellBack: !!v && tokenFellBack(parts[0], copies) };
   }
   for (const p of parts) {
     const v = resolveTokenValue(p, copies);
-    if (v) return v; // first non-empty (skips unknown → null and empty → "")
+    // first non-empty (skips unknown → null and empty → "")
+    if (v) return { value: v, spec: p, fellBack: tokenFellBack(p, copies) };
   }
-  return "";
+  return { value: "", spec: null, fellBack: false };
 }
 
 /** Marker left in place of a placeholder that resolved to nothing, so {@link tidy} can strip only
@@ -324,12 +364,70 @@ export function renderTitleTemplate(
   template: string | null | undefined,
   copies: readonly TitleTemplateCopy[]
 ): string {
+  return renderTitleTemplateSegments(template, copies)
+    .map((s) => s.text)
+    .join("");
+}
+
+/** One run of a rendered title: `fellBack` marks text that came from a token resolved in the
+ * default language because the asked-for language has no translation for it (#298). */
+export interface TitleSegment {
+  text: string;
+  fellBack: boolean;
+}
+
+/** Sentinels wrapping a fallen-back placeholder's value while {@link tidy} runs, so the segments and
+ * the plain string can never disagree about the final text. Like {@link EMPTY_MARK} these are
+ * control characters that never occur in real data; unlike it they survive `tidy` untouched (they
+ * are not whitespace and no rule matches them) and are split out afterwards. */
+const FB_OPEN = "";
+const FB_CLOSE = "";
+
+/**
+ * {@link renderTitleTemplate}, split into segments so a preview can mark the parts whose text is not
+ * actually translated (#298). Concatenating the segments' `text` yields exactly what
+ * `renderTitleTemplate` returns. Generation is never affected — this only reports.
+ */
+export function renderTitleTemplateSegments(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): TitleSegment[] {
   const tpl = template?.trim() || DEFAULT_TITLE_TEMPLATE;
   const rendered = tpl.replace(/\{([^{}]+)\}/g, (_m, inner: string) => {
-    const value = resolvePlaceholder(inner, copies);
+    const { value, fellBack } = resolvePlaceholder(inner, copies);
     // A placeholder that resolved to nothing becomes a marker so its glue separator is trimmed; a
     // literal (unknown-token) result stays as-is.
-    return value === "" ? EMPTY_MARK : value;
+    if (value === "") return EMPTY_MARK;
+    return fellBack ? `${FB_OPEN}${value}${FB_CLOSE}` : value;
   });
-  return tidy(rendered);
+  const tidied = tidy(rendered);
+  if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
+  return tidied
+    .split(new RegExp(`[${FB_OPEN}${FB_CLOSE}]`))
+    // A split on the sentinels alternates outside / inside runs, starting outside.
+    .map((text, i) => ({ text, fellBack: i % 2 === 1 }))
+    .filter((s) => s.text !== "");
+}
+
+/**
+ * The tokens of `template` whose text fell back to the default language for these copies (#298), as
+ * they read in the token legend (`{condition}`), first-seen order, de-duplicated. Drives the
+ * preview's summary line. Empty when nothing fell back — including whenever the copies were resolved
+ * without a language.
+ */
+export function titleFallbackTokens(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): string[] {
+  const tpl = template?.trim() || DEFAULT_TITLE_TEMPLATE;
+  const out: string[] = [];
+  for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
+    const { value, spec, fellBack } = resolvePlaceholder(m[1], copies);
+    if (!value || !spec || !fellBack) continue;
+    const token = `{${spec.split(":")[0].trim()}}`;
+    const canonical = AVAILABLE_TITLE_TOKENS.find((t) => t.token.toLowerCase() === token.toLowerCase());
+    const label = canonical?.token ?? token;
+    if (!out.includes(label)) out.push(label);
+  }
+  return out;
 }

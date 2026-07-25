@@ -1,8 +1,15 @@
 import "server-only";
 import type { TitleTemplateCopy, TitleCatalogNumber } from "./offer-title-template";
+import { prisma } from "./db";
 import { getCollectionAreas } from "./areas";
-import { buildAreaVendorMaps, buildAreaTitleMap, type AreaVendorMaps } from "./area-vendor";
-import { resolveTranslation } from "./translations";
+import {
+  buildAreaVendorMaps,
+  buildAreaTitleEntries,
+  type AreaTitleEntry,
+  type AreaVendorMaps,
+} from "./area-vendor";
+import { normalizeLanguage } from "./languages";
+import { resolveTranslationWithFallback } from "./translations";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -92,11 +99,14 @@ export type TitleCopyRow = {
  * the condition / certificate status name + abbreviation (#294) each resolve to their translation
  * for it, **field by field**, falling back to the entity's default-language column — so a Polish
  * listing can translate `Mint Never Hinged` while keeping `MNH`. `{area}` resolves earlier, in
- * `areaTitleById`, because its fallback also walks the area roll-up chain. */
+ * `areaTitleById`, because its fallback also walks the area roll-up chain.
+ *
+ * Every field that ends up rendering **untranslated** text is also listed in the copy's `fallbacks`
+ * (#298) — the preview marks those tokens, generation itself is unaffected. */
 export function toTitleCopy(
   row: TitleCopyRow,
   maps: AreaVendorMaps,
-  areaTitleById: ReadonlyMap<string, string>,
+  areaTitleById: ReadonlyMap<string, AreaTitleEntry>,
   language: string | null = null
 ): TitleTemplateCopy {
   const areas = row.stamp.stampAreaLinks;
@@ -107,7 +117,8 @@ export function toTitleCopy(
   const issue = row.stamp.issueMemberships[0]?.issue ?? null;
   // The area shown in the title rolls up per its `titleName` config (#210); falls back to the leaf
   // area's own name when nothing is configured up the chain.
-  const areaTitle = areaId ? (areaTitleById.get(areaId) ?? primaryLink?.collectionArea.name ?? null) : null;
+  const areaEntry = areaId ? areaTitleById.get(areaId) : undefined;
+  const areaTitle = areaId ? (areaEntry?.title ?? primaryLink?.collectionArea.name ?? null) : null;
 
   const catalogNumbers: TitleCatalogNumber[] = row.stamp.catalogNumbers.map((cn) => {
     const entry = vendorMap?.get(cn.catalogVendorId);
@@ -124,44 +135,63 @@ export function toTitleCopy(
   // rest keep their recorded order.
   catalogNumbers.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
-  return {
-    name: resolveTranslation(row.stamp.translations, language, (t) => t.name, row.stamp.name),
+  // Each translatable field resolves *and* reports whether it fell back; `fallbacks` collects the
+  // ones that did, keyed by the `TitleTemplateCopy` field the token renders from.
+  const fallbacks: string[] = [];
+  const resolve = <T extends { language: string }>(
+    field: string,
+    rows: readonly T[] | undefined,
+    pick: (row: T) => string | null | undefined,
+    fallback: string | null
+  ): string | null => {
+    const { value, fellBack } = resolveTranslationWithFallback(rows, language, pick, fallback);
+    if (fellBack) fallbacks.push(field);
+    return value;
+  };
+
+  const copy: TitleTemplateCopy = {
+    name: resolve("name", row.stamp.translations, (t: NameTranslation) => t.name, row.stamp.name),
     catalogNumbers,
     year: row.stamp.issuedYear,
-    condition: resolveTranslation(
+    condition: resolve(
+      "condition",
       row.condition.translations,
-      language,
-      (t) => t.name,
+      (t: LabelTranslation) => t.name,
       row.condition.name
     ),
-    conditionAbbr: resolveTranslation(
+    conditionAbbr: resolve(
+      "conditionAbbr",
       row.condition.translations,
-      language,
-      (t) => t.abbreviation,
+      (t: LabelTranslation) => t.abbreviation,
       row.condition.abbreviation
     ),
     certificate: row.certificateStatus
-      ? resolveTranslation(
+      ? resolve(
+          "certificate",
           row.certificateStatus.translations,
-          language,
-          (t) => t.name,
+          (t: LabelTranslation) => t.name,
           row.certificateStatus.name
         )
       : null,
     certificateAbbr: row.certificateStatus
-      ? resolveTranslation(
+      ? resolve(
+          "certificateAbbr",
           row.certificateStatus.translations,
-          language,
-          (t) => t.abbreviation,
+          (t: LabelTranslation) => t.abbreviation,
           row.certificateStatus.abbreviation
         )
       : null,
     area: areaTitle,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
-    issueName: issue ? resolveTranslation(issue.translations, language, (t) => t.name, issue.name) : null,
+    issueName: issue
+      ? resolve("issueName", issue.translations, (t: NameTranslation) => t.name, issue.name)
+      : null,
     issueYear: issue?.year ?? null,
   };
+  // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately.
+  if (areaTitle && areaEntry?.fellBack) fallbacks.push("area");
+  return fallbacks.length > 0 ? { ...copy, fallbacks } : copy;
 }
 
 /** Build a row→`TitleTemplateCopy` mapper for a collection, loading its area-vendor maps once (they
@@ -170,17 +200,27 @@ export function toTitleCopy(
  *
  * `language` (#293) is the listing language of the platform the title is generated for — an ISO
  * 639-1 code, or null for the default language. Entity text resolves to that language where a
- * translation exists and falls back silently to the default value otherwise (surfacing the
- * fallback in the preview is #298). Every translatable token now honours it: `{area}` (#293),
- * `{condition}` / `{conditionAbbr}` / `{certificate}` / `{certificateAbbr}` (#294), `{issueName}`
- * (#295) and `{name}` (#296). */
+ * translation exists and falls back to the default value otherwise; the fallback is silent in the
+ * generated title and reported per copy for the preview to flag (#298). Every translatable token
+ * honours it: `{area}` (#293), `{condition}` / `{conditionAbbr}` / `{certificate}` /
+ * `{certificateAbbr}` (#294), `{issueName}` (#295) and `{name}` (#296).
+ *
+ * A language equal to the collection's own `defaultLanguage` is the same thing as no language —
+ * entity columns are already written in it and carry no translation rows — so it is normalised to
+ * null. Without that, a platform listing in the default language would resolve identically but
+ * report *every* token as a fallback. */
 export async function makeTitleCopyMapper(
   ownerId: string,
   collectionId: string,
   language: string | null = null
 ): Promise<(row: TitleCopyRow) => TitleTemplateCopy> {
-  const areas = await getCollectionAreas(ownerId, collectionId);
+  const [areas, collection] = await Promise.all([
+    getCollectionAreas(ownerId, collectionId),
+    prisma.collection.findUnique({ where: { id: collectionId }, select: { defaultLanguage: true } }),
+  ]);
+  const code = normalizeLanguage(language);
+  const effective = code && code !== normalizeLanguage(collection?.defaultLanguage) ? code : null;
   const maps = buildAreaVendorMaps(areas);
-  const areaTitleById = buildAreaTitleMap(areas, language);
-  return (row) => toTitleCopy(row, maps, areaTitleById, language);
+  const areaTitleById = buildAreaTitleEntries(areas, effective);
+  return (row) => toTitleCopy(row, maps, areaTitleById, effective);
 }

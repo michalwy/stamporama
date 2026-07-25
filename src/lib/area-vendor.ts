@@ -84,23 +84,44 @@ export function buildAreaTitleMap(
   areas: CollectionAreaData[],
   language?: string | null
 ): Map<string, string> {
-  const byId = new Map(areas.map((a) => [a.id, a]));
   const out = new Map<string, string>();
+  for (const [id, entry] of buildAreaTitleEntries(areas, language)) out.set(id, entry.title);
+  return out;
+}
+
+/** One area's resolved title name, plus whether it **fell back** to untranslated text (#298): true
+ * when a language was asked for and the name that won the roll-up carries no translation for it —
+ * whether that is a default-language `titleName` or the area's own `name`. */
+export interface AreaTitleEntry {
+  title: string;
+  fellBack: boolean;
+}
+
+/** {@link buildAreaTitleMap}, additionally reporting the per-area fallback (#298) so the title
+ * preview can mark an `{area}` that is not really translated. */
+export function buildAreaTitleEntries(
+  areas: CollectionAreaData[],
+  language?: string | null
+): Map<string, AreaTitleEntry> {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const out = new Map<string, AreaTitleEntry>();
   for (const area of areas) {
     let current: CollectionAreaData | undefined = area;
     let depth = 0;
     let resolved: string | null = null;
+    let translated = false;
     while (current && depth < 50) {
-      const translated = language ? current.titleNameByLanguage[language]?.trim() : undefined;
-      const t = translated || current.titleName?.trim();
-      if (t) {
-        resolved = t;
+      const t = language ? current.titleNameByLanguage[language]?.trim() : undefined;
+      const value = t || current.titleName?.trim();
+      if (value) {
+        resolved = value;
+        translated = !!t;
         break;
       }
       current = current.parentId ? byId.get(current.parentId) : undefined;
       depth++;
     }
-    out.set(area.id, resolved ?? area.name);
+    out.set(area.id, { title: resolved ?? area.name, fellBack: !!language && !translated });
   }
   return out;
 }
