@@ -10,8 +10,12 @@ instance.
 ## Installing it
 
 The Assistant is published as an **unlisted Chrome Web Store listing** — not searchable, but
-installable by anyone with the link. Open the listing and click **Add to Chrome**. That is the whole
-installation: no settings, no policy, nothing per machine.
+installable by anyone with the link:
+
+<https://chromewebstore.google.com/detail/lhbaflbkfgahmcbgmlibleedmfcdjedf>
+
+Click **Add to Chrome**. That is the whole installation: no settings, no policy, nothing per
+machine.
 
 Chrome keeps it up to date on its own, the same way it updates any other extension.
 

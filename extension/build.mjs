@@ -48,7 +48,7 @@ async function copyStatic() {
   await cp(resolve(root, "src/options/index.html"), resolve(outdir, "options.html"));
   await cp(resolve(root, "icons"), resolve(outdir, "icons"), {
     recursive: true,
-    // The dev icons are dead weight inside a signed CRX — and shipping them would invite the
+    // The dev icons are dead weight inside the store package — and shipping them would invite the
     // released extension to reference an icon set it is not supposed to use.
     filter: (source) => !release || !source.includes(`${sep}dev`),
   });

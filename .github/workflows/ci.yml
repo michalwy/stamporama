@@ -130,8 +130,8 @@ jobs:
         run: pnpm exec tsx --tsconfig tests/integration/tsconfig.json --test tests/integration/**/*.test.ts
 
   # The extension is a separate workspace package, excluded from the app's lint/typecheck. Its own
-  # checks run here — notably the CRX packaging tests (#254), whose output only fails at install
-  # time on someone else's machine if it is wrong.
+  # checks run here — notably the packaging tests (#288), whose output would otherwise only fail
+  # later, on upload to the store or in review.
   extension:
     name: Extension checks
     runs-on: ubuntu-latest

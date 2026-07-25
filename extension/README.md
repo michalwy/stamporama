@@ -31,7 +31,7 @@ The unpacked dev build and the released build are **separate extensions**, on pu
 |---|---|---|
 | Name | Stamporama Assistant (dev) | Stamporama Assistant |
 | Icon | amber | blue |
-| Extension ID | `idmgaeimkafaifpfbjonmjdfbmgffcbh` | assigned by the Chrome Web Store |
+| Extension ID | `idmgaeimkafaifpfbjonmjdfbmgffcbh` | `lhbaflbkfgahmcbgmlibleedmfcdjedf` (assigned by the store) |
 | Identity from | `DEV_KEY` in `identity.mjs` | the store |
 
 So you can run both in one browser: the amber one pointed at a dev instance, the blue one installed
@@ -63,7 +63,11 @@ builds, two extensions* above. For daily use, install from the store listing —
 ## Install for daily use (#288)
 
 The Assistant is published as an **unlisted Chrome Web Store listing**: not searchable, installed
-from a link, updated by the store. Open the listing, click **Add to Chrome**, then connect it —
+from a link, updated by the store.
+
+<https://chromewebstore.google.com/detail/lhbaflbkfgahmcbgmlibleedmfcdjedf>
+
+Click **Add to Chrome**, then connect it —
 **Settings → Assistant → Connect Stamporama Assistant** in Stamporama, and click the toolbar icon
 with that page in front.
 
@@ -100,13 +104,22 @@ Three things have to be done by hand first, because the API can only update an i
 
 1. **Create the listing.** Chrome Web Store developer account (one-off 5 USD) → new item → upload
    `dist-store/stamporama-assistant.zip` → fill the *Store listing* and *Privacy* tabs → set
-   visibility to **Unlisted** → publish once. The item ID it gets is `CWS_EXTENSION_ID`; the
-   publisher ID is in the dashboard settings.
+   visibility to **Unlisted** → publish once. Both ids are then in the dashboard URL,
+   `…/devconsole/<CWS_PUBLISHER_ID>/<CWS_EXTENSION_ID>/edit` — read them there rather than from
+   *Account settings*, whose publisher id differs when the item belongs to a publisher group and
+   would 404 the upload.
 2. **Enable the API.** A Google Cloud project with the Chrome Web Store API enabled and an OAuth
    client (desktop app) for the same account that owns the listing.
-3. **Mint a refresh token** once, interactively, for the scope
-   `https://www.googleapis.com/auth/chromewebstore`. **Push the OAuth consent screen to
-   production** — left in *Testing*, the refresh token expires every 7 days and releases start
+3. **Mint a refresh token** once, interactively:
+
+   ```bash
+   CWS_CLIENT_ID='…' CWS_CLIENT_SECRET='…' node extension/scripts/cws-refresh-token.mjs
+   ```
+
+   It opens a one-shot loopback listener, prints the URL to approve, and exchanges the code Google
+   redirects back with — the copy-the-code-from-the-page flow was removed in 2022, so a desktop
+   client has no simpler route. The token is printed and never written to disk. **Push the OAuth
+   consent screen to production** — left in *Testing* it expires every 7 days, and releases start
    failing for reasons that have nothing to do with the release.
 
 Publishing keeps whatever visibility the dashboard has; changing visibility there means publishing
