@@ -157,7 +157,10 @@
         color: var(--muted); display: flex; align-items: center; gap: 8px;
         margin-bottom: 6px; flex-wrap: wrap;
       }
-      .body { display: flex; align-items: center; gap: 14px; }
+      /* Top-aligned, not centred: both columns start with a label on the same baseline, so anchoring
+         the pictures to the top keeps the two thumbnails level whatever the text under them runs to.
+         Centring drifts them apart as soon as one side has more lines than the other. */
+      .body { display: flex; align-items: flex-start; gap: 14px; }
       .body + .body { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
       .grow { flex: 1; min-width: 0; }
       .body .nm { font-weight: 600; line-height: 1.35; }
@@ -203,8 +206,10 @@
       .warnline { color: var(--warn); font-size: 12px; margin-top: 4px; }
       .empty { color: var(--muted); margin-top: 10px; }
 
+      /* Above everything, the sticky section headings included — they carry a z-index of their own
+         and would otherwise paint over the scrim and the dialog. */
       .overlay {
-        position: fixed; inset: 0; background: var(--scrim);
+        position: fixed; inset: 0; z-index: 100; background: var(--scrim);
         display: flex; align-items: center; justify-content: center; padding: 16px;
       }
       .overlay[hidden] { display: none; }
