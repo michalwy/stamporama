@@ -224,7 +224,8 @@ you want the new wording.
 ## Photo settings
 
 Every offer carries its **own** photo configuration, seeded from its platform when the offer is
-created and edited afterwards from the **⋮** menu → **Photo settings…**.
+created and edited afterwards from the **⚙** button in the [Photos](#generating-the-photos) card's
+button row — beside **Generate**, where its effect is.
 
 The dialog opens with a one-line reminder of what the platform accepts (how many photos, longest
 edge, file size). Those are the platform's limits, not the offer's — change them on the
@@ -253,8 +254,8 @@ platform. Press **Generate** and the work happens **in the background** — you 
 and the card shows the run's state on its own (*Queued*, *Rendering 2/4*, *Ready*, or *Failed* with
 the reason). Pressing Generate while a run is already going does nothing; it will not render twice.
 
-The card starts **collapsed** — click its heading to open it. Generate and Download all sit in the
-header and work either way, and anything you would want to notice while it is shut (the run's state,
+The card starts **collapsed** — click its heading to open it. Generate, Download all and the **⚙**
+[photo settings](#photo-settings) sit in the header and work either way, and anything you would want to notice while it is shut (the run's state,
 *Out of date*, a side that could not be rendered) stays there as a chip.
 
 What gets made follows the offer, not a choice you make here:

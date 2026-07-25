@@ -218,7 +218,7 @@ Below them sit the two defaults each **new** offer on this platform is seeded fr
 These two — plus the **photo tile label** from the templates dialog — are **copied onto the offer**
 when it is created, not looked up later. Changing them here therefore affects only offers you create
 from now on; offers already prepared or listed keep exactly the photos they were set up with. Adjust
-one of those on the offer itself, under **⋮ → Photo settings…** (see
+one of those on the offer itself, with the **⚙** button in its Photos card (see
 [Offers → Photo settings](offers.md#photo-settings)).
 
 Every contact row has a **⋮** menu with **Edit** and **Delete**. Editing replaces all the

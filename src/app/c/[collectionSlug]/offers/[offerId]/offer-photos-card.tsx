@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useOfferPhotoPlan, type OfferPhotoPlanView } from "../use-offers-query";
+import { useOfferPhotoPlan, useInvalidateOffers, type OfferPhotoPlanView } from "../use-offers-query";
 import { formatBytes } from "@/lib/format-bytes";
 import { PhotoLightbox } from "../../inventory/photo-thumb";
+import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
+import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
 // explicit and runs in a background worker, so the card's first job is to start a run and then tell
@@ -57,6 +59,18 @@ const BTN: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   cursor: "pointer",
+};
+
+/** Square icon-only variant of BTN, for the settings gear at the end of the button row. */
+const ICON_BTN: React.CSSProperties = {
+  ...BTN,
+  padding: "0.375rem",
+  width: "2rem",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "0.875rem",
+  fontWeight: 400,
 };
 
 const NOTE: React.CSSProperties = {
@@ -290,13 +304,23 @@ function SkippedNotice({ skipped }: { skipped: OfferPhotoPlanView["plan"]["skipp
 export function OfferPhotosCard({
   collectionId,
   offerId,
+  photoConfig,
+  photoLimits,
+  platformName,
 }: {
   collectionId: string;
   offerId: string;
+  /** This offer's photo configuration (#308), edited from the gear in this card's button row. */
+  photoConfig: OfferPhotoConfigInput;
+  photoLimits: PlatformPhotoLimits;
+  platformName: string;
 }) {
   const { data: plan, isLoading, refetch } = useOfferPhotoPlan(collectionId, offerId);
+  const { invalidateAll } = useInvalidateOffers();
   const [error, setError] = useState<string | undefined>();
   const [expanded, setExpanded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
 
   const generate = () => {
@@ -309,6 +333,33 @@ export function OfferPhotosCard({
       await refetch();
     });
   };
+
+  /** Save the photo configuration edited in the dialog, then refresh the plan it feeds. */
+  const saveSettings = (formData: FormData) => {
+    setSettingsError(undefined);
+    startTransition(async () => {
+      const { updateOfferPhotoConfigAction } = await import("@/app/actions/offers");
+      const result = await updateOfferPhotoConfigAction(offerId, formData);
+      if (result.status === "success") {
+        setSettingsOpen(false);
+        invalidateAll(collectionId);
+        await refetch();
+      } else setSettingsError(result.message);
+    });
+  };
+
+  const settingsDialog = settingsOpen && (
+    <PhotoSettingsDialog
+      collectionId={collectionId}
+      config={photoConfig}
+      limits={photoLimits}
+      platformName={platformName}
+      isPending={isPending}
+      error={settingsError}
+      onClose={() => !isPending && setSettingsOpen(false)}
+      onSubmit={saveSettings}
+    />
+  );
 
   const heading = (
     <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -418,6 +469,18 @@ export function OfferPhotosCard({
           >
             {stored > 0 ? "Regenerate" : "Generate"}
           </button>
+          {/* Photo settings (#308) live here rather than in the offer's ⋮ menu: the configuration is
+              what this card renders from, so it is edited where its effect is read. */}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Photo settings"
+            title="Photo settings — sides, tile label and collage numbers"
+            style={{ ...ICON_BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+          >
+            <span aria-hidden>⚙</span>
+          </button>
         </div>
       </div>
 
@@ -450,6 +513,8 @@ export function OfferPhotosCard({
 
       {/* An error from the Generate button answers a click that is possible while collapsed. */}
       {error && <p style={{ ...NOTE, color: "var(--color-error)" }}>{error}</p>}
+
+      {settingsDialog}
     </div>
   );
 }

@@ -241,7 +241,7 @@ Two things are worth knowing:
 
 A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the [platform itself](contacts.md#offer-photos).
 
-Set one of these as a platform's **collage template** and every new offer on that platform starts with its numbers already filled in; you can still adjust them per offer under **⋮ → Photo settings…** ([Offers → Photo settings](offers.md#photo-settings)).
+Set one of these as a platform's **collage template** and every new offer on that platform starts with its numbers already filled in; you can still adjust them per offer with the **⚙** button in the offer's Photos card ([Offers → Photo settings](offers.md#photo-settings)).
 
 New collections start with no templates — add the ones that match the material you actually sell.
 
