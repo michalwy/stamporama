@@ -101,7 +101,10 @@ immediately. **Rescan** re-reads the page after you navigate.
 ## Layout
 
 - `src/platform/` — the `PlatformModule` interface + registry; `colnect/` is the first module (#249),
-  registered by the content bootstrap.
+  registered by the content bootstrap. It reads two page shapes: catalog **list** pages (`div.pl-it`
+  cards) and a **single stamp's** page, where the minor-variant rows carry catalog codes in the same
+  abbreviated form. The main stamp on that page is skipped — its codes are printed with full catalog
+  names, which the abbreviation mapping (#248) can't key off.
 - `src/core/` — profile store + colour derivation (#251), decision types, message contracts.
 - `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background fetch).
 - `src/content/` — extractor bootstrap: runs declaratively on `colnect.com` (for the badge) and is

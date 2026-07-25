@@ -1,12 +1,15 @@
 import type { CatalogRef, ExtractedItem } from "../types";
 
-// Colnect catalog-list DOM extraction (#249). Pure functions over a Document/Element so they run
-// under a test DOM (linkedom) as well as in the content script. Structure confirmed from a real
-// Poland/Year list page:
-//   - each item card:            div.pl-it
+// Colnect DOM extraction (#249). Pure functions over a Document/Element so they run under a test DOM
+// (linkedom) as well as in the content script. Two page shapes yield items, both confirmed against
+// real pages — a Poland/Year list page and a single stamp's page:
+//
+//   list page card:              div.pl-it
 //   - Colnect item-ID:           .ibox[data-xid]  (fallback: an /stamps/stamp/<ID>-… link)
 //   - catalog codes:             a <dt> "Catalog codes:" whose <dd> holds
 //                                <strong>Mi:</strong>PL 3690, <strong>Sn:</strong>PL 3382, …
+//
+//   stamp page minor variant:    .nested_items li[data-id]  (see the section further down)
 // Values are kept verbatim (prefix + number + any suffix/range/block) — see the note in the plan:
 // strict full-key matching needs the area prefix inside `number`, and suffixes like "3701y",
 // ranges "3706-3711", blocks "BL132" must not be coerced. "Unlisted" values are skipped.
@@ -67,14 +70,18 @@ export function parseCatalogCodes(dd: Element): CatalogRef[] {
   return refs;
 }
 
+/** The Colnect item-ID leading a `/stamps/stamp/<ID>-…` link inside `el`, if there is one. */
+function idFromStampLink(el: Element): string | null {
+  const href = el.querySelector('a[href*="/stamps/stamp/"]')?.getAttribute("href");
+  const m = href?.match(/\/stamps\/stamp\/(\d+)/);
+  return m ? m[1] : null;
+}
+
 /** The numeric Colnect item-ID for a card: the `data-xid`, else the id leading a stamp-page link. */
 function cardItemId(card: Element): string | null {
   const xid = card.querySelector("[data-xid]")?.getAttribute("data-xid");
   if (xid && xid.trim()) return xid.trim();
-
-  const href = card.querySelector('a[href*="/stamps/stamp/"]')?.getAttribute("href");
-  const m = href?.match(/\/stamps\/stamp\/(\d+)/);
-  return m ? m[1] : null;
+  return idFromStampLink(card);
 }
 
 /** Best-effort display name (the matcher ignores it): the stamp-page link's text or title. */
@@ -144,9 +151,64 @@ export function extractCard(card: Element): ExtractedItem | null {
   };
 }
 
-/** Extract every item card on a Colnect list page. */
+// ── Variants on a single-stamp page ──────────────────────────────────────────
+//
+// A stamp's own page also carries catalog numbers, in two places:
+//
+//   • the **main stamp**, under a "Catalog codes:" dt whose dd spells the catalogs out in full and
+//     without a colon (`<strong>Michel</strong> PL 389`). Those don't parse as markers, so the main
+//     stamp yields nothing and is skipped — the abbreviation mapping (#248) keys off abbreviations,
+//     not full names.
+//   • its **minor variants**, in `.nested_items li[data-id]`, whose `.st_codes` use exactly the same
+//     abbreviated markup as a list page (`<strong>Mi:</strong>PL 389U`). Those are extracted here.
+//
+// A variant's own Colnect id is the `data-id` on its `<li>` (its "More details" link carries it too).
+// Variants have no name of their own, so one is composed from the page's stamp name plus whatever
+// the row gives as its difference ("Grey red", "Split rectangle.").
+
+/** Name for a variant row: the page's stamp name, plus what makes this row different. */
+function variantName(li: Element): string | undefined {
+  const stamp = (li.ownerDocument?.querySelector("#name")?.textContent ?? "").trim();
+  const diff = Array.from(li.querySelectorAll(".st_diff dd"))
+    .map((d) => (d.textContent ?? "").trim())
+    .find(Boolean);
+  return [stamp, diff].filter(Boolean).join(" — ") || undefined;
+}
+
+/** Extract one minor-variant row, or null without an id or any usable catalog ref. */
+export function extractVariant(li: Element): ExtractedItem | null {
+  const platformItemId = li.getAttribute("data-id")?.trim() || idFromStampLink(li);
+  if (!platformItemId) return null;
+  const codes = li.querySelector(".st_codes");
+  const catalogRefs = codes ? parseCatalogCodes(codes) : [];
+  if (catalogRefs.length === 0) return null;
+  const name = variantName(li);
+  const imageUrl = cardImageUrl(li);
+  return {
+    platformItemId,
+    catalogRefs,
+    ...(name ? { name } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+  };
+}
+
+/**
+ * Extract every item a Colnect page offers: the cards of a catalog list page, and the minor variants
+ * listed on a single stamp's page. Results are deduplicated by Colnect id, so no item can be offered
+ * — and written — twice from one page.
+ */
 export function extractColnect(doc: Document): ExtractedItem[] {
-  return Array.from(doc.querySelectorAll("div.pl-it"))
-    .map(extractCard)
-    .filter((i): i is ExtractedItem => i !== null);
+  const found = [
+    ...Array.from(doc.querySelectorAll("div.pl-it")).map(extractCard),
+    ...Array.from(doc.querySelectorAll(".nested_items li[data-id]")).map(extractVariant),
+  ].filter((i): i is ExtractedItem => i !== null);
+
+  const seen = new Set<string>();
+  const items: ExtractedItem[] = [];
+  for (const item of found) {
+    if (seen.has(item.platformItemId)) continue;
+    seen.add(item.platformItemId);
+    items.push(item);
+  }
+  return items;
 }
