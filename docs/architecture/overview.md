@@ -242,6 +242,15 @@ Photo configuration sits on **two levels**, following the `titleTemplate` / `des
 - **Why stored, not read.** Changing a platform setting must never silently alter offers already prepared or listed. This matters most for the label template: a buyer referring to a label on an image already uploaded must keep getting that label after a regeneration (#315). Editing any of these marks the generated photo plan out of date (#311).
 - Rules live in `src/lib/offer-photo-config.ts` (Prisma-free, unit-tested): the sides vocabulary, limit parsing, and the all-or-nothing collage group. `updateOfferPhotoConfig` replaces the whole configuration in one write, mirroring the dialog's single save; it is allowed in every offer state, like the listing texts.
 
+### Offer photo plan (#309)
+
+`src/lib/offer-photo-plan.ts` — `planOfferPhotos()` turns an offer's sets, copies, photo configuration and the platform's limits into an **ordered list of planned images**. Pure and Prisma-free like `offer-title-template.ts`, so the server generator (#311) and a client-side preview run identical rules, and it is unit-tested without a database. An offer's photos are a sequence, not "one main image plus extras"; a single image is a 1×1 collage, so there is exactly one rendering path (#310).
+
+- **Grouping.** A multi-copy set gets its own group (split into consecutive groups of its own if it holds more copies than `rows × columns`). Single-copy sets are collected **across set boundaries** and chunked to capacity — a collage of one stamp is pointless. Mixed offers are not a designed-for case, but stay predictable: a run of single-copy sets flushes before the next multi-copy set, so plan order always follows set order (#306), and tile order follows copy order.
+- **Front / back.** `photoSides` decides which sides are attempted. A side is rendered **only if every copy in the group has that scan** — all or nothing, no gaps — so a group yields a front/back pair with identical contents (emitted interleaved), or a degenerate group of one image, or none. Nothing may assume a group has two members.
+- **Truncation.** With `maxPhotos` set, whole groups drop from the end and a pair always drops together; manual attachments (#313) hold explicit positions and are protected, so they never drop. The result reports `droppedGroups` and `exceedsLimit` (attachments alone over the limit — the collector's call, not the engine's). With no `maxPhotos` there is no truncation at all.
+- An offer with no collage numbers yet plans no collages (`configured: false`); its attachments still appear.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:
