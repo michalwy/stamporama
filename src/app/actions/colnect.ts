@@ -11,7 +11,6 @@ import {
   ColnectAbbrevTakenError,
   type ColnectMappingData,
 } from "@/lib/colnect";
-import { createAssistantToken, revokeAssistantToken } from "@/lib/api-tokens";
 
 export type ColnectActionState =
   | { status: "idle" }
@@ -85,41 +84,5 @@ export async function deleteColnectMappingAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete mapping. Please try again." };
-  }
-}
-
-// ── Assistant tokens (#253) ──────────────────────────────────────────────────
-// Minimal generator behind the browser extension's bearer auth. The full registration/code-exchange
-// UX is #252; here the owner mints a token and copies it once into the extension's options.
-
-export type AssistantTokenCreateState =
-  | { status: "idle" }
-  | { status: "success"; token: string }
-  | { status: "error"; message: string };
-
-export async function createAssistantTokenAction(
-  collectionId: string,
-  formData: FormData
-): Promise<AssistantTokenCreateState> {
-  const session = await getSession();
-  const label = ((formData.get("label") as string | null) ?? "").trim();
-  try {
-    const { token } = await createAssistantToken(session.user.id, collectionId, label || null);
-    return { status: "success", token };
-  } catch {
-    return { status: "error", message: "Failed to generate token. Please try again." };
-  }
-}
-
-export async function revokeAssistantTokenAction(
-  collectionId: string,
-  tokenId: string
-): Promise<ColnectActionState> {
-  const session = await getSession();
-  try {
-    await revokeAssistantToken(session.user.id, collectionId, tokenId);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to revoke token. Please try again." };
   }
 }

@@ -3,7 +3,7 @@
 Platform-neutral MV3 extension shell (#253, part of #155). It matches marketplace catalog pages
 against a Stamporama collection via the Colnect matcher endpoints (#250). Colnect DOM extraction is a
 pluggable **platform module** added separately (#249); connection profiles (#251) say which instance
-and collection a match is written to.
+and collection a match is written to, and an instance registers itself into one (#252).
 
 ## Build
 
@@ -21,8 +21,13 @@ pnpm test
 1. `pnpm build`.
 2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, choose
    `extension/dist`.
-3. In Stamporama: **Settings → Colnect → Assistant tokens → Generate** and copy the token.
-4. Open the extension **Options** and add a profile: instance URL, collection id, and token.
+3. In Stamporama: **Settings → Assistant → Connect Stamporama Assistant**.
+4. With that page still in front, click the extension's toolbar icon. That is the whole setup —
+   the profile appears in **Options**, active, with nothing typed.
+
+Adding a profile by hand (Options → *Add profile*: instance URL, collection id, token from
+**Settings → Assistant → Generate token by hand**) still works, for a browser or a script that cannot
+register.
 
 ## Connection profiles (#251)
 
@@ -52,7 +57,34 @@ Switching profile is a real re-point: the results on screen, the cached stamp ph
 background's per-tab match cache all belong to the instance being left, so they are dropped and the
 page is matched again against the new target.
 
-Profiles are typed in by hand for now; registering one straight from Stamporama's settings is #252.
+## Registration (#252)
+
+A profile is normally not typed in at all: the instance registers itself.
+
+**Settings → Assistant** in Stamporama mints a short-lived, single-use code and exposes it, with the
+instance's own origin and the current collection, as JSON in a hidden element
+(`#stamporama-assistant-registration`). Clicking the toolbar icon on that page reads the payload,
+`POST`s the code to `/api/assistant/register`, and stores the token it gets back as a profile — made
+active, because registering is an explicit "talk to this one".
+
+Three properties are the point:
+
+- **Nothing is typed.** The `apiBaseUrl` is the origin that served the payload, so it cannot be wrong,
+  and dev vs production separates itself: you register from each instance.
+- **The long-lived token is never on the page** — only the one-time code is, for minutes, and it is
+  redeemed server-side. Tokens are revocable per registration from the same screen.
+- **The icon click is what grants access.** `activeTab` lets us read a page on an origin the
+  extension does not otherwise script, so no instance origin has to be declared up front. (The
+  redemption `fetch` runs in the background worker, CORS-exempt under the manifest's
+  `host_permissions`.)
+
+The extension reports the outcome by setting `data-registration-state` / `-message` on the payload
+element, which the page renders as a success or error line — attributes rather than an event, because
+the extension's world is isolated and the page owns that node.
+
+Registering a target the extension **already has updates that profile in place**: same id, same name
+if you renamed it, fresh token. That is deliberate — two profiles with one target are rejected
+anyway, and re-registering is how a revoked or lost token is meant to be replaced.
 
 ## The flow
 
@@ -114,8 +146,10 @@ immediately. **Rescan** re-reads the page after you navigate.
   cards) and a **single stamp's** page, where the minor-variant rows carry catalog codes in the same
   abbreviated form. The main stamp on that page is skipped — its codes are printed with full catalog
   names, which the abbreviation mapping (#248) can't key off.
-- `src/core/` — profile store + colour derivation (#251), decision types, message contracts.
-- `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background fetch).
+- `src/core/` — profile store + colour derivation (#251), the registration payload contract (#252),
+  decision types, message contracts.
+- `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background
+  fetch) + the registration exchange (#252).
 - `src/content/` — extractor bootstrap: runs declaratively on `colnect.com` (for the badge) and is
   also injected on demand by the popup (covers tabs already open before an extension reload).
 - `src/popup/`, `src/options/` — the generic flow UI (with the target badge + profile selector) and
@@ -123,5 +157,4 @@ immediately. **Rescan** re-reads the page after you navigate.
 
 ## Boundaries
 
-Profile registration from Stamporama's settings (#252), Colnect DOM specifics (#249), and
-packaging/distribution (#254) are intentionally out of scope here.
+Colnect DOM specifics (#249) and packaging/distribution (#254) are intentionally out of scope here.

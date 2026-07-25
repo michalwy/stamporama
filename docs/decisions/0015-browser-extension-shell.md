@@ -39,8 +39,16 @@ This keeps DOM specifics out of the neutral core and lets Delcampe/Allegro/… f
 **Bearer token auth (`AssistantToken`).** A per-collection token authenticates the extension. It is
 stored only as a SHA-256 hash, authorizes as the collection's owner for that one collection, and is
 accepted by the matcher endpoints alongside a session via `resolveCollectionOwner` (session wins;
-otherwise a valid `Authorization: Bearer` token pinned to the route's collection). A minimal generator
-lives in **Settings → Colnect**; the full registration/code-exchange issuance UX is #252.
+otherwise a valid `Authorization: Bearer` token pinned to the route's collection).
+
+**The instance registers itself (#252).** Rather than have the collector type an instance URL, a
+collection id, and a token into the extension, **Settings → Assistant** mints a short-lived
+single-use code (`AssistantRegistrationCode`, hash-stored like a token) and exposes it on the page
+with the instance's own origin and current collection; clicking the toolbar icon reads that payload
+under `activeTab` and exchanges the code at `POST /api/assistant/register` for a token. Alternatives
+rejected: a redirect or custom-scheme handoff (puts a token in a URL, and needs a registered scheme),
+and a pre-declared instance origin (there isn't one — every self-hosted instance is a different
+host). Manual token generation stays for callers that cannot register.
 
 ## Consequences
 
@@ -72,5 +80,17 @@ lives in **Settings → Colnect**; the full registration/code-exchange issuance 
   (hashed, de-collided) so the instance is recognisable rather than merely readable. Switching drops
   the on-screen results and the background's per-tab match cache — they describe the instance being
   left.
-- The shell remains partial where the work is scheduled elsewhere: profiles are typed in by hand
-  until the registration/code exchange lands (#252), and there is no packaging/distribution (#254).
+- Registration is driven by the **toolbar-icon click**, which is what grants `activeTab` and so
+  permits reading a page on an instance origin the extension never declared. The exchange itself runs
+  in the background worker, CORS-exempt under `host_permissions`. The consequence is a two-click
+  setup with no typing, whose `apiBaseUrl` is correct by construction (the instance served it) — and
+  that dev and production are told apart by *where you registered from*, not by what someone typed.
+- The one-time code is the only credential ever on a page, for minutes and for one use; the token is
+  minted server-side and is revocable per registration. Re-registering an instance+collection the
+  extension already holds **refreshes that profile's token in place**, which is the recovery path for
+  a revoked or lost token.
+- The extension answers the page by setting `data-registration-*` attributes on the payload element
+  (attributes, because its world is isolated and React owns the node), so the outcome is visible
+  where the user is looking rather than inside the extension.
+- The shell remains partial where the work is scheduled elsewhere: there is no
+  packaging/distribution (#254).

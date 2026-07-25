@@ -51,6 +51,7 @@ model Collection {
   sales           Sale[]
   colnectCatalogMappings ColnectCatalogMapping[]
   assistantTokens AssistantToken[]
+  assistantRegistrationCodes AssistantRegistrationCode[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -164,6 +165,24 @@ model AssistantToken {
 
   @@index([collectionId])
   @@map("assistant_token")
+}
+
+model AssistantRegistrationCode {
+  id           String    @id @default(cuid())
+  collectionId String
+  // SHA-256 hex of the raw code; the raw value (prefix "stmpr_") is shown once, on the page that
+  // minted it, and exchanged by the extension for an AssistantToken.
+  codeHash     String    @unique
+  expiresAt    DateTime
+  // Set when redeemed — the row is kept (not deleted) so a replayed code fails as "used", and
+  // expired/used rows are swept when the collection mints its next code.
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@map("assistant_registration_code")
 }
 
 model CatalogName {

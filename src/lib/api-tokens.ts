@@ -6,8 +6,9 @@ import { prisma } from "./db";
 // calls a collection's Colnect matcher endpoints from colnect.com — cross-site, where the Better
 // Auth session cookie is not sent — so it authenticates with a per-collection token instead. A token
 // authorizes as the collection's owner for that one collection. Only the SHA-256 hash is stored; the
-// raw value is returned once at creation and never again. The full registration/code-exchange
-// issuance flow is #252; this is the minimal generator + verifier behind it.
+// raw value is returned once at creation and never again. Tokens are minted either by the one-click
+// registration exchange (`assistant-registration.ts`, #252) or by hand from Settings → Assistant;
+// both land in the same list and revoke the same way.
 
 const TOKEN_PREFIX = "stmpa_";
 

@@ -122,7 +122,8 @@ async function render(): Promise<void> {
   if (profiles.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "No profiles yet — add the instance and collection you want to match against.";
+    empty.textContent =
+      "No profiles yet — register one from Stamporama’s Settings → Assistant, or add it here by hand.";
     listEl.append(empty);
     return;
   }

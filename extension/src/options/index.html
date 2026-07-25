@@ -63,8 +63,10 @@
       <p class="help">
         A <strong>profile</strong> is one Stamporama instance plus one collection — a dev server and
         your production instance are separate profiles, and so are two collections on the same
-        instance. The extension only ever talks to the <strong>active</strong> one. Generate the token
-        in Stamporama under <strong>Settings → Colnect → Assistant tokens</strong>.
+        instance. The extension only ever talks to the <strong>active</strong> one. The easy way to add
+        one is to open <strong>Settings → Assistant</strong> in Stamporama, click
+        <strong>Connect Stamporama Assistant</strong>, then click this extension's toolbar icon — the
+        instance registers itself, with nothing to type. The form below is the manual alternative.
       </p>
 
       <h2>Profiles</h2>
@@ -120,8 +122,10 @@
       </label>
 
       <div class="note">
-        Profiles are typed in by hand for now. Registering one straight from Stamporama's settings
-        (instance URL, collection, and a one-time token exchange) is Stamporama issue #252.
+        Registering from Stamporama's settings exchanges a one-time code for a token that is stored
+        here and revocable there (Stamporama issue #252). Registering the same instance and collection
+        again refreshes that profile's token in place — that is how you replace a token you revoked or
+        lost.
       </div>
     </div>
     <script src="options.js"></script>

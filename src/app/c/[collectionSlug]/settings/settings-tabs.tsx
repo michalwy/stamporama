@@ -9,6 +9,7 @@ import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
+import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
@@ -44,6 +45,7 @@ const TABS = [
   { key: "areas", label: "Areas" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
+  { key: "assistant", label: "Assistant" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -83,7 +85,8 @@ export function SettingsTabs({
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "duplicates" ||
-    rawTab === "colnect"
+    rawTab === "colnect" ||
+    rawTab === "assistant"
       ? rawTab
       : "general";
 
@@ -198,7 +201,6 @@ export function SettingsTabs({
           <ColnectPanel
             collectionId={collectionId}
             initialMappings={initialColnectMappings}
-            initialTokens={initialAssistantTokens}
             vendors={initialTree.map((v) => ({
               id: v.id,
               name: v.name,
@@ -206,6 +208,13 @@ export function SettingsTabs({
             }))}
           />
         </section>
+      )}
+      {activeTab === "assistant" && (
+        <AssistantPanel
+          collectionId={collectionId}
+          collectionName={collectionName}
+          initialTokens={initialAssistantTokens}
+        />
       )}
     </div>
   );

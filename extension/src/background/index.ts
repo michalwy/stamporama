@@ -10,6 +10,7 @@ import type {
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
+import { handleRegistrationClick } from "./registration";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
@@ -184,8 +185,15 @@ async function openAssistant(sourceTab: chrome.tabs.Tab): Promise<void> {
   assistantWindowId = created.id ?? null;
 }
 
+// The icon click has two meanings, decided by what the page in front offers. On a Stamporama
+// Settings page holding a registration payload (#252) it registers that instance + collection — the
+// click is what grants `activeTab`, which is how we may read a page on an origin the extension does
+// not otherwise script. Everywhere else it opens the Assistant, as before.
 chrome.action.onClicked.addListener((tab) => {
-  void openAssistant(tab);
+  void (async () => {
+    if (tab.id !== undefined && (await handleRegistrationClick(tab.id))) return;
+    await openAssistant(tab);
+  })();
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {
