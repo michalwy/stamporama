@@ -9,6 +9,7 @@ import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getColnectMappings } from "@/lib/colnect";
+import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
@@ -37,6 +38,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     conditions,
     certificateStatuses,
     subtypes,
+    collageTemplates,
     colnectMappings,
     assistantTokens,
     photoStorageBytes,
@@ -48,6 +50,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getStampConditions(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
+    getCollageTemplates(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -70,6 +73,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialConditions={conditions}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
+          initialCollageTemplates={collageTemplates}
           initialColnectMappings={colnectMappings}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}

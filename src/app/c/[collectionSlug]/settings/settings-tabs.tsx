@@ -9,6 +9,7 @@ import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
+import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -18,6 +19,7 @@ import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import type { CollageTemplateData } from "@/lib/collage-templates";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -35,6 +37,7 @@ interface SettingsTabsProps {
   initialConditions: StampConditionData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  initialCollageTemplates: CollageTemplateData[];
   initialColnectMappings: ColnectMappingData[];
   initialAssistantTokens: AssistantTokenData[];
   duplicateCatalogMode: DuplicateCatalogMode;
@@ -48,6 +51,7 @@ const TABS = [
   { key: "conditions", label: "Conditions" },
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
+  { key: "collages", label: "Collage templates" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
   { key: "assistant", label: "Assistant" },
@@ -75,6 +79,7 @@ export function SettingsTabs({
   initialConditions,
   initialCertificateStatuses,
   initialSubtypes,
+  initialCollageTemplates,
   initialColnectMappings,
   initialAssistantTokens,
   duplicateCatalogMode,
@@ -91,6 +96,7 @@ export function SettingsTabs({
     rawTab === "areas" ||
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
+    rawTab === "collages" ||
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
     rawTab === "assistant"
@@ -198,6 +204,15 @@ export function SettingsTabs({
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
         />
+      )}
+      {activeTab === "collages" && (
+        <section>
+          <h2 style={sectionHeadingStyle}>Collage templates</h2>
+          <CollageTemplatesPanel
+            collectionId={collectionId}
+            initialTemplates={initialCollageTemplates}
+          />
+        </section>
       )}
       {activeTab === "duplicates" && (
         <section>

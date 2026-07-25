@@ -222,6 +222,17 @@ Copies **and catalog stamps** can carry photos (see [ADR-0011](../decisions/0011
 - **Transport & serving**: multipart uploads go through the route handler `POST /api/collections/[collectionId]/photos/uploads` (not a server action); bytes are served by `GET /api/collections/[collectionId]/photos/[photoId]/[variant]`, authorized by the photo's owning collection + owner (item **or** stamp). Files never sit under `public/`.
 - **Cleanup**: deleting a photo, its `Item`, or its `Stamp` deletes the stored bytes (cascade drops rows only). Abandoned staging uploads are swept hourly by an idempotent in-process GC started from `src/instrumentation.ts` `register()` (TTL `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS`, default 3h) — no separate compose service.
 
+### Collage templates (`CollageTemplate`)
+
+A collection-level, named render preset for offer photo collages (#307) — `name`, `rows`, `columns`, `gap`, `background`, `labelStripHeight`, cascade-deleted with its collection, edited under **Settings → Collage templates** (`collage-templates-panel.tsx`, mirroring `subtypes-panel.tsx`). It exists because collage capacity is a property of **stamp size**, not of the platform or of one listing.
+
+- **Capacity, not frame.** `rows × columns` is a maximum; the renderer (#310) shrinks the canvas to the actual contents, so 4 copies under a 5×4 template give a one-row image. A 1×1 template is the single-stamp case, which keeps one rendering path for every image.
+- **Seeded, not referenced.** A template is picked on an offer and its values are **copied onto the offer** (#308), exactly as `Contact.descriptionTemplate` seeds `Offer.description`; nothing points back at the table. Editing or deleting a template therefore cannot retroactively change offers already prepared, and there is no in-use check on delete.
+- **Pixels, not millimetres.** `gap` and `labelStripHeight` are output pixels: stamps are scanned at a constant DPI, so the renderer already works in a pixel space carrying true relative sizes and needs no physical-unit conversion. One `gap` value serves both axes.
+- Platform limits (max photos / longest edge / file size) are **not** here — they live on `Contact` and are read live at render time (#308, #310).
+- No rows are seeded into a new collection: sizing conventions depend on the material a collector actually sells.
+- Validation is a pure module (`src/lib/collage-template-rules.ts`, unit-tested) so the offer-side form can reuse it in #308; the server module (`src/lib/collage-templates.ts`) is owner-authorized like every other config entity.
+
 ## CI
 
 The `ci.yml` GitHub Actions workflow runs three jobs on every push and pull request:

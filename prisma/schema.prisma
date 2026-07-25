@@ -48,6 +48,7 @@ model Collection {
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
   stampSubtypes   StampSubtype[]
+  collageTemplates CollageTemplate[]
   items           Item[]
   contacts        Contact[]
   locations       Location[]
@@ -142,6 +143,45 @@ model StampSubtype {
   //   CREATE UNIQUE INDEX "stamp_subtype_one_default"
   //     ON "stamp_subtype"("collectionId") WHERE "isDefault";
   @@map("stamp_subtype")
+}
+
+// A named, reusable collage render preset (#307). How many stamps fit sensibly on one collage is a
+// property of **stamp size**, not of the platform or the offer — many small definitives fit where
+// few large commemoratives do — so the numbers live in templates the collector maintains once,
+// rather than being set by hand on every offer.
+//
+// Two things to keep in mind:
+//
+//  - **Capacity, not frame.** `rows` × `columns` is a maximum. A set of 4 copies under a 5×4
+//    template produces a one-row collage sized to its contents, not a padded 5×4 canvas (#310).
+//  - **Seeded, not referenced.** A template is chosen on an offer and its values are *copied* onto
+//    the offer (#308), exactly as `Contact.descriptionTemplate` seeds `Offer.description`. Editing
+//    a template therefore never retroactively changes offers that were already prepared, and
+//    nothing points back here — the offer holds no template reference.
+//
+// Templates carry no platform limits (max photos / edge / file size); those live on `Contact` and
+// are read live at render time (#308, #310).
+model CollageTemplate {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  // Capacity of the collage. Both ≥ 1; a 1×1 template is the single-stamp case, which is the same
+  // rendering path as any other collage.
+  rows         Int
+  columns      Int
+  // Spacing between tiles, in **output pixels** — one value used both between columns and between
+  // rows. Pixels rather than millimetres because stamps are scanned at a constant DPI, so the
+  // renderer already works in a pixel space that carries true relative sizes (#310).
+  gap          Int
+  // Canvas colour behind the tiles, `#rrggbb`. Also what the label strip is drawn on.
+  background   String @default("#ffffff")
+  // Height of the label strip drawn below each tile (#312), in output pixels. 0 = no strip.
+  labelStripHeight Int @default(0)
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@map("collage_template")
 }
 
 model CatalogVendor {

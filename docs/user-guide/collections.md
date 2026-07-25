@@ -223,6 +223,26 @@ Subtypes attach to **child** stamps only (a stamp nested under a parent); top-le
 
 Use the override for the odd child that does not follow its category — for example a single colour-variety row you want treated as a distinct entry. Left on **Use subtype setting**, the child simply inherits its subtype.
 
+## Collage templates
+
+Offer photos put several stamps on one image. How many fit sensibly is a property of **stamp size**, not of the platform: many small definitives sit comfortably where only a few large commemoratives do. Rather than setting those numbers by hand on every offer, keep them as named, reusable **collage templates** under **Settings → Collage templates**.
+
+A template holds:
+
+- **Rows** and **Columns** — the collage's capacity.
+- **Gap** — the spacing between stamps, in pixels of the finished image, used between columns and rows alike.
+- **Label strip height** — the height of the strip drawn below each stamp for its label, in the same pixels. Set it to **0** for no strip.
+- **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on.
+
+Two things are worth knowing:
+
+- **Rows × columns is a maximum, not a frame.** A set of four copies under a 5 × 4 template produces a one-row image sized to its contents, not a padded 5 × 4 canvas.
+- **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
+
+A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the platform itself.
+
+New collections start with no templates — add the ones that match the material you actually sell.
+
 ## Stamp photos
 
 Alongside the photos you attach to an individual owned **copy** (see [Inventory → Photos](inventory.md#photos)), you can attach photos to the **stamp itself** — a representative or reference image of the catalog stamp (or variant). Stamp photos live at the catalog level, so they are shared context for every copy of that stamp rather than a record of one physical piece.
