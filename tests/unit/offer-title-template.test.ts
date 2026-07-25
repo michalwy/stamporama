@@ -140,13 +140,51 @@ describe("renderTitleTemplate — {catalog} options", () => {
     assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 1-3");
   });
 
-  it("keeps non-integer numbers verbatim after the ranges", () => {
+  it("keeps a differently-suffixed number out of the plain-integer range", () => {
     const nums = [
       copy({ catalogNumbers: [cn("Mi", "1", { isPrimary: true })] }),
       copy({ catalogNumbers: [cn("Mi", "2", { isPrimary: true })] }),
       copy({ catalogNumbers: [cn("Mi", "5a", { isPrimary: true })] }),
     ];
     assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 1-2,5a");
+  });
+
+  it("collapses a prefixed family, writing the shared prefix once (#286)", () => {
+    const nums = ["BL31", "BL32", "BL33"].map((n) =>
+      copy({ catalogNumbers: [cn("Fi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Fi:vendor}", nums), "Fi BL31-33");
+  });
+
+  it("writes a shared suffix once around the collapsed span", () => {
+    const nums = ["40A", "41A", "42A"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 40-42A");
+  });
+
+  it("collapses each vendor independently when another vendor cannot fold (#286)", () => {
+    const rows: [string, string, string][] = [
+      ["BL31", "1294CKB", "BF28"],
+      ["BL32", "1295CKB", "BF29"],
+      ["BL33", "1296KB", "BF30"],
+    ];
+    const copies = rows.map(([fi, mi, yt]) =>
+      copy({
+        catalogNumbers: [cn("Fi", fi, { isPrimary: true }), cn("Mi", mi), cn("Yt", yt)],
+      })
+    );
+    assert.equal(
+      renderTitleTemplate("{catalog:*:vendor}", copies),
+      "Fi BL31-33 / Mi 1294-1295CKB,1296KB / Yt BF28-30"
+    );
+  });
+
+  it("keeps a number with no digits verbatim after the ranges", () => {
+    const nums = ["1", "2", "Ark."].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 1-2,Ark.");
   });
 
   it("groups each vendor separately when showing all", () => {

@@ -130,38 +130,59 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
   return "";
 }
 
-/** Compact a group's catalog numbers into a range list (#210): plain-integer numbers are sorted and
- * consecutive runs collapse to `from-to`, so `1,2,4,6,7,8` reads `1-2,4,6-8`. Numbers that aren't
- * bare integers (a prefix like `BL5` or a suffix like `12a`) can't range-fold, so they are kept
- * verbatim after the integer ranges. All comma-joined; duplicates dropped. */
+/** Compact a group's catalog numbers into a range list (#210, #286). Numbers are bucketed by their
+ * **numbering family** — the constant prefix + suffix around the digits, as `parseCatalogNumberParts`
+ * splits them — and within each family the base numbers are sorted and consecutive runs collapse to
+ * `from-to`. So `1,2,4,6,7,8` reads `1-2,4,6-8`, and `BL31,BL32,BL33` reads `BL31-33`: the shared
+ * prefix and suffix are written **once**, around the collapsed span. Families are emitted in
+ * first-seen order, and a number without a digit run at all (e.g. `Ark.`) is kept verbatim at the
+ * end. All comma-joined; duplicates dropped. */
 function compactCatalogNumbers(numbers: readonly string[]): string {
-  const ints: number[] = [];
-  const seenInt = new Set<number>();
+  interface Family {
+    prefix: string;
+    suffix: string;
+    bases: number[];
+    seen: Set<number>;
+  }
+  const families = new Map<string, Family>();
+  const order: string[] = [];
   const others: string[] = [];
   const seenOther = new Set<string>();
   for (const n of numbers) {
     const parts = parseCatalogNumberParts(n);
-    if (parts && parts.prefix === "" && parts.suffix === "") {
-      const v = parseInt(parts.base, 10);
-      if (!seenInt.has(v)) {
-        seenInt.add(v);
-        ints.push(v);
-      }
-    } else {
+    if (!parts) {
       const t = n.trim();
       if (t && !seenOther.has(t)) {
         seenOther.add(t);
         others.push(t);
       }
+      continue;
+    }
+    const key = `${parts.prefix} ${parts.suffix}`;
+    let f = families.get(key);
+    if (!f) {
+      f = { prefix: parts.prefix, suffix: parts.suffix, bases: [], seen: new Set() };
+      families.set(key, f);
+      order.push(key);
+    }
+    const v = parseInt(parts.base, 10);
+    if (!f.seen.has(v)) {
+      f.seen.add(v);
+      f.bases.push(v);
     }
   }
-  ints.sort((a, b) => a - b);
+
   const ranges: string[] = [];
-  for (let i = 0; i < ints.length; ) {
-    let j = i;
-    while (j + 1 < ints.length && ints[j + 1] === ints[j] + 1) j++;
-    ranges.push(i === j ? String(ints[i]) : `${ints[i]}-${ints[j]}`);
-    i = j + 1;
+  for (const key of order) {
+    const f = families.get(key)!;
+    f.bases.sort((a, b) => a - b);
+    for (let i = 0; i < f.bases.length; ) {
+      let j = i;
+      while (j + 1 < f.bases.length && f.bases[j + 1] === f.bases[j] + 1) j++;
+      const span = i === j ? String(f.bases[i]) : `${f.bases[i]}-${f.bases[j]}`;
+      ranges.push(`${f.prefix}${span}${f.suffix}`);
+      i = j + 1;
+    }
   }
   return [...ranges, ...others].join(",");
 }

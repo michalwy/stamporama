@@ -85,6 +85,12 @@ When several copies are listed together, their numbers are grouped per vendor an
 collapse into ranges** — `Mi·DR 1` + `Mi·DR 2` becomes `Mi·DR 1-2`, and a gapped set reads
 `Mi·DR 1-2,4,6-10`. Different vendors are shown separately, joined with ` / `.
 
+Numbers that share a prefix or suffix collapse too, with the shared part written **once** around the
+span: `BL31`, `BL32`, `BL33` reads `BL31-33`, and `40A`, `41A`, `42A` reads `40-42A`. Numbers whose
+prefix/suffix differ belong to different numbering families and are folded separately — Michel
+`1294CKB`, `1295CKB`, `1296KB` reads `1294-1295CKB,1296KB`. Each catalog is evaluated on its own, so
+one catalog's mixed numbering never stops the others from collapsing.
+
 ### Area names in titles
 
 Your area tree often mixes public territories with **internal grouping** levels — e.g. `Poland ›
