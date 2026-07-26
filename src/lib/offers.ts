@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { listItemsPaginated, valuateItemsByIds, type ItemListItem } from "./items";
@@ -544,56 +544,88 @@ export async function offerTranslationGaps(
 
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
 
+/** One flagged offer: how many of its copies are dead, and the platform it is listed on (so the
+ *  filter facets can group without a second pass). */
+interface NeedsActionRow {
+  offerId: string;
+  platformId: string;
+  deadCount: number;
+}
+
 /**
  * Per active offer, the number of copies held in a set that has already sold elsewhere — a set
- * whose copy is on a `sale_line_item` but **not** through that set's own sale line. Such an offer
- * is stale on its platform: the collector removes the dead set (decrement) or withdraws. A set
- * that sold through its own line is not counted (it is the sale, not a collision), and fully-sold
- * offers are already `sold` (#166), so only `active` offers are considered.
+ * whose copy is on a `sale_line_item` but **not** through that set's own sale line — or that is
+ * held by *another* active offer currently in active bidding (#215). Such an offer is stale on its
+ * platform: the collector removes the dead set (decrement) or withdraws. A set that sold through
+ * its own line is not counted (it is the sale, not a collision), and fully-sold offers are already
+ * `sold` (#166), so only `active` offers are considered.
  *
- * One batched `sale_line_item` lookup across every candidate copy — no per-offer query.
+ * **One SQL query, evaluated in the database** — the previous in-memory derivation had to load
+ * every active offer with its sets and copy ids on each call, which is tens of thousands of rows
+ * at the collection sizes this is built for. Only flagged offers come back, so the result is small
+ * whatever the collection's size. `offerIds` narrows the *reported* offers (a list page asking for
+ * its own rows) without narrowing what they are compared against: the collision sources are always
+ * the whole collection, or a bid on page 3 would not flag the twin on page 1.
+ *
+ * Every collision source is reached through a plain join, deliberately: sales **accumulate without
+ * bound** (in time there are more sold copies than live ones), so `sale_line_item` must stay a
+ * table the planner can either scan or probe by its UNIQUE `itemId` index, whichever its statistics
+ * favour — pinning it into a materialized CTE would force a full scan that grows forever. Only the
+ * bidding source is materialized: it is bounded by the handful of live auctions, and pre-grouping
+ * it per copy turns what was a per-row correlated subplan (~180 ms at 15k offers) into one hash
+ * join. `sale_line_item.itemId` is UNIQUE (ADR-0012), so the sale join cannot multiply a copy's row
+ * and `COUNT(*)` counts each dead copy exactly once even when it is both sold and bid on.
+ *
+ * `offerCount > 1` is the mutual case: two live auctions on the same copy flag **both** offers, not
+ * an arbitrary one of them.
  */
+async function needsActionRows(
+  collectionId: string,
+  offerIds?: string[]
+): Promise<NeedsActionRow[]> {
+  if (offerIds && offerIds.length === 0) return [];
+  const scope = offerIds
+    ? Prisma.sql`AND o."id" IN (${Prisma.join(offerIds)})`
+    : Prisma.empty;
+
+  return prisma.$queryRaw<NeedsActionRow[]>`
+    WITH bidding_items AS MATERIALIZED (
+      SELECT li2."itemId",
+             MIN(o2."id") AS "offerId",
+             COUNT(DISTINCT o2."id") AS "offerCount"
+      FROM "offer" o2
+      JOIN "offer_set" s2 ON s2."offerId" = o2."id"
+      JOIN "offer_set_item" li2 ON li2."offerSetId" = s2."id"
+      WHERE o2."collectionId" = ${collectionId}
+        AND o2."state" = 'active'
+        AND o2."inActiveBidding" = TRUE
+      GROUP BY li2."itemId"
+    )
+    SELECT o."id" AS "offerId", o."platformId" AS "platformId", COUNT(*)::int AS "deadCount"
+    FROM "offer" o
+    JOIN "offer_set" s ON s."offerId" = o."id"
+    JOIN "offer_set_item" li ON li."offerSetId" = s."id"
+    LEFT JOIN "sale_line_item" sli ON sli."itemId" = li."itemId"
+    LEFT JOIN "sale_line" sl ON sl."id" = sli."saleLineId"
+    LEFT JOIN bidding_items b ON b."itemId" = li."itemId"
+    WHERE o."collectionId" = ${collectionId}
+      AND o."state" = 'active'
+      ${scope}
+      AND (
+        (sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id")
+        OR (b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id"))
+      )
+    GROUP BY o."id", o."platformId"
+  `;
+}
+
+/** The flagged offers as the list rows want them: offer id → dead-copy count. */
 async function needsActionCounts(
-  offers: { id: string; state: string; inActiveBidding: boolean; sets: OfferSetRow[] }[]
+  collectionId: string,
+  offerIds?: string[]
 ): Promise<Map<string, number>> {
-  const active = offers.filter((o) => o.state === "active");
-  const allIds = [...new Set(active.flatMap((o) => o.sets.flatMap((s) => s.items.map((li) => li.itemId))))];
-  if (allIds.length === 0) return new Map();
-
-  // Which candidate copies have sold, and through which set (so a set's own sale is not a collision).
-  const soldRows = await prisma.saleLineItem.findMany({
-    where: { itemId: { in: allIds } },
-    select: { itemId: true, saleLine: { select: { offerSetId: true } } },
-  });
-  const soldViaSet = new Map<string, string>(); // itemId -> the offerSetId it sold through
-  for (const r of soldRows) soldViaSet.set(r.itemId, r.saleLine.offerSetId);
-
-  // Copies held by an offer currently "in active bidding" (#215) — every OTHER active offer
-  // holding the same copy needs to withdraw before the auction closes, same collision mechanism
-  // as an actual sale (ADR-0013 §4), without a sale line existing yet.
-  const biddingItemToOfferId = new Map<string, string>();
-  for (const o of active) {
-    if (!o.inActiveBidding) continue;
-    for (const s of o.sets) for (const li of s.items) biddingItemToOfferId.set(li.itemId, o.id);
-  }
-
-  const counts = new Map<string, number>();
-  for (const o of active) {
-    let dead = 0;
-    for (const s of o.sets) {
-      for (const li of s.items) {
-        const soldSet = soldViaSet.get(li.itemId);
-        if (soldSet && soldSet !== s.id) {
-          dead++;
-          continue;
-        }
-        const biddingOfferId = biddingItemToOfferId.get(li.itemId);
-        if (biddingOfferId && biddingOfferId !== o.id) dead++;
-      }
-    }
-    if (dead > 0) counts.set(o.id, dead);
-  }
-  return counts;
+  const rows = await needsActionRows(collectionId, offerIds);
+  return new Map(rows.map((r) => [r.offerId, r.deadCount]));
 }
 
 // ── Collision lookup (non-blocking warning) ─────────────────────────────────
@@ -766,14 +798,18 @@ async function attachBasePrices(
   }
 }
 
-/** Enrich a fetched page of offer rows with their derived "needs action" counts in one batched
- * query (only `active` offers can need action), then their base-currency prices (#208). */
+/** Enrich a fetched page of offer rows with their derived "needs action" counts in one query
+ * (scoped to this page's offers, but compared against the whole collection), then their
+ * base-currency prices (#208). */
 async function withNeedsAction(
   rows: OfferRow[],
   collectionId: string,
   baseCurrency: string
 ): Promise<OfferListItem[]> {
-  const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, inActiveBidding: r.inActiveBidding, sets: r.sets })));
+  const counts = await needsActionCounts(
+    collectionId,
+    rows.filter((r) => r.state === "active").map((r) => r.id)
+  );
   const items = rows.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
@@ -797,8 +833,9 @@ export interface PaginatedOffersResult {
   nextCursor: string | null;
 }
 
-/** Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state; the
- * derived "needs action" filter is applied in memory (it can't be a DB `where`). */
+/** Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or by the
+ * derived "needs action" overlay — resolved to its flagged offer ids first, then paginated as a
+ * normal `where`, so a page never costs more than the offers it shows. */
 export async function listOffersPaginated(
   ownerId: string,
   collectionId: string,
@@ -809,24 +846,24 @@ export async function listOffersPaginated(
   const offset = filters.offset ?? 0;
 
   if (filters.needsAction) {
+    const counts = await needsActionCounts(collectionId);
+    if (counts.size === 0) return { items: [], nextCursor: null };
     const rows = await prisma.offer.findMany({
       where: {
         collectionId,
-        state: "active",
+        id: { in: [...counts.keys()] },
         ...(filters.platformId ? { platformId: filters.platformId } : {}),
       },
       orderBy: { createdAt: "desc" },
+      take: pageSize + 1,
+      skip: offset,
       select: OFFER_SELECT,
     });
-    const counts = await needsActionCounts(rows.map((r) => ({ id: r.id, state: r.state, inActiveBidding: r.inActiveBidding, sets: r.sets })));
-    const flagged = rows.filter((r) => counts.has(r.id));
-    const page = flagged.slice(offset, offset + pageSize);
+    const hasMore = rows.length > pageSize;
+    const page = hasMore ? rows.slice(0, pageSize) : rows;
     const items = page.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
     await attachBasePrices(collectionId, baseCurrency, items);
-    return {
-      items,
-      nextCursor: flagged.length > offset + pageSize ? String(offset + pageSize) : null,
-    };
+    return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
   }
 
   const rows = await prisma.offer.findMany({
@@ -869,6 +906,91 @@ export async function listOfferPlatforms(
     orderBy: { platform: { name: "asc" } },
   });
   return rows.map((r) => r.platform);
+}
+
+export interface OfferFilterCounts {
+  /** Offers per state, within the selected platform. States with no offers are absent. */
+  states: Partial<Record<OfferState, number>>;
+  /** Flagged offers within the selected platform. */
+  needsAction: number;
+  /** Offers per platform, under the selected state / needs-action / show-closed choice. */
+  platforms: Record<string, number>;
+  /** Total across platforms — the "All platforms" option. */
+  total: number;
+}
+
+/**
+ * Counts for the offer list's filter controls (#332), computed **faceted**: every control's count
+ * ignores its own dimension and respects the others. So the state chips (and "Needs action") are
+ * counted within the selected platform, and each platform option is counted under the selected
+ * state — each count is what you would get by clicking that control, not what the list shows now.
+ *
+ * The needs-action facet can't be a DB `where` (ADR-0013 §4), so it is derived in memory from the
+ * collection's `active` offers, exactly as the needs-action list page does.
+ */
+export async function offerFilterCounts(
+  ownerId: string,
+  collectionId: string,
+  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+): Promise<OfferFilterCounts> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  // The needs-action facet comes back already grouped by platform, so both the chip's own count
+  // (within the selected platform) and the platform facet under a needs-action selection are read
+  // off the same few flagged rows — no id list travels back into a `where`.
+  const [flagged, byState, byPlatform] = await Promise.all([
+    needsActionRows(collectionId),
+    prisma.offer.groupBy({
+      by: ["state"],
+      where: { collectionId, ...(filters.platformId ? { platformId: filters.platformId } : {}) },
+      _count: { _all: true },
+    }),
+    // The platform facet respects the state choice the same way the list does: an explicit state
+    // wins, otherwise closed offers are counted only when the user opted in (#245). A needs-action
+    // selection is not a state, so it is served from `flagged` instead of this query.
+    filters.needsAction
+      ? Promise.resolve(null)
+      : prisma.offer.groupBy({
+          by: ["platformId"],
+          where: {
+            collectionId,
+            ...(filters.state
+              ? { state: filters.state }
+              : filters.includeClosed
+                ? {}
+                : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
+          },
+          _count: { _all: true },
+        }),
+  ]);
+
+  const states: Partial<Record<OfferState, number>> = {};
+  for (const row of byState) {
+    if (isOfferState(row.state)) states[row.state] = row._count._all;
+  }
+
+  const platforms: Record<string, number> = {};
+  let total = 0;
+  if (byPlatform) {
+    for (const row of byPlatform) {
+      platforms[row.platformId] = row._count._all;
+      total += row._count._all;
+    }
+  } else {
+    for (const row of flagged) {
+      platforms[row.platformId] = (platforms[row.platformId] ?? 0) + 1;
+      total += 1;
+    }
+  }
+
+  return {
+    states,
+    needsAction: filters.platformId
+      ? flagged.filter((r) => r.platformId === filters.platformId).length
+      : flagged.length,
+    platforms,
+    total,
+  };
 }
 
 export interface OfferDetailSet {

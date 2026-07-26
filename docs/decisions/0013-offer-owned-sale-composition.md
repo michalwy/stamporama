@@ -84,6 +84,21 @@ state and no acknowledgement watermark:
 The signal clears the moment the offer no longer holds a sold copy — nothing to "mark done"
 because the resolving edit *is* the record.
 
+**Computed in the database, not in memory.** The derivation is one SQL query returning only the
+flagged offers and their dead-copy counts (`needsActionRows` in `src/lib/offers.ts`), used by the
+list rows, the "needs action" filter, and the toolbar's filter counts (#332) alike. It started as
+an in-memory pass over every active offer with its sets and copy ids, which is a five-figure row
+count at the collection sizes this is built for — at 15k active offers / 90k copies that pass cost
+~180 ms and grew with the collection on every list render, while the SQL form is ~30 ms and is
+dominated by a single scan of each side. Two properties of the query matter and should survive
+edits: `sale_line_item` is reached through a plain join (never a materialized CTE) because sales
+accumulate without bound and the planner must stay free to probe its UNIQUE `itemId` index instead
+of scanning; and the bidding source is pre-grouped **per copy**, so two live auctions on the same
+copy flag both offers rather than an arbitrary one.
+
+Because the query always compares against the whole collection, a page of list rows gets correct
+flags regardless of which offers share its page — a bid on page 3 flags its twin on page 1.
+
 **Extended for auction platforms (#215).** A bid on an auction listing commits the collector
 before a sale is actually recorded — well before the derivation above has anything to key off.
 `Offer.inActiveBidding` is a stored boolean, independent of `state`/`sold` and freely revertible,

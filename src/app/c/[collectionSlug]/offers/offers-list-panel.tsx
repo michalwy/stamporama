@@ -11,6 +11,7 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import {
   useOffersInfinite,
   useOfferPlatforms,
+  useOfferFilterCounts,
   useInvalidateOffers,
   type OfferFilters,
 } from "./use-offers-query";
@@ -161,6 +162,10 @@ export function OffersListPanel({
     collectionId,
     filters
   );
+  // Faceted counts for the toolbar (#332): each control's count ignores its own dimension, so a
+  // badge says how many offers clicking it would show. Absent until the first fetch lands — the
+  // chips render without badges rather than flashing zeros.
+  const { data: counts } = useOfferFilterCounts(collectionId, filters);
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   function closeDialog() {
@@ -216,10 +221,12 @@ export function OffersListPanel({
             }}
             style={{ ...CONTROL_STYLE, cursor: "pointer" }}
           >
-            <option value="">All platforms</option>
+            <option value="">
+              {counts ? `All platforms (${counts.total})` : "All platforms"}
+            </option>
             {platforms.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {counts ? `${p.name} (${counts.platforms[p.id] ?? 0})` : p.name}
               </option>
             ))}
           </select>
@@ -230,6 +237,7 @@ export function OffersListPanel({
               <FilterChip
                 key={value}
                 label={OFFER_STATE_LABEL[value]}
+                count={counts ? (counts.states[value] ?? 0) : undefined}
                 active={active}
                 onClick={() => {
                   rememberStatusFilter(active ? "" : value);
@@ -242,6 +250,10 @@ export function OffersListPanel({
           {/* Derived overlay (ADR-0013 §4): active offers holding a set sold elsewhere. */}
           <FilterChip
             label="Needs action"
+            count={counts?.needsAction}
+            // Anything needing action is a problem on a live platform, so the chip alarms in the
+            // same error tint as the row badge until the count is back to zero.
+            alarm={!!counts && counts.needsAction > 0}
             active={needsAction}
             onClick={() => {
               rememberStatusFilter(needsAction ? "" : NEEDS_ACTION);
@@ -462,7 +474,25 @@ export function OffersListPanel({
   );
 }
 
-function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function FilterChip({
+  label,
+  count,
+  alarm,
+  active,
+  onClick,
+}: {
+  label: string;
+  /** Matching offers (#332), or undefined for a chip that carries no count (and while the first
+   *  count fetch is still in flight). */
+  count?: number;
+  /** Render in the error tint — an alarm the user should not have to click to notice. */
+  alarm?: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  // The active selection keeps the accent treatment; an alarming chip takes the error tint only
+  // while it is not the current selection, so "which filter am I on" stays readable.
+  const tint = active ? "accent" : alarm ? "error" : null;
   return (
     <button
       type="button"
@@ -470,13 +500,28 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
       style={{
         ...CONTROL_STYLE,
         cursor: "pointer",
-        fontWeight: active ? 600 : 400,
-        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-        borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
-        background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        fontWeight: active || alarm ? 600 : 400,
+        color: tint ? `var(--color-${tint})` : "var(--color-text-secondary)",
+        borderColor: tint ? `var(--color-${tint})` : "var(--color-border-strong)",
+        background: tint ? `var(--color-${tint}-soft)` : "var(--color-bg-elevated)",
       }}
     >
       {label}
+      {count !== undefined && (
+        <span
+          style={{
+            fontSize: "0.75rem",
+            fontVariantNumeric: "tabular-nums",
+            fontWeight: 600,
+            opacity: count === 0 ? 0.5 : 0.8,
+          }}
+        >
+          {count}
+        </span>
+      )}
     </button>
   );
 }

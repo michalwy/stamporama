@@ -552,6 +552,19 @@ only what's still in play. Toggle **Show sold/withdrawn** to bring them back; th
 remembered per collection. Selecting the **Sold** or **Withdrawn** state chip always shows those
 offers regardless of the toggle.
 
+### Counts on the filters
+
+Every state chip, the **Needs action** chip, and each option in the platform dropdown carries the
+**number of offers you would see by picking it**. The counts are *faceted*: a count ignores its own
+filter but respects the others, so with a platform selected the state chips count only that
+platform's offers, and each platform option counts only offers in the state (or **Needs action**,
+or **Show sold/withdrawn**) you currently have chosen. The **All platforms** option shows the total
+under that same choice.
+
+The **Needs action** chip turns **red** as soon as its count is above zero, so a stale listing is
+visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
+count — it widens the list rather than selecting a slice of it.
+
 ## Related
 
 - [Inventory](inventory.md) — the copies you compose offers from.

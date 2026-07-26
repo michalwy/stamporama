@@ -1,7 +1,13 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { OfferListItem, OfferCollision, OfferDetail, ComposeTargets } from "@/lib/offers";
+import type {
+  OfferListItem,
+  OfferCollision,
+  OfferDetail,
+  ComposeTargets,
+  OfferFilterCounts,
+} from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
@@ -79,6 +85,26 @@ export function useOfferPhotoPlan(collectionId: string, offerId: string) {
     },
     refetchInterval: (query) =>
       query.state.data?.status === "queued" || query.state.data?.status === "running" ? 2000 : false,
+  });
+}
+
+/** Faceted counts for the toolbar's filter controls (#332). Lives under the offers key so
+ * `invalidateAll` refreshes the badges whenever an offer changes state, platform, or is deleted. */
+export function useOfferFilterCounts(collectionId: string, filters: OfferFilters) {
+  return useQuery<OfferFilterCounts>({
+    queryKey: ["offers", collectionId, "counts", filters] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.needsAction) params.set("needsAction", "1");
+      else if (filters.state) params.set("state", filters.state);
+      else if (filters.includeClosed) params.set("includeClosed", "1");
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/counts?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch offer counts");
+      return res.json();
+    },
   });
 }
 
