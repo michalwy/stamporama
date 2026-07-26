@@ -121,8 +121,8 @@ export function IssueCatalogChips({
             {warn.kind === "adopt-basic"
               ? "Required stamps use the basic numbering — set this catalog's range to "
               : "Required stamps extend this range — widen it to "}
-            <span style={{ fontWeight: 600 }}>{proposed}</span>. Use “Update declared range” or edit
-            the issue.
+            <span style={{ fontWeight: 600 }}>{proposed}</span>. Use “Recompute declared range…” or
+            edit the issue.
           </span>
         }
       >

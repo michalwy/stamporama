@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { useIssueMembers, useInvalidateIssues } from "./use-issues-query";
-import { applyIssueRangeSuggestionAction } from "@/app/actions/issues";
+import { RecomputeRangeDialog } from "./recompute-range-dialog";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import {
@@ -300,28 +300,10 @@ export function IssueRow({
   const prices = usePriceDetailsAction({ kind: "issue", collectionId, issueId: issue.id });
 
   const { invalidateList } = useInvalidateIssues();
-  const [applyingRange, setApplyingRange] = useState(false);
   const rangeSuggestions = issue.rangeSuggestions;
-
-  // Apply every vendor's declared-range extension in one go, then refresh the list.
-  async function handleUpdateRange() {
-    if (applyingRange || rangeSuggestions.length === 0) return;
-    setApplyingRange(true);
-    try {
-      for (const s of rangeSuggestions) {
-        await applyIssueRangeSuggestionAction(
-          collectionId,
-          issue.id,
-          s.catalogVendorId,
-          s.proposedFirst,
-          s.proposedLast
-        );
-      }
-      await invalidateList(collectionId);
-    } finally {
-      setApplyingRange(false);
-    }
-  }
+  // Recomputing the declared range (#333) is an explicit, always-available action that confirms
+  // before writing — the list row's warning chip is a hint, not the only way in.
+  const [recomputeOpen, setRecomputeOpen] = useState(false);
 
   const actions: RowAction[] = [
     { key: "add-stamp", label: "Add stamp", icon: "＋", onSelect: () => callbacks.onAddStamp(issue.id) },
@@ -329,16 +311,12 @@ export function IssueRow({
     addCopy.action,
     copies.action,
     ...(issue.requiredPriceTotal ? [prices.action] : []),
-    ...(rangeSuggestions.length > 0
-      ? [
-          {
-            key: "update-range",
-            label: applyingRange ? "Updating range…" : "Update declared range",
-            icon: "⤢",
-            onSelect: handleUpdateRange,
-          } as RowAction,
-        ]
-      : []),
+    {
+      key: "recompute-range",
+      label: "Recompute declared range…",
+      icon: "⤢",
+      onSelect: () => setRecomputeOpen(true),
+    },
     { key: "move-area", label: "Move to another area…", icon: "⇄", onSelect: () => callbacks.onMoveIssueArea(issue) },
     { key: "merge", label: "Merge into another issue…", icon: "⤵", onSelect: () => callbacks.onMergeIssue(issue) },
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => callbacks.onEdit(issue) },
@@ -436,6 +414,18 @@ export function IssueRow({
           {addCopy.dialog}
           {copies.dialog}
           {prices.dialog}
+          {recomputeOpen && (
+            <RecomputeRangeDialog
+              collectionId={collectionId}
+              issueId={issue.id}
+              issueLabel={issue.name ?? "(unnamed issue)"}
+              onApplied={async () => {
+                setRecomputeOpen(false);
+                await invalidateList(collectionId);
+              }}
+              onClose={() => setRecomputeOpen(false)}
+            />
+          )}
         </div>
 
         {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (

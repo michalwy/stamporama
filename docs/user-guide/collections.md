@@ -156,7 +156,7 @@ You cannot save the stamp until you pick one, so the decision is never made for 
 **On an existing issue**, the same situation is surfaced after the fact:
 
 - The affected **catalog-number chip** on the **Issues** list turns to a warning colour. Hover it to see the widened range being proposed.
-- The issue's **⋮** menu gains an **Update declared range** action that widens the range for you — one click updates every affected catalog and refreshes the list.
+- The issue's **⋮** menu always offers **Recompute declared range…**, which re-runs the check against every stamp currently attached to the issue. The dialog lists each affected catalog as *current → proposed* and lets you **edit the proposed First/Last by hand** before committing; nothing is written until you press **Apply range**. When every declared range already covers its required stamps, the dialog says so and there is nothing to apply.
 - You can also do it from the **Edit issue** dialog: the same suggestion appears under **Catalog numbers** with an **Apply** button that fills in the widened First/Last; save the issue to keep it.
 
 The check only ever suggests **widening** a range, never narrowing it — a range that is broader than the required stamps you have entered so far is normal while an issue is still being filled in, so it is never flagged. Comparison stays within the **same numbering family** as the range: for a plain numeric range like `100–105`, a block (`BL12`) or sheetlet (`Ark. 103`) that belongs to the same issue is a different family and is left alone, whereas a range written as `BL17–BL18` **is** extended by `BL19`.
