@@ -4,6 +4,10 @@ The Assistant is a Chrome extension that matches Colnect catalog pages against y
 you browse. On a Colnect list page it tells you which stamps you already have, which need a
 decision, and writes the Colnect links back into Stamporama.
 
+It reads three kinds of Colnect page: a catalog **list** page, a single **stamp** page (its minor
+variants), and the site-wide **search results** page — so a stamp you found by searching can be
+matched without opening it first.
+
 It is not part of the web app: you install it into Chrome once per machine, then connect it to your
 instance.
 

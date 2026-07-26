@@ -10,17 +10,21 @@ import type { CatalogRef, ExtractedItem } from "../types";
 //                                <strong>Mi:</strong>PL 3690, <strong>Sn:</strong>PL 3382, …
 //
 //   stamp page minor variant:    .nested_items li[data-id]  (see the section further down)
+//
+//   search results page card:    #search_box > a[href*="/stamps/stamp/"]  (see the section further down)
 // Values are kept verbatim (prefix + number + any suffix/range/block) — see the note in the plan:
 // strict full-key matching needs the area prefix inside `number`, and suffixes like "3701y",
 // ranges "3706-3711", blocks "BL132" must not be coerced. "Unlisted" values are skipped.
 
-/** True for a Colnect stamp list/catalog page. Over-matching is harmless — extraction yields [] when
- *  a page has no `div.pl-it` cards. */
+/** True for a Colnect stamp list/catalog page, or a site-wide search results page (which is not under
+ *  `/stamps/` but lists stamps among its results). Over-matching is harmless — extraction yields []
+ *  when a page has no cards. */
 export function matchesColnectUrl(url: string): boolean {
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, "");
-    return (host === "colnect.com" || host.endsWith(".colnect.com")) && u.pathname.includes("/stamps/");
+    if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return false;
+    return u.pathname.includes("/stamps/") || /(^|\/)search(\/|$)/.test(u.pathname);
   } catch {
     return false;
   }
@@ -229,15 +233,112 @@ export function extractVariant(li: Element): ExtractedItem | null {
   };
 }
 
+// ── Search results page ──────────────────────────────────────────────────────
+//
+// The site-wide search (`/en/search`, all categories) lists results as bare anchors in `#search_box`,
+// one per item, with no dt/dd anywhere:
+//
+//   <a title="Stamp: Imperial eagle in a circle (German Realm)
+//             Mi:DR 47d, Sn:DE 48, Yt:DR 47"
+//      href="/en/stamps/stamp/873427-Imperial_eagle_in_a_circle-Crown_Eagle-German_Realm">
+//     <div class="wrapper"><img data-src="//i.colnect.net/t/…"></div>
+//     <div>Imperial eagle in a circle (German Realm)<br><strong>Mi:</strong>DR 47d, …</div>
+//   </a>
+//
+// The codes are extracted from the **`title`**, not from that inner div: the div is visually
+// truncated mid-value ("<strong>Un:</strong>DR S…"), which would silently corrupt a catalog number,
+// while the title always carries the full list. Its first line gives the name and, in a trailing
+// parenthesised group, the issuing country. Non-stamp results (coins, banknotes, …) are ignored by
+// the selector — only `/stamps/stamp/` anchors are read. Search results state no issue year.
+
 /**
- * Extract every item a Colnect page offers: the cards of a catalog list page, and the minor variants
- * listed on a single stamp's page. Results are deduplicated by Colnect id, so no item can be offered
- * — and written — twice from one page.
+ * Parse a plain-text catalog code list ("Mi:DR 47d, Sn:DE 48") into refs. Markers are recognised
+ * only at the start or after a comma, so a value may itself contain a comma or parentheses; the
+ * abbreviation is taken verbatim minus surrounding space (Colnect prints one as "Gz :"). `Unlisted`
+ * and empty values are skipped, as in the markup-driven {@link parseCatalogCodes}.
+ */
+export function parseCatalogCodesText(text: string): CatalogRef[] {
+  const marker = /(?:^|,)\s*([^,:]{1,24}?)\s*:\s*/g;
+  const refs: CatalogRef[] = [];
+  let m: RegExpExecArray | null;
+  let pending: { catalog: string; from: number } | null = null;
+
+  const flush = (to: number) => {
+    if (!pending) return;
+    const number = cleanValue(text.slice(pending.from, to));
+    if (number && number.toLowerCase() !== "unlisted") {
+      refs.push({ catalog: pending.catalog, number });
+    }
+  };
+
+  while ((m = marker.exec(text)) !== null) {
+    flush(m.index);
+    pending = { catalog: m[1].trim(), from: marker.lastIndex };
+  }
+  flush(text.length);
+  return refs;
+}
+
+/** The trailing parenthesised group of a title line, matched from the right so nested parentheses
+ *  survive ("Dr. Sun Yat-sen (1866-1925) (Taiwan (Republic of China))" → "Taiwan (Republic of
+ *  China)"), plus what precedes it. */
+function splitTrailingParenthesis(line: string): { head: string; inner?: string } {
+  const trimmed = line.trim();
+  if (!trimmed.endsWith(")")) return { head: trimmed };
+  let depth = 0;
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    const ch = trimmed[i];
+    if (ch === ")") depth++;
+    else if (ch === "(") {
+      depth--;
+      if (depth === 0) {
+        return { head: trimmed.slice(0, i).trim(), inner: trimmed.slice(i + 1, -1).trim() };
+      }
+    }
+  }
+  return { head: trimmed };
+}
+
+/** Name and country from a search result's title first line ("Stamp: Name (Country)"). The leading
+ *  category label is dropped; a result without a trailing group simply has no country. */
+function parseSearchTitleLine(line: string): { name?: string; country?: string } {
+  const withoutCategory = line.replace(/^[A-Za-z][A-Za-z ]*:\s*/, "").trim();
+  const { head, inner } = splitTrailingParenthesis(withoutCategory);
+  return {
+    ...(head ? { name: head } : {}),
+    ...(inner ? { country: inner } : {}),
+  };
+}
+
+/** Extract one search result anchor, or null without an id or any usable catalog ref. */
+export function extractSearchResult(a: Element): ExtractedItem | null {
+  // The id is on the anchor's own href — `idFromStampLink` looks at descendants, not at self.
+  const platformItemId = a.getAttribute("href")?.match(/\/stamps\/stamp\/(\d+)/)?.[1];
+  if (!platformItemId) return null;
+  const [titleLine = "", ...codeLines] = (a.getAttribute("title") ?? "").split("\n");
+  const catalogRefs = parseCatalogCodesText(codeLines.join(" ").trim());
+  if (catalogRefs.length === 0) return null;
+  const { name, country } = parseSearchTitleLine(titleLine);
+  const imageUrl = cardImageUrl(a);
+  return {
+    platformItemId,
+    catalogRefs,
+    ...(name ? { name } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(country ? { country } : {}),
+  };
+}
+
+/**
+ * Extract every item a Colnect page offers: the cards of a catalog list page, the minor variants
+ * listed on a single stamp's page, and the stamp results of a search page. Results are deduplicated
+ * by Colnect id, so no item can be offered — and written — twice from one page.
  */
 export function extractColnect(doc: Document): ExtractedItem[] {
   const found = [
     ...Array.from(doc.querySelectorAll("div.pl-it")).map(extractCard),
     ...Array.from(doc.querySelectorAll(".nested_items li[data-id]")).map(extractVariant),
+    ...Array.from(doc.querySelectorAll('#search_box a[href*="/stamps/stamp/"]')).map(extractSearchResult),
   ].filter((i): i is ExtractedItem => i !== null);
 
   const seen = new Set<string>();

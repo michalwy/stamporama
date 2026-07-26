@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
-import { extractColnect, matchesColnectUrl, parseCatalogCodes } from "./parse";
+import { extractColnect, matchesColnectUrl, parseCatalogCodes, parseCatalogCodesText } from "./parse";
 
 // Fixture mirrors a real Colnect stamp list page: div.pl-it cards, .ibox[data-xid] item-IDs, and a
 // "Catalog codes:" dt→dd with <strong>Abbr:</strong>Value pairs. Covers PL prefixes, an Unlisted
@@ -106,15 +106,67 @@ function stampPageDoc() {
   return parseHTML(STAMP_PAGE).document as unknown as Document;
 }
 
+// A site-wide search results page, taken from a real one (`/en/search`, query "dr 47"): bare anchors
+// in #search_box carrying the full code list in `title` while the visible div is truncated with "…".
+// Covers a nested-parentheses country, an abbreviation printed with a space ("Gz :"), a non-stamp
+// result to ignore, an empty trailing anchor, and a stamp result with no codes at all.
+const SEARCH_PAGE = `
+<html><body>
+  <div id="search_box">
+    <a title="Stamp: Imperial eagle in a circle (German Realm)
+Mi:DR 47d, Sn:DE 48, Yt:DR 47, Sg:DR 48b, AFA:DR 47, Un:DR 47" href="/en/stamps/stamp/873427-Imperial_eagle_in_a_circle-Crown_Eagle-German_Realm"><div class="wrapper"><img class="lzy" data-src="//i.colnect.net/t/5914/599/E.jpg" src="data:image/gif;base64,R0lGOD"></div><div>Stamp: Imperial eagle in a circle (German Realm)<br><strong>Mi:</strong>DR 47d, <strong>Un:</strong>DR 4...</div></a>
+    <a title="Stamp: Dr. Sun Yat-sen (1866-1925) (Taiwan (Republic of China))
+Mi:TW 46, Sn:TW 46, Yt:TW 56, Sg:TW 47, Chi:TW 70" href="/en/stamps/stamp/680736-Dr_Sun_Yat-sen-Taiwan_Republic_of_China"><div class="wrapper"><img data-src="//i.colnect.net/t/3891/667/S.jpg"></div><div>…</div></a>
+    <a title="Stamp: Mother's Day (Dia de la Madre) (Argentina)
+Gz :AR 794a-TV" href="/en/stamps/stamp/1618442-Mothers_Day_Dia_de_la_Madre-Argentina"><div class="wrapper"><img data-src="//i.colnect.net/t/22866/102/M.jpg"></div><div>…</div></a>
+    <a title="Coin: 47 Something (Poland)
+Mi:XX 1" href="/en/coins/coin/12345-Something-Poland"><div>…</div></a>
+    <a title="Stamp: No codes at all (Poland)" href="/en/stamps/stamp/999-No_codes-Poland"><div>…</div></a>
+    <a class="hidden"></a>
+  </div>
+</body></html>`;
+
+function searchPageDoc() {
+  return parseHTML(SEARCH_PAGE).document as unknown as Document;
+}
+
 describe("matchesColnectUrl", () => {
   it("accepts Colnect stamp list pages (any locale/subdomain)", () => {
     assert.equal(matchesColnectUrl("https://colnect.com/en/stamps/list/country/POL"), true);
     assert.equal(matchesColnectUrl("https://www.colnect.com/pl/stamps/year/1998"), true);
   });
+  it("accepts the site-wide search results page", () => {
+    assert.equal(matchesColnectUrl("https://colnect.com/en/search"), true);
+    assert.equal(matchesColnectUrl("https://colnect.com/pl/search/list/collectibles/stamps/q/dr+47"), true);
+  });
   it("rejects non-Colnect and non-stamp pages", () => {
     assert.equal(matchesColnectUrl("https://example.com/en/stamps/list"), false);
     assert.equal(matchesColnectUrl("https://colnect.com/en/coins/list"), false);
+    assert.equal(matchesColnectUrl("https://colnect.com/en/researcher"), false);
     assert.equal(matchesColnectUrl("not a url"), false);
+  });
+});
+
+describe("parseCatalogCodesText", () => {
+  it("splits Abbr:Value pairs from a plain-text list", () => {
+    assert.deepEqual(parseCatalogCodesText("Mi:DR 47d, Sn:DE 48, Yt:DR 47"), [
+      { catalog: "Mi", number: "DR 47d" },
+      { catalog: "Sn", number: "DE 48" },
+      { catalog: "Yt", number: "DR 47" },
+    ]);
+  });
+  it("keeps values verbatim, tolerates a spaced abbreviation and skips Unlisted", () => {
+    assert.deepEqual(
+      parseCatalogCodesText("Gz :AR 794a-TV, Mi:CD 1464B-1466BKB, Yt:CN-OJ 47(A), Sg:Unlisted"),
+      [
+        { catalog: "Gz", number: "AR 794a-TV" },
+        { catalog: "Mi", number: "CD 1464B-1466BKB" },
+        { catalog: "Yt", number: "CN-OJ 47(A)" },
+      ]
+    );
+  });
+  it("yields nothing for an empty list", () => {
+    assert.deepEqual(parseCatalogCodesText(""), []);
   });
 });
 
@@ -196,10 +248,52 @@ describe("extractColnect on a single stamp's page", () => {
     assert.equal(items[1].imageUrl, "//i.colnect.net/t/23130/423/V2.jpg");
   });
 
+  it("a search page URL is recognised", () => {
+    assert.equal(matchesColnectUrl("https://colnect.com/en/search"), true);
+  });
+
   it("a stamp page URL is recognised", () => {
     assert.equal(
       matchesColnectUrl("https://colnect.com/en/stamps/stamp/136748-Romuald_Traugutt-Poland"),
       true
     );
+  });
+});
+
+describe("extractColnect on a search results page", () => {
+  it("extracts stamp results from their title, ignoring other categories", () => {
+    const items = extractColnect(searchPageDoc());
+
+    // The coin result, the code-less stamp and the empty trailing anchor are all dropped.
+    assert.equal(items.length, 3);
+    assert.ok(!items.some((i) => i.platformItemId === "12345"), "non-stamp results are ignored");
+
+    assert.deepEqual(items[0], {
+      platformItemId: "873427",
+      name: "Imperial eagle in a circle",
+      catalogRefs: [
+        { catalog: "Mi", number: "DR 47d" },
+        { catalog: "Sn", number: "DE 48" },
+        { catalog: "Yt", number: "DR 47" },
+        { catalog: "Sg", number: "DR 48b" },
+        { catalog: "AFA", number: "DR 47" },
+        { catalog: "Un", number: "DR 47" },
+      ],
+      imageUrl: "//i.colnect.net/t/5914/599/E.jpg",
+      country: "German Realm",
+    });
+
+    // The codes come from the title, not the truncated visible div: the last value is intact.
+    assert.deepEqual(items[0].catalogRefs.at(-1), { catalog: "Un", number: "DR 47" });
+
+    // A country of its own may contain parentheses; the name keeps the rest.
+    assert.equal(items[1].country, "Taiwan (Republic of China)");
+    assert.equal(items[1].name, "Dr. Sun Yat-sen (1866-1925)");
+
+    assert.equal(items[2].name, "Mother's Day (Dia de la Madre)");
+    assert.deepEqual(items[2].catalogRefs, [{ catalog: "Gz", number: "AR 794a-TV" }]);
+
+    // A search result states no issue year.
+    assert.ok(items.every((i) => i.issuedYear === undefined));
   });
 });
