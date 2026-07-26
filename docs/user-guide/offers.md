@@ -143,6 +143,10 @@ instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer.
 
 The title is yours to change:
 
+- **Copy it** — the **⧉** button beside the title puts it on the clipboard, ready to paste into the
+  platform's own listing form; the icon turns into a **✓** for a moment to confirm. It copies the
+  title that is actually stored, so on an offer still showing its derived label there is nothing to
+  copy and the button stays greyed out — generate or type a title first.
 - **Edit it** — click the **✎** pencil beside the title on the detail header, type a new one, and
   press Enter (Escape reverts). Clearing it falls back to the derived label. The title stays editable
   in every state, including sold and withdrawn, so you can keep the record straight.
@@ -170,8 +174,11 @@ to a buyer). Both are generated when the offer is created, from the platform's
 optional: a platform with no template for a field generates nothing, and while both are empty the
 whole section collapses to a single **+ Add listing text** row.
 
-Each field carries its own two controls:
+Each field carries its own three controls:
 
+- **⧉** copies the field to the clipboard — the routine act here, since these texts exist to be
+  pasted into the platform's listing form. The icon flashes **✓** on success; it is greyed out while
+  the field is empty.
 - **✎** opens it for editing — a plain text box, so line breaks are yours to place. **⌘/Ctrl + Enter**
   saves, **Esc** cancels, and saving an empty box clears the field. Editable in every state, like the
   title.

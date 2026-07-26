@@ -18,6 +18,7 @@ import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText } from "./offer-listing-text";
+import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
@@ -321,6 +322,10 @@ export function OfferDetailPanel({
               onSave={(v) => patch("name", v)}
             />
           </h2>
+          {/* Copy the title as it will be pasted into the platform's form (#327). It copies what is
+              actually stored, so an offer still on its derived label has nothing to hand over and
+              the button says so rather than copying a label the platform never sees. */}
+          <CopyButton value={offer.name} label="listing title" />
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />

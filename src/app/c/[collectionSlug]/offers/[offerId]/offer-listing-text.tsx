@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import type { OfferDetail } from "@/lib/offers";
 
 // The offer's two long generated texts (#266 description, #267 private note): shown under the header
@@ -146,6 +147,9 @@ export function OfferListingText({ offer, isPending, onSave, onRegenerate }: Off
               <span style={{ flex: 1 }} />
               {!isEditing && (
                 <>
+                  {/* Copy first (#327): getting the generated wording into the platform's own form
+                      is the routine act here — regenerating and editing are the exceptions. */}
+                  <CopyButton value={value} label={f.label.toLowerCase()} />
                   <button
                     type="button"
                     onClick={() => onRegenerate(f.key)}
