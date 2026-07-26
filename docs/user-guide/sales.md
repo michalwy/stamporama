@@ -142,7 +142,8 @@ exact physical copies that left — as full inventory rows with catalog number, 
   (a flat stream). Lot and Location are mutually exclusive.
 - **Issue** sub-groups the copies within whichever primary you chose.
 - **Sort copies** orders the copies; the card and issue headers **stick** to the top as you
-  scroll a long order.
+  scroll a long order. Sorting by **Location ref** reads the usual `prefix + number` scheme —
+  prefix first, then the number — so `A9`, `A10`, `A100`, `B-3000` come out in shelf order.
 - Copies load lazily, so even a large sale opens quickly. Use **Collapse all** / **Expand all**
   to switch between an overview and full contents.
 
@@ -153,6 +154,57 @@ packing happens copy by copy, so this is tracked **per copy**, independent of th
 you still advance the status yourself, it never changes on its own.
 
 Remove a sold set from its card's **⋮** menu (its copies become available again).
+
+## Printing a packing list
+
+If you'd rather pack from paper than from the screen, the header's **🖨 Packing list** button opens
+a print-friendly sheet for the sale. It is a plain document — no sidebar, no controls, no filters —
+laid out as a walk through your shelves:
+
+- A **header** with the platform, buyer, order number, sale date, [status](#fulfillment-status),
+  and the copy/packed counts.
+- One **section per storage [location](locations.md)**, in shelf order, with the copies filed
+  nowhere in a trailing **No location** section.
+- Inside a section, one line per copy: a **tick box** plus whichever of the columns below you
+  turned on. Lines are ordered by the in-location **ref** — what you read off the shelf.
+  Refs of the usual `prefix + number` shape (`A100`, `A1200`, `B-3000`) sort **by prefix first,
+  then by the number**, so `A100` comes before `A1200` and the whole `A` run comes before `B`;
+  the separator doesn't matter (`A-100` and `A100` sort together). Copies with no ref go last.
+- Copies that are indistinguishable while packing — same stamp, same condition, same certificate
+  status, same ref, same packed state — collapse into a **single line with a quantity**, so five of
+  the same stamp are one line to tick rather than five.
+
+### Choosing the columns
+
+Above the list, a row of **Columns** chips picks what the sheet prints. They print in this order:
+**Photo** (a thumbnail of the copy), **Qty**, **Ref**, **Catalog**, **Area** (the full path, e.g.
+`Polska › II RP`), **Series** (the issue the stamp belongs to), **Stamp**, **Condition**, and
+**Certificate**. Click a chip to turn its column on or off — the tick box always stays, since it's
+the point of the sheet. The chips themselves never print, and each column is only as wide as its
+own content needs, so turning columns off tightens the sheet instead of leaving gaps.
+
+Your selection is remembered **globally**, across every sale and every collection: it describes how
+you like to pack, not something about one order. So set it once and every packing list you open
+comes out the same way.
+
+Copies you already ticked as **packed** in the app print with a **✓** in the box; the rest print
+empty, for ticking by hand. The sheet is a snapshot — ticking on paper doesn't change anything in
+Stamporama, so update the packed checkboxes on the detail screen when you're back at the computer.
+
+Each printed page carries a line at its foot that identifies the sale on its own — **platform**,
+**buyer**, **order number**, **sale date**, the **copy count** and the **status** — next to
+**Stamporama** and its version, the collection, and the date and time the sheet was **generated**.
+So a page that slips out of the stack can still be matched back to its order, two printouts of the
+same sale can be told apart, and a sheet found weeks later says where it came from. The note about
+the tick boxes closes the document, after the last row.
+
+**Page numbers** come from the browser, not from the sheet: tick **Headers and footers** in the
+print dialog and every page is numbered (the dialog also adds the date and the page title there).
+Browsers don't render page numbers that a web page asks for itself, so this is the one setting the
+packing list can't set for you — the screen reminds you of it above the list.
+
+Click **🖨 Print** for your browser's print dialog (or print/save as PDF from the browser menu).
+The sheet always prints in light colours, even if you use the dark [theme](appearance.md).
 
 ## Deleting
 

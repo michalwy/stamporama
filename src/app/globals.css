@@ -144,3 +144,81 @@ body {
     animation: none;
   }
 }
+
+/* Print support (#330). The packing list is the one screen meant for paper, but the rules are
+   generic: anything that is app chrome rather than content opts out with `.no-print`, and the
+   colour tokens are forced to an ink-friendly light palette so a dark theme doesn't print as a
+   black page (browsers drop backgrounds by default, which would leave light text on white). */
+@page {
+  margin: 14mm;
+
+  /* Page numbers, per CSS Paged Media. No browser renders margin-box content today (it is a
+     print-engine feature — PrinceXML, Paged.js), so this is inert until one does; the practical
+     source of page numbers is the print dialog's own "Headers and footers" option, which the
+     packing list points the collector at. Harmless where unsupported. */
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-size: 8pt;
+    color: #444444;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  :root,
+  .dark {
+    color-scheme: light;
+    --color-bg-page: #ffffff;
+    --color-bg-elevated: #ffffff;
+    --color-bg-subtle: #ffffff;
+    --color-bg-muted: #ffffff;
+    --color-bg-strong: #ffffff;
+    --color-bg-row-hover: #ffffff;
+    --color-text-primary: #000000;
+    --color-text-secondary: #1a1a1a;
+    --color-text-muted: #444444;
+    --color-border: #b0b0b0;
+    --color-border-strong: #777777;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  /* A printed sheet drops the screen padding — the page margin above is the paper margin. The
+     bottom padding is the strip the pinned footer sits in, so the last rows can't hide under it. */
+  .print-sheet {
+    padding: 0 0 2.25rem !important;
+    max-width: none !important;
+  }
+
+  /* Pinned to the foot of the printed page rather than trailing the content. A fixed element in
+     paged media lands at the bottom of the page box; Chrome repeats it on every page, which is
+     what a sheet several pages long wants anyway. On screen the footer stays in normal flow. */
+  .print-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0 !important;
+    background: #ffffff;
+  }
+
+  /* Keep a row (and a short section) from being split across a page break, and repeat the
+     column headers on every page of a long list. */
+  tr {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  /* Never leave a section heading stranded at the foot of a page. */
+  .print-section-heading {
+    break-after: avoid;
+  }
+}

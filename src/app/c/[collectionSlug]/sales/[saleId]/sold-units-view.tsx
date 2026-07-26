@@ -13,6 +13,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
+import { compareLocationRef } from "@/lib/location-ref";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   sortCopies,
@@ -33,10 +34,9 @@ const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 // lot views (whose server pagination validates a fixed key set) are unaffected.
 const SALE_SORT_KEYS = [...COPY_SORT_KEYS, "ref"] as const;
 const SALE_SORT_LABELS: Record<string, string> = { ...COPY_SORT_LABELS, ref: "Location ref" };
-const REF_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-/** Sort copies for the packing view. Handles the sales-local "ref" key (by location ref, blanks
- * last, natural order); everything else delegates to the shared `sortCopies`. */
+/** Sort copies for the packing view. Handles the sales-local "ref" key (by location ref: prefix
+ * first, then its number, blanks last); everything else delegates to the shared `sortCopies`. */
 function sortSaleCopies(
   items: SaleCopyItem[],
   sortKey: string,
@@ -52,11 +52,10 @@ function sortSaleCopies(
     .sort((a, b) => {
       const ra = a.it.locationRef ?? "";
       const rb = b.it.locationRef ?? "";
+      // Blanks stay last in both directions, so the direction only flips the labelled refs.
       let cmp: number;
-      if (!ra && !rb) cmp = 0;
-      else if (!ra) cmp = 1; // blanks last, both directions
-      else if (!rb) cmp = -1;
-      else cmp = REF_COLLATOR.compare(ra, rb) * dir;
+      if (!ra || !rb) cmp = compareLocationRef(ra, rb);
+      else cmp = compareLocationRef(ra, rb) * dir;
       if (cmp === 0) cmp = a.i - b.i; // stable tiebreak
       return cmp;
     })

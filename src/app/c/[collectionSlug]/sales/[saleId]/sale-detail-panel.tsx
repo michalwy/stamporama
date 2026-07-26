@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -93,6 +94,7 @@ interface SaleDetailPanelProps {
 
 export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHeaderById }: SaleDetailPanelProps) {
   const router = useRouter();
+  const params = useParams<{ collectionSlug: string }>();
   const { invalidateAll } = useInvalidateSales();
   const [isPending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
@@ -165,6 +167,14 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             {sale.buyerName ? `to ${sale.buyerName}` : "buyer unknown"}
           </span>
+          {/* Printable packing list (#330) — a paper checklist of the sold copies, in shelf order. */}
+          <Link
+            href={`/c/${params.collectionSlug}/sales/${sale.id}/packing-list`}
+            style={{ ...SECONDARY_BTN, marginLeft: "auto", textDecoration: "none", display: "inline-block" }}
+            title="Open a print-friendly packing list for this sale"
+          >
+            🖨 Packing list
+          </Link>
           <button
             type="button"
             onClick={() => {
@@ -172,7 +182,7 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               setDialog({ kind: "editHeader" });
             }}
             disabled={isPending}
-            style={{ ...SECONDARY_BTN, marginLeft: "auto" }}
+            style={SECONDARY_BTN}
           >
             Edit header
           </button>

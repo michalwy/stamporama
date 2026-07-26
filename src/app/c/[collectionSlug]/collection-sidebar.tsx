@@ -210,6 +210,8 @@ export function CollectionSidebar({
 
   return (
     <aside
+      // App chrome, never paper: the printable packing list (#330) prints the content alone.
+      className="no-print"
       style={{
         width: "15rem",
         flexShrink: 0,

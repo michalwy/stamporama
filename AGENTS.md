@@ -82,6 +82,8 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Shared base components for list screens (loading, empty, filters, table, endless scroll).
 - Use semantic color tokens from `src/app/globals.css` for UI intent. New tokens must have values in both `:root` (light) and `.dark` blocks.
 - URL state for navigation/filters/sorting/pagination; toast for ephemeral feedback.
+- Printable views (#330, the sale packing list) are their own route rendering a plain server-side sheet — no filters, no lazy loading — because the artifact is the printout, not an interactive screen. Print support lives in `globals.css`: mark app chrome and on-screen controls `.no-print`, wrap the sheet in `.print-sheet` (drops screen padding), and rely on the `@media print` block that forces the colour tokens to an ink-friendly light palette (so the dark theme never prints as a black page). Use real `<table>` markup so headers repeat across pages, and `.print-footer` to pin a provenance footer to the foot of the page (fixed in paged media; the sheet reserves the strip with its bottom padding). Which columns a sheet prints is a per-user choice stored **globally** (one `usePersistentString` key holding a CSV of column keys — a stored empty string must read as "all off", which a set of booleans can't express), not scoped to the collection or the record.
+- In-location refs (`A234`) are ordered by `compareLocationRef` (`src/lib/location-ref.ts`): prefix first, then the trailing number, separators ignored, blanks last. Use it anywhere refs are sorted — a plain numeric collator disagrees as soon as the separator varies.
 
 ## Testing Direction
 

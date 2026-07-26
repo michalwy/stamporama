@@ -4,6 +4,10 @@ import type { CollectionAreaData } from "@/lib/areas";
 // lot-intake reads (#172) can share it; re-exported here for existing importers.
 export { effectiveVendorsForArea, effectivePrimaryVendorId } from "@/lib/area-vendor";
 
+/** Re-export so the UI keeps importing the path builder from here; the derivation itself lives in
+ * `@/lib/area-path` so server-side reads (the printable packing list, #330) share it. */
+export { buildAreaPath } from "@/lib/area-path";
+
 export function getDescendantIds(
   areas: CollectionAreaData[],
   areaId: string
@@ -20,24 +24,6 @@ export function getDescendantIds(
     }
   }
   return result;
-}
-
-/** Breadcrumb path (`A › B › C`) from the root area to `areaId`, or null. */
-export function buildAreaPath(
-  areas: CollectionAreaData[],
-  areaId: string | null
-): string | null {
-  if (!areaId) return null;
-  const byId = new Map(areas.map((a) => [a.id, a]));
-  const path: string[] = [];
-  let current = byId.get(areaId);
-  let depth = 0;
-  while (current && depth < 50) {
-    path.unshift(current.name);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return path.length > 0 ? path.join(" › ") : null;
 }
 
 export interface AreaTreeItem {

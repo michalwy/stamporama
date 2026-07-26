@@ -1,0 +1,179 @@
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
+import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { getCollectionBySlug } from "@/lib/collections";
+import { getSaleDetail, listSaleCopies } from "@/lib/sales";
+import { getAppVersionLabel } from "@/lib/version";
+import { getCollectionAreas } from "@/lib/areas";
+import { getLocations } from "@/lib/locations";
+import { buildAreaVendorMaps } from "@/lib/area-vendor";
+import { buildPackingList } from "@/lib/packing-list";
+import { saleStatusMeta } from "../../sale-status";
+import { PrintButton } from "./print-button";
+import { PackingSheet } from "./packing-sheet";
+
+interface PackingListPageProps {
+  params: Promise<{ collectionSlug: string; saleId: string }>;
+}
+
+export async function generateMetadata({ params }: PackingListPageProps): Promise<Metadata> {
+  const { saleId } = await params;
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return {};
+  const sale = await getSaleDetail(session.user.id, saleId);
+  if (!sale) return {};
+  return { title: `Packing list — ${sale.platformName}` };
+}
+
+function formatDate(d: Date): string {
+  return new Date(d).toISOString().slice(0, 10);
+}
+
+/** `2026-07-26 14:32` in the instance's local time — when this sheet was generated. Minutes are
+ * enough: it exists to tell two printouts of the same sale apart. */
+function formatDateTime(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Printable packing list for a sale (#330): the sold copies as a paper checklist, sectioned by
+ * storage location so the sheet is a walk-order through the shelves. Everything is server-rendered
+ * — no filters, no toggles, no lazy loading — because the artifact is the printout; the interactive
+ * packing view lives on the sale detail screen. App chrome (`.no-print`) drops out on paper.
+ */
+export default async function PackingListPage({ params }: PackingListPageProps) {
+  const { collectionSlug, saleId } = await params;
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+
+  const collection = await getCollectionBySlug(session.user.id, collectionSlug);
+  if (!collection) notFound();
+
+  const sale = await getSaleDetail(session.user.id, saleId);
+  if (!sale || sale.collectionId !== collection.id) notFound();
+
+  const [areas, locations, copies] = await Promise.all([
+    getCollectionAreas(session.user.id, collection.id),
+    getLocations(session.user.id, collection.id),
+    listSaleCopies(session.user.id, saleId),
+  ]);
+
+  const list = buildPackingList(copies, areas, locations, buildAreaVendorMaps(areas));
+  const status = saleStatusMeta(sale.status);
+
+  return (
+    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+      {/* Screen-only controls */}
+      <div
+        className="no-print"
+        style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}
+      >
+        <Link
+          href={`/c/${collectionSlug}/sales/${saleId}`}
+          style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", textDecoration: "none" }}
+        >
+          ← Back to the sale
+        </Link>
+        {/* Browsers won't render CSS page numbers, but their own print header/footer does — so
+            point at it rather than pretend the sheet can number its pages itself. */}
+        <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          For page numbers, enable “Headers and footers” in the print dialog.
+        </span>
+        <PrintButton />
+      </div>
+
+      {/* Sheet header — who and what this parcel is */}
+      <header style={{ borderBottom: "2px solid var(--color-border-strong)", paddingBottom: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+          <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+            Packing list
+          </h1>
+          <span style={{ fontSize: "1rem", color: "var(--color-text-secondary)" }}>
+            {sale.platformName}
+            {sale.buyerName ? ` — ${sale.buyerName}` : ""}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.375rem 1.5rem",
+            margin: "0.625rem 0 0",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+          }}
+        >
+          <Meta label="Sold" value={formatDate(sale.soldAt)} />
+          {sale.externalRef && <Meta label="Order" value={sale.externalRef} />}
+          <Meta label="Buyer" value={sale.buyerName ?? "unknown"} />
+          <Meta label="Status" value={status.label} />
+          <Meta
+            label="Copies"
+            value={`${list.totalCopies} in ${sale.lines.length} sold ${sale.lines.length === 1 ? "set" : "sets"}`}
+          />
+          <Meta label="Packed" value={`${list.packedCopies} of ${list.totalCopies}`} />
+        </div>
+      </header>
+
+      <PackingSheet collectionId={collection.id} list={list} />
+
+      {/* The legend closes the document — it is read once, after the last row, so it stays in the
+          flow rather than repeating at the foot of every page. */}
+      <footer
+        style={{
+          marginTop: "1.5rem",
+          paddingTop: "0.625rem",
+          borderTop: "1px solid var(--color-border)",
+          fontSize: "0.6875rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        A ticked box (✓) is a copy already marked packed in Stamporama; empty boxes are for ticking
+        by hand as you pack.
+      </footer>
+
+      {/* Pinned to the foot of every printed page (`.print-footer`). It carries enough to identify
+          the sale on its own — a page that gets separated from the stack has to be matchable back
+          to its order without the header — plus the provenance of the printout itself. */}
+      <div
+        className="print-footer"
+        style={{
+          marginTop: "0.5rem",
+          fontSize: "0.6875rem",
+          color: "var(--color-text-muted)",
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <span>
+          <strong style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>
+            {sale.platformName}
+            {sale.buyerName ? ` — ${sale.buyerName}` : ""}
+          </strong>
+          {sale.externalRef ? ` · #${sale.externalRef}` : ""} · sold {formatDate(sale.soldAt)} ·{" "}
+          {list.totalCopies} {list.totalCopies === 1 ? "copy" : "copies"} · {status.label}
+        </span>
+        <span>
+          Stamporama {getAppVersionLabel()} · {collection.name} · generated{" "}
+          {formatDateTime(new Date())}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <span style={{ whiteSpace: "nowrap" }}>
+      <span style={{ fontWeight: 600, color: "var(--color-text-muted)" }}>{label}: </span>
+      <span style={{ color: "var(--color-text-primary)" }}>{value}</span>
+    </span>
+  );
+}

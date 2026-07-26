@@ -1,5 +1,9 @@
 import type { LocationData } from "@/lib/locations";
 
+/** Re-export so the UI keeps importing the path builder from here; the derivation itself lives in
+ * `@/lib/location-path` so server-side reads (the printable packing list, #330) share it. */
+export { buildLocationPath } from "@/lib/location-path";
+
 /** Ids of every descendant of `locationId` (children, grandchildren, …). */
 export function getLocationDescendantIds(
   locations: LocationData[],
@@ -17,25 +21,6 @@ export function getLocationDescendantIds(
     }
   }
   return result;
-}
-
-/** Breadcrumb path (`Szafa 1 › Klaser A`) from the root location to `locationId`,
- * or null when unknown (mirrors {@link buildAreaPath}). */
-export function buildLocationPath(
-  locations: LocationData[],
-  locationId: string | null
-): string | null {
-  if (!locationId) return null;
-  const byId = new Map(locations.map((l) => [l.id, l]));
-  const path: string[] = [];
-  let current = byId.get(locationId);
-  let depth = 0;
-  while (current && depth < 50) {
-    path.unshift(current.name);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return path.length > 0 ? path.join(" › ") : null;
 }
 
 interface LocationTreeRow {
