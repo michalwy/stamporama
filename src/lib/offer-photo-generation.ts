@@ -11,6 +11,7 @@ import {
 } from "./storage";
 import { deriveSetLabel } from "./offer-set-rules";
 import { sortSetItems } from "./offer-set-order";
+import { isOfferState, isTerminalState } from "./offer-rules";
 import { zip } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
@@ -53,6 +54,16 @@ import type { PlanCopy, PlanSet } from "./offer-photo-plan";
  * previously generated images intact — a half-replaced plan would be worse than a stale one. Every new
  * image is a new `Photo` id, so nothing is ever mutated in place and the immutable-bytes-per-key
  * assumption the serving route's cache headers rely on holds.
+ *
+ * Sold sets (#315)
+ * ----------------
+ * A set that has gone — sold through this offer's own sale line, sold from under it by another
+ * offer, or held by an offer in active bidding (ADR-0013 §4) — is dropped from the plan's inputs
+ * here, before the engine ever sees it. The unit is the **whole set**: an `OfferSet` sells together
+ * and indivisibly, so a series missing one stamp is not sellable and its collage must not advertise
+ * it. Because the composition is also what the fingerprint hashes, a sale marks the stored images
+ * out of date by itself — no new flag, and still no implicit regeneration. Manual attachments (#313)
+ * are untouched: they are not derived from a rule, so a regeneration could not reproduce them.
  */
 
 /** Lifecycle of one offer's generation. `none` is the synthetic state of an offer never generated. */
@@ -98,6 +109,19 @@ export interface OfferPhotoImage {
   width: number;
   height: number;
   sizeBytes: number;
+}
+
+/** Why a set is no longer part of the plan (#315). `sold` covers both a sale through this offer's
+ * own line and a copy sold from under it elsewhere; `bidding` is the same collision without a sale
+ * line yet (#215). */
+export type OfferPhotoExcludedReason = "sold" | "bidding";
+
+/** A set the plan leaves out because it is no longer available (#315) — named so the collector can
+ * see *why* the offer plans fewer images than it holds sets. */
+export interface OfferPhotoExcludedSet {
+  setId: string;
+  label: string;
+  reason: OfferPhotoExcludedReason;
 }
 
 /** A side the current plan cannot produce, named so it can be fixed (#314). */
@@ -152,6 +176,8 @@ export interface OfferPhotoPlanPreview {
   /** Sides no group can produce for want of a complete set of scans. A set of eight losing its back
    * collage over one missing reverse is easy to overlook, so the panel says so out loud (#314). */
   skipped: OfferPhotoSkippedSide[];
+  /** Sets the plan leaves out because they have sold or are committed elsewhere (#315). */
+  excludedSets: OfferPhotoExcludedSet[];
 }
 
 export interface OfferPhotoPlanState {
@@ -230,7 +256,10 @@ interface GenerationInputs {
   offerName: string | null;
   collectionId: string;
   ownerId: string;
+  /** The sets the plan is built from: the offer's sets **minus** the ones that have gone (#315). */
   sets: PlanSet[];
+  /** The sets left out, in set order — the panel's only way to explain the missing collages. */
+  excludedSets: OfferPhotoExcludedSet[];
   labels: PlanLabels;
   photoSides: ReturnType<typeof normalizePhotoSides>;
   photoLabelLeftTemplate: string | null;
@@ -258,6 +287,67 @@ interface GenerationInputs {
 
 const SIDE_ROLES = ["front", "back"];
 
+/**
+ * The sets this offer can no longer sell (#315), by set id, in one batched lookup — the same
+ * derivation the offers list and the detail screen use for "needs action" (ADR-0013 §4), applied to
+ * the photo plan:
+ *
+ * - the set sold through **this** offer (it has its own sale line) — a multi-set offer stays active
+ *   while its remaining sets are still for sale, and the sold one must leave the collages;
+ * - one of its copies sold through **another** offer's set;
+ * - one of its copies is held by another active offer **in active bidding** (#215) — committed
+ *   before a sale line exists, and treated the same way.
+ *
+ * A copy is enough to condemn the whole set: sets sell indivisibly, so a series short one stamp is
+ * not sellable and photographing it would advertise something that cannot be bought.
+ *
+ * Empty for a terminal offer (sold / withdrawn): its images document a listing that is over, and
+ * recomputing them against an empty composition would only declare them out of date forever.
+ */
+async function excludedSetsFor(offer: {
+  id: string;
+  state: string;
+  sets: readonly {
+    id: string;
+    saleLines: readonly unknown[];
+    items: readonly { itemId: string }[];
+  }[];
+}): Promise<Map<string, OfferPhotoExcludedReason>> {
+  const excluded = new Map<string, OfferPhotoExcludedReason>();
+  const state = isOfferState(offer.state) ? offer.state : "active";
+  if (isTerminalState(state)) return excluded;
+
+  const itemIds = [...new Set(offer.sets.flatMap((s) => s.items.map((li) => li.itemId)))];
+  if (itemIds.length === 0) return excluded;
+
+  const [soldRows, biddingRows] = await Promise.all([
+    prisma.saleLineItem.findMany({
+      where: { itemId: { in: itemIds } },
+      select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+    }),
+    prisma.offerSetItem.findMany({
+      where: {
+        itemId: { in: itemIds },
+        offerSet: { offer: { id: { not: offer.id }, inActiveBidding: true, state: "active" } },
+      },
+      select: { itemId: true },
+    }),
+  ]);
+  const soldViaSet = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+  const biddingElsewhere = new Set(biddingRows.map((r) => r.itemId));
+
+  for (const set of offer.sets) {
+    if (set.saleLines.length > 0 || set.items.some((li) => soldViaSet.has(li.itemId))) {
+      excluded.set(set.id, "sold");
+      continue;
+    }
+    if (set.items.some((li) => biddingElsewhere.has(li.itemId))) {
+      excluded.set(set.id, "bidding");
+    }
+  }
+  return excluded;
+}
+
 async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
@@ -265,6 +355,9 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       id: true,
       name: true,
       collectionId: true,
+      // A terminal offer's photos are history: nothing is regenerated against what is still
+      // available, because nothing is being sold any more (#315).
+      state: true,
       photoSides: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
@@ -290,6 +383,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           id: true,
           title: true,
           sortOrder: true,
+          // Its own sale, if any: the set sold through this very offer (#315).
+          saleLines: { select: { id: true }, take: 1 },
           items: {
             select: {
               itemId: true,
@@ -347,7 +442,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
 
   const sourceById = new Map<string, SourcePhoto>();
   const labels: PlanLabels = { copies: new Map(), sets: new Map() };
-  const sets: PlanSet[] = offer.sets.map((set) => ({
+  const allSets: PlanSet[] = offer.sets.map((set) => ({
     id: set.id,
     sortOrder: set.sortOrder,
     items: set.items.map((li): PlanCopy => {
@@ -374,15 +469,29 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     }),
   }));
 
+  // Labels cover **every** set, excluded ones included: a stored image rendered from a set that has
+  // since sold still has to be able to name it (#315), exactly as it names a set since removed.
   for (const [index, set] of offer.sets.entries()) {
     labels.sets.set(
       set.id,
       deriveSetLabel(
         set.title,
-        sortSetItems(sets[index].items).map((c) => labels.copies.get(c.itemId) ?? "Copy")
+        sortSetItems(allSets[index].items).map((c) => labels.copies.get(c.itemId) ?? "Copy")
       )
     );
   }
+
+  // Sets that have gone leave the plan's inputs here (#315) — the engine, the fingerprint and the
+  // renderer all see the offer as what is still sellable, and nothing downstream needs to know.
+  const excluded = await excludedSetsFor(offer);
+  const sets = allSets.filter((set) => !excluded.has(set.id));
+  const excludedSets: OfferPhotoExcludedSet[] = offer.sets
+    .filter((set) => excluded.has(set.id))
+    .map((set) => ({
+      setId: set.id,
+      label: labels.sets.get(set.id) ?? REMOVED_LABEL,
+      reason: excluded.get(set.id)!,
+    }));
 
   const hasCollage =
     offer.collageRows != null &&
@@ -436,6 +545,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     collectionId: offer.collectionId,
     ownerId: offer.collection.ownerId,
     sets,
+    excludedSets,
     labels,
     photoSides: normalizePhotoSides(offer.photoSides),
     photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
@@ -630,6 +740,7 @@ export async function getOfferPhotoPlanState(
       }),
       droppedGroups: plan.droppedGroups,
       exceedsLimit: plan.exceedsLimit,
+      excludedSets: inputs.excludedSets,
       skipped: plan.skipped.map((s) => ({
         side: s.side,
         setLabels: s.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
@@ -720,7 +831,9 @@ export async function enqueueOfferPhotoGeneration(
   }
   if (plan.images.length === 0) {
     throw new OfferPhotoGenerationError(
-      "Nothing to generate: this offer's copies have no scans for the chosen sides."
+      inputs.excludedSets.length > 0 && inputs.sets.length === 0
+        ? "Nothing to generate: every set in this offer has sold or is committed elsewhere."
+        : "Nothing to generate: this offer's copies have no scans for the chosen sides."
     );
   }
 

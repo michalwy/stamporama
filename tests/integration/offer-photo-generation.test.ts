@@ -9,6 +9,8 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, addOfferSet, deleteOffer, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
+import { attachOfferCopyPhoto } from "../../src/lib/offer-photo-attachments";
+import { createSale, addSaleLines } from "../../src/lib/sales";
 import { inflateRawSync } from "node:zlib";
 import {
   buildOfferPhotoArchive,
@@ -37,6 +39,7 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //   - staleness is reported (never repaired) once the offer changes underneath stored images;
 //   - regenerating replaces wholesale — old rows and old files both go;
 //   - deleting the offer leaves no orphaned files;
+//   - a sold set leaves the plan while manual attachments stay (#315);
 //   - enqueuing refuses the two cases that could only produce nothing.
 
 /** One scan's worth of bytes: a solid PNG of the given size, distinct per colour so nothing collapses. */
@@ -198,6 +201,9 @@ describe("offer photo generation (#311)", () => {
   });
 
   after(async () => {
+    // A sale (#315) holds its copies by foreign key; its test cleans up after itself, but a failure
+    // partway through must not block the teardown.
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
     await rm(DATA_DIR, { recursive: true, force: true });
@@ -533,6 +539,126 @@ describe("offer photo generation (#311)", () => {
       "there is no archive to build before a run has produced images"
     );
     await deleteOffer(userId, empty);
+  });
+
+  // ── Sold sets (#315) ───────────────────────────────────────────────────────
+
+  it("drops a sold set from the plan, keeps attachments, and marks the stored images out of date", async () => {
+    // An attachment of a surviving copy: a regeneration must recompute the collages around it and
+    // leave it exactly where it is — it is not reproducible from any rule (#313).
+    const survivingItem = await prisma.offerSetItem.findFirstOrThrow({
+      where: { offerSetId: setIds[1] },
+      select: { itemId: true },
+    });
+    const attachedPhoto = await prisma.photo.findFirstOrThrow({
+      where: { itemId: survivingItem.itemId, role: "front" },
+      select: { id: true },
+    });
+    const attachment = await attachOfferCopyPhoto(userId, offerId, {
+      itemId: survivingItem.itemId,
+      photoId: attachedPhoto.id,
+      title: "Detail",
+    });
+
+    await updateOfferPhotoConfig(userId, offerId, {
+      photoSides: "front",
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
+      collage: {
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    });
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(before.outOfDate, false);
+    assert.equal(before.images.length, 2, "one collage of three copies, plus the attachment");
+    const soldItem = await prisma.offerSetItem.findFirstOrThrow({
+      where: { offerSetId: setIds[0] },
+      select: { itemId: true },
+    });
+    assert.ok(
+      before.images.some((i) => i.itemIds.includes(soldItem.itemId)),
+      "the copy about to sell is in the images generated so far"
+    );
+
+    // One set of this multi-set offer sells; the offer stays live for the rest. A sale only records
+    // against a live listing, so the offer goes active first.
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "active" } });
+    const saleId = await createSale(userId, collectionId, {
+      platformId,
+      buyerId: null,
+      externalRef: null,
+      soldAt: new Date(),
+      currency: "EUR",
+      buyerHandling: null,
+      buyerPaidTotal: null,
+      commission: null,
+    });
+    await addSaleLines(userId, saleId, [
+      { offerId, offerSetId: setIds[0], price: "9.00", itemIds: [soldItem.itemId] },
+    ]);
+
+    const after = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(after.plan.excludedSets.length, 1, "the sold set leaves the plan");
+    assert.equal(after.plan.excludedSets[0].setId, setIds[0]);
+    assert.equal(after.plan.excludedSets[0].reason, "sold");
+    assert.ok(after.plan.excludedSets[0].label.length > 0, "the notice can name the set");
+    assert.equal(
+      after.outOfDate,
+      true,
+      "a sale alone marks the stored images out of date — the composition changed"
+    );
+    assert.deepEqual(
+      after.images.map((i) => i.photoId),
+      before.images.map((i) => i.photoId),
+      "nothing is regenerated behind the collector's back"
+    );
+    assert.equal(
+      after.plan.images.filter((i) => i.source === "collage").length,
+      1,
+      "the two remaining copies still chunk into one collage"
+    );
+    assert.equal(
+      after.plan.images.filter((i) => i.attachmentId === attachment.id).length,
+      1,
+      "the attachment is untouched by the sale"
+    );
+
+    // Regenerating renders what is still available.
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+
+    const regenerated = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(regenerated.status, "ready");
+    assert.equal(regenerated.outOfDate, false);
+    assert.equal(regenerated.images.length, 2, "one collage of the survivors, plus the attachment");
+    assert.ok(
+      regenerated.images.every((i) => !i.itemIds.includes(soldItem.itemId)),
+      "the sold copy is in none of the new images"
+    );
+    assert.equal(
+      regenerated.images.filter((i) => i.source === "copy_photo").length,
+      1,
+      "the manual attachment is rendered again, not dropped"
+    );
+    assert.equal(
+      await prisma.offerPhotoAttachment.count({ where: { offerId } }),
+      1,
+      "regeneration recomputes the collages only — the attachment row survives"
+    );
+
+    // Undo the sale: an offer holding a sold set cannot be deleted, and the next test deletes this
+    // one. The offer goes back to where the previous tests left it.
+    await prisma.sale.deleteMany({ where: { collectionId } });
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "preparing" } });
   });
 
   it("leaves no files behind when the offer is deleted", async () => {

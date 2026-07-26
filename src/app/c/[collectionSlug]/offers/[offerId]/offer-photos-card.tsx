@@ -146,7 +146,9 @@ function planNote(plan: OfferPhotoPlanView): string {
     return "No collage numbers on this offer yet — pick a collage template in Photo settings first.";
   }
   if (plan.plan.imageCount === 0) {
-    return "Nothing to render: the copies in this offer have no scans for the chosen sides.";
+    return plan.plan.excludedSets.length > 0
+      ? "Nothing to render: no set still for sale in this offer has scans for the chosen sides."
+      : "Nothing to render: the copies in this offer have no scans for the chosen sides.";
   }
   const parts = [
     plan.plan.imageCount === 1 ? "1 image planned" : `${plan.plan.imageCount} images planned`,
@@ -443,6 +445,81 @@ function PlanSequence({
   );
 }
 
+/** Was any stored image rendered from a set that has since gone (#315)? That, not the exclusion
+ * itself, is what a regeneration fixes — once it has run, the sets stay out of the plan for good and
+ * there is nothing left to act on. */
+function showsExcludedSets(
+  sets: OfferPhotoPlanView["plan"]["excludedSets"],
+  stored: OfferPhotoImage[]
+): boolean {
+  const excludedIds = new Set(sets.map((s) => s.setId));
+  return stored.some((image) => image.setIds.some((id) => excludedIds.has(id)));
+}
+
+/**
+ * Sets the plan leaves out because they have gone (#315) — sold here, sold from under this offer, or
+ * held by an offer in active bidding. Said out loud for the same reason a skipped side is: the
+ * collages that are no longer planned look exactly like collages nobody asked for.
+ *
+ * Two readings, because the exclusion is permanent while the call to act is not: while a stored image
+ * still shows a set that has gone this is a warning with a **Regenerate** to answer it; once one has
+ * run it stays as a plain note saying why the offer plans fewer collages than it holds sets.
+ */
+function ExcludedNotice({
+  sets,
+  stored,
+}: {
+  sets: OfferPhotoPlanView["plan"]["excludedSets"];
+  stored: OfferPhotoImage[];
+}) {
+  if (sets.length === 0) return null;
+  const sold = sets.filter((s) => s.reason === "sold");
+  const bidding = sets.filter((s) => s.reason === "bidding");
+  // The call to regenerate is a claim about the files on disk, so it is made only while one of them
+  // was actually rendered from a set that has gone. After a regeneration the sets stay listed —
+  // they are why the offer plans fewer collages than it holds sets — but there is nothing left to do.
+  const stillShown = showsExcludedSets(sets, stored);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.25rem",
+        padding: "0.5rem 0.75rem",
+        borderRadius: "0.5rem",
+        border: stillShown
+          ? "1px solid var(--color-warning-border, var(--color-border))"
+          : "1px solid var(--color-border)",
+        background: stillShown
+          ? "var(--color-warning-soft, var(--color-bg-page))"
+          : "var(--color-bg-page)",
+      }}
+    >
+      {sold.length > 0 && (
+        <p style={{ ...NOTE, color: stillShown ? "var(--color-warning)" : undefined }}>
+          Left out of the plan — sold: {sold.map((s) => s.label).join(", ")}.
+        </p>
+      )}
+      {bidding.length > 0 && (
+        <p style={{ ...NOTE, color: stillShown ? "var(--color-warning)" : undefined }}>
+          Left out of the plan — in active bidding elsewhere:{" "}
+          {bidding.map((s) => s.label).join(", ")}.
+        </p>
+      )}
+      {stillShown ? (
+        <p style={NOTE}>
+          The stored images still show {sets.length === 1 ? "this set" : "these sets"}. Regenerate to
+          replace them with the sets that are still for sale; your attachments are kept.
+        </p>
+      ) : (
+        <p style={NOTE}>
+          The stored images no longer show {sets.length === 1 ? "it" : "them"} — nothing to do.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Sides the plan could not produce (#314). Deliberately loud: a set of eight losing its back collage
  * over one missing reverse scan is invisible in the preview — the image that is not there looks
@@ -639,6 +716,26 @@ export function OfferPhotosCard({
               "Out of date",
               "The offer changed after these images were generated — they are still served as they are"
             )}
+          {/* Collapsed, this chip is the only trace of a set the plan had to leave out (#315). It is
+              a warning only while the stored images still show it — after a regeneration the sets
+              are simply out of the plan, which is a fact, not something to fix. */}
+          {plan.plan.excludedSets.length > 0 &&
+            (showsExcludedSets(plan.plan.excludedSets, plan.images) ? (
+              tinted(
+                "warning",
+                plan.plan.excludedSets.length === 1 ? "1 set gone" : `${plan.plan.excludedSets.length} sets gone`,
+                "A set has sold or is committed elsewhere and is still in the stored images — expand for which"
+              )
+            ) : (
+              <span
+                style={CHIP}
+                title="A set has sold or is committed elsewhere — it is out of the plan; expand for which"
+              >
+                {plan.plan.excludedSets.length === 1
+                  ? "1 set gone"
+                  : `${plan.plan.excludedSets.length} sets gone`}
+              </span>
+            ))}
           {/* Collapsed, this chip is the only trace of a side that could not be rendered. */}
           {plan.plan.skipped.length > 0 &&
             tinted(
@@ -717,6 +814,8 @@ export function OfferPhotosCard({
               regenerate when you are ready to re-upload them to the platform.
             </p>
           )}
+
+          <ExcludedNotice sets={plan.plan.excludedSets} stored={plan.images} />
 
           <SkippedNotice skipped={plan.plan.skipped} />
 

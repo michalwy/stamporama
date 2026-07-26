@@ -299,6 +299,16 @@ The generated collages had no order of their own — their sequence came from th
 - **Every drag stores the full sequence.** The card sends all tokens in their new order, so the override is total and the derived order cannot creep back in for the images left untouched.
 - **Fingerprint.** The **resolved** order (the tokens in their final upload order, not the raw stored list) joins the hash, so reordering the images a buyer is looking at reads as out of date — and a stale token cannot keep a plan out of date forever. Like attachments and the copyless label, it is appended to the payload **only when the offer carries a custom order**, so introducing it did not mark every already-generated plan stale.
 
+### Sold sets leave the plan (#315)
+
+When a copy sells, the collages of every offer still holding it advertise something that cannot be bought. `readInputs` (`offer-photo-generation.ts`) therefore drops the affected sets from the plan's inputs before the engine sees them — the plan, the fingerprint and the renderer all read the offer as *what is still sellable*.
+
+- **The unit is the whole set.** An `OfferSet` sells together and indivisibly, so a series missing one stamp is not sellable anyway; one gone copy condemns its set. `excludedSetsFor` is one batched lookup mirroring the "needs action" derivation (ADR-0013 §4): the set has its own sale line (a partial sale of a multi-set offer), one of its copies sold through another offer's set, or one of its copies is held by another active offer **in active bidding** (#215).
+- **No new state, no new trigger.** Composition is already what the fingerprint hashes, so a sale marks the stored images **out of date** by itself; nothing regenerates implicitly, exactly as with every other change. The stored images keep showing the sold set until the collector presses Regenerate — they may be live in a listing.
+- **Only derived entries are recomputed.** Manual attachments (#313) are plan rows precisely because a rule cannot reproduce them; a regeneration renders them again untouched, including one pointing at a copy in a sold set. Labels are unaffected too: they derive from each copy's own data (#312), so the remaining stamps keep the labels a buyer may already be quoting.
+- **Terminal offers are exempt** (`sold` / `withdrawn`): their images document a listing that is over, and recomputing them against an empty composition would only declare them permanently stale.
+- **Surfaced, not silent.** `plan.excludedSets` (set id, label, `sold` | `bidding`) rides along in the panel state, so the card can say which sets left the plan and why — a collage that is no longer planned looks exactly like one nobody asked for.
+
 ### Getting the files out (#314)
 
 Delivery is a **manual upload** — there is no Delcampe API (#154 is an open scoping question) — so the deliverable is a correctly ordered set of ready-to-upload files. The Photos card sits under the listing texts on offer detail and expands in place (no dialog, no route of its own) into the plan in upload order: each image with what it was rendered from, a lightbox, a per-image download, and a whole-plan ZIP.

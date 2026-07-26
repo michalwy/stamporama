@@ -300,6 +300,27 @@ ready to re-upload.
 Regenerating replaces the whole set of images at once. If a run fails, the previous images are still
 there.
 
+### When a set sells
+
+A set that has gone leaves the plan by itself. That covers all three ways it happens: it sold through
+this offer (a multi-set offer stays live for the sets it still has), a copy of it sold through
+another listing, or a copy of it sits in an offer that is [in active
+bidding](#in-active-bidding--auction-platforms). Whole sets leave, never single copies — a set sells
+indivisibly, so a series missing one stamp is not something a buyer can have.
+
+The card says which sets left and why, and marks the stored images **Out of date**: they still show
+the sold set until you press **Regenerate**, because they may be live in a listing right now. A
+regeneration rebuilds the collages from the sets that are still for sale and **keeps your
+attachments** exactly as they are — they are yours, not something a rule could make again. Labels do
+not change either: each one comes from its own copy, so a buyer quoting a label off an image you
+already uploaded still lands on the right stamp.
+
+Afterwards the card keeps listing the sets that went — that is why the offer makes fewer collages
+than it holds sets — but as a plain note rather than a warning: once the stored images no longer show
+them, there is nothing left to do.
+
+If every set in the offer has gone, there is nothing left to render and Generate says so.
+
 ### Attaching your own images
 
 Not everything a listing needs comes out of the composition. Expand the card and press **+ Add
