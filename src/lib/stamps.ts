@@ -709,13 +709,13 @@ const PICKER_LIMIT = 20;
 /**
  * Search a collection's stamps for the inventory picker autocomplete (#104).
  *
- * The database query is a broad *recall* net — name / issue-name substring plus a
- * catalog-number-digits `contains` — and the JS pass is *precision*: a candidate
- * survives only if the query matches its name/issue text or, via
- * {@link catalogKeyMatches}, its normalized catalog keys (vendor abbreviation +
- * effective area prefix + number). That normalization is what lets `Mi PL200`,
- * `MiPL200`, and `200` all resolve to the same stamp. Returns ≤20 rows, catalog
- * matches first, then by newest issue year.
+ * The database query is a broad *recall* net — name / issue-name substring, a
+ * catalog-number-digits `contains`, and a copy `locationRef` substring (#303) — and the
+ * JS pass is *precision*: a candidate survives only if the query matches its name/issue
+ * text, one of its copies' location refs, or, via {@link catalogKeyMatches}, its
+ * normalized catalog keys (vendor abbreviation + effective area prefix + number). That
+ * normalization is what lets `Mi PL200`, `MiPL200`, and `200` all resolve to the same
+ * stamp. Returns ≤20 rows, catalog matches first, then by newest issue year.
  */
 export async function searchStampsForPicker(
   ownerId: string,
@@ -735,6 +735,10 @@ export async function searchStampsForPicker(
   if (digits) {
     or.push({ catalogNumbers: { some: { number: { contains: digits } } } });
   }
+  // A stamp is also reachable by where one of its copies is filed (#303), so the shelf
+  // reference on a piece in hand finds the stamp it belongs to.
+  const locationRefWhere = { locationRef: { contains: text, mode: "insensitive" as const } };
+  or.push({ items: { some: locationRefWhere } });
 
   const [candidates, vendors, areaRows] = await Promise.all([
     prisma.stamp.findMany({
@@ -751,6 +755,8 @@ export async function searchStampsForPicker(
           take: 1,
         },
         variants: { select: VARIANT_FLAG_SELECT },
+        // Pre-filtered to the matching copies only, so its presence *is* the location hit.
+        items: { where: locationRefWhere, select: { id: true }, take: 1 },
       },
       // Cap recall generously; precision + ranking narrow to PICKER_LIMIT below.
       take: 200,
@@ -799,8 +805,9 @@ export async function searchStampsForPicker(
     const issueName = membership?.issue.name ?? null;
     const issueHit = !!issueName && issueName.toLowerCase().includes(lower);
     const catalogHit = catalogKeyMatches(text, keys);
+    const locationHit = s.items.length > 0;
 
-    if (!nameHit && !issueHit && !catalogHit) continue;
+    if (!nameHit && !issueHit && !catalogHit && !locationHit) continue;
 
     scored.push({
       // Catalog-number matches are the most specific intent, so rank them first.

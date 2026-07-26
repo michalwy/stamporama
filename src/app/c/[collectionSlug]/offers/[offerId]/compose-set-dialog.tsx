@@ -144,6 +144,8 @@ export function ComposeSetDialog({
       if (!q) return true;
       if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
       if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
+      // Where the copy is filed (#303) — pull a piece off the shelf, type its ref, add it.
+      if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
       const vm = c.areaId ? vendorMapByArea.get(c.areaId) : undefined;
       const keys = c.catalogNumbers.map((cn) => {
         const v = vm?.get(cn.catalogVendorId);
@@ -282,7 +284,7 @@ export function ComposeSetDialog({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by stamp, issue, or catalog number…"
+              placeholder="Filter by stamp, issue, catalog number, or location ref…"
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />

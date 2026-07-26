@@ -37,8 +37,10 @@ sets". A plain single-stamp offer is just the one-set case.
    possible — it needs at least one set first — so those statuses apply when you list a copy at
    creation (see *Sell a new item* and *Listing on another platform*). Creating the offer opens its
    detail screen.
-2. On the detail screen, use **Add set** to pick copies from your inventory. When you pick more
-   than one copy you choose how they go in:
+2. On the detail screen, use **Add set** to pick copies from your inventory. The picker's filter
+   box matches a copy by stamp name, issue name, **catalog number**, or its **location ref** — so
+   with a piece in hand you can type the shelf reference it is filed under (e.g. `A234`) and add
+   exactly that copy. When you pick more than one copy you choose how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
    - **One set holding all of them** — a series sold together.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.

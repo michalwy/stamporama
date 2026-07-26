@@ -95,9 +95,10 @@ function targetKey(t: Target): string {
   return t.kind === "new" ? `new:${t.offerId}` : `set:${t.offerSetId}`;
 }
 
-/** Does a set match the search? Its label, its copies' stamp/issue names, and — crucially — their
- * normalized catalog keys (vendor + area prefix + number), so "Mi PL 200", "PL200", or bare "200"
- * all hit (mirrors the offer compose + add-sold-sets pickers). */
+/** Does a set match the search? Its label, its copies' stamp/issue names, their location refs
+ * (#303), and — crucially — their normalized catalog keys (vendor + area prefix + number), so
+ * "Mi PL 200", "PL200", or bare "200" all hit (mirrors the offer compose + add-sold-sets
+ * pickers). */
 function setMatches(s: ComposeTargetSet, raw: string, q: string, ctx: RowCtx): boolean {
   if (s.label.toLowerCase().includes(q)) return true;
   if (s.itemLabels.join(" ").toLowerCase().includes(q)) return true;
@@ -106,6 +107,7 @@ function setMatches(s: ComposeTargetSet, raw: string, q: string, ctx: RowCtx): b
     if (!c) continue;
     if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
     if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
+    if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
     const vm = c.areaId ? ctx.vendorMapByArea.get(c.areaId) : undefined;
     const keys = c.catalogNumbers.map((cn) => {
       const v = vm?.get(cn.catalogVendorId);
@@ -391,7 +393,7 @@ export function AddToOfferDialog({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by offer, platform, set, or catalog number…"
+              placeholder="Filter by offer, platform, set, catalog number, or location ref…"
               style={SEARCH_STYLE}
               aria-label="Filter offers"
               autoFocus

@@ -83,7 +83,7 @@ export function StampPickerAutocomplete({
         setValue("");
         onPick(s);
       }}
-      placeholder="Search by catalog no. (e.g. Mi PL200), name, or issue…"
+      placeholder="Search by catalog no. (e.g. Mi PL200), name, issue, or location ref…"
       inputStyle={INPUT_STYLE}
       inputId={inputId}
       disabled={disabled}

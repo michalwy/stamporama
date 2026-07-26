@@ -473,8 +473,9 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
    * area plus its descendants, resolved by the caller). Mirrors the stamps list area
    * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
   areaIds?: string[];
-  /** Free-text search over the linked stamp's name, its issue name, and catalog numbers
-   * (case-insensitive substring). Mirrors the stamps list search (#106). */
+  /** Free-text search over the linked stamp's name, its issue name, its catalog numbers, and
+   * the copy's own `locationRef` (case-insensitive substring). Mirrors the stamps list search
+   * (#106); the location ref is matched too so a copy can be found by where it is filed (#303). */
   search?: string;
   /** Parsed from the search box when it reads as a prefixed catalog number (#146):
    * the bare number, optionally narrowed to a vendor resolved from a leading
@@ -518,8 +519,10 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   missingCatalogValue?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259): copies with no
    * *non-terminal* offer (any state except sold/withdrawn) on the given platform. A copy listed on
-   * a different platform still matches — multi-platform listing is expected (#165). Implies the
-   * `forSale` disposition, so it surfaces exactly what still needs listing there. */
+   * a different platform still matches — multi-platform listing is expected (#165) — unless that
+   * offer is in active bidding (#215), which commits the copy to a pending sale and so excludes it
+   * everywhere (#334). Implies the `forSale` disposition, so it surfaces exactly what still needs
+   * listing there. */
   notOfferedPlatformId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
@@ -537,8 +540,8 @@ function buildItemWhere(
   locationIds: string[] | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
-  // Constraints on the linked stamp (issue membership, area membership, text search) live
-  // under a single `stamp` relation filter so they compose without clobbering each other.
+  // Constraints on the linked stamp (issue membership, area membership, year) live under a
+  // single `stamp` relation filter so they compose without clobbering each other.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stampWhere: any = {};
   if (filters.issueId) {
@@ -550,28 +553,66 @@ function buildItemWhere(
   if (filters.year !== undefined) {
     stampWhere.issuedYear = filters.year === "none" ? null : filters.year;
   }
+  // Constraints that would otherwise collide on the same top-level key (several
+  // `offerSetMemberships` filters, the search `OR`) are collected here and AND-ed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const and: any[] = [];
   if (filters.search) {
     const s = filters.search;
+    // Free text spans two levels — the linked stamp's identity and the copy's own filing
+    // reference (#303) — so the OR sits on the item, not inside `stampWhere` (whose other
+    // entries must stay AND-ed).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const or: any[] = [
-      { name: { contains: s, mode: "insensitive" } },
-      { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
-      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
+      { stamp: { name: { contains: s, mode: "insensitive" } } },
+      {
+        stamp: {
+          issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } },
+        },
+      },
+      { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } },
+      { locationRef: { contains: s, mode: "insensitive" } },
     ];
     // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
     // when one was recognized) so "Mi PL 200" resolves even though the raw text
     // isn't a substring of the stored "200".
     if (filters.catalogNumber) {
       or.push({
-        catalogNumbers: {
-          some: {
-            number: { contains: filters.catalogNumber, mode: "insensitive" },
-            ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
+        stamp: {
+          catalogNumbers: {
+            some: {
+              number: { contains: filters.catalogNumber, mode: "insensitive" },
+              ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
+            },
           },
         },
       });
     }
-    stampWhere.OR = or;
+    and.push({ OR: or });
+  }
+  if (filters.notOfferedPlatformId) {
+    // "For sale, not yet offered on platform X" (#259): exclude copies already sitting in a
+    // non-terminal offer on that platform…
+    and.push({
+      offerSetMemberships: {
+        none: {
+          offerSet: {
+            offer: {
+              platformId: filters.notOfferedPlatformId,
+              state: { notIn: [...CLOSED_OFFER_STATES] },
+            },
+          },
+        },
+      },
+    });
+    // …and copies held by an offer in active bidding on *any* platform (#334). A bid commits
+    // the copy to a pending sale, so listing it again elsewhere would risk double-selling —
+    // the same availability principle that hides sold copies (#207).
+    and.push({
+      offerSetMemberships: {
+        none: { offerSet: { offer: { state: "active", inActiveBidding: true } } },
+      },
+    });
   }
   return {
     collectionId,
@@ -595,26 +636,15 @@ function buildItemWhere(
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
     ...(filters.noPhotos ? { photos: { none: {} } } : {}),
-    // "For sale, not yet offered on platform X" (#259): implies the for-sale disposition, then
-    // excludes copies already sitting in a non-terminal offer on that platform. Merged with the
-    // explicit forSale toggle so both being set is a no-op, not a clobbered constraint.
+    // The not-offered-on-platform filter (#259) implies the for-sale disposition; its offer
+    // exclusions live in `and` above. Merged with the explicit forSale toggle so both being
+    // set is a no-op, not a clobbered constraint.
     ...(filters.notOfferedPlatformId
-      ? {
-          forSale: true,
-          offerSetMemberships: {
-            none: {
-              offerSet: {
-                offer: {
-                  platformId: filters.notOfferedPlatformId,
-                  state: { notIn: [...CLOSED_OFFER_STATES] },
-                },
-              },
-            },
-          },
-        }
+      ? { forSale: true }
       : filters.forSale !== undefined
         ? { forSale: filters.forSale }
         : {}),
+    ...(and.length > 0 ? { AND: and } : {}),
   };
 }
 

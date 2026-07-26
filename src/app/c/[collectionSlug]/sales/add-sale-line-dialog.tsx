@@ -143,8 +143,9 @@ function buildGroups(offers: SellableOffer[], saleCurrency: string): Group[] {
 }
 
 /** Does a set match the search? Checks its label, and each of its real copies by stamp name,
- * issue, and — crucially — normalized catalog key (vendor abbreviation + area prefix + number),
- * so "Mi PL 200", "MiPL200", "PL200", or bare "200" all hit (mirrors the compose picker). Falls
+ * issue, location ref (#303), and — crucially — normalized catalog key (vendor abbreviation +
+ * area prefix + number), so "Mi PL 200", "MiPL200", "PL200", or bare "200" all hit (mirrors
+ * the compose picker). Falls
  * back to the plain labels while the copies are still loading. */
 function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
   if (s.label.toLowerCase().includes(q)) return true;
@@ -154,6 +155,7 @@ function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
     if (!c) continue;
     if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
     if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
+    if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
     const vm = c.areaId ? ctx.vendorMapByArea.get(c.areaId) : undefined;
     const keys = c.catalogNumbers.map((cn) => {
       const v = vm?.get(cn.catalogVendorId);
@@ -364,7 +366,7 @@ export function AddSaleLineDialog({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by offer, set, or catalog number…"
+              placeholder="Filter by offer, set, catalog number, or location ref…"
               style={SEARCH_STYLE}
               aria-label="Filter sets"
               autoFocus

@@ -53,9 +53,11 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
   area includes its nested sub-areas. Choose **All areas** to clear it.
 - **Search** — type in the search box to match copies by the linked stamp's **name**, its
-  **issue name**, or a **catalog number** (case-insensitive). A catalog number can be typed
-  bare (`200`) or with its full prefix and any spacing (`Mi PL 200`, `MiPL200`); when the
-  text starts with a known vendor abbreviation the match is narrowed to that vendor.
+  **issue name**, a **catalog number**, or the copy's own **location ref** (case-insensitive).
+  A catalog number can be typed bare (`200`) or with its full prefix and any spacing
+  (`Mi PL 200`, `MiPL200`); when the text starts with a known vendor abbreviation the match is
+  narrowed to that vendor. Typing a shelf reference such as `A234` finds the copies filed under
+  it, so you can go from a piece in hand straight to its record.
 - **Issue** — filter to copies of stamps in a single issue. Start typing to pick one; the
   suggestions are scoped to the area selected on the left.
 - **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none
@@ -72,7 +74,10 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   already listed on a *different* platform still shows up, since the same copy can be offered on
   several platforms at once. Only offers that are done (**sold** or **withdrawn**) stop counting;
   a copy sitting in a **preparing**, **ready**, **active**, or **paused** offer on that platform
-  is treated as already handled. This filter appears once you have at least one offer platform,
+  is treated as already handled. One exception to the "other platforms don't count" rule: a copy
+  held by an offer that is **in active bidding** anywhere is left out entirely — a bid commits it
+  to a pending sale, so listing it again would risk selling the same piece twice.
+  This filter appears once you have at least one offer platform,
   and the holdings totals and year panel follow it too. Your chosen platform here is **remembered**
   for this collection, so the filter comes back the way you left it next time.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
@@ -187,10 +192,11 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 1. Click **Add copy**.
 2. **Choose the stamp or variant** in one of two ways:
    - **Type to search** in the field. Suggestions match the stamp name, its issue name,
-     and **catalog numbers** — including the vendor and area prefix. Catalog search
-     ignores spacing, so `Mi PL 200`, `Mi PL200`, `MiPL200`, and just `200` all find the
-     same stamp. Each suggestion shows its catalog number, name, issue, year, and area so
-     you can tell similar stamps apart.
+     **catalog numbers** — including the vendor and area prefix — and the **location ref**
+     of any copy you already hold, so a shelf reference such as `A234` finds the stamp filed
+     there. Catalog search ignores spacing, so `Mi PL 200`, `Mi PL200`, `MiPL200`, and just
+     `200` all find the same stamp. Each suggestion shows its catalog number, name, issue,
+     year, and area so you can tell similar stamps apart.
    - **Browse…** opens a larger picker: pick an **area** on the left, filter its **issues**
      on the right, then expand an issue to choose a stamp or one of its variants. The picker
      remembers its area, year, and search text, so it reopens on the same filter you left it
@@ -266,7 +272,8 @@ marked **For sale** and has been **delivered** (in hand), the row's **⋮** menu
 
 - A **state** panel on the left filters by **Preparing / Active / Paused** (with counts) — the
   offers you're still composing come first.
-- The search box matches by offer, platform, set, or **catalog number**.
+- The search box matches by offer, platform, set, **catalog number**, or the **location ref** of
+  a copy inside a set.
 - Each offer expands to its existing sets; **Show contents** reveals the exact copies a set holds.
 
 Choose where the copy lands: **＋ New set** on an offer (a fresh single-item set), or an

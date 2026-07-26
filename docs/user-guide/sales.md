@@ -46,7 +46,8 @@ Every amount field accepts either a comma or a period as the decimal separator â
 
 On the detail screen, **Add sold sets** opens a browse-and-pick dialog listing every
 [set](offers.md) still sellable on the sale's platform, grouped by offer. **Search** by offer,
-set, or catalog number. Each set is a whole sellable piece:
+set, catalog number, or the **location ref** of a copy inside a set. Each set is a whole sellable
+piece:
 
 - A single-set offer is **one row** â€” ticking it sells the whole thing.
 - A multi-set (quantity) offer is a **collapsible row**; expand it to tick the specific sets the
