@@ -2,28 +2,43 @@
  * Pure validation for collage templates (#307) — no Prisma, so it is unit-testable and can be
  * reused by the offer-side form once the offer carries its own copy of these numbers (#308).
  *
- * Sizes are **percentages of the stamp**, never pixels (#312). A collector cannot pick a pixel
- * number without knowing the scan DPI *and* how far the platform's limits will shrink the finished
- * collage — and neither is knowable when the template is written. Relative sizes need neither:
- * whether a label is readable next to a stamp does not change when the whole image is scaled, and
- * an image scaled far enough for the label to vanish has already lost the stamp. The renderer
- * resolves them against the **median tile height** of the collage it is laying out (#310).
+ * Sizes are **percentages**, never pixels (#312). A collector cannot pick a pixel number without
+ * knowing the scan DPI *and* how far the platform's limits will shrink the finished collage — and
+ * neither is knowable when the template is written.
+ *
+ * The two percentages are shares of different things, and the renderer (#310) resolves them apart:
+ * the **gap** against the collage's median tile height, because spacing between stamps belongs to
+ * the stamps; the **label strip** against the finished image's longest edge (#337), because every
+ * image of a listing is scaled to the same platform limit, and that is the only measure that makes
+ * captions come out the same size on all of them.
  */
 
 /** Capacity bounds. A 1×1 template is the single-stamp case and is deliberately allowed. */
 export const MIN_COLLAGE_AXIS = 1;
 export const MAX_COLLAGE_AXIS = 20;
 
-/** Bounds shared by `gapPercent` and `labelPercent`, in percent of the stamp height. 0 means
- * "none" — no gap, or no label strip at all. The ceiling is a sanity rail: a strip as tall as the
- * stamp above it is already absurd. */
+/** Bounds for `gapPercent`, in percent of the stamp height. 0 means no gap. */
 export const MIN_COLLAGE_PERCENT = 0;
 export const MAX_COLLAGE_PERCENT = 100;
 
-/** What a new template starts at: a comfortable margin and a strip whose text lands at roughly a
- * tenth of the stamp's height, which stays readable at every output size. */
+/** Bounds for `labelPercent`, in percent of the finished image's **longest edge** (#337) — a
+ * different measure from the gap's, so a different ceiling. 0 means no strip at all. A caption a
+ * quarter of the image tall is already past absurd, and on a multi-row collage the layout has to
+ * refuse it anyway (a strip per row cannot each be a quarter of the page). */
+export const MIN_COLLAGE_LABEL_PERCENT = 0;
+export const MAX_COLLAGE_LABEL_PERCENT = 25;
+
+/** Decimal places allowed on the label strip. Measured against the whole image, the band between
+ * "too small to read" and "shouting over the stamps" is about two percent wide, and whole numbers
+ * cannot land inside it: 1 reads well where 2 is already too much. Steps of a tenth give that band
+ * twenty settings, which is enough to stop tuning. */
+export const COLLAGE_LABEL_DECIMALS = 1;
+export const COLLAGE_LABEL_STEP = 0.1;
+
+/** What a new template starts at: a comfortable margin, and a caption at a percent and a half of the
+ * image — the middle of the band above, readable on a marketplace listing at any output size. */
 export const DEFAULT_COLLAGE_GAP_PERCENT = 5;
-export const DEFAULT_COLLAGE_LABEL_PERCENT = 14;
+export const DEFAULT_COLLAGE_LABEL_PERCENT = 1.5;
 
 export const DEFAULT_COLLAGE_BACKGROUND = "#ffffff";
 
@@ -34,7 +49,8 @@ export interface CollageTemplateInput {
   /** Space between tiles, rows and around the collage, as a percent of the stamp height. */
   gapPercent: number;
   background: string;
-  /** Height of each tile's label strip, as a percent of the stamp height. */
+  /** Height of each tile's label strip — and so the size of its caption — as a percent of the
+   * finished image's longest edge (#337). */
   labelPercent: number;
 }
 
@@ -72,6 +88,27 @@ export function parseBoundedInteger(raw: string, label: string, min: number, max
   return { ok: true, value };
 }
 
+/** Parses a required number within bounds, allowing up to {@link COLLAGE_LABEL_DECIMALS} decimal
+ * places and either separator — a collector typing `1,5` means the same as `1.5`, as everywhere else
+ * a decimal is entered. Exported for the offer-side photo configuration (#308). */
+export function parseBoundedDecimal(raw: string, label: string, min: number, max: number):
+  | { ok: true; value: number }
+  | { ok: false; message: string } {
+  const trimmed = raw.trim().replace(",", ".");
+  if (!trimmed) return { ok: false, message: `${label} is required.` };
+  if (!new RegExp(`^-?\\d+(\\.\\d{1,${COLLAGE_LABEL_DECIMALS}})?$`).test(trimmed)) {
+    return {
+      ok: false,
+      message: `${label} must be a number with at most ${COLLAGE_LABEL_DECIMALS} decimal place.`,
+    };
+  }
+  const value = Number(trimmed);
+  if (value < min || value > max) {
+    return { ok: false, message: `${label} must be between ${min} and ${max}.` };
+  }
+  return { ok: true, value };
+}
+
 /**
  * Validates the raw strings a form submits into a collage template. Reports the first problem
  * found; the panel surfaces the message inline in the dialog.
@@ -101,11 +138,11 @@ export function parseCollageTemplateInput(raw: {
   );
   if (!gapPercent.ok) return gapPercent;
 
-  const labelPercent = parseBoundedInteger(
+  const labelPercent = parseBoundedDecimal(
     raw.labelPercent,
     "Label strip",
-    MIN_COLLAGE_PERCENT,
-    MAX_COLLAGE_PERCENT
+    MIN_COLLAGE_LABEL_PERCENT,
+    MAX_COLLAGE_LABEL_PERCENT
   );
   if (!labelPercent.ok) return labelPercent;
 

@@ -29,7 +29,7 @@ const FULL_CONFIG = {
   collageColumns: "4",
   collageGapPercent: "5",
   collageBackground: "#FFF",
-  collageLabelPercent: "14",
+  collageLabelPercent: "1.5",
 };
 
 describe("normalizePhotoSides", () => {
@@ -97,7 +97,7 @@ describe("parseOfferPhotoConfigInput", () => {
       collageColumns: 4,
       collageGapPercent: 5,
       collageBackground: "#ffffff",
-      collageLabelPercent: 14,
+      collageLabelPercent: 1.5,
     });
   });
 
@@ -121,8 +121,8 @@ describe("parseOfferPhotoConfigInput", () => {
     const badRows = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageRows: "0" });
     assert.equal(badRows.ok, false);
 
-    // The sizes are percentages of the stamp, so anything past 100% is refused (#312).
-    const badStrip = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageLabelPercent: "140" });
+    // The strip is a percentage of the finished image (#337), so a quarter of it is the ceiling.
+    const badStrip = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageLabelPercent: "40" });
     assert.equal(badStrip.ok, false);
   });
 

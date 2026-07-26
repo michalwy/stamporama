@@ -17,10 +17,13 @@ import {
 } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
+  COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
   MIN_COLLAGE_AXIS,
   MAX_COLLAGE_AXIS,
+  MIN_COLLAGE_LABEL_PERCENT,
   MIN_COLLAGE_PERCENT,
+  MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
   DEFAULT_COLLAGE_GAP_PERCENT,
   DEFAULT_COLLAGE_LABEL_PERCENT,
@@ -72,6 +75,7 @@ function NumberField({
   defaultValue,
   min,
   max,
+  step = 1,
   hint,
   isPending,
 }: {
@@ -81,6 +85,8 @@ function NumberField({
   defaultValue: number;
   min: number;
   max: number;
+  /** Whole numbers everywhere except the label strip, which needs tenths (#337). */
+  step?: number;
   hint?: string;
   isPending: boolean;
 }) {
@@ -91,7 +97,7 @@ function NumberField({
         id={id}
         name={name}
         type="number"
-        step={1}
+        step={step}
         min={min}
         max={max}
         defaultValue={defaultValue}
@@ -163,21 +169,24 @@ function CollageTemplateForm({
         <NumberField
           id="f-collage-strip"
           name="labelPercent"
-          label="Label strip (% of stamp)"
+          label="Label strip (% of image)"
           defaultValue={template?.labelPercent ?? DEFAULT_COLLAGE_LABEL_PERCENT}
-          min={MIN_COLLAGE_PERCENT}
-          max={MAX_COLLAGE_PERCENT}
-          hint="Strip below each stamp for its label. 0 for none."
+          min={MIN_COLLAGE_LABEL_PERCENT}
+          max={MAX_COLLAGE_LABEL_PERCENT}
+          step={COLLAGE_LABEL_STEP}
+          hint="Strip below each stamp, and the size of its label. Tenths allowed; 0 for none."
           isPending={isPending}
         />
       </div>
       {/* Percentages rather than pixels (#312): the collector cannot know the scan resolution or how
-          far the platform's limits will shrink the finished image, but "a seventh of the stamp" reads
-          the same at every size. */}
+          far the platform's limits will shrink the finished image. The two are shares of different
+          things (#337) — spacing belongs to the stamps, a caption to the image it is uploaded as. */}
       <span style={{ ...HINT_STYLE, marginTop: "-0.75rem" }}>
-        Both are shares of the stamp&rsquo;s height, so one template works for any scan resolution:
-        a 14% strip writes its label at roughly a tenth of the stamp&rsquo;s height, whatever size
-        the finished image ends up at.
+        Both are shares rather than pixels, so one template works for any scan resolution. The gap is
+        a share of the stamp&rsquo;s height; the strip is a share of the finished image, so every
+        photo of a listing — a full page of stamps, a single one, a close-up — carries a label of the
+        same size. Long labels are shortened rather than written smaller, so a value around 1–2% is
+        usually where a caption reads without crowding the stamps.
       </span>
 
       <div>
@@ -331,7 +340,7 @@ export function CollageTemplatesPanel({
 
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               {template.rows} × {template.columns} · gap {template.gapPercent}% ·{" "}
-              {template.labelPercent > 0 ? `strip ${template.labelPercent}%` : "no label strip"}
+              {template.labelPercent > 0 ? `strip ${template.labelPercent}% of image` : "no label strip"}
             </span>
 
             <RowActionsMenu

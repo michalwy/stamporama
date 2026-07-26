@@ -26,15 +26,23 @@
  *
  * Fitting
  * -------
- * Text is centred under its tile and scaled to fit the strip: capped by the strip's height, then by
- * the tile's width. Below a legibility floor the text is truncated with an ellipsis instead of
- * shrinking further — an unreadable label is worth no more than a shortened one. A copy whose
- * template tokens all came out empty simply gets an unlabelled tile; nothing is invented.
+ * The font size comes from the **strip's height and nothing else** (#337). Text that does not fit
+ * the tile's width is truncated with an ellipsis; it never shrinks the type. Sizing to the text was
+ * the first attempt and it was wrong: a caption is only ever compared against the other captions of
+ * the same batch, and letting length decide the size made one image carry a full-height label and
+ * the next — same template, a longer ref — a visibly smaller one. Nothing about that reads as
+ * fitting; it reads as a mistake. With the size fixed, `Label strip (%)` (#307) is the single knob
+ * for how big captions are — and, because the tile's width is a given, a *lower* one is what makes
+ * more text fit under the stamp.
+ *
+ * A copy whose template tokens all came out empty simply gets an unlabelled tile; nothing is
+ * invented.
  *
  * Every size here is a **fraction of the strip it is drawn in**, and the strip is itself a fraction
- * of the stamp (#312) — there is no pixel constant anywhere in this module. That is what makes the
- * result independent of scan DPI and of the platform's downscale: the label keeps its size relative
- * to the stamp it names, whatever resolution the finished image ends up at.
+ * of the finished image (#337, `labelPercent` of the longest edge) — there is no pixel constant
+ * anywhere in this module. That is what makes the result independent of scan DPI and of the
+ * platform's downscale: every image of a listing is scaled to the same limit before it is uploaded,
+ * so one caption size in that fraction is one caption size on the platform.
  */
 
 import type { CollageLayout } from "./collage-layout";
@@ -52,12 +60,6 @@ const WIDTH_RATIO = 0.94;
  * estimate — measuring text would need the font — so it is deliberately generous: a label that
  * comes out a little small is fine, one that overflows its tile is not. */
 const ADVANCE_RATIO = 0.62;
-/** How far below the strip's own size the text may shrink to fit a long label before it is
- * truncated instead. A fraction, not a pixel count: what makes a label readable is its size next to
- * the stamp, and that ratio is the same at every scan resolution. Set low enough that a full
- * `Fi·PL 10 / Mi·PL 12` under a narrow stamp still reads whole — a third of the strip is still a
- * twentieth of the stamp beside it — because cutting a catalog number is worse than a smaller one. */
-const MIN_HEIGHT_FRACTION = 0.35;
 /** Where the baseline sits inside the strip: roughly the cap height of the stack above, used to
  * centre the glyphs vertically without relying on `dominant-baseline`, which renderers disagree on. */
 const CAP_RATIO = 0.72;
@@ -74,6 +76,16 @@ function oneLine(text: string): string {
 }
 
 /**
+ * The size every caption in a strip of this height is drawn at — the whole of the sizing rule
+ * (#337). Deliberately unrounded, and deliberately blind to the text: two collages built from one
+ * template resolve the same strip height for the same stamps, so they get the same caption whatever
+ * their labels say.
+ */
+export function labelFontSize(stripHeight: number): number {
+  return Math.max(0, stripHeight) * HEIGHT_RATIO;
+}
+
+/**
  * Fit one label into a `width × height` strip, or null when there is nothing to draw — a blank
  * label, a strip with no height (`labelStripHeight` of 0 reserves nothing), or a box too narrow for
  * even one glyph.
@@ -87,25 +99,12 @@ export function fitCollageLabel(
 }
 
 /** {@link fitCollageLabel} against a width that is **already** the drawable one — what the two-sided
- * placement works in, having divided the strip between the annotations itself. `forced` draws at a
- * size decided elsewhere (the collage's shared size), fitting the text to *that* rather than
- * choosing one. */
-function fitToWidth(
-  line: string,
-  available: number,
-  height: number,
-  forced?: number
-): FittedLabel | null {
+ * placement works in, having divided the strip between the annotations itself. */
+function fitToWidth(line: string, available: number, height: number): FittedLabel | null {
   if (!line || available <= 0 || height <= 0) return null;
 
-  const byHeight = height * HEIGHT_RATIO;
-  const byWidth = available / (line.length * ADVANCE_RATIO);
-  const floor = byHeight * MIN_HEIGHT_FRACTION;
-  // Below the floor the label is not shrunk further — it is cut instead, at the floor size.
-  const fontSize = forced ?? Math.min(byHeight, Math.max(byWidth, floor));
+  const fontSize = labelFontSize(height);
   const text = textAtSize(line, available, fontSize);
-  // Deliberately unrounded: the collage picks one size out of these and then re-fits the text to it,
-  // and a size rounded up first would cut a label that in fact fits.
   return text === null ? null : { text, fontSize };
 }
 
@@ -174,15 +173,14 @@ const GUTTER_RATIO = 0.06;
  *
  * The two share the strip's width, minus a gutter, **in proportion to their length** rather than
  * half each: a location ref beside a pair of catalog numbers is the normal case, and splitting the
- * strip down the middle would squeeze the long side to nothing while the short one sat in white
- * space. Proportional shares give both the same size per character, which is the same thing as
- * giving the strip one font size. Empty when the strip has no height or neither side has anything
- * to say.
+ * strip down the middle would cut the long side while the short one sat in white space. With the
+ * size fixed by the strip (#337) the shares decide only *where the ellipsis falls* when the pair is
+ * too long for the tile — proportionally, so neither side is cut while the other still has room.
+ * Empty when the strip has no height or neither side has anything to say.
  */
 export function fitTileLabels(
   labels: TileLabelTexts,
-  box: { x: number; y: number; width: number; height: number },
-  forcedFontSize?: number
+  box: { x: number; y: number; width: number; height: number }
 ): PlacedLabel[] {
   const left = oneLine(labels.left ?? "");
   const right = oneLine(labels.right ?? "");
@@ -194,15 +192,15 @@ export function fitTileLabels(
 
   // One side only: the whole strip, centred.
   if (!left || !right) {
-    const fitted = fitToWidth(left || right, box.width * WIDTH_RATIO, box.height, forcedFontSize);
+    const fitted = fitToWidth(left || right, box.width * WIDTH_RATIO, box.height);
     if (!fitted) return [];
     return [{ ...fitted, x: box.x + box.width / 2, y: baseline(box, fitted.fontSize), anchor: "middle" }];
   }
 
   const usable = box.width * (WIDTH_RATIO - GUTTER_RATIO);
   const share = usable / (left.length + right.length);
-  const fittedLeft = fitToWidth(left, share * left.length, box.height, forcedFontSize);
-  const fittedRight = fitToWidth(right, share * right.length, box.height, forcedFontSize);
+  const fittedLeft = fitToWidth(left, share * left.length, box.height);
+  const fittedRight = fitToWidth(right, share * right.length, box.height);
   if (!fittedLeft || !fittedRight) {
     // One side could not be drawn at all in its half; the other keeps the strip to itself.
     const only = fittedLeft ?? fittedRight;
@@ -210,7 +208,9 @@ export function fitTileLabels(
     return [{ ...only, x: box.x + box.width / 2, y: baseline(box, only.fontSize), anchor: "middle" }];
   }
 
-  const fontSize = Math.min(fittedLeft.fontSize, fittedRight.fontSize);
+  // Equal by construction — both were fitted to the same strip — but named once so the pair shares
+  // one baseline as well as one size.
+  const fontSize = fittedLeft.fontSize;
   const y = baseline(box, fontSize);
   return [
     { text: fittedLeft.text, fontSize, x: start, y, anchor: "start" },
@@ -230,29 +230,22 @@ function baseline(box: { y: number; height: number }, fontSize: number): number 
  *
  * `labels` is parallel to `layout.tiles`; a missing or blank entry leaves that tile unlabelled.
  * Drawn at the layout's **native** scale, before any output-limit downscale, so the labels shrink
- * with the stamps and keep their relative size.
+ * with the image and keep their share of it.
  *
- * One font size for the **whole collage**, the smallest any tile needed: a narrow stamp beside a
- * wide one would otherwise carry a visibly smaller label, which reads as a mistake rather than as
- * fitting. The floor under the per-side fitting bounds how small that can get, so a single long
- * label cannot shrink the page — it is truncated instead.
+ * One font size for the **whole collage**, and the same one on every other image of the listing
+ * (#337): the layout gives every tile a strip of one height, that height is a share of the image
+ * (#310), and the height is the only thing the size is taken from. A narrow stamp beside a wide one
+ * has less room for its text, not smaller text — it is truncated instead.
  */
 export function collageLabelSvg(
   layout: CollageLayout,
   labels: readonly (TileLabelTexts | null | undefined)[],
   background: string
 ): string | null {
-  // Two passes. The first asks every tile what size it would take; the second draws them all at the
-  // smallest of those — and re-fits the text to *that* size, so a label the first pass had to cut
-  // for a narrow tile comes back whole once the collage settles on a smaller font.
-  const wanted = layout.tiles.flatMap((tile, index) => fitTileLabels(labels[index] ?? {}, tile.label));
-  if (wanted.length === 0) return null;
-  const fontSize = Math.min(...wanted.map((p) => p.fontSize));
-
   const texts = layout.tiles.flatMap((tile, index) =>
-    fitTileLabels(labels[index] ?? {}, tile.label, fontSize).map(
+    fitTileLabels(labels[index] ?? {}, tile.label).map(
       (placed) =>
-        `<text x="${round(placed.x)}" y="${round(placed.y)}" font-size="${round(fontSize)}"` +
+        `<text x="${round(placed.x)}" y="${round(placed.y)}" font-size="${round(placed.fontSize)}"` +
         ` text-anchor="${placed.anchor}">${escapeXml(placed.text)}</text>`
     )
   );

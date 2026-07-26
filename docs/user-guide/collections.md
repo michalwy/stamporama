@@ -231,16 +231,25 @@ A template holds:
 
 - **Rows** and **Columns** — the collage's capacity.
 - **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.
-- **Label strip (% of stamp)** — the height of the strip drawn below each stamp for its labels. Set it to **0** for no strip.
+- **Label strip (% of image)** — the height of the strip drawn below each stamp for its labels, and with it the size of the label text. Takes tenths (`1.5`, or `1,5`), because the difference between a readable caption and one shouting over the stamps is well under a whole percent; **1–2%** is the usual range. Set it to **0** for no strip.
 - **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on.
 
-Three things are worth knowing:
+Five things are worth knowing:
 
-- **The two sizes are shares of the stamp, not pixels.** You cannot know in advance how many pixels a
-  scan will have, nor how far a platform's size limit will shrink the finished image — so a strip
-  measured in pixels comes out unreadable on one listing and enormous on the next. A share of the
-  stamp holds: at 14% the label reads at roughly a tenth of the stamp's height whatever resolution
-  you scan at, because the label and the stamp are always scaled together.
+- **Both sizes are shares, not pixels.** You cannot know in advance how many pixels a scan will
+  have, nor how far a platform's size limit will shrink the finished image — so a strip measured in
+  pixels comes out unreadable on one listing and enormous on the next.
+- **They are shares of different things, and deliberately so.** The gap is a share of the *stamp's*
+  height, because spacing between stamps belongs to the stamps. The label strip is a share of the
+  *finished image's* longest edge, because every photo of a listing is scaled to the same platform
+  limit before it goes up — so a 1.5% strip writes a label of the same size on a full page of stamps,
+  on a single stamp, and on a close-up of one perforation. Measured against the stamp instead, the
+  close-up would carry a caption a third of the size of the one beside it.
+- **The strip alone decides how big the label text is.** It is never sized to the words, so a stamp
+  with a long catalog number does not get a smaller caption than the one next to it. Text with
+  nowhere left to go is cut with an ellipsis, so if your labels come out shortened, lower the strip
+  percentage: a smaller strip means smaller text, and smaller text means more of it fits under the
+  stamp.
 - **Rows × columns is a maximum, not a frame.** A set of four copies under a 5 × 4 template produces a one-row image sized to its contents, not a padded 5 × 4 canvas.
 - **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
 

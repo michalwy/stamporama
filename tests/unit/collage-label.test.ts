@@ -10,7 +10,8 @@ import {
 
 // The tile annotation of a collage (#312): every tile carries up to two labels — an identifier and
 // something descriptive — so a buyer can name one copy out of eight. Sizes are fractions of the
-// strip, which is itself a fraction of the stamp, so nothing here depends on a scan resolution.
+// strip, which is itself a fraction of the finished image (#337), so nothing here depends on a scan
+// resolution.
 
 describe("fitCollageLabel", () => {
   it("scales a short label to the strip's height", () => {
@@ -21,10 +22,13 @@ describe("fitCollageLabel", () => {
     assert.equal(fitted.text, "A234");
   });
 
-  it("shrinks a long label to the tile's width rather than overflowing it", () => {
+  it("keeps one size whatever the label says, cutting a long one to the tile's width (#337)", () => {
     const short = fitCollageLabel("A2", 120, 40)!;
     const long = fitCollageLabel("Mi·PL 200 Merc", 120, 40)!;
-    assert.ok(long.fontSize < short.fontSize);
+    // Sizing to the text made two images off one template disagree; the strip decides now.
+    assert.equal(long.fontSize, short.fontSize);
+    assert.equal(short.text, "A2");
+    assert.ok(long.text.endsWith("…"));
     assert.ok(long.text.length * long.fontSize * 0.62 <= 120);
   });
 
@@ -115,10 +119,13 @@ describe("fitTileLabels", () => {
   });
 });
 
-const layoutStyle = { columns: 2, gapPercent: 8, labelPercent: 18 };
+// A stamp of ordinary proportions under an ordinary strip: with the size taken from the strip alone
+// (#337), how much text fits is decided by the strip against the tile's width, so a fixture with an
+// outsized strip would cut labels that a real collage has room for.
+const layoutStyle = { columns: 2, gapPercent: 8, labelPercent: 6 };
 const sizes = [
-  { width: 100, height: 140 },
-  { width: 100, height: 140 },
+  { width: 120, height: 150 },
+  { width: 120, height: 150 },
 ];
 
 describe("collageLabelSvg", () => {
@@ -191,7 +198,7 @@ describe("labelInkColor", () => {
 });
 
 describe("collageLabelSvg — one size for the whole collage", () => {
-  it("draws every tile's labels at the smallest size any of them needed", () => {
+  it("draws every tile's labels at the size the strip decides, whatever they say", () => {
     // A narrow stamp beside a wide one: a per-tile size would give the narrow one a visibly smaller
     // label, which reads as a mistake rather than as fitting.
     const layout = layOutCollage(
@@ -199,7 +206,7 @@ describe("collageLabelSvg — one size for the whole collage", () => {
         { width: 200, height: 300 },
         { width: 900, height: 300 },
       ],
-      { columns: 2, gapPercent: 5, labelPercent: 14 }
+      { columns: 2, gapPercent: 5, labelPercent: 6 }
     );
     const svg = collageLabelSvg(
       layout,
@@ -217,5 +224,39 @@ describe("collageLabelSvg — one size for the whole collage", () => {
     // And with one size, one baseline: every strip sits its text at the same offset.
     const ys = [...svg.matchAll(/<text x="[\d.]+" y="([\d.]+)"/g)].map((m) => Number(m[1]));
     assert.equal(new Set(ys).size, 1, `baselines differed: ${ys.join()}`);
+  });
+
+  it("gives two collages off one template the same caption size (#337)", () => {
+    // The bug: the same template produced a full-height caption on one image and a much smaller one
+    // on the next, because the size followed the longest label in the collage.
+    const sizeOf = (svg: string) => {
+      const found = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+      assert.equal(new Set(found).size, 1, `sizes differed within one image: ${found.join()}`);
+      return found[0];
+    };
+    const layout = layOutCollage(sizes, layoutStyle);
+
+    const brief = sizeOf(collageLabelSvg(layout, [{ left: "A1" }, { left: "A2" }], "#ffffff")!);
+    const wordy = sizeOf(
+      collageLabelSvg(
+        layout,
+        [
+          { left: "A234", right: "Mi·PL 200-204" },
+          { left: "B7", right: "Mi·PL 12" },
+        ],
+        "#ffffff"
+      )!
+    );
+    assert.equal(wordy, brief);
+
+    // Same template, same stamps at twice the scan resolution: twice the size, so the caption reads
+    // the same next to the stamp — the one thing that is allowed to change it.
+    const doubled = layOutCollage(
+      sizes.map((s) => ({ width: s.width * 2, height: s.height * 2 })),
+      layoutStyle
+    );
+    const scaled = sizeOf(collageLabelSvg(doubled, [{ left: "A1" }, { left: "A2" }], "#ffffff")!);
+    // Within the rounding of a strip height to whole pixels.
+    assert.ok(Math.abs(scaled / (brief * 2) - 1) < 0.05, `${scaled} is not twice ${brief}`);
   });
 });

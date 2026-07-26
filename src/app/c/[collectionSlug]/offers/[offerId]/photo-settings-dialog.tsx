@@ -5,9 +5,12 @@ import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/di
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
+  COLLAGE_LABEL_STEP,
   MAX_COLLAGE_AXIS,
+  MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
   MIN_COLLAGE_AXIS,
+  MIN_COLLAGE_LABEL_PERCENT,
   MIN_COLLAGE_PERCENT,
 } from "@/lib/collage-template-rules";
 import {
@@ -85,6 +88,7 @@ function NumberField({
   value,
   min,
   max,
+  step = 1,
   hint,
   isPending,
   onChange,
@@ -95,6 +99,8 @@ function NumberField({
   value: string;
   min: number;
   max: number;
+  /** Whole numbers everywhere except the label strip, which needs tenths (#337). */
+  step?: number;
   hint?: string;
   isPending: boolean;
   onChange: (value: string) => void;
@@ -106,7 +112,7 @@ function NumberField({
         id={id}
         name={name}
         type="number"
-        step={1}
+        step={step}
         min={min}
         max={max}
         value={value}
@@ -350,9 +356,10 @@ export function PhotoSettingsDialog({
               name="collageLabelPercent"
               label="Label strip (%)"
               value={collage.collageLabelPercent}
-              min={MIN_COLLAGE_PERCENT}
-              max={MAX_COLLAGE_PERCENT}
-              hint="Of the stamp; 0 for none."
+              min={MIN_COLLAGE_LABEL_PERCENT}
+              max={MAX_COLLAGE_LABEL_PERCENT}
+              step={COLLAGE_LABEL_STEP}
+              hint="Of the image, and the label size. Tenths allowed; 0 for none."
               isPending={isPending}
               onChange={(v) => set("collageLabelPercent", v)}
             />

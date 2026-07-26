@@ -23,14 +23,25 @@
  * - Every tile gets a **label strip** below it, as wide as the tile, drawn by `collage-label.ts`
  *   (#312); a height of 0 simply reserves nothing.
  *
- * Sizes relative to the stamps
- * ----------------------------
- * The gap and the label strip are configured as **percentages of the stamp height** (#312), not in
- * pixels, and are resolved here against the **median tile height** of this collage. A pixel number
- * would have to be chosen without knowing the scan DPI or how far the platform's limits will shrink
- * the finished image; a percentage needs neither, because "readable next to the stamp" is a relative
- * property that survives the shared downscale. The median rather than the tallest tile, so a single
- * oversized souvenir sheet cannot inflate the strips of a whole page.
+ * Sizes as percentages, and what of
+ * ---------------------------------
+ * Neither the gap nor the label strip is a pixel count (#312): a pixel number would have to be
+ * chosen without knowing the scan DPI or how far the platform's limits will shrink the finished
+ * image. They are percentages — but of **two different things**, because they answer two different
+ * questions:
+ *
+ * - **Gap** — a percent of the **median tile height**. Spacing between stamps is a property of the
+ *   stamps, and the median rather than the tallest so one oversized souvenir sheet cannot inflate
+ *   the whole page. (The median of an even count takes the lower middle: arbitrary, but stable.)
+ * - **Label strip** — a percent of the finished image's **longest edge** (#337). Every image of a
+ *   listing is scaled to the same platform limit before it is uploaded, so a share of the longest
+ *   edge is the one measure that renders at the same size on all of them. Taking it off the stamp
+ *   was the first attempt and it broke on exactly the images that need a caption most: a wide
+ *   detail crop has no "stamp height" worth the name, so its caption came out a third of the size of
+ *   the one on the full scan beside it.
+ *
+ * The strip is therefore circular — it grows the canvas it is a share of — and is solved for below
+ * rather than multiplied out.
  *
  * A single stamp is a 1×1 collage, so this is the only layout path there is.
  */
@@ -48,8 +59,9 @@ export interface CollageLayoutStyle {
   /** Space between tiles, between rows and around the whole collage, as a percent of the stamp
    * height (#312). */
   gapPercent: number;
-  /** Height of the label strip reserved below each tile (#312), as a percent of the stamp height.
-   * 0 reserves nothing, which is how a collage without labels is configured. */
+  /** Height of the label strip reserved below each tile (#312), as a percent of the finished
+   * image's longest edge (#337) — the caption's size is this and nothing else. 0 reserves nothing,
+   * which is how a collage without labels is configured. */
   labelPercent: number;
 }
 
@@ -70,7 +82,7 @@ export interface CollageLayout {
    * tests can talk about the geometry that was actually used. */
   gap: number;
   labelStripHeight: number;
-  /** The median tile height the percentages were taken of. */
+  /** The median tile height the **gap** was taken of. The strip is taken of the canvas instead. */
   referenceHeight: number;
   /** Placed tiles in input order (plan order — copy order within a group, #309). */
   tiles: PlacedCollageTile[];
@@ -84,6 +96,38 @@ export interface CollageLayout {
 function medianHeight(sizes: readonly CollageTileSize[]): number {
   const heights = sizes.map((s) => Math.max(0, s.height)).sort((a, b) => a - b);
   return heights[Math.floor((heights.length - 1) / 2)];
+}
+
+/** The share of the canvas's height all the strips together may take. A rail, not a setting: a
+ * caption that is 20% of the image is a fine thing to ask for on a single stamp and an impossible
+ * one on a ten-row page, and the layout has to stay solvable either way. */
+const MAX_LABEL_SHARE_OF_HEIGHT = 0.5;
+
+/**
+ * The strip height for a canvas whose other dimensions are already known — the fixed point of
+ * `strip = percent × longestEdge`, where the longest edge itself grows by one strip per row.
+ *
+ * Two cases, both exact:
+ * - The image stays **wider than it is tall** even with the strips: the longest edge is the known
+ *   width, so the strip is a plain multiplication.
+ * - Otherwise the height wins, and `h = base + rows × p × h` solves to `p × base / (1 − p × rows)`.
+ *   The cap above keeps the denominator at or above ½, so this never explodes or goes negative.
+ */
+function solveLabelStrip(
+  percent: number,
+  rowCount: number,
+  width: number,
+  heightWithoutStrips: number
+): number {
+  const share = Math.min(
+    Math.max(0, percent) / 100,
+    MAX_LABEL_SHARE_OF_HEIGHT / Math.max(1, rowCount)
+  );
+  if (share <= 0 || rowCount === 0) return 0;
+
+  const ifWidthWins = share * width;
+  if (heightWithoutStrips + rowCount * ifWidthWins <= width) return Math.round(ifWidthWins);
+  return Math.round((share * heightWithoutStrips) / (1 - share * rowCount));
 }
 
 function chunk<T>(rows: readonly T[], size: number): T[][] {
@@ -113,10 +157,7 @@ export function layOutCollage(
   }
 
   const referenceHeight = medianHeight(sizes);
-  const percentOf = (percent: number) =>
-    Math.max(0, Math.round((referenceHeight * Math.max(0, percent)) / 100));
-  const gap = percentOf(style.gapPercent);
-  const labelStripHeight = percentOf(style.labelPercent);
+  const gap = Math.max(0, Math.round((referenceHeight * Math.max(0, style.gapPercent)) / 100));
   const columns = Math.max(1, Math.round(style.columns));
 
   const rows = chunk(sizes, columns).map((row) => ({
@@ -127,13 +168,20 @@ export function layOutCollage(
     contentHeight: row.reduce((tallest, size) => Math.max(tallest, size.height), 0),
   }));
 
+  // The canvas as it would be with no strips at all: everything the strip percentage is solved
+  // against, and the width it is solved against outright.
   const contentWidth = rows.reduce((widest, row) => Math.max(widest, row.width), 0);
-  const contentHeight =
-    rows.reduce((sum, row) => sum + row.contentHeight + labelStripHeight, 0) +
-    gap * (rows.length - 1);
-
   const width = contentWidth + gap * 2;
-  const height = contentHeight + gap * 2;
+  const heightWithoutStrips =
+    rows.reduce((sum, row) => sum + row.contentHeight, 0) + gap * (rows.length - 1) + gap * 2;
+
+  const labelStripHeight = solveLabelStrip(
+    style.labelPercent,
+    rows.length,
+    width,
+    heightWithoutStrips
+  );
+  const height = heightWithoutStrips + labelStripHeight * rows.length;
 
   const tiles: PlacedCollageTile[] = [];
   let y = gap;

@@ -30,8 +30,9 @@ async function noise(width: number, height: number): Promise<CollageTileSource> 
   return { buffer };
 }
 
-// 10% and 20% of the stamp: with the 100-tall tiles below that is a 10 px gap and a 20 px strip.
-const style = { columns: 2, gapPercent: 10, labelPercent: 20, background: "#ffffff" };
+// A 10% gap of the stamp — 10 px on the 100-tall tiles below — and a label strip at 10% of the
+// finished image (#337), which each case works out for itself.
+const style = { columns: 2, gapPercent: 10, labelPercent: 10, background: "#ffffff" };
 
 const noLimits = { maxEdge: null, maxBytes: null };
 
@@ -41,9 +42,9 @@ describe("renderCollage", () => {
 
     assert.equal(rendered.mime, COLLAGE_MIME);
     assert.equal(rendered.quality, COLLAGE_QUALITY_MAX);
-    // One 140-tall stamp: gap 14, strip 28.
+    // One 140-tall stamp: gap 14, and a strip that is a tenth of the 187 the canvas comes to.
     assert.equal(rendered.width, 100 + 14 * 2);
-    assert.equal(rendered.height, 140 + 28 + 14 * 2);
+    assert.equal(rendered.height, 140 + 19 + 14 * 2);
     assert.equal(rendered.layout.rowCount, 1);
     assert.equal(rendered.exceedsFileSizeLimit, false);
 
@@ -70,7 +71,7 @@ describe("renderCollage", () => {
 
     assert.equal(rendered.layout.rowCount, 2);
     assert.equal(rendered.width, 100 + 10 + 100 + 10 * 2);
-    assert.equal(rendered.height, 100 + 20 + 10 + 100 + 20 + 10 * 2);
+    assert.equal(rendered.height, 100 + 29 + 10 + 100 + 29 + 10 * 2);
   });
 
   it("paints the configured background between the tiles", async () => {
@@ -150,7 +151,7 @@ describe("renderCollage", () => {
         { ...(await scan(100, 100)), labels: { left: "A234", right: "Mi 200" } },
         { ...(await scan(100, 100)), labels: null },
       ],
-      { ...style, background: "#ffffff", labelPercent: 30 },
+      { ...style, background: "#ffffff", labelPercent: 12 },
       noLimits
     );
 

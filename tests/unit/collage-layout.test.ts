@@ -4,32 +4,35 @@ import { layOutCollage, type CollageTileSize } from "../../src/lib/collage-layou
 
 const size = (width: number, height: number): CollageTileSize => ({ width, height });
 
-/** 10% and 20% of the stamp — with 100-tall tiles that is 10 px of gap and a 20 px strip, which is
- * what most of these cases are written against. */
+/** Gap at 10% of the stamp and a strip at 10% of the finished image (#337) — with 100-tall,
+ * 100-wide tiles that is 10 px of gap and a strip in the same ballpark, which is what most of these
+ * cases are written against. Each expectation below states the strip it works out to: the strip is
+ * solved against the canvas it is part of, so it does not follow from the tile alone. */
 const style = (over: Partial<{ columns: number; gapPercent: number; labelPercent: number }> = {}) => ({
   columns: 2,
   gapPercent: 10,
-  labelPercent: 20,
+  labelPercent: 10,
   ...over,
 });
 
 describe("layOutCollage", () => {
   it("packs a single tile as a 1×1 collage with margin and label strip", () => {
-    // One 140-tall tile: the percentages resolve against it, so gap 14 and strip 28.
+    // One 140-tall tile: the gap resolves against it (14), the strip against the 187-tall canvas it
+    // is itself part of (19) — 10% of the longest edge, solved rather than multiplied out.
     const layout = layOutCollage([size(100, 140)], style({ columns: 3 }));
 
     assert.equal(layout.rowCount, 1);
     assert.equal(layout.referenceHeight, 140);
     assert.equal(layout.gap, 14);
-    assert.equal(layout.labelStripHeight, 28);
+    assert.equal(layout.labelStripHeight, 19);
     assert.equal(layout.width, 100 + 14 * 2);
-    assert.equal(layout.height, 140 + 28 + 14 * 2);
+    assert.equal(layout.height, 140 + 19 + 14 * 2);
     assert.deepEqual(layout.tiles[0], {
       x: 14,
       y: 14,
       width: 100,
       height: 140,
-      label: { x: 14, y: 154, width: 100, height: 28 },
+      label: { x: 14, y: 154, width: 100, height: 19 },
     });
   });
 
@@ -43,8 +46,8 @@ describe("layOutCollage", () => {
     assert.equal(large.height, small.height * 4);
   });
 
-  it("takes the percentages of the median tile, not the tallest", () => {
-    // One souvenir sheet among four ordinary stamps must not inflate the whole page's strips.
+  it("takes the gap of the median tile, not the tallest", () => {
+    // One souvenir sheet among three ordinary stamps must not inflate the whole page's spacing.
     const layout = layOutCollage(
       [size(100, 100), size(100, 100), size(100, 100), size(300, 900)],
       style({ columns: 4 })
@@ -52,7 +55,8 @@ describe("layOutCollage", () => {
 
     assert.equal(layout.referenceHeight, 100);
     assert.equal(layout.gap, 10);
-    assert.equal(layout.labelStripHeight, 20);
+    // The strip does not follow the stamps at all: it is 10% of the canvas the sheet made tall.
+    assert.equal(layout.labelStripHeight, Math.round(layout.height / 10));
   });
 
   it("shrinks the canvas to the contents rather than to the template's capacity", () => {
@@ -61,7 +65,8 @@ describe("layOutCollage", () => {
 
     assert.equal(layout.rowCount, 1);
     assert.equal(layout.width, 100 + 10 + 100 + 10 * 2);
-    assert.equal(layout.height, 100 + 20 + 10 * 2);
+    // Wider than it is tall, so the strip is 10% of the width: 23.
+    assert.equal(layout.height, 100 + 23 + 10 * 2);
   });
 
   it("keeps native tile sizes so true relative proportions survive", () => {
@@ -93,9 +98,10 @@ describe("layOutCollage", () => {
     );
 
     assert.equal(layout.rowCount, 2);
-    // Row 1 is 100 + 20 tall, then a gap, then row 2 of 300 + 20.
-    assert.equal(layout.height, 100 + 20 + 10 + 300 + 20 + 10 * 2);
-    assert.equal(layout.tiles[2].y, 10 + 100 + 20 + 10);
+    // Row 1 is 100 + 54 tall, then a gap, then row 2 of 300 + 54 — two strips at 10% of the 538
+    // the page comes to.
+    assert.equal(layout.height, 100 + 54 + 10 + 300 + 54 + 10 * 2);
+    assert.equal(layout.tiles[2].y, 10 + 100 + 54 + 10);
   });
 
   it("centres a partly filled row against the widest row", () => {
@@ -124,6 +130,33 @@ describe("layOutCollage", () => {
       [0, 100]
     );
     assert.equal(layout.tiles[0].label.height, 0);
+  });
+
+  it("gives a tall scan and a wide detail crop the same strip share (#337)", () => {
+    // The bug this rule exists for: both go up as one listing, both are scaled to the platform's
+    // limit, so a strip taken off the stamp left the crop's caption a third of the size of the
+    // scan's. A share of the longest edge is the same on both.
+    const share = (layout: { labelStripHeight: number; width: number; height: number }) =>
+      layout.labelStripHeight / Math.max(layout.width, layout.height);
+
+    const scan = layOutCollage([size(1500, 1900)], style({ columns: 1 }));
+    const crop = layOutCollage([size(2000, 700)], style({ columns: 1 }));
+
+    assert.ok(Math.abs(share(scan) - 0.1) < 0.005, `scan strip is ${share(scan)} of the image`);
+    assert.ok(Math.abs(share(crop) - 0.1) < 0.005, `crop strip is ${share(crop)} of the image`);
+  });
+
+  it("refuses to spend more than half the page on strips, however many rows", () => {
+    // 20% each is a fair ask on one row and an impossible one on ten; the layout has to stay
+    // solvable rather than trust the number.
+    const tiles = Array.from({ length: 10 }, () => size(100, 100));
+    const layout = layOutCollage(tiles, style({ columns: 1, labelPercent: 20 }));
+
+    assert.equal(layout.rowCount, 10);
+    assert.ok(
+      layout.labelStripHeight * 10 <= layout.height / 2,
+      `${layout.labelStripHeight} × 10 is more than half of ${layout.height}`
+    );
   });
 
   it("returns an empty canvas for no tiles", () => {

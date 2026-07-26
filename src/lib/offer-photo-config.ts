@@ -17,10 +17,13 @@
 
 import {
   MAX_COLLAGE_AXIS,
+  MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
   MIN_COLLAGE_AXIS,
+  MIN_COLLAGE_LABEL_PERCENT,
   MIN_COLLAGE_PERCENT,
   normalizeHexColor,
+  parseBoundedDecimal,
   parseBoundedInteger,
 } from "./collage-template-rules";
 
@@ -182,11 +185,11 @@ export function parseOfferPhotoConfigInput(raw: {
   );
   if (!gapPercent.ok) return gapPercent;
 
-  const labelPercent = parseBoundedInteger(
+  const labelPercent = parseBoundedDecimal(
     raw.collageLabelPercent,
     "Label strip",
-    MIN_COLLAGE_PERCENT,
-    MAX_COLLAGE_PERCENT
+    MIN_COLLAGE_LABEL_PERCENT,
+    MAX_COLLAGE_LABEL_PERCENT
   );
   if (!labelPercent.ok) return labelPercent;
 

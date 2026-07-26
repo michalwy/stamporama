@@ -179,8 +179,12 @@ model CollageTemplate {
   gapPercent   Int
   // Canvas colour behind the tiles, `#rrggbb`. Also what the label strip is drawn on.
   background   String @default("#ffffff")
-  // Height of the label strip drawn below each tile (#312), same units as `gapPercent`. 0 = no strip.
-  labelPercent Int @default(0)
+  // Height of the label strip drawn below each tile (#312) — and so the size of its caption — as a
+  // percent of the **finished image's longest edge**, not of the stamp (#337): every image of a
+  // listing is scaled to the same platform limit before upload, so only a share of the image renders
+  // at one size across a collage, a lone scan and a wide detail crop. Fractional, because the usable
+  // band is a couple of percent wide and whole numbers cannot land inside it. 0 = no strip.
+  labelPercent Float @default(0)
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
@@ -752,12 +756,13 @@ model Offer {
   // The collage numbers copied from the chosen template (#307). All null together when the platform
   // had no default template and none has been picked on the offer yet — there is no collage to
   // render until they are set. Units follow the template: percent of the stamp height for
-  // `collageGapPercent` and `collageLabelPercent`, `#rrggbb` for `collageBackground`.
+  // `collageGapPercent`, percent of the finished image's longest edge for `collageLabelPercent`
+  // (#337, fractional), `#rrggbb` for `collageBackground`.
   collageRows  Int?
   collageColumns Int?
   collageGapPercent Int?
   collageBackground String?
-  collageLabelPercent Int?
+  collageLabelPercent Float?
   // A manual **plan order** over this offer's photos (#313): an ordered list of stable tokens, one
   // per planned image — `c:<side>:<sortedItemIds>` for a generated collage side, `a:<attachmentId>`
   // for a manual attachment. It is an *override* of the derived order (set order + grouping), not a

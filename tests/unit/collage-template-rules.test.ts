@@ -4,7 +4,7 @@ import {
   normalizeHexColor,
   parseCollageTemplateInput,
   MAX_COLLAGE_AXIS,
-  MAX_COLLAGE_PERCENT,
+  MAX_COLLAGE_LABEL_PERCENT,
 } from "../../src/lib/collage-template-rules";
 
 const VALID = {
@@ -13,7 +13,7 @@ const VALID = {
   columns: "4",
   gapPercent: "5",
   background: "#ffffff",
-  labelPercent: "14",
+  labelPercent: "1.5",
 };
 
 describe("normalizeHexColor", () => {
@@ -45,7 +45,7 @@ describe("parseCollageTemplateInput", () => {
       columns: 4,
       gapPercent: 5,
       background: "#ffffff",
-      labelPercent: 14,
+      labelPercent: 1.5,
     });
   });
 
@@ -89,10 +89,34 @@ describe("parseCollageTemplateInput", () => {
 
     const huge = parseCollageTemplateInput({
       ...VALID,
-      labelPercent: String(MAX_COLLAGE_PERCENT + 1),
+      labelPercent: String(MAX_COLLAGE_LABEL_PERCENT + 1),
     });
     assert.ok(!huge.ok);
     assert.match(huge.message, /Label strip/);
+  });
+
+  it("takes the label strip in tenths, with either decimal separator (#337)", () => {
+    // Against the whole image the usable band is about two percent wide, so whole numbers cannot
+    // land inside it: 1 reads well where 2 already shouts.
+    for (const [raw, expected] of [
+      ["1.2", 1.2],
+      ["1,2", 1.2],
+      ["2", 2],
+    ] as const) {
+      const result = parseCollageTemplateInput({ ...VALID, labelPercent: raw });
+      assert.ok(result.ok, `${raw} was refused`);
+      assert.equal(result.value.labelPercent, expected);
+    }
+
+    // A second decimal place is past the point of any visible difference.
+    const tooFine = parseCollageTemplateInput({ ...VALID, labelPercent: "1.25" });
+    assert.ok(!tooFine.ok);
+    assert.match(tooFine.message, /Label strip/);
+
+    // The gap stays whole: it is a share of the stamp, where a percent is already a fine step.
+    const fractionalGap = parseCollageTemplateInput({ ...VALID, gapPercent: "5.5" });
+    assert.ok(!fractionalGap.ok);
+    assert.match(fractionalGap.message, /Gap/);
   });
 
   it("rejects non-integer numbers", () => {

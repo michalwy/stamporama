@@ -279,10 +279,16 @@ listing:
   `{ref}` writes that copy's own location ref (`A234`) under it and a buyer asking for "the one
   labelled A234" names exactly one copy; put something descriptive like `{catalog}` on the other
   side. Fill only one and it is centred instead. A copy with nothing to write for a side — no ref,
-  say — simply leaves that side blank, and both blank leaves the stamp unlabelled.
-- **Collage** — **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and **Background**. The two
-  percentages are shares of the stamp's height rather than pixels, so one setting reads the same
-  whatever resolution you scan at (see
+  say — simply leaves that side blank, and both blank leaves the stamp unlabelled. The text is drawn
+  at the size the **Label strip (%)** below sets and at no other: a long label is cut with an
+  ellipsis rather than shrunk. If yours come out cut, lower the strip percentage or write shorter
+  templates.
+- **Collage** — **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and **Background**. Both
+  percentages are shares rather than pixels, so one setting reads the same whatever resolution you
+  scan at: the gap is a share of the stamp's height, the label strip a share of the finished image
+  (in tenths of a percent — 1–2% is the usual range),
+  which is what makes captions come out the same size on every photo of the listing — the eight-stamp
+  collage, the single stamp and the close-up alike (see
   [collage templates](collections.md#collage-templates)). Use **Copy from
   template** to fill them from one of your
   [collage templates](collections.md#collage-templates), then adjust the numbers for this listing if
