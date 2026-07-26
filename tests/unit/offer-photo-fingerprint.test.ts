@@ -170,3 +170,80 @@ describe("fingerprintOfferPhotoInputs sensitivity", () => {
     assert.ok(differs({ limits: { ...base.limits, maxPhotoFileSizeMib: 2 } }));
   });
 });
+
+describe("fingerprintOfferPhotoInputs manual attachments (#313)", () => {
+  const attached = (patch: Partial<OfferPhotoFingerprintInput> = {}) =>
+    fp({
+      ...base,
+      attachments: [{ id: "m1", position: 0, photoId: "p1", itemId: "a" }],
+      ...patch,
+    });
+
+  it("leaves an offer with no attachments hashing exactly as before", () => {
+    // Widening the inputs must not declare every already-generated plan stale for images that did
+    // not change by a pixel — so an empty attachment list is not part of the payload at all.
+    assert.equal(fp({ ...base, attachments: [] }), fp(base));
+    assert.equal(fp({ ...base, uploadTileLabel: ["Detail", ""] }), fp(base));
+  });
+
+  it("changes as soon as the offer carries one", () => {
+    assert.notEqual(attached(), fp(base));
+  });
+
+  it("changes when an attachment moves, or shows something else", () => {
+    assert.notEqual(
+      attached({ attachments: [{ id: "m1", position: 3, photoId: "p1", itemId: "a" }] }),
+      attached()
+    );
+    assert.notEqual(
+      attached({ attachments: [{ id: "m1", position: 0, photoId: "p2", itemId: "a" }] }),
+      attached()
+    );
+    // The copy is what the tile's label resolves from, so it is part of the image.
+    assert.notEqual(
+      attached({ attachments: [{ id: "m1", position: 0, photoId: "p1", itemId: null }] }),
+      attached()
+    );
+  });
+
+  it("ignores the order the attachments were read in", () => {
+    const two = [
+      { id: "m1", position: 0, photoId: "p1", itemId: "a" },
+      { id: "m2", position: 4, photoId: "p2", itemId: null },
+    ];
+    assert.equal(attached({ attachments: two }), attached({ attachments: [...two].reverse() }));
+  });
+
+  it("changes with the label an attachment with no copy is drawn with", () => {
+    const upload = [{ id: "m2", position: 1, photoId: "p2", itemId: null }];
+    assert.notEqual(
+      attached({ attachments: upload, uploadTileLabel: ["Detail", ""] }),
+      attached({ attachments: upload })
+    );
+  });
+});
+
+describe("fingerprintOfferPhotoInputs manual plan order (#313)", () => {
+  it("leaves an offer with no custom order hashing exactly as before", () => {
+    // Like attachments, the order joins the payload only when present — so introducing the feature
+    // does not mark every already-generated plan out of date.
+    assert.equal(fp({ ...base, order: [] }), fp(base));
+  });
+
+  it("changes when a custom order is set, and with what that order is", () => {
+    const one = fp({ ...base, order: ["c:front:x", "a:m1"] });
+    assert.notEqual(one, fp(base));
+    assert.notEqual(one, fp({ ...base, order: ["a:m1", "c:front:x"] }));
+  });
+
+  it("is not reordered away by the order array's own position among the other extensions", () => {
+    // An offer with attachments but no order must hash the same before and after the order field
+    // existed: an absent order appends nothing.
+    const withAttachments: OfferPhotoFingerprintInput = {
+      ...base,
+      attachments: [{ id: "m1", position: 0, photoId: "p1", itemId: "a" }],
+    };
+    assert.equal(fp(withAttachments), fp({ ...withAttachments, order: [] }));
+    assert.notEqual(fp(withAttachments), fp({ ...withAttachments, order: ["a:m1"] }));
+  });
+});

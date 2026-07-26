@@ -31,6 +31,15 @@ import {
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
+import {
+  attachOfferCopyPhotos,
+  attachOfferUploads,
+  removeOfferPhotoAttachment,
+  renameOfferPhotoAttachment,
+  setOfferPhotoPlanOrder,
+  type CopyPhotoAttachmentInput,
+  type UploadAttachmentInput,
+} from "@/lib/offer-photo-attachments";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
@@ -368,6 +377,84 @@ export async function generateOfferPhotosAction(offerId: string): Promise<OfferA
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to start photo generation.");
+  }
+}
+
+// ── Manual photo attachments (#313) ─────────────────────────────────────────
+// Adding, moving or removing an attachment changes the **plan**, never the stored images: the files
+// already generated stay exactly as they are (a buyer may be looking at them) and the plan simply
+// reads as out of date until the collector regenerates.
+
+/** Attach one or more specific photos of copies in this offer (#313 mode a) — fronts, backs or
+ * extras, so single details can be shown on their own. They land at the end of the plan, in the
+ * order picked, and are dragged from there. */
+export async function attachOfferCopyPhotosAction(
+  offerId: string,
+  inputs: CopyPhotoAttachmentInput[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await attachOfferCopyPhotos(session.user.id, offerId, inputs);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to attach the photos.");
+  }
+}
+
+/** Attach one or more images uploaded straight to the offer (#313 mode b): each staged upload (#112)
+ * becomes an offer-owned original, from which the annotated image is rendered. */
+export async function attachOfferUploadsAction(
+  offerId: string,
+  uploads: UploadAttachmentInput[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await attachOfferUploads(session.user.id, offerId, uploads);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to attach the images.");
+  }
+}
+
+/** Rename an attachment — the caption shown in the plan, never text drawn on the image. */
+export async function renameOfferPhotoAttachmentAction(
+  attachmentId: string,
+  title: string | null
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await renameOfferPhotoAttachment(session.user.id, attachmentId, title);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to rename the attachment.");
+  }
+}
+
+/** Remove an attachment from the plan. An uploaded image goes with it; a copy's own scan does not. */
+export async function removeOfferPhotoAttachmentAction(
+  attachmentId: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await removeOfferPhotoAttachment(session.user.id, attachmentId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to remove the attachment.");
+  }
+}
+
+/** Record the plan order the collector dragged the card into (#313) — collage sides and attachments
+ * alike, as the image tokens in their new sequence. An empty list clears the override. */
+export async function setOfferPhotoPlanOrderAction(
+  offerId: string,
+  tokens: string[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await setOfferPhotoPlanOrder(session.user.id, offerId, tokens);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to reorder the plan.");
   }
 }
 

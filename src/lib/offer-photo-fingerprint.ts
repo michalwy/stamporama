@@ -26,6 +26,9 @@
  * - the **rendered tile labels** (#312), not just their template: the labels are drawn into the
  *   images, so editing the location ref of a copy changes the pixels exactly as replacing its scan
  *   does, and has to read as out of date for the same reason;
+ * - the **manual attachments** (#313) — which image, from which copy, at which position, and the
+ *   annotation an attachment with no copy is drawn with. Adding, removing, reordering or replacing
+ *   one changes both the images and their order, so it is the same kind of change as any other;
  * - the **platform's output limits** (#308), which the renderer reads live: raising the file-size cap
  *   changes the encoded result, so it belongs here even though it lives on the platform.
  *
@@ -67,6 +70,25 @@ export interface OfferPhotoFingerprintInput {
   tileLabels: readonly (readonly [string, string, string])[];
   collage: OfferCollageValues | null;
   limits: PlatformPhotoLimits;
+  /** The offer's manual attachments (#313), in any order. */
+  attachments?: readonly FingerprintAttachment[];
+  /** The annotation an attachment with no copy is drawn with (#313 mode b) — the label templates
+   * resolved against nothing, so only their literal text survives. Hashed because it is drawn into
+   * those images, exactly like a copy's own tile labels. */
+  uploadTileLabel?: readonly [string, string];
+  /** The **resolved** manual plan order (#313): the image tokens in their final upload order, or
+   * empty/absent for the derived order. The upload order is what the collector sees and what the
+   * ZIP is numbered by, so reordering the stored images has to read as a change. */
+  order?: readonly string[];
+}
+
+/** One manual attachment as the fingerprint sees it: what it shows, from which copy, and where it
+ * sits in the plan. */
+export interface FingerprintAttachment {
+  id: string;
+  position: number;
+  photoId: string;
+  itemId: string | null;
 }
 
 /**
@@ -107,7 +129,20 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
     input.limits.maxPhotoFileSizeMib,
   ];
 
-  return createHash("sha256")
-    .update(JSON.stringify([FINGERPRINT_VERSION, composition, config, limits]))
-    .digest("hex");
+  // The manual features (#313) extend the hashed payload only when the offer uses them. An offer
+  // with neither attachments nor a custom order is precisely the offer the original shape described,
+  // so widening the inputs does not declare every already-generated plan out of date — which is what
+  // appending an empty element (or bumping the version) would do, for images unchanged by a pixel.
+  // Each extension is appended in a fixed order after the base, so adding a later one leaves an offer
+  // that uses only an earlier one hashing exactly as it did.
+  const attachments = [...(input.attachments ?? [])]
+    .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((a) => [a.id, a.position, a.photoId, a.itemId]);
+  const order = input.order ?? [];
+
+  const payload: unknown[] = [FINGERPRINT_VERSION, composition, config, limits];
+  if (attachments.length > 0) payload.push(attachments, input.uploadTileLabel ?? null);
+  if (order.length > 0) payload.push(["order", order]);
+
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

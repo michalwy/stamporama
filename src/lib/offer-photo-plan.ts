@@ -89,6 +89,11 @@ export interface OfferPhotoPlanInput {
   /** The platform's `maxPhotos` limit (#308); null means no limit and so no truncation. */
   maxPhotos: number | null;
   attachments?: readonly PlanAttachment[];
+  /** A manual plan order (#313): the image tokens the collector dragged into place, in their order.
+   * An override of the derived order, applied to the surviving images after grouping and truncation
+   * — tokens no longer present are ignored, images not in the list keep their natural position.
+   * Empty/absent means the derived order, unchanged. */
+  order?: readonly string[];
 }
 
 // ── Output ───────────────────────────────────────────────────────────────────
@@ -108,6 +113,10 @@ export interface PlannedCollage {
   /** Groups sharing a key are the front/back pair rendered from the same copies. Stable within one
    * plan only — it is a pairing marker, not an identity. */
   groupKey: string;
+  /** A **stable** identity for this image across plans (#313), so a manual plan order can name it:
+   * `c:<side>:<sortedItemIds>`. Unlike `groupKey` it does not move with position — it is the copies
+   * the image shows, which is what the collector reordered. */
+  token: string;
   /** The sets that contributed copies, in plan order. One id for a multi-copy set's group; possibly
    * several for a chunk of single-copy sets. */
   setIds: string[];
@@ -119,11 +128,24 @@ export interface PlannedCollage {
 export interface PlannedAttachment {
   kind: "attachment";
   attachmentId: string;
+  /** This image's stable identity for the manual plan order (#313): `a:<attachmentId>`. */
+  token: string;
   photoId: string;
   itemId: string | null;
 }
 
 export type PlannedImage = PlannedCollage | PlannedAttachment;
+
+/** The stable token of a collage side — the copies it shows, sorted so tile order does not change
+ * it, prefixed by the side so a front and its back stay distinct. */
+export function collageToken(side: PlanSide, itemIds: readonly string[]): string {
+  return `c:${side}:${[...itemIds].sort().join(",")}`;
+}
+
+/** The stable token of a manual attachment. */
+export function attachmentToken(attachmentId: string): string {
+  return `a:${attachmentId}`;
+}
 
 /**
  * A side a group could not produce, because at least one of its copies has no scan for that side
@@ -245,7 +267,14 @@ function renderGroup(group: CopyGroup, sides: PlanSide[], groupKey: string): Gro
       });
       continue;
     }
-    images.push({ kind: "collage", side, groupKey, setIds: group.setIds, tiles });
+    images.push({
+      kind: "collage",
+      side,
+      groupKey,
+      token: collageToken(side, tiles.map((t) => t.itemId)),
+      setIds: group.setIds,
+      tiles,
+    });
   }
   return { key: groupKey, images, skipped };
 }
@@ -264,11 +293,50 @@ function placeAttachments(
     images.splice(at, 0, {
       kind: "attachment",
       attachmentId: attachment.id,
+      token: attachmentToken(attachment.id),
       photoId: attachment.photoId,
       itemId: attachment.itemId,
     });
   }
   return images;
+}
+
+/**
+ * Applies the collector's manual plan order (#313) to the derived sequence. The stored order is an
+ * **override**, not a replacement: every image keeps a natural position (its index here), and the
+ * stored order only re-seats the images whose token it names.
+ *
+ * - An image whose token is in `order` sorts to that token's rank.
+ * - An image the order does not name — one added since the last reorder — sorts **just after its
+ *   natural predecessor**, so a freshly added collage or attachment lands where the derivation put
+ *   it rather than being flung to the end.
+ * - A token in `order` that no longer maps to any image is simply absent, so a sold-out collage or a
+ *   deleted attachment leaves no gap.
+ *
+ * The sort is stable, so images sharing a rank (consecutive newcomers) keep their natural order.
+ */
+function applyManualOrder(images: PlannedImage[], order: readonly string[]): PlannedImage[] {
+  if (order.length === 0) return images;
+  const rank = new Map(order.map((token, index) => [token, index] as const));
+
+  // A key per image: its stored rank when named, otherwise a fraction just past the last named
+  // image's rank so it trails its natural predecessor. `-1` seats leading newcomers before rank 0.
+  let anchor = -1;
+  let gap = 0;
+  const keyed = images.map((image, index) => {
+    const named = rank.get(image.token);
+    if (named !== undefined) {
+      anchor = named;
+      gap = 0;
+    } else {
+      gap += 1;
+    }
+    return { image, index, key: named !== undefined ? named : anchor + gap / (images.length + 1) };
+  });
+
+  return keyed
+    .sort((a, b) => a.key - b.key || a.index - b.index)
+    .map((entry) => entry.image);
 }
 
 /**
@@ -307,9 +375,13 @@ export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
     }
   }
 
-  const images = placeAttachments(
-    kept.flatMap((group) => group.images),
-    attachments
+  // Natural order first — grouping and truncation are properties of the composition, not of the
+  // upload order — then the manual order (#313) re-seats the survivors. Doing it in this order keeps
+  // the truncation invariants (a front/back pair drops together, attachments never drop) untouched:
+  // the manual order only permutes images that already made the cut.
+  const images = applyManualOrder(
+    placeAttachments(kept.flatMap((group) => group.images), attachments),
+    input.order ?? []
   );
 
   return {

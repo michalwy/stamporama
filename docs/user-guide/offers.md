@@ -277,9 +277,13 @@ What gets made follows the offer, not a choice you make here:
   over one missing reverse is easy to miss.
 - If the platform caps how many photos a listing takes, whole groups are dropped from the end (a
   front/back pair always goes together). The card says how many.
+- Anything you [attached by hand](#attaching-your-own-images) keeps the position you gave it and is
+  never dropped to fit the limit.
 
 Generate is unavailable, with the reason on the card, when the offer has no collage numbers yet, or
-when none of its copies have scans for the chosen sides.
+when there is nothing to render — no copy with a scan for the chosen sides and no attachment either.
+The collage numbers are needed even for a lone attachment: they decide the gap, the label strip and
+the background every image is drawn with.
 
 The images are **stored**, not made again on demand: what you download tomorrow is the same file you
 uploaded to the platform today.
@@ -287,8 +291,8 @@ uploaded to the platform today.
 ### When the offer changes afterwards
 
 Change the composition, reorder sets or copies, replace a scan, edit the photo settings, change a
-copy's location ref (the labels are drawn into the images), or change the platform's limits, and the
-card marks the stored images **Out of date**. Nothing happens to them:
+copy's location ref (the labels are drawn into the images), add an attachment, reorder the plan, or
+change the platform's limits, and the card marks the stored images **Out of date**. Nothing happens to them:
 they stay exactly as they are and keep being served, because they may already be live in a listing
 whose buyers are looking at them. It is a reminder, not an action — press **Regenerate** when you are
 ready to re-upload.
@@ -296,10 +300,49 @@ ready to re-upload.
 Regenerating replaces the whole set of images at once. If a run fails, the previous images are still
 there.
 
+### Attaching your own images
+
+Not everything a listing needs comes out of the composition. Expand the card and press **+ Add
+attachments** to put images of your own into the plan, in one of two ways:
+
+- **Photos of copies** — pick any photos of copies in this offer: fronts, backs, or extras. Use them
+  to show single details on their own — a perforation, a flaw, a cancel. Each gets the same label as
+  that copy's tile in a collage, so a buyer quoting the label still lands on the right stamp. Pick as
+  many as you like in one go; a ✓ marks each selected photo.
+- **Upload images** — drop in any pictures, several at once if you like. They belong to the offer,
+  not to a copy, so the parts of the label template that read inventory data come out empty; any
+  plain text you wrote into the template still shows. Nothing goes up unlabelled either way: an
+  attachment is rendered like every other image, with the same strip below it.
+
+You can add a caption; it is shown in the plan to help you recognise the entry and is never drawn on
+the image. With several picked at once, it applies to all of them.
+
+Remove an attachment with the **✕** beside it in the plan; an image you uploaded is deleted with it,
+a copy's own photo is left alone. Attachments are also **protected** from the platform's photo limit
+— when there are too many photos, generated collages are dropped first, because you added the
+attachment deliberately while a collage is the result of a rule.
+
+Adding or removing an attachment changes the **plan**, never the images already generated — the card
+simply marks them out of date until you regenerate.
+
+### Ordering the plan
+
+The plan is the order your photos go up in, and it is yours to arrange. Drag any entry by its ⠿ grip
+— a generated collage or an attachment alike — to put the whole sequence in the order you want.
+Collages start out following the offer's sets; once you drag them, your order is what sticks.
+
+Your order survives the offer [changing underneath it](#when-the-offer-changes-afterwards). Add a
+set and its new collage slots in where it naturally falls; a collage whose copies are gone simply
+drops away, and everything else keeps the order you gave it. Reordering the plan, like adding an
+attachment, marks the stored images out of date until you regenerate — the upload order changed, even
+though each image is the same.
+
 ### Reviewing and downloading them
 
-Expand the card and it shows the plan in upload order: every image with its number, its side, and the
-copies it was made from. Click a thumbnail to see it full size.
+Expand the card and it shows two lists. **Plan** is what pressing Generate would produce right now,
+in upload order, with your attachments in their places — this is where you arrange them. **Stored
+files** is what has actually been rendered: every image with its number, its side, and the copies it
+was made from. Click a thumbnail there to see it full size.
 
 Getting the files to the marketplace is a manual upload — Stamporama's job is handing you the right
 files in the right order:

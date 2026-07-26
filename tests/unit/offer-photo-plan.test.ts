@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  attachmentToken,
+  collageToken,
   planOfferPhotos,
   type PlanAttachment,
   type PlanCopy,
@@ -440,5 +442,108 @@ describe("planOfferPhotos attachments", () => {
 
     assert.deepEqual(shape(plan.images), ["attachment:m1"]);
     assert.equal(plan.configured, false);
+  });
+});
+
+// Manual plan order (#313) --------------------------------------------------
+
+describe("planOfferPhotos manual order", () => {
+  const attachment = (id: string, position: number): PlanAttachment => ({
+    id,
+    position,
+    photoId: `${id}-p`,
+    itemId: null,
+  });
+
+  // Two multi-copy sets, front only → two collages g0:a,b and g1:c,d, plus two attachments.
+  const baseInput = () => ({
+    sets: [set("s1", 0, [copy("a"), copy("b")]), set("s2", 1, [copy("c"), copy("d")])],
+    photoSides: "front" as const,
+    collage,
+    maxPhotos: null,
+    attachments: [attachment("m1", 4), attachment("m2", 4)],
+  });
+
+  const tokens = { g0: collageToken("front", ["a", "b"]), g1: collageToken("front", ["c", "d"]) };
+
+  it("leaves the derived order untouched when no order is given", () => {
+    const plan = planOfferPhotos(baseInput());
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a,b",
+      "g1:front:c,d",
+      "attachment:m1",
+      "attachment:m2",
+    ]);
+  });
+
+  it("reorders collages and attachments alike by their tokens", () => {
+    const plan = planOfferPhotos({
+      ...baseInput(),
+      order: [attachmentToken("m2"), tokens.g1, attachmentToken("m1"), tokens.g0],
+    });
+    assert.deepEqual(shape(plan.images), [
+      "attachment:m2",
+      "g1:front:c,d",
+      "attachment:m1",
+      "g0:front:a,b",
+    ]);
+  });
+
+  it("ignores tokens the plan no longer contains", () => {
+    // `m2` was removed and a stale collage token lingers; the order still applies to what is left.
+    const plan = planOfferPhotos({
+      ...baseInput(),
+      attachments: [attachment("m1", 4)],
+      order: [attachmentToken("m1"), "c:front:zzz", tokens.g1, tokens.g0],
+    });
+    assert.deepEqual(shape(plan.images), ["attachment:m1", "g1:front:c,d", "g0:front:a,b"]);
+  });
+
+  it("slots an image the order does not yet name after its natural predecessor", () => {
+    // A realistic reorder names every image; then a new attachment (`m2`) is added. It was not in
+    // the stored order, and its natural predecessor is the last image, so it lands at the end.
+    const plan = planOfferPhotos({
+      ...baseInput(),
+      order: [tokens.g1, tokens.g0, attachmentToken("m1")],
+    });
+    assert.deepEqual(shape(plan.images), [
+      "g1:front:c,d",
+      "g0:front:a,b",
+      "attachment:m1",
+      "attachment:m2",
+    ]);
+  });
+
+  it("orders the two sides of one group independently", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")])],
+      photoSides: "both",
+      collage,
+      maxPhotos: null,
+      order: [collageToken("back", ["a", "b"]), collageToken("front", ["a", "b"])],
+    });
+    assert.deepEqual(shape(plan.images), ["g0:back:a,b", "g0:front:a,b"]);
+  });
+
+  it("applies the order only after truncation, so protection is unchanged", () => {
+    // maxPhotos drops g2 by natural group order even though the manual order would end on g0.
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a"), copy("b")]),
+        set("s2", 1, [copy("c"), copy("d")]),
+        set("s3", 2, [copy("e"), copy("f")]),
+      ],
+      photoSides: "front",
+      collage,
+      maxPhotos: 2,
+      order: [
+        collageToken("front", ["e", "f"]),
+        collageToken("front", ["c", "d"]),
+        collageToken("front", ["a", "b"]),
+      ],
+    });
+    // g2 (e,f) was dropped by truncation; the surviving two are then shown in the manual order.
+    assert.deepEqual(shape(plan.images), ["g1:front:c,d", "g0:front:a,b"]);
+    assert.equal(plan.droppedGroups, 1);
   });
 });

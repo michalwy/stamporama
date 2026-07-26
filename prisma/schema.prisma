@@ -498,6 +498,8 @@ model Item {
   // via the `sale_line_item` join (the DB-level no-double-sale guard is the unique on `itemId`).
   offerSetMemberships OfferSetItem[]
   saleLineItems       SaleLineItem[]
+  /** Manual offer attachments (#313) whose label tokens resolve from this copy. */
+  offerPhotoAttachments OfferPhotoAttachment[]
 
   @@index([collectionId])
   @@index([stampId])
@@ -554,6 +556,9 @@ model Photo {
   offer Offer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
   /** The photo plan entry this image occupies, when it is part of an offer's plan (#311). */
   offerPhotoEntry OfferPhotoEntry?
+  /** Manual attachments (#313) that render *from* this image. A copy's scan can be attached to
+   * several offers; an offer's own upload is attached exactly once. */
+  offerPhotoAttachments OfferPhotoAttachment[]
 
   // Owner XOR (CHECK) and the per-owner partial unique `(*, role)` indexes are declared
   // in the migration SQL — Prisma cannot express partial unique indexes or check constraints.
@@ -745,15 +750,24 @@ model Offer {
   collageGapPercent Int?
   collageBackground String?
   collageLabelPercent Int?
+  // A manual **plan order** over this offer's photos (#313): an ordered list of stable tokens, one
+  // per planned image — `c:<side>:<sortedItemIds>` for a generated collage side, `a:<attachmentId>`
+  // for a manual attachment. It is an *override* of the derived order (set order + grouping), not a
+  // replacement: the engine still groups and truncates naturally, then reorders the surviving images
+  // by this list. Tokens the composition no longer contains are ignored; images added since the last
+  // reorder slot in after their natural predecessor. Empty (the default) means the derived order,
+  // so an offer never reordered by hand behaves exactly as before.
+  photoPlanOrder String[] @default([])
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
   sets       OfferSet[]
   saleLines  SaleLine[]
-  /** Listing images owned by this offer (#311): the generated collages, and later the files
-   * uploaded straight to it (#313). */
+  /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
+   * straight to it for a manual attachment (#313). */
   photos     Photo[]
   photoEntries OfferPhotoEntry[]
+  photoAttachments OfferPhotoAttachment[]
   photoGeneration OfferPhotoGeneration?
 
   @@index([collectionId])
@@ -830,6 +844,50 @@ model OfferPhotoEntry {
 
   @@index([offerId, sortOrder])
   @@map("offer_photo_entry")
+}
+
+// A manual photo attachment on an offer (#313) — an image the collector put in the plan by hand,
+// rather than one a rule produced.
+//
+// Two modes, one row shape. `copy_photo` points at a *specific* photo of a copy in the offer (a
+// front, a back, or an extra), so a perforation or a cancel can be shown on its own; its label
+// tokens resolve from that copy. `upload` points at an image uploaded straight to the offer — an
+// offer-owned `Photo` with `kind = original` — which has no copy at all, so inventory tokens
+// resolve empty and only the literal text of the label template renders.
+//
+// The row is the *plan entry*, not the image: this is where the derived/manual distinction lives,
+// which is what lets a regeneration (#315) recompute the collages and leave these alone. Being
+// manual, they are also protected from the platform's photo-count truncation (#309) — a collage is
+// the output of a rule, an attachment was added deliberately.
+//
+// `photoId` cascades on purpose. Deleting a copy's scan removes the attachment from *future* plans;
+// the image already generated from it is a separate `Photo` and survives, which is exactly the
+// staleness the fingerprint reports. An `upload` attachment's photo exists only for the attachment,
+// so removing the attachment deletes that row and its bytes explicitly.
+model OfferPhotoAttachment {
+  id      String @id @default(cuid())
+  offerId String
+  /** 0-based position in the finished plan. Out-of-range values clamp to the end (#309). */
+  sortOrder Int
+  /** `copy_photo` | `upload`. */
+  source  String
+  /** The image this attachment shows: a copy's own photo, or the offer's own upload. */
+  photoId String
+  /** The copy whose data annotates the tile (#312); null for an upload. */
+  itemId  String?
+  /** The collector's own caption for the attachment, shown in the plan. Never drawn on the image —
+   * the tile's annotation comes from the offer's label templates like every other tile. */
+  title   String?
+  createdAt DateTime @default(now())
+
+  offer Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  photo Photo  @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  item  Item?  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([offerId, sortOrder])
+  @@index([photoId])
+  @@index([itemId])
+  @@map("offer_photo_attachment")
 }
 
 // One atomic sellable unit inside an offer (ADR-0013). A set holds one or more `Item`s that sell

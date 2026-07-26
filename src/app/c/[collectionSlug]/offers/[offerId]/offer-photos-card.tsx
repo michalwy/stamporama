@@ -1,17 +1,30 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useOfferPhotoPlan, useInvalidateOffers, type OfferPhotoPlanView } from "../use-offers-query";
 import { formatBytes } from "@/lib/format-bytes";
 import { PhotoLightbox } from "../../inventory/photo-thumb";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
-import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
+import { AddAttachmentDialog } from "./add-attachment-dialog";
+import {
+  useReorderList,
+  showLineAt,
+  InsertionLine,
+  dragStyle,
+  DragGrip,
+} from "@/app/c/[collectionSlug]/shared/reorder-list";
+import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
 // explicit and runs in a background worker, so the card's first job is to start a run and then tell
 // the truth about it: what is stored, whether it still matches the offer, and what pressing Generate
 // would produce now.
+//
+// Expanded, it shows two lists. The **plan** is what Generate would produce right now, in upload
+// order, and it is where manual attachments (#313) are added, dragged into position and removed —
+// they sit between generated groups that do not exist as files yet, so the stored images could never
+// show where one goes. The **stored files** are what has actually been rendered.
 //
 // Its second job (#314) is getting the files out. There is no Delcampe API (#154 is still an open
 // scoping question), so delivery is a manual upload: the panel expands into the plan in order — each
@@ -77,6 +90,16 @@ const NOTE: React.CSSProperties = {
   margin: 0,
   fontSize: "0.8125rem",
   color: "var(--color-text-secondary)",
+};
+
+/** Separates the card's two lists: the plan (what Generate would produce) and the stored files. */
+const SECTION_HEADING: React.CSSProperties = {
+  margin: "0.25rem 0 0",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "var(--color-text-muted)",
 };
 
 function tinted(token: string, label: string, title?: string) {
@@ -270,6 +293,156 @@ function PlanPreview({
   );
 }
 
+/** What a planned entry is, in one line: its number, its side, and the copies it shows. */
+function plannedTitle(image: OfferPhotoPlannedImage, index: number): string {
+  const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
+  const what =
+    image.title ??
+    (image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", "));
+  const fallback = image.source === "upload" ? "Uploaded image" : "Attachment";
+  return [String(index + 1).padStart(2, "0"), side, what || fallback].filter(Boolean).join(" · ");
+}
+
+function plannedKind(image: OfferPhotoPlannedImage): string {
+  if (image.source === "collage") return "Planned collage";
+  if (image.source === "copy_photo") return "Attachment · copy photo";
+  return "Attachment · uploaded image";
+}
+
+/**
+ * The plan in upload order (#313) — what pressing Generate would produce right now. Every entry is
+ * draggable: attachments and generated collages alike, because the collector arranges the whole
+ * upload sequence, not just where the attachments fall (#313). A reorder is stored as the images'
+ * stable tokens, so it survives a composition change or a regeneration.
+ *
+ * This is a separate list from the stored files below on purpose. An entry holds a position among
+ * *planned* groups, which do not exist as files until a run finishes — so the stored images could
+ * never show the order being arranged. The plan is also the honest answer to "what would I get if I
+ * pressed Generate", which is exactly the question being asked while arranging it.
+ */
+function PlanSequence({
+  collectionId,
+  images,
+  disabled,
+  onReorder,
+  onRemove,
+}: {
+  collectionId: string;
+  images: OfferPhotoPlannedImage[];
+  disabled: boolean;
+  onReorder: (tokens: string[]) => void;
+  onRemove: (attachmentId: string) => void;
+}) {
+  const move = (from: number, to: number) => {
+    const next = [...images];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    // The whole sequence is stored as tokens: the override names every image, so the derived order
+    // cannot creep back in for the ones left untouched.
+    onReorder(next.map((image) => image.token));
+  };
+  // Every row carries a grip (`handleOnly`), so both collages and attachments start a drag — but a
+  // stray press elsewhere on a row does not.
+  const drag = useReorderList(!disabled, move, { handleOnly: true });
+
+  return (
+    <ul
+      style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}
+      {...(drag?.containerProps ?? {})}
+    >
+      {images.map((image, index) => (
+        <Fragment key={image.key}>
+          {showLineAt(drag, index) && <InsertionLine />}
+          <li
+            {...(drag?.itemProps(index) ?? {})}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.375rem 0.5rem",
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.5rem",
+              background: "var(--color-bg-page)",
+              ...dragStyle(drag, index),
+            }}
+          >
+            {drag ? (
+              <span
+                {...drag.handleProps(index)}
+                style={{ cursor: "grab", display: "inline-flex" }}
+              >
+                <DragGrip
+                  label={
+                    image.attachmentId
+                      ? "Drag this attachment to a position in the plan"
+                      : "Drag this collage to a position in the plan"
+                  }
+                />
+              </span>
+            ) : (
+              <span aria-hidden style={{ width: "1.25rem" }} />
+            )}
+            {image.previewPhotoId ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={photoUrl(collectionId, image.previewPhotoId, "thumb")}
+                alt=""
+                style={{
+                  width: "2.5rem",
+                  height: "2.5rem",
+                  objectFit: "cover",
+                  borderRadius: "0.375rem",
+                  border: "1px solid var(--color-border)",
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <span aria-hidden style={{ width: "2.5rem" }} />
+            )}
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={plannedTitle(image, index)}
+            >
+              {plannedTitle(image, index)}
+            </span>
+            <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+              {plannedKind(image)}
+            </span>
+            {image.attachmentId && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onRemove(image.attachmentId!)}
+                title="Remove this attachment from the plan"
+                aria-label={`Remove ${plannedTitle(image, index)}`}
+                style={{
+                  border: "none",
+                  background: "none",
+                  color: "var(--color-error)",
+                  cursor: disabled ? "default" : "pointer",
+                  fontSize: "0.875rem",
+                  padding: "0 0.25rem",
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </li>
+        </Fragment>
+      ))}
+      {drag && showLineAt(drag, images.length) && <InsertionLine />}
+    </ul>
+  );
+}
+
 /**
  * Sides the plan could not produce (#314). Deliberately loud: a set of eight losing its back collage
  * over one missing reverse scan is invisible in the preview — the image that is not there looks
@@ -321,7 +494,24 @@ export function OfferPhotosCard({
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | undefined>();
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachError, setAttachError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
+
+  /** Run one attachment mutation (#313) and pick up the plan it changed. Nothing here touches the
+   * stored images: they stay exactly as generated until the collector regenerates. */
+  const mutateAttachments = (
+    run: () => Promise<{ status: "success" } | { status: "error"; message: string }>,
+    onDone?: () => void
+  ) => {
+    setAttachError(undefined);
+    startTransition(async () => {
+      const result = await run();
+      if (result.status === "error") setAttachError(result.message);
+      else onDone?.();
+      await refetch();
+    });
+  };
 
   const generate = () => {
     setError(undefined);
@@ -358,6 +548,34 @@ export function OfferPhotosCard({
       error={settingsError}
       onClose={() => !isPending && setSettingsOpen(false)}
       onSubmit={saveSettings}
+    />
+  );
+
+  const attachDialog = attachOpen && (
+    <AddAttachmentDialog
+      collectionId={collectionId}
+      offerId={offerId}
+      isPending={isPending}
+      error={attachError}
+      onClose={() => !isPending && setAttachOpen(false)}
+      onAttachCopyPhotos={(picks, title) =>
+        mutateAttachments(async () => {
+          const { attachOfferCopyPhotosAction } = await import("@/app/actions/offers");
+          return attachOfferCopyPhotosAction(
+            offerId,
+            picks.map((p) => ({ ...p, title }))
+          );
+        }, () => setAttachOpen(false))
+      }
+      onAttachUploads={(uploadIds, title) =>
+        mutateAttachments(async () => {
+          const { attachOfferUploadsAction } = await import("@/app/actions/offers");
+          return attachOfferUploadsAction(
+            offerId,
+            uploadIds.map((uploadId) => ({ uploadId, title }))
+          );
+        }, () => setAttachOpen(false))
+      }
     />
   );
 
@@ -502,8 +720,50 @@ export function OfferPhotosCard({
 
           <SkippedNotice skipped={plan.plan.skipped} />
 
+          {/* The plan first — it is what Generate would produce, and the only place the upload order
+              (collages and attachments) can be seen and changed (#313). Stored files follow below. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+            <h4 style={SECTION_HEADING}>Plan</h4>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setAttachOpen(true)}
+              style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+              title="Attach photos of copies, or upload images to this offer"
+            >
+              + Add attachments
+            </button>
+          </div>
+          {plan.plan.images.length > 0 ? (
+            <PlanSequence
+              collectionId={collectionId}
+              images={plan.plan.images}
+              disabled={isPending}
+              onReorder={(tokens) =>
+                mutateAttachments(async () => {
+                  const { setOfferPhotoPlanOrderAction } = await import("@/app/actions/offers");
+                  return setOfferPhotoPlanOrderAction(offerId, tokens);
+                })
+              }
+              onRemove={(attachmentId) =>
+                mutateAttachments(async () => {
+                  const { removeOfferPhotoAttachmentAction } = await import("@/app/actions/offers");
+                  return removeOfferPhotoAttachmentAction(attachmentId);
+                })
+              }
+            />
+          ) : (
+            <p style={NOTE}>Nothing planned yet.</p>
+          )}
+          {attachError && <p style={{ ...NOTE, color: "var(--color-error)" }}>{attachError}</p>}
+
           {/* No second toggle: expanded means the whole plan, in upload order. */}
-          {stored > 0 && <PlanPreview collectionId={collectionId} images={plan.images} />}
+          {stored > 0 && (
+            <>
+              <h4 style={SECTION_HEADING}>Stored files</h4>
+              <PlanPreview collectionId={collectionId} images={plan.images} />
+            </>
+          )}
 
           {plan.status === "failed" && plan.error && (
             <p style={{ ...NOTE, color: "var(--color-error)" }}>{plan.error}</p>
@@ -515,6 +775,7 @@ export function OfferPhotosCard({
       {error && <p style={{ ...NOTE, color: "var(--color-error)" }}>{error}</p>}
 
       {settingsDialog}
+      {attachDialog}
     </div>
   );
 }

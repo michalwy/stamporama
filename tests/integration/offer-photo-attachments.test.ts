@@ -1,0 +1,416 @@
+import { describe, it, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import sharp from "sharp";
+import { prisma } from "../../src/lib/db";
+import { createItem } from "../../src/lib/items";
+import { createOffer, addOfferSet, updateOfferPhotoConfig } from "../../src/lib/offers";
+import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
+import {
+  attachOfferCopyPhoto,
+  attachOfferUpload,
+  listOfferPhotoAttachments,
+  OfferPhotoAttachmentError,
+  removeOfferPhotoAttachment,
+  setOfferPhotoPlanOrder,
+} from "../../src/lib/offer-photo-attachments";
+import {
+  claimNextOfferPhotoGeneration,
+  enqueueOfferPhotoGeneration,
+  getOfferPhotoPlanState,
+  runOfferPhotoGeneration,
+} from "../../src/lib/offer-photo-generation";
+import { getStorage, variantKey } from "../../src/lib/storage";
+
+const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-offer-attachments-"));
+process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
+
+// Manual photo attachments on an offer (#313). Placement and truncation are unit-tested on the pure
+// plan engine (#309); what needs a database and a storage backend is the wiring:
+//
+//   - a copy's *specific* photo, and an arbitrary upload, both become plan entries;
+//   - they hold explicit positions between the generated groups, and a reorder rewrites them;
+//   - a run renders them as annotated one-tile images, with their own entry `source`;
+//   - removing an upload takes its bytes with it; removing a copy attachment leaves the scan alone;
+//   - the guards: a copy outside the offer, a photo that is not that copy's, another user's offer.
+
+async function scan(width: number, height: number, red: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: red, g: 90, b: 160 } },
+  })
+    .png()
+    .toBuffer();
+}
+
+async function bytesExist(photo: {
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+}): Promise<boolean> {
+  const storage = getStorage(photo.storageBackend);
+  try {
+    for (const variant of ["full", "thumb"] as const) {
+      await storage.get(variantKey(photo.storageKey, variant, photo.mime), photo.mime);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+describe("offer photo attachments (#313)", () => {
+  let userId: string;
+  let strangerId: string;
+  let collectionId: string;
+  let offerId: string;
+  /** The one copy in the offer, with a front and a back scan. */
+  let itemId: string;
+  let frontPhotoId: string;
+  let backPhotoId: string;
+  /** A copy of the same collection that the offer does **not** hold. */
+  let outsiderItemId: string;
+  let outsiderPhotoId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-offer-attach-${ts}`;
+    strangerId = `test-user-offer-attach-other-${ts}`;
+    for (const [id, label] of [
+      [userId, "owner"],
+      [strangerId, "stranger"],
+    ] as const) {
+      await prisma.user.create({
+        data: {
+          id,
+          name: `Test User offer-attach-${label}-${ts}`,
+          email: `test-offer-attach-${label}-${ts}@example.com`,
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
+    const col = await prisma.collection.create({
+      data: {
+        slug: `col-offer-attach-${ts}`,
+        name: `Collection offer-attach-${ts}`,
+        baseCurrency: "EUR",
+        ownerId: userId,
+      },
+    });
+    collectionId = col.id;
+
+    const conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    const platformId = (
+      await prisma.contact.create({
+        data: {
+          collectionId,
+          name: `Delcampe ${ts}`,
+          platform: true,
+          maxPhotos: 6,
+          maxPhotoEdge: 700,
+        },
+      })
+    ).id;
+
+    offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "10.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    // A literal in the label template is what an attachment with no copy renders (#313 mode b):
+    // `{ref}` resolves empty against no copy, and the engine tidies what it leaves behind.
+    await updateOfferPhotoConfig(userId, offerId, {
+      photoSides: "both",
+      photoLabelLeftTemplate: "{ref}",
+      photoLabelRightTemplate: "Lot 7",
+      collage: {
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    });
+
+    const makeCopy = async (index: number) => {
+      const stamp = await prisma.stamp.create({
+        data: { collectionId, name: `Stamp ${index}`, primaryCatalogSortKey: index },
+      });
+      const item = await createItem(userId, collectionId, {
+        stampId: stamp.id,
+        conditionId,
+        forSale: true,
+      });
+      for (const [role, red] of [
+        ["front", 20 + index * 30],
+        ["back", 180 - index * 30],
+      ] as const) {
+        const upload = await stageUpload(userId, collectionId, {
+          bytes: await scan(120, 160, red),
+          mime: "image/png",
+        });
+        await applyPhotoChangeSet(userId, item.id, {
+          add: [{ uploadId: upload.id, role, title: null, sortOrder: 0 }],
+          update: [],
+          remove: [],
+        });
+      }
+      return item.id;
+    };
+
+    itemId = await makeCopy(0);
+    outsiderItemId = await makeCopy(1);
+    await addOfferSet(userId, offerId, [itemId]);
+
+    const photos = await prisma.photo.findMany({ where: { itemId }, select: { id: true, role: true } });
+    frontPhotoId = photos.find((p) => p.role === "front")!.id;
+    backPhotoId = photos.find((p) => p.role === "back")!.id;
+    outsiderPhotoId = (await prisma.photo.findFirst({
+      where: { itemId: outsiderItemId, role: "front" },
+      select: { id: true },
+    }))!.id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.deleteMany({ where: { id: { in: [userId, strangerId] } } });
+    await rm(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("refuses a copy the offer does not hold, and a photo that is not that copy's", async () => {
+    await assert.rejects(
+      () => attachOfferCopyPhoto(userId, offerId, { itemId: outsiderItemId, photoId: outsiderPhotoId }),
+      OfferPhotoAttachmentError,
+      "a copy outside the offer would show a stamp the buyer is not being sold"
+    );
+    await assert.rejects(
+      () => attachOfferCopyPhoto(userId, offerId, { itemId, photoId: outsiderPhotoId }),
+      OfferPhotoAttachmentError
+    );
+    await assert.rejects(
+      () => attachOfferCopyPhoto(strangerId, offerId, { itemId, photoId: frontPhotoId }),
+      OfferPhotoAttachmentError
+    );
+    await assert.rejects(
+      () => listOfferPhotoAttachments(strangerId, offerId),
+      OfferPhotoAttachmentError
+    );
+  });
+
+  it("attaches a specific photo of a copy, at the end of the plan", async () => {
+    const attachment = await attachOfferCopyPhoto(userId, offerId, {
+      itemId,
+      photoId: backPhotoId,
+      title: "Perforation",
+    });
+    assert.equal(attachment.source, "copy_photo");
+    assert.equal(attachment.itemId, itemId);
+    assert.equal(attachment.photoId, backPhotoId);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    // One copy with both scans → a front and a back collage, then the attachment.
+    assert.deepEqual(
+      state.plan.images.map((i) => [i.source, i.side, i.attachmentId]),
+      [
+        ["collage", "front", null],
+        ["collage", "back", null],
+        ["copy_photo", null, attachment.id],
+      ]
+    );
+    assert.equal(state.plan.images[2].title, "Perforation");
+    assert.deepEqual(state.plan.images[2].copyLabels.length, 1, "it renders from a copy, so it is labelled");
+  });
+
+  it("attaches an uploaded image, promoting the staged bytes to an offer-owned original", async () => {
+    const upload = await stageUpload(userId, collectionId, {
+      bytes: await scan(300, 200, 240),
+      mime: "image/png",
+    });
+    const attachment = await attachOfferUpload(userId, offerId, upload.id, "Shipping note");
+    assert.equal(attachment.source, "upload");
+    assert.equal(attachment.itemId, null);
+
+    const photo = await prisma.photo.findUnique({ where: { id: attachment.photoId } });
+    assert.equal(photo?.offerId, offerId, "an uploaded attachment is owned by the offer");
+    assert.equal(photo?.kind, "original", "it is a source image, not something the app generated");
+    assert.equal(photo?.itemId, null);
+    assert.ok(await bytesExist(photo!), "the staged bytes moved to their permanent key");
+    assert.equal(
+      await prisma.photoUpload.count({ where: { id: upload.id } }),
+      0,
+      "the staging row is consumed"
+    );
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.plan.imageCount, 4);
+    assert.equal(state.plan.images[3].source, "upload");
+    assert.deepEqual(state.plan.images[3].copyLabels, [], "an upload has no copy to name");
+  });
+
+  it("reorders the whole plan by tokens — attachments between the generated groups", async () => {
+    // Natural order is [front, back, detail(copy_photo), note(upload)]. Drag it into
+    // [detail, front, note, back] and store that as the plan order.
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    const tok = (pred: (i: (typeof before.plan.images)[number]) => boolean) =>
+      before.plan.images.find(pred)!.token;
+    const front = tok((i) => i.source === "collage" && i.side === "front");
+    const back = tok((i) => i.source === "collage" && i.side === "back");
+    const detail = tok((i) => i.source === "copy_photo");
+    const note = tok((i) => i.source === "upload");
+    await setOfferPhotoPlanOrder(userId, offerId, [detail, front, note, back]);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.deepEqual(
+      state.plan.images.map((i) => [i.source, i.side]),
+      [
+        ["copy_photo", null],
+        ["collage", "front"],
+        ["upload", null],
+        ["collage", "back"],
+      ]
+    );
+  });
+
+  it("renders the attachments in their planned positions, each as its own entry", async () => {
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.status, "ready");
+    assert.equal(state.outOfDate, false, "the fingerprint covers the attachments too");
+    assert.deepEqual(
+      state.images.map((i) => [i.sortOrder, i.source, i.side]),
+      [
+        [0, "copy_photo", null],
+        [1, "collage", "front"],
+        [2, "upload", null],
+        [3, "collage", "back"],
+      ]
+    );
+    // File names are a dense 1..n run in plan order, attachments included (#314).
+    assert.deepEqual(
+      state.images.map((i) => i.fileName),
+      ["01.jpg", "02.jpg", "03.jpg", "04.jpg"]
+    );
+
+    const rendered = await prisma.photo.findMany({
+      where: { id: { in: state.images.map((i) => i.photoId) } },
+    });
+    for (const photo of rendered) {
+      assert.equal(photo.offerId, offerId);
+      assert.equal(photo.kind, "generated", "even an attachment is rendered, never passed through");
+      assert.equal(photo.mime, "image/jpeg");
+      assert.ok(await bytesExist(photo));
+    }
+    // The uploaded original is a source, not an output: the run must not have swapped it away.
+    const originals = await prisma.photo.findMany({ where: { offerId, kind: "original" } });
+    assert.equal(originals.length, 1);
+    assert.ok(await bytesExist(originals[0]));
+  });
+
+  it("marks the plan out of date when the order changes, without touching the stored images", async () => {
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    // Reverse the stored order — a different upload sequence for the same images.
+    await setOfferPhotoPlanOrder(
+      userId,
+      offerId,
+      [...before.plan.images].reverse().map((i) => i.token)
+    );
+
+    const after = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(after.outOfDate, true);
+    assert.deepEqual(
+      after.images.map((i) => i.photoId),
+      before.images.map((i) => i.photoId),
+      "the files a buyer may already be looking at are untouched"
+    );
+  });
+
+  it("removes an upload with its bytes, and a copy attachment without touching the scan", async () => {
+    const attachments = await listOfferPhotoAttachments(userId, offerId);
+    const upload = attachments.find((a) => a.source === "upload")!;
+    const copyAttachment = attachments.find((a) => a.source === "copy_photo")!;
+    const uploadPhoto = (await prisma.photo.findUnique({ where: { id: upload.photoId } }))!;
+
+    await assert.rejects(
+      () => removeOfferPhotoAttachment(strangerId, upload.id),
+      OfferPhotoAttachmentError
+    );
+
+    await removeOfferPhotoAttachment(userId, upload.id);
+    assert.equal(await prisma.photo.count({ where: { id: upload.photoId } }), 0);
+    assert.equal(await bytesExist(uploadPhoto), false, "an uploaded image exists only for its attachment");
+
+    await removeOfferPhotoAttachment(userId, copyAttachment.id);
+    const scanRow = await prisma.photo.findUnique({ where: { id: copyAttachment.photoId } });
+    assert.ok(scanRow, "the copy still owns its scan");
+    assert.ok(await bytesExist(scanRow!), "and its bytes");
+
+    assert.deepEqual(await listOfferPhotoAttachments(userId, offerId), []);
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.deepEqual(
+      state.plan.images.map((i) => i.source),
+      ["collage", "collage"],
+      "the plan is back to what the composition alone produces"
+    );
+    assert.equal(
+      state.images.length,
+      4,
+      "the images already generated are kept — removing an attachment is a plan change"
+    );
+  });
+
+  it("reorders the generated collages themselves and renders in that order", async () => {
+    // Only the two collage sides remain now (#313 independent plan order): put the back before the
+    // front and regenerate, and the stored images take that order.
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    const front = before.plan.images.find((i) => i.side === "front")!.token;
+    const back = before.plan.images.find((i) => i.side === "back")!.token;
+    await setOfferPhotoPlanOrder(userId, offerId, [back, front]);
+
+    const planned = await getOfferPhotoPlanState(userId, offerId);
+    assert.deepEqual(
+      planned.plan.images.map((i) => i.side),
+      ["back", "front"],
+      "the collage order is the collector's now, not front-before-back"
+    );
+
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.status, "ready");
+    assert.equal(state.outOfDate, false, "the fingerprint covers the manual order");
+    assert.deepEqual(
+      state.images.map((i) => [i.sortOrder, i.side]),
+      [
+        [0, "back"],
+        [1, "front"],
+      ],
+      "the stored images are numbered in the collector's order"
+    );
+  });
+
+  it("drops an attachment from the plan when the photo it shows is deleted", async () => {
+    const attachment = await attachOfferCopyPhoto(userId, offerId, { itemId, photoId: frontPhotoId });
+    await prisma.photo.delete({ where: { id: frontPhotoId } });
+    assert.deepEqual(
+      await prisma.offerPhotoAttachment.findMany({ where: { id: attachment.id } }),
+      [],
+      "the attachment cascades with the scan it pointed at"
+    );
+  });
+});

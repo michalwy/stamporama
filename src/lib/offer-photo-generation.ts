@@ -16,7 +16,12 @@ import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/co
 import type { TileLabelTexts } from "./collage-label";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
-import { planOfferPhotos, type PlannedCollage } from "./offer-photo-plan";
+import {
+  planOfferPhotos,
+  type PlanAttachment,
+  type PlannedAttachment,
+  type PlannedCollage,
+} from "./offer-photo-plan";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
 import { renderTitleTemplate } from "./offer-title-template";
 import { makeTitleCopyMapper, TITLE_COPY_SELECT, type TitleCopyRow } from "./title-copy";
@@ -71,7 +76,7 @@ export class OfferPhotoGenerationError extends Error {}
 export interface OfferPhotoImage {
   photoId: string;
   sortOrder: number;
-  /** `collage` today; `copy_photo` / `upload` arrive with manual attachments (#313). */
+  /** `collage` for a group of set copies, `copy_photo` / `upload` for a manual attachment (#313). */
   source: string;
   side: "front" | "back" | null;
   /** Links the front/back pair rendered from the same copies. */
@@ -105,11 +110,41 @@ export interface OfferPhotoSkippedSide {
   missingCopyLabels: string[];
 }
 
+/**
+ * One image the current plan would produce, in plan order — including the manual attachments (#313)
+ * sitting between the generated groups. This is the sequence the card draws, and the only surface on
+ * which an attachment's position can be seen and changed: the generated groups it sits between do
+ * not exist as files until a run finishes, so a list of stored images could never show where an
+ * attachment goes.
+ */
+export interface OfferPhotoPlannedImage {
+  /** Stable within one plan — a React key, not a persistent id. */
+  key: string;
+  /** This image's **stable** identity for the manual plan order (#313): what the card sends back to
+   * record a reorder. `c:<side>:<sortedItemIds>` for a collage side, `a:<attachmentId>` for an
+   * attachment. */
+  token: string;
+  /** `collage` for a planned group; `copy_photo` / `upload` for a manual attachment. */
+  source: "collage" | "copy_photo" | "upload";
+  side: "front" | "back" | null;
+  /** Set for an attachment: what to drag, rename or remove. Null for a generated group. */
+  attachmentId: string | null;
+  /** The collector's caption for an attachment; null for a generated group. */
+  title: string | null;
+  /** An image to preview the entry with — an attachment's own source photo, or the first tile of a
+   * planned collage. The planned collage itself does not exist yet, so its first stamp stands in. */
+  previewPhotoId: string | null;
+  setLabels: string[];
+  copyLabels: string[];
+}
+
 /** What pressing Generate right now would produce — the plan, not the stored images. */
 export interface OfferPhotoPlanPreview {
   /** False while the offer carries no collage numbers (#308): nothing can be laid out. */
   configured: boolean;
   imageCount: number;
+  /** The planned sequence in upload order (#313), attachments included. */
+  images: OfferPhotoPlannedImage[];
   /** Groups the platform's photo-count limit would drop from the end (#309). */
   droppedGroups: number;
   /** The plan exceeds the platform's limit through protected attachments alone (#309). */
@@ -202,9 +237,23 @@ interface GenerationInputs {
   photoLabelRightTemplate: string | null;
   /** The rendered tile annotations per copy id (#312) — what is actually drawn, not the template. */
   tileLabels: Map<string, TileLabelTexts>;
+  /** The annotation an attachment with no copy is drawn with (#313 mode b): the same templates
+   * resolved against nothing, so inventory tokens come out empty — the engine tidies the separators
+   * they leave behind — while literal text still renders. Null when neither template says anything
+   * without a copy, which is the common case and yields an unlabelled tile. */
+  uploadTileLabel: TileLabelTexts | null;
   collage: OfferCollageValues | null;
   limits: PlatformPhotoLimits;
   sourceById: Map<string, SourcePhoto>;
+  /** The offer's manual plan order (#313): image tokens in the collector's chosen order. Empty means
+   * the derived order. */
+  photoPlanOrder: string[];
+  /** The offer's manual attachments (#313), already resolved to the photo each one shows. */
+  attachments: PlanAttachment[];
+  /** Each attachment's caption, by attachment id — for the panel only. */
+  attachmentTitles: Map<string, string | null>;
+  /** Which mode each attachment is, by attachment id: `copy_photo` or `upload`. */
+  attachmentSources: Map<string, "copy_photo" | "upload">;
 }
 
 const SIDE_ROLES = ["front", "back"];
@@ -224,6 +273,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       collageGapPercent: true,
       collageBackground: true,
       collageLabelPercent: true,
+      photoPlanOrder: true,
       collection: { select: { ownerId: true } },
       // Limits are read **live** from the platform (#308): they say what it accepts today. The
       // listing language comes along so a tile label reads the way the listing does (#293).
@@ -266,6 +316,27 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
                   },
                 },
               },
+            },
+          },
+        },
+      },
+      // Manual attachments (#313), with the image each one shows. A `copy_photo` points at a copy's
+      // own scan (which may or may not also be a tile of a collage) and an `upload` at an image
+      // owned by the offer itself; either way the renderer needs its bytes.
+      photoAttachments: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          sortOrder: true,
+          source: true,
+          itemId: true,
+          title: true,
+          photo: {
+            select: {
+              id: true,
+              storageBackend: true,
+              storageKey: true,
+              mime: true,
             },
           },
         },
@@ -320,13 +391,44 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     offer.collageBackground != null &&
     offer.collageLabelPercent != null;
 
+  // Attachments (#313). Their photos join the source map so the renderer can read the bytes, and a
+  // `copy_photo`'s copy joins the label subjects — a copy attached on its own need not be one the
+  // collages already cover.
+  const attachments: PlanAttachment[] = [];
+  const attachmentTitles = new Map<string, string | null>();
+  const attachmentSources = new Map<string, "copy_photo" | "upload">();
+  for (const row of offer.photoAttachments) {
+    attachments.push({
+      id: row.id,
+      position: row.sortOrder,
+      photoId: row.photo.id,
+      itemId: row.itemId,
+    });
+    attachmentTitles.set(row.id, row.title);
+    attachmentSources.set(row.id, row.source === "upload" ? "upload" : "copy_photo");
+    sourceById.set(row.photo.id, {
+      id: row.photo.id,
+      storageBackend: row.photo.storageBackend,
+      storageKey: row.photo.storageKey,
+      mime: row.photo.mime,
+    });
+  }
+
+  const labelSubjects = [
+    ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
+    ...attachments.flatMap((a) => (a.itemId ? [a.itemId] : [])),
+  ];
   const tileLabels = await readTileLabels(
     offer.collection.ownerId,
     offer.collectionId,
-    sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
+    [...new Set(labelSubjects)],
     { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
     offer.platform.titleLanguage
   );
+  // An attachment naming a copy the offer no longer holds keeps its place and renders: the plan is
+  // what the collector arranged, and the panel shows the copy as `removed` rather than dropping the
+  // image behind their back. Attaching one is guarded (`attachOfferCopyPhoto`); a copy leaving the
+  // offer afterwards is not.
 
   return {
     offerId: offer.id,
@@ -339,6 +441,10 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
     photoLabelRightTemplate: offer.photoLabelRightTemplate,
     tileLabels,
+    uploadTileLabel: renderCopylessTileLabel({
+      left: offer.photoLabelLeftTemplate,
+      right: offer.photoLabelRightTemplate,
+    }),
     collage: hasCollage
       ? {
           collageRows: offer.collageRows!,
@@ -354,20 +460,43 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
     },
     sourceById,
+    photoPlanOrder: offer.photoPlanOrder,
+    attachments,
+    attachmentTitles,
+    attachmentSources,
   };
 }
 
-/** The plan these inputs produce. Manual attachments (#313) do not exist yet, so none are passed. */
+/**
+ * The tile annotation for an attachment with no copy (#313 mode b): the offer's label templates
+ * resolved against **no copies at all**. Every inventory token comes out empty and the engine tidies
+ * the separators they leave, so what survives is whatever literal text the template carries — a
+ * "Detail" or a shop name renders, a `{ref}` does not. Null when that leaves both sides blank, which
+ * is the ordinary result and means an unlabelled tile.
+ */
+function renderCopylessTileLabel(templates: {
+  left: string | null;
+  right: string | null;
+}): TileLabelTexts | null {
+  const left = templates.left?.trim() ? renderTitleTemplate(templates.left, []).trim() : "";
+  const right = templates.right?.trim() ? renderTitleTemplate(templates.right, []).trim() : "";
+  return left || right ? { left, right } : null;
+}
+
+/** The plan these inputs produce, manual attachments (#313) included — the engine places them at
+ * their positions and protects them from truncation. */
 function planFor(inputs: GenerationInputs) {
   return planOfferPhotos({
     sets: inputs.sets,
     photoSides: inputs.photoSides,
     collage: inputs.collage,
     maxPhotos: inputs.limits.maxPhotos,
+    attachments: inputs.attachments,
+    order: inputs.photoPlanOrder,
   });
 }
 
-function fingerprintFor(inputs: GenerationInputs): string {
+function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFor>): string {
   return fingerprintOfferPhotoInputs({
     sets: inputs.sets,
     photoSides: inputs.photoSides,
@@ -378,6 +507,15 @@ function fingerprintFor(inputs: GenerationInputs): string {
     ),
     collage: inputs.collage,
     limits: inputs.limits,
+    attachments: inputs.attachments,
+    uploadTileLabel: inputs.uploadTileLabel
+      ? [inputs.uploadTileLabel.left ?? "", inputs.uploadTileLabel.right ?? ""]
+      : undefined,
+    // The **resolved** order the plan actually produced, not the raw stored list — so a stale token
+    // (a sold-out collage) does not keep the plan out of date forever, and reordering the images a
+    // buyer is looking at reads as a change. Passed only when the offer carries a custom order, so an
+    // offer never reordered by hand hashes exactly as it did before this existed.
+    order: inputs.photoPlanOrder.length > 0 ? plan.images.map((image) => image.token) : undefined,
   });
 }
 
@@ -450,7 +588,7 @@ export async function getOfferPhotoPlanState(
     outOfDate:
       images.length > 0 &&
       generation?.fingerprint != null &&
-      generation.fingerprint !== fingerprintFor(inputs),
+      generation.fingerprint !== fingerprintFor(inputs, plan),
     plannedCount: generation?.plannedCount ?? 0,
     renderedCount: generation?.renderedCount ?? 0,
     error: generation?.status === "failed" ? generation.error : null,
@@ -460,6 +598,36 @@ export async function getOfferPhotoPlanState(
     plan: {
       configured: plan.configured,
       imageCount: plan.images.length,
+      images: plan.images.map((image, index): OfferPhotoPlannedImage => {
+        if (image.kind === "attachment") {
+          return {
+            key: image.attachmentId,
+            token: image.token,
+            source: inputs.attachmentSources.get(image.attachmentId) ?? "upload",
+            side: null,
+            attachmentId: image.attachmentId,
+            title: inputs.attachmentTitles.get(image.attachmentId) ?? null,
+            previewPhotoId: image.photoId,
+            setLabels: [],
+            copyLabels: image.itemId
+              ? [inputs.labels.copies.get(image.itemId) ?? REMOVED_LABEL]
+              : [],
+          };
+        }
+        return {
+          key: `${image.groupKey}-${image.side}-${index}`,
+          token: image.token,
+          source: "collage",
+          side: image.side,
+          attachmentId: null,
+          title: null,
+          previewPhotoId: image.tiles[0]?.photoId ?? null,
+          setLabels: image.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
+          copyLabels: image.tiles.map(
+            (tile) => inputs.labels.copies.get(tile.itemId) ?? REMOVED_LABEL
+          ),
+        };
+      }),
       droppedGroups: plan.droppedGroups,
       exceedsLimit: plan.exceedsLimit,
       skipped: plan.skipped.map((s) => ({
@@ -637,7 +805,8 @@ async function deleteVariants(backend: string, storageKey: string, mime: string)
 }
 
 /**
- * Delete the stored bytes of an offer's generated images. Prisma's cascade drops the rows with the
+ * Delete the stored bytes of every image the offer owns — the generated ones and the originals
+ * uploaded straight to it for a manual attachment (#313). Prisma's cascade drops the rows with the
  * offer, but never the files — same contract as the copy/stamp paths in `photos.ts`. Call *before*
  * deleting the offer, while the rows can still be read.
  */
@@ -661,35 +830,46 @@ interface RenderedImage {
   height: number;
   sizeBytes: number;
   sortOrder: number;
-  side: "front" | "back";
-  pairKey: string;
+  /** `collage` for a planned group, `copy_photo` / `upload` for a manual attachment (#313). */
+  source: "collage" | "copy_photo" | "upload";
+  side: "front" | "back" | null;
+  pairKey: string | null;
   setIds: string[];
   itemIds: string[];
 }
 
-async function renderPlannedCollage(
-  image: PlannedCollage,
+/** One tile's bytes plus the annotation drawn under it. Shared by the collage and the attachment
+ * paths — an attachment is a one-tile collage, which is the whole reason nothing is ever passed
+ * through unlabelled (#310, #312). */
+async function tileSource(
+  photoId: string,
+  labels: TileLabelTexts | null,
+  inputs: GenerationInputs
+): Promise<CollageTileSource> {
+  const source = inputs.sourceById.get(photoId);
+  if (!source) {
+    // The plan was built from the same read, so a missing source is a bug, not a race.
+    throw new Error(`Planned tile references unknown photo ${photoId}.`);
+  }
+  return { buffer: await readFullBytes(source), labels };
+}
+
+/**
+ * Render one image from its tiles and store it. `columns` is the collage's own width for a group and
+ * 1 for an attachment; everything else — gap, label strip, background, the platform's output limits
+ * — is identical, so an attachment looks like the images around it rather than like a pass-through.
+ */
+async function renderTiles(
+  sources: CollageTileSource[],
+  columns: number,
   index: number,
   inputs: GenerationInputs
-): Promise<RenderedImage> {
-  const sources: CollageTileSource[] = [];
-  for (const tile of image.tiles) {
-    const source = inputs.sourceById.get(tile.photoId);
-    if (!source) {
-      // The plan was built from the same read, so a missing source is a bug, not a race.
-      throw new Error(`Planned tile references unknown photo ${tile.photoId}.`);
-    }
-    sources.push({
-      buffer: await readFullBytes(source),
-      labels: inputs.tileLabels.get(tile.itemId) ?? null,
-    });
-  }
-
+): Promise<Omit<RenderedImage, "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
   const collage = inputs.collage!;
   const rendered = await renderCollage(
     sources,
     {
-      columns: collage.collageColumns,
+      columns,
       gapPercent: collage.collageGapPercent,
       labelPercent: collage.collageLabelPercent,
       background: collage.collageBackground,
@@ -731,10 +911,53 @@ async function renderPlannedCollage(
     height: rendered.height,
     sizeBytes: rendered.buffer.byteLength,
     sortOrder: index,
+  };
+}
+
+/** A planned collage group: every tile is a copy's scan, annotated from that copy's own data. */
+async function renderPlannedCollage(
+  image: PlannedCollage,
+  index: number,
+  inputs: GenerationInputs
+): Promise<RenderedImage> {
+  const sources: CollageTileSource[] = [];
+  for (const tile of image.tiles) {
+    sources.push(await tileSource(tile.photoId, inputs.tileLabels.get(tile.itemId) ?? null, inputs));
+  }
+  return {
+    ...(await renderTiles(sources, inputs.collage!.collageColumns, index, inputs)),
+    source: "collage",
     side: image.side,
     pairKey: image.groupKey,
     setIds: image.setIds,
     itemIds: image.tiles.map((t) => t.itemId),
+  };
+}
+
+/**
+ * A manual attachment (#313): one tile, annotated like any other. A `copy_photo` resolves its label
+ * from the copy it shows, so a detail shot carries the same `A234` as that copy's tile in a collage
+ * — which is the point of attaching one. An `upload` has no copy, so it gets the copyless label:
+ * literal text only, or nothing at all.
+ *
+ * It carries no side and no pair: an attachment is one deliberate image, not half of a front/back.
+ */
+async function renderPlannedAttachment(
+  image: PlannedAttachment,
+  index: number,
+  inputs: GenerationInputs
+): Promise<RenderedImage> {
+  const labels = image.itemId
+    ? inputs.tileLabels.get(image.itemId) ?? null
+    : inputs.uploadTileLabel;
+  const source = await tileSource(image.photoId, labels, inputs);
+  return {
+    ...(await renderTiles([source], 1, index, inputs)),
+    source: inputs.attachmentSources.get(image.attachmentId) ?? "upload",
+    side: null,
+    pairKey: null,
+    setIds: [],
+    itemIds: image.itemId ? [image.itemId] : [],
   };
 }
 
@@ -752,7 +975,7 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
   if (!inputs) throw new OfferPhotoGenerationError("Offer not found.");
 
   const plan = planFor(inputs);
-  const fingerprint = fingerprintFor(inputs);
+  const fingerprint = fingerprintFor(inputs, plan);
   await prisma.offerPhotoGeneration.update({
     where: { offerId },
     data: { plannedCount: plan.images.length },
@@ -761,10 +984,11 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
   const rendered: RenderedImage[] = [];
   try {
     for (const [index, image] of plan.images.entries()) {
-      // Manual attachments (#313) are not implemented yet and the plan is built without them; an
-      // unexpected one is skipped rather than guessed at.
-      if (image.kind !== "collage") continue;
-      rendered.push(await renderPlannedCollage(image, index, inputs));
+      rendered.push(
+        image.kind === "collage"
+          ? await renderPlannedCollage(image, index, inputs)
+          : await renderPlannedAttachment(image, index, inputs)
+      );
       await prisma.offerPhotoGeneration.update({
         where: { offerId },
         data: { renderedCount: rendered.length },
@@ -778,7 +1002,9 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
   }
 
   // Swap: the previous generated photos go, the new ones arrive, in one transaction. Deleting a
-  // `Photo` cascades to its plan entry, so the entries need no separate delete.
+  // `Photo` cascades to its plan entry, so the entries need no separate delete. Only `generated`
+  // rows are swapped: an attachment's uploaded original (#313) is a source, not an output, and is
+  // rendered from again on every run.
   const previous = await prisma.photo.findMany({
     where: { offerId, kind: "generated" },
     select: { id: true, storageBackend: true, storageKey: true, mime: true },
@@ -809,7 +1035,7 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
           offerId,
           photoId: image.photoId,
           sortOrder: image.sortOrder,
-          source: "collage",
+          source: image.source,
           side: image.side,
           pairKey: image.pairKey,
           setIds: image.setIds,
