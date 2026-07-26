@@ -6,6 +6,32 @@ import type { PhotoVariant } from "@/lib/storage";
 
 const VALID_VARIANTS = new Set<PhotoVariant>(["full", "thumb"]);
 
+/** Extension for a stored mime, for the fallback download name. */
+const MIME_EXTENSION: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+  "image/gif": "gif",
+};
+
+/**
+ * A caller-supplied download name, reduced to something safe to put in a `Content-Disposition`
+ * header: no path separators, no quotes, no control characters, and bounded in length. Anything
+ * left empty falls back to the photo's own id.
+ */
+function safeDownloadName(requested: string | null, photoId: string, mime: string): string {
+  // Whitelist rather than blacklist: letters, digits and a few separators. That drops path
+  // separators, quotes and control characters in one pass, whatever the caller sent.
+  const cleaned = (requested ?? "")
+    .replace(/[^A-Za-z0-9._ -]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .trim()
+    .slice(0, 120);
+  if (cleaned && cleaned.replace(/[. ]/g, "")) return cleaned;
+  return `${photoId}.${MIME_EXTENSION[mime] ?? "bin"}`;
+}
+
 // Collection-scoped photo serving (#112). Authorizes by the photo's owning `collectionId`
 // (same pattern as the rest of the app) — files never sit under `public/`. Serves both the
 // thumbnail and full-size variants. `resolveUrl` returns a discriminated result so a future
@@ -48,6 +74,33 @@ export async function GET(
 
   const storage = getStorage(photo.storageBackend);
   const key = variantKey(photo.storageKey, variant as PhotoVariant, photo.mime);
+
+  // `?download=<name>` asks for the file rather than a view of it (#324). The `download` attribute
+  // on an `<a>` cannot carry this on its own — it is ignored the moment the response is a redirect
+  // to another origin, which is exactly what the GCS binding returns — so the disposition has to
+  // come from the server. That means streaming the bytes ourselves even on a redirecting backend:
+  // a download is a rare, deliberate click, so paying for the proxy hop is the cheaper trade.
+  const download = request.nextUrl.searchParams.get("download");
+  if (download !== null) {
+    let object;
+    try {
+      object = await storage.get(key, photo.mime);
+    } catch {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const fileName = safeDownloadName(download, photoId, object.mime);
+    return new Response(toWebStream(object.stream), {
+      status: 200,
+      headers: {
+        "Content-Type": object.mime,
+        "Content-Length": String(object.sizeBytes),
+        // Both forms: the plain one for old clients, the RFC 5987 one for anything non-ASCII the
+        // whitelist above would otherwise have stripped out of the readable name.
+        "Content-Disposition": `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        "Cache-Control": "private, max-age=31536000, immutable",
+      },
+    });
+  }
 
   let resolved;
   try {

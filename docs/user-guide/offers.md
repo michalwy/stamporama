@@ -402,6 +402,8 @@ files in the right order:
   they go up in order. Anything [held back](#holding-a-photo-back) is left out, which is what keeps
   the numbering a gapless run.
 - Each image also has its own **↓ 01.jpg** link in the preview, when you only need to replace one.
+  It saves the file under that name rather than opening it — click the thumbnail beside it when you
+  want a look instead.
 
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.

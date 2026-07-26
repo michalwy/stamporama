@@ -168,6 +168,13 @@ function photoUrl(collectionId: string, photoId: string, variant: "thumb" | "ful
   return `/api/collections/${collectionId}/photos/${photoId}/${variant}`;
 }
 
+/** The same bytes, asked for as a file (#324). The `download` attribute alone is not enough — a
+ * storage backend that redirects to another origin makes the browser ignore it and simply show the
+ * image — so the disposition is requested from the server, which also names the file. */
+function photoDownloadUrl(collectionId: string, photoId: string, fileName: string): string {
+  return `${photoUrl(collectionId, photoId, "full")}?download=${encodeURIComponent(fileName)}`;
+}
+
 /** What the image is, in one line: its number, its side, and the copies it shows. */
 function imageTitle(image: OfferPhotoImage): string {
   const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
@@ -303,7 +310,7 @@ function PlanPreview({
                 </span>
               )}
               <a
-                href={photoUrl(collectionId, image.photoId, "full")}
+                href={photoDownloadUrl(collectionId, image.photoId, image.fileName)}
                 download={image.fileName}
                 style={{
                   fontSize: "0.75rem",
