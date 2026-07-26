@@ -83,6 +83,10 @@ describe("offer photo attachments (#313)", () => {
   let strangerId: string;
   let collectionId: string;
   let offerId: string;
+  /** The stem every one of this offer's file names starts with (#326). The fixture offer is
+   *  unnamed, so it falls back to a slice of the offer's id. A function, not a constant: `offerId`
+   *  is only assigned in `before`. */
+  const stem = () => `offer-${offerId.slice(-6)}`;
   /** The one copy in the offer, with a front and a back scan. */
   let itemId: string;
   let frontPhotoId: string;
@@ -316,10 +320,11 @@ describe("offer photo attachments (#313)", () => {
         [3, "collage", "back"],
       ]
     );
-    // File names are a dense 1..n run in plan order, attachments included (#314).
+    // File names are the offer's stem (#326) plus a dense 1..n run in plan order, attachments
+    // included (#314).
     assert.deepEqual(
       state.images.map((i) => i.fileName),
-      ["01.jpg", "02.jpg", "03.jpg", "04.jpg"]
+      [1, 2, 3, 4].map((n) => `${stem()}-0${n}.jpg`)
     );
 
     const rendered = await prisma.photo.findMany({
@@ -359,7 +364,7 @@ describe("offer photo attachments (#313)", () => {
     );
     assert.deepEqual(
       after.images.map((i) => i.fileName),
-      ["01.jpg", "02.jpg", "03.jpg", "04.jpg"],
+      [1, 2, 3, 4].map((n) => `${stem()}-0${n}.jpg`),
       "and keep a dense upload run"
     );
     assert.deepEqual(
@@ -386,14 +391,14 @@ describe("offer photo attachments (#313)", () => {
     assert.equal(state.plan.overLimitCount, 2);
     assert.deepEqual(
       state.images.map((i) => i.fileName),
-      ["01.jpg", "02.jpg", "over-limit-01.jpg", "over-limit-02.jpg"],
+      [`${stem()}-01.jpg`, `${stem()}-02.jpg`, `${stem()}-over-limit-01.jpg`, `${stem()}-over-limit-02.jpg`],
       "only the upload set takes upload numbers"
     );
 
     const archive = await buildOfferPhotoArchive(userId, offerId);
     assert.deepEqual(
       zipEntryNames(archive.bytes),
-      ["01.jpg", "02.jpg"],
+      [`${stem()}-01.jpg`, `${stem()}-02.jpg`],
       "the ZIP is the upload set alone"
     );
 
@@ -412,7 +417,7 @@ describe("offer photo attachments (#313)", () => {
     const state = await getOfferPhotoPlanState(userId, offerId);
     const held = state.images.find((i) => i.token === collage.token)!;
     assert.equal(held.publish, false);
-    assert.ok(held.fileName.startsWith("unpublished-"), "it takes no upload number");
+    assert.ok(held.fileName.startsWith(`${stem()}-unpublished-`), "it takes no upload number");
     assert.equal(state.plan.uploadCount, 3, "the other three still go up");
     assert.equal(
       state.outOfDate,
@@ -424,7 +429,7 @@ describe("offer photo attachments (#313)", () => {
     const archive = await buildOfferPhotoArchive(userId, offerId);
     assert.deepEqual(
       zipEntryNames(archive.bytes),
-      ["01.jpg", "02.jpg", "03.jpg"],
+      [1, 2, 3].map((n) => `${stem()}-0${n}.jpg`),
       "the held-back image is absent and the run stays dense"
     );
 

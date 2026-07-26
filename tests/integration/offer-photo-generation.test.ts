@@ -460,7 +460,11 @@ describe("offer photo generation (#311)", () => {
     assert.equal(state.images.length, 1, "front-only, one group");
     const [image] = state.images;
 
-    assert.equal(image.fileName, "01.jpg", "plan position, padded, with the stored mime's extension");
+    assert.equal(
+      image.fileName,
+      `offer-${offerId.slice(-6)}-01.jpg`,
+      "the offer's stem (#326), then plan position, padded, with the stored mime's extension"
+    );
     assert.equal(image.itemIds.length, 3, "the three copies the collage actually shows");
     assert.deepEqual(image.copyLabels, ["Stamp 0", "Stamp 1", "Stamp 2"]);
     assert.deepEqual([...image.setLabels].sort(), ["Stamp 0", "Stamp 1", "Stamp 2"]);
@@ -473,7 +477,7 @@ describe("offer photo generation (#311)", () => {
     const entries = readZipEntries(archive.bytes);
     assert.deepEqual(
       entries.map((e) => e.name),
-      ["01.jpg"],
+      [`offer-${offerId.slice(-6)}-01.jpg`],
       "one file per stored image, numbered in plan order"
     );
 
@@ -490,6 +494,34 @@ describe("offer photo generation (#311)", () => {
     const chunks: Buffer[] = [];
     for await (const chunk of stored.stream) chunks.push(Buffer.from(chunk));
     assert.deepEqual(entries[0].contents, Buffer.concat(chunks));
+  });
+
+  it("names every file after the offer, so it stays identifiable outside the app (#326)", async () => {
+    await prisma.offer.update({ where: { id: offerId }, data: { name: "Węgry 1950 — zestaw" } });
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.deepEqual(
+      state.images.map((i) => i.fileName),
+      ["wegry-1950-zestaw-01.jpg"],
+      "diacritics are folded rather than dropped, so the stem stays readable"
+    );
+
+    const archive = await buildOfferPhotoArchive(userId, offerId);
+    assert.equal(archive.fileName, "wegry-1950-zestaw-photos.zip");
+    assert.deepEqual(
+      readZipEntries(archive.bytes).map((e) => e.name),
+      ["wegry-1950-zestaw-01.jpg"],
+      "the archive and its contents carry the same stem"
+    );
+
+    // Back to unnamed, which the tests around this one are written against — and which falls back
+    // to the offer's id rather than a constant, so two unnamed offers still differ.
+    await prisma.offer.update({ where: { id: offerId }, data: { name: null } });
+    const unnamed = await getOfferPhotoPlanState(userId, offerId);
+    assert.deepEqual(
+      unnamed.images.map((i) => i.fileName),
+      [`offer-${offerId.slice(-6)}-01.jpg`]
+    );
   });
 
   it("reports a side skipped for want of a complete set of scans", async () => {

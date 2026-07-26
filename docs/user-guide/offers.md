@@ -363,7 +363,7 @@ drag in one is a drag in the other.
 
 Reordering does **not** make anything out of date and never needs a regeneration. The images do not
 change — only their order does — so the stored files are simply renumbered on the spot, which is also
-what renames them (`01.jpg`, `02.jpg`…) and what the ZIP follows.
+what renames them (`wegry-1950-01.jpg`, `wegry-1950-02.jpg`…) and what the ZIP follows.
 
 Your order survives the offer [changing underneath it](#when-the-offer-changes-afterwards). Add a set
 and its new collage slots in where it naturally falls; a collage whose copies are gone simply drops
@@ -387,8 +387,8 @@ in the ZIP.
   cap out instead. Nothing is protected from the cap — not a front/back pair, not an attachment —
   because your order is what says which photos matter most.
 
-Held-back rows are dimmed in both lists, and their downloads are named `unpublished-01.jpg` /
-`over-limit-01.jpg` so a number never suggests a slot in the listing that the image does not have.
+Held-back rows are dimmed in both lists, and their downloads are named `…-unpublished-01.jpg` /
+`…-over-limit-01.jpg` so a number never suggests a slot in the listing that the image does not have.
 
 ### Reviewing and downloading them
 
@@ -404,13 +404,18 @@ will be made from.
 Getting the files to the marketplace is a manual upload — Stamporama's job is handing you the right
 files in the right order:
 
-- **Download all** gives you the images that are actually going up as a ZIP, named `01.jpg`,
-  `02.jpg` and so on in upload order. Unpack it and select the lot in your platform's bulk upload;
-  they go up in order. Anything [held back](#holding-a-photo-back) is left out, which is what keeps
-  the numbering a gapless run.
-- Each image also has its own **↓ 01.jpg** link in the preview, when you only need to replace one.
-  It saves the file under that name rather than opening it — click the thumbnail beside it when you
-  want a look instead.
+- **Download all** gives you the images that are actually going up as a ZIP, named
+  `wegry-1950-01.jpg`, `wegry-1950-02.jpg` and so on in upload order. Unpack it and select the lot in
+  your platform's bulk upload; they go up in order. Anything [held back](#holding-a-photo-back) is
+  left out, which is what keeps the numbering a gapless run.
+- Each image also has its own **↓** link in the preview, under the same name, when you only need to
+  replace one. It saves the file rather than opening it — click the thumbnail beside it when you want
+  a look instead.
+
+Every file is prefixed with the **offer's own title**, shortened into something a file system is
+happy with, because these files leave Stamporama: unpacked into a downloads folder beside another
+listing's photos, a bare `01.jpg` says nothing about which offer it belongs to. An offer with no
+title yet falls back to a short piece of its id, so two untitled offers still do not collide.
 
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.

@@ -75,11 +75,18 @@ const ACTIVE_STATUSES = ["queued", "running"] as const;
  * is a snapshot; the mismatch is what `outOfDate` reports, not something to hide. */
 const REMOVED_LABEL = "removed";
 
-/** `01.jpg`, `02.jpg`… — upload position, 1-based, zero-padded so a file manager sorts them right.
+/** `wegry-01.jpg`, `wegry-02.jpg`… — the offer's own slug, then the upload position, 1-based and
+ * zero-padded so a file manager sorts them right.
+ *
+ * The slug is there because these files leave the app (#326): downloaded one at a time or unpacked
+ * from the ZIP, they land in a folder beside another offer's `01.jpg`, and a bare number says
+ * nothing about which listing it belongs to. It is the same slug the archive itself is named with,
+ * so a ZIP and its contents read as one set.
+ *
  * `prefix` names the images that are *not* part of the upload run (#313), which get their own dense
  * sequence so no number of theirs can be mistaken for a slot in the listing. */
-function planFileName(index: number, mime: string, prefix = ""): string {
-  return `${prefix}${String(index + 1).padStart(2, "0")}.${extForMime(mime)}`;
+function planFileName(offerSlug: string, index: number, mime: string, prefix = ""): string {
+  return `${offerSlug}-${prefix}${String(index + 1).padStart(2, "0")}.${extForMime(mime)}`;
 }
 
 /** Raised by {@link enqueueOfferPhotoGeneration} when there is nothing sensible to render. */
@@ -107,13 +114,15 @@ export interface OfferPhotoImage {
   overLimit: boolean;
   /**
    * The name this image takes when downloaded, on its own or inside the plan's ZIP (#314):
-   * `01.jpg`, `02.jpg`… Plain numbers in **upload** order, because the whole point is a folder that
-   * sorts into upload order in any file manager. Our numbering is not the platform's — position
-   * there is whatever was uploaded — and that is fine: labels identify copies independently (#312).
+   * `<offer>-01.jpg`, `<offer>-02.jpg`… The offer's own slug (#326) so a file still says which
+   * listing it belongs to once it is sitting in a folder next to another offer's, then the number
+   * in **upload** order, because the whole point is a folder that sorts into upload order in any
+   * file manager. Our numbering is not the platform's — position there is whatever was uploaded —
+   * and that is fine: labels identify copies independently (#312).
    *
    * Images outside the upload set take a name that is deliberately not part of that run
-   * (`unpublished-01.jpg`, `over-limit-01.jpg`), so a number never implies a slot the image does not
-   * have and the ZIP's `01…n` stays dense.
+   * (`<offer>-unpublished-01.jpg`, `<offer>-over-limit-01.jpg`), so a number never implies a slot
+   * the image does not have and the ZIP's `01…n` stays dense.
    */
   fileName: string;
   /** The copies the image shows, in tile order. Ids no longer in the offer resolve to a placeholder
@@ -719,16 +728,19 @@ export async function getOfferPhotoPlanState(
     return { publish: match?.publish ?? true, overLimit: match?.overLimit ?? false };
   };
   const counters = { upload: 0, unpublished: 0, overLimit: 0 };
+  // Every image is named for the offer it belongs to (#326), so a file keeps saying which listing
+  // it is for once it has left the app.
+  const offerSlug = offerFileSlug(inputs.offerName, offerId);
   const images: OfferPhotoImage[] = entries.map((e) => {
     const { publish, overLimit } = marksFor(e.token);
     // Numbered by position among the images that are actually uploaded, so the run is a dense 1..n
     // for a bulk upload. The other two get their own sequences under a name that cannot be mistaken
     // for an upload slot.
     const fileName = !publish
-      ? planFileName(counters.unpublished++, e.photo.mime, "unpublished-")
+      ? planFileName(offerSlug, counters.unpublished++, e.photo.mime, "unpublished-")
       : overLimit
-        ? planFileName(counters.overLimit++, e.photo.mime, "over-limit-")
-        : planFileName(counters.upload++, e.photo.mime);
+        ? planFileName(offerSlug, counters.overLimit++, e.photo.mime, "over-limit-")
+        : planFileName(offerSlug, counters.upload++, e.photo.mime);
     return {
     photoId: e.photoId,
     sortOrder: e.sortOrder,
@@ -830,8 +842,12 @@ export async function getOfferPhotoPlanState(
 // ── Archive ──────────────────────────────────────────────────────────────────
 
 /**
- * The offer's **upload set** as one ZIP, in plan order, named `01.jpg`, `02.jpg`… — the file the
- * collector drops into a marketplace's bulk upload (#314). Owner-checked.
+ * The offer's **upload set** as one ZIP, in plan order, named `<offer>-01.jpg`, `<offer>-02.jpg`…
+ * — the file the collector drops into a marketplace's bulk upload (#314). Owner-checked.
+ *
+ * The names come straight from the read model, so a file unpacked here is called exactly what the
+ * same file downloaded on its own is called, and both carry the offer's slug (#326): these files
+ * end up in a folder with another listing's, where a bare `01.jpg` names nothing.
  *
  * Only the images that are actually going up are in it (#313): an image marked do-not-publish, or
  * one past the platform's photo limit, is stored and downloadable on its own but has no place in a
@@ -875,11 +891,19 @@ export async function buildOfferPhotoArchive(
     }))
   );
 
-  return { fileName: `${archiveSlug(offer?.name)}-photos.zip`, bytes: zip(files) };
+  return { fileName: `${offerFileSlug(offer?.name, offerId)}-photos.zip`, bytes: zip(files) };
 }
 
-/** A safe, recognisable archive name from the offer's own name. */
-function archiveSlug(name: string | null | undefined): string {
+/**
+ * A safe, recognisable file-name stem for one offer — used for the archive and, since #326, for
+ * every image inside it and every image downloaded on its own.
+ *
+ * The offer's own name when it has one (it usually does: the title is generated at creation from
+ * the platform's template, #209/#210). When it does not, the fall-back is a slice of its id rather
+ * than a bare `offer`, because a constant stem would put every unnamed offer's `01.jpg` straight
+ * back in collision with every other's — the very thing the stem is here to prevent.
+ */
+function offerFileSlug(name: string | null | undefined, offerId: string): string {
   const slug = (name ?? "")
     // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
     .normalize("NFKD")
@@ -888,7 +912,7 @@ function archiveSlug(name: string | null | undefined): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .toLowerCase();
-  return slug || "offer";
+  return slug || `offer-${offerId.slice(-6)}`;
 }
 
 // ── Enqueue ──────────────────────────────────────────────────────────────────
