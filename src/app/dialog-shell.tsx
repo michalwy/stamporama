@@ -278,6 +278,10 @@ type DialogActionsProps = {
   error?: ReactNode;
   onCancel?: () => void;
   onAction?: () => void;
+  /** Content pinned to the left of the footer, opposite the buttons. For a control that qualifies
+   *  the action itself — e.g. "regenerate photos after saving" (#328) — rather than another field:
+   *  it belongs beside the button it changes, not at the end of the form. */
+  leading?: ReactNode;
 };
 
 export function DialogActions({
@@ -289,10 +293,12 @@ export function DialogActions({
   error,
   onCancel,
   onAction,
+  leading,
 }: DialogActionsProps) {
   const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
   return (
     <DialogFooter>
+      {leading != null && <div style={{ marginRight: "auto", minWidth: 0 }}>{leading}</div>}
       <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
         {cancelLabel}
       </DialogSecondaryButton>

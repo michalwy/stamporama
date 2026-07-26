@@ -250,6 +250,13 @@ listing:
 
 Rows × columns is a maximum, not a frame: fewer stamps simply make a smaller image.
 
+Changing any of these puts images you have already generated **out of date**, so the dialog's footer
+carries **Regenerate photos after saving**, ticked by default — saving then queues the run for you
+and the Save button reads **Save & regenerate**. Untick it when the settings should change but the
+files should not: the stored images stay exactly as they are, flagged *Out of date*, until you press
+**Regenerate** yourself. Nothing is regenerated when the settings leave the offer with no collage to
+render.
+
 Because these values live on the offer, changing a platform's defaults — or editing a collage
 template — never alters an offer you have already prepared. That matters most for the tile labels: a
 buyer referring to a label on an image you have already uploaded keeps getting the same label.

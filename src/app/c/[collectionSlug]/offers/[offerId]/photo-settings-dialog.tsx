@@ -154,6 +154,8 @@ export function PhotoSettingsDialog({
   const [labelRight, setLabelRight] = useState(config.photoLabelRightTemplate ?? "");
   const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config));
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
+  // Regenerate on save (#328), on by default — see the note by the footer checkbox.
+  const [regenerate, setRegenerate] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -376,11 +378,39 @@ export function PhotoSettingsDialog({
           </p>
         </DialogBody>
 
+        {/* Saving these settings puts the stored images out of date (#311), so the regeneration is
+            offered where the save is rather than as a second trip to the card (#328). Checked by
+            default: the settings exist to change what the images look like, and photos that do not
+            match the settings that produced them are the exception, not the norm. Unchecking keeps
+            the old files exactly as they are — they may already be live on the platform (#312). */}
         <DialogActions
-          actionLabel={isPending ? "Saving…" : "Save settings"}
+          actionLabel={isPending ? "Saving…" : regenerate ? "Save & regenerate" : "Save settings"}
           onCancel={onClose}
           disabled={isPending}
           error={error}
+          leading={
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4375rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-secondary)",
+                cursor: isPending ? "default" : "pointer",
+              }}
+              title="Render this offer's images again once the settings are saved, replacing the stored ones"
+            >
+              <input
+                type="checkbox"
+                name="regeneratePhotos"
+                checked={regenerate}
+                onChange={(e) => setRegenerate(e.target.checked)}
+                disabled={isPending}
+                style={{ cursor: isPending ? "default" : "pointer" }}
+              />
+              Regenerate photos after saving
+            </label>
+          }
         />
       </form>
     </DialogShell>

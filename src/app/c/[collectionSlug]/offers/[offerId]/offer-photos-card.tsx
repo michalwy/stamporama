@@ -718,17 +718,37 @@ export function OfferPhotosCard({
     });
   };
 
-  /** Save the photo configuration edited in the dialog, then refresh the plan it feeds. */
+  /**
+   * Save the photo configuration edited in the dialog, then refresh the plan it feeds — and, unless
+   * the collector unticked it, start the regeneration the change calls for (#328). The dialog's own
+   * checkbox rides in the same form, so one submit is one decision.
+   *
+   * The regeneration is decided against the *saved* plan, not the one on screen when the dialog
+   * opened: clearing the collage numbers leaves nothing to render, and queueing a run that can only
+   * fail would answer a save with an error about something the collector did on purpose.
+   */
   const saveSettings = (formData: FormData) => {
     setSettingsError(undefined);
+    const regenerate = formData.get("regeneratePhotos") != null;
     startTransition(async () => {
-      const { updateOfferPhotoConfigAction } = await import("@/app/actions/offers");
+      const { updateOfferPhotoConfigAction, generateOfferPhotosAction } = await import(
+        "@/app/actions/offers"
+      );
       const result = await updateOfferPhotoConfigAction(offerId, formData);
-      if (result.status === "success") {
-        setSettingsOpen(false);
-        invalidateAll(collectionId);
-        await refetch();
-      } else setSettingsError(result.message);
+      if (result.status !== "success") {
+        setSettingsError(result.message);
+        return;
+      }
+      setSettingsOpen(false);
+      invalidateAll(collectionId);
+      const saved = await refetch();
+      if (!regenerate) return;
+      const next = saved.data;
+      if (!next?.plan.configured || next.plan.imageCount === 0) return;
+      // Enqueuing while a run is already in flight is a no-op server-side, so this is safe to fire.
+      const queued = await generateOfferPhotosAction(offerId);
+      if (queued.status === "error") setError(queued.message);
+      await refetch();
     });
   };
 
