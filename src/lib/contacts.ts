@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
+import { normalizeDescriptionFormat } from "./description-format";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -93,6 +94,11 @@ export interface ContactData extends ContactRoles {
    * is no built-in default). Only meaningful for the `platform` role. */
   descriptionTemplate: string | null;
   privateNoteTemplate: string | null;
+  /** What this platform's description field accepts (#319) — plain text, HTML or Markdown. Seeded
+   * onto every offer created here, which is where rendering and copying read it (ADR-0019). Only
+   * meaningful for the `platform` role. Normalised on write (like `photoSides`), so a reader can
+   * take it at face value. */
+  descriptionFormat: string;
   /** ISO 639-1 language the platform's generated listing text is written in (#293), or null when
    * unset. Only meaningful for the `platform` role; drives which entity translations the title
    * tokens resolve. */
@@ -129,6 +135,7 @@ const CONTACT_SELECT = {
   titleTemplate: true,
   descriptionTemplate: true,
   privateNoteTemplate: true,
+  descriptionFormat: true,
   titleLanguage: true,
   maxPhotos: true,
   maxPhotoEdge: true,
@@ -159,6 +166,9 @@ export interface ContactCreateInput {
    * Set/edited on the platform's contact form. */
   descriptionTemplate?: string | null;
   privateNoteTemplate?: string | null;
+  /** What the platform's description field accepts (#319). Normalised on write, so an unknown or
+   * missing value simply stores plain text. */
+  descriptionFormat?: string | null;
   /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
   titleLanguage?: string | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
@@ -342,6 +352,7 @@ export async function createContact(
         titleTemplate: data.titleTemplate ?? null,
         descriptionTemplate: data.descriptionTemplate ?? null,
         privateNoteTemplate: data.privateNoteTemplate ?? null,
+        descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
@@ -386,6 +397,7 @@ export async function updateContact(
         titleTemplate: data.titleTemplate ?? null,
         descriptionTemplate: data.descriptionTemplate ?? null,
         privateNoteTemplate: data.privateNoteTemplate ?? null,
+        descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,

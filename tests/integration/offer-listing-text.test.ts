@@ -98,6 +98,7 @@ describe("offer description + private note (#266, #267)", () => {
           titleTemplate: "{catalog} {name}",
           descriptionTemplate: DESCRIPTION_TEMPLATE,
           privateNoteTemplate: NOTE_TEMPLATE,
+          descriptionFormat: "markdown",
         },
       })
     ).id;
@@ -134,6 +135,35 @@ describe("offer description + private note (#266, #267)", () => {
     assert.equal(detail?.name, "Mi 12 Mercury");
     assert.equal(detail?.description, "Mercury 1850\nCondition: Used\n\n- Mi 12 Mercury");
     assert.equal(detail?.privateNote, "Mi 12 · Stockbook A");
+  });
+
+  it("seeds the description format from the platform, and keeps it when the platform changes", async () => {
+    // The format (#319) is copied at creation like the photo defaults, so a listing keeps the
+    // interpretation it was written for even after the platform is reconfigured.
+    const offerId = await offerOn(fullPlatformId, [mercuryId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "markdown");
+
+    await prisma.contact.update({
+      where: { id: fullPlatformId },
+      data: { descriptionFormat: "html" },
+    });
+    assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "markdown");
+
+    // The offer's own value is editable, and anything unknown falls back to plain text.
+    await patchOffer(userId, offerId, { descriptionFormat: "html" });
+    assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "html");
+    await patchOffer(userId, offerId, { descriptionFormat: "rtf" });
+    assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "plain");
+
+    await prisma.contact.update({
+      where: { id: fullPlatformId },
+      data: { descriptionFormat: "markdown" },
+    });
+  });
+
+  it("starts a platform with no format configured on plain text", async () => {
+    const offerId = await offerOn(titleOnlyPlatformId, [mercuryId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "plain");
   });
 
   it("generates nothing for a field the platform has no template for", async () => {

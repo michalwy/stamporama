@@ -2,11 +2,23 @@
 
 import { useState } from "react";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
+import {
+  DESCRIPTION_FORMATS,
+  DESCRIPTION_FORMAT_LABELS,
+  normalizeDescriptionFormat,
+  type DescriptionFormat,
+} from "@/lib/description-format";
 import type { OfferDetail } from "@/lib/offers";
 
 // The offer's two long generated texts (#266 description, #267 private note): shown under the header
 // card, edited in place, and regenerated per field from the platform's template. The title (#209)
 // stays in the header — it is the offer's identity, these are the listing's body.
+//
+// The description also carries a **format** (#319) — plain text, HTML or Markdown, seeded from the
+// platform. It is shown rendered, the way the platform will show it, with a Source switch back to
+// what is actually stored; editing always edits the source. The private note has no format: it is a
+// note to self, and the platforms that offer one treat it as plain text.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -84,6 +96,9 @@ export interface OfferListingTextProps {
   onSave: (field: Field, value: string) => void;
   /** Regenerate one field from the platform's template, overwriting what is there. */
   onRegenerate: (field: Field) => void;
+  /** Change how this listing's description is read (#319) — the offer's own copy of the platform's
+   * setting, so changing it here affects this listing alone. */
+  onFormatChange: (format: DescriptionFormat) => void;
 }
 
 /**
@@ -93,10 +108,21 @@ export interface OfferListingTextProps {
  * are empty the card collapses to a single "Add listing text" row, so an offer that needs neither
  * costs one line.
  */
-export function OfferListingText({ offer, isPending, onSave, onRegenerate }: OfferListingTextProps) {
+export function OfferListingText({
+  offer,
+  isPending,
+  onSave,
+  onRegenerate,
+  onFormatChange,
+}: OfferListingTextProps) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState<Field | null>(null);
   const [draft, setDraft] = useState("");
+  // The description shows rendered by default — that is what the buyer will read — with this
+  // switching to the stored source. Only offered when there is a difference to see.
+  const [showSource, setShowSource] = useState(false);
+  const format = normalizeDescriptionFormat(offer.descriptionFormat);
+  const formatted = format !== "plain";
 
   const empty = !offer.description && !offer.privateNote;
   if (empty && !expanded && editing === null) {
@@ -147,9 +173,52 @@ export function OfferListingText({ offer, isPending, onSave, onRegenerate }: Off
               <span style={{ flex: 1 }} />
               {!isEditing && (
                 <>
+                  {/* The format the platform's field takes (#319), seeded from the platform and
+                      changed here for this listing alone. It sits with the field's other controls
+                      because it belongs to the same set of decisions — how this text is shown,
+                      copied and rewritten. */}
+                  {f.key === "description" && (
+                    <select
+                      value={format}
+                      onChange={(e) => onFormatChange(normalizeDescriptionFormat(e.target.value))}
+                      disabled={isPending}
+                      aria-label="Description format"
+                      title="How this platform reads the description — it renders and copies accordingly"
+                      style={{
+                        ...SMALL_BTN,
+                        padding: "0.125rem 0.25rem",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {DESCRIPTION_FORMATS.map((v) => (
+                        <option key={v} value={v}>
+                          {DESCRIPTION_FORMAT_LABELS[v]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {/* Only worth offering where source and rendering differ. */}
+                  {f.key === "description" && formatted && value && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSource((v) => !v)}
+                      title={
+                        showSource
+                          ? "Show the description the way the platform will"
+                          : "Show the description as it is stored"
+                      }
+                      style={SMALL_BTN}
+                    >
+                      {showSource ? "Rendered" : "Source"}
+                    </button>
+                  )}
                   {/* Copy first (#327): getting the generated wording into the platform's own form
                       is the routine act here — regenerating and editing are the exceptions. */}
-                  <CopyButton value={value} label={f.label.toLowerCase()} />
+                  <CopyButton
+                    value={value}
+                    label={f.label.toLowerCase()}
+                    format={f.key === "description" ? format : undefined}
+                  />
                   <button
                     type="button"
                     onClick={() => onRegenerate(f.key)}
@@ -209,8 +278,19 @@ export function OfferListingText({ offer, isPending, onSave, onRegenerate }: Off
                   </span>
                 </div>
               </div>
+            ) : f.key === "description" && formatted && !showSource ? (
+              <RenderedDescription text={value} format={format} placeholder={f.placeholder} />
             ) : (
-              <p style={{ ...BODY, color: value ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
+              <p
+                style={{
+                  ...BODY,
+                  color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                  // Source view of markup reads as markup, not prose.
+                  ...(f.key === "description" && formatted && value
+                    ? { fontFamily: "var(--font-mono, monospace)", fontSize: "0.75rem" }
+                    : {}),
+                }}
+              >
                 {value || f.placeholder}
               </p>
             )}

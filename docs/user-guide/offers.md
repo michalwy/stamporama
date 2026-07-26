@@ -184,7 +184,8 @@ Each field carries its own three controls:
 
 - **⧉** copies the field to the clipboard — the routine act here, since these texts exist to be
   pasted into the platform's listing form. The icon flashes **✓** on success; it is greyed out while
-  the field is empty.
+  the field is empty. On a description that is not plain text it copies the **formatted** version and
+  grows a **▾** for the choice (see below).
 - **✎** opens it for editing — a plain text box, so line breaks are yours to place. **⌘/Ctrl + Enter**
   saves, **Esc** cancels, and saving an empty box clears the field. Editable in every state, like the
   title.
@@ -194,6 +195,30 @@ Each field carries its own three controls:
 
 Because the templates can repeat a block per set, regenerating after you add or remove a set is what
 keeps an item-by-item description in step with the listing.
+
+### Description format
+
+The description carries a **format** — plain text, HTML or Markdown — copied from the platform when
+the offer was created (see [Description format](contacts.md#description-format)). The selector at the
+left of the description's own row of buttons changes it for **this listing alone**: use it for the
+offer that turns out to be an exception, not to reconfigure the platform.
+
+With HTML or Markdown chosen:
+
+- the description is shown **rendered**, the way the platform will show it, and a **Source** button
+  switches to what is actually stored (shown in a monospace font). Editing always edits the source —
+  the box is the plain text box it has always been.
+- **⧉** copies the **formatted** description: the rendered version goes onto the clipboard as rich
+  text, so a platform's rich-text editor keeps the formatting when you paste. The **▾** beside it
+  offers the choice explicitly — **Copy formatted**, or **Copy source** for a field that wants the
+  raw tags (or the Markdown) typed in.
+
+Plain text keeps a single **⧉** and no switches: there is nothing to render and only one thing to
+copy. The private note has no format either way.
+
+> Copying rich text needs `navigator.clipboard`, which browsers only expose over HTTPS (or on
+> `localhost`). On a plain-HTTP instance the button reports a **✕** — reach the app over HTTPS, or use
+> **Source** and copy the text by hand.
 
 ### Title preview when adding a set
 

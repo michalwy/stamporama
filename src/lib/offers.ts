@@ -16,6 +16,7 @@ import {
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
+import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import {
   compareSetItems,
   hasManualItemOrder,
@@ -156,6 +157,12 @@ interface PlatformTemplates {
   titleLanguage: string | null;
 }
 
+/** What the platform's description field accepts (#319) — seeded onto every offer created on it,
+ * exactly as the photo defaults are, so a listing keeps the interpretation it was written for. */
+interface PlatformDescriptionFormat {
+  descriptionFormat: string;
+}
+
 /** The photo defaults a platform seeds onto every offer created on it (#308): which scan sides to
  * include, the per-tile label template (#312), and the collage template (#307) whose render numbers
  * are copied in. The platform's *limits* are deliberately not here — they describe what the platform
@@ -195,7 +202,9 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
 async function assertPlatform(
   collectionId: string,
   platformId: string
-): Promise<PlatformTemplates & PlatformPhotoDefaults & { platformCurrency: string | null }> {
+): Promise<
+  PlatformTemplates & PlatformPhotoDefaults & PlatformDescriptionFormat & { platformCurrency: string | null }
+> {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
     select: {
@@ -203,6 +212,7 @@ async function assertPlatform(
       titleTemplate: true,
       descriptionTemplate: true,
       privateNoteTemplate: true,
+      descriptionFormat: true,
       titleLanguage: true,
       photoSides: true,
       tileLabelLeftTemplate: true,
@@ -218,6 +228,7 @@ async function assertPlatform(
     titleTemplate: contact.titleTemplate,
     descriptionTemplate: contact.descriptionTemplate,
     privateNoteTemplate: contact.privateNoteTemplate,
+    descriptionFormat: contact.descriptionFormat,
     titleLanguage: contact.titleLanguage,
     photoSides: contact.photoSides,
     tileLabelLeftTemplate: contact.tileLabelLeftTemplate,
@@ -1025,6 +1036,10 @@ export interface OfferDetail {
    * platform generated none and nothing was written by hand. */
   description: string | null;
   privateNote: string | null;
+  /** How the description is written (#319) — the offer's own copy of the platform's setting, driving
+   * how it renders on screen and what the copy action puts on the clipboard. The private note has no
+   * format; it is always plain. */
+  descriptionFormat: DescriptionFormat;
   /** Which generated texts the platform actually has a template for (#266/#267) — each field's
    * ↻ Regenerate control enables itself on this. */
   regeneratable: Record<OfferTextField, boolean>;
@@ -1074,6 +1089,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       name: true,
       description: true,
       privateNote: true,
+      descriptionFormat: true,
       collectionId: true,
       platformId: true,
       url: true,
@@ -1218,6 +1234,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     label: offerLabel(offer.sets),
     description: offer.description,
     privateNote: offer.privateNote,
+    descriptionFormat: normalizeDescriptionFormat(offer.descriptionFormat),
     regeneratable: {
       name: !!offer.platform.titleTemplate?.trim(),
       description: !!offer.platform.descriptionTemplate?.trim(),
@@ -1494,6 +1511,9 @@ export async function createOffer(
         name,
         description,
         privateNote,
+        // The format the description is written in (#319), seeded from the platform for the same
+        // reason the photo configuration is: this listing's text was composed for that field.
+        descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
         price: input.price,
@@ -1609,6 +1629,9 @@ export async function duplicateOffer(
         name,
         description,
         privateNote,
+        // The format the description is written in (#319), seeded from the platform for the same
+        // reason the photo configuration is: this listing's text was composed for that field.
+        descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
         price: input.price,
@@ -1683,6 +1706,8 @@ export interface OfferPatch {
    * title: blank clears back to null, editable in every state. */
   description?: string | null;
   privateNote?: string | null;
+  /** How the description is read (#319). Normalised, so an unknown value falls back to plain text. */
+  descriptionFormat?: string;
 }
 
 /** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits name / price
@@ -1712,6 +1737,9 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.privateNote !== undefined ? { privateNote: patch.privateNote } : {}),
+      ...(patch.descriptionFormat !== undefined
+        ? { descriptionFormat: normalizeDescriptionFormat(patch.descriptionFormat) }
+        : {}),
     },
   });
 }

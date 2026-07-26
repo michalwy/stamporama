@@ -15,6 +15,11 @@ import {
   type ListingTemplates,
 } from "./listing-templates-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
+import {
+  normalizeDescriptionFormat,
+  DESCRIPTION_FORMAT_LABELS,
+  type DescriptionFormat,
+} from "@/lib/description-format";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
@@ -114,6 +119,11 @@ export function ContactFormDialog({
     tileLabelLeftTemplate: contact?.tileLabelLeftTemplate ?? "",
     tileLabelRightTemplate: contact?.tileLabelRightTemplate ?? "",
   });
+  // What this platform's description field accepts (#319). Configured in the same dialog as the
+  // description template it applies to, and carried on submit the same way.
+  const [descriptionFormat, setDescriptionFormat] = useState<DescriptionFormat>(
+    normalizeDescriptionFormat(contact?.descriptionFormat)
+  );
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const configuredTemplates = Object.values(templates).filter((t) => t.trim()).length;
   // The listing language (#293) is tracked so the builder's preview renders in the language being
@@ -295,6 +305,7 @@ export function ContactFormDialog({
               <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
               <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
               <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+              <input type="hidden" name="descriptionFormat" value={descriptionFormat} />
               <input
                 type="hidden"
                 name="tileLabelLeftTemplate"
@@ -318,7 +329,7 @@ export function ContactFormDialog({
                   }}
                 >
                   {configuredTemplates
-                    ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured`
+                    ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
                     : "None — listings use the catalog/copy label"}
                 </div>
                 <button
@@ -339,7 +350,8 @@ export function ContactFormDialog({
               </div>
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
                 Title, description, private note and photo tile label for this platform&apos;s
-                listings, each generated from a {"{token}"} template with a live preview.
+                listings, each generated from a {"{token}"} template with a live preview — and what
+                this platform&apos;s description field accepts: plain text, HTML or Markdown.
               </p>
             </div>
           )}
@@ -461,9 +473,11 @@ export function ContactFormDialog({
         collectionId={collectionId}
         language={titleLanguage || null}
         templates={templates}
+        descriptionFormat={descriptionFormat}
         onCancel={() => setTemplatesOpen(false)}
-        onSave={(next) => {
+        onSave={(next, format) => {
           setTemplates(next);
+          setDescriptionFormat(format);
           setTemplatesOpen(false);
         }}
       />

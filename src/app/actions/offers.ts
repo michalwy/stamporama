@@ -309,15 +309,18 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
 /** In-place edit of a single offer header field from the detail screen. `price` accepts blank
  * (clears to 0); `url` blank clears the listing link; `name` blank clears the title back to the
  * derived label (#209), and `description` / `privateNote` blank clear those texts (#266/#267).
- * Currency is not editable here (#196) — it is inherited and locked from the platform. */
+ * `descriptionFormat` (#319) says how the description is read; an unknown value normalises to plain
+ * text. Currency is not editable here (#196) — it is inherited and locked from the platform. */
 export async function patchOfferAction(
   offerId: string,
-  field: "price" | "url" | OfferTextField,
+  field: "price" | "url" | "descriptionFormat" | OfferTextField,
   rawValue: string
 ): Promise<OfferActionState> {
   const session = await getSession();
   try {
-    if (field === "price") {
+    if (field === "descriptionFormat") {
+      await patchOffer(session.user.id, offerId, { descriptionFormat: rawValue });
+    } else if (field === "price") {
       const raw = rawValue.trim();
       let price = "0.00";
       if (raw) {

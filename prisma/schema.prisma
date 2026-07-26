@@ -714,6 +714,12 @@ model Offer {
   // field simply produces none, and the field stays manually editable.
   description  String?
   privateNote  String?
+  // How `description` is written (#319): `plain` | `html` | `markdown`. Seeded from the platform at
+  // creation and editable here, on the same reasoning as the photo configuration below — the text was
+  // written for one platform's field, so re-pointing an existing listing at another interpretation
+  // because a setting changed elsewhere is never what was meant. Drives how the description renders on
+  // screen and what the copy action puts on the clipboard (ADR-0019). `privateNote` has no format.
+  descriptionFormat String @default("plain")
   // Listing URL on the platform.
   url          String?
   // Asking price in `currency` (the offer's own transaction currency).
@@ -1150,6 +1156,12 @@ model Contact {
   // how a platform that has no private-note feature at all is configured.
   descriptionTemplate String?
   privateNoteTemplate String?
+  // What the platform's description field accepts (#319): `plain` | `html` | `markdown`. Marketplaces
+  // disagree — some show plain text with its line breaks, some take raw HTML, some paste rich text —
+  // and the app renders and copies the description accordingly (ADR-0019). **Seeded** onto every
+  // offer created on this platform, like the photo defaults: changing it here never re-interprets a
+  // listing already written. The private note (#267) has no format; it is always plain.
+  descriptionFormat String @default("plain")
   // Language this platform's generated listing text is written in (#265, #293) — a free ISO 639-1
   // code (`"pl"`, `"en"`). Nullable; only platforms carry it. Title tokens resolve translated
   // entity text for this language and fall back to the entity's default-language value when a

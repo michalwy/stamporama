@@ -120,6 +120,26 @@ Items in this lot:
 Shipped tracked within 3 working days.
 ```
 
+### Description format
+
+The **Listing description** section also carries a **Format**, because marketplaces disagree about
+what their description field accepts:
+
+| Format | Choose it when | On the offer |
+| --- | --- | --- |
+| **Plain text** | the field shows what you type, line breaks and all | shown as written |
+| **HTML** | the field takes tags | shown rendered, with a **Source** switch back to the tags |
+| **Markdown** | you would rather write Markdown than tags | shown rendered; the formatted copy is its rendered HTML |
+
+With HTML or Markdown chosen, the template's own preview gains a **Rendered** button that shows the
+description the way the platform will — the default **Source** view stays, because only it can mark
+the words that fell back to your default language.
+
+Like the photo defaults, the format is **copied onto each new offer** on this platform: changing it
+here never re-reads a listing you have already written. Each offer can also be switched on its own
+(see [Listing text](offers.md#listing-text)). The private note has no format — it is a note to
+yourself, and the platforms that offer one treat it as plain text.
+
 ### A legend of the abbreviations used
 
 Two more blocks repeat over the **distinct conditions and certificate statuses** the offer's copies

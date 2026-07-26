@@ -15,6 +15,13 @@ import {
   TemplateSyntaxLegend,
   useTemplateSamples,
 } from "@/app/c/[collectionSlug]/shared/template-builder";
+import {
+  DESCRIPTION_FORMATS,
+  DESCRIPTION_FORMAT_HINTS,
+  DESCRIPTION_FORMAT_LABELS,
+  normalizeDescriptionFormat,
+  type DescriptionFormat,
+} from "@/lib/description-format";
 
 /** The generated listing texts a platform configures a template for — also the `Contact` columns. */
 export type TemplateKey =
@@ -108,9 +115,12 @@ export interface ListingTemplatesDialogProps {
   /** The platform's listing language (#293), so previews read the way its listings will. */
   language: string | null;
   templates: ListingTemplates;
+  /** What this platform's description field accepts (#319) — configured here, next to the template
+   * that writes it, and seeded onto every offer created on the platform. */
+  descriptionFormat: DescriptionFormat;
   onCancel: () => void;
   /** Save all three at once — one dialog, one logical save. */
-  onSave: (templates: ListingTemplates) => void;
+  onSave: (templates: ListingTemplates, descriptionFormat: DescriptionFormat) => void;
 }
 
 /**
@@ -124,10 +134,12 @@ export function ListingTemplatesDialog({
   collectionId,
   language,
   templates,
+  descriptionFormat,
   onCancel,
   onSave,
 }: ListingTemplatesDialogProps) {
   const [draft, setDraft] = useState<ListingTemplates>(templates);
+  const [format, setFormat] = useState<DescriptionFormat>(normalizeDescriptionFormat(descriptionFormat));
   // Which sections are expanded. A template that is already configured opens, so an existing
   // platform shows what it has; a fresh one opens on the title and leaves the rest as one-line rows.
   const [open, setOpen] = useState<Record<TemplateKey, boolean>>({
@@ -156,6 +168,14 @@ export function ListingTemplatesDialog({
         {TEMPLATE_FIELDS.map((f) => (
           <TemplateBuilder
             key={f.key}
+            // The description is the one text with a format (#319): it is what gets pasted into the
+            // platform's own field, and the platforms disagree about what that field takes.
+            extra={
+              f.key === "descriptionTemplate" ? (
+                <DescriptionFormatField value={format} onChange={setFormat} />
+              ) : undefined
+            }
+            previewFormat={f.key === "descriptionTemplate" ? format : undefined}
             label={f.label}
             open={open[f.key]}
             onToggle={() => setOpen((o) => ({ ...o, [f.key]: !o[f.key] }))}
@@ -177,15 +197,66 @@ export function ListingTemplatesDialog({
         actionLabel="Save templates"
         onCancel={onCancel}
         onAction={() =>
-          onSave({
-            titleTemplate: draft.titleTemplate.trim(),
-            descriptionTemplate: draft.descriptionTemplate.trim(),
-            privateNoteTemplate: draft.privateNoteTemplate.trim(),
-            tileLabelLeftTemplate: draft.tileLabelLeftTemplate.trim(),
-            tileLabelRightTemplate: draft.tileLabelRightTemplate.trim(),
-          })
+          onSave(
+            {
+              titleTemplate: draft.titleTemplate.trim(),
+              descriptionTemplate: draft.descriptionTemplate.trim(),
+              privateNoteTemplate: draft.privateNoteTemplate.trim(),
+              tileLabelLeftTemplate: draft.tileLabelLeftTemplate.trim(),
+              tileLabelRightTemplate: draft.tileLabelRightTemplate.trim(),
+            },
+            format
+          )
         }
       />
     </DialogShell>
+  );
+}
+
+/**
+ * The description's format (#319) — what the platform's description field accepts. It sits with the
+ * description *template* rather than in the contact form's own fields because the two are one
+ * decision: the template writes the text, this says how the platform will read it. Seeded onto every
+ * offer created on this platform (ADR-0019 §4), so changing it here leaves prepared listings alone.
+ */
+function DescriptionFormatField({
+  value,
+  onChange,
+}: {
+  value: DescriptionFormat;
+  onChange: (value: DescriptionFormat) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0 0 0.625rem" }}>
+      <label
+        htmlFor="description-format"
+        style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}
+      >
+        Format
+      </label>
+      <select
+        id="description-format"
+        value={value}
+        onChange={(e) => onChange(normalizeDescriptionFormat(e.target.value))}
+        style={{
+          padding: "0.25rem 0.5rem",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: "0.375rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-primary)",
+          background: "var(--color-bg-elevated)",
+          cursor: "pointer",
+        }}
+      >
+        {DESCRIPTION_FORMATS.map((f) => (
+          <option key={f} value={f}>
+            {DESCRIPTION_FORMAT_LABELS[f]}
+          </option>
+        ))}
+      </select>
+      <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+        {DESCRIPTION_FORMAT_HINTS[value]}
+      </span>
+    </div>
   );
 }

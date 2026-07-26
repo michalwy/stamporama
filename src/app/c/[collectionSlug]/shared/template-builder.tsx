@@ -10,6 +10,8 @@ import {
   type TitleToken,
 } from "@/lib/offer-title-template";
 import { TitlePreviewText, TitleFallbackNote } from "./title-preview";
+import { RenderedDescription } from "./rendered-description";
+import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
@@ -279,6 +281,13 @@ export interface TemplateBuilderProps {
   /** What the preview says when the template is blank (the fields differ: a title falls back, the
    * longer texts are simply not generated). */
   emptyPreview: string;
+  /** Extra controls for this template, shown between its explanation and the field — the listing
+   * description's format selector (#319) is the only one so far. */
+  extra?: React.ReactNode;
+  /** The format this template's text will be read as (#319). Anything other than plain text adds a
+   * Source / Rendered switch to the preview. Source stays the default: it is the only mode that can
+   * mark the runs which fell back to the default language (#298). */
+  previewFormat?: DescriptionFormat;
 }
 
 /**
@@ -302,8 +311,13 @@ export function TemplateBuilder({
   description,
   samples,
   emptyPreview,
+  extra,
+  previewFormat,
 }: TemplateBuilderProps) {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  // Only offered when the text is not plain — there is nothing to render otherwise.
+  const formatted = previewFormat && previewFormat !== "plain" ? previewFormat : null;
+  const [showRendered, setShowRendered] = useState(false);
   const fieldId = `template-${label.toLowerCase().replace(/\s+/g, "-")}`;
 
   /** Insert text at the caret (or wrap the selection, for a block), then restore focus + caret. */
@@ -402,6 +416,7 @@ export function TemplateBuilder({
           {description}
         </p>
       )}
+      {extra}
 
       <LabelWithError htmlFor={fieldId}>Template</LabelWithError>
       {multiline ? (
@@ -450,9 +465,28 @@ export function TemplateBuilder({
           padding: "0.75rem 0.875rem",
         }}
       >
-        <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
-          Preview
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
+            Preview
+          </span>
+          {formatted && (
+            <>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={() => setShowRendered((v) => !v)}
+                title={
+                  showRendered
+                    ? "Show the text as written, with untranslated runs marked"
+                    : "Show it the way the platform will"
+                }
+                style={{ ...SMALL_BTN, fontSize: "0.6875rem", padding: "0.125rem 0.5rem" }}
+              >
+                {showRendered ? "Source" : "Rendered"}
+              </button>
+            </>
+          )}
+        </div>
         <div
           style={{
             marginTop: "0.375rem",
@@ -461,7 +495,8 @@ export function TemplateBuilder({
             color: "var(--color-text-primary)",
             minHeight: multiline ? "4.5rem" : "1.5rem",
             wordBreak: "break-word",
-            whiteSpace: multiline ? "pre-wrap" : "normal",
+            // Rendered markup brings its own block spacing; only the source view needs the breaks kept.
+            whiteSpace: multiline && !(formatted && showRendered) ? "pre-wrap" : "normal",
           }}
         >
           {samples.loading ? (
@@ -469,7 +504,13 @@ export function TemplateBuilder({
               Loading a sample copy…
             </span>
           ) : preview ? (
-            <TitlePreviewText segments={segments} />
+            formatted && showRendered ? (
+              // The rendered mode drops the per-segment language marks — it is markup now, not
+              // segments — so the note below keeps reporting them either way.
+              <RenderedDescription text={preview} format={formatted} style={{ margin: 0 }} />
+            ) : (
+              <TitlePreviewText segments={segments} />
+            )
           ) : (
             <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
               {emptyPreview}

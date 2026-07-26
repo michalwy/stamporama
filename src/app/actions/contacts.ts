@@ -99,6 +99,10 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     privateNoteTemplate: bool(formData, "platform")
       ? str(formData, "privateNoteTemplate") || null
       : null,
+    // What the platform's description field accepts (#319), configured next to the description
+    // template it applies to. Same platform-only handling; an unset or unknown value normalises to
+    // plain text in the domain layer.
+    descriptionFormat: isPlatform ? str(formData, "descriptionFormat") : null,
     // The platform's listing language (#293), same platform-only handling. Blank normalises to
     // null, meaning entity text stays in its default language.
     titleLanguage: bool(formData, "platform")

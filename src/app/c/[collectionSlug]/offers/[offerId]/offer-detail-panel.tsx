@@ -193,7 +193,7 @@ export function OfferDetailPanel({
     advanceTo !== null && requiresPrice(advanceTo) && !hasPrice(offer.price) && offer.sets.length > 0;
 
   /** Patch a single header field in place, then refresh. */
-  function patch(field: "price" | "url" | OfferTextField, value: string) {
+  function patch(field: "price" | "url" | "descriptionFormat" | OfferTextField, value: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
@@ -504,6 +504,7 @@ export function OfferDetailPanel({
         isPending={isPending}
         onSave={(field, value) => patch(field, value)}
         onRegenerate={(field) => regenerate(field)}
+        onFormatChange={(format) => patch("descriptionFormat", format)}
       />
 
       {/* Missing translations behind those texts (#299) — filled here rather than by touring
