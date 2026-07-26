@@ -516,6 +516,11 @@ The toolbar filters offers by **platform**, by **state** (Preparing / Ready / Ac
 Withdrawn), and by **Needs action** (the derived overlay above). The state filters and **Needs action** are
 mutually exclusive.
 
+Your selection is **remembered per collection**, so coming back to the offer list picks up where you
+left it rather than at "all offers". A link that names a filter still wins over the remembered one,
+so a URL you share or bookmark keeps meaning exactly what it says. A remembered platform that has
+since stopped being a platform is ignored, so the list can never quietly narrow to nothing.
+
 Closed listings — **Sold** and **Withdrawn** offers — are **hidden by default** so the list shows
 only what's still in play. Toggle **Show sold/withdrawn** to bring them back; the choice is
 remembered per collection. Selecting the **Sold** or **Withdrawn** state chip always shows those

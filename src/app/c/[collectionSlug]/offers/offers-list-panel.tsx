@@ -7,6 +7,7 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import type { OfferListItem } from "@/lib/offers";
 import { type OfferState, type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
   useOffersInfinite,
   useOfferPlatforms,
@@ -35,6 +36,10 @@ type DialogState =
   | { kind: "withdraw"; offer: OfferListItem }
   | { kind: "delete"; offer: OfferListItem }
   | { kind: "quickOffer" };
+
+/** The stored value standing for the derived "needs action" overlay, which is not an `OfferState`
+ *  and shares its slot with one (#325). No offer state can collide with it. */
+const NEEDS_ACTION = "needsAction";
 
 const CONTROL_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.625rem",
@@ -83,10 +88,41 @@ export function OffersListPanel({
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
   const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
-  const needsAction = searchParams.get("needsAction") === "1";
-  const stateParam = searchParams.get("state") as OfferState | null;
-  const state = !needsAction && stateParam && OFFER_STATES.includes(stateParam) ? stateParam : undefined;
-  const platformId = searchParams.get("platform") || undefined;
+  // Remembered filter selections (#325), per collection, mirroring the catalog-vendor and
+  // "not offered on" filters (#115, #275): the URL param wins whenever the URL carries one, so a
+  // shared link still means exactly what it says, and a fresh visit falls back to what was last
+  // picked here. Every change writes both, so clearing a filter clears the memory of it too.
+  //
+  // State and "needs action" share one stored value because they are one choice in the toolbar —
+  // picking either clears the other — and storing them apart would let the two disagree.
+  const [storedPlatform, rememberPlatformFilter] = usePersistedCollectionValue(
+    "offers-platform",
+    collectionId
+  );
+  const [storedStatus, rememberStatusFilter] = usePersistedCollectionValue(
+    "offers-status",
+    collectionId
+  );
+
+  const statusFromUrl =
+    searchParams.has("state") || searchParams.has("needsAction")
+      ? searchParams.get("needsAction") === "1"
+        ? NEEDS_ACTION
+        : (searchParams.get("state") ?? "")
+      : null;
+  const status = statusFromUrl ?? storedStatus ?? "";
+  const needsAction = status === NEEDS_ACTION;
+  const state =
+    !needsAction && OFFER_STATES.includes(status as OfferState) ? (status as OfferState) : undefined;
+
+  // Only the *stored* platform is checked against the loaded list: one that has since been removed
+  // would silently narrow the list to nothing, and unlike a link nobody typed it this time. A
+  // platform named in the URL is left alone, as it always was.
+  const platformFromUrl = searchParams.has("platform") ? (searchParams.get("platform") ?? "") : null;
+  const platformId =
+    (platformFromUrl ??
+      (storedPlatform && platforms.some((p) => p.id === storedPlatform) ? storedPlatform : "")) ||
+    undefined;
 
   // Seed a new offer's platform from the current filter, falling back to the last platform an offer
   // was created on (#241). Resolved against the loaded platforms so it carries the name + currency
@@ -174,7 +210,10 @@ export function OffersListPanel({
           <select
             aria-label="Filter by platform"
             value={platformId ?? ""}
-            onChange={(e) => updateParams({ platform: e.target.value })}
+            onChange={(e) => {
+              rememberPlatformFilter(e.target.value);
+              updateParams({ platform: e.target.value });
+            }}
             style={{ ...CONTROL_STYLE, cursor: "pointer" }}
           >
             <option value="">All platforms</option>
@@ -192,7 +231,10 @@ export function OffersListPanel({
                 key={value}
                 label={OFFER_STATE_LABEL[value]}
                 active={active}
-                onClick={() => updateParams({ state: active ? "" : value, needsAction: "" })}
+                onClick={() => {
+                  rememberStatusFilter(active ? "" : value);
+                  updateParams({ state: active ? "" : value, needsAction: "" });
+                }}
               />
             );
           })}
@@ -201,7 +243,10 @@ export function OffersListPanel({
           <FilterChip
             label="Needs action"
             active={needsAction}
-            onClick={() => updateParams({ needsAction: needsAction ? "" : "1", state: "" })}
+            onClick={() => {
+              rememberStatusFilter(needsAction ? "" : NEEDS_ACTION);
+              updateParams({ needsAction: needsAction ? "" : "1", state: "" });
+            }}
           />
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
           {/* Remembered toggle (#245): closed (sold / withdrawn) offers are hidden by default. */}
