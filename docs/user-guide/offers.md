@@ -34,9 +34,9 @@ sets". A plain single-stamp offer is just the one-set case.
    an offer, so listing many items in a row is fast; the URL is never remembered — it's always
    specific to the individual offer. Leaving everything at its default creates a **Preparing** offer
    (still being composed, not yet live). Marking a fresh, set-less offer **Ready** or **Active** isn't
-   possible — it needs at least one set first — so those statuses apply when you list a copy at
-   creation (see *Sell a new item* and *Listing on another platform*). Creating the offer opens its
-   detail screen.
+   possible — it needs at least one set *and* an asking price first — so those statuses apply when you
+   list a copy at creation with its price (see *Sell a new item* and *Listing on another platform*).
+   Creating the offer opens its detail screen.
 2. On the detail screen, use **Add set** to pick copies from your inventory. The picker's filter
    box matches a copy by stamp name, issue name, **catalog number**, or its **location ref** — so
    with a piece in hand you can type the shelf reference it is filed under (e.g. `A234`) and add
@@ -63,8 +63,11 @@ sets". A plain single-stamp offer is just the one-set case.
    offer and **▲ Activate** on a Ready one, so you can walk an offer forward without opening the menu.
    It appears only for that unambiguous next step; once an offer is **Active** (where the next move —
    pause, withdraw, or sell — is a choice) the button steps aside and you use the **⋮** menu. An offer
-   needs at least one set before it can be marked ready or activated. You can step a **Ready** offer
-   back to **Preparing** at any time (from the **⋮** menu) to keep editing.
+   needs at least one set **and an asking price** before it can be marked ready or activated — an
+   unpriced offer shows *Set a price to…* beside its price, and the quick-advance button waits until
+   you set one. For the same reason you cannot clear the price of an offer that is already **Ready**
+   or **Active**; step it back to **Preparing** first. You can step a **Ready** offer back to
+   **Preparing** at any time (from the **⋮** menu) to keep editing.
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
@@ -525,7 +528,8 @@ from what has sold, so it clears the moment the offer no longer holds a sold cop
 
 - **Preparing** — being put together (photos, description, price not finalised). A new offer starts
   here. **Mark ready** (in the **⋮** menu) once it is assembled.
-- **Ready** — fully prepared, waiting to be posted to the platform. **Activate** it once the listing
+- **Ready** — fully prepared, waiting to be posted to the platform: it lists at least one set and
+  carries an asking price. **Activate** it once the listing
   is live, or step it back to **Preparing** to keep editing. Activating a **Ready** offer sets its
   **listing date to today**, since that is the moment it goes live — from the quick-advance button or
   the **⋮** menu alike. It is a starting value, not a lock: correct it from **Edit offer** whenever

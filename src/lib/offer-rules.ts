@@ -72,6 +72,21 @@ export function requiresSets(to: OfferState): boolean {
   return to === "ready" || to === "active";
 }
 
+/** A transition into `ready` or `active` requires an asking price (#336) — the same two states
+ * {@link requiresSets} gates. An offer with no price is not prepared: `ready` means "assembled and
+ * priced, waiting to be posted", and publishing one with no price is never intentional. */
+export function requiresPrice(to: OfferState): boolean {
+  return to === "ready" || to === "active";
+}
+
+/** Whether an offer's stored price counts as *set*. The column is a non-null `Decimal`, so an
+ * offer with no asking price yet carries `0` — the same convention the UI reads ("— set price").
+ * Accepts the domain's 2-dp string or a raw number. */
+export function hasPrice(price: string | number): boolean {
+  const n = typeof price === "number" ? price : Number(price);
+  return Number.isFinite(n) && n > 0;
+}
+
 /** Whether a user-initiated lifecycle change from `from` to `to` is allowed (excludes `sold`,
  * which the sale flow owns). */
 export function canTransition(from: OfferState, to: OfferState): boolean {
@@ -88,8 +103,8 @@ export function manualTransitions(from: OfferState): readonly OfferState[] {
  * forward part of the lifecycle only — `preparing → ready` and `ready → active`. Returns `null`
  * wherever the next move is ambiguous (from `active` / `paused`: pause vs resume vs withdraw vs
  * sell) or the state is terminal, so callers fall back to the manual dropdown instead of guessing.
- * A `ready`/`active` target still requires the offer to list something (see {@link requiresSets}) —
- * the caller gates on that.
+ * A `ready`/`active` target still requires the offer to list something (see {@link requiresSets})
+ * and to carry an asking price (see {@link requiresPrice}) — the caller gates on that.
  */
 export function quickAdvanceTarget(from: OfferState): ManualOfferTarget | null {
   if (from === "preparing") return "ready";
@@ -146,8 +161,8 @@ export function parseOfferDate(
 
 /** The non-terminal states an offer may be *created* directly in (#257): the collector states the
  * listing's real-world status up front rather than stepping the draft through the lifecycle. `ready`
- * and `active` still require the offer to list something (see {@link requiresSets}); the caller
- * gates on that. Terminal states (`sold` / `withdrawn`) and `paused` are excluded — you don't open
+ * and `active` still require the offer to list something (see {@link requiresSets}) and to carry an
+ * asking price (see {@link requiresPrice}); the caller gates on that. Terminal states (`sold` / `withdrawn`) and `paused` are excluded — you don't open
  * a listing already closed or paused. */
 export const CREATABLE_OFFER_STATES: readonly OfferState[] = ["preparing", "ready", "active"];
 

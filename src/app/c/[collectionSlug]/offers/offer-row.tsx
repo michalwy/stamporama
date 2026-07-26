@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
-import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
+import {
+  hasPrice,
+  isTerminalState,
+  manualTransitions,
+  quickAdvanceTarget,
+  requiresPrice,
+  requiresSets,
+  type ManualOfferTarget,
+} from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
 
@@ -81,7 +89,12 @@ export function OfferRow({
   // move is unambiguous and permitted — a target that would list something needs ≥1 set, else the
   // server would reject it; ambiguous/terminal states fall back to the ⋮ menu.
   const advanceTo = terminal ? null : quickAdvanceTarget(offer.state);
-  const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.setCount > 0);
+  const canAdvance =
+    advanceTo !== null &&
+    (!requiresSets(advanceTo) || offer.setCount > 0) &&
+    // Ready / Active need an asking price too (#336) — the step is offered from the detail screen,
+    // where the price is editable, rather than as a button here that would only fail.
+    (!requiresPrice(advanceTo) || hasPrice(offer.price));
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
     .filter((s): s is ManualOfferTarget => s !== "sold")

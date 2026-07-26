@@ -11,6 +11,8 @@ import {
   canTransition,
   isTerminalState,
   requiresSets,
+  requiresPrice,
+  hasPrice,
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
 import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
@@ -63,6 +65,8 @@ export type OfferBlockReason =
   | "no-currency"
   | "empty"
   | "sold-set"
+  /** Going live (#336) without an asking price set. */
+  | "unpriced"
   /** A reorder (#306) did not carry the current composition — the client is stale. */
   | "bad-order";
 
@@ -1456,6 +1460,14 @@ export async function createOffer(
       `An offer can't start ${targetState} with no sets — compose it first, then advance it.`
     );
   }
+  // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
+  // `active` skips the transition, so the same rule applies here.
+  if (requiresPrice(targetState) && !hasPrice(input.price)) {
+    throw new OfferActionBlockedError(
+      "unpriced",
+      `An offer can't start ${targetState} with no asking price — set a price first.`
+    );
+  }
 
   // Generate the listing texts (#209/#210, #266, #267) from the platform's configured templates over
   // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
@@ -1565,6 +1577,14 @@ export async function duplicateOffer(
       `Nothing left to list — every copy has sold elsewhere, so the copy can't start ${targetState}.`
     );
   }
+  // Same price rule as a fresh creation (#336): the clone is priced for its own platform, so a
+  // blank price cannot start prepared or live either.
+  if (requiresPrice(targetState) && !hasPrice(input.price)) {
+    throw new OfferActionBlockedError(
+      "unpriced",
+      `An offer can't start ${targetState} with no asking price — set a price first.`
+    );
+  }
 
   // Generate the clone's listing texts from the *new* platform's configured templates over its kept
   // sets (#209/#210, #266, #267) — the clone is a listing on another platform, so it gets that
@@ -1633,6 +1653,11 @@ export async function updateOffer(
   if (isTerminalState(ref.state)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
   }
+  // The same invariant the transition guard enforces (#336): a ready or active offer always has a
+  // price, so an edit cannot clear it back out from under one.
+  if (requiresPrice(ref.state) && !hasPrice(input.price)) {
+    throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
+  }
   await assertPlatform(ref.collectionId, input.platformId);
   await prisma.offer.update({
     where: { id: offerId },
@@ -1669,6 +1694,11 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   const touchesFrozenField = patch.platformId !== undefined || patch.price !== undefined;
   if (isTerminalState(ref.state) && touchesFrozenField) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
+  }
+  // A ready or active offer always has a price (#336): clearing it in place is refused for the same
+  // reason advancing to those states without one is.
+  if (patch.price !== undefined && requiresPrice(ref.state) && !hasPrice(patch.price)) {
+    throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
   }
   if (patch.platformId !== undefined) {
     await assertPlatform(ref.collectionId, patch.platformId);
@@ -1776,6 +1806,15 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     if (setCount === 0) {
       const verb = to === "active" ? "activating" : "marking this offer ready";
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
+    }
+  }
+  // The same two targets also need an asking price (#336): an offer with no price is not prepared,
+  // and publishing one is never intentional.
+  if (requiresPrice(to)) {
+    const row = await prisma.offer.findUnique({ where: { id: offerId }, select: { price: true } });
+    if (!row || !hasPrice(row.price.toFixed(2))) {
+      const verb = to === "active" ? "activating" : "marking this offer ready";
+      throw new OfferActionBlockedError("unpriced", `Set an asking price before ${verb}.`);
     }
   }
   // Publishing (#320): `ready → active` is the moment the listing actually goes live, so it stamps

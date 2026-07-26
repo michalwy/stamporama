@@ -309,7 +309,7 @@ describe("offer photo attachments (#313)", () => {
 
   it("renders the attachments in their planned positions, each as its own entry", async () => {
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const state = await getOfferPhotoPlanState(userId, offerId);
@@ -503,7 +503,7 @@ describe("offer photo attachments (#313)", () => {
     );
 
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const state = await getOfferPhotoPlanState(userId, offerId);
@@ -566,7 +566,7 @@ describe("offer photo attachments (#313)", () => {
     assert.deepEqual(entry.copyLabels.length, 1, "only one of its two tiles comes from a copy");
 
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const state = await getOfferPhotoPlanState(userId, offerId);

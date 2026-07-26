@@ -1044,10 +1044,14 @@ export async function enqueueOfferPhotoGeneration(
 /**
  * Claim the oldest queued run, or null when the queue is empty. The claim is a conditional update, so
  * two callers cannot claim the same row even though only one worker exists today.
+ *
+ * `only` narrows the claim to one offer. The worker never passes it — the queue is global by design;
+ * it exists for tests, which share a single database across concurrently-running files and would
+ * otherwise claim each other's runs.
  */
-export async function claimNextOfferPhotoGeneration(): Promise<string | null> {
+export async function claimNextOfferPhotoGeneration(only?: { offerId: string }): Promise<string | null> {
   const next = await prisma.offerPhotoGeneration.findFirst({
-    where: { status: "queued" },
+    where: { status: "queued", ...(only ? { offerId: only.offerId } : {}) },
     orderBy: { queuedAt: "asc" },
     select: { id: true, offerId: true },
   });
@@ -1062,10 +1066,13 @@ export async function claimNextOfferPhotoGeneration(): Promise<string | null> {
 /**
  * Requeue runs left `running` by a process that went away (a container restart mid-render). Called once
  * at boot: a render is a full replacement, so re-running it is always safe. Returns how many.
+ *
+ * `only` narrows it to one offer, for the same test-isolation reason as
+ * {@link claimNextOfferPhotoGeneration}; the boot path passes nothing.
  */
-export async function requeueStalledOfferPhotoGenerations(): Promise<number> {
+export async function requeueStalledOfferPhotoGenerations(only?: { offerId: string }): Promise<number> {
   const { count } = await prisma.offerPhotoGeneration.updateMany({
-    where: { status: "running" },
+    where: { status: "running", ...(only ? { offerId: only.offerId } : {}) },
     data: { status: "queued", startedAt: null, renderedCount: 0 },
   });
   return count;

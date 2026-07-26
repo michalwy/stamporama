@@ -20,7 +20,15 @@ import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-lan
 import { OfferListingText } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
-import { isTerminalState, manualTransitions, quickAdvanceTarget, requiresSets, type ManualOfferTarget } from "@/lib/offer-rules";
+import {
+  hasPrice,
+  isTerminalState,
+  manualTransitions,
+  quickAdvanceTarget,
+  requiresPrice,
+  requiresSets,
+  type ManualOfferTarget,
+} from "@/lib/offer-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -175,7 +183,14 @@ export function OfferDetailPanel({
   // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
   // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
   const advanceTo = editable ? quickAdvanceTarget(offer.state) : null;
-  const canAdvance = advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0);
+  const canAdvance =
+    advanceTo !== null &&
+    (!requiresSets(advanceTo) || offer.sets.length > 0) &&
+    (!requiresPrice(advanceTo) || hasPrice(offer.price));
+  // An offer that only lacks a price (#336): the price field is right here, so say what is missing
+  // instead of silently withholding the advance button.
+  const blockedOnPrice =
+    advanceTo !== null && requiresPrice(advanceTo) && !hasPrice(offer.price) && offer.sets.length > 0;
 
   /** Patch a single header field in place, then refresh. */
   function patch(field: "price" | "url" | OfferTextField, value: string) {
@@ -420,6 +435,11 @@ export function OfferDetailPanel({
                 onSave={(v) => patch("price", v)}
               />
             </span>
+            {blockedOnPrice && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
+                Set a price to {advanceTo === "active" ? "activate this offer" : "mark this offer ready"}
+              </span>
+            )}
             {offer.priceBase && (
               <span
                 style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}

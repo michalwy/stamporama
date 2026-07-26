@@ -225,7 +225,7 @@ describe("offer photo generation (#311)", () => {
     assert.equal(queued.plannedCount, 2);
 
     // Stand in for the worker: claim the job, then run it.
-    const claimed = await claimNextOfferPhotoGeneration();
+    const claimed = await claimNextOfferPhotoGeneration({ offerId });
     assert.equal(claimed, offerId);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "running");
     await runOfferPhotoGeneration(offerId);
@@ -298,7 +298,7 @@ describe("offer photo generation (#311)", () => {
     });
 
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const after = await getOfferPhotoPlanState(userId, offerId);
@@ -378,17 +378,17 @@ describe("offer photo generation (#311)", () => {
   });
 
   it("requeues a run left running by a restart", async () => {
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "running");
 
     // The process went away mid-render; the next boot picks it back up.
-    assert.ok((await requeueStalledOfferPhotoGenerations()) >= 1);
+    assert.equal(await requeueStalledOfferPhotoGenerations({ offerId }), 1);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "queued");
 
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "ready");
-    assert.equal(await claimNextOfferPhotoGeneration(), null, "the queue is drained");
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), null, "the queue is drained");
   });
 
   // ── Tile labels (#312) ─────────────────────────────────────────────────────
@@ -423,7 +423,7 @@ describe("offer photo generation (#311)", () => {
     assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
 
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
     const labelled = await getOfferPhotoPlanState(userId, offerId);
     assert.equal(labelled.status, "ready");
@@ -445,7 +445,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
     });
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
     const unlabelled = await getOfferPhotoPlanState(userId, offerId);
     assert.equal(unlabelled.status, "ready");
@@ -605,7 +605,7 @@ describe("offer photo generation (#311)", () => {
       },
     });
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const before = await getOfferPhotoPlanState(userId, offerId);
@@ -665,7 +665,7 @@ describe("offer photo generation (#311)", () => {
 
     // Regenerating renders what is still available.
     await enqueueOfferPhotoGeneration(userId, offerId);
-    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
     await runOfferPhotoGeneration(offerId);
 
     const regenerated = await getOfferPhotoPlanState(userId, offerId);

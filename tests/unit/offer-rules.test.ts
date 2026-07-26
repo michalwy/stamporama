@@ -7,6 +7,8 @@ import {
   manualTransitions,
   isTerminalState,
   requiresSets,
+  requiresPrice,
+  hasPrice,
   quickAdvanceTarget,
   parsePrice,
   normalizeUrl,
@@ -121,6 +123,36 @@ describe("requiresSets", () => {
     assert.equal(requiresSets("preparing"), false);
     assert.equal(requiresSets("paused"), false);
     assert.equal(requiresSets("withdrawn"), false);
+  });
+});
+
+describe("requiresPrice", () => {
+  it("gates the same two states as requiresSets — ready and active (#336)", () => {
+    assert.equal(requiresPrice("ready"), true);
+    assert.equal(requiresPrice("active"), true);
+    assert.equal(requiresPrice("preparing"), false);
+    assert.equal(requiresPrice("paused"), false);
+    assert.equal(requiresPrice("sold"), false);
+    assert.equal(requiresPrice("withdrawn"), false);
+  });
+});
+
+describe("hasPrice", () => {
+  it("treats the zero the column carries for an unpriced offer as not set (#336)", () => {
+    assert.equal(hasPrice("0.00"), false);
+    assert.equal(hasPrice("0"), false);
+    assert.equal(hasPrice(0), false);
+  });
+
+  it("accepts any positive amount, as string or number", () => {
+    assert.equal(hasPrice("0.01"), true);
+    assert.equal(hasPrice("12.50"), true);
+    assert.equal(hasPrice(12.5), true);
+  });
+
+  it("treats an unparseable value as not set", () => {
+    assert.equal(hasPrice(""), false);
+    assert.equal(hasPrice("abc"), false);
   });
 });
 

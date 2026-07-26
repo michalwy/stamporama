@@ -252,7 +252,8 @@ export function OfferFormDialog({
 
           {/* Status + listing date (#257). Status is create-only — an existing offer's lifecycle is
               driven by its own controls. A live status (Ready / Active) needs the offer to list
-              something; the server rejects it on a set-less offer. Both pre-fill from the last created
+              something and to carry an asking price (#336); the server rejects either and the
+              message lands on the dialog's error line. Both pre-fill from the last created
               offer so repeated listings are fast. */}
           <div style={{ display: "flex", gap: "0.75rem" }}>
             {!isEdit && (
