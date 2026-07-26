@@ -31,13 +31,25 @@
 //   so a group yields two images — or one, when the other side is incomplete. Nothing may assume a
 //   group has two members.
 //
-// Ordering and truncation
-// -----------------------
+// Ordering, and what actually gets uploaded
+// -----------------------------------------
 // - Group order follows the explicit set order (#306); tile order inside a group follows copy order.
-// - Manual attachments (#313) occupy explicit positions and are **protected**: when the platform's
-//   photo-count limit is exceeded, whole generated groups are dropped from the end instead, and a
-//   front/back pair always drops together.
-// - Every platform limit is optional; with no photo-count limit there is no truncation at all.
+//   Manual attachments (#313) are then placed at their positions, and the collector's **manual plan
+//   order** — a list of image tokens — re-seats whatever it names.
+// - **Everything planned is rendered.** Nothing is dropped from the plan for want of a slot: an
+//   image the collector cannot upload today is still an image they want to see, and a plan that
+//   silently produced fewer files than it listed was the confusing part.
+// - Two marks say an image is not part of the upload set, and only that:
+//   - `publish: false` — the collector marked it **do not publish** (#313). A generated collage
+//     cannot be deleted the way an attachment can, so this is how one is set aside.
+//   - `overLimit: true` — derived: among the published images, in plan order, this one falls past
+//     the platform's `maxPhotos`. The order is therefore the **priority** order — the limit fills up
+//     from the front — and nothing is protected: not a front/back pair, not an attachment. Once the
+//     collector can arrange the sequence, protecting anything would silently contradict it.
+// - Neither mark stops an image being rendered and stored; both keep it out of the numbered upload
+//   run and out of the plan's ZIP. Marking an image do-not-publish frees its slot, so hiding one can
+//   bring another back under the limit.
+// - Every platform limit is optional; with no photo-count limit nothing is ever over it.
 
 import type { PhotoSides } from "./offer-photo-config";
 import {
@@ -90,10 +102,13 @@ export interface OfferPhotoPlanInput {
   maxPhotos: number | null;
   attachments?: readonly PlanAttachment[];
   /** A manual plan order (#313): the image tokens the collector dragged into place, in their order.
-   * An override of the derived order, applied to the surviving images after grouping and truncation
-   * — tokens no longer present are ignored, images not in the list keep their natural position.
-   * Empty/absent means the derived order, unchanged. */
+   * An override of the derived order — tokens no longer present are ignored, images not in the list
+   * keep their natural position. Empty/absent means the derived order, unchanged. Applied *before*
+   * truncation, because the order is also the priority order. */
   order?: readonly string[];
+  /** Image tokens marked **do not publish** (#313): planned and rendered, but out of the upload set,
+   * so they take no upload number and do not count toward `maxPhotos`. */
+  unpublished?: readonly string[];
 }
 
 // ── Output ───────────────────────────────────────────────────────────────────
@@ -106,8 +121,19 @@ export interface PlannedTile {
   photoId: string;
 }
 
+/** What every planned image carries, whatever produced it. */
+interface PlannedImageBase {
+  /** False when the collector marked this image **do not publish** (#313): still rendered, but out
+   * of the upload set — no upload number, not in the ZIP, and not counted against `maxPhotos`. */
+  publish: boolean;
+  /** True when this published image falls past the platform's `maxPhotos` in plan order (#313).
+   * Still rendered and shown — it is only kept out of the upload set, so the collector can see what
+   * did not fit and reorder to change what does. */
+  overLimit: boolean;
+}
+
 /** A collage to render (#310) — including the 1×1 case. */
-export interface PlannedCollage {
+export interface PlannedCollage extends PlannedImageBase {
   kind: "collage";
   side: PlanSide;
   /** Groups sharing a key are the front/back pair rendered from the same copies. Stable within one
@@ -123,9 +149,9 @@ export interface PlannedCollage {
   tiles: PlannedTile[];
 }
 
-/** A manual attachment placed in the plan (#313). Carried through untouched — it is not derived
- * from a rule and is never truncated. */
-export interface PlannedAttachment {
+/** A manual attachment placed in the plan (#313). Not derived from a rule: the collector put it
+ * there, and only they take it out. */
+export interface PlannedAttachment extends PlannedImageBase {
   kind: "attachment";
   attachmentId: string;
   /** This image's stable identity for the manual plan order (#313): `a:<attachmentId>`. */
@@ -164,18 +190,25 @@ export interface SkippedSide {
 }
 
 export interface OfferPhotoPlan {
-  /** The planned images, in upload order. */
+  /** Every planned image, in plan order. Nothing is left out: the ones marked do-not-publish and
+   * the ones past the platform's limit are all rendered, and carry `publish` / `overLimit` to say
+   * they are not part of the upload set. */
   images: PlannedImage[];
+  /** The images that *are* uploaded — published and within the limit — in order. A convenience over
+   * `images`, so callers cannot disagree about what the ZIP holds. */
+  uploaded: PlannedImage[];
   /** Sides no group could produce for want of a complete set of scans, in group order. */
   skipped: SkippedSide[];
-  /** How many generated groups the photo-count limit dropped from the end. */
-  droppedGroups: number;
-  /** True when the plan still exceeds the platform's limit because protected attachments alone
-   * do — the collector has to remove attachments; the engine will not. */
-  exceedsLimit: boolean;
+  /** How many published images fall past the platform's photo limit. */
+  overLimitCount: number;
   /** False when the offer carries no collage numbers yet (#308): nothing can be laid out, so only
    * attachments appear in the plan. */
   configured: boolean;
+}
+
+/** Whether a planned image is part of the upload set: published, and within the platform's limit. */
+export function isUploaded(image: PlannedImage): boolean {
+  return image.publish && !image.overLimit;
 }
 
 // ── Engine ───────────────────────────────────────────────────────────────────
@@ -274,6 +307,10 @@ function renderGroup(group: CopyGroup, sides: PlanSide[], groupKey: string): Gro
       token: collageToken(side, tiles.map((t) => t.itemId)),
       setIds: group.setIds,
       tiles,
+      // Publishing and the limit are decided once, over the whole ordered plan, so grouping stays
+      // about grouping.
+      publish: true,
+      overLimit: false,
     });
   }
   return { key: groupKey, images, skipped };
@@ -296,6 +333,8 @@ function placeAttachments(
       token: attachmentToken(attachment.id),
       photoId: attachment.photoId,
       itemId: attachment.itemId,
+      publish: true,
+      overLimit: false,
     });
   }
   return images;
@@ -340,8 +379,15 @@ function applyManualOrder(images: PlannedImage[], order: readonly string[]): Pla
 }
 
 /**
- * Plans an offer's images. Deterministic and total: any input produces a plan, possibly an empty
- * one (no sets, no collage numbers, or a photo limit consumed entirely by attachments).
+ * Plans an offer's images. Deterministic and total: any input produces a plan, possibly an empty one
+ * (no sets and no attachments, or no collage numbers).
+ *
+ * The pipeline is: group the composition → render each group's sides → place the attachments → apply
+ * the manual order → mark what is not published → mark what falls past the platform's limit.
+ *
+ * Ordering deliberately comes **before** the limit is applied: the collector's sequence is what says
+ * which images matter most, so the allowance fills from the front. Nothing is removed, though —
+ * every planned image is rendered, and the two marks only decide what the upload set contains.
  */
 export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
   const attachments = input.attachments ?? [];
@@ -358,39 +404,34 @@ export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
       )
     : [];
 
-  // Truncation drops whole groups from the end — a front/back pair always goes together — and never
-  // touches attachments, which hold their slots.
-  let kept = groups.filter((group) => group.images.length > 0);
-  const truncated = new Set<string>();
-  let droppedGroups = 0;
-  if (input.maxPhotos != null) {
-    const allowance = Math.max(0, input.maxPhotos - attachments.length);
-    let count = kept.reduce((sum, group) => sum + group.images.length, 0);
-    while (count > allowance && kept.length > 0) {
-      const last = kept[kept.length - 1];
-      count -= last.images.length;
-      truncated.add(last.key);
-      kept = kept.slice(0, -1);
-      droppedGroups += 1;
-    }
-  }
-
-  // Natural order first — grouping and truncation are properties of the composition, not of the
-  // upload order — then the manual order (#313) re-seats the survivors. Doing it in this order keeps
-  // the truncation invariants (a front/back pair drops together, attachments never drop) untouched:
-  // the manual order only permutes images that already made the cut.
-  const images = applyManualOrder(
-    placeAttachments(kept.flatMap((group) => group.images), attachments),
+  const unpublished = new Set(input.unpublished ?? []);
+  const ordered = applyManualOrder(
+    placeAttachments(groups.flatMap((group) => group.images), attachments),
     input.order ?? []
   );
 
+  // Walk the ordered plan once, filling the platform's allowance from the front. An unpublished
+  // image is not being uploaded, so it neither consumes a slot nor can be over the limit; every
+  // published image past the allowance is marked — the second half of a front/back pair and a
+  // late attachment included, because the collector's order is the priority order.
+  const images: PlannedImage[] = [];
+  let overLimitCount = 0;
+  let taken = 0;
+  for (const image of ordered) {
+    const publish = !unpublished.has(image.token);
+    const overLimit = publish && input.maxPhotos != null && taken >= input.maxPhotos;
+    if (publish && !overLimit) taken += 1;
+    if (overLimit) overLimitCount += 1;
+    images.push({ ...image, publish, overLimit });
+  }
+
   return {
     images,
-    // A group the photo limit removed outright is already reported as a drop; its missing back side
-    // would be a second notice about an image nobody is getting either way.
-    skipped: groups.flatMap((group) => (truncated.has(group.key) ? [] : group.skipped)),
-    droppedGroups,
-    exceedsLimit: input.maxPhotos != null && images.length > input.maxPhotos,
+    uploaded: images.filter(isUploaded),
+    // Every group that produced an image keeps it, so a missing side is always worth reporting:
+    // there is no longer a case where the notice would be about an image nobody is getting.
+    skipped: groups.flatMap((group) => group.skipped),
+    overLimitCount,
     configured,
   };
 }

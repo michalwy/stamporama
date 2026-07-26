@@ -27,8 +27,14 @@
  *   images, so editing the location ref of a copy changes the pixels exactly as replacing its scan
  *   does, and has to read as out of date for the same reason;
  * - the **manual attachments** (#313) — which image, from which copy, at which position, and the
- *   annotation an attachment with no copy is drawn with. Adding, removing, reordering or replacing
- *   one changes both the images and their order, so it is the same kind of change as any other;
+ *   annotation an attachment with no copy is drawn with. Adding, removing or replacing one changes
+ *   what gets rendered, so it is the same kind of change as any other;
+ * - the **set of images the plan renders** (#313), when the offer carries a manual order or a
+ *   do-not-publish mark: either can change *which* images fit under the platform's photo limit.
+ *
+ * What is deliberately **not** in it is the upload **order**. A reorder is applied to the stored
+ * images themselves — their entries are renumbered, their bytes untouched — so it cannot leave them
+ * stale, and reporting it as staleness would ask for a re-render that changes nothing.
  * - the **platform's output limits** (#308), which the renderer reads live: raising the file-size cap
  *   changes the encoded result, so it belongs here even though it lives on the platform.
  *
@@ -76,10 +82,21 @@ export interface OfferPhotoFingerprintInput {
    * resolved against nothing, so only their literal text survives. Hashed because it is drawn into
    * those images, exactly like a copy's own tile labels. */
   uploadTileLabel?: readonly [string, string];
-  /** The **resolved** manual plan order (#313): the image tokens in their final upload order, or
-   * empty/absent for the derived order. The upload order is what the collector sees and what the
-   * ZIP is numbered by, so reordering the stored images has to read as a change. */
-  order?: readonly string[];
+  /**
+   * The tokens of the images the plan actually renders (#313), in any order — a **set**, not a
+   * sequence.
+   *
+   * Order itself is deliberately *not* hashed: a reorder is applied to the stored images directly
+   * (their entries are renumbered, the bytes untouched), so it can never make them stale. What can
+   * is *which* images exist — and order and do-not-publish both affect that, because truncation
+   * follows the order and an unpublished image frees a slot under `maxPhotos`. Hashing the resolved
+   * set catches exactly that and nothing else.
+   *
+   * Passed **only when the offer carries a custom order or an unpublished token**. Without either,
+   * the rendered set follows from the composition and the limits, which are hashed already — so
+   * leaving it out keeps every such offer hashing exactly as it did before this existed.
+   */
+  renderedTokens?: readonly string[];
 }
 
 /** One manual attachment as the fingerprint sees it: what it shows, from which copy, and where it
@@ -138,11 +155,12 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   const attachments = [...(input.attachments ?? [])]
     .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .map((a) => [a.id, a.position, a.photoId, a.itemId]);
-  const order = input.order ?? [];
+  // Sorted, because this is the set of images that exist, not the order they go up in.
+  const rendered = [...(input.renderedTokens ?? [])].sort();
 
   const payload: unknown[] = [FINGERPRINT_VERSION, composition, config, limits];
   if (attachments.length > 0) payload.push(attachments, input.uploadTileLabel ?? null);
-  if (order.length > 0) payload.push(["order", order]);
+  if (rendered.length > 0) payload.push(["rendered", rendered]);
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

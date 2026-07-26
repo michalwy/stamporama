@@ -13,6 +13,7 @@ import {
   dragStyle,
   DragGrip,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
+import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 
@@ -153,13 +154,12 @@ function planNote(plan: OfferPhotoPlanView): string {
   const parts = [
     plan.plan.imageCount === 1 ? "1 image planned" : `${plan.plan.imageCount} images planned`,
   ];
-  if (plan.plan.droppedGroups > 0) {
+  const held = plan.plan.imageCount - plan.plan.uploadCount;
+  if (held > 0) parts.push(`${plan.plan.uploadCount} for upload, ${held} held back`);
+  if (plan.plan.overLimitCount > 0) {
     parts.push(
-      `${plan.plan.droppedGroups} group(s) dropped to fit the platform's photo limit`
+      `${plan.plan.overLimitCount} over the platform's photo limit — still generated, drag one up to swap it in`
     );
-  }
-  if (plan.plan.exceedsLimit) {
-    parts.push("still over the platform's photo limit — remove an attachment");
   }
   return `${parts.join(" · ")}.`;
 }
@@ -177,15 +177,35 @@ function imageTitle(image: OfferPhotoImage): string {
     .join(" · ");
 }
 
-/** The plan in upload order: every image, what it was rendered from, and a way to take it out. */
+/**
+ * The stored files, in upload order: every image, what it was rendered from, and a way to take it
+ * out. Draggable like the plan above it and by the same tokens (#313) — a reorder here *is* a plan
+ * reorder, because there is only one upload sequence and both lists show it.
+ */
 function PlanPreview({
   collectionId,
   images,
+  disabled,
+  onReorder,
 }: {
   collectionId: string;
   images: OfferPhotoImage[];
+  disabled: boolean;
+  onReorder: (tokens: string[]) => void;
 }) {
   const [lightbox, setLightbox] = useState<number | null>(null);
+
+  const move = (from: number, to: number) => {
+    const next = [...images];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    // A row too old to carry a token cannot be named in the order; it keeps its place at the end.
+    onReorder(next.flatMap((image) => (image.token ? [image.token] : [])));
+  };
+  // Only rows that can be named in a plan order are draggable, so a drag can never silently do
+  // nothing.
+  const draggable = !disabled && images.every((image) => image.token != null);
+  const drag = useReorderList(draggable, move, { handleOnly: true, layout: "grid" });
 
   return (
     <>
@@ -199,20 +219,35 @@ function PlanPreview({
           gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))",
           gap: "0.5rem",
         }}
+        {...(drag?.containerProps ?? {})}
       >
         {images.map((image, index) => (
           <li
             key={image.photoId}
+            {...(drag?.itemProps(index) ?? {})}
             style={{
               display: "flex",
               gap: "0.625rem",
               alignItems: "flex-start",
               padding: "0.5rem",
-              border: "1px solid var(--color-border)",
+              border: `1px solid ${
+                showLineAt(drag, index) ? "var(--color-accent)" : "var(--color-border)"
+              }`,
               borderRadius: "0.5rem",
               background: "var(--color-bg-page)",
+              // Held-back images stay visible and downloadable, but read as set aside.
+              opacity: image.publish && !image.overLimit ? 1 : 0.55,
+              ...dragStyle(drag, index),
             }}
           >
+            {drag && (
+              <span
+                {...drag.handleProps(index)}
+                style={{ cursor: "grab", display: "inline-flex", alignSelf: "center" }}
+              >
+                <DragGrip label="Drag to change the upload order" />
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setLightbox(index)}
@@ -256,6 +291,17 @@ function PlanPreview({
                 {image.source === "collage" ? "Generated collage" : "Attachment"} ·{" "}
                 {image.width}×{image.height} · {formatBytes(image.sizeBytes)}
               </span>
+              {/* Why this file is not in the ZIP, said where the file is (#313). */}
+              {!image.publish && (
+                <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
+                  Not published — left out of the upload
+                </span>
+              )}
+              {image.publish && image.overLimit && (
+                <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
+                  Over the platform&rsquo;s photo limit — left out of the upload
+                </span>
+              )}
               <a
                 href={photoUrl(collectionId, image.photoId, "full")}
                 download={image.fileName}
@@ -295,14 +341,17 @@ function PlanPreview({
   );
 }
 
-/** What a planned entry is, in one line: its number, its side, and the copies it shows. */
-function plannedTitle(image: OfferPhotoPlannedImage, index: number): string {
+/** What a planned entry is, in one line: its upload number, its side, and the copies it shows. The
+ * number is the one it will actually carry, so an entry outside the upload set shows none — a
+ * position in the list is not a slot in the listing. */
+function plannedTitle(image: OfferPhotoPlannedImage, uploadIndex: number | null): string {
   const side = image.side === "front" ? "Front" : image.side === "back" ? "Back" : null;
   const what =
     image.title ??
     (image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", "));
   const fallback = image.source === "upload" ? "Uploaded image" : "Attachment";
-  return [String(index + 1).padStart(2, "0"), side, what || fallback].filter(Boolean).join(" · ");
+  const number = uploadIndex == null ? "—" : String(uploadIndex + 1).padStart(2, "0");
+  return [number, side, what || fallback].filter(Boolean).join(" · ");
 }
 
 function plannedKind(image: OfferPhotoPlannedImage): string {
@@ -328,12 +377,14 @@ function PlanSequence({
   disabled,
   onReorder,
   onRemove,
+  onSetPublish,
 }: {
   collectionId: string;
   images: OfferPhotoPlannedImage[];
   disabled: boolean;
   onReorder: (tokens: string[]) => void;
   onRemove: (attachmentId: string) => void;
+  onSetPublish: (token: string, publish: boolean) => void;
 }) {
   const move = (from: number, to: number) => {
     const next = [...images];
@@ -347,12 +398,21 @@ function PlanSequence({
   // stray press elsewhere on a row does not.
   const drag = useReorderList(!disabled, move, { handleOnly: true });
 
+  // The upload number an entry will carry, counted over the entries that are actually uploaded.
+  let uploadCounter = 0;
+  const uploadIndexes = images.map((image) =>
+    image.publish && !image.overLimit ? uploadCounter++ : null
+  );
+
   return (
     <ul
       style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}
       {...(drag?.containerProps ?? {})}
     >
-      {images.map((image, index) => (
+      {images.map((image, index) => {
+        const uploadIndex = uploadIndexes[index];
+        const held = !image.publish || image.overLimit;
+        return (
         <Fragment key={image.key}>
           {showLineAt(drag, index) && <InsertionLine />}
           <li
@@ -365,6 +425,8 @@ function PlanSequence({
               border: "1px solid var(--color-border)",
               borderRadius: "0.5rem",
               background: "var(--color-bg-page)",
+              // Held back, not gone: still rendered, still visible, just not going up.
+              opacity: held ? 0.6 : 1,
               ...dragStyle(drag, index),
             }}
           >
@@ -389,12 +451,20 @@ function PlanSequence({
               <img
                 src={photoUrl(collectionId, image.previewPhotoId, "thumb")}
                 alt=""
+                title={
+                  image.generatedPhotoId
+                    ? "The image generated for this entry"
+                    : "Not generated yet — showing what it will be made from"
+                }
                 style={{
                   width: "2.5rem",
                   height: "2.5rem",
                   objectFit: "cover",
                   borderRadius: "0.375rem",
-                  border: "1px solid var(--color-border)",
+                  // A dashed border says the thumbnail is a stand-in, not the image itself.
+                  border: image.generatedPhotoId
+                    ? "1px solid var(--color-border)"
+                    : "1px dashed var(--color-border-strong)",
                   flexShrink: 0,
                 }}
               />
@@ -411,20 +481,56 @@ function PlanSequence({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
-              title={plannedTitle(image, index)}
+              title={plannedTitle(image, uploadIndex)}
             >
-              {plannedTitle(image, index)}
+              {plannedTitle(image, uploadIndex)}
             </span>
+            {!image.publish &&
+              tinted("warning", "Not published", "Generated, but kept out of the upload")}
+            {image.overLimit &&
+              tinted(
+                "warning",
+                "Over limit",
+                "Past the platform's photo limit — generated, but not part of the upload. Drag it up to swap it in."
+              )}
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
               {plannedKind(image)}
             </span>
+            {/* Publishing is offered on collages only: an attachment the collector does not want is
+                simply removed, and two ways out of one list would be a puzzle rather than a choice. */}
+            {!image.attachmentId && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSetPublish(image.token, !image.publish)}
+                title={
+                  image.publish
+                    ? "Do not publish this image — it stays generated, but is left out of the upload"
+                    : "Publish this image again"
+                }
+                aria-label={image.publish ? "Do not publish this image" : "Publish this image"}
+                aria-pressed={!image.publish}
+                style={{
+                  border: "none",
+                  background: "none",
+                  color: image.publish
+                    ? "var(--color-text-secondary)"
+                    : "var(--color-warning, var(--color-text-secondary))",
+                  cursor: disabled ? "default" : "pointer",
+                  fontSize: "0.875rem",
+                  padding: "0 0.25rem",
+                }}
+              >
+                {image.publish ? "👁" : "🚫"}
+              </button>
+            )}
             {image.attachmentId && (
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => onRemove(image.attachmentId!)}
                 title="Remove this attachment from the plan"
-                aria-label={`Remove ${plannedTitle(image, index)}`}
+                aria-label={`Remove ${plannedTitle(image, uploadIndex)}`}
                 style={{
                   border: "none",
                   background: "none",
@@ -439,7 +545,8 @@ function PlanSequence({
             )}
           </li>
         </Fragment>
-      ))}
+        );
+      })}
       {drag && showLineAt(drag, images.length) && <InsertionLine />}
     </ul>
   );
@@ -568,7 +675,10 @@ export function OfferPhotosCard({
   const { data: plan, isLoading, refetch } = useOfferPhotoPlan(collectionId, offerId);
   const { invalidateAll } = useInvalidateOffers();
   const [error, setError] = useState<string | undefined>();
-  const [expanded, setExpanded] = useState(false);
+  // Whether the card is open is remembered across visits: a collector working through a batch of
+  // listings opens it on every one of them. One key for the card, not one per offer — the habit is
+  // about the step, not about the listing.
+  const [expanded, setExpanded] = usePersistentToggle("stamporama.offerPhotos.expanded", false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | undefined>();
   const [attachOpen, setAttachOpen] = useState(false);
@@ -682,7 +792,7 @@ export function OfferPhotosCard({
         {/* The whole left-hand group is the toggle, so the heading and its chips are all clickable. */}
         <button
           type="button"
-          onClick={() => setExpanded((open) => !open)}
+          onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
           title={expanded ? "Collapse" : "Show the plan in upload order"}
           style={{
@@ -850,6 +960,12 @@ export function OfferPhotosCard({
                   return removeOfferPhotoAttachmentAction(attachmentId);
                 })
               }
+              onSetPublish={(token, publish) =>
+                mutateAttachments(async () => {
+                  const { setOfferPhotoPublishAction } = await import("@/app/actions/offers");
+                  return setOfferPhotoPublishAction(offerId, token, publish);
+                })
+              }
             />
           ) : (
             <p style={NOTE}>Nothing planned yet.</p>
@@ -860,7 +976,17 @@ export function OfferPhotosCard({
           {stored > 0 && (
             <>
               <h4 style={SECTION_HEADING}>Stored files</h4>
-              <PlanPreview collectionId={collectionId} images={plan.images} />
+              <PlanPreview
+                collectionId={collectionId}
+                images={plan.images}
+                disabled={isPending}
+                onReorder={(tokens) =>
+                  mutateAttachments(async () => {
+                    const { setOfferPhotoPlanOrderAction } = await import("@/app/actions/offers");
+                    return setOfferPhotoPlanOrderAction(offerId, tokens);
+                  })
+                }
+              />
             </>
           )}
 

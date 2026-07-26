@@ -16,8 +16,10 @@ import {
   OfferPhotoAttachmentError,
   removeOfferPhotoAttachment,
   setOfferPhotoPlanOrder,
+  setOfferPhotoPublish,
 } from "../../src/lib/offer-photo-attachments";
 import {
+  buildOfferPhotoArchive,
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
   getOfferPhotoPlanState,
@@ -59,6 +61,21 @@ async function bytesExist(photo: {
   } catch {
     return false;
   }
+}
+
+/** The names in a ZIP, in written order — walking the local file headers. Names only, so unlike the
+ * reader in `offer-photo-generation.test.ts` this one never has to inflate a payload. */
+function zipEntryNames(archive: Buffer): string[] {
+  const names: string[] = [];
+  let offset = 0;
+  while (offset + 4 <= archive.length && archive.readUInt32LE(offset) === 0x04034b50) {
+    const compressedSize = archive.readUInt32LE(offset + 18);
+    const nameLength = archive.readUInt16LE(offset + 26);
+    const extraLength = archive.readUInt16LE(offset + 28);
+    names.push(archive.subarray(offset + 30, offset + 30 + nameLength).toString("utf8"));
+    offset = offset + 30 + nameLength + extraLength + compressedSize;
+  }
+  return names;
 }
 
 describe("offer photo attachments (#313)", () => {
@@ -320,9 +337,9 @@ describe("offer photo attachments (#313)", () => {
     assert.ok(await bytesExist(originals[0]));
   });
 
-  it("marks the plan out of date when the order changes, without touching the stored images", async () => {
+  it("applies a reorder to the stored images themselves, without regenerating anything", async () => {
     const before = await getOfferPhotoPlanState(userId, offerId);
-    // Reverse the stored order — a different upload sequence for the same images.
+    // Reverse the order — a different upload sequence for the very same images.
     await setOfferPhotoPlanOrder(
       userId,
       offerId,
@@ -330,12 +347,101 @@ describe("offer photo attachments (#313)", () => {
     );
 
     const after = await getOfferPhotoPlanState(userId, offerId);
-    assert.equal(after.outOfDate, true);
+    assert.equal(
+      after.outOfDate,
+      false,
+      "a reorder changes no image, so there is nothing to regenerate"
+    );
     assert.deepEqual(
       after.images.map((i) => i.photoId),
-      before.images.map((i) => i.photoId),
-      "the files a buyer may already be looking at are untouched"
+      [...before.images].reverse().map((i) => i.photoId),
+      "the stored files are renumbered into the new order"
     );
+    assert.deepEqual(
+      after.images.map((i) => i.fileName),
+      ["01.jpg", "02.jpg", "03.jpg", "04.jpg"],
+      "and keep a dense upload run"
+    );
+    assert.deepEqual(
+      after.images.map((i) => i.token),
+      after.plan.images.map((i) => i.token),
+      "the stored list and the plan agree on the sequence"
+    );
+
+    // Put it back, so the tests that follow read the order they were written against.
+    await setOfferPhotoPlanOrder(userId, offerId, before.plan.images.map((i) => i.token));
+  });
+
+  it("keeps an image over the platform's limit generated, but out of the upload set and the ZIP", async () => {
+    // The platform takes 6; this offer plans 4. Squeeze it to 2 and the last two are over the limit
+    // — still rendered and stored, just not going up.
+    await prisma.contact.update({
+      where: { id: (await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).platformId },
+      data: { maxPhotos: 2 },
+    });
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.plan.imageCount, 4, "nothing is dropped from the plan");
+    assert.equal(state.plan.uploadCount, 2);
+    assert.equal(state.plan.overLimitCount, 2);
+    assert.deepEqual(
+      state.images.map((i) => i.fileName),
+      ["01.jpg", "02.jpg", "over-limit-01.jpg", "over-limit-02.jpg"],
+      "only the upload set takes upload numbers"
+    );
+
+    const archive = await buildOfferPhotoArchive(userId, offerId);
+    assert.deepEqual(
+      zipEntryNames(archive.bytes),
+      ["01.jpg", "02.jpg"],
+      "the ZIP is the upload set alone"
+    );
+
+    await prisma.contact.update({
+      where: { id: (await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).platformId },
+      data: { maxPhotos: 6 },
+    });
+  });
+
+  it("holds a collage back from the upload set when it is marked do-not-publish", async () => {
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    const collage = before.plan.images.find((i) => i.source === "collage")!;
+
+    await setOfferPhotoPublish(userId, offerId, collage.token, false);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    const held = state.images.find((i) => i.token === collage.token)!;
+    assert.equal(held.publish, false);
+    assert.ok(held.fileName.startsWith("unpublished-"), "it takes no upload number");
+    assert.equal(state.plan.uploadCount, 3, "the other three still go up");
+    assert.equal(
+      state.outOfDate,
+      false,
+      "the image is unchanged — holding it back is not a reason to regenerate"
+    );
+    assert.ok(await bytesExist((await prisma.photo.findUniqueOrThrow({ where: { id: held.photoId } }))));
+
+    const archive = await buildOfferPhotoArchive(userId, offerId);
+    assert.deepEqual(
+      zipEntryNames(archive.bytes),
+      ["01.jpg", "02.jpg", "03.jpg"],
+      "the held-back image is absent and the run stays dense"
+    );
+
+    await setOfferPhotoPublish(userId, offerId, collage.token, true);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).plan.uploadCount, 4);
+  });
+
+  it("previews a planned collage with the image generated for it", async () => {
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    for (const image of state.plan.images) {
+      assert.ok(image.generatedPhotoId, `${image.token} has been generated`);
+      assert.equal(
+        image.previewPhotoId,
+        image.generatedPhotoId,
+        "the plan shows the real image, not one of its stamps"
+      );
+    }
   });
 
   it("removes an upload with its bytes, and a copy attachment without touching the scan", async () => {

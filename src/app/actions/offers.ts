@@ -37,6 +37,7 @@ import {
   removeOfferPhotoAttachment,
   renameOfferPhotoAttachment,
   setOfferPhotoPlanOrder,
+  setOfferPhotoPublish,
   type CopyPhotoAttachmentInput,
   type UploadAttachmentInput,
 } from "@/lib/offer-photo-attachments";
@@ -443,8 +444,26 @@ export async function removeOfferPhotoAttachmentAction(
   }
 }
 
+/** Mark one plan image do-not-publish, or publish it again (#313). It stays generated and stored —
+ * it only leaves the upload set, which frees its slot under the platform's photo limit. */
+export async function setOfferPhotoPublishAction(
+  offerId: string,
+  token: string,
+  publish: boolean
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await setOfferPhotoPublish(session.user.id, offerId, token, publish);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to change whether this image is published.");
+  }
+}
+
 /** Record the plan order the collector dragged the card into (#313) — collage sides and attachments
- * alike, as the image tokens in their new sequence. An empty list clears the override. */
+ * alike, as the image tokens in their new sequence. An empty list clears the override. Dragging
+ * either list (the plan or the stored files) lands here: the stored entries are renumbered to
+ * match, so both always show one order. */
 export async function setOfferPhotoPlanOrderAction(
   offerId: string,
   tokens: string[]

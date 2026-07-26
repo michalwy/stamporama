@@ -275,10 +275,9 @@ What gets made follows the offer, not a choice you make here:
   scan. One missing back means no back image for that group, rather than one with a hole in it. The
   card says so out loud, naming the copies to scan — a set of eight quietly losing its back image
   over one missing reverse is easy to miss.
-- If the platform caps how many photos a listing takes, whole groups are dropped from the end (a
-  front/back pair always goes together). The card says how many.
-- Anything you [attached by hand](#attaching-your-own-images) keeps the position you gave it and is
-  never dropped to fit the limit.
+- Everything the plan lists is generated, including anything you
+  [attached by hand](#attaching-your-own-images) and anything past the platform's photo limit — see
+  [holding a photo back](#holding-a-photo-back) for what that limit does instead.
 
 Generate is unavailable, with the reason on the card, when the offer has no collage numbers yet, or
 when there is nothing to render — no copy with a scan for the chosen sides and no attachment either.
@@ -291,8 +290,10 @@ uploaded to the platform today.
 ### When the offer changes afterwards
 
 Change the composition, reorder sets or copies, replace a scan, edit the photo settings, change a
-copy's location ref (the labels are drawn into the images), add an attachment, reorder the plan, or
-change the platform's limits, and the card marks the stored images **Out of date**. Nothing happens to them:
+copy's location ref (the labels are drawn into the images), add an attachment, or change the
+platform's limits, and the card marks the stored images **Out of date**. (Reordering the plan and
+holding a photo back do not: neither changes an image, so both are applied to the stored files as
+they are.) Nothing happens to them:
 they stay exactly as they are and keep being served, because they may already be live in a listing
 whose buyers are looking at them. It is a reminder, not an action — press **Regenerate** when you are
 ready to re-upload.
@@ -349,28 +350,57 @@ simply marks them out of date until you regenerate.
 ### Ordering the plan
 
 The plan is the order your photos go up in, and it is yours to arrange. Drag any entry by its ⠿ grip
-— a generated collage or an attachment alike — to put the whole sequence in the order you want.
-Collages start out following the offer's sets; once you drag them, your order is what sticks.
+— a generated collage or an attachment alike — to put the whole sequence in the order you want. You
+can drag from either list: the **Plan** and the **Stored files** show one and the same order, so a
+drag in one is a drag in the other.
 
-Your order survives the offer [changing underneath it](#when-the-offer-changes-afterwards). Add a
-set and its new collage slots in where it naturally falls; a collage whose copies are gone simply
-drops away, and everything else keeps the order you gave it. Reordering the plan, like adding an
-attachment, marks the stored images out of date until you regenerate — the upload order changed, even
-though each image is the same.
+Reordering does **not** make anything out of date and never needs a regeneration. The images do not
+change — only their order does — so the stored files are simply renumbered on the spot, which is also
+what renames them (`01.jpg`, `02.jpg`…) and what the ZIP follows.
+
+Your order survives the offer [changing underneath it](#when-the-offer-changes-afterwards). Add a set
+and its new collage slots in where it naturally falls; a collage whose copies are gone simply drops
+away, and everything else keeps the order you gave it.
+
+The order is also a **priority** order — see the photo limit below.
+
+### Holding a photo back
+
+Two things can keep a generated image out of the upload without deleting it. Either way it is still
+rendered, still stored, and still downloadable on its own; it just takes no upload number and is not
+in the ZIP.
+
+- **Do not publish** — press the 👁 on a collage in the plan to set it aside; press 🚫 to bring it
+  back. This is how you drop a collage you do not want to list, since (unlike an attachment) there is
+  nothing to remove. A held-back image also frees its slot under the platform's photo limit, so
+  hiding one can bring another image back under it.
+- **Over the limit** — if the platform caps how many photos a listing takes, everything past that
+  count *in your order* is marked **Over limit**. It is still generated so you can look at it and
+  change your mind: drag it higher in the plan and it swaps in, pushing whatever now sits past the
+  cap out instead. Nothing is protected from the cap — not a front/back pair, not an attachment —
+  because your order is what says which photos matter most.
+
+Held-back rows are dimmed in both lists, and their downloads are named `unpublished-01.jpg` /
+`over-limit-01.jpg` so a number never suggests a slot in the listing that the image does not have.
 
 ### Reviewing and downloading them
 
 Expand the card and it shows two lists. **Plan** is what pressing Generate would produce right now,
-in upload order, with your attachments in their places — this is where you arrange them. **Stored
-files** is what has actually been rendered: every image with its number, its side, and the copies it
-was made from. Click a thumbnail there to see it full size.
+in upload order, with your attachments in their places. **Stored files** is what has actually been
+rendered: every image with its number, its side, and the copies it was made from. Click a thumbnail
+there to see it full size. Both lists carry the same order and both can be dragged.
+
+Once an entry has been generated, the plan previews it with **that image**. A dashed thumbnail means
+the opposite: nothing has been rendered for that entry yet, so what you see is one of the stamps it
+will be made from.
 
 Getting the files to the marketplace is a manual upload — Stamporama's job is handing you the right
 files in the right order:
 
-- **Download all** gives you the whole plan as a ZIP, with the files named `01.jpg`, `02.jpg` and so
-  on in upload order. Unpack it and select the lot in your platform's bulk upload; they go up in
-  order.
+- **Download all** gives you the images that are actually going up as a ZIP, named `01.jpg`,
+  `02.jpg` and so on in upload order. Unpack it and select the lot in your platform's bulk upload;
+  they go up in order. Anything [held back](#holding-a-photo-back) is left out, which is what keeps
+  the numbering a gapless run.
 - Each image also has its own **↓ 01.jpg** link in the preview, when you only need to replace one.
 
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that

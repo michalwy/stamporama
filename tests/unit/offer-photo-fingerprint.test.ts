@@ -223,27 +223,34 @@ describe("fingerprintOfferPhotoInputs manual attachments (#313)", () => {
   });
 });
 
-describe("fingerprintOfferPhotoInputs manual plan order (#313)", () => {
-  it("leaves an offer with no custom order hashing exactly as before", () => {
-    // Like attachments, the order joins the payload only when present — so introducing the feature
-    // does not mark every already-generated plan out of date.
-    assert.equal(fp({ ...base, order: [] }), fp(base));
+describe("fingerprintOfferPhotoInputs rendered set (#313)", () => {
+  it("leaves an offer that renders the derived set hashing exactly as before", () => {
+    // Like attachments, the rendered set joins the payload only when the offer uses a manual order
+    // or a do-not-publish mark — so introducing it does not mark every generated plan out of date.
+    assert.equal(fp({ ...base, renderedTokens: [] }), fp(base));
   });
 
-  it("changes when a custom order is set, and with what that order is", () => {
-    const one = fp({ ...base, order: ["c:front:x", "a:m1"] });
-    assert.notEqual(one, fp(base));
-    assert.notEqual(one, fp({ ...base, order: ["a:m1", "c:front:x"] }));
+  it("changes with which images the plan renders", () => {
+    const two = fp({ ...base, renderedTokens: ["c:front:x", "a:m1"] });
+    assert.notEqual(two, fp(base));
+    assert.notEqual(two, fp({ ...base, renderedTokens: ["c:front:x"] }));
   });
 
-  it("is not reordered away by the order array's own position among the other extensions", () => {
-    // An offer with attachments but no order must hash the same before and after the order field
-    // existed: an absent order appends nothing.
+  it("ignores the order of the set — the upload order is not a property of the images", () => {
+    // A reorder is applied to the stored images themselves (their entries are renumbered), so it
+    // cannot leave them stale and must not read as a change.
+    assert.equal(
+      fp({ ...base, renderedTokens: ["c:front:x", "a:m1"] }),
+      fp({ ...base, renderedTokens: ["a:m1", "c:front:x"] })
+    );
+  });
+
+  it("does not disturb an offer that has attachments but renders the derived set", () => {
     const withAttachments: OfferPhotoFingerprintInput = {
       ...base,
       attachments: [{ id: "m1", position: 0, photoId: "p1", itemId: "a" }],
     };
-    assert.equal(fp(withAttachments), fp({ ...withAttachments, order: [] }));
-    assert.notEqual(fp(withAttachments), fp({ ...withAttachments, order: ["a:m1"] }));
+    assert.equal(fp(withAttachments), fp({ ...withAttachments, renderedTokens: [] }));
+    assert.notEqual(fp(withAttachments), fp({ ...withAttachments, renderedTokens: ["a:m1"] }));
   });
 });

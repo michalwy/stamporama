@@ -75,9 +75,11 @@ const ACTIVE_STATUSES = ["queued", "running"] as const;
  * is a snapshot; the mismatch is what `outOfDate` reports, not something to hide. */
 const REMOVED_LABEL = "removed";
 
-/** `01.jpg`, `02.jpg`… — plan position, 1-based, zero-padded so a file manager sorts them right. */
-function planFileName(index: number, mime: string): string {
-  return `${String(index + 1).padStart(2, "0")}.${extForMime(mime)}`;
+/** `01.jpg`, `02.jpg`… — upload position, 1-based, zero-padded so a file manager sorts them right.
+ * `prefix` names the images that are *not* part of the upload run (#313), which get their own dense
+ * sequence so no number of theirs can be mistaken for a slot in the listing. */
+function planFileName(index: number, mime: string, prefix = ""): string {
+  return `${prefix}${String(index + 1).padStart(2, "0")}.${extForMime(mime)}`;
 }
 
 /** Raised by {@link enqueueOfferPhotoGeneration} when there is nothing sensible to render. */
@@ -87,6 +89,9 @@ export class OfferPhotoGenerationError extends Error {}
 export interface OfferPhotoImage {
   photoId: string;
   sortOrder: number;
+  /** The plan identity this image was rendered for (#313), or null on a row too old to match. It is
+   * what the panel drags and marks — the stored list and the plan speak the same tokens. */
+  token: string | null;
   /** `collage` for a group of set copies, `copy_photo` / `upload` for a manual attachment (#313). */
   source: string;
   side: "front" | "back" | null;
@@ -94,11 +99,21 @@ export interface OfferPhotoImage {
   pairKey: string | null;
   setIds: string[];
   itemIds: string[];
+  /** False when the collector marked this image do-not-publish (#313) — stored and downloadable,
+   * but not part of the upload set. */
+  publish: boolean;
+  /** True when this image falls past the platform's photo limit in plan order (#313) — stored all
+   * the same, so the collector can see what did not fit and reorder to change that. */
+  overLimit: boolean;
   /**
    * The name this image takes when downloaded, on its own or inside the plan's ZIP (#314):
-   * `01.jpg`, `02.jpg`… Plain numbers in plan order, because the whole point is a folder that
+   * `01.jpg`, `02.jpg`… Plain numbers in **upload** order, because the whole point is a folder that
    * sorts into upload order in any file manager. Our numbering is not the platform's — position
    * there is whatever was uploaded — and that is fine: labels identify copies independently (#312).
+   *
+   * Images outside the upload set take a name that is deliberately not part of that run
+   * (`unpublished-01.jpg`, `over-limit-01.jpg`), so a number never implies a slot the image does not
+   * have and the ZIP's `01…n` stays dense.
    */
   fileName: string;
   /** The copies the image shows, in tile order. Ids no longer in the offer resolve to a placeholder
@@ -155,9 +170,20 @@ export interface OfferPhotoPlannedImage {
   attachmentId: string | null;
   /** The collector's caption for an attachment; null for a generated group. */
   title: string | null;
-  /** An image to preview the entry with — an attachment's own source photo, or the first tile of a
-   * planned collage. The planned collage itself does not exist yet, so its first stamp stands in. */
+  /**
+   * An image to preview the entry with. Once a run has produced this very image — matched by token —
+   * it is that image: previewing a generated collage with its first stamp's scan was a small lie
+   * about what the plan holds. Falls back to the attachment's own source photo, or to the collage's
+   * first tile while nothing has been rendered for it yet.
+   */
   previewPhotoId: string | null;
+  /** The stored image rendered for this entry (#313), or null when there is none yet. Also what says
+   * the entry is already generated, as opposed to merely planned. */
+  generatedPhotoId: string | null;
+  /** False when the collector marked this entry do-not-publish (#313): rendered, but not uploaded. */
+  publish: boolean;
+  /** True when this entry falls past the platform's photo limit in plan order (#313). */
+  overLimit: boolean;
   setLabels: string[];
   copyLabels: string[];
 }
@@ -169,10 +195,11 @@ export interface OfferPhotoPlanPreview {
   imageCount: number;
   /** The planned sequence in upload order (#313), attachments included. */
   images: OfferPhotoPlannedImage[];
-  /** Groups the platform's photo-count limit would drop from the end (#309). */
-  droppedGroups: number;
-  /** The plan exceeds the platform's limit through protected attachments alone (#309). */
-  exceedsLimit: boolean;
+  /** How many planned images fall past the platform's photo limit (#313). They are still rendered
+   * and stored — only kept out of the numbered upload run and the ZIP. */
+  overLimitCount: number;
+  /** How many images the plan holds that would actually be uploaded. */
+  uploadCount: number;
   /** Sides no group can produce for want of a complete set of scans. A set of eight losing its back
    * collage over one missing reverse is easy to overlook, so the panel says so out loud (#314). */
   skipped: OfferPhotoSkippedSide[];
@@ -277,6 +304,8 @@ interface GenerationInputs {
   /** The offer's manual plan order (#313): image tokens in the collector's chosen order. Empty means
    * the derived order. */
   photoPlanOrder: string[];
+  /** Plan tokens marked do-not-publish (#313): rendered, but out of the upload set. */
+  photoPlanUnpublished: string[];
   /** The offer's manual attachments (#313), already resolved to the photo each one shows. */
   attachments: PlanAttachment[];
   /** Each attachment's caption, by attachment id — for the panel only. */
@@ -367,6 +396,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       collageBackground: true,
       collageLabelPercent: true,
       photoPlanOrder: true,
+      photoPlanUnpublished: true,
       collection: { select: { ownerId: true } },
       // Limits are read **live** from the platform (#308): they say what it accepts today. The
       // listing language comes along so a tile label reads the way the listing does (#293).
@@ -571,6 +601,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     },
     sourceById,
     photoPlanOrder: offer.photoPlanOrder,
+    photoPlanUnpublished: offer.photoPlanUnpublished,
     attachments,
     attachmentTitles,
     attachmentSources,
@@ -603,6 +634,7 @@ function planFor(inputs: GenerationInputs) {
     maxPhotos: inputs.limits.maxPhotos,
     attachments: inputs.attachments,
     order: inputs.photoPlanOrder,
+    unpublished: inputs.photoPlanUnpublished,
   });
 }
 
@@ -621,11 +653,14 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
     uploadTileLabel: inputs.uploadTileLabel
       ? [inputs.uploadTileLabel.left ?? "", inputs.uploadTileLabel.right ?? ""]
       : undefined,
-    // The **resolved** order the plan actually produced, not the raw stored list — so a stale token
-    // (a sold-out collage) does not keep the plan out of date forever, and reordering the images a
-    // buyer is looking at reads as a change. Passed only when the offer carries a custom order, so an
-    // offer never reordered by hand hashes exactly as it did before this existed.
-    order: inputs.photoPlanOrder.length > 0 ? plan.images.map((image) => image.token) : undefined,
+    // The set of images the plan renders, hashed only when a manual order or a do-not-publish mark
+    // is in play — those are the only things that can change it without changing the composition or
+    // the limits, which are hashed already. The *order* is deliberately absent: a reorder is applied
+    // to the stored images themselves, so it can never leave them stale.
+    renderedTokens:
+      inputs.photoPlanOrder.length > 0 || inputs.photoPlanUnpublished.length > 0
+        ? plan.images.map((image) => image.token)
+        : undefined,
   });
 }
 
@@ -662,6 +697,7 @@ export async function getOfferPhotoPlanState(
       select: {
         photoId: true,
         sortOrder: true,
+        token: true,
         source: true,
         side: true,
         pairKey: true,
@@ -673,24 +709,51 @@ export async function getOfferPhotoPlanState(
   ]);
 
   const plan = planFor(inputs);
-  const images: OfferPhotoImage[] = entries.map((e, index) => ({
+  // The plan's marks, by token, so a stored image can say whether it is part of the upload set. A
+  // stored image whose token the plan no longer holds (its set sold, its attachment removed) is
+  // treated as published: it *was* uploaded, and the plan not planning it any more is what
+  // `outOfDate` already reports.
+  const planned = new Map(plan.images.map((image) => [image.token, image]));
+  const marksFor = (token: string | null) => {
+    const match = token ? planned.get(token) : undefined;
+    return { publish: match?.publish ?? true, overLimit: match?.overLimit ?? false };
+  };
+  const counters = { upload: 0, unpublished: 0, overLimit: 0 };
+  const images: OfferPhotoImage[] = entries.map((e) => {
+    const { publish, overLimit } = marksFor(e.token);
+    // Numbered by position among the images that are actually uploaded, so the run is a dense 1..n
+    // for a bulk upload. The other two get their own sequences under a name that cannot be mistaken
+    // for an upload slot.
+    const fileName = !publish
+      ? planFileName(counters.unpublished++, e.photo.mime, "unpublished-")
+      : overLimit
+        ? planFileName(counters.overLimit++, e.photo.mime, "over-limit-")
+        : planFileName(counters.upload++, e.photo.mime);
+    return {
     photoId: e.photoId,
     sortOrder: e.sortOrder,
+    token: e.token,
     source: e.source,
     side: e.side === "front" || e.side === "back" ? e.side : null,
     pairKey: e.pairKey,
     setIds: e.setIds,
     itemIds: e.itemIds,
-    // Numbered by position in the stored plan, not by `sortOrder`: the file names have to be a dense
-    // 1..n run for a bulk upload, and a plan that ever renders partially would leave gaps.
-    fileName: planFileName(index, e.photo.mime),
+    publish,
+    overLimit,
+    fileName,
     copyLabels: e.itemIds.map((id) => inputs.labels.copies.get(id) ?? REMOVED_LABEL),
     setLabels: e.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
     mime: e.photo.mime,
     width: e.photo.width,
     height: e.photo.height,
     sizeBytes: e.photo.sizeBytes,
-  }));
+    };
+  });
+  // Which stored image was rendered for which plan entry, so the plan can preview a generated
+  // collage with the image itself rather than with one of its stamps.
+  const storedByToken = new Map(
+    images.flatMap((image) => (image.token ? [[image.token, image.photoId] as const] : []))
+  );
 
   return {
     status: (generation?.status as OfferPhotoGenerationStatus) ?? "none",
@@ -709,6 +772,7 @@ export async function getOfferPhotoPlanState(
       configured: plan.configured,
       imageCount: plan.images.length,
       images: plan.images.map((image, index): OfferPhotoPlannedImage => {
+        const generatedPhotoId = storedByToken.get(image.token) ?? null;
         if (image.kind === "attachment") {
           return {
             key: image.attachmentId,
@@ -717,7 +781,12 @@ export async function getOfferPhotoPlanState(
             side: null,
             attachmentId: image.attachmentId,
             title: inputs.attachmentTitles.get(image.attachmentId) ?? null,
-            previewPhotoId: image.photoId,
+            // The rendered image once there is one — an attachment is annotated too, so its source
+            // photo is not what the listing shows either.
+            previewPhotoId: generatedPhotoId ?? image.photoId,
+            generatedPhotoId,
+            publish: image.publish,
+            overLimit: image.overLimit,
             setLabels: [],
             copyLabels: image.itemId
               ? [inputs.labels.copies.get(image.itemId) ?? REMOVED_LABEL]
@@ -731,15 +800,20 @@ export async function getOfferPhotoPlanState(
           side: image.side,
           attachmentId: null,
           title: null,
-          previewPhotoId: image.tiles[0]?.photoId ?? null,
+          // The generated collage itself when it exists; its first stamp only stands in while
+          // nothing has been rendered for this entry yet.
+          previewPhotoId: generatedPhotoId ?? image.tiles[0]?.photoId ?? null,
+          generatedPhotoId,
+          publish: image.publish,
+          overLimit: image.overLimit,
           setLabels: image.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
           copyLabels: image.tiles.map(
             (tile) => inputs.labels.copies.get(tile.itemId) ?? REMOVED_LABEL
           ),
         };
       }),
-      droppedGroups: plan.droppedGroups,
-      exceedsLimit: plan.exceedsLimit,
+      overLimitCount: plan.overLimitCount,
+      uploadCount: plan.uploaded.length,
       excludedSets: inputs.excludedSets,
       skipped: plan.skipped.map((s) => ({
         side: s.side,
@@ -756,36 +830,48 @@ export async function getOfferPhotoPlanState(
 // ── Archive ──────────────────────────────────────────────────────────────────
 
 /**
- * The offer's stored images as one ZIP, in plan order, named `01.jpg`, `02.jpg`… — the file the
+ * The offer's **upload set** as one ZIP, in plan order, named `01.jpg`, `02.jpg`… — the file the
  * collector drops into a marketplace's bulk upload (#314). Owner-checked.
+ *
+ * Only the images that are actually going up are in it (#313): an image marked do-not-publish, or
+ * one past the platform's photo limit, is stored and downloadable on its own but has no place in a
+ * bulk upload. Their absence is what keeps the archive's `01…n` dense, which is the whole point of
+ * the numbering.
  *
  * Buffered rather than streamed: the archive is bounded by the platform's own photo-count and
  * per-file limits (#308), which is a handful of megabytes, and a stream would have to hold the same
  * central directory anyway.
  *
- * @throws {OfferPhotoGenerationError} when the offer has no generated images to archive.
+ * @throws {OfferPhotoGenerationError} when the offer has no images to upload.
  */
 export async function buildOfferPhotoArchive(
   ownerId: string,
   offerId: string
 ): Promise<{ fileName: string; bytes: Buffer }> {
-  await assertOfferOwner(ownerId, offerId);
+  const state = await getOfferPhotoPlanState(ownerId, offerId);
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { name: true } });
-  const entries = await prisma.offerPhotoEntry.findMany({
-    where: { offerId },
-    orderBy: { sortOrder: "asc" },
-    select: {
-      photo: { select: { storageBackend: true, storageKey: true, mime: true } },
-    },
-  });
-  if (entries.length === 0) {
-    throw new OfferPhotoGenerationError("This offer has no generated images yet.");
+
+  // The read model already resolved every image's marks and its upload name against the current
+  // plan, so the archive cannot disagree with the panel about what goes up or what it is called.
+  const uploaded = state.images.filter((image) => image.publish && !image.overLimit);
+  if (uploaded.length === 0) {
+    throw new OfferPhotoGenerationError(
+      state.images.length === 0
+        ? "This offer has no generated images yet."
+        : "Every generated image of this offer is held back — nothing to upload."
+    );
   }
 
+  const photos = await prisma.photo.findMany({
+    where: { id: { in: uploaded.map((image) => image.photoId) } },
+    select: { id: true, storageBackend: true, storageKey: true, mime: true },
+  });
+  const byId = new Map(photos.map((photo) => [photo.id, photo]));
+
   const files = await Promise.all(
-    entries.map(async (e, index) => ({
-      name: planFileName(index, e.photo.mime),
-      contents: await readFullBytes(e.photo),
+    uploaded.map(async (image) => ({
+      name: image.fileName,
+      contents: await readFullBytes(byId.get(image.photoId)!),
     }))
   );
 
@@ -943,6 +1029,9 @@ interface RenderedImage {
   height: number;
   sizeBytes: number;
   sortOrder: number;
+  /** The plan identity this image was rendered for (#313) — stored on its entry, so the panel can
+   * match the file back to its planned place. */
+  token: string;
   /** `collage` for a planned group, `copy_photo` / `upload` for a manual attachment (#313). */
   source: "collage" | "copy_photo" | "upload";
   side: "front" | "back" | null;
@@ -977,7 +1066,7 @@ async function renderTiles(
   columns: number,
   index: number,
   inputs: GenerationInputs
-): Promise<Omit<RenderedImage, "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
+): Promise<Omit<RenderedImage, "token" | "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
   const collage = inputs.collage!;
   const rendered = await renderCollage(
     sources,
@@ -1039,6 +1128,7 @@ async function renderPlannedCollage(
   }
   return {
     ...(await renderTiles(sources, inputs.collage!.collageColumns, index, inputs)),
+    token: image.token,
     source: "collage",
     side: image.side,
     pairKey: image.groupKey,
@@ -1066,6 +1156,7 @@ async function renderPlannedAttachment(
   const source = await tileSource(image.photoId, labels, inputs);
   return {
     ...(await renderTiles([source], 1, index, inputs)),
+    token: image.token,
     source: inputs.attachmentSources.get(image.attachmentId) ?? "upload",
     side: null,
     pairKey: null,
@@ -1148,6 +1239,7 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
           offerId,
           photoId: image.photoId,
           sortOrder: image.sortOrder,
+          token: image.token,
           source: image.source,
           side: image.side,
           pairKey: image.pairKey,

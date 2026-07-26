@@ -37,6 +37,9 @@ const collage = { collageRows: 2, collageColumns: 2 }; // capacity 4
 const collages = (images: PlannedImage[]): PlannedCollage[] =>
   images.filter((i): i is PlannedCollage => i.kind === "collage");
 
+const skips = (plan: ReturnType<typeof planOfferPhotos>) =>
+  plan.skipped.map((s) => `${s.groupKey}:${s.side}:${s.missingItemIds.join(",")}`);
+
 const shape = (images: PlannedImage[]) =>
   images.map((image) =>
     image.kind === "collage"
@@ -228,9 +231,6 @@ describe("planOfferPhotos sides", () => {
 // Skipped sides (#314) -------------------------------------------------------
 
 describe("planOfferPhotos skipped sides", () => {
-  const skips = (plan: ReturnType<typeof planOfferPhotos>) =>
-    plan.skipped.map((s) => `${s.groupKey}:${s.side}:${s.missingItemIds.join(",")}`);
-
   it("reports nothing when every planned side is complete", () => {
     const plan = planOfferPhotos({
       sets: [set("s1", 0, [copy("a"), copy("b")])],
@@ -268,24 +268,8 @@ describe("planOfferPhotos skipped sides", () => {
     assert.deepEqual(skips(plan), ["g0:front:a", "g0:back:a"]);
   });
 
-  it("stays silent about a side of a group the photo limit dropped outright", () => {
-    const plan = planOfferPhotos({
-      sets: [
-        set("s1", 0, [copy("a"), copy("b")]),
-        set("s2", 1, [copy("c"), copy("d", { back: false })]),
-      ],
-      photoSides: "both",
-      collage,
-      maxPhotos: 2,
-    });
-
-    // s2's group is the one truncated, so its missing back is not worth a second notice.
-    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g0:back:a,b"]);
-    assert.equal(plan.droppedGroups, 1);
-    assert.deepEqual(plan.skipped, []);
-  });
-
-  it("keeps the notice when the incomplete group survives truncation", () => {
+  it("reports a missing side regardless of the platform's photo limit", () => {
+    // Nothing is dropped for want of a slot any more, so a missing scan is always a real absence.
     const plan = planOfferPhotos({
       sets: [
         set("s1", 0, [copy("a"), copy("b", { back: false })]),
@@ -296,7 +280,7 @@ describe("planOfferPhotos skipped sides", () => {
       maxPhotos: 1,
     });
 
-    assert.deepEqual(shape(plan.images), ["g0:front:a,b"]);
+    assert.deepEqual(shape(plan.uploaded), ["g0:front:a,b"]);
     assert.deepEqual(skips(plan), ["g0:back:b"]);
   });
 
@@ -312,16 +296,16 @@ describe("planOfferPhotos skipped sides", () => {
   });
 });
 
-// Truncation ----------------------------------------------------------------
+// The platform's photo limit ------------------------------------------------
 
-describe("planOfferPhotos truncation", () => {
+describe("planOfferPhotos over the platform's photo limit", () => {
   const threeSets = [
     set("s1", 0, [copy("a"), copy("b")]),
     set("s2", 1, [copy("c"), copy("d")]),
     set("s3", 2, [copy("e"), copy("f")]),
   ];
 
-  it("does not truncate when the platform states no photo limit", () => {
+  it("marks nothing when the platform states no photo limit", () => {
     const plan = planOfferPhotos({
       sets: threeSets,
       photoSides: "both",
@@ -330,11 +314,13 @@ describe("planOfferPhotos truncation", () => {
     });
 
     assert.equal(plan.images.length, 6);
-    assert.equal(plan.droppedGroups, 0);
-    assert.equal(plan.exceedsLimit, false);
+    assert.equal(plan.uploaded.length, 6);
+    assert.equal(plan.overLimitCount, 0);
   });
 
-  it("drops whole groups from the end, front and back together", () => {
+  it("keeps planning past the limit, marking the tail instead of dropping it", () => {
+    // The limit falls in the middle of g2's front/back pair. Everything is still rendered; the
+    // images past the allowance are simply not part of the upload set.
     const plan = planOfferPhotos({
       sets: threeSets,
       photoSides: "both",
@@ -342,12 +328,22 @@ describe("planOfferPhotos truncation", () => {
       maxPhotos: 5,
     });
 
-    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g0:back:a,b", "g1:front:c,d", "g1:back:c,d"]);
-    assert.equal(plan.droppedGroups, 1);
-    assert.equal(plan.exceedsLimit, false);
+    assert.equal(plan.images.length, 6, "nothing is dropped from the plan");
+    assert.deepEqual(
+      plan.images.map((i) => i.overLimit),
+      [false, false, false, false, false, true]
+    );
+    assert.deepEqual(shape(plan.uploaded), [
+      "g0:front:a,b",
+      "g0:back:a,b",
+      "g1:front:c,d",
+      "g1:back:c,d",
+      "g2:front:e,f",
+    ]);
+    assert.equal(plan.overLimitCount, 1);
   });
 
-  it("drops groups in order when only fronts are rendered", () => {
+  it("fills the allowance from the front, in plan order", () => {
     const plan = planOfferPhotos({
       sets: threeSets,
       photoSides: "front",
@@ -355,8 +351,38 @@ describe("planOfferPhotos truncation", () => {
       maxPhotos: 2,
     });
 
-    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g1:front:c,d"]);
-    assert.equal(plan.droppedGroups, 1);
+    assert.deepEqual(shape(plan.uploaded), ["g0:front:a,b", "g1:front:c,d"]);
+    assert.equal(plan.overLimitCount, 1);
+  });
+
+  it("uploads nothing, but still plans everything, when the platform allows no photos", () => {
+    const plan = planOfferPhotos({
+      sets: threeSets,
+      photoSides: "front",
+      collage,
+      maxPhotos: 0,
+    });
+
+    assert.equal(plan.images.length, 3);
+    assert.deepEqual(plan.uploaded, []);
+    assert.equal(plan.overLimitCount, 3);
+  });
+
+  it("still reports a missing side of a group that is over the limit", () => {
+    // The image is rendered and shown either way now, so its missing back is a real absence — the
+    // old silence was only justified while the group was dropped outright.
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a"), copy("b")]),
+        set("s2", 1, [copy("c"), copy("d", { back: false })]),
+      ],
+      photoSides: "both",
+      collage,
+      maxPhotos: 2,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g0:back:a,b", "g1:front:c,d"]);
+    assert.deepEqual(skips(plan), ["g1:back:d"]);
   });
 });
 
@@ -399,7 +425,7 @@ describe("planOfferPhotos attachments", () => {
     assert.deepEqual(shape(plan.images), ["g0:front:a,b", "attachment:m1"]);
   });
 
-  it("protects attachments from truncation, dropping generated groups instead", () => {
+  it("counts attachments against the limit by position — an early one is uploaded, a late one is not", () => {
     const plan = planOfferPhotos({
       sets: [
         set("s1", 0, [copy("a"), copy("b")]),
@@ -409,26 +435,32 @@ describe("planOfferPhotos attachments", () => {
       photoSides: "front",
       collage,
       maxPhotos: 3,
-      attachments: [attachment("m1", 0), attachment("m2", 1)],
+      // One attachment at the very front, one at the very back.
+      attachments: [attachment("m1", 0), attachment("m2", 9)],
     });
 
-    assert.deepEqual(shape(plan.images), ["attachment:m1", "attachment:m2", "g0:front:a,b"]);
-    assert.equal(plan.droppedGroups, 2);
-    assert.equal(plan.exceedsLimit, false);
+    assert.deepEqual(shape(plan.images), [
+      "attachment:m1",
+      "g0:front:a,b",
+      "g1:front:c,d",
+      "g2:front:e,f",
+      "attachment:m2",
+    ]);
+    assert.deepEqual(shape(plan.uploaded), ["attachment:m1", "g0:front:a,b", "g1:front:c,d"]);
+    assert.equal(plan.overLimitCount, 2, "g2's front and the trailing attachment are both over");
   });
 
-  it("keeps every attachment and reports the overflow when they alone exceed the limit", () => {
+  it("lets attachments alone fill the limit, putting the collages behind them over it", () => {
     const plan = planOfferPhotos({
       sets: [set("s1", 0, [copy("a"), copy("b")])],
       photoSides: "front",
       collage,
-      maxPhotos: 1,
+      maxPhotos: 2,
       attachments: [attachment("m1", 0), attachment("m2", 1)],
     });
 
-    assert.deepEqual(shape(plan.images), ["attachment:m1", "attachment:m2"]);
-    assert.equal(plan.droppedGroups, 1);
-    assert.equal(plan.exceedsLimit, true);
+    assert.deepEqual(shape(plan.uploaded), ["attachment:m1", "attachment:m2"]);
+    assert.equal(plan.overLimitCount, 1);
   });
 
   it("plans attachments even while the offer carries no collage numbers", () => {
@@ -525,8 +557,9 @@ describe("planOfferPhotos manual order", () => {
     assert.deepEqual(shape(plan.images), ["g0:back:a,b", "g0:front:a,b"]);
   });
 
-  it("applies the order only after truncation, so protection is unchanged", () => {
-    // maxPhotos drops g2 by natural group order even though the manual order would end on g0.
+  it("applies the order before truncation, so the order is the priority order", () => {
+    // The collector put g2 first and g0 last; the limit therefore keeps g2 and drops g0 — the
+    // opposite of what the derived order would have kept.
     const plan = planOfferPhotos({
       sets: [
         set("s1", 0, [copy("a"), copy("b")]),
@@ -542,8 +575,82 @@ describe("planOfferPhotos manual order", () => {
         collageToken("front", ["a", "b"]),
       ],
     });
-    // g2 (e,f) was dropped by truncation; the surviving two are then shown in the manual order.
-    assert.deepEqual(shape(plan.images), ["g1:front:c,d", "g0:front:a,b"]);
-    assert.equal(plan.droppedGroups, 1);
+    assert.deepEqual(shape(plan.uploaded), ["g2:front:e,f", "g1:front:c,d"]);
+    assert.equal(plan.overLimitCount, 1, "g0, which the collector put last, is the one over");
+  });
+});
+
+// Do not publish (#313) ------------------------------------------------------
+
+describe("planOfferPhotos unpublished images", () => {
+  const threeFronts = [
+    set("s1", 0, [copy("a"), copy("b")]),
+    set("s2", 1, [copy("c"), copy("d")]),
+    set("s3", 2, [copy("e"), copy("f")]),
+  ];
+  const g0 = collageToken("front", ["a", "b"]);
+  const g1 = collageToken("front", ["c", "d"]);
+
+  it("keeps an unpublished image in the plan, marked, because it is still rendered", () => {
+    const plan = planOfferPhotos({
+      sets: threeFronts,
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+      unpublished: [g1],
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g1:front:c,d", "g2:front:e,f"]);
+    assert.deepEqual(
+      plan.images.map((i) => i.publish),
+      [true, false, true]
+    );
+  });
+
+  it("does not count an unpublished image against the platform's limit", () => {
+    // Two of three published fit a limit of 2 — the unpublished one is not being uploaded, so it
+    // neither consumes the allowance nor can be over it.
+    const plan = planOfferPhotos({
+      sets: threeFronts,
+      photoSides: "front",
+      collage,
+      maxPhotos: 2,
+      unpublished: [g0],
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b", "g1:front:c,d", "g2:front:e,f"]);
+    assert.deepEqual(shape(plan.uploaded), ["g1:front:c,d", "g2:front:e,f"]);
+    assert.equal(plan.overLimitCount, 0, "hiding one let the third image under the limit");
+  });
+
+  it("marks an attachment unpublished by its own token", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")])],
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+      attachments: [{ id: "m1", position: 9, photoId: "m1-p", itemId: null }],
+      unpublished: [attachmentToken("m1")],
+    });
+
+    assert.deepEqual(
+      plan.images.map((i) => i.publish),
+      [true, false]
+    );
+  });
+
+  it("ignores a token that matches no image", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b")])],
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+      unpublished: ["c:front:long-gone"],
+    });
+
+    assert.deepEqual(
+      plan.images.map((i) => i.publish),
+      [true]
+    );
   });
 });

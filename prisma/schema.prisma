@@ -753,11 +753,20 @@ model Offer {
   // A manual **plan order** over this offer's photos (#313): an ordered list of stable tokens, one
   // per planned image — `c:<side>:<sortedItemIds>` for a generated collage side, `a:<attachmentId>`
   // for a manual attachment. It is an *override* of the derived order (set order + grouping), not a
-  // replacement: the engine still groups and truncates naturally, then reorders the surviving images
-  // by this list. Tokens the composition no longer contains are ignored; images added since the last
-  // reorder slot in after their natural predecessor. Empty (the default) means the derived order,
-  // so an offer never reordered by hand behaves exactly as before.
+  // replacement: the engine still groups the composition, then reorders the images by this list.
+  // Tokens the composition no longer contains are ignored; images added since the last reorder slot
+  // in after their natural predecessor. Empty (the default) means the derived order, so an offer
+  // never reordered by hand behaves exactly as before.
+  //
+  // The order is also the **priority** order: what the platform's photo limit drops is whatever
+  // falls off the end of it. And it is applied to the stored images directly (their entries are
+  // renumbered), so the plan and the stored files never disagree about the upload sequence.
   photoPlanOrder String[] @default([])
+  // Plan tokens marked **do not publish**: still rendered and stored — the collector wants to look
+  // at them, and a collage cannot be "removed" the way a manual attachment can — but kept out of the
+  // upload set. They take no upload number, are absent from the plan's ZIP, and do not count toward
+  // the platform's photo limit, so hiding one can let a truncated image back in.
+  photoPlanUnpublished String[] @default([])
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -823,8 +832,16 @@ model OfferPhotoEntry {
   offerId String
   /** The generated file this entry is. One entry per photo; deleting either drops the pair. */
   photoId String @unique
-  /** 0-based position in the finished plan — the order the images are uploaded in. */
+  /** 0-based position in the finished plan — the order the images are uploaded in. Rewritten when
+   * the collector reorders the plan (#313), so the stored files, their numbering and the ZIP always
+   * follow one order; the bytes are never touched by a reorder. */
   sortOrder Int
+  /** The plan identity this image was rendered for (#313): `c:<side>:<sortedItemIds>` for a collage
+   * side, `a:<attachmentId>` for a manual attachment. It is what matches a stored file back to its
+   * planned entry — so the plan can preview a generated collage with the real image, and a reorder
+   * or a do-not-publish mark can name it. Null on rows generated before tokens existed that could
+   * not be backfilled; such a row simply does not match. */
+  token   String?
   /** What the image was produced from: `collage` (a group of set copies) today; `copy_photo` and
    * `upload` arrive with manual attachments (#313). */
   source  String @default("collage")

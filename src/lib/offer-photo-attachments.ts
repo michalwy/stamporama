@@ -366,7 +366,13 @@ export async function removeOfferPhotoAttachment(
  * is nothing to validate against the current composition, which is the whole point of letting it
  * survive one.
  *
- * Passing an empty list clears the override, returning the plan to its derived order.
+ * The order is then **applied to the images already stored**: their entries are renumbered into it,
+ * so the stored list, the upload numbering and the ZIP all follow one sequence. Only `sortOrder`
+ * moves — no bytes, no ids — which is why a reorder is not a reason to regenerate, and why the same
+ * drag works from either list.
+ *
+ * Passing an empty list clears the override, returning the plan to its derived order; the stored
+ * entries are renumbered into that too.
  */
 export async function setOfferPhotoPlanOrder(
   ownerId: string,
@@ -379,6 +385,70 @@ export async function setOfferPhotoPlanOrder(
   const seen = new Set<string>();
   const order = tokens.filter((token) => (seen.has(token) ? false : (seen.add(token), true)));
   await prisma.offer.update({ where: { id: offerId }, data: { photoPlanOrder: order } });
+  await renumberStoredEntries(ownerId, offerId);
+}
+
+/**
+ * Mark one plan image **do not publish**, or publish it again (#313). Keyed by token like the order,
+ * because a generated collage has no row of its own — and unlike a manual attachment it cannot
+ * simply be removed, which is exactly why it needs this.
+ *
+ * Nothing is deleted and nothing needs re-rendering: the image is still generated and still
+ * downloadable on its own. It only leaves the upload set, which frees its slot under the platform's
+ * photo limit — so hiding one can bring another image back under it. That shuffle is why the stored
+ * entries are renumbered afterwards.
+ */
+export async function setOfferPhotoPublish(
+  ownerId: string,
+  offerId: string,
+  token: string,
+  publish: boolean
+): Promise<void> {
+  await assertOfferOwner(ownerId, offerId);
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { photoPlanUnpublished: true },
+  });
+  if (!offer) throw new OfferPhotoAttachmentError("Offer not found.");
+
+  const current = new Set(offer.photoPlanUnpublished);
+  if (publish) current.delete(token);
+  else current.add(token);
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { photoPlanUnpublished: [...current] },
+  });
+  await renumberStoredEntries(ownerId, offerId);
+}
+
+/**
+ * Renumber the offer's stored entries into the plan's current order. The plan is the authority on
+ * sequence; the entries only record where each stored file sits in it, so this is a pure
+ * `sortOrder` rewrite.
+ *
+ * A stored image the plan no longer holds — its set sold, its attachment removed — keeps its
+ * relative place at the end rather than being deleted or renumbered to the front: it is still a file
+ * the collector may have uploaded, and the staleness signal is what speaks about it.
+ */
+async function renumberStoredEntries(ownerId: string, offerId: string): Promise<void> {
+  const state = await getOfferPhotoPlanState(ownerId, offerId);
+  if (state.images.length === 0) return;
+
+  const rank = new Map(state.plan.images.map((image, index) => [image.token, index] as const));
+  const positioned = state.images.map((image, index) => ({
+    photoId: image.photoId,
+    // Unplanned images sort after every planned one, keeping the order they already had.
+    rank: image.token != null && rank.has(image.token) ? rank.get(image.token)! : Infinity,
+    index,
+  }));
+  positioned.sort((a, b) => a.rank - b.rank || a.index - b.index);
+
+  await prisma.$transaction(
+    positioned.map((entry, sortOrder) =>
+      prisma.offerPhotoEntry.update({ where: { photoId: entry.photoId }, data: { sortOrder } })
+    )
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

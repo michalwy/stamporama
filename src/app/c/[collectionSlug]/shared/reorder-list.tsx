@@ -32,11 +32,13 @@ export interface DragList {
 
 /** Wires one reorderable list. `onMove(from, to)` gets list indexes; it fires only for a real move.
  * Returns null when reordering is off, so the caller can spread nothing. With `handleOnly`, an
- * element only becomes draggable while the pointer went down on its handle. */
+ * element only becomes draggable while the pointer went down on its handle. `layout: "grid"` is for
+ * a wrapping gallery, where the drop gap depends on the pointer's column as well as its row. */
 export function useReorderList(
   enabled: boolean,
   onMove: (from: number, to: number) => void,
-  { handleOnly = false }: { handleOnly?: boolean } = {}
+  { handleOnly = false, layout = "vertical" }:
+    { handleOnly?: boolean; layout?: "vertical" | "grid" } = {}
 ): DragList | null {
   const [fromIndex, setFromIndex] = useState<number | null>(null);
   const [insertAt, setInsertAt] = useState<number | null>(null);
@@ -53,15 +55,30 @@ export function useReorderList(
     return () => window.removeEventListener("mouseup", disarm);
   }, [armed]);
 
-  /** Which gap the pointer sits in: before the first element whose midpoint it has not passed. */
-  const gapAt = useCallback((clientY: number) => {
-    const entries = [...els.current.entries()].sort((a, b) => a[0] - b[0]);
-    for (const [index, el] of entries) {
-      const r = el.getBoundingClientRect();
-      if (clientY < r.top + r.height / 2) return index;
-    }
-    return entries.length;
-  }, []);
+  /**
+   * Which gap the pointer sits in.
+   *
+   * In a vertical list that is simply the first element whose vertical midpoint the pointer has not
+   * passed. In a **grid** the elements of one row share a top and a height, so height alone cannot
+   * separate them: the pointer lands before the first element it is either fully above (an earlier
+   * row) or inside whose left half it sits (an earlier column of this row).
+   */
+  const gapAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const entries = [...els.current.entries()].sort((a, b) => a[0] - b[0]);
+      for (const [index, el] of entries) {
+        const r = el.getBoundingClientRect();
+        if (layout === "grid") {
+          if (clientY < r.top) return index;
+          if (clientY <= r.bottom && clientX < r.left + r.width / 2) return index;
+        } else if (clientY < r.top + r.height / 2) {
+          return index;
+        }
+      }
+      return entries.length;
+    },
+    [layout]
+  );
 
   const reset = useCallback(() => {
     setFromIndex(null);
@@ -78,14 +95,14 @@ export function useReorderList(
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
-        const at = gapAt(e.clientY);
+        const at = gapAt(e.clientX, e.clientY);
         setInsertAt((prev) => (prev === at ? prev : at));
       },
       onDrop: (e: React.DragEvent) => {
         if (fromIndex == null) return;
         e.preventDefault();
         e.stopPropagation();
-        const at = gapAt(e.clientY);
+        const at = gapAt(e.clientX, e.clientY);
         // A gap below the source shifts down by one once the source is lifted out.
         const to = at > fromIndex ? at - 1 : at;
         const from = fromIndex;
