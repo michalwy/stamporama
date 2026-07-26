@@ -146,6 +146,73 @@ describe("renderListingTemplate — repeating blocks", () => {
   });
 });
 
+// A legend of the abbreviations a description just printed (#318): the blocks iterate the *distinct*
+// conditions / certificate statuses the copies use, and the collector formats the entry themselves.
+describe("renderListingTemplate — legend blocks", () => {
+  const mnh = copy({ name: "Mercury", catalogNumbers: [cn("Mi", "12")], condition: "Mint never hinged", conditionAbbr: "MNH" });
+  const used = copy({ name: "Venus", catalogNumbers: [cn("Mi", "13")], condition: "Used", conditionAbbr: "U" });
+  const mnhToo = copy({ name: "Mars", catalogNumbers: [cn("Mi", "14")], condition: "Mint never hinged", conditionAbbr: "MNH" });
+  const legend = "{#conditionLegend}{conditionAbbr} = {condition}\n{/conditionLegend}";
+
+  it("repeats once per distinct condition used, in first-seen order", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [mnh, used, mnhToo] }];
+    assert.equal(renderListingTemplate(legend, sets), "MNH = Mint never hinged\nU = Used");
+  });
+
+  it("collects the conditions of every set in the offer", () => {
+    const sets: TemplateSet[] = [
+      { title: "Lot A", copies: [mnh] },
+      { title: "Lot B", copies: [used, mnhToo] },
+    ];
+    assert.equal(renderListingTemplate(legend, sets), "MNH = Mint never hinged\nU = Used");
+  });
+
+  it("leaves out a copy that records no condition at all", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [mnh, copy({ name: "Ceres" })] }];
+    assert.equal(renderListingTemplate(legend, sets), "MNH = Mint never hinged");
+  });
+
+  it("drops the '=' glue when the condition has no abbreviation", () => {
+    const noAbbr = copy({ name: "Ceres", condition: "Used" });
+    const sets: TemplateSet[] = [{ title: null, copies: [mnh, noAbbr] }];
+    assert.equal(renderListingTemplate(legend, sets), "MNH = Mint never hinged\nUsed");
+  });
+
+  it("narrows every other token to the copies using that condition", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [mnh, used, mnhToo] }];
+    const out = renderListingTemplate("{#conditionLegend}{conditionAbbr}: {catalog}\n{/conditionLegend}", sets);
+    assert.equal(out, "MNH: Mi 12,14\nU: Mi 13");
+  });
+
+  it("iterates the enclosing set's conditions when nested in a set block", () => {
+    const sets: TemplateSet[] = [
+      { title: "Lot A", copies: [mnh, used] },
+      { title: "Lot B", copies: [mnhToo] },
+    ];
+    const out = renderListingTemplate("{#set}{setTitle}\n{#conditionLegend}- {conditionAbbr}\n{/conditionLegend}{/set}", sets);
+    assert.equal(out, "Lot A\n- MNH\n- U\nLot B\n- MNH");
+  });
+
+  it("repeats once per distinct certificate status used", () => {
+    const photo = copy({ name: "Mercury", certificate: "Photo certificate", certificateAbbr: "cert." });
+    const photoToo = copy({ name: "Venus", certificate: "Photo certificate", certificateAbbr: "cert." });
+    const full = copy({ name: "Mars", certificate: "Full certificate", certificateAbbr: "FC" });
+    const sets: TemplateSet[] = [{ title: null, copies: [photo, copy({ name: "Ceres" }), photoToo, full] }];
+    const out = renderListingTemplate("{#certificateLegend}{certificateAbbr} = {certificate}\n{/certificateLegend}", sets);
+    assert.equal(out, "cert. = Photo certificate\nFC = Full certificate");
+  });
+
+  it("renders nothing when no copy in scope carries the dictionary entry", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [copy({ name: "Ceres" })] }];
+    assert.equal(renderListingTemplate(`Legend:\n${legend}`, sets), "Legend:");
+  });
+
+  it("leaves mismatched legend tags literal", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [mnh] }];
+    assert.equal(renderListingTemplate("{#conditionLegend}{conditionAbbr}{/certificateLegend}", sets), "{#conditionLegend}MNH{/certificateLegend}");
+  });
+});
+
 describe("renderListingTemplateSegments / listingFallbackTokens", () => {
   it("flags text that fell back to the default language, inside and outside a block", () => {
     const fallen = copy({ name: "Mercury", condition: "Mint", fallbacks: [conditionFallback] });
@@ -176,7 +243,7 @@ describe("listing token legend", () => {
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{catalog}"));
     assert.deepEqual(
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),
-      ["{#set}{/set}", "{#copy}{/copy}"]
+      ["{#set}{/set}", "{#copy}{/copy}", "{#conditionLegend}{/conditionLegend}", "{#certificateLegend}{/certificateLegend}"]
     );
   });
 });

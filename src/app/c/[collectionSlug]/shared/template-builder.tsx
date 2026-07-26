@@ -245,7 +245,10 @@ export function TemplateSyntaxLegend() {
       all, blank = primary), then which prefixes to show (<code>vendor</code>/<code>v</code>,{" "}
       <code>area</code>/<code>a</code>; an empty flags segment like <code>{"{catalog:Mi:}"}</code>{" "}
       gives the bare number). In the multi-line templates a block chip wraps your selection and
-      repeats it once per set (or copy) the offer lists.
+      repeats it once per set (or copy) the offer lists — or, with{" "}
+      <code>{"{#conditionLegend}"}</code> / <code>{"{#certificateLegend}"}</code>, once per distinct
+      condition or certificate status the offer uses — how you append a legend such as{" "}
+      <code>{"{conditionAbbr} = {condition}"}</code>.
     </p>
   );
 }

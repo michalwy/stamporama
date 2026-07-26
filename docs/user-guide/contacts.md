@@ -92,8 +92,8 @@ always generates, falling back to your default text. The tokens fill in from the
 - `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
   named the set, so pair it as `{setTitle|catalog}`)
 
-Literal text between tokens — spaces, `-`, `/`, `:` — is kept as written; it only disappears when it
-was gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several
+Literal text between tokens — spaces, `-`, `/`, `:`, `=` — is kept as written; it only disappears
+when it was gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several
 tokens: for example `{issueName|name|catalog}` prefers the issue name, falls back to the stamp name,
 then the catalog number.
 
@@ -119,6 +119,42 @@ Items in this lot:
 {/set}
 Shipped tracked within 3 working days.
 ```
+
+### A legend of the abbreviations used
+
+Two more blocks repeat over the **distinct conditions and certificate statuses** the offer's copies
+actually use, rather than over its items: `{#conditionLegend}…{/conditionLegend}` and
+`{#certificateLegend}…{/certificateLegend}`. Each runs its body once per entry, in the order the
+entries first appear, so you can spell out the abbreviations a description prints — in whatever
+format you like, since the entry's layout is what you write inside the block:
+
+```
+{#copy}{catalog} {name} — {conditionAbbr}
+{/copy}
+Abbreviations used:
+{#conditionLegend}{conditionAbbr} = {condition}
+{/conditionLegend}
+```
+
+which comes out as, say:
+
+```
+Mi 12 Mercury — MNH
+Mi 13 Venus — U
+
+Abbreviations used:
+MNH = Mint never hinged
+U = Used
+```
+
+The block is named `…Legend` so it is never confused with the `{condition}` / `{certificate}` tokens
+you write *inside* it. Inside such a block every *other* token narrows to the copies carrying that
+entry too, so `{#conditionLegend}{conditionAbbr}: {catalog}{/conditionLegend}` reads `MNH: Mi 12,14`.
+Copies with no condition (or no certificate) recorded contribute no entry, and an entry whose
+dictionary row has no abbreviation set renders its full name alone — the ` = ` glue disappears with
+the empty token, as usual. Keep the body on one line if you prefer the legend inline, e.g.
+`{#conditionLegend}{conditionAbbr} = {condition}, {/conditionLegend}` — the separator is literal
+text, so the last entry keeps its trailing comma.
 
 Blank means *no text is generated at all* for that field — unlike the title, there is no built-in
 default.

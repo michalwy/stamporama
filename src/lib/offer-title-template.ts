@@ -14,6 +14,10 @@
 // so rendering scope is grouped by `OfferSet` rather than flat: line breaks are preserved, a line
 // whose placeholders all came out empty is dropped whole, and the repeating blocks `{#set}…{/set}` /
 // `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
+// `{#conditionLegend}…{/conditionLegend}` / `{#certificateLegend}…{/certificateLegend}` (#318) are the
+// same mechanism over the *distinct dictionary entries* the copies use, which is how a description
+// appends a legend of the abbreviations it just printed — the collector writes the entry's format
+// inside the block.
 
 import { parseCatalogNumberParts } from "./catalog-number";
 import type { TranslatableEntity } from "./translations";
@@ -125,6 +129,16 @@ export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
 export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; label: string }[] = [
   { open: "{#set}", close: "{/set}", label: "Repeat once per set in the offer" },
   { open: "{#copy}", close: "{/copy}", label: "Repeat once per copy (of the enclosing set)" },
+  {
+    open: "{#conditionLegend}",
+    close: "{/conditionLegend}",
+    label: "Repeat once per distinct condition used — a legend of abbreviations",
+  },
+  {
+    open: "{#certificateLegend}",
+    close: "{/certificateLegend}",
+    label: "Repeat once per distinct certificate status used — a legend of abbreviations",
+  },
 ];
 
 /** The fallback template when a platform has none set: catalog, name, year, condition. */
@@ -399,17 +413,17 @@ const EMPTY_MARK = "\u0000";
 const VALUE_MARK = "\u0003";
 
 /** Collapse whitespace, trim, and remove only the dangling glue an **empty** placeholder left
- * behind: a separator (`- – · / , : ;`) that sat directly next to the emptied slot, and any now-empty
+ * behind: a separator (`- – · / , : ; =`) that sat directly next to the emptied slot, and any now-empty
  * `()` / `[]`. A separator between two present values carries no marker, so it is kept verbatim.
  * Runs over the whole render for a one-line title, and line by line for a multi-line text. */
 function tidyLine(rendered: string): string {
   return rendered
     // An empty slot *between* two separators keeps the first one (with its original spacing) and
     // loses the second — `{name} - {certificate} - {year}` must not collapse to `Mercury1850`.
-    .replace(/(\s*[-–·/,:;]\s*) \s*[-–·/,:;]\s*/g, "$1")
+    .replace(/(\s*[-–·/,:;=]\s*) \s*[-–·/,:;=]\s*/g, "$1")
     // Otherwise drop a separator immediately before an empty slot, then one immediately after it.
-    .replace(/\s*[-–·/,:;]\s* /g, EMPTY_MARK)
-    .replace(/ \s*[-–·/,:;]\s*/g, EMPTY_MARK)
+    .replace(/\s*[-–·/,:;=]\s* /g, EMPTY_MARK)
+    .replace(/ \s*[-–·/,:;=]\s*/g, EMPTY_MARK)
     .replace(/[\u0000\u0003]/g, "") // remove the markers themselves
     .replace(/\(\s*\)/g, "") // empty parens left by an emptied token
     .replace(/\[\s*\]/g, "") // empty brackets
@@ -457,12 +471,23 @@ interface TemplateScope {
   setTitle: string | null;
 }
 
+/** What a repeating block iterates: the offer's sets, the copies in scope, or — for a legend of
+ * abbreviations (#318) — the distinct conditions / certificate statuses those copies use. The legend
+ * blocks are named `…Legend` rather than after the dictionary itself so `{#conditionLegend}` cannot
+ * be misread as the `{condition}` token it is normally wrapped around. */
+type BlockOver = "set" | "copy" | "conditionLegend" | "certificateLegend";
+
+/** The two legend blocks, and which pair of {@link TitleTemplateCopy} fields each iterates. */
+type LegendOver = "conditionLegend" | "certificateLegend";
+
 /** A parsed template: literal runs (still carrying `{token}` placeholders) and repeating blocks. */
 type TemplateNode =
   | { kind: "text"; text: string }
-  | { kind: "block"; over: "set" | "copy"; body: TemplateNode[] };
+  | { kind: "block"; over: BlockOver; body: TemplateNode[] };
 
-const BLOCK_TAG_RE = /\{(#set|#copy|\/set|\/copy)\}/g;
+const BLOCK_TAGS: readonly BlockOver[] = ["set", "copy", "conditionLegend", "certificateLegend"];
+
+const BLOCK_TAG_RE = new RegExp(`\\{(${BLOCK_TAGS.map((t) => `#${t}|/${t}`).join("|")})\\}`, "g");
 
 /**
  * Split the repeating blocks `{#set}…{/set}` / `{#copy}…{/copy}` (#266) out of a template, leaving
@@ -472,7 +497,7 @@ const BLOCK_TAG_RE = /\{(#set|#copy|\/set|\/copy)\}/g;
  */
 function parseTemplateNodes(template: string): TemplateNode[] | null {
   const root: TemplateNode[] = [];
-  const stack: { over: "set" | "copy"; body: TemplateNode[] }[] = [];
+  const stack: { over: BlockOver; body: TemplateNode[] }[] = [];
   const push = (node: TemplateNode) => (stack.length > 0 ? stack[stack.length - 1].body : root).push(node);
   let last = 0;
   for (const m of template.matchAll(BLOCK_TAG_RE)) {
@@ -480,11 +505,12 @@ function parseTemplateNodes(template: string): TemplateNode[] | null {
     if (text) push({ kind: "text", text });
     last = m.index + m[0].length;
     const tag = m[1];
-    if (tag === "#set" || tag === "#copy") {
-      stack.push({ over: tag === "#set" ? "set" : "copy", body: [] });
+    const over = tag.slice(1) as BlockOver;
+    if (tag.startsWith("#")) {
+      stack.push({ over, body: [] });
     } else {
       const open = stack.pop();
-      if (!open || open.over !== (tag === "/set" ? "set" : "copy")) return null;
+      if (!open || open.over !== over) return null;
       // After the pop, `push` targets the parent — which is where the finished block belongs.
       push({ kind: "block", over: open.over, body: open.body });
     }
@@ -518,9 +544,43 @@ function isBlankRender(rendered: string): boolean {
   return rendered.replace(/[\u0000-\u0004]/g, "").trim() === "";
 }
 
+/** The dictionary entry one copy contributes to a `{#conditionLegend}` / `{#certificateLegend}` block
+ * (#318): the (full name, abbreviation) pair, as a key that de-duplicates the copies using it. Null
+ * when the copy records neither — it has nothing to explain and is left out of the legend. */
+function legendKey(copy: TitleTemplateCopy, over: LegendOver): string | null {
+  const isCondition = over === "conditionLegend";
+  const name = (isCondition ? copy.condition : copy.certificate)?.trim() ?? "";
+  const abbr = (isCondition ? copy.conditionAbbr : copy.certificateAbbr)?.trim() ?? "";
+  return name || abbr ? `${name} ${abbr}` : null;
+}
+
+/** One scope per distinct condition / certificate status used by the copies in `scope` (#318), in
+ * first-seen order. Each narrows the scope to exactly the copies carrying that entry, so inside the
+ * block `{condition}` / `{conditionAbbr}` name that one entry — and every other token (`{catalog}`,
+ * `{year}`, a nested `{#copy}`) describes the copies it applies to, which is what makes the block a
+ * legend the collector formats themselves rather than a fixed `ABBR = Name` string. */
+function legendScopes(scope: TemplateScope, over: LegendOver): TemplateScope[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const c of scope.copies) {
+    const key = legendKey(c, over);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys.map((key) => {
+    const sets = scope.sets
+      .map((s) => ({ title: s.title, copies: s.copies.filter((c) => legendKey(c, over) === key) }))
+      .filter((s) => s.copies.length > 0);
+    return { sets, copies: sets.flatMap((s) => [...s.copies]), setTitle: scope.setTitle };
+  });
+}
+
 /** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
  * with tokens narrowed to that set's copies; a `{#copy}` block once per copy in scope — nested in a
- * set block that means that set's copies, at the top level every copy of the offer. */
+ * set block that means that set's copies, at the top level every copy of the offer. The legend blocks
+ * `{#conditionLegend}` / `{#certificateLegend}` (#318) repeat once per distinct dictionary entry the
+ * copies use, narrowed to the copies using it. */
 function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): string {
   let out = "";
   for (const node of nodes) {
@@ -531,11 +591,13 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
     const iterations: TemplateScope[] =
       node.over === "set"
         ? scope.sets.map((s) => ({ sets: [s], copies: s.copies, setTitle: s.title }))
-        : scope.copies.map((c) => ({
-            sets: [{ title: scope.setTitle, copies: [c] }],
-            copies: [c],
-            setTitle: scope.setTitle,
-          }));
+        : node.over === "conditionLegend" || node.over === "certificateLegend"
+          ? legendScopes(scope, node.over)
+          : scope.copies.map((c) => ({
+              sets: [{ title: scope.setTitle, copies: [c] }],
+              copies: [c],
+              setTitle: scope.setTitle,
+            }));
     for (const iteration of iterations) {
       const body = renderNodes(node.body, iteration);
       if (!isBlankRender(body)) out += body;
