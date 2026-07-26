@@ -490,6 +490,13 @@ export function InventoryItemRow({
               <span style={CHIP}>{item.certificateStatusName}</span>
             </Tooltip>
           )}
+          {/* Only multiples get a chip. A single is the unmarked default, so labelling it would
+              put a badge on nearly every row and say nothing. */}
+          {item.formatAbbreviation && (
+            <Tooltip content={item.formatName ?? "Format"}>
+              <span style={CHIP}>{item.formatAbbreviation}</span>
+            </Tooltip>
+          )}
           {onSetLocation ? (
             <Tooltip
               content={

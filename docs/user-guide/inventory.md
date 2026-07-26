@@ -251,6 +251,62 @@ To edit the **stamp** a copy points to — its name, catalog numbers, or catalog
 and Issues lists), so you can fix stamp-level details without navigating away from Inventory. Edits
 here apply to the stamp itself, so every copy of it reflects the change.
 
+## Pairs, blocks and other multiples
+
+A copy has a **Format** alongside its condition and certificate: a horizontal pair, a block of
+four, a strip of three, whatever your collection needs. Leave it as **Single** — the default —
+for an ordinary single stamp; there is no "single" entry to pick, because a copy with no format
+set *is* the single. Only multiples get a chip on the list row, so the common case stays quiet.
+
+The format sits on the **copy**, not on the stamp. That matters when a stamp has variants: you
+attach the pair to whichever level of the variant tree you have actually identified, exactly as
+you would a single. A pair you have narrowed down to `309B` but no further is recorded against
+`309B` with format *Horizontal pair* — you do not need a separate "pair" stamp at every level of
+the tree, and you do not lose the fact that the variant is still open.
+
+**A multiple is never split into singles.** A block of four is one copy, one row, one line in your
+holdings — not four. Completeness works the same way it does for condition: just as a used copy
+does not count toward a complete mint set, a block does not count toward a set of singles. You ask
+separately whether you have the series in singles, in pairs, or in blocks.
+
+**Se-tenant and gutter combinations are different.** When the catalog gives the combination its own
+number — Michel `S`, `W`, `K`, `Zd` — it is a distinct catalog entry, so record it as its own stamp
+with that number, not as a format of one of its parts. The test is whether the catalog numbered it
+separately, not whether it holds more than one stamp.
+
+Formats are managed in **Settings → Conditions & formats**. A format that is used by any copy or
+any catalog price cannot be deleted.
+
+### What a multiple is worth
+
+Catalog values are recorded per format, on the same grid as everything else: the stamp editor's
+**Prices** tab has a row of format tabs above the condition × certificate grid, starting with
+**Single**.
+
+Most of the time you will not type these in. Catalogs publish multiples as a **multiplier** — one
+Viererblock factor for a whole issue — and record an explicit price only where a multiple is out of
+line. Stamporama follows that: set the multipliers once under **Settings → Conditions & formats →
+Format multipliers**, and every format's price is derived from the single's. Derived values appear
+in the grid as greyed, dashed placeholders — nothing is stored. Type over one where the catalog
+disagrees and it becomes a real price that always wins; clear it to fall back to the derived value.
+
+A multiplier can be pinned to an **area** (covering everything beneath it), an **issue**, and a
+**condition** — used blocks are often scarcer relative to mint than a single factor can express. A
+multiplier with none of these set is your collection-wide default. When several could apply, the
+narrowest anchor wins, in this order: **issue** first, then the **nearest area**, then
+**condition**. So a factor set on an issue beats a collection-wide factor set on "used".
+
+You set each one where its scope lives, so you never pick the thing it applies to out of a list:
+
+- **Collection-wide and per-area** — Settings → Conditions &amp; formats → Format multipliers.
+- **One area** — also from that area's **⋮** menu under Areas, which is usually quicker.
+- **One issue** — from that issue's **⋮** menu on the Issues list. Per-issue multipliers are not
+  listed in Settings: you can have one for every issue and every format, so that list would be
+  thousands of lines long. Each issue's own row shows just its own.
+
+A scope's dialog lists only what is set on that area or issue itself — not what it inherits from
+above. To change an inherited multiplier, go to the area it was set on.
+
 ## Adding a catalog value
 
 Click a copy's **value** in the list to price it in place — a **+ catalog value** link when the

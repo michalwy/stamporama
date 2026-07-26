@@ -6,6 +6,8 @@ import { CatalogPanel } from "../catalog/catalog-panel";
 import { AreasPanel } from "../areas/areas-panel";
 import { ConditionsPanel } from "./conditions-panel";
 import { CertificateStatusesPanel } from "./certificate-statuses-panel";
+import { FormatsPanel } from "./formats-panel";
+import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
@@ -17,6 +19,8 @@ import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData } from "@/lib/colnect";
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { StampConditionData } from "@/lib/conditions";
+import type { StampFormatData } from "@/lib/stamp-formats";
+import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
@@ -35,6 +39,8 @@ interface SettingsTabsProps {
   titleLanguages: string[];
   initialTree: CatalogVendorData[];
   initialConditions: StampConditionData[];
+  initialFormats: StampFormatData[];
+  initialFormatFactors: FormatFactorData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
   initialCollageTemplates: CollageTemplateData[];
@@ -48,7 +54,7 @@ interface SettingsTabsProps {
 const TABS = [
   { key: "general", label: "General" },
   { key: "catalogs", label: "Catalogs" },
-  { key: "conditions", label: "Conditions" },
+  { key: "conditions", label: "Conditions & formats" },
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
   { key: "collages", label: "Collage templates" },
@@ -77,6 +83,8 @@ export function SettingsTabs({
   titleLanguages,
   initialTree,
   initialConditions,
+  initialFormats,
+  initialFormatFactors,
   initialCertificateStatuses,
   initialSubtypes,
   initialCollageTemplates,
@@ -182,6 +190,22 @@ export function SettingsTabs({
               initialStatuses={initialCertificateStatuses}
               titleLanguages={titleLanguages}
               defaultLanguage={defaultLanguage}
+            />
+          </section>
+          {/* Formats sit here, not on a tab of their own: condition, certificate and format are
+              the three axes of one catalog price, and they are set up together, once. */}
+          <section>
+            <h2 style={sectionHeadingStyle}>Formats</h2>
+            <FormatsPanel collectionId={collectionId} initialFormats={initialFormats} />
+          </section>
+          <section>
+            <h2 style={sectionHeadingStyle}>Format multipliers</h2>
+            <FormatFactorsPanel
+              collectionId={collectionId}
+              initialFactors={initialFormatFactors}
+              formats={initialFormats}
+              conditions={initialConditions}
+              areas={initialAreas}
             />
           </section>
         </div>

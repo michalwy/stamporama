@@ -27,6 +27,7 @@ import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 
 // Persisted collapse state for the area management tree, consistent with the area
@@ -50,7 +51,8 @@ type DialogState =
   | { kind: "none" }
   | { kind: "add-area"; defaultParentId?: string; inheritedPrimaryId: string | null; inheritedPrefixes: AreaCatalogEntry[] }
   | { kind: "edit-area"; area: CollectionAreaData; inheritedPrimaryId: string | null; inheritedPrefixes: AreaCatalogEntry[] }
-  | { kind: "delete-area"; area: CollectionAreaData };
+  | { kind: "delete-area"; area: CollectionAreaData }
+  | { kind: "format-factors"; area: CollectionAreaData };
 
 interface TreeNode {
   area: CollectionAreaData;
@@ -1015,6 +1017,12 @@ export function AreasPanel({
                         openDialog({ kind: "edit-area", area, ...inheritedValuesFor(area.parentId) }),
                     },
                     {
+                      key: "format-multipliers",
+                      label: "Format multipliers…",
+                      icon: "×",
+                      onSelect: () => openDialog({ kind: "format-factors", area }),
+                    },
+                    {
                       key: "delete",
                       label: "Delete",
                       icon: "✕",
@@ -1031,6 +1039,17 @@ export function AreasPanel({
       )}
 
       {/* ── Dialogs ── */}
+
+      {/* Multipliers for the pairs and blocks of this area, edited where the area lives rather
+          than picked out of a collection-wide list (Settings keeps that overview). */}
+      {dialog.kind === "format-factors" && (
+        <FormatFactorsDialog
+          collectionId={collectionId}
+          scope={{ kind: "area", id: dialog.area.id }}
+          scopeLabel={dialog.area.name}
+          onClose={closeDialog}
+        />
+      )}
 
       {dialog.kind === "add-area" && (
         <DialogShell title="Add area" onClose={closeDialog} dismissable={!nestedDialogOpen}>

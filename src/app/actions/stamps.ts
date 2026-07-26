@@ -117,14 +117,16 @@ export async function quickSetCatalogPricesAction(
   }
 }
 
-// Price cells are serialized as `catalogPrice_<editionId>~<conditionId>~<certId>`
-// (empty cert segment = no certificate status; `~` never occurs in a cuid).
+// Price cells are serialized as `catalogPrice_<editionId>~<conditionId>~<certId>~<formatId>`
+// (an empty segment means "none" for the certificate and "single" for the format; `~` never
+// occurs in a cuid). The format segment is trailing and optional, so a payload written before
+// formats existed still parses — `split` simply yields undefined for it.
 // Currency is per-edition: `catalogCurrency_<editionId>`.
 function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
   const prices: CatalogPriceInput[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("catalogPrice_")) continue;
-    const [catalogEditionId, conditionId, certRaw] = key
+    const [catalogEditionId, conditionId, certRaw, formatRaw] = key
       .slice("catalogPrice_".length)
       .split("~");
     if (!catalogEditionId || !conditionId) continue;
@@ -137,6 +139,7 @@ function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
       catalogEditionId,
       conditionId,
       certificateStatusId: certRaw ? certRaw : null,
+      formatId: formatRaw ? formatRaw : null,
       price,
       currency,
     });

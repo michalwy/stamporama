@@ -355,6 +355,7 @@ const STAMP_LIST_SELECT = {
       currency: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       catalogEdition: { select: { year: true, catalogNameId: true } },
     },
   },
@@ -843,6 +844,9 @@ export interface CatalogPriceInput {
   catalogEditionId: string;
   conditionId: string;
   certificateStatusId: string | null;
+  /** Physical format; null or absent = single, so a caller that predates formats stays valid.
+   *  An explicit row here always wins over a value derived from a multiplier. */
+  formatId?: string | null;
   price: string;
   currency: string;
 }
@@ -949,6 +953,7 @@ export async function updateStampWithCatalog(
             catalogEditionId: cp.catalogEditionId,
             conditionId: cp.conditionId,
             certificateStatusId: cp.certificateStatusId,
+            formatId: cp.formatId ?? null,
             price: cp.price,
             currency: cp.currency,
           })),
@@ -1288,6 +1293,8 @@ export interface StampCatalogPriceData {
 export interface StampCatalogPriceDisplay {
   catalogEditionId: string;
   conditionId: string;
+  /** Physical format this price is for; null = single. */
+  formatId: string | null;
   conditionName: string;
   conditionAbbreviation: string;
   certificateStatusId: string | null;
@@ -1317,6 +1324,7 @@ export async function getStampCatalogPrices(
       catalogEditionId: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       price: true,
       currency: true,
       condition: { select: { name: true, abbreviation: true } },
@@ -1353,6 +1361,7 @@ export async function getStampCatalogPrices(
     certificateStatusId: p.certificateStatusId,
     certificateStatusName: p.certificateStatus?.name ?? null,
     certificateStatusAbbreviation: p.certificateStatus?.abbreviation ?? null,
+    formatId: p.formatId,
     price: Number(p.price).toFixed(2),
     currency: p.currency,
     convertedAmount: applyConversion(Number(p.price), p.currency, baseCurrency, rates),

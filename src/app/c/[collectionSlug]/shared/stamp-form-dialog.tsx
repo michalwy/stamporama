@@ -24,6 +24,7 @@ import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalo
 import { Segmented } from "./segmented";
 import { CatalogDuplicateWarningIcon } from "./catalog-duplicate-warning";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
+import type { StampFormatPricing } from "@/lib/format-pricing";
 import { languageLabel } from "@/lib/languages";
 import {
   fillTranslationValues,
@@ -119,6 +120,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
   // used to decide which older edition/condition rows to show. Snapshotted so the
   // grid doesn't jump around as the user types.
   const [pricedCells, setPricedCells] = useState<Set<string>>(new Set());
+  // Formats and the multipliers resolved for *this* stamp (its area ancestry and issue decide
+  // which factor rows apply), plus which format's slice of the grid is on screen. Null is the
+  // single, which is what the grid showed before formats existed.
+  const [formatPricing, setFormatPricing] = useState<StampFormatPricing>({
+    formats: [],
+    factors: {},
+  });
+  const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
   const [pricesLoaded, setPricesLoaded] = useState(false);
 
   // ── Photos (#137): direct stamp-photo upload, add + edit modes ──
@@ -203,19 +212,22 @@ export function StampFormDialog(props: StampFormDialogProps) {
       { getCatalogTreeAction },
       { getStampConditionsAction },
       { getCertificateStatusesAction },
+      { getStampFormatPricingAction },
     ] = await Promise.all([
       import("@/app/actions/stamps"),
       import("@/app/actions/catalog"),
       import("@/app/actions/conditions"),
       import("@/app/actions/certificate-statuses"),
+      import("@/app/actions/format-pricing"),
     ]);
-    const [tree, conditions, certificateStatuses, prices] = await Promise.all([
+    const [tree, conditions, certificateStatuses, prices, formatPricing] = await Promise.all([
       getCatalogTreeAction(collectionId),
       getStampConditionsAction(collectionId),
       getCertificateStatusesAction(collectionId),
       stampId ? getStampCatalogPricesAction(stampId) : Promise.resolve([]),
+      getStampFormatPricingAction(collectionId, stampId ?? null),
     ]);
-    return { tree, conditions, certificateStatuses, prices };
+    return { tree, conditions, certificateStatuses, prices, formatPricing };
   }, [collectionId, stampId]);
 
   useEffect(() => {
@@ -228,8 +240,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
       setCertificateStatuses(data.certificateStatuses);
       const edits = new Map<string, string>();
       const priced = new Set<string>();
+      setFormatPricing(data.formatPricing);
       for (const p of data.prices) {
-        const key = priceCellKey(p.catalogEditionId, p.conditionId, p.certificateStatusId);
+        const key = priceCellKey(
+          p.catalogEditionId,
+          p.conditionId,
+          p.certificateStatusId,
+          p.formatId
+        );
         edits.set(key, formatPrice(p.price));
         priced.add(key);
       }
@@ -1007,6 +1025,10 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   pricedCells={pricedCells}
                   onPriceChange={handlePriceChange}
                   disabled={isPending}
+                  formats={formatPricing.formats}
+                  formatFactors={formatPricing.factors}
+                  activeFormatId={activeFormatId}
+                  onActiveFormatChange={setActiveFormatId}
                 />
               )}
             </div>

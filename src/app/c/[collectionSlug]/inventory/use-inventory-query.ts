@@ -12,6 +12,7 @@ import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 
 interface InventoryItemsPage {
@@ -342,6 +343,20 @@ export function useCollectionCertificateStatuses(collectionId: string) {
         "@/app/actions/certificate-statuses"
       );
       return getCertificateStatusesAction(collectionId);
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** Physical formats for the copy dialog's format select. Fetched client-side for the same
+ * reason as {@link useCollectionCertificateStatuses}: the dialog is opened from four different
+ * screens, and threading one more dictionary through every one of them buys nothing. */
+export function useCollectionFormats(collectionId: string) {
+  return useQuery<StampFormatData[]>({
+    queryKey: ["stampFormats", collectionId] as const,
+    queryFn: async () => {
+      const { getStampFormatsAction } = await import("@/app/actions/stamp-formats");
+      return getStampFormatsAction(collectionId);
     },
     staleTime: 60_000,
   });

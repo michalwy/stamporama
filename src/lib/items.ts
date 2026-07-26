@@ -140,6 +140,8 @@ export interface ItemData {
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
+  /** Physical format; null = single. */
+  formatId: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -188,6 +190,7 @@ const ITEM_SELECT = {
   stampId: true,
   conditionId: true,
   certificateStatusId: true,
+  formatId: true,
   inCollection: true,
   forSale: true,
   forTrade: true,
@@ -208,6 +211,7 @@ function toItemData(row: {
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
+  formatId: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -229,6 +233,9 @@ export interface ItemCreateInput {
   stampId: string;
   conditionId: string;
   certificateStatusId?: string | null;
+  /** Physical format; null or absent = single. A multiple is one copy in one format and is
+   *  never recorded as, or counted as, several single copies. */
+  formatId?: string | null;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -281,6 +288,8 @@ export interface ItemUpdateInput {
   stampId?: string;
   conditionId?: string;
   certificateStatusId?: string | null;
+  /** Physical format; null = single (a copy that is one stamp on its own). */
+  formatId?: string | null;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -329,6 +338,7 @@ export async function createItem(
       stampId: data.stampId,
       conditionId: data.conditionId,
       certificateStatusId: data.certificateStatusId ?? null,
+      formatId: data.formatId ?? null,
       inCollection: data.inCollection ?? true,
       forSale: data.forSale ?? false,
       forTrade: data.forTrade ?? false,
@@ -427,6 +437,7 @@ export async function updateItem(
     ...(fields.certificateStatusId !== undefined
       ? { certificateStatusId: fields.certificateStatusId }
       : {}),
+    ...(fields.formatId !== undefined ? { formatId: fields.formatId } : {}),
     ...(fields.inCollection !== undefined ? { inCollection: fields.inCollection } : {}),
     ...(fields.forSale !== undefined ? { forSale: fields.forSale } : {}),
     ...(fields.forTrade !== undefined ? { forTrade: fields.forTrade } : {}),
@@ -724,6 +735,10 @@ export interface ItemListItem {
   conditionAbbreviation: string;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
+  /** Physical format; null = single. A multiple is one row, never N single rows. */
+  formatId: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -777,6 +792,7 @@ const ITEM_LIST_SELECT = {
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
+  format: { select: { id: true, name: true, abbreviation: true } },
   stamp: {
     select: {
       parentId: true,
@@ -838,6 +854,9 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     conditionAbbreviation: row.condition.abbreviation,
     certificateStatusId: row.certificateStatus?.id ?? null,
     certificateStatusName: row.certificateStatus?.name ?? null,
+    formatId: row.format?.id ?? null,
+    formatName: row.format?.name ?? null,
+    formatAbbreviation: row.format?.abbreviation ?? null,
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,
@@ -1338,6 +1357,9 @@ const VALUATION_PRICE_SELECT = {
   currency: true,
   conditionId: true,
   certificateStatusId: true,
+  // Required by `RawCatalogPrice` (ADR-0020): a copy is valued against prices of *its own*
+  // format, and omitting the column here would let a block's price stand in for a single's.
+  formatId: true,
   catalogEdition: { select: { year: true, catalogNameId: true } },
 } as const;
 

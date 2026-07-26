@@ -24,6 +24,7 @@ function price(
     currency?: string;
     conditionId?: string;
     certificateStatusId?: string | null;
+    formatId?: string | null;
     year?: number;
     catalogNameId?: string;
   } = {}
@@ -33,6 +34,7 @@ function price(
     currency: opts.currency ?? "EUR",
     conditionId: opts.conditionId ?? MNH,
     certificateStatusId: opts.certificateStatusId ?? null,
+    formatId: opts.formatId ?? null,
     catalogEdition: {
       year: opts.year ?? 2024,
       catalogNameId: opts.catalogNameId ?? MICHEL,

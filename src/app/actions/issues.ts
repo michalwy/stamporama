@@ -304,18 +304,19 @@ export async function addStampToIssueAction(
     }
   }
 
-  // Price cells: `catalogPrice_<editionId>~<conditionId>~<certId>` (empty cert
-  // segment = no certificate status). Currency is per-edition.
+  // Price cells: `catalogPrice_<editionId>~<conditionId>~<certId>~<formatId>` (an empty segment
+  // means "none" for the certificate and "single" for the format). Currency is per-edition.
   const catalogPrices: {
     catalogEditionId: string;
     conditionId: string;
     certificateStatusId: string | null;
+    formatId: string | null;
     price: string;
     currency: string;
   }[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("catalogPrice_")) continue;
-    const [catalogEditionId, conditionId, certRaw] = key
+    const [catalogEditionId, conditionId, certRaw, formatRaw] = key
       .slice("catalogPrice_".length)
       .split("~");
     if (!catalogEditionId || !conditionId) continue;
@@ -327,6 +328,7 @@ export async function addStampToIssueAction(
       catalogEditionId,
       conditionId,
       certificateStatusId: certRaw ? certRaw : null,
+      formatId: formatRaw ? formatRaw : null,
       price,
       currency,
     });

@@ -151,6 +151,9 @@ const HEADLINE_PRICE_SELECT = {
   currency: true,
   conditionId: true,
   certificateStatusId: true,
+  // Required by `RawCatalogPrice` (ADR-0020). A headline price is the *single's*, so the picker
+  // has to be able to tell a format's price apart rather than treating it as another candidate.
+  formatId: true,
   catalogEdition: { select: { year: true, catalogNameId: true } },
 } as const;
 

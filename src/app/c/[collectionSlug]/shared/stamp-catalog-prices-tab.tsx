@@ -7,6 +7,8 @@ import type { CatalogVendorData } from "@/lib/catalog";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { StampFormatData } from "@/lib/stamp-formats";
+import { deriveFormatPrice, formatFactorKey } from "@/lib/format-factor";
 
 const CELL_INPUT: React.CSSProperties = {
   padding: "0.25rem 0.375rem",
@@ -29,13 +31,16 @@ export function formatPrice(value: string): string {
   return n.toFixed(2);
 }
 
-/** Form/state key for one price cell. `certId` null → the "no certificate" column. */
+/** Form/state key for one price cell. `certId` null → the "no certificate" column; `formatId`
+ *  null → the single, which is what a stamp is when no format is chosen. The format segment is
+ *  trailing so a three-segment key written before formats existed still parses. */
 export function priceCellKey(
   editionId: string,
   conditionId: string,
-  certId: string | null
+  certId: string | null,
+  formatId: string | null = null
 ): string {
-  return `${editionId}~${conditionId}~${certId ?? ""}`;
+  return `${editionId}~${conditionId}~${certId ?? ""}~${formatId ?? ""}`;
 }
 
 interface EditionRow {
@@ -58,6 +63,14 @@ interface StampCatalogPricesTabProps {
   pricedCells: Set<string>;
   onPriceChange: (cellKey: string, value: string) => void;
   disabled?: boolean;
+  /** Physical formats (#multiples). Empty renders the grid exactly as before formats existed. */
+  formats: StampFormatData[];
+  /** `formatId~conditionId` → multiplier, resolved server-side against this stamp's area and
+   *  issue. A missing entry means nothing derives for that pair. */
+  formatFactors: Record<string, number>;
+  /** Which format's slice of the grid is shown; null is the single. */
+  activeFormatId: string | null;
+  onActiveFormatChange: (formatId: string | null) => void;
 }
 
 export function StampCatalogPricesTab({
@@ -69,6 +82,10 @@ export function StampCatalogPricesTab({
   pricedCells,
   onPriceChange,
   disabled,
+  formats,
+  formatFactors,
+  activeFormatId,
+  onActiveFormatChange,
 }: StampCatalogPricesTabProps) {
   const relevantNameIds = useMemo(
     () => new Set(areaVendors.map((v) => v.catalogNameId)),
@@ -144,7 +161,7 @@ export function StampCatalogPricesTab({
             ? conditions
             : conditions.filter((c) => {
                 const oldCerts = certColumns.filter((col) =>
-                  pricedCells.has(priceCellKey(ed.editionId, c.id, col.id))
+                  pricedCells.has(priceCellKey(ed.editionId, c.id, col.id, activeFormatId))
                 );
                 if (oldCerts.length === 0) return false;
                 // Keep the row while any priced certificate isn't yet in a newer edition.
@@ -155,7 +172,7 @@ export function StampCatalogPricesTab({
         }
         for (const c of conditions) {
           for (const col of certColumns) {
-            if (pricedCells.has(priceCellKey(ed.editionId, c.id, col.id))) {
+            if (pricedCells.has(priceCellKey(ed.editionId, c.id, col.id, activeFormatId))) {
               newerPricedCells.add(ccKey(c.id, col.id));
             }
           }
@@ -170,7 +187,7 @@ export function StampCatalogPricesTab({
       return b.row.year - a.row.year;
     });
     return blocks;
-  }, [rows, conditions, certColumns, pricedCells]);
+  }, [rows, conditions, certColumns, pricedCells, activeFormatId]);
 
   // Column-first Tab order (#232): within an editable table, Tab walks top-to-bottom
   // through the condition rows of a certificate column before moving to the next
@@ -184,12 +201,30 @@ export function StampCatalogPricesTab({
       if (!block.isNewest) continue;
       for (const col of certColumns) {
         for (const cond of block.conditions) {
-          order.push(priceCellKey(block.row.editionId, cond.id, col.id));
+          order.push(priceCellKey(block.row.editionId, cond.id, col.id, activeFormatId));
         }
       }
     }
     return order;
-  }, [visibleBlocks, certColumns]);
+  }, [visibleBlocks, certColumns, activeFormatId]);
+
+  // The value a cell falls back to when nothing was entered for this format. Null on the single
+  // tab (there is nothing to derive from), when no multiplier resolves, or when the single itself
+  // is blank — a derived price is an inference from two facts and says nothing without both.
+  function derivedFor(
+    editionId: string,
+    conditionId: string,
+    certId: string | null
+  ): string | null {
+    if (!activeFormatId) return null;
+    const factor = formatFactors[formatFactorKey(activeFormatId, conditionId)];
+    if (!factor) return null;
+    const single = (priceEdits.get(priceCellKey(editionId, conditionId, certId, null)) ?? "").trim();
+    if (single === "") return null;
+    const amount = Number(normalizeDecimalInput(single));
+    if (!Number.isFinite(amount)) return null;
+    return deriveFormatPrice(amount, factor).toFixed(2);
+  }
 
   function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>, key: string) {
     if (e.key !== "Tab") return;
@@ -224,8 +259,68 @@ export function StampCatalogPricesTab({
     );
   }
 
+  const activeFormat = formats.find((f) => f.id === activeFormatId) ?? null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {formats.length > 0 && (
+        <div>
+          {/* Format tabs, not extra columns: the grid is already condition x certificate, and a
+              third axis inline would make it unreadable. One tab at a time keeps every format's
+              prices in the same familiar shape. */}
+          <div
+            role="tablist"
+            aria-label="Format"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.25rem",
+              borderBottom: "1px solid var(--color-border)",
+              paddingBottom: "0.5rem",
+            }}
+          >
+            {[{ id: null as string | null, label: "Single" }, ...formats.map((f) => ({ id: f.id as string | null, label: f.abbreviation }))].map(
+              (tab) => {
+                const active = tab.id === activeFormatId;
+                return (
+                  <button
+                    key={tab.id ?? "single"}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => onActiveFormatChange(tab.id)}
+                    style={{
+                      padding: "0.25rem 0.625rem",
+                      fontSize: "0.8125rem",
+                      fontWeight: active ? 600 : 400,
+                      color: active ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                      background: active ? "var(--color-bg-page)" : "transparent",
+                      border: `1px solid ${active ? "var(--color-border-strong)" : "transparent"}`,
+                      borderRadius: "0.375rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              }
+            )}
+          </div>
+          {activeFormat && (
+            <p
+              style={{
+                fontSize: "0.6875rem",
+                color: "var(--color-text-muted)",
+                margin: "0.5rem 0 0",
+              }}
+            >
+              {activeFormat.name}. Greyed values are derived from the single&apos;s price by this
+              format&apos;s multiplier — nothing is stored until you type over one. Clear a cell to
+              go back to the derived value.
+            </p>
+          )}
+        </div>
+      )}
       {visibleBlocks.map(({ row, conditions: rowConditions, isNewest, newestEditionId }) => (
         <div key={row.editionId}>
           <div
@@ -274,8 +369,12 @@ export function StampCatalogPricesTab({
                       </span>
                     </td>
                     {certColumns.map((col) => {
-                      const key = priceCellKey(row.editionId, cond.id, col.id);
+                      const key = priceCellKey(row.editionId, cond.id, col.id, activeFormatId);
                       const price = priceEdits.get(key) ?? "";
+                      // What this cell would show if left empty: the single's price for the same
+                      // edition/condition/certificate, times the format's multiplier. Recomputed
+                      // as the single is typed, so a derived value is never stale on screen.
+                      const derived = derivedFor(row.editionId, cond.id, col.id);
 
                       if (isNewest) {
                         return (
@@ -289,8 +388,13 @@ export function StampCatalogPricesTab({
                               onBlur={(e) => onPriceChange(key, formatPrice(e.target.value))}
                               onKeyDown={(e) => handleCellKeyDown(e, key)}
                               disabled={disabled}
-                              placeholder="—"
-                              style={CELL_INPUT}
+                              placeholder={derived ?? "—"}
+                              style={derived && price.trim() === "" ? CELL_INPUT_DERIVED : CELL_INPUT}
+                              title={
+                                derived && price.trim() === ""
+                                  ? "Derived from the single's price. Type a value to record this format's own price."
+                                  : undefined
+                              }
                             />
                           </td>
                         );
@@ -298,7 +402,7 @@ export function StampCatalogPricesTab({
 
                       // Older edition: read-only value, with a button to copy the
                       // price up to the (editable) newest edition when it's empty there.
-                      const newestKey = priceCellKey(newestEditionId, cond.id, col.id);
+                      const newestKey = priceCellKey(newestEditionId, cond.id, col.id, activeFormatId);
                       const canCopy =
                         price.trim() !== "" && (priceEdits.get(newestKey) ?? "").trim() === "";
                       return (
@@ -339,6 +443,13 @@ export function StampCatalogPricesTab({
     </div>
   );
 }
+
+/** A cell showing a derived value rather than a stored one: same box, quieter text, so the grid
+ *  reads as complete without ever claiming the number was entered. */
+const CELL_INPUT_DERIVED: React.CSSProperties = {
+  ...CELL_INPUT,
+  borderStyle: "dashed",
+};
 
 const thCondStyle: React.CSSProperties = {
   textAlign: "left",

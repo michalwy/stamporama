@@ -47,6 +47,8 @@ model Collection {
   exchangeRates   ExchangeRate[]
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
+  stampFormats    StampFormat[]
+  stampFormatFactors StampFormatFactor[]
   stampSubtypes   StampSubtype[]
   collageTemplates CollageTemplate[]
   items           Item[]
@@ -74,9 +76,92 @@ model StampCondition {
   catalogPrices StampCatalogPrice[]
   items         Item[]
   translations  StampConditionTranslation[]
+  formatFactors StampFormatFactor[]
 
   @@index([collectionId])
   @@map("stamp_condition")
+}
+
+// A physical **format** — how many stamps are attached to each other and how (horizontal pair,
+// block of four, strip of three…). Supersedes the #135 convention, under which a multiple was
+// recorded as its own `Stamp` with a self-descriptive number (`245 x4`): that collapses two
+// independent axes into one and produces `formats × variant-tree nodes` stamps, while making
+// "a pair, variant not yet identified" inexpressible — a pair of `309BP` is not a child of a
+// pair of `309B`. Zusammendrucke / se-tenant that carry their **own** catalog number (Michel
+// `S`/`W`/`K`/`Zd`) are unaffected and stay their own `Stamp`; they really are distinct entries.
+//
+// A format is a peer of `StampCondition`, not a quantity. A multiple is **never** decomposed
+// into N singles — there is deliberately no unit count, and nothing anywhere multiplies or
+// divides by one. Completeness asks "do I have the whole series in pairs?" exactly the way it
+// asks "in MNH?", so format is a breakdown dimension alongside condition, not a factor applied
+// to counts.
+//
+// There is no "single" row, and none is seeded: a null `formatId` **means single**, exactly as a
+// null `certificateStatusId` means "no certificate" (ADR-0006 §2). That keeps every pre-existing
+// price and copy valid with no backfill, and extends the existing `NULLS NOT DISTINCT` idiom to
+// the new column instead of inventing a second convention.
+model StampFormat {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  abbreviation String
+  sortOrder    Int
+
+  collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  catalogPrices StampCatalogPrice[]
+  items         Item[]
+  factors       StampFormatFactor[]
+
+  @@index([collectionId])
+  @@map("stamp_format")
+}
+
+// The multiplier that derives a format's catalog price from the single's, when no explicit price
+// was recorded for that format. Catalogs are written this way — Michel Spezial prints one
+// Viererblock factor per issue and an explicit price only where the multiple deviates — so
+// following the source keeps entry proportional to what is actually published, instead of
+// demanding a condition × certificate × format grid per stamp.
+//
+// One table with **nullable anchors**: the all-nulls row *is* the collection default, so there is
+// a single mechanism and a single editor rather than a `defaultFactor` column plus an override
+// table. A row applies only when every anchor it sets matches the stamp being priced — the area
+// anchor matching any descendant of itself, so a factor on "German Reich" covers "Infla" unless
+// Infla sets its own.
+//
+// Resolution is a **fixed precedence order**, not a specificity score: candidates are compared on
+// `(issue set?, area depth, condition set?)` lexicographically and the first difference wins.
+// Scoring independent dimensions against each other produces orderings nobody can predict; a
+// fixed order is always explainable in one line in the UI ("from: Infla 1923 → block of 4").
+// Note the consequence, chosen deliberately: *where* beats *for which condition*, so a factor
+// pinned to an issue outranks a collection-wide factor pinned to "used".
+model StampFormatFactor {
+  id           String  @id @default(cuid())
+  collectionId String
+  formatId     String
+  // Multiplier applied to the single's price. Four decimals because catalog factors are not
+  // always whole (a pair is commonly 2.2×, a block 4.5×).
+  factor       Decimal @db.Decimal(10, 4)
+  // Anchors. Null means "any" — the dimension simply does not narrow this row.
+  collectionAreaId String?
+  issueId          String?
+  conditionId      String?
+
+  collection     Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  format         StampFormat     @relation(fields: [formatId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea? @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+  issue          Issue?          @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  condition      StampCondition? @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+
+  // Uniqueness on (collectionId, formatId, collectionAreaId, issueId, conditionId) is enforced by
+  // a raw `UNIQUE ... NULLS NOT DISTINCT` index (see migration) for the same reason as
+  // `stamp_catalog_price`: three of the five columns are nullable, and Postgres would otherwise
+  // treat every null-anchored row as distinct from every other. Requires PostgreSQL 15+.
+  @@index([collectionId])
+  @@index([formatId])
+  @@index([collectionAreaId])
+  @@index([issueId])
+  @@index([conditionId])
+  @@map("stamp_format_factor")
 }
 
 // Per-language `name` / `abbreviation` for a condition (#294), behind the `{condition}` and
@@ -330,6 +415,7 @@ model CollectionArea {
   collectionAreaCatalogs CollectionAreaCatalog[]
   collectionAreaVendors  CollectionAreaVendor[]
   issues                 Issue[]
+  formatFactors          StampFormatFactor[]
 
   @@map("collection_area")
 }
@@ -442,6 +528,10 @@ model StampCatalogPrice {
   catalogEditionId    String
   conditionId         String
   certificateStatusId String?
+  // Physical format this price is for; null = single, the only value before formats existed.
+  // A row here is an **explicit** price that wins over anything `StampFormatFactor` would
+  // derive — recording what a catalog actually prints for that multiple.
+  formatId            String?
   price               Decimal @db.Decimal(10, 2)
   currency            String
 
@@ -449,14 +539,16 @@ model StampCatalogPrice {
   catalogEdition    CatalogEdition     @relation(fields: [catalogEditionId], references: [id], onDelete: Cascade)
   condition         StampCondition     @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  format            StampFormat?       @relation(fields: [formatId], references: [id], onDelete: Restrict)
 
-  // Uniqueness on (stampId, catalogEditionId, conditionId, certificateStatusId)
+  // Uniqueness on (stampId, catalogEditionId, conditionId, certificateStatusId, formatId)
   // is enforced by a raw `UNIQUE ... NULLS NOT DISTINCT` index (see migration),
   // which Prisma cannot express — so no @@unique here. Requires PostgreSQL 15+.
   @@index([stampId])
   @@index([catalogEditionId])
   @@index([conditionId])
   @@index([certificateStatusId])
+  @@index([formatId])
   @@map("stamp_catalog_price")
 }
 
@@ -466,6 +558,9 @@ model Item {
   stampId             String
   conditionId         String
   certificateStatusId String?
+  // Physical format of this copy; null = single. A multiple is one copy in one format — it is
+  // never stored as, or counted as, N single copies (see `StampFormat`).
+  formatId            String?
   inCollection        Boolean  @default(true)
   forSale             Boolean  @default(false)
   forTrade            Boolean  @default(false)
@@ -493,6 +588,7 @@ model Item {
   stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)
   condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  format            StampFormat?         @relation(fields: [formatId], references: [id], onDelete: Restrict)
   lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
@@ -511,6 +607,7 @@ model Item {
   @@index([conditionId])
   @@index([lotId])
   @@index([locationId])
+  @@index([formatId])
   @@map("item")
 }
 
@@ -1288,6 +1385,7 @@ model Issue {
   members        IssueMember[]
   catalogNumbers IssueCatalogNumber[]
   translations   IssueTranslation[]
+  formatFactors  StampFormatFactor[]
 
   @@index([collectionId, year, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])

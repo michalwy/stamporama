@@ -6,6 +6,8 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
+import { getStampFormats } from "@/lib/stamp-formats";
+import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getColnectMappings } from "@/lib/colnect";
@@ -36,6 +38,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     catalogNames,
     catalogTree,
     conditions,
+    formats,
+    formatFactors,
     certificateStatuses,
     subtypes,
     collageTemplates,
@@ -48,6 +52,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCatalogNames(session.user.id, collection.id),
     getCatalogTree(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
+    getStampFormats(session.user.id, collection.id),
+    getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
@@ -71,6 +77,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           titleLanguages={titleLanguages}
           initialTree={catalogTree}
           initialConditions={conditions}
+          initialFormats={formats}
+          initialFormatFactors={formatFactors}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
           initialCollageTemplates={collageTemplates}

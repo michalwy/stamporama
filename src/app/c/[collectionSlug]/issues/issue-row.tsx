@@ -24,6 +24,7 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import {
@@ -362,6 +363,13 @@ export function IssueRow({
     },
   });
   const prices = usePriceDetailsAction({ kind: "issue", collectionId, issueId: issue.id });
+  // An issue's format multipliers are edited here rather than in Settings: the issue is the
+  // narrowest anchor a factor can take, and it is the one a catalog actually prints them against.
+  const formatFactors = useFormatFactorsAction({
+    collectionId,
+    scope: { kind: "issue", id: issue.id },
+    scopeLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
+  });
 
   const { invalidateList } = useInvalidateIssues();
   const rangeSuggestions = issue.rangeSuggestions;
@@ -375,6 +383,7 @@ export function IssueRow({
     addCopy.action,
     copies.action,
     ...(issue.requiredPriceTotal ? [prices.action] : []),
+    formatFactors.action,
     {
       key: "recompute-range",
       label: "Recompute declared range…",
@@ -478,6 +487,7 @@ export function IssueRow({
           {addCopy.dialog}
           {copies.dialog}
           {prices.dialog}
+          {formatFactors.dialog}
           {recomputeOpen && (
             <RecomputeRangeDialog
               collectionId={collectionId}

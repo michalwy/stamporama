@@ -33,6 +33,9 @@ export interface RawCatalogPrice {
   currency: string;
   conditionId: string;
   certificateStatusId: string | null;
+  /** Physical format (ADR-0020); null = single. Required rather than optional on purpose: a
+   *  producer that forgot to select it would silently pass block prices off as singles. */
+  formatId: string | null;
   catalogEdition: { year: number; catalogNameId: string };
 }
 
@@ -46,16 +49,19 @@ export interface PickedPrice {
 
 /**
  * Latest catalog edition (by year) with a recorded price for the primary catalog
- * name, at the given condition and certificate status. When `certificateStatusId`
+ * name, at the given condition, certificate status and format. When `certificateStatusId`
  * is `null` the match is the no-certificate price; otherwise an exact certificate
- * match is required (no fall-back across certificate levels). Returns null when no
- * condition/catalog is given or no matching price exists.
+ * match is required (no fall-back across certificate levels). `formatId` defaults to null —
+ * the single — and matches exactly for the same reason: a block's price is a different figure,
+ * not a variation of the single's, and must never stand in for it (ADR-0020). Returns null when
+ * no condition/catalog is given or no matching price exists.
  */
 export function pickCatalogPriceFor(
   prices: RawCatalogPrice[],
   primaryCatalogNameId: string | null,
   conditionId: string | null,
-  certificateStatusId: string | null
+  certificateStatusId: string | null,
+  formatId: string | null = null
 ): PickedPrice | null {
   if (!primaryCatalogNameId || !conditionId) return null;
   let best: RawCatalogPrice | null = null;
@@ -63,6 +69,7 @@ export function pickCatalogPriceFor(
     if (p.catalogEdition.catalogNameId !== primaryCatalogNameId) continue;
     if (p.conditionId !== conditionId) continue;
     if (p.certificateStatusId !== certificateStatusId) continue;
+    if (p.formatId !== formatId) continue;
     if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
   }
   if (!best) return null;

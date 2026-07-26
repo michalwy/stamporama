@@ -16,6 +16,7 @@ async function recomputeCollectionSortKeys(collectionId: string): Promise<void> 
   await recomputeStampSortKeys(collectionId);
 }
 import { seedDefaultConditions } from "./conditions";
+import { seedDefaultFormats } from "./stamp-formats";
 import { seedDefaultSubtypes } from "./subtypes";
 
 export async function generateUniqueSlug(
@@ -60,6 +61,7 @@ export async function createCollection(
         select: { id: true, slug: true, name: true },
       });
       await seedDefaultConditions(created.id, tx as never);
+      await seedDefaultFormats(created.id, tx as never);
       await seedDefaultSubtypes(created.id, tx as never);
       if (options?.seedDemo) {
         await seedDemoData(created.id, tx as never);

@@ -42,6 +42,7 @@ interface ItemFields {
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
+  formatId: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -63,11 +64,14 @@ function parseItemFields(formData: FormData): ParsedItemFields {
   const stampId = str(formData, "stampId");
   const conditionId = str(formData, "conditionId");
   const certRaw = str(formData, "certificateStatusId");
+  // Blank means single — the dictionary holds only the multiples.
+  const formatRaw = str(formData, "formatId");
 
   const data: ItemFields = {
     stampId,
     conditionId,
     certificateStatusId: certRaw || null,
+    formatId: formatRaw || null,
     inCollection: bool(formData, "inCollection"),
     forSale: bool(formData, "forSale"),
     forTrade: bool(formData, "forTrade"),

@@ -9,6 +9,7 @@ import {
 } from "@/app/dialog-shell";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import { useCollectionFormats } from "./use-inventory-query";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -150,6 +151,9 @@ export function InventoryItemFormDialog({
   onClose,
   onSubmit,
 }: InventoryItemFormDialogProps) {
+  // Formats are fetched here rather than threaded in: this dialog is opened from four screens,
+  // and each would otherwise have to carry one more dictionary it makes no other use of.
+  const { data: formats = [] } = useCollectionFormats(collectionId);
   // Last-used condition / location / disposition, remembered globally across every add-copy
   // entry point (#234). Add mode only; edit mode always reflects the item being edited. Computed
   // once at mount so the fields stay stable while the dialog is open.
@@ -262,8 +266,9 @@ export function InventoryItemFormDialog({
               />
             </div>
 
-            {/* Row 2: condition · certificate — two matched selects. */}
-            <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr" }}>
+            {/* Row 2: condition · certificate · format — the three axes a copy is described by,
+                and the same three a catalog price is recorded against. */}
+            <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr 1fr" }}>
               <div>
                 <GroupLabel htmlFor="copy-condition">Condition</GroupLabel>
                 <select
@@ -294,6 +299,25 @@ export function InventoryItemFormDialog({
                   {certificateStatuses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.abbreviation})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <GroupLabel htmlFor="copy-format">Format</GroupLabel>
+                <select
+                  id="copy-format"
+                  name="formatId"
+                  defaultValue={item?.formatId ?? ""}
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                >
+                  {/* No "single" row exists in the dictionary — a copy with no format *is* the
+                      single, exactly as no certificate means none. */}
+                  <option value="">— Single —</option>
+                  {formats.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.abbreviation})
                     </option>
                   ))}
                 </select>
