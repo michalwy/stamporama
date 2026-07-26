@@ -356,7 +356,12 @@ function plannedTitle(image: OfferPhotoPlannedImage, uploadIndex: number | null)
   const what =
     image.title ??
     (image.copyLabels.length > 0 ? image.copyLabels.join(" + ") : image.setLabels.join(", "));
-  const fallback = image.source === "upload" ? "Uploaded image" : "Attachment";
+  const fallback =
+    image.source === "upload"
+      ? "Uploaded image"
+      : image.source === "manual_collage"
+        ? "Collage"
+        : "Attachment";
   const number = uploadIndex == null ? "—" : String(uploadIndex + 1).padStart(2, "0");
   return [number, side, what || fallback].filter(Boolean).join(" · ");
 }
@@ -364,6 +369,11 @@ function plannedTitle(image: OfferPhotoPlannedImage, uploadIndex: number | null)
 function plannedKind(image: OfferPhotoPlannedImage): string {
   if (image.source === "collage") return "Planned collage";
   if (image.source === "copy_photo") return "Attachment · copy photo";
+  // A hand-built collage says how many stamps it shows: it is the one entry whose contents the
+  // collector chose photo by photo (#331), so the count is what identifies it in the list.
+  if (image.source === "manual_collage") {
+    return `Attachment · collage${image.tileCount > 0 ? ` of ${image.tileCount}` : ""}`;
+  }
   return "Attachment · uploaded image";
 }
 
@@ -790,6 +800,12 @@ export function OfferPhotosCard({
           );
         }, () => setAttachOpen(false))
       }
+      onAttachCollage={(tiles, columns, title) =>
+        mutateAttachments(async () => {
+          const { attachOfferPhotoCollageAction } = await import("@/app/actions/offers");
+          return attachOfferPhotoCollageAction(offerId, { tiles, columns, title });
+        }, () => setAttachOpen(false))
+      }
     />
   );
 
@@ -965,7 +981,7 @@ export function OfferPhotosCard({
               disabled={isPending}
               onClick={() => setAttachOpen(true)}
               style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
-              title="Attach photos of copies, or upload images to this offer"
+              title="Attach photos of copies, upload images, or build a collage from a selection"
             >
               + Add attachments
             </button>

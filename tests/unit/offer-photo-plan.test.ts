@@ -392,8 +392,8 @@ describe("planOfferPhotos attachments", () => {
   const attachment = (id: string, position: number): PlanAttachment => ({
     id,
     position,
-    photoId: `${id}-p`,
-    itemId: null,
+    tiles: [{ photoId: `${id}-p`, itemId: null }],
+    columns: 1,
   });
 
   it("places attachments at their explicit positions", () => {
@@ -475,6 +475,52 @@ describe("planOfferPhotos attachments", () => {
     assert.deepEqual(shape(plan.images), ["attachment:m1"]);
     assert.equal(plan.configured, false);
   });
+
+  it("carries a manual collage's tiles and width through unchanged (#331)", () => {
+    const manual: PlanAttachment = {
+      id: "m1",
+      position: 0,
+      tiles: [
+        { photoId: "p1", itemId: "a" },
+        { photoId: "p2", itemId: null },
+        { photoId: "p3", itemId: "c" },
+      ],
+      columns: 2,
+    };
+    const plan = planOfferPhotos({
+      sets: [],
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+      attachments: [manual],
+    });
+
+    const [image] = plan.images;
+    assert.equal(image.kind, "attachment");
+    assert.equal(image.kind === "attachment" && image.columns, 2);
+    assert.deepEqual(
+      image.kind === "attachment" ? image.tiles : [],
+      [
+        { photoId: "p1", itemId: "a" },
+        { photoId: "p2", itemId: null },
+        { photoId: "p3", itemId: "c" },
+      ],
+      "the collector chose these tiles in this order; the engine only places the image"
+    );
+  });
+
+  it("clamps a nonsensical column count to one (#331)", () => {
+    const plan = planOfferPhotos({
+      sets: [],
+      photoSides: "front",
+      collage,
+      maxPhotos: null,
+      attachments: [{ id: "m1", position: 0, tiles: [{ photoId: "p1", itemId: null }], columns: 0 }],
+    });
+
+    const [image] = plan.images;
+    assert.equal(image.kind === "attachment" && image.columns, 1);
+  });
 });
 
 // Manual plan order (#313) --------------------------------------------------
@@ -483,8 +529,8 @@ describe("planOfferPhotos manual order", () => {
   const attachment = (id: string, position: number): PlanAttachment => ({
     id,
     position,
-    photoId: `${id}-p`,
-    itemId: null,
+    tiles: [{ photoId: `${id}-p`, itemId: null }],
+    columns: 1,
   });
 
   // Two multi-copy sets, front only → two collages g0:a,b and g1:c,d, plus two attachments.
@@ -629,7 +675,9 @@ describe("planOfferPhotos unpublished images", () => {
       photoSides: "front",
       collage,
       maxPhotos: null,
-      attachments: [{ id: "m1", position: 9, photoId: "m1-p", itemId: null }],
+      attachments: [
+        { id: "m1", position: 9, tiles: [{ photoId: "m1-p", itemId: null }], columns: 1 },
+      ],
       unpublished: [attachmentToken("m1")],
     });
 

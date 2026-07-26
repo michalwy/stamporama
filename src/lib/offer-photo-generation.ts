@@ -66,6 +66,13 @@ import type { PlanCopy, PlanSet } from "./offer-photo-plan";
  * are untouched: they are not derived from a rule, so a regeneration could not reproduce them.
  */
 
+/**
+ * Which manual mode an attachment is (#313, #331). `manual_collage` rather than `collage`, because
+ * in the plan's vocabulary plain `collage` already means a group the rules derived from the offer's
+ * composition — and the whole point of a hand-composed one is that it is not that.
+ */
+export type AttachmentSource = "copy_photo" | "upload" | "manual_collage";
+
 /** Lifecycle of one offer's generation. `none` is the synthetic state of an offer never generated. */
 export type OfferPhotoGenerationStatus = "none" | "queued" | "running" | "ready" | "failed";
 
@@ -99,7 +106,8 @@ export interface OfferPhotoImage {
   /** The plan identity this image was rendered for (#313), or null on a row too old to match. It is
    * what the panel drags and marks — the stored list and the plan speak the same tokens. */
   token: string | null;
-  /** `collage` for a group of set copies, `copy_photo` / `upload` for a manual attachment (#313). */
+  /** `collage` for a group of set copies; `copy_photo` / `upload` / `manual_collage` for a manual
+   * attachment (#313, #331). */
   source: string;
   side: "front" | "back" | null;
   /** Links the front/back pair rendered from the same copies. */
@@ -172,8 +180,9 @@ export interface OfferPhotoPlannedImage {
    * record a reorder. `c:<side>:<sortedItemIds>` for a collage side, `a:<attachmentId>` for an
    * attachment. */
   token: string;
-  /** `collage` for a planned group; `copy_photo` / `upload` for a manual attachment. */
-  source: "collage" | "copy_photo" | "upload";
+  /** `collage` for a planned group; `copy_photo` / `upload` / `manual_collage` for a manual
+   * attachment (#313, #331). */
+  source: "collage" | AttachmentSource;
   side: "front" | "back" | null;
   /** Set for an attachment: what to drag, rename or remove. Null for a generated group. */
   attachmentId: string | null;
@@ -189,6 +198,9 @@ export interface OfferPhotoPlannedImage {
   /** The stored image rendered for this entry (#313), or null when there is none yet. Also what says
    * the entry is already generated, as opposed to merely planned. */
   generatedPhotoId: string | null;
+  /** How many tiles the image is composited from. 1 for a single-photo attachment; the collector's
+   * own count for a hand-built collage (#331), which is what identifies it in the plan. */
+  tileCount: number;
   /** False when the collector marked this entry do-not-publish (#313): rendered, but not uploaded. */
   publish: boolean;
   /** True when this entry falls past the platform's photo limit in plan order (#313). */
@@ -319,8 +331,8 @@ interface GenerationInputs {
   attachments: PlanAttachment[];
   /** Each attachment's caption, by attachment id — for the panel only. */
   attachmentTitles: Map<string, string | null>;
-  /** Which mode each attachment is, by attachment id: `copy_photo` or `upload`. */
-  attachmentSources: Map<string, "copy_photo" | "upload">;
+  /** Which mode each attachment is, by attachment id (#313, #331). */
+  attachmentSources: Map<string, AttachmentSource>;
 }
 
 const SIDE_ROLES = ["front", "back"];
@@ -464,6 +476,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           sortOrder: true,
           source: true,
           itemId: true,
+          collageColumns: true,
           title: true,
           photo: {
             select: {
@@ -471,6 +484,21 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
               storageBackend: true,
               storageKey: true,
               mime: true,
+            },
+          },
+          // A manual collage (#331) shows its tiles instead of a single photo, in their own order.
+          tiles: {
+            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+            select: {
+              itemId: true,
+              photo: {
+                select: {
+                  id: true,
+                  storageBackend: true,
+                  storageKey: true,
+                  mime: true,
+                },
+              },
             },
           },
         },
@@ -544,27 +572,46 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   // collages already cover.
   const attachments: PlanAttachment[] = [];
   const attachmentTitles = new Map<string, string | null>();
-  const attachmentSources = new Map<string, "copy_photo" | "upload">();
+  const attachmentSources = new Map<string, AttachmentSource>();
   for (const row of offer.photoAttachments) {
+    // One shape for all three modes: a manual collage (#331) is its tiles at its own width, and the
+    // single-image modes are one tile in one column — which is what the renderer has always made of
+    // them (#310, #312).
+    const source: AttachmentSource =
+      row.source === "upload"
+        ? "upload"
+        : row.source === "manual_collage"
+          ? "manual_collage"
+          : "copy_photo";
+    const photos =
+      source === "manual_collage"
+        ? row.tiles.map((tile) => ({ photo: tile.photo, itemId: tile.itemId }))
+        : row.photo
+          ? [{ photo: row.photo, itemId: row.itemId }]
+          : [];
+    // A collage whose every tile lost its source scan plans nothing rather than an empty image.
+    if (photos.length === 0) continue;
     attachments.push({
       id: row.id,
       position: row.sortOrder,
-      photoId: row.photo.id,
-      itemId: row.itemId,
+      tiles: photos.map((t) => ({ photoId: t.photo.id, itemId: t.itemId })),
+      columns: source === "manual_collage" ? row.collageColumns ?? 1 : 1,
     });
     attachmentTitles.set(row.id, row.title);
-    attachmentSources.set(row.id, row.source === "upload" ? "upload" : "copy_photo");
-    sourceById.set(row.photo.id, {
-      id: row.photo.id,
-      storageBackend: row.photo.storageBackend,
-      storageKey: row.photo.storageKey,
-      mime: row.photo.mime,
-    });
+    attachmentSources.set(row.id, source);
+    for (const { photo } of photos) {
+      sourceById.set(photo.id, {
+        id: photo.id,
+        storageBackend: photo.storageBackend,
+        storageKey: photo.storageKey,
+        mime: photo.mime,
+      });
+    }
   }
 
   const labelSubjects = [
     ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
-    ...attachments.flatMap((a) => (a.itemId ? [a.itemId] : [])),
+    ...attachments.flatMap((a) => a.tiles.flatMap((tile) => (tile.itemId ? [tile.itemId] : []))),
   ];
   const tileLabels = await readTileLabels(
     offer.collection.ownerId,
@@ -658,7 +705,27 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
     ),
     collage: inputs.collage,
     limits: inputs.limits,
-    attachments: inputs.attachments,
+    // A single-image attachment hashes as its one photo, exactly as it always did; a hand-composed
+    // collage (#331) hashes its tiles and its width instead, because those are what it draws.
+    attachments: inputs.attachments.map((attachment) =>
+      inputs.attachmentSources.get(attachment.id) === "manual_collage"
+        ? {
+            id: attachment.id,
+            position: attachment.position,
+            photoId: null,
+            itemId: null,
+            collage: {
+              columns: attachment.columns,
+              tiles: attachment.tiles.map((tile) => [tile.photoId, tile.itemId] as const),
+            },
+          }
+        : {
+            id: attachment.id,
+            position: attachment.position,
+            photoId: attachment.tiles[0].photoId,
+            itemId: attachment.tiles[0].itemId,
+          }
+    ),
     uploadTileLabel: inputs.uploadTileLabel
       ? [inputs.uploadTileLabel.left ?? "", inputs.uploadTileLabel.right ?? ""]
       : undefined,
@@ -794,15 +861,17 @@ export async function getOfferPhotoPlanState(
             attachmentId: image.attachmentId,
             title: inputs.attachmentTitles.get(image.attachmentId) ?? null,
             // The rendered image once there is one — an attachment is annotated too, so its source
-            // photo is not what the listing shows either.
-            previewPhotoId: generatedPhotoId ?? image.photoId,
+            // photo is not what the listing shows either. Before that, its first tile stands in,
+            // exactly as a derived collage's first stamp does.
+            previewPhotoId: generatedPhotoId ?? image.tiles[0]?.photoId ?? null,
             generatedPhotoId,
+            tileCount: image.tiles.length,
             publish: image.publish,
             overLimit: image.overLimit,
             setLabels: [],
-            copyLabels: image.itemId
-              ? [inputs.labels.copies.get(image.itemId) ?? REMOVED_LABEL]
-              : [],
+            copyLabels: image.tiles.flatMap((tile) =>
+              tile.itemId ? [inputs.labels.copies.get(tile.itemId) ?? REMOVED_LABEL] : []
+            ),
           };
         }
         return {
@@ -816,6 +885,7 @@ export async function getOfferPhotoPlanState(
           // nothing has been rendered for this entry yet.
           previewPhotoId: generatedPhotoId ?? image.tiles[0]?.photoId ?? null,
           generatedPhotoId,
+          tileCount: image.tiles.length,
           publish: image.publish,
           overLimit: image.overLimit,
           setLabels: image.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
@@ -1056,8 +1126,9 @@ interface RenderedImage {
   /** The plan identity this image was rendered for (#313) — stored on its entry, so the panel can
    * match the file back to its planned place. */
   token: string;
-  /** `collage` for a planned group, `copy_photo` / `upload` for a manual attachment (#313). */
-  source: "collage" | "copy_photo" | "upload";
+  /** `collage` for a planned group; `copy_photo` / `upload` / `manual_collage` for a manual
+   * attachment (#313, #331). */
+  source: "collage" | AttachmentSource;
   side: "front" | "back" | null;
   pairKey: string | null;
   setIds: string[];
@@ -1162,10 +1233,11 @@ async function renderPlannedCollage(
 }
 
 /**
- * A manual attachment (#313): one tile, annotated like any other. A `copy_photo` resolves its label
- * from the copy it shows, so a detail shot carries the same `A234` as that copy's tile in a collage
- * — which is the point of attaching one. An `upload` has no copy, so it gets the copyless label:
- * literal text only, or nothing at all.
+ * A manual attachment (#313, #331): the tiles the collector chose, at the width they chose,
+ * annotated like any other. A tile showing a copy's photo resolves its label from that copy, so a
+ * detail shot carries the same `A234` as that copy's tile in a derived collage — which is the point
+ * of attaching one. A tile with no copy gets the copyless label: literal text only, or nothing at
+ * all. The single-image modes are this with one tile in one column.
  *
  * It carries no side and no pair: an attachment is one deliberate image, not half of a front/back.
  */
@@ -1174,18 +1246,21 @@ async function renderPlannedAttachment(
   index: number,
   inputs: GenerationInputs
 ): Promise<RenderedImage> {
-  const labels = image.itemId
-    ? inputs.tileLabels.get(image.itemId) ?? null
-    : inputs.uploadTileLabel;
-  const source = await tileSource(image.photoId, labels, inputs);
+  const sources: CollageTileSource[] = [];
+  for (const tile of image.tiles) {
+    const labels = tile.itemId
+      ? inputs.tileLabels.get(tile.itemId) ?? null
+      : inputs.uploadTileLabel;
+    sources.push(await tileSource(tile.photoId, labels, inputs));
+  }
   return {
-    ...(await renderTiles([source], 1, index, inputs)),
+    ...(await renderTiles(sources, image.columns, index, inputs)),
     token: image.token,
     source: inputs.attachmentSources.get(image.attachmentId) ?? "upload",
     side: null,
     pairKey: null,
     setIds: [],
-    itemIds: image.itemId ? [image.itemId] : [],
+    itemIds: image.tiles.flatMap((tile) => (tile.itemId ? [tile.itemId] : [])),
   };
 }
 

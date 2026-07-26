@@ -33,11 +33,13 @@ import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
 import {
   attachOfferCopyPhotos,
+  attachOfferPhotoCollage,
   attachOfferUploads,
   removeOfferPhotoAttachment,
   renameOfferPhotoAttachment,
   setOfferPhotoPlanOrder,
   setOfferPhotoPublish,
+  type CollageAttachmentInput,
   type CopyPhotoAttachmentInput,
   type UploadAttachmentInput,
 } from "@/lib/offer-photo-attachments";
@@ -414,6 +416,24 @@ export async function attachOfferUploadsAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to attach the images.");
+  }
+}
+
+/**
+ * Attach one collage the collector composed by hand (#331): the photos they picked — copy scans and
+ * images being uploaded with it, mixed freely — combined into a single image at the width they chose.
+ * It lands at the end of the plan and is dragged from there like any other attachment.
+ */
+export async function attachOfferPhotoCollageAction(
+  offerId: string,
+  input: CollageAttachmentInput
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await attachOfferPhotoCollage(session.user.id, offerId, input);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to build the collage.");
   }
 }
 

@@ -6,7 +6,9 @@
 //
 // An offer's photos are not "one main image plus extras" — they are an ordered sequence, part
 // collage, part single. A single image is just a 1×1 collage (#310): there is no pass-through path,
-// because every tile is annotated (#312).
+// because every tile is annotated (#312). A manual attachment (#313) is the same thing the collector
+// placed by hand, and since #331 it may hold several chosen tiles at a chosen width — a collage
+// composed deliberately, where the derived ones are composed by the grouping rules below.
 //
 // Grouping
 // --------
@@ -81,15 +83,31 @@ export interface PlanCollageCapacity {
   collageColumns: number;
 }
 
-/** A manual attachment (#313) already resolved to the photo it shows. `itemId` is the copy the
- * photo belongs to (its label tokens resolve from that copy); null for an image uploaded straight
- * to the offer. */
+/** One tile of a manual attachment: the photo to composite and the copy whose data annotates it
+ * (#312), or null for an image uploaded straight to the offer — its inventory tokens resolve empty
+ * and only the label template's literal text renders. */
+export interface PlanAttachmentTile {
+  photoId: string;
+  itemId: string | null;
+}
+
+/**
+ * A manual attachment (#313) already resolved to the photos it shows.
+ *
+ * One shape for all three modes: a copy photo and an upload are a single tile in a single column,
+ * and a manual collage (#331) is the same thing with the tiles the collector chose and the width
+ * they picked. That is not a generalisation for its own sake — an attachment has always been
+ * rendered as a one-tile collage (#310/#312), so the only thing #331 adds here is that the number of
+ * tiles and the number of columns are no longer fixed at one.
+ */
 export interface PlanAttachment {
   id: string;
   /** 0-based position in the finished plan. Out-of-range values clamp to the end. */
   position: number;
-  photoId: string;
-  itemId: string | null;
+  /** The images this attachment shows, in tile order. Never empty. */
+  tiles: readonly PlanAttachmentTile[];
+  /** How many tiles per row (#331). 1 for the single-image modes. */
+  columns: number;
 }
 
 export interface OfferPhotoPlanInput {
@@ -150,14 +168,18 @@ export interface PlannedCollage extends PlannedImageBase {
 }
 
 /** A manual attachment placed in the plan (#313). Not derived from a rule: the collector put it
- * there, and only they take it out. */
+ * there, and only they take it out. One tile for the single-image modes; the chosen photos at the
+ * chosen width for a manual collage (#331). */
 export interface PlannedAttachment extends PlannedImageBase {
   kind: "attachment";
   attachmentId: string;
-  /** This image's stable identity for the manual plan order (#313): `a:<attachmentId>`. */
+  /** This image's stable identity for the manual plan order (#313): `a:<attachmentId>`. Unlike a
+   * collage's token it does not describe the contents, so editing what a manual collage shows keeps
+   * its place in the plan — which is the point of an image the collector composed by hand. */
   token: string;
-  photoId: string;
-  itemId: string | null;
+  tiles: PlanAttachmentTile[];
+  /** How many tiles per row this image is laid out at (#331). */
+  columns: number;
 }
 
 export type PlannedImage = PlannedCollage | PlannedAttachment;
@@ -331,8 +353,8 @@ function placeAttachments(
       kind: "attachment",
       attachmentId: attachment.id,
       token: attachmentToken(attachment.id),
-      photoId: attachment.photoId,
-      itemId: attachment.itemId,
+      tiles: [...attachment.tiles],
+      columns: Math.max(1, attachment.columns),
       publish: true,
       overLimit: false,
     });

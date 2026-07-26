@@ -28,7 +28,8 @@
  *   does, and has to read as out of date for the same reason;
  * - the **manual attachments** (#313) — which image, from which copy, at which position, and the
  *   annotation an attachment with no copy is drawn with. Adding, removing or replacing one changes
- *   what gets rendered, so it is the same kind of change as any other;
+ *   what gets rendered, so it is the same kind of change as any other. A manual collage (#331) adds
+ *   its tiles and its column count, for the same reason: both are drawn into the image;
  * - the **set of images the plan renders** (#313), when the offer carries a manual order or a
  *   do-not-publish mark: either can change *which* images fit under the platform's photo limit.
  *
@@ -100,12 +101,19 @@ export interface OfferPhotoFingerprintInput {
 }
 
 /** One manual attachment as the fingerprint sees it: what it shows, from which copy, and where it
- * sits in the plan. */
+ * sits in the plan. A manual collage (#331) shows several photos and no single one, so it names
+ * neither `photoId` nor `itemId` and carries `collage` instead. */
 export interface FingerprintAttachment {
   id: string;
   position: number;
-  photoId: string;
+  photoId: string | null;
   itemId: string | null;
+  /** A manual collage's contents (#331): the tiles it composites, in order, and how wide it is laid
+   * out. Absent for the single-image modes, so those keep hashing exactly as they did. */
+  collage?: {
+    columns: number;
+    tiles: readonly (readonly [string, string | null])[];
+  };
 }
 
 /**
@@ -154,7 +162,15 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   // that uses only an earlier one hashing exactly as it did.
   const attachments = [...(input.attachments ?? [])]
     .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map((a) => [a.id, a.position, a.photoId, a.itemId]);
+    // A manual collage appends its contents as a fifth element (#331): its tiles and its width are
+    // what it renders, so editing either is the same kind of change as swapping a single
+    // attachment's photo. Appended rather than woven in, so a single-image attachment — the only
+    // kind that could already exist — hashes exactly as it did.
+    .map((a) =>
+      a.collage
+        ? [a.id, a.position, a.photoId, a.itemId, [a.collage.columns, a.collage.tiles]]
+        : [a.id, a.position, a.photoId, a.itemId]
+    );
   // Sorted, because this is the set of images that exist, not the order they go up in.
   const rendered = [...(input.renderedTokens ?? [])].sort();
 

@@ -11,6 +11,7 @@ import { createOffer, addOfferSet, updateOfferPhotoConfig } from "../../src/lib/
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import {
   attachOfferCopyPhoto,
+  attachOfferPhotoCollage,
   attachOfferUpload,
   listOfferPhotoAttachments,
   OfferPhotoAttachmentError,
@@ -37,7 +38,10 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //   - they hold explicit positions between the generated groups, and a reorder rewrites them;
 //   - a run renders them as annotated one-tile images, with their own entry `source`;
 //   - removing an upload takes its bytes with it; removing a copy attachment leaves the scan alone;
-//   - the guards: a copy outside the offer, a photo that is not that copy's, another user's offer.
+//   - the guards: a copy outside the offer, a photo that is not that copy's, another user's offer;
+//   - and, since #331, a collage the collector composed by hand: several chosen photos — a copy's
+//     scan and an upload mixed freely — rendered as one image at the width they picked, whose
+//     uploaded tiles go with it and whose borrowed scans do not.
 
 async function scan(width: number, height: number, red: number): Promise<Buffer> {
   return sharp({
@@ -262,7 +266,7 @@ describe("offer photo attachments (#313)", () => {
     assert.equal(attachment.source, "upload");
     assert.equal(attachment.itemId, null);
 
-    const photo = await prisma.photo.findUnique({ where: { id: attachment.photoId } });
+    const photo = await prisma.photo.findUnique({ where: { id: attachment.photoId! } });
     assert.equal(photo?.offerId, offerId, "an uploaded attachment is owned by the offer");
     assert.equal(photo?.kind, "original", "it is a source image, not something the app generated");
     assert.equal(photo?.itemId, null);
@@ -453,7 +457,7 @@ describe("offer photo attachments (#313)", () => {
     const attachments = await listOfferPhotoAttachments(userId, offerId);
     const upload = attachments.find((a) => a.source === "upload")!;
     const copyAttachment = attachments.find((a) => a.source === "copy_photo")!;
-    const uploadPhoto = (await prisma.photo.findUnique({ where: { id: upload.photoId } }))!;
+    const uploadPhoto = (await prisma.photo.findUnique({ where: { id: upload.photoId! } }))!;
 
     await assert.rejects(
       () => removeOfferPhotoAttachment(strangerId, upload.id),
@@ -461,11 +465,11 @@ describe("offer photo attachments (#313)", () => {
     );
 
     await removeOfferPhotoAttachment(userId, upload.id);
-    assert.equal(await prisma.photo.count({ where: { id: upload.photoId } }), 0);
+    assert.equal(await prisma.photo.count({ where: { id: upload.photoId! } }), 0);
     assert.equal(await bytesExist(uploadPhoto), false, "an uploaded image exists only for its attachment");
 
     await removeOfferPhotoAttachment(userId, copyAttachment.id);
-    const scanRow = await prisma.photo.findUnique({ where: { id: copyAttachment.photoId } });
+    const scanRow = await prisma.photo.findUnique({ where: { id: copyAttachment.photoId! } });
     assert.ok(scanRow, "the copy still owns its scan");
     assert.ok(await bytesExist(scanRow!), "and its bytes");
 
@@ -513,6 +517,86 @@ describe("offer photo attachments (#313)", () => {
       ],
       "the stored images are numbered in the collector's order"
     );
+  });
+
+  it("builds one collage from a hand-picked selection, mixing a copy's scan with an upload (#331)", async () => {
+    const upload = await stageUpload(userId, collectionId, {
+      bytes: await scan(300, 200, 60),
+      mime: "image/png",
+    });
+    const attachment = await attachOfferPhotoCollage(userId, offerId, {
+      tiles: [
+        { kind: "copy_photo", itemId, photoId: frontPhotoId },
+        { kind: "upload", uploadId: upload.id },
+      ],
+      columns: 2,
+      title: "Detail pair",
+    });
+
+    assert.equal(attachment.source, "manual_collage");
+    assert.equal(attachment.photoId, null, "a collage shows its tiles, not one photo");
+    assert.equal(attachment.collageColumns, 2);
+    const tiles = await prisma.offerPhotoAttachmentTile.findMany({
+      where: { attachmentId: attachment.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.deepEqual(
+      tiles.map((t) => [t.source, t.itemId]),
+      [
+        ["copy_photo", itemId],
+        ["upload", null],
+      ],
+      "the tiles keep the order they were picked in"
+    );
+    const uploadedTile = tiles[1];
+    const tilePhoto = (await prisma.photo.findUnique({ where: { id: uploadedTile.photoId } }))!;
+    assert.equal(tilePhoto.offerId, offerId, "a collage's uploaded tile is owned by the offer");
+    assert.equal(tilePhoto.kind, "original");
+    assert.ok(await bytesExist(tilePhoto), "the staged bytes moved to their permanent key");
+    assert.equal(await prisma.photoUpload.count({ where: { id: upload.id } }), 0);
+
+    const planned = await getOfferPhotoPlanState(userId, offerId);
+    // Found by id, not by position: the offer already carries a manual plan order, so a newcomer
+    // seats itself after its natural predecessor rather than at the end (#313).
+    const entry = planned.plan.images.find((i) => i.attachmentId === attachment.id)!;
+    assert.equal(entry.source, "manual_collage");
+    assert.equal(entry.attachmentId, attachment.id);
+    assert.equal(entry.tileCount, 2);
+    assert.equal(entry.title, "Detail pair");
+    assert.deepEqual(entry.copyLabels.length, 1, "only one of its two tiles comes from a copy");
+
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration(), offerId);
+    await runOfferPhotoGeneration(offerId);
+
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(state.outOfDate, false, "the fingerprint covers the collage's tiles and width");
+    const image = state.images.find((i) => i.token === entry.token)!;
+    assert.equal(image.source, "manual_collage");
+    assert.deepEqual(image.itemIds, [itemId], "an uploaded tile has no copy to name");
+    assert.ok(
+      image.width > image.height,
+      "two tiles side by side make a wide image; one on its own would not"
+    );
+  });
+
+  it("removes a hand-built collage, taking only its own uploaded tiles (#331)", async () => {
+    const attachment = (await listOfferPhotoAttachments(userId, offerId)).find(
+      (a) => a.source === "manual_collage"
+    )!;
+    const tiles = await prisma.offerPhotoAttachmentTile.findMany({
+      where: { attachmentId: attachment.id },
+    });
+    const uploadedPhotoId = tiles.find((t) => t.source === "upload")!.photoId;
+    const uploadedPhoto = (await prisma.photo.findUnique({ where: { id: uploadedPhotoId } }))!;
+
+    await removeOfferPhotoAttachment(userId, attachment.id);
+
+    assert.equal(await prisma.offerPhotoAttachmentTile.count({ where: { attachmentId: attachment.id } }), 0);
+    assert.equal(await prisma.photo.count({ where: { id: uploadedPhotoId } }), 0);
+    assert.equal(await bytesExist(uploadedPhoto), false, "its uploaded tile existed for it alone");
+    const scanRow = await prisma.photo.findUnique({ where: { id: frontPhotoId } });
+    assert.ok(scanRow && (await bytesExist(scanRow)), "the copy still owns the scan it lent");
   });
 
   it("drops an attachment from the plan when the photo it shows is deleted", async () => {

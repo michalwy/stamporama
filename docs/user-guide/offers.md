@@ -343,7 +343,7 @@ If every set in the offer has gone, there is nothing left to render and Generate
 ### Attaching your own images
 
 Not everything a listing needs comes out of the composition. Expand the card and press **+ Add
-attachments** to put images of your own into the plan, in one of two ways:
+attachments** to put images of your own into the plan. There are two places to pick from:
 
 - **Photos of copies** — pick any photos of copies in this offer: fronts, backs, or extras. Use them
   to show single details on their own — a perforation, a flaw, a cancel. Each gets the same label as
@@ -357,10 +357,26 @@ attachments** to put images of your own into the plan, in one of two ways:
 You can add a caption; it is shown in the plan to help you recognise the entry and is never drawn on
 the image. With several picked at once, it applies to all of them.
 
+#### Building a collage by hand
+
+Normally each photo you pick becomes its own image. Tick **Combine everything picked into one
+collage** and they become a single image instead — the grouping the automatic rules cannot make,
+because those follow the offer's sets.
+
+While it is ticked, the two tabs are one selection: a hand-built collage can mix a copy's scan with
+a picture you are uploading. Choose how many **columns** to lay it out in; the number of rows follows
+from that and the number of photos, and both are shown as you pick. The strip of numbered thumbnails
+below is the order the tiles go in — copy photos in the order you picked them, then your uploads.
+Everything else about the image — the gap, the background, the label strip — comes from this offer's
+own collage settings, so a collage you built sits among the generated ones instead of standing out.
+
+The result is one attachment: it takes one place in the plan, carries one caption, is removed in one
+click, and a regeneration leaves it alone like every other attachment. To change what it shows,
+remove it and build it again.
+
 Remove an attachment with the **✕** beside it in the plan; an image you uploaded is deleted with it,
-a copy's own photo is left alone. Attachments are also **protected** from the platform's photo limit
-— when there are too many photos, generated collages are dropped first, because you added the
-attachment deliberately while a collage is the result of a rule.
+a copy's own photo is left alone — including the uploads and the borrowed scans inside a collage you
+built.
 
 Adding or removing an attachment changes the **plan**, never the images already generated — the card
 simply marks them out of date until you regenerate.

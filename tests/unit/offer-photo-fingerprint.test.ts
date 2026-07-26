@@ -214,6 +214,37 @@ describe("fingerprintOfferPhotoInputs manual attachments (#313)", () => {
     assert.equal(attached({ attachments: two }), attached({ attachments: [...two].reverse() }));
   });
 
+  it("hashes a manual collage's tiles and width, leaving single-image attachments alone (#331)", () => {
+    const collageAttachment = (patch: { columns?: number; tiles?: [string, string | null][] } = {}) =>
+      attached({
+        attachments: [
+          {
+            id: "m1",
+            position: 0,
+            photoId: null,
+            itemId: null,
+            collage: {
+              columns: patch.columns ?? 2,
+              tiles: patch.tiles ?? [
+                ["p1", "a"],
+                ["p2", null],
+              ],
+            },
+          },
+        ],
+      });
+
+    // A collage is not the same image as a single attachment, and neither of its two knobs is free.
+    assert.notEqual(collageAttachment(), attached());
+    assert.notEqual(collageAttachment({ columns: 3 }), collageAttachment());
+    assert.notEqual(
+      collageAttachment({ tiles: [["p2", null], ["p1", "a"]] }),
+      collageAttachment(),
+      "tile order is the layout order, so swapping two tiles is a different image"
+    );
+    assert.notEqual(collageAttachment({ tiles: [["p1", "a"]] }), collageAttachment());
+  });
+
   it("changes with the label an attachment with no copy is drawn with", () => {
     const upload = [{ id: "m2", position: 1, photoId: "p2", itemId: null }];
     assert.notEqual(
