@@ -9,6 +9,7 @@ import {
   updateOffer,
   setOfferState,
   setOfferInActiveBidding,
+  publishOffer,
   deleteOffer,
   patchOffer,
   regenerateOfferText,
@@ -545,6 +546,22 @@ export async function setOfferStateAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the offer state.");
+  }
+}
+
+/** Publish a prepared offer from the bulk listing workspace (#322): `ready → active`, stamping the
+ * listing date (#320), plus the listing URL the platform gave back. A blank URL is accepted — the
+ * listing may not have one to copy yet — and clears whatever was there. */
+export async function publishOfferAction(
+  offerId: string,
+  rawUrl: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await publishOffer(session.user.id, offerId, normalizeUrl(rawUrl));
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to publish the offer.");
   }
 }
 

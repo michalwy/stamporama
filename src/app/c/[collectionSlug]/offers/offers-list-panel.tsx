@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import type { OfferListItem } from "@/lib/offers";
@@ -270,6 +271,21 @@ export function OffersListPanel({
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+          {/* Post a prepared batch (#322). Carries the platform filter across: the workspace posts to
+              one platform, and the one being looked at here is the one meant. */}
+          <Link
+            href={`/c/${collectionSlug}/offers/listing${platformId ? `?platform=${platformId}` : ""}`}
+            title="Post the offers you have marked ready to their platform, one after another"
+            style={{
+              ...CONTROL_STYLE,
+              display: "inline-flex",
+              alignItems: "center",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            Bulk listing →
+          </Link>
           {/* Sell a new item end-to-end (#241): create the stamp, copy, and offer in one pass. */}
           <button
             type="button"

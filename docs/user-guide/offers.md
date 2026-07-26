@@ -5,7 +5,9 @@ or Colnect. The offer **owns what it lists**: you compose it from your inventory
 more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
 independent offers — each tracked, edited, and sold on its own.
 
-Open the **Offers** screen from the **Trading** section of the sidebar.
+Open the **Offers** screen from the **Trading** section of the sidebar. When a batch of offers is
+prepared and ready to go live, [**Bulk listing**](#bulk-listing--posting-a-prepared-batch) on its
+toolbar is where you post them.
 
 ## Sets — what an offer is made of
 
@@ -474,6 +476,92 @@ title yet falls back to a short piece of its id, so two untitled offers still do
 
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.
+
+## Bulk listing — posting a prepared batch
+
+Once you have several offers marked **Ready**, posting them is the same handful of motions over and
+over: open the platform's listing form, paste the title, paste the description, type the price, upload
+the photos, mark the offer live. The **Bulk listing** screen — the button on the Offers toolbar — is
+that session in one place. It shows nothing you cannot reach elsewhere; it just stops you from opening
+forty offer screens to do it.
+
+It is scoped to **one platform** and to **Ready** offers only. Both are deliberate: a batch spanning
+platforms would mix listings whose titles, description formats and photo limits differ, and an offer
+that is not Ready is not prepared to be posted. The platform comes across from whatever the Offers
+list was filtered to, and the dropdown at the top changes it.
+
+### Grouped by area and year
+
+Offers are grouped under **area · year** headers, in the order the area tree runs and then
+chronologically — the order a posting session tends to go in, a run of one area's 1960s, then the
+next.
+
+An offer is filed under a pair only when **every copy it holds** shares it. One that spans areas or
+years has no single pair to sit under, so it goes to **Mixed**, the last group. The area/year rail on
+the left narrows the session; **Mixed** is an entry in that rail, so a narrowed session can still get
+to those offers.
+
+The rail's filter is stricter than the grouping, on purpose: an offer matches an area only when
+*every* copy is inside it (or inside one of its sub-areas), so a filtered session never hands you a
+listing half of which came from somewhere else. That is why an offer holding 1960 and 1961 stamps of
+one area is grouped as **Mixed** and yet still appears when you filter by that area — it *is* an
+offer for that area, it just has no one year. Year counts in the rail follow the same rule, so a count
+never promises more than clicking it delivers.
+
+Your area and year selection is the same one the Issues, Stamps and Inventory lists use, so it
+carries between them.
+
+### The posting kit
+
+Each offer is one line: its title, how many sets, how many photos are stored, the asking price, and
+**Publish**. Expand it and you get everything the platform's form wants, each with its own copy
+button:
+
+- **Title** — the [generated listing title](#listing-title).
+- **Price** — the asking price, with the suggested price beside it for reference.
+- **Description** — shown the way the platform will read it, in [its
+  format](#description-format); the copy control offers formatted or source, as on the offer screen.
+- **Private note** — only when the offer has one.
+- **Photos** — the generated images in upload order, numbered as their files are named. Click a
+  thumbnail for a full-size look, **↓** under it to save that one file, or **↓ ZIP** for the whole
+  upload set at once. Images [held back](#holding-a-photo-back) or past the platform's limit are shown
+  faded and left out of the ZIP, exactly as on the offer screen. An **Out of date** chip means the
+  offer changed after these images were rendered — regenerate them from **Open offer ↗** before
+  posting.
+
+One offer is expanded at a time, which is also how the work goes. The **first offer of the batch opens
+by itself**, so a session starts on the listing you are about to post rather than on a wall of shut
+cards. Closing it leaves everything shut — the screen won't argue with you — and changing the platform
+or the area/year filter opens the first offer of the new batch.
+
+The kit is loaded when you expand it, so a big batch opens instantly.
+
+From the card's **⋮** menu you can **open the offer** — for anything the kit doesn't cover: editing a
+text, regenerating photos, changing the composition — or send it **back to preparing**.
+
+### When something turns out to be missing
+
+If you get into a listing and find the description is wrong, a scan is missing, or the price needs
+another look, **⋮ → Back to preparing** takes the offer out of the batch. It disappears from the
+workspace, because it is no longer ready to post. Nothing else changes: fix it on the offer screen and
+mark it ready again, and it is back in the next session. Marking ready is
+[reversible](#offer-lifecycle) from the Offers list too.
+
+If an offer has no images yet, the card says so rather than quietly offering an empty upload. Generate
+them from the offer screen — see [Generating the photos](#generating-the-photos).
+
+### Publishing
+
+**Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the
+platform gave back. The URL is optional: some platforms only mint one once the listing is approved,
+and the offer's **Edit offer** form takes it later. Publishing stamps the listing date to today, the
+same as activating from anywhere else — correct it from **Edit offer** if you posted it on a different
+day.
+
+A published offer leaves the batch immediately: it is Active now, and the workspace lists what is
+still waiting. **The next offer opens by itself**, so your hands go straight back to copying instead of
+hunting for where you were. Publish the last one of a group and the first of what remains opens
+instead.
 
 ## One active offer per copy, per platform
 

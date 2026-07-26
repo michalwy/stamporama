@@ -7,6 +7,7 @@ import type {
   OfferDetail,
   ComposeTargets,
   OfferFilterCounts,
+  ListingWorkspaceOffer,
 } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
@@ -105,6 +106,25 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       if (!res.ok) throw new Error("Failed to fetch offer counts");
       return res.json();
     },
+  });
+}
+
+/** Every `ready` offer on one platform, for the bulk listing workspace (#322). One request, no
+ * pagination: the screen groups it by area/year and facets the rail client-side, so it needs the
+ * whole batch in hand. Disabled until a platform is chosen — the workspace posts to one marketplace.
+ * Lives under the offers key, so activating an offer refreshes the batch it just left. */
+export function useListingOffers(collectionId: string, platformId: string | undefined) {
+  return useQuery<ListingWorkspaceOffer[]>({
+    queryKey: ["offers", collectionId, "listing", platformId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ platformId: platformId! });
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/listing?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to load the ready offers");
+      return (await res.json()).items;
+    },
+    enabled: !!platformId,
   });
 }
 

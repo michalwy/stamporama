@@ -42,16 +42,32 @@ function writeCollapsed(ids: Set<string>) {
   for (const listener of collapsedListeners) listener();
 }
 
+/**
+ * A list-specific bucket that sits with the areas without being one — the bulk listing workspace's
+ * **Mixed** group (#322), for offers whose copies span areas or years and so belong under no single
+ * pair. It is a selection at the same level as "All areas" (it answers the same question about
+ * scope), which is why it is rendered here rather than as a control elsewhere on the screen.
+ */
+export interface AreaExtraEntry {
+  label: string;
+  title?: string;
+  count?: number;
+  selected: boolean;
+  onSelect: () => void;
+}
+
 interface AreaFilterSidebarProps {
   areas: CollectionAreaData[];
   filterAreaId: string | null;
   onNavigate: (areaId: string | null) => void;
+  extraEntry?: AreaExtraEntry;
 }
 
 export function AreaFilterSidebar({
   areas,
   filterAreaId,
   onNavigate,
+  extraEntry,
 }: AreaFilterSidebarProps) {
   const flatTree = useMemo(() => flattenAreaTree(areas), [areas]);
 
@@ -157,6 +173,58 @@ export function AreaFilterSidebar({
         >
           All areas
         </button>
+
+        {extraEntry && (
+          <button
+            type="button"
+            onClick={extraEntry.onSelect}
+            title={extraEntry.title}
+            onMouseEnter={(e) => {
+              if (!extraEntry.selected)
+                e.currentTarget.style.background = "var(--color-bg-muted)";
+            }}
+            onMouseLeave={(e) => {
+              if (!extraEntry.selected) e.currentTarget.style.background = "transparent";
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.5rem",
+              width: "100%",
+              textAlign: "left",
+              padding: "0.4rem 1rem",
+              background: extraEntry.selected ? "var(--color-accent-soft)" : "transparent",
+              border: "none",
+              borderBottom: "1px solid var(--color-border)",
+              cursor: "pointer",
+              fontSize: "0.8125rem",
+              fontStyle: "italic",
+              fontWeight: extraEntry.selected ? 600 : 400,
+              color: extraEntry.selected
+                ? "var(--color-accent)"
+                : "var(--color-text-secondary)",
+            }}
+          >
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {extraEntry.label}
+            </span>
+            {extraEntry.count !== undefined && (
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontSize: "0.75rem",
+                  fontWeight: 400,
+                  fontStyle: "normal",
+                  color: "var(--color-text-muted)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {extraEntry.count}
+              </span>
+            )}
+          </button>
+        )}
 
         {loaded &&
           visibleTree.map(({ area, depth, isLast, ancestorHasNextSibling }) => {

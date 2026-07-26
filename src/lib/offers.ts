@@ -41,7 +41,11 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
-import { deleteOfferPhotoBytes } from "./offer-photo-generation";
+import {
+  deleteOfferPhotoBytes,
+  type OfferPhotoGenerationStatus,
+} from "./offer-photo-generation";
+import type { OfferAreaYear } from "./listing-groups";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -794,7 +798,9 @@ function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): Off
 async function attachBasePrices(
   collectionId: string,
   baseCurrency: string,
-  items: OfferListItem[]
+  // Structural, not `OfferListItem`: the bulk listing workspace's leaner row (#322) carries the same
+  // three fields and wants the same conversion.
+  items: { price: string; currency: string; priceBase: string | null }[]
 ): Promise<void> {
   const currencies = [...new Set(items.map((i) => i.currency).filter((c) => c !== baseCurrency))];
   if (currencies.length === 0) return;
@@ -1006,6 +1012,157 @@ export async function offerFilterCounts(
     platforms,
     total,
   };
+}
+
+// ── Bulk listing workspace (#322) ────────────────────────────────────────────
+
+/** The offer's sets as the workspace reads them: the label select every offer list uses, plus each
+ * copy's area links and issued year for the area/year grouping. */
+const LISTING_SETS_SELECT = {
+  id: true,
+  title: true,
+  items: {
+    select: {
+      itemId: true,
+      sortOrder: true,
+      item: {
+        select: {
+          stamp: {
+            select: {
+              ...STAMP_LABEL_SELECT.stamp.select,
+              issuedYear: true,
+              stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+  saleLines: { select: { id: true }, take: 1 },
+} as const;
+
+/** One `ready` offer as the bulk listing workspace lists it: enough for the collapsed line and for
+ * grouping, and nothing more. The posting kit itself — the listing texts and the photos — is read per
+ * card through the offer detail (#266/#267) and photo-plan (#311) endpoints when the card is
+ * expanded, so opening the screen on a big batch does not pay for texts nobody has looked at. */
+export interface ListingWorkspaceOffer {
+  id: string;
+  name: string | null;
+  label: string;
+  price: string;
+  currency: string;
+  baseCurrency: string;
+  priceBase: string | null;
+  setCount: number;
+  itemCount: number;
+  /** How many images the last generation run stored — what there is to upload right now. */
+  photoCount: number;
+  /** The generation job's state (#311), so a card can say "never generated" or "failed" without
+   * loading the whole plan. */
+  photoStatus: OfferPhotoGenerationStatus;
+  /** The listing URL, when one was already recorded (an offer can be re-listed, and the activate
+   * prompt should not start blank on the second pass). */
+  url: string | null;
+  /** The distinct (area, year) pairs across the offer's copies, for the grouping and the rail
+   * (`listing-groups.ts`). One entry when every copy agrees. */
+  areaYears: OfferAreaYear[];
+}
+
+/**
+ * Every `ready` offer on one platform, for the bulk listing workspace (#322). Unpaginated on
+ * purpose: this is one posting session's worth of work, the caller groups and filters it client-side
+ * for instant facets (as the compose picker does), and a `ready` batch is bounded by how many
+ * listings a person is about to type in by hand.
+ *
+ * A copy's **area** is its stamp's primary area link, falling back to any link when none is marked
+ * primary — a stamp can sit in several areas, and the grouping needs the one it is filed under, not
+ * a set that would make every such offer Mixed. Its **year** is `stamp.issuedYear`, the same year the
+ * inventory list filters on (#142).
+ */
+export async function listReadyOffersForListing(
+  ownerId: string,
+  collectionId: string,
+  platformId: string
+): Promise<ListingWorkspaceOffer[]> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.offer.findMany({
+    where: { collectionId, platformId, state: "ready" },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      url: true,
+      price: true,
+      currency: true,
+      sets: { select: LISTING_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+      photoEntries: { select: { id: true } },
+      photoGeneration: { select: { status: true } },
+    },
+  });
+
+  const items: ListingWorkspaceOffer[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    label: offerLabel(row.sets),
+    price: row.price.toFixed(2),
+    currency: row.currency,
+    baseCurrency,
+    priceBase: null, // filled below, like every other offer list (#208)
+    setCount: row.sets.length,
+    itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
+    photoCount: row.photoEntries.length,
+    photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
+    url: row.url,
+    areaYears: distinctAreaYears(row.sets),
+  }));
+
+  await attachBasePrices(collectionId, baseCurrency, items);
+  return items;
+}
+
+type AreaLinkedSet = {
+  items: {
+    item: {
+      stamp: {
+        issuedYear: number | null;
+        stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
+      };
+    };
+  }[];
+};
+
+/** The distinct (primary area, issued year) pairs across an offer's copies, in first-seen order. */
+function distinctAreaYears(sets: AreaLinkedSet[]): OfferAreaYear[] {
+  const seen = new Map<string, OfferAreaYear>();
+  for (const set of sets) {
+    for (const { item } of set.items) {
+      const links = item.stamp.stampAreaLinks;
+      const areaId = (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null;
+      const year = item.stamp.issuedYear;
+      const key = `${areaId ?? ""}:${year ?? ""}`;
+      if (!seen.has(key)) seen.set(key, { areaId, year });
+    }
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Publish a prepared offer (#322): record the listing URL the platform gave back, then move
+ * `ready → active`, which stamps the listing date (#320).
+ *
+ * The URL is written **after** the transition so a refused publication — an offer that lost its last
+ * set, or its price — leaves nothing behind: a listing URL on an offer that never went live would be
+ * a false record of a live listing. `null` clears the field, and a listing may legitimately have no
+ * URL yet (the platform hands one out only once the listing is approved); the header stays editable
+ * afterwards either way.
+ */
+export async function publishOffer(
+  ownerId: string,
+  offerId: string,
+  url: string | null
+): Promise<void> {
+  await setOfferState(ownerId, offerId, "active");
+  await patchOffer(ownerId, offerId, { url });
 }
 
 export interface OfferDetailSet {
