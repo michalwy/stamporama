@@ -186,10 +186,14 @@ export function StampDetailLine({
   node,
   vendorMap,
   primaryVendorId,
+  onSetPrice,
 }: {
   node: StampNodeData;
   vendorMap: VendorMap;
   primaryVendorId: string | null;
+  /** When provided, an unpriced stamp shows a **+ catalog value** link in the price slot
+   * (#341) — the same affordance the Copies list puts on an unpriced copy (#228). */
+  onSetPrice?: () => void;
 }) {
   const primaryCN = primaryVendorId
     ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
@@ -197,7 +201,13 @@ export function StampDetailLine({
   const secondaryCNs = node.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId);
   const notRequired = !node.requiredForCompleteness;
 
-  if (!primaryCN && secondaryCNs.length === 0 && !node.colnectId && !node.mainCatalogPrice)
+  if (
+    !primaryCN &&
+    secondaryCNs.length === 0 &&
+    !node.colnectId &&
+    !node.mainCatalogPrice &&
+    !onSetPrice
+  )
     return null;
 
   return (
@@ -221,6 +231,31 @@ export function StampDetailLine({
         </span>
       ))}
       <ColnectChip colnectId={node.colnectId} />
+      {!node.mainCatalogPrice && onSetPrice && (
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+          <Tooltip
+            align="end"
+            content="Set the catalog value for this condition on the primary catalog"
+          >
+            <button
+              type="button"
+              onClick={onSetPrice}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "var(--color-accent)",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              + catalog value
+            </button>
+          </Tooltip>
+        </span>
+      )}
       {node.mainCatalogPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
           {node.mainCatalogPriceStale && <StalePriceIcon />}

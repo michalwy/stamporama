@@ -899,7 +899,7 @@ function useCopyEditing(ctx: {
     <>
       {quickPriceItem && (
         <QuickPriceDialog
-          item={quickPriceItem}
+          subject={quickPriceItem}
           collectionId={collectionId}
           areaName={
             quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null

@@ -11,7 +11,7 @@ import {
 } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry } from "@/lib/areas";
-import type { ItemListItem } from "@/lib/items";
+import type { PhotoSummary } from "@/lib/photos";
 import type { QuickCatalogPriceContext } from "@/lib/stamps";
 import {
   formatStampCN,
@@ -46,17 +46,33 @@ const CONDITION_BADGE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** What the dialog prices: a stamp at one condition × certificate, plus the context it shows.
+ * `ItemListItem` satisfies it structurally (a copy carries its own condition), and the Issue
+ * list builds one from a stamp-tree node plus the list's display condition (#341). */
+export interface QuickPriceSubject {
+  stampId: string;
+  stampName: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  conditionId: string;
+  conditionAbbreviation: string;
+  certificateStatusId: string | null;
+  certificateStatusName: string | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  photos: PhotoSummary[];
+}
+
 /**
- * Inline "set catalog value" dialog (#147, #170): prices a copy's stamp on the latest edition
- * of every catalog active on its area — one input per vendor, the primary catalog focused by
- * default for fast entry, the rest optional. Shows the stamp's issue, catalog numbers (primary
- * highlighted), condition badge, area, this copy's photos, and any prices already recorded (the
- * target rows marked) so the user can price consistently. Shared by the purchase-order intake
- * view (#121) and the sale-lot composition view (#164). The dialog only loads the context and
- * reports the entered amounts; the caller performs the save.
+ * Inline "set catalog value" dialog (#147, #170): prices a stamp on the latest edition of every
+ * catalog active on its area — one input per vendor, the primary catalog focused by default for
+ * fast entry, the rest optional. Shows the stamp's issue, catalog numbers (primary highlighted),
+ * condition badge, area, the subject's photos, and any prices already recorded (the target rows
+ * marked) so the user can price consistently. Shared by the purchase-order intake view (#121),
+ * the sale-lot composition view (#164), the Copies list (#228) and the Issue list (#341). The
+ * dialog only loads the context and reports the entered amounts; the caller performs the save.
  */
 export function QuickPriceDialog({
-  item,
+  subject: item,
   collectionId,
   areaName,
   primaryVendorId,
@@ -66,7 +82,7 @@ export function QuickPriceDialog({
   onClose,
   onSubmit,
 }: {
-  item: ItemListItem;
+  subject: QuickPriceSubject;
   collectionId: string;
   areaName: string | null;
   primaryVendorId: string | null;
@@ -88,15 +104,14 @@ export function QuickPriceDialog({
     if (!loading && !loadError) primaryInputRef.current?.focus();
   }, [loading, loadError]);
 
+  // Keyed on the identity fields, not the subject object: a caller building the subject
+  // inline (the Issue list's stamp rows) would otherwise refetch on every render.
+  const { stampId, conditionId, certificateStatusId } = item;
   useEffect(() => {
     let active = true;
     (async () => {
       const { getQuickCatalogPriceContextAction } = await import("@/app/actions/stamps");
-      const r = await getQuickCatalogPriceContextAction(
-        item.stampId,
-        item.conditionId,
-        item.certificateStatusId
-      );
+      const r = await getQuickCatalogPriceContextAction(stampId, conditionId, certificateStatusId);
       if (!active) return;
       if (r.status === "success") {
         setContext(r.context);
@@ -113,7 +128,7 @@ export function QuickPriceDialog({
     return () => {
       active = false;
     };
-  }, [item]);
+  }, [stampId, conditionId, certificateStatusId]);
 
   const filledEntries = useMemo(
     () =>

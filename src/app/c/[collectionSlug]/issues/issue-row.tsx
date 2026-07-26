@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { useIssueMembers, useInvalidateIssues } from "./use-issues-query";
 import { RecomputeRangeDialog } from "./recompute-range-dialog";
@@ -24,6 +24,8 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import {
   useInventoryPopupAction,
   useInventoryAddAction,
@@ -32,6 +34,12 @@ import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-sh
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
+
+/** The condition the list's price column is showing, so a quick-add prices what's on screen. */
+export interface DisplayConditionRef {
+  id: string;
+  abbreviation: string;
+}
 
 interface StampTreeNodeProps {
   treeNode: StampTreeNodeData;
@@ -42,6 +50,13 @@ interface StampTreeNodeProps {
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
+  /** Issue context shown in the quick-add catalog value dialog (#341). */
+  issueName: string | null;
+  issueYear: number | null;
+  areaName: string | null;
+  /** Condition a quick-added catalog value is recorded at — the one the list displays (#341). */
+  displayCondition: DisplayConditionRef | null;
+  onPriceSaved: () => void | Promise<unknown>;
   onEdit: (stampId: string) => void;
   onAddChild: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
@@ -57,6 +72,11 @@ function StampTreeNode({
   primaryVendorId,
   vendorMap,
   isLast,
+  issueName,
+  issueYear,
+  areaName,
+  displayCondition,
+  onPriceSaved,
   onEdit,
   onAddChild,
   onDelete,
@@ -100,6 +120,31 @@ function StampTreeNode({
     target: { kind: "stamp", stampId: node.stampId, label: popupLabel },
   });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: node.stampId });
+  // Quick-add a catalog value for exactly the condition the list is showing (#341): a
+  // "+ catalog value" link in the price slot, as on the Copies list (#228), shown only while
+  // this stamp has no price at that condition. The certificate axis is "none", matching the
+  // headline price the row renders.
+  const quickPrice = useQuickPriceDialog({
+    collectionId,
+    subject: displayCondition
+      ? {
+          stampId: node.stampId,
+          stampName: node.name,
+          issueName,
+          issueYear,
+          conditionId: displayCondition.id,
+          conditionAbbreviation: displayCondition.abbreviation,
+          certificateStatusId: null,
+          certificateStatusName: null,
+          catalogNumbers: node.catalogNumbers,
+          photos: node.photos,
+        }
+      : null,
+    areaName,
+    primaryVendorId,
+    vendorMap,
+    onSaved: onPriceSaved,
+  });
 
   const actions: RowAction[] = [
     { key: "add-child", label: "Add child stamp", icon: "＋", onSelect: () => onAddChild(node.stampId) },
@@ -179,12 +224,14 @@ function StampTreeNode({
               {addCopy.dialog}
               {copies.dialog}
               {prices.dialog}
+              {quickPrice.dialog}
             </div>
 
             <StampDetailLine
               node={node}
               vendorMap={vendorMap}
               primaryVendorId={primaryVendorId}
+              onSetPrice={quickPrice.open ?? undefined}
             />
           </div>
         </div>
@@ -201,6 +248,11 @@ function StampTreeNode({
             primaryVendorId={primaryVendorId}
             vendorMap={vendorMap}
             isLast={isLast && i === children.length - 1}
+            issueName={issueName}
+            issueYear={issueYear}
+            areaName={areaName}
+            displayCondition={displayCondition}
+            onPriceSaved={onPriceSaved}
             onEdit={onEdit}
             onAddChild={onAddChild}
             onDelete={onDelete}
@@ -271,6 +323,18 @@ export function IssueRow({
     isExpanded,
     displayConditionId
   );
+
+  // The condition the price column is filled from — the switcher's choice, or (when the list
+  // left it to the server) the first condition, which is the server's own fallback. A quick-add
+  // records its value there, so what's entered is what the row then shows (#341).
+  const { data: conditions } = useCollectionConditions(collectionId);
+  const displayCondition = useMemo(() => {
+    const list = conditions ?? [];
+    const chosen = displayConditionId
+      ? list.find((c) => c.id === displayConditionId)
+      : list[0];
+    return chosen ? { id: chosen.id, abbreviation: chosen.abbreviation } : null;
+  }, [conditions, displayConditionId]);
 
   const stampTree = members ? buildStampTree(members) : [];
 
@@ -596,6 +660,15 @@ export function IssueRow({
                   primaryVendorId={primaryVendorId}
                   vendorMap={vendorMap}
                   isLast={i === stampTree.length - 1}
+                  issueName={issue.name}
+                  issueYear={issue.year}
+                  areaName={
+                    areaName ??
+                    areas.find((a) => a.id === issue.collectionAreaId)?.name ??
+                    null
+                  }
+                  displayCondition={displayCondition}
+                  onPriceSaved={() => invalidateList(collectionId)}
                   onEdit={(stampId) => {
                     const stampNode = members?.find(
                       (m) => m.stampId === stampId

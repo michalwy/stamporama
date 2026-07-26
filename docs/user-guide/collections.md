@@ -286,6 +286,10 @@ The item list and the issues list each show a **single price column**. Because a
 
 **Unknown-variant stamps roll their price up from their variants.** A stamp that has variant children (an "unknown variant" umbrella — see [Inventory → unknown variant](inventory.md)) but no price of its own borrows the **lowest** price among its variant children (compared in the collection currency), exactly like a copy's catalog value does. Such a rolled-up price is shown as an estimate — prefixed with **~** and set in muted italics — because it is inferred rather than recorded. This applies at any depth of the variant tree. The estimate also feeds the **issue total**: when the total includes one or more rolled-up members it carries a **~** marker (hover it to see how many stamps were estimated). A stamp that has its own recorded price always uses that price and is never an estimate.
 
+### Adding a missing catalog value from the issues list
+
+Expand an issue and a member stamp that has **no price for the condition the list is currently showing** gets a **+ catalog value** link where its price would be — the same affordance an unpriced copy has on the [Inventory list](inventory.md#adding-a-catalog-value). It opens the same dialog — the stamp, its catalog numbers, its issue and area, any prices already recorded, and one input per catalog active on the stamp's area with the primary catalog focused — but pre-set to the condition in the **"Price for …"** selector (certificate status = None), so what you type is exactly what the row then shows. Switch the selector first if you want to price a different condition. Save and the list refreshes: the price replaces the link, and the issue total takes it in.
+
 ### The price details dialog
 
 Each stamp and issue row's **⋮** actions menu has a **Show catalog prices** action that opens the **price details** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has two kinds of section:

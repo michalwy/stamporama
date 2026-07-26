@@ -684,7 +684,7 @@ export function InventoryListPanel({
           row action on copies with no catalog value for their condition. */}
       {dialog.kind === "quickPrice" && (
         <QuickPriceDialog
-          item={dialog.item}
+          subject={dialog.item}
           collectionId={collectionId}
           areaName={dialog.item.areaId ? (areaNameById.get(dialog.item.areaId) ?? null) : null}
           primaryVendorId={
