@@ -1637,7 +1637,9 @@ export async function regenerateOfferText(
 }
 
 /** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
- * reversible; #246). `sold` is owned by the sale flow (#166) and rejected here. */
+ * reversible; #246). `sold` is owned by the sale flow (#166) and rejected here.
+ *
+ * Publishing — `ready → active` — also stamps the listing date (#320); see the note at the update. */
 export async function setOfferState(ownerId: string, offerId: string, to: OfferState): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (to === "sold") {
@@ -1654,7 +1656,24 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
     }
   }
-  await prisma.offer.update({ where: { id: offerId }, data: { state: to } });
+  // Publishing (#320): `ready → active` is the moment the listing actually goes live, so it stamps
+  // the listing date. It is the one transition that does — resuming a paused offer is not a first
+  // publication, and going back to `preparing` is not one either.
+  //
+  // An offer *created* directly as `active` (#257) never passes through here, so the date the
+  // collector typed in the creation dialog is left exactly as entered. The stamp is a starting
+  // value, not a lock: the header form edits it afterwards like any other field.
+  const publishing = ref.state === "ready" && to === "active";
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { state: to, ...(publishing ? { listingDate: todayUtcDate() } : {}) },
+  });
+}
+
+/** Today at UTC midnight — the shape `Offer.listingDate` (`@db.Date`) stores, matching how
+ *  {@link parseOfferDate} normalizes a typed `YYYY-MM-DD`. */
+function todayUtcDate(): Date {
+  return new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
 }
 
 /** Set (or clear) "in active bidding" (#215): an auction-platform offer that has received a bid,

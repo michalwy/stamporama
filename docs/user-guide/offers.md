@@ -51,7 +51,8 @@ sets". A plain single-stamp offer is just the one-set case.
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu. When a **listing date** was recorded it shows as a **📅** chip on the
    detail header; to change it, use **Edit offer** (the header form) — where the listing date and URL
-   are both editable.
+   are both editable. You rarely need to: moving an offer from **Ready** to **Active** stamps the
+   listing date with **today** by itself (see below), since that is the moment it goes live.
 5. Once the offer is assembled, **Mark ready** to move it from **Preparing** to **Ready** — fully
    prepared, waiting to be posted. When the listing is actually up on the platform, **Activate** it to
    move **Ready** → **Active**. A **quick-advance button** beside the offer's state chip — on both the
@@ -499,7 +500,12 @@ from what has sold, so it clears the moment the offer no longer holds a sold cop
 - **Preparing** — being put together (photos, description, price not finalised). A new offer starts
   here. **Mark ready** (in the **⋮** menu) once it is assembled.
 - **Ready** — fully prepared, waiting to be posted to the platform. **Activate** it once the listing
-  is live, or step it back to **Preparing** to keep editing.
+  is live, or step it back to **Preparing** to keep editing. Activating a **Ready** offer sets its
+  **listing date to today**, since that is the moment it goes live — from the quick-advance button or
+  the **⋮** menu alike. It is a starting value, not a lock: correct it from **Edit offer** whenever
+  you posted the listing on a different day. Nothing else touches the date — resuming a **Paused**
+  offer leaves it alone, and an offer *created* directly as **Active** keeps the date you typed in
+  the creation dialog.
 - **Active** — live on the platform.
 - **Paused** — temporarily suspended; the copies stay committed. Resume any time.
 - **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
