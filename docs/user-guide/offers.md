@@ -44,9 +44,10 @@ sets". A plain single-stamp offer is just the one-set case.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
 4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
    offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
-   asking price accepts either a comma or a period as the decimal separator (`12,50` or `12.50`). Once a
-   listing URL is set, its **🔗 Listing** link opens the listing when clicked; use the **✎** pencil
-   beside it to change the URL. The listing URL stays editable in **every** state — including a
+   asking price accepts either a comma or a period as the decimal separator (`12,50` or `12.50`), and
+   opens with its current value **selected**, so typing a new one replaces it rather than running into
+   it. Once a listing URL is set, its **🔗 Listing** link opens the listing when clicked; use the **✎**
+   pencil beside it to change the URL. The listing URL stays editable in **every** state — including a
    **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
    in the header's **⋮** menu. When a **listing date** was recorded it shows as a **📅** chip on the

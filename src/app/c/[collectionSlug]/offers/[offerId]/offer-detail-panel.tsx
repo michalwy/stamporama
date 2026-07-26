@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -415,6 +415,8 @@ export function OfferDetailPanel({
                 isPending={isPending}
                 inputType="number"
                 suffix={offer.currency}
+                // A price is retyped whole, never amended in the middle (#329).
+                selectOnEdit
                 onSave={(v) => patch("price", v)}
               />
             </span>
@@ -670,6 +672,7 @@ function InlineText({
   suffix,
   editControl = false,
   editAriaLabel = "Edit",
+  selectOnEdit = false,
   onSave,
 }: {
   value: string;
@@ -681,10 +684,21 @@ function InlineText({
   suffix?: string;
   editControl?: boolean;
   editAriaLabel?: string;
+  /** Select the existing value when edit mode opens (#329), so the first keystroke replaces it
+   *  instead of landing beside it — the pattern the picker's search field uses (#183). For a short
+   *  value that is typically retyped whole, like a price; not for a URL you came back to amend. */
+  selectOnEdit?: boolean;
   onSave: (next: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // On entering edit mode only — not on every focus — so clicking back into the field to fix one
+  // digit still puts the caret where it was clicked.
+  useEffect(() => {
+    if (editing && selectOnEdit) inputRef.current?.select();
+  }, [editing, selectOnEdit]);
 
   if (!editable) return <>{display}</>;
 
@@ -735,6 +749,7 @@ function InlineText({
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
       <input
+        ref={inputRef}
         autoFocus
         type={inputType}
         value={draft}
