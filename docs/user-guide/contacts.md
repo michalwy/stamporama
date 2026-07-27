@@ -89,6 +89,10 @@ always generates, falling back to your default text. The tokens fill in from the
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
 - `{issueName}` — name of the issue the stamp belongs to
 - `{issueYear}` — year of that issue (also collapses to a range across copies)
+- `{subtype}` — the stamp's [subtype](collections.md#stamp-subtypes) (`Error`, `Overprint`, …).
+  Empty for a top-level stamp and for anything on your collection's **default** subtype, so ordinary
+  variants do not gain a redundant word — pair it as `{subtype|condition}` if you want something
+  there either way.
 - `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
   named the set, so pair it as `{setTitle|catalog}`)
 
@@ -238,7 +242,7 @@ languages you add. A small number on the button counts the languages still **mis
 **Done** closes the translations dialog and carries your entries back to the area — they are written
 only when you save the **area** itself, so cancelling the area dialog discards the translations along
 with everything else you changed there. The same dialog handles conditions, certificate statuses,
-issue names and stamp names, always beside the field it translates: where an entity has **two**
+stamp subtypes, issue names and stamp names, always beside the field it translates: where an entity has **two**
 translatable fields (a condition's name and its abbreviation), each gets its own 🌐 and its own
 dialog, so a badge always tells you about exactly one field.
 

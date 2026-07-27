@@ -216,6 +216,8 @@ export function SettingsTabs({
           <SubtypesPanel
             collectionId={collectionId}
             initialSubtypes={initialSubtypes}
+            titleLanguages={titleLanguages}
+            defaultLanguage={defaultLanguage}
           />
         </section>
       )}

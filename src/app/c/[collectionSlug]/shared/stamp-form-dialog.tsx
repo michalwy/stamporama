@@ -19,6 +19,7 @@ import type { CatalogVendorData } from "@/lib/catalog";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { computeIssueRangeExtension } from "@/lib/catalog-number";
 import { StampCatalogPricesTab, formatPrice, priceCellKey } from "./stamp-catalog-prices-tab";
 import { Segmented } from "./segmented";
@@ -317,7 +318,12 @@ export function StampFormDialog(props: StampFormDialogProps) {
               : ""
         );
       } else {
-        setSelectedSubtypeId(defId);
+        // Adding: start from the last subtype used in this collection (#342), which is usually the
+        // one the next stamp wants too. A remembered id that no longer exists — the subtype was
+        // deleted or renamed away — falls back to the collection default rather than to a blank
+        // select, exactly as the add-copy defaults drop a deleted condition.
+        const remembered = readLast(LS_LAST_SUBTYPE, collectionId);
+        setSelectedSubtypeId(list.some((s) => s.id === remembered) ? remembered : defId);
       }
     });
     return () => { cancelled = true; };
@@ -465,6 +471,14 @@ export function StampFormDialog(props: StampFormDialogProps) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+
+    // Remember the subtype just used, so the next child stamp starts there (#342). Written only
+    // when the field was actually in play — a base stamp's save must not overwrite what the last
+    // *child* was typed as. Editing counts too: re-typing a stamp as an overprint is exactly the
+    // signal that the next one is one as well.
+    if (isChildContext && selectedSubtypeId) {
+      writeLast(LS_LAST_SUBTYPE, collectionId, selectedSubtypeId);
+    }
 
     // Photo change-set (#137): applied server-side after the stamp is created/updated.
     fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));

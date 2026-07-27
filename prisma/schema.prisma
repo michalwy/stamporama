@@ -219,8 +219,9 @@ model StampSubtype {
   isDefault     Boolean @default(false)
   sortOrder     Int
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  stamps     Stamp[]
+  collection   Collection                @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampSubtypeTranslation[]
 
   @@index([collectionId])
   // Exactly-one-default is enforced by a partial unique index written by hand in
@@ -228,6 +229,20 @@ model StampSubtype {
   //   CREATE UNIQUE INDEX "stamp_subtype_one_default"
   //     ON "stamp_subtype"("collectionId") WHERE "isDefault";
   @@map("stamp_subtype")
+}
+
+// Per-language `name` for a subtype (#338), behind the `{subtype}` token (#339). See
+// {@link IssueTranslation} — identical shape and fallback rules, and one translatable column
+// because a subtype has no abbreviation.
+model StampSubtypeTranslation {
+  stampSubtypeId String
+  language       String
+  name           String?
+
+  stampSubtype StampSubtype @relation(fields: [stampSubtypeId], references: [id], onDelete: Cascade)
+
+  @@id([stampSubtypeId, language])
+  @@map("stamp_subtype_translation")
 }
 
 // A named, reusable collage render preset (#307). How many stamps fit sensibly on one collage is a

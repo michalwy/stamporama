@@ -6,7 +6,9 @@ import { getCertificateStatuses } from "./certificate-statuses";
 import {
   childIsVariant,
   isUnknownVariantStamp,
+  subtypeLabel,
   VARIANT_FLAG_SELECT,
+  type SubtypeLabel,
 } from "./variant-classification";
 import { sortPhotos, type PhotoRole, type PhotoSummary } from "./photos";
 import { computeIssueRangeSuggestions, type IssueRangeSuggestion } from "./catalog-number";
@@ -118,6 +120,9 @@ export interface StampNodeData {
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
+  /** The stamp's subtype for display (#340), or null for a base stamp. The collection default is
+   *  reported as stored and dropped by the chip, not here. */
+  subtype: SubtypeLabel | null;
   /** Catalog-level photos (#137), ordered main then extras — shown under the expanded row. */
   photos: PhotoSummary[];
 }
@@ -236,7 +241,7 @@ function toStampNode(
       catalogPrices: RawCatalogPrice[];
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
-      subtype: { actsAsVariant: boolean } | null;
+      subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
       variants: {
         actsAsVariantOverride: boolean | null;
         subtype: { actsAsVariant: boolean } | null;
@@ -296,6 +301,7 @@ function toStampNode(
     mainCatalogPriceStale,
     mainCatalogPriceUncertain: headline.uncertain,
     actsAsVariant: childIsVariant(m.stamp),
+    subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
   };
 }
@@ -338,7 +344,7 @@ function toIssueData(issue: {
       catalogPrices: RawCatalogPrice[];
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       actsAsVariantOverride: boolean | null;
-      subtype: { actsAsVariant: boolean } | null;
+      subtype: { actsAsVariant: boolean; name: string; isDefault: boolean } | null;
       variants: {
         actsAsVariantOverride: boolean | null;
         subtype: { actsAsVariant: boolean } | null;

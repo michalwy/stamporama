@@ -321,6 +321,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         name: "5 kr blue",
         issuedYear: 1918,
         translations: [{ language: "pl", name: "5 kr niebieski" }],
+        subtype: null,
         catalogNumbers: [],
         stampAreaLinks: [],
         issueMemberships: [

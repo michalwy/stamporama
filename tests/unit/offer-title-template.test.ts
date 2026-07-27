@@ -25,6 +25,7 @@ function fb(field: string, over: Partial<TitleFallback> = {}): TitleFallback {
     certificateAbbr: { type: "certificateStatus", field: "abbreviation" },
     area: { type: "area", field: "titleName" },
     issueName: { type: "issue", field: "name" },
+    subtype: { type: "subtype", field: "name" },
   };
   const entity = entityByField[field];
   return {
@@ -64,6 +65,7 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     area: null,
     location: null,
     ref: null,
+    subtype: null,
     issueName: null,
     issueYear: null,
     ...over,
@@ -328,6 +330,34 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
     assert.equal(renderTitleTemplate("{issueName} ({issueYear})", [c]), "First Issue (1850)");
   });
 
+  // `{subtype}` (#339). The engine only ever sees a *resolved* subtype: `toTitleCopy` already
+  // dropped the collection default and the base stamp's absent one to null, so from here the
+  // token behaves like any other — which is exactly what these assert.
+  it("resolves the subtype token", () => {
+    const c = copy({ name: "Mercury", subtype: "Overprint" });
+    assert.equal(renderTitleTemplate("{name} {subtype}", [c]), "Mercury Overprint");
+  });
+
+  it("renders nothing for a copy with no subtype, taking its separator with it", () => {
+    const c = copy({ name: "Mercury", condition: "Used" });
+    assert.equal(renderTitleTemplate("{name} - {subtype} - {condition}", [c]), "Mercury - Used");
+  });
+
+  it("joins distinct subtypes across copies and skips the ones without", () => {
+    const copies = [
+      copy({ subtype: "Overprint" }),
+      copy({ subtype: null }),
+      copy({ subtype: "Plate flaw" }),
+      copy({ subtype: "Overprint" }),
+    ];
+    assert.equal(renderTitleTemplate("{subtype}", copies), "Overprint / Plate flaw");
+  });
+
+  it("lets a fallback group fall past an absent subtype", () => {
+    const c = copy({ subtype: null, condition: "Used" });
+    assert.equal(renderTitleTemplate("{subtype|condition}", [c]), "Used");
+  });
+
   it("resolves the location tokens", () => {
     const c = copy({ location: "Stockbook A", ref: "A234" });
     assert.equal(renderTitleTemplate("{location} {ref}", [c]), "Stockbook A A234");
@@ -364,6 +394,7 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
       ref: "Ref",
       issueName: "Issue",
       issueYear: 1901,
+      subtype: "Sub",
     });
     for (const { token } of AVAILABLE_TITLE_TOKENS) {
       assert.notEqual(renderTitleTemplate(token, [c]), token, `${token} should resolve`);

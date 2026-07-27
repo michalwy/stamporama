@@ -27,11 +27,16 @@ export function primaryLabel(catalogNumbers: string[], name: string | null): str
   return [cat || null, name || null].filter(Boolean).join(" · ") || "(unnamed stamp)";
 }
 
-/** Compact label for a stamp node (raw catalog numbers · name), used by the
- * identify-variant tree picker where prefix-formatting context isn't loaded. */
+/** Compact label for a stamp node (raw catalog numbers · name · subtype), used by the
+ * identify-variant tree picker where prefix-formatting context isn't loaded. The subtype (#340) is
+ * what separates two siblings that share a number — an Error from a Plate flaw — so it belongs in
+ * the label a plain tree-select renders. The collection default is omitted, as everywhere else. */
 export function stampNodeLabel(node: StampNodeData): string {
   const cn = node.catalogNumbers.map((c) => c.number).join(", ");
-  return [cn || null, node.name || null].filter(Boolean).join(" · ") || "(unnamed)";
+  const subtype = node.subtype && !node.subtype.isDefault ? node.subtype.name : null;
+  return (
+    [cn || null, node.name || null, subtype].filter(Boolean).join(" · ") || "(unnamed)"
+  );
 }
 
 export function fromSearchItem(i: StampSearchItem): PickedStamp {

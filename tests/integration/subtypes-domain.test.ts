@@ -118,6 +118,71 @@ describe("updateStampSubtype and setSubtypeActsAsVariant", () => {
   });
 });
 
+// Per-language subtype names (#338). The shared blank / delete / untouched rules are unit-tested on
+// `syncEntityTranslations`; what matters here is that the subtype's own path wires them to the right
+// table and that `getStampSubtypes` reads them back field-by-language.
+describe("stamp subtype translations (#338)", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`tr-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `tr-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("stores per-language names on create and reads them back", async () => {
+    await createStampSubtype(userId, collectionId, {
+      name: "Overprint",
+      actsAsVariant: false,
+      translations: { pl: { name: "Nadruk" }, de: { name: "Aufdruck" } },
+    });
+    const [s] = await getStampSubtypes(userId, collectionId);
+    assert.equal(s.name, "Overprint");
+    assert.deepEqual(s.nameByLanguage, { pl: "Nadruk", de: "Aufdruck" });
+  });
+
+  it("rewrites one language and leaves the others alone", async () => {
+    const [before] = await getStampSubtypes(userId, collectionId);
+    await updateStampSubtype(userId, before.id, {
+      name: "Overprint",
+      translations: { pl: { name: "Nadrukowany" } },
+    });
+    const [after] = await getStampSubtypes(userId, collectionId);
+    assert.deepEqual(after.nameByLanguage, { pl: "Nadrukowany", de: "Aufdruck" });
+  });
+
+  it("drops a language's row when its name is blanked", async () => {
+    const [before] = await getStampSubtypes(userId, collectionId);
+    await updateStampSubtype(userId, before.id, {
+      name: "Overprint",
+      translations: { pl: { name: "  " } },
+    });
+    const [after] = await getStampSubtypes(userId, collectionId);
+    assert.deepEqual(after.nameByLanguage, { de: "Aufdruck" });
+    assert.equal(
+      await prisma.stampSubtypeTranslation.count({
+        where: { stampSubtypeId: before.id, language: "pl" },
+      }),
+      0
+    );
+  });
+
+  it("cascade-deletes translations with the subtype", async () => {
+    const [s] = await getStampSubtypes(userId, collectionId);
+    await deleteStampSubtype(userId, s.id);
+    assert.equal(
+      await prisma.stampSubtypeTranslation.count({ where: { stampSubtypeId: s.id } }),
+      0
+    );
+  });
+});
+
 describe("setDefaultSubtype", () => {
   let userId: string;
   let collectionId: string;

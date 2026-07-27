@@ -10,12 +10,12 @@ import {
 
 // Writing **one** translated field of **one** entity, outside that entity's own form (#299/#300).
 //
-// The five translatable entities (#293–#296) are each edited through their own dialog, which stages
+// The six translatable entities (#293–#296, #338) are each edited through their own dialog, which stages
 // every language and submits them along the entity's save. Filling a gap from an offer dialog is the
 // opposite shape: one field, one language, saved on its own the moment it is typed, because a
 // translation is entity data and must survive cancelling the offer dialog it was typed in.
 //
-// One module rather than a setter per domain module: the five paths differ only in which table they
+// One module rather than a setter per domain module: the six paths differ only in which table they
 // resolve the owning collection through and which row they upsert, and the caller dispatches over
 // `TranslatableEntity` anyway. The shared blank / delete / untouched rules still come from
 // `syncEntityTranslations`, so a gap filled here and one filled in the entity's dialog store the
@@ -82,6 +82,16 @@ async function loadEntity(
         select: {
           collectionId: true,
           translations: { where: { language }, select: { titleName: true } },
+        },
+      });
+      return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
+    }
+    case "subtype": {
+      const row = await prisma.stampSubtype.findUnique({
+        where: { id: entityId },
+        select: {
+          collectionId: true,
+          translations: { where: { language }, select: { name: true } },
         },
       });
       return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
@@ -166,6 +176,22 @@ function handlers(entityType: TranslatableEntity, entityId: string) {
         remove: async (language: string) => {
           await prisma.collectionAreaTranslation.deleteMany({
             where: { collectionAreaId: entityId, language },
+          });
+        },
+      };
+    case "subtype":
+      return {
+        upsert: async (language: string, fields: Record<string, string | null>) => {
+          const name = fields.name ?? null;
+          await prisma.stampSubtypeTranslation.upsert({
+            where: { stampSubtypeId_language: { stampSubtypeId: entityId, language } },
+            create: { stampSubtypeId: entityId, language, name },
+            update: { name },
+          });
+        },
+        remove: async (language: string) => {
+          await prisma.stampSubtypeTranslation.deleteMany({
+            where: { stampSubtypeId: entityId, language },
           });
         },
       };

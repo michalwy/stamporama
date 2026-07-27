@@ -51,6 +51,10 @@ export interface TitleTemplateCopy {
   location: string | null;
   /** Free-text identifier within that location (e.g. `A234`), or null. */
   ref: string | null;
+  /** The stamp's subtype (#339) — `Error`, `Overprint`… — or null. Null for a base stamp, which has
+   * no subtype, **and** for the collection's default subtype: the default is the unmarked case, so
+   * `{subtype}` renders empty rather than stamping a redundant "Variant" on every listing. */
+  subtype: string | null;
   /** Name of the issue the stamp belongs to (its first membership), or null. */
   issueName: string | null;
   /** Year of that issue, or null. */
@@ -91,6 +95,7 @@ const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   certificateabbr: "certificateAbbr",
   area: "area",
   issuename: "issueName",
+  subtype: "subtype",
 };
 
 /** A token usable in a template, with the label + example the config UI shows as a legend. */
@@ -114,6 +119,7 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{ref}", label: "Location ref", example: "A234" },
   { token: "{issueName}", label: "Issue name", example: "1850 First Issue" },
   { token: "{issueYear}", label: "Issue year", example: "1850" },
+  { token: "{subtype}", label: "Subtype", example: "Overprint" },
 ];
 
 /** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
@@ -341,6 +347,8 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.ref)).join(" / ");
     case "issuename":
       return distinct(copies.map((c) => c.issueName)).join(" / ");
+    case "subtype":
+      return distinct(copies.map((c) => c.subtype)).join(" / ");
     case "issueyear":
       return yearSpan(copies, (c) => c.issueYear);
     default:
@@ -669,7 +677,8 @@ function renderSegments(
 
 /**
  * Render a title template against the copies in scope (#210). Placeholders `{token}` (`{name}`,
- * `{catalog}`, `{year}`, `{condition}`, `{certificate}`, `{area}`, `{issueName}`, `{issueYear}`)
+ * `{catalog}`, `{year}`, `{condition}`, `{certificate}`, `{area}`, `{issueName}`, `{issueYear}`,
+ * `{subtype}`)
  * resolve to distinct values across the copies; a **fallback group** `{a|b|c}` resolves to the first
  * non-empty of its tokens. Everything else — including literal separators like `-` — is kept
  * verbatim; a placeholder that resolves to nothing takes its adjacent glue separator with it, but a

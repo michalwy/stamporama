@@ -20,6 +20,13 @@ import {
 } from "@/app/actions/subtypes";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -44,6 +51,11 @@ const FORM_STYLE: React.CSSProperties = {
 interface SubtypesPanelProps {
   collectionId: string;
   initialSubtypes: StampSubtypeData[];
+  /** Languages needing a translation (#338): the platforms' listing languages minus the
+   * collection's default language. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain Name field is written in (#338). */
+  defaultLanguage: string;
 }
 
 type DialogState =
@@ -52,30 +64,77 @@ type DialogState =
   | { kind: "edit"; subtype: StampSubtypeData }
   | { kind: "delete"; subtype: StampSubtypeData };
 
+/** A subtype's one translatable field (#338) — mirrors `SUBTYPE_TRANSLATION_FIELDS`, which the
+ * action parses the submitted `name:<lang>` inputs with. */
+const NAME_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+
 function SubtypeForm({
   defaultName,
   defaultActsAsVariant,
+  defaultTranslations,
   showActsAsVariant,
+  titleLanguages,
+  defaultLanguage,
   isPending,
+  onNestedDialogOpenChange,
 }: {
   defaultName?: string;
   defaultActsAsVariant?: boolean;
+  /** Stored per-language names (#338); absent when adding. */
+  defaultTranslations?: Record<string, string>;
   showActsAsVariant: boolean;
+  titleLanguages: string[];
+  defaultLanguage: string;
   isPending: boolean;
+  /** Raised while a translations dialog is open on top of this form, so the enclosing dialog stops
+   * dismissing itself on Esc / backdrop click — otherwise one Esc closes both. */
+  onNestedDialogOpenChange?: (open: boolean) => void;
 }) {
+  const translatable = titleLanguages.length > 0;
+  // Controlled so the translations dialog's placeholders show the *live* default-language text a
+  // blank entry falls back to, rather than whatever the field held when the dialog opened.
+  const [name, setName] = useState(defaultName ?? "");
+  const [nameTranslations, setNameTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, NAME_FIELDS, { name: defaultTranslations ?? {} })
+  );
+
   return (
     <>
       <div style={{ marginBottom: showActsAsVariant ? "1rem" : 0 }}>
-        <LabelWithError htmlFor="f-subtype-name">Name</LabelWithError>
-        <input
-          id="f-subtype-name"
-          name="name"
-          type="text"
-          defaultValue={defaultName}
-          disabled={isPending}
-          placeholder="e.g. Colour variety"
-          style={INPUT_STYLE}
-        />
+        <LabelWithError htmlFor="f-subtype-name">
+          {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-subtype-name"
+            name="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Colour variety"
+            style={INPUT_STYLE}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Subtype name translations"
+              description={`The name each language's platforms use for this subtype. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the subtype.`}
+              languages={titleLanguages}
+              fields={[{ ...NAME_FIELDS[0], defaultValue: name }]}
+              values={nameTranslations}
+              onChange={setNameTranslations}
+              onOpenChange={onNestedDialogOpenChange}
+              ariaLabel="Edit subtype name translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
+        {translatable && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+            Used for the <code>{"{subtype}"}</code> token in listing texts. Translations (🌐) are
+            saved together with the subtype.
+          </p>
+        )}
       </div>
       {showActsAsVariant && (
         <label
@@ -113,11 +172,19 @@ function SubtypeForm({
   );
 }
 
-export function SubtypesPanel({ collectionId, initialSubtypes }: SubtypesPanelProps) {
+export function SubtypesPanel({
+  collectionId,
+  initialSubtypes,
+  titleLanguages,
+  defaultLanguage,
+}: SubtypesPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<SubtypeActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
+  // A translations dialog (🌐) opens *on top of* the subtype dialog. While it is up, this one must
+  // stop dismissing itself, or one Esc would close both.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
   // Local ordering for optimistic drag-and-drop; re-synced on server refresh
   // via the render-phase "reset state when a prop changes" pattern.
@@ -365,13 +432,19 @@ export function SubtypesPanel({ collectionId, initialSubtypes }: SubtypesPanelPr
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add" && (
-        <DialogShell title="Add subtype" onClose={closeDialog}>
+        <DialogShell title="Add subtype" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => createStampSubtypeAction(collectionId, fd), e)}
           >
             <DialogBody>
-              <SubtypeForm showActsAsVariant isPending={isPending} />
+              <SubtypeForm
+                showActsAsVariant
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
+              />
             </DialogBody>
             <DialogActions
               actionLabel={isPending ? "Saving…" : "Save"}
@@ -384,7 +457,7 @@ export function SubtypesPanel({ collectionId, initialSubtypes }: SubtypesPanelPr
       )}
 
       {dialog.kind === "edit" && (
-        <DialogShell title="Edit subtype" onClose={closeDialog}>
+        <DialogShell title="Edit subtype" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => updateStampSubtypeAction(dialog.subtype.id, fd), e)}
@@ -392,8 +465,12 @@ export function SubtypesPanel({ collectionId, initialSubtypes }: SubtypesPanelPr
             <DialogBody>
               <SubtypeForm
                 defaultName={dialog.subtype.name}
+                defaultTranslations={dialog.subtype.nameByLanguage}
                 showActsAsVariant={false}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
                 isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
               />
             </DialogBody>
             <DialogActions

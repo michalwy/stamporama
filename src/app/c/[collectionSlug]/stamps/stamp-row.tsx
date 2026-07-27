@@ -14,6 +14,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import {
@@ -249,6 +250,7 @@ export function StampRow({
             </span>
           ))}
           <ColnectChip colnectId={stamp.colnectId} size="medium" />
+          <SubtypeChip subtype={stamp.subtype} size="medium" />
           {stamp.mainCatalogPrice && (
             <span
               style={{

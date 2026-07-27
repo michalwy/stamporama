@@ -20,7 +20,12 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
-import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import {
+  isUnknownVariantStamp,
+  subtypeLabel,
+  VARIANT_FLAG_SELECT,
+  type SubtypeLabel,
+} from "./variant-classification";
 import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
@@ -312,6 +317,8 @@ export interface StampListItem {
   collectionId: string;
   parentId: string | null;
   subtypeId: string | null;
+  /** The stamp's subtype for display (#340), or null for a base stamp. */
+  subtype: SubtypeLabel | null;
   actsAsVariantOverride: boolean | null;
   name: string | null;
   issuedDay: number | null;
@@ -341,6 +348,8 @@ const STAMP_LIST_SELECT = {
   collectionId: true,
   parentId: true,
   subtypeId: true,
+  // Name + default-ness for the row's subtype chip (#340).
+  subtype: { select: { name: true, isDefault: true } },
   actsAsVariantOverride: true,
   name: true,
   issuedDay: true,
@@ -378,6 +387,7 @@ function toStampListItem(
     collectionId: string;
     parentId: string | null;
     subtypeId: string | null;
+    subtype: { name: string; isDefault: boolean } | null;
     actsAsVariantOverride: boolean | null;
     name: string | null;
     issuedDay: number | null;
@@ -412,6 +422,7 @@ function toStampListItem(
     collectionId: stamp.collectionId,
     parentId: stamp.parentId,
     subtypeId: stamp.subtypeId,
+    subtype: subtypeLabel(stamp),
     actsAsVariantOverride: stamp.actsAsVariantOverride,
     name: stamp.name,
     issuedDay: stamp.issuedDay,
@@ -703,6 +714,8 @@ export interface StampSearchItem {
   issueYear: number | null;
   /** Formatted catalog labels, e.g. ["Mi·PL 200"]. */
   catalogNumbers: string[];
+  /** The stamp's subtype for display (#340), or null for a base stamp. */
+  subtype: SubtypeLabel | null;
 }
 
 const PICKER_LIMIT = 20;
@@ -756,6 +769,9 @@ export async function searchStampsForPicker(
           take: 1,
         },
         variants: { select: VARIANT_FLAG_SELECT },
+        // The candidate's own subtype, for the result row's chip (#340) — `variants` above carries
+        // the children's, which answers a different question (is this an umbrella?).
+        subtype: { select: { name: true, isDefault: true } },
         // Pre-filtered to the matching copies only, so its presence *is* the location hit.
         items: { where: locationRefWhere, select: { id: true }, take: 1 },
       },
@@ -826,6 +842,7 @@ export async function searchStampsForPicker(
         issueName,
         issueYear: membership?.issue.year ?? null,
         catalogNumbers: labels,
+        subtype: subtypeLabel(s),
       },
     });
   }

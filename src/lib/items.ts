@@ -18,7 +18,9 @@ import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
 import {
   childIsVariant,
   isUnknownVariantStamp,
+  subtypeLabel,
   VARIANT_FLAG_SELECT,
+  type SubtypeLabel,
 } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
@@ -716,6 +718,8 @@ export interface ItemListItem {
   /** True when the copy links to a base stamp (parentId === null) that has variants,
    * i.e. the specific variant is unknown (ADR-0007 §2). */
   unknownVariant: boolean;
+  /** The linked stamp's subtype for display (#340), or null for a base stamp. */
+  subtype: SubtypeLabel | null;
   /** True when the copy has at least one `ItemVariantHistory` entry (has been refined). */
   hasHistory: boolean;
   issuedDay: number | null;
@@ -804,6 +808,8 @@ const ITEM_LIST_SELECT = {
       colnectId: true,
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
       variants: { select: VARIANT_FLAG_SELECT },
+      // The copy's own stamp's subtype, for the row's chip (#340).
+      subtype: { select: { name: true, isDefault: true } },
       issueMemberships: {
         select: { issue: { select: { id: true, name: true, year: true } } },
         take: 1,
@@ -839,6 +845,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     stampName: row.stamp.name,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
+    subtype: subtypeLabel(row.stamp),
     hasHistory: row._count.variantHistory > 0,
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,

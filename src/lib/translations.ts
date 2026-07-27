@@ -1,9 +1,10 @@
 import { normalizeLanguage } from "./languages";
 
-// Shared rules for per-language entity text (#265, #293–#296). Five entities now carry translation
-// child tables — area title name, condition and certificate status (name + abbreviation), issue name
-// and stamp name — and every one of them parses the same form fields, writes rows the same way, and
-// resolves the same fallback. That logic lives here once.
+// Shared rules for per-language entity text (#265, #293–#296, #338). Six entities now carry
+// translation child tables — area title name, condition and certificate status (name +
+// abbreviation), issue name, stamp name and stamp subtype name — and every one of them parses the
+// same form fields, writes rows the same way, and resolves the same fallback. That logic lives here
+// once.
 //
 // Pure — no Prisma, no React, no `server-only`. Persistence is supplied by the caller as two
 // callbacks in {@link syncEntityTranslations}, so this module stays unit-testable and the per-entity
@@ -16,7 +17,7 @@ import { normalizeLanguage } from "./languages";
  */
 export type TranslationValueMap = Record<string, Record<string, string | null>>;
 
-/** The entities that carry a translation child table (#293–#296). Names the row a missing
+/** The entities that carry a translation child table (#293–#296, #338). Names the row a missing
  * translation is filled on (#299), which is why it lives here rather than in any one entity's
  * module — the gap-filling path dispatches over it. */
 export type TranslatableEntity =
@@ -24,7 +25,8 @@ export type TranslatableEntity =
   | "issue"
   | "condition"
   | "certificateStatus"
-  | "area";
+  | "area"
+  | "subtype";
 
 /** The translatable columns of each entity, in the order their forms show them. Also the guard the
  * single-field save path validates an incoming field name against. */
@@ -34,6 +36,7 @@ export const TRANSLATABLE_ENTITY_FIELDS: Readonly<Record<TranslatableEntity, rea
   condition: ["name", "abbreviation"],
   certificateStatus: ["name", "abbreviation"],
   area: ["titleName"],
+  subtype: ["name"],
 };
 
 /** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */

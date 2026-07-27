@@ -37,11 +37,29 @@ export function isUnknownVariantStamp(stamp: {
   return stamp.variants.some(childIsVariant);
 }
 
+/** A subtype as the lists and pickers display it (#340): its name, and whether it is the
+ * collection's default — the default renders nothing, see `SubtypeChip`. */
+export interface SubtypeLabel {
+  name: string;
+  isDefault: boolean;
+}
+
+/** The display label of a stamp selected with {@link VARIANT_FLAG_SELECT}, or null for a base
+ * stamp (which carries no subtype). The default-renders-nothing rule lives in the chip, not here:
+ * a read model reports what is stored and the surface decides what to draw. */
+export function subtypeLabel(stamp: {
+  subtype: { name: string; isDefault: boolean } | null;
+}): SubtypeLabel | null {
+  return stamp.subtype ? { name: stamp.subtype.name, isDefault: stamp.subtype.isDefault } : null;
+}
+
 /**
- * Prisma `select` fragment for the two fields {@link childIsVariant} needs. Spread
- * into a stamp/`variants` selection so the resolver can run server-side.
+ * Prisma `select` fragment for the fields {@link childIsVariant} needs, plus the name and
+ * default-ness {@link subtypeLabel} needs (#340). Spread into a stamp/`variants` selection so both
+ * resolvers can run server-side. Two extra scalars off a small per-collection dictionary table is
+ * cheaper than a second select fragment every caller would have to remember to spread as well.
  */
 export const VARIANT_FLAG_SELECT = {
   actsAsVariantOverride: true,
-  subtype: { select: { actsAsVariant: true } },
+  subtype: { select: { actsAsVariant: true, name: true, isDefault: true } },
 } as const;

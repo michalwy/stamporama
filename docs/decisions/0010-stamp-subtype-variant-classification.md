@@ -160,6 +160,37 @@ The collection-creation path also seeds the set for future collections
 (`DEFAULT_STAMP_SUBTYPES`) and is **replicated by hand** in the migration SQL; the two
 must be kept in sync.
 
+### 6. The default subtype is the *unmarked* case — it renders nothing (#338–#340)
+
+Once a subtype became visible outside the edit form — a chip on the lists and pickers (#340), a
+`{subtype}` token in listing texts (#339) — the question was what to show for the majority of child
+stamps, which sit on the default "Variant".
+
+The answer is **nothing**. The `isDefault` row is the one assigned automatically to every new child,
+so it carries no information a reader did not already have from the tree; badging every variant
+"Variant" and printing it in every listing title is noise proportional to the size of the collection.
+Only non-default subtypes (`Error`, `Overprint`, `Plate flaw`) render. A base stamp has no subtype at
+all and likewise renders none.
+
+Two properties make this cheap rather than a special case:
+
+- **One rule, two surfaces.** The chip and the token drop the default for the same reason, so what a
+  row shows and what a listing prints never disagree.
+- **The collector controls it**, without a second setting: *which* subtype is default is already an
+  editable choice (Settings → Subtypes), so a collection that wants "Variant" spelled out just makes
+  something else the default.
+
+The read models still report the subtype **as stored** (`{ name, isDefault }`, via `subtypeLabel`);
+the default-drops rule lives in the rendering surface, not in the query. `toTitleCopy` is the one
+place that applies it early — it resolves `{subtype}` to null for the default *before* the
+translation lookup, so a missing translation on the default subtype is never reported as a gap to
+fill (#299): there is no token output to translate.
+
+The subtype's `name` is therefore user-visible text in a listing, which makes it translatable on the
+same terms as a condition or an issue name — `StampSubtypeTranslation(stampSubtypeId, language,
+name?)`, one column because a subtype has no abbreviation. See *Per-language entity text* in
+`docs/architecture/overview.md`.
+
 ## Schema sketch
 
 ```prisma
@@ -171,8 +202,9 @@ model StampSubtype {
   isDefault     Boolean  @default(false)
   sortOrder     Int
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  stamps     Stamp[]
+  collection   Collection                @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampSubtypeTranslation[] // per-language `name` (#338)
 
   @@map("stamp_subtype")
   // Partial unique index (one default per collection) written by hand in migration SQL:

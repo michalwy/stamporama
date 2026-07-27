@@ -2,7 +2,7 @@
 
 import { lsGet, lsSet, lsRemove } from "./lot-view-prefs";
 
-// Shared "remember last-used" storage for the add-copy flows (#121, #234). The condition,
+// Shared "remember last-used" storage for repeated entry (#121, #234, #342). The condition,
 // location, and disposition last chosen are remembered per collection and pre-filled at every
 // add-copy entry point — the inventory add dialog (#99) and lot intake (#121) — so all of them
 // read and write the same keys. Kept under the original `intake` namespace so values already
@@ -13,6 +13,12 @@ export const LS_LAST_CERT = "stamporama:intake:certId";
 export const LS_LAST_LOCATION = "stamporama:intake:locationId";
 // Disposition stored as a comma-joined list of the active flag keys.
 export const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
+
+// The last subtype chosen when adding or editing a child stamp (#342), remembered per collection so
+// a run of plate flaws or colour varieties is entered once and repeated. Its own `stamp` namespace
+// rather than `intake`: this is a property of the catalog entry, not of a copy being taken in, and
+// the two flows are reached from different screens.
+export const LS_LAST_SUBTYPE = "stamporama:stamp:subtypeId";
 
 export function readLast(key: string, collectionId: string): string {
   return lsGet(`${key}:${collectionId}`) ?? "";

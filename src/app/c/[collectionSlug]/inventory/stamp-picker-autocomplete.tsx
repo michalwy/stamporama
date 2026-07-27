@@ -8,6 +8,7 @@ import {
 import type { StampSearchItem } from "@/lib/stamps";
 import { useStampPickerSearch } from "./use-inventory-query";
 import { issueLabel } from "./stamp-picker-shared";
+import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -35,18 +36,29 @@ function SuggestionRow({ item }: { item: StampSearchItem }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
-      <span style={{ color: "var(--color-text-primary)" }}>
-        {cat && (
-          <span style={{ fontWeight: 600 }}>{cat}</span>
-        )}
-        {cat && (item.name || isUnknownVariant) ? " · " : ""}
-        {item.name && <span>{item.name}</span>}
-        {isUnknownVariant && (
-          <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
-        )}
-        {!cat && !item.name && (
-          <span style={{ color: "var(--color-text-muted)" }}>(unnamed stamp)</span>
-        )}
+      <span
+        style={{
+          color: "var(--color-text-primary)",
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: "0.35rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <span>
+          {cat && (
+            <span style={{ fontWeight: 600 }}>{cat}</span>
+          )}
+          {cat && (item.name || isUnknownVariant) ? " · " : ""}
+          {item.name && <span>{item.name}</span>}
+          {isUnknownVariant && (
+            <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
+          )}
+          {!cat && !item.name && (
+            <span style={{ color: "var(--color-text-muted)" }}>(unnamed stamp)</span>
+          )}
+        </span>
+        <SubtypeChip subtype={item.subtype} />
       </span>
       {context && (
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{context}</span>

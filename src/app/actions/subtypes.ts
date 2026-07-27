@@ -13,8 +13,10 @@ import {
   getStampSubtypes,
   SubtypeInUseError,
   SubtypeIsDefaultError,
+  SUBTYPE_TRANSLATION_FIELDS,
   type StampSubtypeData,
 } from "@/lib/subtypes";
+import { parseTranslationValues } from "@/lib/translations";
 
 export type SubtypeActionState =
   | { status: "idle" }
@@ -43,7 +45,11 @@ export async function createStampSubtypeAction(
   const actsAsVariant = formData.get("actsAsVariant") === "on";
   if (!name) return { status: "error", message: "Name is required." };
   try {
-    await createStampSubtype(session.user.id, collectionId, { name, actsAsVariant });
+    await createStampSubtype(session.user.id, collectionId, {
+      name,
+      actsAsVariant,
+      translations: parseTranslationValues(formData, SUBTYPE_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create subtype. Please try again." };
@@ -58,7 +64,10 @@ export async function updateStampSubtypeAction(
   const name = ((formData.get("name") as string | null) ?? "").trim();
   if (!name) return { status: "error", message: "Name is required." };
   try {
-    await updateStampSubtype(session.user.id, subtypeId, { name });
+    await updateStampSubtype(session.user.id, subtypeId, {
+      name,
+      translations: parseTranslationValues(formData, SUBTYPE_TRANSLATION_FIELDS),
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update subtype. Please try again." };

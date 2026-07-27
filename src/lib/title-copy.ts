@@ -38,6 +38,16 @@ export const TITLE_COPY_SELECT = {
       name: true,
       issuedYear: true,
       translations: { select: { language: true, name: true } },
+      // The subtype behind `{subtype}` (#339). `isDefault` rides along because the default subtype
+      // renders as nothing — see `toTitleCopy`.
+      subtype: {
+        select: {
+          id: true,
+          name: true,
+          isDefault: true,
+          translations: { select: { language: true, name: true } },
+        },
+      },
       catalogNumbers: {
         select: { catalogVendorId: true, number: true, catalogVendor: { select: { abbreviation: true } } },
       },
@@ -91,6 +101,12 @@ export type TitleCopyRow = {
     name: string | null;
     issuedYear: number | null;
     translations: NameTranslation[];
+    subtype: {
+      id: string;
+      name: string;
+      isDefault: boolean;
+      translations: NameTranslation[];
+    } | null;
     catalogNumbers: { catalogVendorId: string; number: string; catalogVendor: { abbreviation: string } }[];
     stampAreaLinks: { isPrimary: boolean; collectionAreaId: string; collectionArea: { name: string } }[];
     issueMemberships: {
@@ -133,6 +149,7 @@ export function toTitleCopy(
   const vendorMap = areaId ? maps.vendorMapByArea.get(areaId) : undefined;
   const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
   const issue = row.stamp.issueMemberships[0]?.issue ?? null;
+  const subtype = row.stamp.subtype;
   // The area shown in the title rolls up per its `titleName` config (#210); falls back to the leaf
   // area's own name when nothing is configured up the chain.
   const areaEntry = areaId ? areaTitleById.get(areaId) : undefined;
@@ -232,6 +249,20 @@ export function toTitleCopy(
         )
       : null,
     issueYear: issue?.year ?? null,
+    // The **default** subtype is the unmarked case and renders nothing (#339): a listing should not
+    // read "Mercury Variant" for every ordinary variant. It is skipped before `resolve` rather than
+    // blanked after, so a missing translation on it is never reported as a gap to fill — there is no
+    // token output to translate. A base stamp has no subtype row at all.
+    subtype:
+      subtype && !subtype.isDefault
+        ? resolve(
+            "subtype",
+            { type: "subtype", id: subtype.id, field: "name" },
+            subtype.translations,
+            (t: NameTranslation) => t.name,
+            subtype.name
+          )
+        : null,
   };
   // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately — and
   // against the area the winning name came from, which may be an ancestor of the copy's own (#299).
@@ -256,7 +287,7 @@ export function toTitleCopy(
  * translation exists and falls back to the default value otherwise; the fallback is silent in the
  * generated title and reported per copy for the preview to flag (#298). Every translatable token
  * honours it: `{area}` (#293), `{condition}` / `{conditionAbbr}` / `{certificate}` /
- * `{certificateAbbr}` (#294), `{issueName}` (#295) and `{name}` (#296).
+ * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296) and `{subtype}` (#338/#339).
  *
  * A language equal to the collection's own `defaultLanguage` is the same thing as no language —
  * entity columns are already written in it and carry no translation rows — so it is normalised to

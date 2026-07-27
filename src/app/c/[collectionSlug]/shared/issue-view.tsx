@@ -21,6 +21,7 @@ import {
 } from "./chip-styles";
 import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip } from "./colnect-chip";
+import { SubtypeChip } from "./subtype-chip";
 
 // Shared presentational building blocks for an issue and its stamp/variant tree,
 // so the main issues list (issue-row.tsx) and the inventory stamp-picker popup
@@ -201,10 +202,15 @@ export function StampDetailLine({
   const secondaryCNs = node.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId);
   const notRequired = !node.requiredForCompleteness;
 
+  // Mirrors `SubtypeChip`'s own rule, so a stamp whose only detail is a non-default subtype still
+  // gets a line to show it on.
+  const showsSubtype = !!node.subtype && !node.subtype.isDefault;
+
   if (
     !primaryCN &&
     secondaryCNs.length === 0 &&
     !node.colnectId &&
+    !showsSubtype &&
     !node.mainCatalogPrice &&
     !onSetPrice
   )
@@ -231,6 +237,7 @@ export function StampDetailLine({
         </span>
       ))}
       <ColnectChip colnectId={node.colnectId} />
+      <SubtypeChip subtype={node.subtype} />
       {!node.mainCatalogPrice && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip

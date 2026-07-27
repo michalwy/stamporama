@@ -1,6 +1,14 @@
 import "server-only";
 import { prisma } from "./db";
 import type { PrismaClient } from "@/generated/prisma/client";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
+
+/** The subtype's translatable fields (#338). One column — a subtype has no abbreviation. */
+export const SUBTYPE_TRANSLATION_FIELDS = ["name"] as const;
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -26,7 +34,11 @@ async function resolveSubtypeCollection(subtypeId: string): Promise<string> {
 
 export interface StampSubtypeData {
   id: string;
+  /** Default-language name (#338); {@link nameByLanguage} overrides it per language. */
   name: string;
+  /** Per-language overrides of {@link name} (#338), keyed by ISO 639-1 code. Only languages with a
+   * stored, non-blank value appear. */
+  nameByLanguage: Record<string, string>;
   actsAsVariant: boolean;
   isDefault: boolean;
   sortOrder: number;
@@ -98,7 +110,7 @@ export async function getStampSubtypes(
   collectionId: string
 ): Promise<StampSubtypeData[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.stampSubtype.findMany({
+  const rows = await prisma.stampSubtype.findMany({
     where: { collectionId },
     orderBy: { sortOrder: "asc" },
     select: {
@@ -107,6 +119,37 @@ export async function getStampSubtypes(
       actsAsVariant: true,
       isDefault: true,
       sortOrder: true,
+      translations: { select: { language: true, name: true } },
+    },
+  });
+  return rows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    nameByLanguage: translationsByLanguage(s.translations, (t) => t.name),
+    actsAsVariant: s.actsAsVariant,
+    isDefault: s.isDefault,
+    sortOrder: s.sortOrder,
+  }));
+}
+
+/** Per-language `name` rows for a subtype (#338). Shared rules — blank clears the field, an
+ * all-blank language drops the row, unlisted languages are untouched — live in
+ * {@link syncEntityTranslations}. */
+async function syncSubtypeTranslations(
+  stampSubtypeId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const name = fields.name ?? null;
+      await prisma.stampSubtypeTranslation.upsert({
+        where: { stampSubtypeId_language: { stampSubtypeId, language } },
+        create: { stampSubtypeId, language, name },
+        update: { name },
+      });
+    },
+    remove: async (language) => {
+      await prisma.stampSubtypeTranslation.deleteMany({ where: { stampSubtypeId, language } });
     },
   });
 }
@@ -114,7 +157,7 @@ export async function getStampSubtypes(
 export async function createStampSubtype(
   ownerId: string,
   collectionId: string,
-  data: { name: string; actsAsVariant: boolean }
+  data: { name: string; actsAsVariant: boolean; translations?: TranslationValueMap }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampSubtype.findFirst({
@@ -125,7 +168,7 @@ export async function createStampSubtype(
   const sortOrder = last ? last.sortOrder + 1 : 0;
   // New subtypes are never the default; the collection already has one. The
   // default is (re)assigned explicitly via setDefaultSubtype (radio semantics).
-  await prisma.stampSubtype.create({
+  const created = await prisma.stampSubtype.create({
     data: {
       collectionId,
       name: data.name,
@@ -133,14 +176,16 @@ export async function createStampSubtype(
       isDefault: false,
       sortOrder,
     },
+    select: { id: true },
   });
+  await syncSubtypeTranslations(created.id, data.translations);
 }
 
-/** Renames a subtype. */
+/** Renames a subtype, and rewrites its per-language names (#338). */
 export async function updateStampSubtype(
   ownerId: string,
   subtypeId: string,
-  data: { name: string }
+  data: { name: string; translations?: TranslationValueMap }
 ): Promise<void> {
   const collectionId = await resolveSubtypeCollection(subtypeId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -148,6 +193,7 @@ export async function updateStampSubtype(
     where: { id: subtypeId },
     data: { name: data.name },
   });
+  await syncSubtypeTranslations(subtypeId, data.translations);
 }
 
 /** Flips the behavioural `actsAsVariant` switch on a single subtype. */

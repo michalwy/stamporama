@@ -223,6 +223,20 @@ Subtypes attach to **child** stamps only (a stamp nested under a parent); top-le
 
 Use the override for the odd child that does not follow its category — for example a single colour-variety row you want treated as a distinct entry. Left on **Use subtype setting**, the child simply inherits its subtype.
 
+The **Subtype** dropdown remembers the last subtype you saved in this collection and starts there next time, so entering a run of plate flaws or colour varieties means picking the category once. If that subtype is later deleted, the dropdown falls back to the collection default.
+
+### Where subtypes are shown
+
+A stamp's subtype appears as a small grey tag beside its catalog numbers on the **Issues** list, the **Stamps** list, the **Copies** list, and in the stamp pickers — so you can tell an **Error** from an **Overprint** without opening either.
+
+**The collection's default subtype is never shown.** Most child stamps are ordinary variants, and tagging every one of them "Variant" would be a column of noise. Only the non-default subtypes get a tag. If you would rather see a particular subtype called out everywhere, make a *different* subtype the default — whichever one carries the radio button is the one that stays silent.
+
+### Subtypes in other languages
+
+Subtypes translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the subtype. These feed the `{subtype}` token in listing titles, descriptions, and private notes, so a Polish listing reads "Nadruk" where an English one reads "Overprint". Leave a language blank to fall back to the name above.
+
+The token follows the same rule as the tag: a stamp on the collection's **default** subtype renders `{subtype}` as empty, so ordinary variants do not pick up a redundant word in their listing title.
+
 ## Collage templates
 
 Offer photos put several stamps on one image. How many fit sensibly is a property of **stamp size**, not of the platform: many small definitives sit comfortably where only a few large commemoratives do. Rather than setting those numbers by hand on every offer, keep them as named, reusable **collage templates** under **Settings → Collage templates**.
