@@ -178,6 +178,7 @@ export async function seedInventory(
 
   type ItemData = {
     collectionId: string;
+    itemNo: number;
     stampId: string;
     conditionId: string;
     certificateStatusId: string | null;
@@ -187,7 +188,7 @@ export async function seedInventory(
     notes: string | null;
   };
 
-  function buildItem(stamp: (typeof stamps)[number]): ItemData {
+  function buildItem(stamp: (typeof stamps)[number], itemNo: number): ItemData {
     const conditionId = conditions[weightedIndex(rng, conditionWeights)].id;
     const certificateStatusId =
       rng() < 0.07 ? certStatusIds[Math.floor(rng() * certStatusIds.length)] : null;
@@ -199,6 +200,7 @@ export async function seedInventory(
 
     return {
       collectionId,
+      itemNo,
       stampId: stamp.id,
       conditionId,
       certificateStatusId,
@@ -211,12 +213,16 @@ export async function seedInventory(
 
   // Bulk copies: one per stamp, plus extra copies for a fraction of stamps, to
   // reach a large inventory (~1000+) that exercises endless scroll and valuation.
+  // Internal copy numbers (#268) run from 1 in seed order; the collection's counter is advanced
+  // past them at the end so a copy added by hand after seeding continues the sequence.
+  let nextItemNo = 1;
+
   const bulk: ItemData[] = [];
   for (const stamp of stamps) {
     let copies = 1;
     if (rng() < 0.35) copies++;
     if (rng() < 0.12) copies++;
-    for (let c = 0; c < copies; c++) bulk.push(buildItem(stamp));
+    for (let c = 0; c < copies; c++) bulk.push(buildItem(stamp, nextItemNo++));
   }
   for (let i = 0; i < bulk.length; i += 500) {
     await tx.item.createMany({ data: bulk.slice(i, i + 500) });
@@ -227,7 +233,7 @@ export async function seedInventory(
   // individually because the history row needs the new item's id.
   const variants = stamps.filter((s) => s.parentId);
   for (const variant of variants) {
-    const data = buildItem(variant);
+    const data = buildItem(variant, nextItemNo++);
     const item = await tx.item.create({ data, select: { id: true } });
     await tx.itemVariantHistory.create({
       data: {
@@ -238,4 +244,9 @@ export async function seedInventory(
       },
     });
   }
+
+  await tx.collection.update({
+    where: { id: collectionId },
+    data: { nextItemNo },
+  });
 }

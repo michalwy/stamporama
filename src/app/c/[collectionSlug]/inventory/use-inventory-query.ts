@@ -14,6 +14,7 @@ import type { StampSearchItem } from "@/lib/stamps";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
+import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -368,6 +369,23 @@ export function useCollectionFormats(collectionId: string) {
     },
     staleTime: 60_000,
   });
+}
+
+/** The collection's internal copy-number width (#268), for every surface that renders one. A
+ * client-side query rather than a prop for the same reason as the dictionaries above: the copy row
+ * is rendered from eight screens, and threading one display setting through all of them to reach
+ * it would touch every one. Cached long — it changes about once in a collection's life — and
+ * `DEFAULT_ITEM_NO_PAD` covers the first paint, which only ever mis-pads by a leading zero. */
+export function useCollectionItemNoPad(collectionId: string): number {
+  const { data } = useQuery<number>({
+    queryKey: ["itemNoPad", collectionId] as const,
+    queryFn: async () => {
+      const { getCollectionItemNoPadAction } = await import("@/app/actions/collections");
+      return getCollectionItemNoPadAction(collectionId);
+    },
+    staleTime: 5 * 60_000,
+  });
+  return data ?? DEFAULT_ITEM_NO_PAD;
 }
 
 /** Storage locations for the add-copy dialog opened from list rows and the read-only

@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   createCollection,
+  getCollectionItemNoPad,
   resetCollectionToDemo,
   setCollectionDefaultLanguage,
+  setCollectionItemNoPad,
 } from "@/lib/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
@@ -93,4 +95,34 @@ export async function updateCollectionDefaultLanguageAction(
       message: e instanceof Error ? e.message : "Failed to save the default language.",
     };
   }
+}
+
+export type ItemNoPadState =
+  | { status: "idle" }
+  | { status: "success"; pad: number }
+  | { status: "error"; message: string };
+
+/** Set the internal copy-number width (#268) from the Settings → General picker. */
+export async function updateCollectionItemNoPadAction(
+  collectionId: string,
+  pad: number
+): Promise<ItemNoPadState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionItemNoPad(session.user.id, collectionId, pad);
+    return { status: "success", pad };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the copy-number width.",
+    };
+  }
+}
+
+/** The collection's copy-number width, for the client rows that render one (#268). */
+export async function getCollectionItemNoPadAction(collectionId: string): Promise<number> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  return getCollectionItemNoPad(session.user.id, collectionId);
 }

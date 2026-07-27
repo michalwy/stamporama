@@ -65,6 +65,8 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     area: null,
     location: null,
     ref: null,
+    itemNo: null,
+    itemNoPad: 5,
     subtype: null,
     format: null,
     formatAbbr: null,
@@ -396,6 +398,32 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
     const c = copy({ location: "Stockbook A", ref: "A234" });
     assert.equal(renderTitleTemplate("{location} {ref}", [c]), "Stockbook A A234");
     assert.equal(renderTitleTemplate("{location}/{ref}", [c]), "Stockbook A/A234");
+  });
+
+  // Internal copy number (#268). Padded to the collection's configured width by default, to an
+  // explicit one with `{itemNo:N}`, and never prefixed with `#` — a template writes its own.
+  it("resolves {itemNo} at the collection's configured width", () => {
+    assert.equal(renderTitleTemplate("{itemNo}", [copy({ itemNo: 42, itemNoPad: 5 })]), "00042");
+    assert.equal(renderTitleTemplate("{itemNo}", [copy({ itemNo: 42, itemNoPad: 2 })]), "42");
+    assert.equal(renderTitleTemplate("no. {itemNo}", [copy({ itemNo: 7, itemNoPad: 3 })]), "no. 007");
+  });
+
+  it("lets {itemNo:N} override the width, ignoring an unusable one", () => {
+    const c = copy({ itemNo: 42, itemNoPad: 5 });
+    assert.equal(renderTitleTemplate("{itemNo:3}", [c]), "042");
+    assert.equal(renderTitleTemplate("{itemNo:1}", [c]), "42");
+    // Out of range / not a number → the collection's width, rather than an empty token.
+    assert.equal(renderTitleTemplate("{itemNo:0}", [c]), "00042");
+    assert.equal(renderTitleTemplate("{itemNo:abc}", [c]), "00042");
+    // Padding sets a minimum width; it never truncates an identifier.
+    assert.equal(renderTitleTemplate("{itemNo:2}", [copy({ itemNo: 123456, itemNoPad: 5 })]), "123456");
+  });
+
+  it("lists the numbers of several copies, and renders empty without one", () => {
+    const a = copy({ itemNo: 1, itemNoPad: 4 });
+    const b = copy({ itemNo: 2, itemNoPad: 4 });
+    assert.equal(renderTitleTemplate("{itemNo}", [a, b]), "0001 / 0002");
+    assert.equal(renderTitleTemplate("x{itemNo}", [copy({ itemNo: null })]), "x");
   });
 
   it("resolves the abbreviation tokens", () => {

@@ -46,6 +46,8 @@ interface SettingsTabsProps {
   initialCollageTemplates: CollageTemplateData[];
   initialColnectMappings: ColnectMappingData[];
   initialAssistantTokens: AssistantTokenData[];
+  /** Internal copy-number display width (#268), edited on the General tab. */
+  itemNoPad: number;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -90,6 +92,7 @@ export function SettingsTabs({
   initialCollageTemplates,
   initialColnectMappings,
   initialAssistantTokens,
+  itemNoPad,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -165,6 +168,7 @@ export function SettingsTabs({
           collectionName={collectionName}
           baseCurrency={baseCurrency}
           defaultLanguage={defaultLanguage}
+          itemNoPad={itemNoPad}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
         />

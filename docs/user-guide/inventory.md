@@ -11,6 +11,7 @@ Open the **Inventory** screen from the **Collection** section of the sidebar.
 
 Each row shows:
 
+- The copy's **internal number** (e.g. `#00123`) — see [Internal copy number](#internal-copy-number).
 - The linked stamp's **catalog number**, **name**, and **issue**.
 - The **condition** and any **certificate status**.
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
@@ -57,7 +58,9 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   A catalog number can be typed bare (`200`) or with its full prefix and any spacing
   (`Mi PL 200`, `MiPL200`); when the text starts with a known vendor abbreviation the match is
   narrowed to that vendor. Typing a shelf reference such as `A234` finds the copies filed under
-  it, so you can go from a piece in hand straight to its record.
+  it, so you can go from a piece in hand straight to its record. A plain number also looks up an
+  **internal copy number** — `123`, `00123` and `#00123` all find copy `#00123` — alongside the
+  text matches, so a number that is also a catalog number still finds both.
 - **Issue** — filter to copies of stamps in a single issue. Start typing to pick one; the
   suggestions are scoped to the area selected on the left.
 - **Disposition** — toggle *In collection*, *For sale*, and *For trade*. With none
@@ -239,6 +242,37 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 > [purchase](purchases.md), not on the copy: the copy form captures identity, condition,
 > disposition, storage, and notes only. A copy taken in through a purchase carries a
 > [cost-basis](#cost-basis); one added here by hand has none.
+
+## Internal copy number
+
+Every copy carries an **internal number** — a plain running number within your collection,
+starting at `1` for the first copy you record. It is assigned automatically when the copy is
+created and cannot be edited or reassigned: it is meant to be written on the piece itself, on a
+stock card, or on a printed label, so it has to keep pointing at the same copy forever.
+
+The number appears on every inventory row, next to the condition, and in the title of the copy's
+**Edit** dialog.
+
+It is shown zero-padded — `#00123` — so a column of numbers lines up. How many digits it pads to is
+your choice, under **Settings → General → Copy number width**: pick `2` and the same copy reads
+`#42`, pick `8` and it reads `#00000042`. That is a display setting only — nothing is renumbered,
+and a number wider than the setting simply renders in full. Listing templates can override it per
+token with `{itemNo:3}`, and can use the number at all through the
+[`{itemNo}` token](contacts.md#adding-and-editing).
+
+Two things to expect:
+
+- **Numbers are never reused.** Deleting copy `#00123` retires that number — the next copy you add
+  continues past the highest number handed out, it does not fill the gap. A number you have already
+  written on a piece must never turn up on a different one.
+- **Numbering is per collection.** Each collection starts again at `1`, so the numbers are yours
+  rather than an artifact of the installation.
+
+To find a copy by its number, type it into the inventory search box — `123`, `00123` and `#00123`
+all work.
+
+Copies that already existed before this feature were numbered in the order they were added, oldest
+first.
 
 ## Editing a copy
 

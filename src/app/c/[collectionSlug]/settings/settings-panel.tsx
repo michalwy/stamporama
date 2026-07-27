@@ -5,9 +5,15 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
   updateCollectionDefaultLanguageAction,
+  updateCollectionItemNoPadAction,
   type ResetToDemoState,
 } from "@/app/actions/collections";
 import { COMMON_LANGUAGES } from "@/lib/languages";
+import {
+  MAX_ITEM_NO_PAD,
+  MIN_ITEM_NO_PAD,
+  formatItemNo,
+} from "@/lib/item-number";
 import { formatBytes } from "@/lib/format-bytes";
 
 interface SettingsPanelProps {
@@ -16,17 +22,35 @@ interface SettingsPanelProps {
   baseCurrency: string;
   /** The language this collection's own entity text is written in (#293). */
   defaultLanguage: string;
+  /** How many digits an internal copy number is padded to for display (#268). */
+  itemNoPad: number;
   photoStorageBytes: number;
   appVersion: string;
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, photoStorageBytes, appVersion }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, photoStorageBytes, appVersion }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
 
   const [language, setLanguage] = useState(defaultLanguage);
   const [languageError, setLanguageError] = useState<string | null>(null);
+
+  const [pad, setPad] = useState(itemNoPad);
+  const [padError, setPadError] = useState<string | null>(null);
+
+  function handlePadChange(next: number) {
+    const previous = pad;
+    setPad(next);
+    setPadError(null);
+    startTransition(async () => {
+      const result = await updateCollectionItemNoPadAction(collectionId, next);
+      if (result.status === "error") {
+        setPad(previous);
+        setPadError(result.message);
+      }
+    });
+  }
 
   function handleLanguageChange(next: string) {
     const previous = language;
@@ -176,6 +200,83 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
             {COMMON_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.label} ({l.code})
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      {/* Internal copy-number width (#268). Display only — the stored number is the bare integer,
+          so changing this renumbers nothing and never breaks a search. */}
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Copy number width
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              How many digits each copy&apos;s internal number is padded to, so a column of them
+              lines up. Display only — no copy is renumbered, and a search finds a number however it
+              is written. Listing templates can override it per token, e.g.{" "}
+              <code>{"{itemNo:3}"}</code>.
+            </p>
+            {padError && (
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                {padError}
+              </p>
+            )}
+          </div>
+          <select
+            aria-label="Copy number width"
+            value={pad}
+            onChange={(e) => handlePadChange(Number(e.target.value))}
+            disabled={isPending}
+            style={{
+              padding: "0.4rem 0.625rem",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "0.375rem",
+              fontSize: "0.875rem",
+              color: "var(--color-text-primary)",
+              background: "var(--color-bg-elevated)",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {Array.from(
+              { length: MAX_ITEM_NO_PAD - MIN_ITEM_NO_PAD + 1 },
+              (_, i) => MIN_ITEM_NO_PAD + i
+            ).map((n) => (
+              // The example is the option's whole point: "5" says nothing, "#00042" says it all.
+              <option key={n} value={n}>
+                {n} — {formatItemNo(42, n)}
               </option>
             ))}
           </select>

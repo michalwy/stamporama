@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { valuateItemsByIds } from "./items";
+import { allocateItemNumbers, valuateItemsByIds } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import {
   computeLotPool,
@@ -437,8 +437,9 @@ export async function intakeStamps(
   // A ref is meaningless without a location, so drop it unless a location is set (mirrors the
   // inventory copy form).
   const locationRef = locationId ? input.locationRef?.trim() || null : null;
-  const copyData = (stampId: string) => ({
+  const copyData = (stampId: string, itemNo: number) => ({
     collectionId,
+    itemNo,
     stampId,
     conditionId,
     certificateStatusId,
@@ -454,15 +455,20 @@ export async function intakeStamps(
   // A single-stamp intake may carry photos for the one created copy (#148). Create that copy
   // individually so we have its id to attach the photos to; whole-issue intake fans out into
   // several distinct copies and never carries photos, so it keeps the bulk `createMany`.
+  // Internal copy numbers (#268) are reserved as one consecutive range for the whole intake, so a
+  // whole-issue expansion numbers its copies in the order the stamps were resolved.
+  const itemNos = await allocateItemNumbers(prisma, collectionId, stampIds.length);
   const singleStamp = !!input.stampId && !input.issueId;
   if (singleStamp && input.photoChangeSet) {
     const item = await prisma.item.create({
-      data: copyData(stampIds[0]),
+      data: copyData(stampIds[0], itemNos[0]),
       select: { id: true },
     });
     await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
   } else {
-    await prisma.item.createMany({ data: stampIds.map(copyData) });
+    await prisma.item.createMany({
+      data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
+    });
   }
   return stampIds.length;
 }

@@ -99,9 +99,10 @@ describe("closeLot batches cost-basis writes by value", () => {
     });
     lotId = lot.id;
 
+    let nextItemNo = 1;
     async function addCopy(stampId: string, deliveryState: string) {
       const item = await prisma.item.create({
-        data: { collectionId, stampId, conditionId, lotId, deliveryState },
+        data: { collectionId, itemNo: nextItemNo++, stampId, conditionId, lotId, deliveryState },
         select: { id: true },
       });
       return item.id;

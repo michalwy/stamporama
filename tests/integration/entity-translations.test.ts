@@ -316,6 +316,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
   function row(): TitleCopyRow {
     return {
       id: "item-1",
+      itemNo: 1,
       stamp: {
         id: "stamp-1",
         name: "5 kr blue",

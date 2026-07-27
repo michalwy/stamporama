@@ -9,8 +9,9 @@ import {
 } from "@/app/dialog-shell";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import { useCollectionFormats } from "./use-inventory-query";
+import { useCollectionFormats, useCollectionItemNoPad } from "./use-inventory-query";
 import type { ItemListItem } from "@/lib/items";
+import { formatItemNo } from "@/lib/item-number";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { StampSelect } from "./stamp-select";
@@ -154,6 +155,7 @@ export function InventoryItemFormDialog({
   // Formats are fetched here rather than threaded in: this dialog is opened from four screens,
   // and each would otherwise have to carry one more dictionary it makes no other use of.
   const { data: formats = [] } = useCollectionFormats(collectionId);
+  const itemNoPad = useCollectionItemNoPad(collectionId);
   // Last-used condition / location / disposition, remembered globally across every add-copy
   // entry point (#234). Add mode only; edit mode always reflects the item being edited. Computed
   // once at mount so the fields stay stable while the dialog is open.
@@ -234,7 +236,13 @@ export function InventoryItemFormDialog({
     onSubmit(formData);
   }
 
-  const title = mode === "add" ? "Add copy" : "Edit copy";
+  // The internal copy number (#268) rides in the title rather than in a form field: it is
+  // assigned automatically and never editable, so a disabled input would only take up space in a
+  // dialog that is otherwise all editable fields. In add mode there is no number yet.
+  const title =
+    mode === "add"
+      ? "Add copy"
+      : `Edit copy ${item ? formatItemNo(item.itemNo, itemNoPad) : ""}`.trim();
   const actionLabel = isPending
     ? mode === "add" ? "Adding…" : "Saving…"
     : photosUploading

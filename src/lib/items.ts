@@ -28,6 +28,7 @@ import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { sortCopies } from "./copy-sort";
+import { parseItemNoSearch } from "./item-number";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -137,9 +138,48 @@ async function resolveLocationSubtree(
   return [...ids];
 }
 
+/** Hand out `count` consecutive internal copy numbers for a collection (#268).
+ *
+ * The counter lives on `Collection.nextItemNo` and is bumped in one statement, so concurrent
+ * creates can never collide (the `UPDATE` takes a row lock) and a whole bulk intake costs a single
+ * round trip. It is deliberately not `max(itemNo) + 1`: a number written on a physical piece must
+ * not be handed to a different copy after the first one is deleted.
+ *
+ * Pass the surrounding transaction client when the copies are created inside one, so a rolled-back
+ * intake also rolls back the numbers it reserved. */
+export async function allocateItemNumbers(
+  client: Prisma.TransactionClient,
+  collectionId: string,
+  count: number
+): Promise<number[]> {
+  if (count < 1) return [];
+  const rows = await client.$queryRaw<{ nextItemNo: number }[]>`
+    UPDATE "collection"
+    SET "nextItemNo" = "nextItemNo" + ${count}
+    WHERE "id" = ${collectionId}
+    RETURNING "nextItemNo"
+  `;
+  if (rows.length === 0) throw new Error("Collection not found.");
+  // The statement returns the value *after* the bump, so the reserved range ends just below it.
+  const end = rows[0].nextItemNo;
+  const start = end - count;
+  return Array.from({ length: count }, (_, i) => start + i);
+}
+
+/** Convenience wrapper for the common single-copy case. */
+export async function allocateItemNumber(
+  client: Prisma.TransactionClient,
+  collectionId: string
+): Promise<number> {
+  const [itemNo] = await allocateItemNumbers(client, collectionId, 1);
+  return itemNo;
+}
+
 export interface ItemData {
   id: string;
   collectionId: string;
+  /** Internal copy number (#268): per-collection, assigned on creation, never editable. */
+  itemNo: number;
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
@@ -190,6 +230,7 @@ function stampLabel(stamp: {
 const ITEM_SELECT = {
   id: true,
   collectionId: true,
+  itemNo: true,
   stampId: true,
   conditionId: true,
   certificateStatusId: true,
@@ -211,6 +252,7 @@ const ITEM_SELECT = {
 function toItemData(row: {
   id: string;
   collectionId: string;
+  itemNo: number;
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
@@ -335,9 +377,11 @@ export async function createItem(
     data.deliveryState && VALID_DELIVERY_STATES.has(data.deliveryState)
       ? data.deliveryState
       : "delivered";
+  const itemNo = await allocateItemNumber(prisma, collectionId);
   const item = await prisma.item.create({
     data: {
       collectionId,
+      itemNo,
       stampId: data.stampId,
       conditionId: data.conditionId,
       certificateStatusId: data.certificateStatusId ?? null,
@@ -590,6 +634,11 @@ function buildItemWhere(
       { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } },
       { locationRef: { contains: s, mode: "insensitive" } },
     ];
+    // Internal copy number (#268): a purely numeric entry also looks up the copy by its own
+    // number, in whichever form the collector read off the label (`123`, `00123`, `#00123`).
+    // Added to the OR rather than replacing it — `200` is a plausible catalog number too.
+    const itemNo = parseItemNoSearch(s);
+    if (itemNo !== null) or.push({ itemNo });
     // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
     // when one was recognized) so "Mi PL 200" resolves even though the raw text
     // isn't a substring of the stored "200".
@@ -722,6 +771,9 @@ async function withMissingCatalogFilter(
  * certificate labels, disposition flags, and acquisition/purchase fields. */
 export interface ItemListItem {
   id: string;
+  /** Internal copy number (#268): per-collection, assigned on creation, never editable.
+   *  Rendered through `formatItemNo` (`#00123`). */
+  itemNo: number;
   stampId: string;
   stampName: string | null;
   /** True when the copy links to a base stamp (parentId === null) that has variants,
@@ -789,6 +841,7 @@ export interface PaginatedItemsResult {
  * screen enriches copies identically. */
 const ITEM_LIST_SELECT = {
   id: true,
+  itemNo: true,
   stampId: true,
   inCollection: true,
   forSale: true,
@@ -851,6 +904,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     primaryLink?.collectionAreaId ?? row.stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
   return {
     id: row.id,
+    itemNo: row.itemNo,
     stampId: row.stampId,
     stampName: row.stamp.name,
     unknownVariant:

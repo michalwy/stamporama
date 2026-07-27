@@ -7,6 +7,7 @@ import type {
 import type { TranslatableEntity } from "./translations";
 import { prisma } from "./db";
 import { getCollectionAreas } from "./areas";
+import { DEFAULT_ITEM_NO_PAD } from "./item-number";
 import {
   buildAreaVendorMaps,
   buildAreaTitleEntries,
@@ -31,6 +32,8 @@ import { resolveTranslationWithFallback } from "./translations";
 // select would save. `toTitleCopy` picks the language.
 export const TITLE_COPY_SELECT = {
   id: true,
+  // The internal copy number behind `{itemNo}` (#268).
+  itemNo: true,
   stamp: {
     select: {
       // Entity ids ride along so a fallback can name the row a missing translation goes on (#299).
@@ -106,6 +109,8 @@ type LabelTranslation = { language: string; name: string | null; abbreviation: s
 
 export type TitleCopyRow = {
   id: string;
+  /** Internal copy number (#268) behind `{itemNo}`. */
+  itemNo: number;
   stamp: {
     id: string;
     name: string | null;
@@ -157,7 +162,8 @@ export function toTitleCopy(
   row: TitleCopyRow,
   maps: AreaVendorMaps,
   areaTitleById: ReadonlyMap<string, AreaTitleEntry>,
-  language: string | null = null
+  language: string | null = null,
+  itemNoPad: number = DEFAULT_ITEM_NO_PAD
 ): TitleTemplateCopy {
   const areas = row.stamp.stampAreaLinks;
   const primaryLink = areas.find((a) => a.isPrimary) ?? areas[0];
@@ -276,6 +282,9 @@ export function toTitleCopy(
     area: areaTitle,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
+    // Not translatable and not an entity — plain digits, so it never joins the fallback machinery.
+    itemNo: row.itemNo,
+    itemNoPad,
     issueName: issue
       ? resolve(
           "issueName",
@@ -338,11 +347,15 @@ export async function makeTitleCopyMapper(
 ): Promise<(row: TitleCopyRow) => TitleTemplateCopy> {
   const [areas, collection] = await Promise.all([
     getCollectionAreas(ownerId, collectionId),
-    prisma.collection.findUnique({ where: { id: collectionId }, select: { defaultLanguage: true } }),
+    prisma.collection.findUnique({
+      where: { id: collectionId },
+      select: { defaultLanguage: true, itemNoPad: true },
+    }),
   ]);
   const code = normalizeLanguage(language);
   const effective = code && code !== normalizeLanguage(collection?.defaultLanguage) ? code : null;
   const maps = buildAreaVendorMaps(areas);
   const areaTitleById = buildAreaTitleEntries(areas, effective);
-  return (row) => toTitleCopy(row, maps, areaTitleById, effective);
+  const itemNoPad = collection?.itemNoPad ?? DEFAULT_ITEM_NO_PAD;
+  return (row) => toTitleCopy(row, maps, areaTitleById, effective, itemNoPad);
 }

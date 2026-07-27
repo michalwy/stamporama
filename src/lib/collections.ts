@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
+import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -125,6 +126,51 @@ export async function setCollectionDefaultLanguage(
   });
 }
 
+/**
+ * Set how many digits an internal copy number (#268) is padded to for display. Display only: the
+ * stored `Item.itemNo` is the bare integer, so this rewrites no rows and never changes which copy
+ * a number points at. Listing templates may still override it per token (`{itemNo:3}`).
+ */
+export async function setCollectionItemNoPad(
+  ownerId: string,
+  collectionId: string,
+  pad: number
+): Promise<void> {
+  const value = parseItemNoPad(pad);
+  if (value === null) {
+    throw new Error(
+      `Width must be a whole number between ${MIN_ITEM_NO_PAD} and ${MAX_ITEM_NO_PAD}.`
+    );
+  }
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { itemNoPad: value },
+  });
+}
+
+/** The collection's configured copy-number width (#268), for the client surfaces that render one.
+ * Owner-scoped like every other collection read. */
+export async function getCollectionItemNoPad(
+  ownerId: string,
+  collectionId: string
+): Promise<number> {
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true, itemNoPad: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  return col.itemNoPad;
+}
+
 export async function getCollectionsByOwner(ownerId: string) {
   return prisma.collection.findMany({
     where: { ownerId },
@@ -143,6 +189,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       baseCurrency: true,
       defaultLanguage: true,
       duplicateCatalogMode: true,
+      itemNoPad: true,
     },
   });
 }

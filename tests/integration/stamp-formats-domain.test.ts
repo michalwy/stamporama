@@ -115,6 +115,7 @@ describe("stamp format dictionary", () => {
     const item = await prisma.item.create({
       data: {
         collectionId,
+        itemNo: 1,
         stampId: stamp.id,
         conditionId: condition.id,
         formatId: format.id,

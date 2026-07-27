@@ -71,6 +71,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           collectionName={collection.name}
           baseCurrency={collection.baseCurrency}
           defaultLanguage={collection.defaultLanguage}
+          itemNoPad={collection.itemNoPad}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}

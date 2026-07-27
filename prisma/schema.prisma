@@ -36,6 +36,14 @@ model Collection {
   // warning; "block" prevents saving a stamp whose catalog identity (vendor +
   // effective area prefix + number) already exists in the collection.
   duplicateCatalogMode String @default("warn")
+  // Allocation counter for the per-collection copy numbering (#268). Handing out `Item.itemNo`
+  // is an atomic bump of this column (`UPDATE ... SET next_item_no = next_item_no + n RETURNING`),
+  // never `max(itemNo) + 1` — a deleted copy must not hand its number to the next one, and a bulk
+  // intake takes a whole range in one statement.
+  nextItemNo   Int      @default(1)
+  // How many digits an internal copy number is padded to for display (#268). Purely a display
+  // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
+  itemNoPad    Int      @default(5)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -587,6 +595,11 @@ model StampCatalogPrice {
 model Item {
   id                  String   @id @default(cuid())
   collectionId        String
+  // Human-readable internal identifier (#268): a per-collection sequence starting at 1,
+  // assigned on creation from `Collection.nextItemNo` and never editable afterwards. It is
+  // what a collector writes on the physical piece, so it must stay stable and must not be
+  // reused — deleting a copy retires its number.
+  itemNo              Int
   stampId             String
   conditionId         String
   certificateStatusId String?
@@ -634,6 +647,7 @@ model Item {
   offerPhotoAttachments OfferPhotoAttachment[]
   offerPhotoAttachmentTiles OfferPhotoAttachmentTile[]
 
+  @@unique([collectionId, itemNo])
   @@index([collectionId])
   @@index([stampId])
   @@index([conditionId])

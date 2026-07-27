@@ -87,6 +87,9 @@ always generates, falling back to your default text. The tokens fill in from the
 - `{area}` — area (uses each area's optional **title name**, rolling up to a parent when blank — see below)
 - `{location}` — the copy's storage location name
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
+- `{itemNo}` — the copy's [internal number](inventory.md#internal-copy-number), padded to the width
+  set in **Settings → General**. Write `{itemNo:3}` to pad to a different width just here (`042`),
+  or `{itemNo:1}` for no padding at all. No `#` is added — type one in the template if you want it.
 - `{issueName}` — name of the issue the stamp belongs to
 - `{issueYear}` — year of that issue (also collapses to a range across copies)
 - `{subtype}` — the stamp's [subtype](collections.md#stamp-subtypes) (`Error`, `Overprint`, …).
