@@ -545,6 +545,25 @@ The kit is loaded when you expand it, so a big batch opens instantly.
 From the card's **⋮** menu you can **open the offer** — for anything the kit doesn't cover: editing a
 text, regenerating photos, changing the composition — or send it **back to preparing**.
 
+### Batch photo actions
+
+The toolbar carries two actions that work on **exactly the offers currently shown** — so narrowing the
+session with the area/year rail narrows what they touch:
+
+- **↻ Regenerate photos** queues a re-render for every shown offer, after a confirmation. Use it when
+  a batch has gone [out of date](#when-the-offer-changes-afterwards) — sets sold from under it, a template changed — and you
+  would otherwise open thirty offer screens to press Generate thirty times. Nothing happens
+  immediately: the runs are queued and rendered in the background, the cards say *Photos rendering…*
+  and turn back into a photo count as each finishes. The images already stored keep being served
+  throughout, so anything already uploaded to a live listing is untouched until its run completes.
+  Offers with nothing to render — no collage numbers, or every set sold — are skipped, and the line
+  under the toolbar says how many.
+- **↓ ZIP all shown** downloads every shown offer's upload set as a **single archive with one folder
+  per offer**, named after the offer exactly as its own ZIP is. Offers with nothing to upload are left
+  out, and the line under the toolbar says how many were. As with the per-offer ZIP, images held back
+  or past the platform's limit are not in it. A very large batch is refused with a message asking you
+  to narrow it first — the archive is built in one go.
+
 ### When something turns out to be missing
 
 If you get into a listing and find the description is wrong, a scan is missing, or the price needs

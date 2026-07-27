@@ -11,6 +11,7 @@ import {
   offerYearFacets,
   type GroupKey,
 } from "@/lib/listing-groups";
+import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
@@ -52,6 +53,17 @@ const CONTROL_STYLE: React.CSSProperties = {
   minHeight: "2rem",
 };
 
+const BULK_BTN: React.CSSProperties = {
+  ...CONTROL_STYLE,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  fontWeight: 600,
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 export function ListingWorkspacePanel({
   collectionId,
   collectionSlug,
@@ -70,6 +82,12 @@ export function ListingWorkspacePanel({
   // offer — the session starts on the listing you are about to post, not on a wall of shut cards.
   // `null` is the collector having closed the open one, and is left alone.
   const [expandedId, setExpandedId] = useState<string | null | undefined>(undefined);
+  // The batch-wide photo actions (#323): a pending confirmation, whether one is running, and what
+  // the last one did — a bulk action reports itself, because nothing on screen would otherwise say
+  // that thirty runs were queued or that four offers were left out of an archive.
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const [bulkPending, setBulkPending] = useState<"regenerate" | "zip" | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
 
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
@@ -206,6 +224,94 @@ export function ListingWorkspacePanel({
     });
   }
 
+  /**
+   * Regenerate every shown offer's photos (#323). The batch is `visible`, not the whole platform's
+   * ready set: the filters are how a session is scoped, and a bulk action that quietly reached past
+   * them would render work the collector is not doing today.
+   *
+   * Offers that cannot render (no collage numbers, every set sold) are reported rather than treated
+   * as failures — the rest of the batch is queued regardless.
+   */
+  function regenerateVisible() {
+    const ids = ordered.map((o) => o.id);
+    setActionError(undefined);
+    setBulkNotice(undefined);
+    setBulkPending("regenerate");
+    startTransition(async () => {
+      const { generateOffersPhotosAction } = await import("@/app/actions/offers");
+      const result = await generateOffersPhotosAction(ids);
+      setBulkPending(null);
+      setConfirmRegenerate(false);
+      if (result.status === "error" && !result.result) {
+        setActionError(result.message);
+        return;
+      }
+      const { queued, skipped } = result.result ?? { queued: 0, skipped: [] };
+      if (queued === 0) {
+        setActionError(result.status === "error" ? result.message : undefined);
+        return;
+      }
+      // The list carries each offer's generation status, so re-reading it is what turns the cards
+      // into "rendering…" and, as the worker drains the queue, back into a photo count.
+      invalidateAll(collectionId);
+      setBulkNotice(
+        `Regenerating ${queued === 1 ? "1 offer" : `${queued} offers`}${
+          skipped.length > 0
+            ? ` · ${skipped.length} skipped (${skipped[0].message}${skipped.length > 1 ? " …" : ""})`
+            : ""
+        }`
+      );
+    });
+  }
+
+  /**
+   * The shown offers' upload sets as one ZIP, a folder per offer (#323). Driven from here rather
+   * than a plain link because the batch travels in the request body — see the route.
+   */
+  async function downloadVisibleZip() {
+    setActionError(undefined);
+    setBulkNotice(undefined);
+    setBulkPending("zip");
+    try {
+      const res = await fetch(`/api/collections/${collectionId}/offers/photos/zip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerIds: ordered.map((o) => o.id) }),
+      });
+      if (!res.ok) {
+        const message = await res
+          .json()
+          .then((b) => (b as { error?: string }).error)
+          .catch(() => undefined);
+        setActionError(message ?? "Failed to build the archive.");
+        return;
+      }
+      const blob = await res.blob();
+      const fileName =
+        /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ??
+        "offers-photos.zip";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      const offerCount = Number(res.headers.get("X-Offer-Count") ?? 0);
+      const imageCount = Number(res.headers.get("X-Image-Count") ?? 0);
+      const skipped = Number(res.headers.get("X-Skipped-Count") ?? 0);
+      setBulkNotice(
+        `Downloaded ${imageCount} ${imageCount === 1 ? "photo" : "photos"} from ${offerCount} ${
+          offerCount === 1 ? "offer" : "offers"
+        }${skipped > 0 ? ` · ${skipped} with nothing to upload left out` : ""}`
+      );
+    } catch {
+      setActionError("Failed to build the archive.");
+    } finally {
+      setBulkPending(null);
+    }
+  }
+
   /** Step an offer back to `preparing` (#246): something turned out to be missing, and it should not
    * sit in the posting batch until it is fixed. Reversible from the Offers list, so no confirmation —
    * the offer simply leaves the session. */
@@ -251,11 +357,57 @@ export function ListingWorkspacePanel({
               : `${visible.length} of ${offers.length} ready ${offers.length === 1 ? "offer" : "offers"}`
             : "Ready offers are scoped to one platform"}
         </span>
+
+        {/* Batch photo actions (#323), over exactly the offers shown — the session's images brought
+            up to date, and its whole upload set as one archive. */}
+        {platformId && visible.length > 0 && (
+          <>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={() => setConfirmRegenerate(true)}
+              disabled={bulkPending !== null}
+              title={`Re-render the photos of all ${visible.length} shown ${
+                visible.length === 1 ? "offer" : "offers"
+              }`}
+              style={BULK_BTN}
+            >
+              ↻ Regenerate photos
+            </button>
+            <button
+              type="button"
+              onClick={downloadVisibleZip}
+              disabled={bulkPending !== null}
+              title="Download every shown offer's upload set as one ZIP, a folder per offer"
+              style={{ ...BULK_BTN, color: "var(--color-accent)" }}
+            >
+              {bulkPending === "zip" ? "Preparing…" : "↓ ZIP all shown"}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* What a batch action did. It is not an error and not a toast: the outcome ("30 queued, 2
+          skipped") is the only place the collector learns that some offers had nothing to render. */}
+      {bulkNotice && (
+        <p
+          style={{
+            margin: 0,
+            padding: "0.5rem 0.75rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-page)",
+            color: "var(--color-text-secondary)",
+            fontSize: "0.8125rem",
+          }}
+        >
+          {bulkNotice}
+        </p>
+      )}
 
       {/* A failed action outside the publish dialog (sending an offer back) has nowhere else to be
           said, and a silent no-op would read as though the offer had simply not moved. */}
-      {actionError && !publishing && (
+      {actionError && !publishing && !confirmRegenerate && (
         <p
           style={{
             margin: 0,
@@ -398,6 +550,34 @@ export function ListingWorkspacePanel({
           })}
         </div>
       </div>
+
+      {/* Regenerating replaces stored images that may already be live in a listing (#311), and a
+          whole batch is minutes of rendering — enough that it is asked for once, deliberately. */}
+      {confirmRegenerate && (
+        <ConfirmDialog
+          title="Regenerate photos for this batch?"
+          message={
+            <>
+              Every one of the {visible.length} shown {visible.length === 1 ? "offer" : "offers"} is
+              queued for re-rendering. Their current images stay in place and keep being served until
+              a run finishes, so anything already uploaded to a listing is unaffected. Offers with
+              nothing to render are skipped.
+            </>
+          }
+          actionLabel="Regenerate"
+          pendingLabel="Queueing…"
+          variant="primary"
+          isPending={bulkPending === "regenerate"}
+          error={actionError}
+          onConfirm={regenerateVisible}
+          onClose={() => {
+            if (bulkPending !== "regenerate") {
+              setConfirmRegenerate(false);
+              setActionError(undefined);
+            }
+          }}
+        />
+      )}
 
       {publishing && (
         <ActivateOfferDialog

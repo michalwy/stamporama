@@ -12,7 +12,7 @@ import {
 import { deriveSetLabel } from "./offer-set-rules";
 import { sortSetItems } from "./offer-set-order";
 import { isOfferState, isTerminalState } from "./offer-rules";
-import { zip } from "./zip";
+import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import { thumbnailFor } from "./photos/process";
@@ -934,6 +934,83 @@ export async function buildOfferPhotoArchive(
   ownerId: string,
   offerId: string
 ): Promise<{ fileName: string; bytes: Buffer }> {
+  const one = await readOfferUploadSet(ownerId, offerId);
+  if ("reason" in one) throw new OfferPhotoGenerationError(one.reason);
+  return { fileName: `${one.slug}-photos.zip`, bytes: zip(one.files) };
+}
+
+/**
+ * The upload sets of **several** offers as one ZIP, a folder per offer (#323) — what the bulk
+ * listing workspace hands over for a whole posting session rather than one listing at a time.
+ *
+ * A folder rather than a filename prefix: the files are already named for their offer (#326), so a
+ * prefix would only repeat the stem, while a folder is what a marketplace's per-listing upload
+ * actually wants — open the offer's folder, select all, done. Two offers sharing a name (the title
+ * is generated, so it happens) get their ids appended, because a collision would silently merge two
+ * listings' uploads into one folder.
+ *
+ * Offers with nothing to upload are **skipped, not refused**: a batch is shown as a batch, and one
+ * offer that was never generated should not deny the collector the other thirty. Which ones were
+ * left out is returned so the caller can say so.
+ *
+ * @throws {OfferPhotoGenerationError} when no offer in the batch has anything to upload.
+ */
+export async function buildOffersPhotoArchive(
+  ownerId: string,
+  offerIds: readonly string[]
+): Promise<{
+  fileName: string;
+  bytes: Buffer;
+  offerCount: number;
+  imageCount: number;
+  skipped: { offerId: string; reason: string }[];
+}> {
+  const sets = await Promise.all(offerIds.map((offerId) => readOfferUploadSet(ownerId, offerId)));
+
+  const skipped: { offerId: string; reason: string }[] = [];
+  const entries: ZipEntry[] = [];
+  const folders = new Map<string, number>();
+  let offerCount = 0;
+
+  sets.forEach((set, index) => {
+    const offerId = offerIds[index];
+    if ("reason" in set) {
+      skipped.push({ offerId, reason: set.reason });
+      return;
+    }
+    const taken = folders.get(set.slug);
+    folders.set(set.slug, (taken ?? 0) + 1);
+    // The first offer keeps the plain slug; a later namesake carries its id, so the folders stay
+    // readable in the common case and unambiguous in the rare one.
+    const folder = taken === undefined ? set.slug : `${set.slug}-${offerId.slice(-6)}`;
+    offerCount += 1;
+    for (const file of set.files) entries.push({ ...file, name: `${folder}/${file.name}` });
+  });
+
+  if (entries.length === 0) {
+    throw new OfferPhotoGenerationError(
+      "None of these offers has images to upload — generate them first."
+    );
+  }
+
+  return {
+    fileName: `offers-photos-${offerCount}.zip`,
+    bytes: zip(entries),
+    offerCount,
+    imageCount: entries.length,
+    skipped,
+  };
+}
+
+/**
+ * One offer's upload set as named files, or the reason it has none. Owner-checked (through the read
+ * model), and the single source both archives are built from — so a file unpacked from the bulk ZIP
+ * is byte-identical to, and named exactly as, the same file taken from the offer on its own.
+ */
+async function readOfferUploadSet(
+  ownerId: string,
+  offerId: string
+): Promise<{ slug: string; files: ZipEntry[] } | { reason: string }> {
   const state = await getOfferPhotoPlanState(ownerId, offerId);
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { name: true } });
 
@@ -941,11 +1018,12 @@ export async function buildOfferPhotoArchive(
   // plan, so the archive cannot disagree with the panel about what goes up or what it is called.
   const uploaded = state.images.filter((image) => image.publish && !image.overLimit);
   if (uploaded.length === 0) {
-    throw new OfferPhotoGenerationError(
-      state.images.length === 0
-        ? "This offer has no generated images yet."
-        : "Every generated image of this offer is held back — nothing to upload."
-    );
+    return {
+      reason:
+        state.images.length === 0
+          ? "This offer has no generated images yet."
+          : "Every generated image of this offer is held back — nothing to upload.",
+    };
   }
 
   const photos = await prisma.photo.findMany({
@@ -961,7 +1039,7 @@ export async function buildOfferPhotoArchive(
     }))
   );
 
-  return { fileName: `${offerFileSlug(offer?.name, offerId)}-photos.zip`, bytes: zip(files) };
+  return { slug: offerFileSlug(offer?.name, offerId), files };
 }
 
 /**

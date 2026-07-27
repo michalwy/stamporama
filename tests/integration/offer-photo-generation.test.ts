@@ -14,6 +14,7 @@ import { createSale, addSaleLines } from "../../src/lib/sales";
 import { inflateRawSync } from "node:zlib";
 import {
   buildOfferPhotoArchive,
+  buildOffersPhotoArchive,
   claimNextOfferPhotoGeneration,
   deleteOfferPhotoBytes,
   enqueueOfferPhotoGeneration,
@@ -522,6 +523,101 @@ describe("offer photo generation (#311)", () => {
       unnamed.images.map((i) => i.fileName),
       [`offer-${offerId.slice(-6)}-01.jpg`]
     );
+  });
+
+  // ── The batch archive (#323) ───────────────────────────────────────────────
+
+  it("packs several offers into one ZIP, a folder each, skipping those with nothing to upload", async () => {
+    // A second offer of the same batch: one copy, one front scan, its own generated image.
+    const stamp = await prisma.stamp.create({
+      data: { collectionId, name: "Stamp bulk", primaryCatalogSortKey: 99 },
+    });
+    const item = await createItem(userId, collectionId, {
+      stampId: stamp.id,
+      conditionId,
+      forSale: true,
+    });
+    const upload = await stageUpload(userId, collectionId, {
+      bytes: await scan(110, 150, 60),
+      mime: "image/png",
+    });
+    await applyPhotoChangeSet(userId, item.id, {
+      add: [{ uploadId: upload.id, role: "front", title: null, sortOrder: 0 }],
+      update: [],
+      remove: [],
+    });
+    const secondId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "5.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    await updateOfferPhotoConfig(userId, secondId, {
+      photoSides: "front",
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
+      collage: {
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    });
+    await addOfferSet(userId, secondId, [item.id]);
+    await enqueueOfferPhotoGeneration(userId, secondId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId: secondId }), secondId);
+    await runOfferPhotoGeneration(secondId);
+
+    // A third offer that was never generated: it belongs to the batch, has nothing to upload, and
+    // must not deny the other two their archive.
+    const emptyId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "3.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+
+    // Both generated offers carry the *same* name, which the generated titles make likely.
+    await prisma.offer.updateMany({
+      where: { id: { in: [offerId, secondId] } },
+      data: { name: "Wegry 1950" },
+    });
+
+    const archive = await buildOffersPhotoArchive(userId, [offerId, secondId, emptyId]);
+    assert.equal(archive.offerCount, 2);
+    assert.deepEqual(
+      archive.skipped.map((s) => s.offerId),
+      [emptyId],
+      "the offer with nothing to upload is reported, not thrown"
+    );
+
+    const names = readZipEntries(archive.bytes).map((e) => e.name);
+    assert.equal(names.length, archive.imageCount);
+    assert.ok(
+      names.every((n) => n.includes("/")),
+      "every file sits in its offer's folder"
+    );
+    assert.deepEqual(
+      [...new Set(names.map((n) => n.split("/")[0]))].sort(),
+      [`wegry-1950`, `wegry-1950-${secondId.slice(-6)}`].sort(),
+      "one folder per offer; the first namesake keeps the plain slug, the later one carries its id"
+    );
+
+    // Nothing to upload anywhere is the one case that refuses: an empty archive says nothing.
+    await assert.rejects(
+      () => buildOffersPhotoArchive(userId, [emptyId]),
+      OfferPhotoGenerationError
+    );
+
+    // Leave the batch as the tests around this one expect it.
+    await prisma.offer.update({ where: { id: offerId }, data: { name: null } });
+    await deleteOffer(userId, secondId);
+    await deleteOffer(userId, emptyId);
   });
 
   it("reports a side skipped for want of a complete set of scans", async () => {

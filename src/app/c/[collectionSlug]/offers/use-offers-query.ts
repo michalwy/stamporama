@@ -125,6 +125,12 @@ export function useListingOffers(collectionId: string, platformId: string | unde
       return (await res.json()).items;
     },
     enabled: !!platformId,
+    // A bulk regeneration (#323) queues runs for the whole batch, so the batch itself has to show
+    // them finishing — the per-offer plan poll only covers the one card that happens to be open.
+    refetchInterval: (query) =>
+      query.state.data?.some((o) => o.photoStatus === "queued" || o.photoStatus === "running")
+        ? 3000
+        : false,
   });
 }
 

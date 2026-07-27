@@ -387,6 +387,59 @@ export async function generateOfferPhotosAction(offerId: string): Promise<OfferA
   }
 }
 
+/** What a bulk regeneration did: how many runs were queued, and every offer that refused one. */
+export interface BulkPhotoGenerationState {
+  queued: number;
+  skipped: { offerId: string; message: string }[];
+}
+
+export type BulkPhotoGenerationActionState =
+  | { status: "success"; result: BulkPhotoGenerationState }
+  | { status: "error"; message: string; result?: BulkPhotoGenerationState };
+
+/**
+ * Queue photo generation for a whole batch (#323) — the listing workspace regenerating everything it
+ * is currently showing, so a session's images are brought up to date in one motion instead of thirty
+ * trips to thirty offer screens.
+ *
+ * Per-offer refusals are **collected, not thrown**: an offer with no collage numbers, or one whose
+ * sets have all sold (#315), is a fact about that offer and no reason to abandon the other
+ * twenty-nine. The same queue rules apply as for a single offer, so an offer already rendering is
+ * left alone rather than stacked, and the worker is nudged once for the whole batch.
+ */
+export async function generateOffersPhotosAction(
+  offerIds: string[]
+): Promise<BulkPhotoGenerationActionState> {
+  const session = await getSession();
+  const skipped: { offerId: string; message: string }[] = [];
+  let queued = 0;
+
+  // Sequentially: a run is a database round trip per offer and this is a background nudge, not a
+  // latency-critical path — a fan-out over a forty-offer batch would only crowd the pool.
+  for (const offerId of offerIds) {
+    try {
+      await enqueueOfferPhotoGeneration(session.user.id, offerId);
+      queued += 1;
+    } catch (e) {
+      const outcome = fail(e, "Failed to start photo generation.");
+      skipped.push({ offerId, message: outcome.message });
+    }
+  }
+
+  if (queued > 0) kickOfferPhotoWorker();
+  if (queued === 0 && skipped.length > 0) {
+    return {
+      status: "error",
+      message:
+        skipped.length === 1
+          ? skipped[0].message
+          : `None of these ${skipped.length} offers could be regenerated.`,
+      result: { queued, skipped },
+    };
+  }
+  return { status: "success", result: { queued, skipped } };
+}
+
 // ── Manual photo attachments (#313) ─────────────────────────────────────────
 // Adding, moving or removing an attachment changes the **plan**, never the stored images: the files
 // already generated stay exactly as they are (a buyer may be looking at them) and the plan simply
