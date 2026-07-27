@@ -194,6 +194,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        # Full history and tags: the job diffs `extension/` against the release the store already
+        # holds, which is a tag that may be many releases back.
+        with:
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6.0.9
@@ -257,6 +261,38 @@ jobs:
 
           base="https://chromewebstore.googleapis.com"
           item="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
+
+          # Most releases change nothing under extension/, and every submission costs a review the
+          # store makes users wait through. So compare against what the store already holds — the
+          # newer of its published and its in-review revision, since a version still with the
+          # reviewers already carries whatever change we would be sending again.
+          #
+          # The baseline is the store's, not "the previous tag", so the check heals itself: a
+          # release whose submission failed, or was cut while CWS_PUBLISH_ENABLED was off, is still
+          # picked up by the next one.
+          status=$(call "Status" 200 -H "Authorization: Bearer $token" "$base/v2/$item:fetchStatus")
+          echo "$status" | jq .
+          known=$(echo "$status" | jq -r '
+            [.publishedItemRevisionStatus, .submittedItemRevisionStatus]
+            | map(select(. != null) | .distributionChannels[]?.crxVersion // empty)
+            | .[]' | sort -V | tail -n1)
+
+          if [ -n "$known" ] && git rev-parse -q --verify "refs/tags/v$known" >/dev/null; then
+            baseline="v$known"
+          else
+            # No tag for what the store reports (a hand-uploaded package, or an item with nothing
+            # published yet). Fall back to the previous release: publishing once too often is the
+            # harmless direction, skipping is the one that loses a change.
+            # `|| true`: with no other release tag at all, grep selects nothing and pipefail would
+            # otherwise fail the step over an empty baseline the next line already handles.
+            baseline=$(git tag --list 'v*' --sort=-v:refname | grep -Fxv "$GITHUB_REF_NAME" | head -n1 || true)
+            echo "::warning::No tag matches the store version '${known:-none}' — comparing against ${baseline:-nothing} instead."
+          fi
+
+          if [ -n "$baseline" ] && git diff --quiet "$baseline" "$GITHUB_REF_NAME" -- extension/; then
+            echo "::notice::extension/ is unchanged since $baseline — nothing to submit."
+            exit 0
+          fi
 
           # A previous version still in review makes this fail — that is the store's rule, not a
           # broken pipeline, and the printed body says so.

@@ -100,6 +100,16 @@ token for an access token, and calls `:upload` then `:publish` on `chromewebstor
 It needs repository **secrets** `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` and
 repository **variables** `CWS_PUBLISHER_ID`, `CWS_EXTENSION_ID`.
 
+It submits **only when `extension/` actually changed**. The job asks the store, through
+`:fetchStatus`, which version it already holds — the newer of the published and the in-review
+revision — and diffs `extension/` between that release's tag and the one being built. Most releases
+touch nothing here, and every submission costs a review the users wait through.
+
+Taking the baseline from the store rather than from "the previous tag" makes the check heal itself:
+a release whose submission failed, or one cut while publishing was paused, is still picked up by the
+next release. If the store reports a version no tag matches, the job warns and falls back to the
+previous tag — publishing once too often is harmless, skipping is what loses a change.
+
 The job only runs when the repository variable **`CWS_PUBLISH_ENABLED` is `true`**:
 
 ```bash
