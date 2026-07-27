@@ -98,6 +98,7 @@ describe("offer-owned composition + coordination", () => {
   it("flags the other offer (not the selling one) once a shared copy sells", async () => {
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,
+      transactionUrl: null,
       soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await addSaleLines(userId, saleId, [{ offerId: offerA, offerSetId: setA, price: "5.00", itemIds: [x] }]);
@@ -118,6 +119,7 @@ describe("offer-owned composition + coordination", () => {
   it("blocks selling a copy that has already sold (no double sale)", async () => {
     const saleId = await createSale(userId, collectionId, {
       platformId: allegroId, buyerId: null, externalRef: null,
+      transactionUrl: null,
       soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await assert.rejects(
@@ -129,6 +131,7 @@ describe("offer-owned composition + coordination", () => {
   it("keeps a partially-sold offer live and decrements it; flags the twin elsewhere", async () => {
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,
+      transactionUrl: null,
       soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await addSaleLines(userId, saleId, [{ offerId: offerQD, offerSetId: setQDy, price: "5.00", itemIds: [y] }]);
@@ -154,6 +157,7 @@ describe("offer-owned composition + coordination", () => {
   it("flips the offer to sold once its last set sells through it", async () => {
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,
+      transactionUrl: null,
       soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await addSaleLines(userId, saleId, [{ offerId: offerQD, offerSetId: setQDz, price: "5.00", itemIds: [z] }]);

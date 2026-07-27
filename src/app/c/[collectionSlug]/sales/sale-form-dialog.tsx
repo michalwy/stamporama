@@ -26,6 +26,7 @@ export interface SaleFormDialogInitial {
   buyerId: string | null;
   buyerName: string | null;
   externalRef: string;
+  transactionUrl: string;
   soldAt: string;
   currency: string;
   buyerHandling: string;
@@ -81,6 +82,7 @@ export function SaleFormDialog({
   const [buyerId, setBuyerId] = useState(initial?.buyerId ?? "");
   const [buyerName, setBuyerName] = useState(initial?.buyerName ?? "");
   const [externalRef, setExternalRef] = useState(initial?.externalRef ?? "");
+  const [transactionUrl, setTransactionUrl] = useState(initial?.transactionUrl ?? "");
   const [soldAt, setSoldAt] = useState(initial?.soldAt ?? today);
   // Currency is inherited from the platform and locked (#196). Editing keeps the sale's snapshot;
   // recording a new sale derives it from the platform — a known currency locks the field, an unset
@@ -162,6 +164,7 @@ export function SaleFormDialog({
       buyerId: buyerId || null,
       buyerName: buyerName || null,
       externalRef,
+      transactionUrl,
       soldAt,
       // Locked to the platform's currency; the setter's value only applies as the first-sale
       // fallback that sets an unset platform's currency (#196).
@@ -284,6 +287,22 @@ export function SaleFormDialog({
               value={externalRef}
               onChange={(e) => setExternalRef(e.target.value)}
               placeholder="Transaction / order no. in the marketplace"
+              disabled={isPending}
+              style={INPUT_STYLE}
+            />
+          </div>
+
+          {/* Link to the transaction on the marketplace (#292) — the sale-side counterpart of the
+              offer's listing URL. Also editable in place on the detail screen, in any status. */}
+          <div style={FIELD_GAP}>
+            <LabelWithError htmlFor="sale-transaction-url">Transaction link (optional)</LabelWithError>
+            <input
+              id="sale-transaction-url"
+              type="url"
+              inputMode="url"
+              value={transactionUrl}
+              onChange={(e) => setTransactionUrl(e.target.value)}
+              placeholder="https://…"
               disabled={isPending}
               style={INPUT_STYLE}
             />

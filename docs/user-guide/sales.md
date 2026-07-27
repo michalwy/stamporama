@@ -22,6 +22,8 @@ Click **Record sale** and fill in:
   is unknown or anonymous.
 - **Order number** — the transaction/order number from the marketplace (optional), so you can
   reconcile the sale against the external system later. Shown on the sale row and header.
+- **Transaction link** — the address of the order/transaction page on the marketplace (optional).
+  Paste whatever the platform gives you; it is stored as-is.
 - **Sale date** — defaults to today; the FX rate to your base currency is frozen at this date.
 - **Currency** — fixed by the platform and shown locked; every amount on the sale is in it. The
   first time you sell (or list) on a platform that has no currency yet, you pick one inline and it
@@ -96,6 +98,14 @@ handling follows the total minus the offer prices and re-settles automatically a
 remove sold sets. If the total ever falls below the offer prices, handling is held at 0 and a
 warning asks you to raise the total. Switch a sale between the two modes any time from **Edit
 header**.
+
+Once a transaction link is set, a **🔗 Transaction** link appears on the sale row and in the detail
+header, and opens the marketplace's order page in a new tab. On the row it opens the link only — the
+sale itself doesn't open — and it's also in the row's **⋮** menu as **Open transaction**. In the
+header, use the **✎** beside the link to change it without navigating away; if no link is recorded
+yet, click **Add transaction link** and type one. You can set or change it whatever the sale's
+[status](#fulfillment-status) is, including long after it was received — the order page is usually
+what you go back to once a sale is done.
 
 You can revise the header (platform, buyer, date, buyer handling, commission) any time with
 **Edit header** — though the platform is locked once units are recorded, since a sale stays on one

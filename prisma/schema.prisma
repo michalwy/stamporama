@@ -1168,6 +1168,10 @@ model Sale {
   // The transaction / order number in the external system (e.g. a Delcampe or Allegro order id),
   // free-text. Null when not recorded. Handy for reconciling against the marketplace.
   externalRef   String?
+  // Link to the transaction/order page on the marketplace (#292), the sale-side counterpart of
+  // `Offer.url`. Free-text, stored as pasted (only trimmed) — collectors paste whatever the
+  // platform gives them. Editable in any fulfillment status, for record-keeping (mirrors #213).
+  transactionUrl String?
   // Base-currency FX rate frozen at `soldAt` (DECIMAL(65,30), like `ExchangeRate.rate`);
   // null when base == transaction currency or no rate is known yet.
   fxRateToBase  Decimal?

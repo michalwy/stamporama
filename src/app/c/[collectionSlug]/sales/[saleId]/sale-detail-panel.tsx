@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -195,6 +196,43 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               # {sale.externalRef}
             </span>
           )}
+          {/* Transaction link (#292): the order page on the marketplace. Editable whatever the
+              fulfillment status is — the order page is most often what you come back to *after* the
+              sale completed (#213). When set, the link opens on click and a separate pencil edits
+              it, so the click-to-open is never hijacked (#214). */}
+          <InlineText
+            value={sale.transactionUrl ?? ""}
+            placeholder="Add transaction link"
+            display={
+              sale.transactionUrl ? (
+                <a
+                  href={sale.transactionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+                  title="Open the transaction on the marketplace"
+                >
+                  🔗 Transaction
+                </a>
+              ) : (
+                <span style={{ ...CHIP, color: "var(--color-text-muted)", cursor: "text" }}>
+                  Add transaction link
+                </span>
+              )
+            }
+            editable
+            editControl={!!sale.transactionUrl}
+            editAriaLabel="Edit transaction link"
+            isPending={isPending}
+            inputType="url"
+            onSave={(v) =>
+              run(async () => {
+                const { updateSaleTransactionUrlAction } = await import("@/app/actions/sales");
+                return updateSaleTransactionUrlAction(sale.id, v);
+              })
+            }
+          />
           {sale.fxRateToBase && (
             <span style={CHIP} title={`Frozen FX rate to ${sale.baseCurrency}: ${sale.fxRateToBase}`}>
               → {sale.baseCurrency} @ {formatRate(sale.fxRateToBase)}
@@ -468,6 +506,7 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             buyerId: sale.buyerId,
             buyerName: sale.buyerName,
             externalRef: sale.externalRef ?? "",
+            transactionUrl: sale.transactionUrl ?? "",
             soldAt: soldDate,
             currency: sale.currency,
             buyerHandling: sale.buyerPaidTotal != null ? "" : (sale.buyerHandling ?? ""),

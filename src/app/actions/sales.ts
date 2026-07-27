@@ -7,6 +7,7 @@ import {
   createSale,
   updateSaleHeader,
   updateSaleAmount,
+  updateSaleTransactionUrl,
   updateSaleShipping,
   addSaleLines,
   updateSaleLinePrice,
@@ -21,6 +22,9 @@ import {
 } from "@/lib/sales";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import { parsePrice, parseAmount, parseSaleDate } from "@/lib/sale-rules";
+// The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
+// so it reuses that normaliser rather than restating it.
+import { normalizeUrl } from "@/lib/offer-rules";
 
 // Server actions for the sale transaction flow (ADR-0012, #166). Thin wrappers over the `sales`
 // domain module. The flow mirrors purchases (#120/#121): a small header (platform + date +
@@ -55,6 +59,8 @@ export interface SaleHeaderRaw {
   buyerId: string | null;
   buyerName: string | null;
   externalRef: string;
+  /** Link to the transaction on the marketplace (#292). Blank clears it. */
+  transactionUrl: string;
   soldAt: string;
   currency: string;
   /** Which buyer-side anchor the form submitted (#205): "direct" uses `buyerHandling`, "total" uses
@@ -74,6 +80,7 @@ async function resolveHeader(
       platformId: string;
       buyerId: string | null;
       externalRef: string | null;
+      transactionUrl: string | null;
       soldAt: Date;
       currency: string;
       buyerHandling: string | null;
@@ -118,6 +125,7 @@ async function resolveHeader(
     platformId,
     buyerId,
     externalRef: raw.externalRef.trim() || null,
+    transactionUrl: normalizeUrl(raw.transactionUrl),
     soldAt,
     currency,
     buyerHandling: raw.handlingMode === "total" ? null : buyerHandling.value,
@@ -138,6 +146,7 @@ export async function createSaleAction(
       platformId: header.platformId,
       buyerId: header.buyerId,
       externalRef: header.externalRef,
+      transactionUrl: header.transactionUrl,
       soldAt: header.soldAt,
       currency: header.currency,
       buyerHandling: header.buyerHandling,
@@ -163,6 +172,7 @@ export async function updateSaleHeaderAction(
       platformId: header.platformId,
       buyerId: header.buyerId,
       externalRef: header.externalRef,
+      transactionUrl: header.transactionUrl,
       soldAt: header.soldAt,
       currency: header.currency,
       buyerHandling: header.buyerHandling,
@@ -172,6 +182,21 @@ export async function updateSaleHeaderAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the sale.");
+  }
+}
+
+/** Set (or clear) the sale's link to the transaction on the marketplace (#292), in place from the
+ * detail screen. Blank clears it. Allowed in any fulfillment status, like the offer link (#213). */
+export async function updateSaleTransactionUrlAction(
+  saleId: string,
+  raw: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await updateSaleTransactionUrl(session.user.id, saleId, normalizeUrl(raw));
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to save the transaction link.");
   }
 }
 

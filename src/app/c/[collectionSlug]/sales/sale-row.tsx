@@ -38,6 +38,16 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
 
   const menuActions: RowAction[] = [
     { key: "view", label: "View", icon: "↗", onSelect: () => router.push(detailHref) },
+    ...(sale.transactionUrl
+      ? [
+          {
+            key: "transaction",
+            label: "Open transaction",
+            icon: "🔗",
+            onSelect: () => window.open(sale.transactionUrl!, "_blank", "noopener,noreferrer"),
+          } as RowAction,
+        ]
+      : []),
     {
       key: "delete",
       label: "Delete",
@@ -121,6 +131,20 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
           <span style={CHIP} title="Physical copies that left">
             {sale.itemCount} {unitWord}
           </span>
+          {/* Transaction link (#292) — opens the marketplace's order page without opening the sale.
+              Stops the click so the row's own navigation doesn't fire too. */}
+          {sale.transactionUrl && (
+            <a
+              href={sale.transactionUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Open the transaction on the marketplace"
+              style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+            >
+              🔗 Transaction
+            </a>
+          )}
           <span
             style={{
               marginLeft: "auto",

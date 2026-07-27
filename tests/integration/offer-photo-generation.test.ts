@@ -723,6 +723,7 @@ describe("offer photo generation (#311)", () => {
       platformId,
       buyerId: null,
       externalRef: null,
+      transactionUrl: null,
       soldAt: new Date(),
       currency: "EUR",
       buyerHandling: null,

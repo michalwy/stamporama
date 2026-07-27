@@ -311,6 +311,9 @@ export interface SaleHeaderInput {
   buyerId: string | null;
   /** The external system's transaction / order number, or null. */
   externalRef: string | null;
+  /** Link to the transaction/order page on the marketplace (#292), or null. Trimmed, not validated
+   * — the offer link's rule (`normalizeUrl`). */
+  transactionUrl: string | null;
   soldAt: Date;
   currency: string;
   /** Buyer-paid handling (+) and platform commission (−) are known at sale time, so they live on
@@ -417,6 +420,7 @@ export async function createSale(
       platformId: input.platformId,
       buyerId: input.buyerId,
       externalRef: input.externalRef,
+      transactionUrl: input.transactionUrl,
       soldAt: input.soldAt,
       currency,
       fxRateToBase,
@@ -503,6 +507,7 @@ export async function updateSaleHeader(
       platformId: input.platformId,
       buyerId: input.buyerId,
       externalRef: input.externalRef,
+      transactionUrl: input.transactionUrl,
       soldAt: input.soldAt,
       fxRateToBase,
       buyerHandling: input.buyerHandling,
@@ -531,6 +536,18 @@ export async function updateSaleAmount(
   if (field === "buyerHandling") data.buyerPaidTotal = null;
   else if (field === "buyerPaidTotal") data.buyerHandling = null;
   await prisma.sale.update({ where: { id: saleId }, data });
+}
+
+/** Set (or clear) the link to the transaction on the marketplace (#292). Editable whatever the
+ * fulfillment status is — a link is record-keeping, and the order page is often the thing you go
+ * back to *after* the sale completed (the offer link's rule, #213). Null when cleared. */
+export async function updateSaleTransactionUrl(
+  ownerId: string,
+  saleId: string,
+  url: string | null
+): Promise<void> {
+  await assertSaleOwner(ownerId, saleId);
+  await prisma.sale.update({ where: { id: saleId }, data: { transactionUrl: url } });
 }
 
 /** Set (or clear) my shipping cost in any currency (#206). Freezes the shipping currency's base
@@ -741,6 +758,8 @@ export interface SaleListItem {
   buyerName: string | null;
   /** External system's transaction / order number, or null. */
   externalRef: string | null;
+  /** Link to the transaction on the marketplace (#292), or null. */
+  transactionUrl: string | null;
   /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
   status: string;
   soldAt: Date;
@@ -762,6 +781,7 @@ const SALE_LIST_SELECT = {
   id: true,
   platformId: true,
   externalRef: true,
+  transactionUrl: true,
   status: true,
   soldAt: true,
   currency: true,
@@ -809,6 +829,7 @@ function toSaleListItem(
     id: string;
     platformId: string;
     externalRef: string | null;
+    transactionUrl: string | null;
     status: string;
     soldAt: Date;
     currency: string;
@@ -845,6 +866,7 @@ function toSaleListItem(
     platformName: row.platform.name,
     buyerName: row.buyer?.name ?? null,
     externalRef: row.externalRef,
+    transactionUrl: row.transactionUrl,
     status: row.status,
     soldAt: row.soldAt,
     currency: row.currency,
@@ -965,6 +987,8 @@ export interface SaleDetail {
   buyerId: string | null;
   buyerName: string | null;
   externalRef: string | null;
+  /** Link to the transaction on the marketplace (#292), or null. Editable in place in any status. */
+  transactionUrl: string | null;
   baseCurrency: string;
   soldAt: Date;
   currency: string;
@@ -1012,6 +1036,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       platformId: true,
       buyerId: true,
       externalRef: true,
+      transactionUrl: true,
       soldAt: true,
       currency: true,
       fxRateToBase: true,
@@ -1121,6 +1146,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     buyerId: sale.buyerId,
     buyerName: sale.buyer?.name ?? null,
     externalRef: sale.externalRef,
+    transactionUrl: sale.transactionUrl,
     baseCurrency,
     soldAt: sale.soldAt,
     currency: sale.currency,
