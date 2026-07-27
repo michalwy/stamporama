@@ -3,6 +3,7 @@
 
 const MATCH_ON_LOAD = "matchOnLoad";
 export const CATALOG_BACKFILL = "catalogBackfill";
+const SHOW_LINKED_DECISIONS = "showLinkedDecisions";
 
 /**
  * Whether to match a supported page automatically as it loads, so the toolbar badge can report how
@@ -32,4 +33,19 @@ export async function getCatalogBackfill(): Promise<boolean> {
 
 export async function setCatalogBackfill(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [CATALOG_BACKFILL]: enabled });
+}
+
+/**
+ * Whether "needs your decision" also lists the rows whose every candidate stamp is already linked to
+ * another Colnect item (#305). Default off: those are decisions already taken, and they otherwise
+ * come back on every re-scan of the page. Persisted rather than per-window, because the answer is a
+ * standing preference — the same pages get re-scanned for weeks.
+ */
+export async function getShowLinkedDecisions(): Promise<boolean> {
+  const data = await chrome.storage.local.get(SHOW_LINKED_DECISIONS);
+  return data[SHOW_LINKED_DECISIONS] === true;
+}
+
+export async function setShowLinkedDecisions(shown: boolean): Promise<void> {
+  await chrome.storage.local.set({ [SHOW_LINKED_DECISIONS]: shown });
 }

@@ -81,3 +81,20 @@ export type MatchResult =
       refs: RefView[];
     }
   | { colnectId: string; status: "skipped"; reason: string; refs: RefView[] };
+
+/**
+ * Whether a "needs your decision" row is one the collector has, in effect, already answered (#305):
+ * every stamp it could be linked to already carries a Colnect ID. The commonest shape is
+ * `existing-different` — our stamp is linked to a neighbouring Colnect item, and the matcher never
+ * silently overwrites (#250), so the same row comes back on every re-scan of the page.
+ *
+ * A row keeping one free candidate is *not* resolved: that free stamp is most likely the answer, so
+ * hiding the row would hide the work.
+ */
+export function isAlreadyLinkedElsewhere(r: MatchResult): boolean {
+  return (
+    r.status === "needs-confirm" &&
+    r.candidates.length > 0 &&
+    r.candidates.every((c) => c.existingColnectId !== null)
+  );
+}

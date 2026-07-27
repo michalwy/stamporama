@@ -14,8 +14,15 @@ import type {
   ExtractResponse,
   MatchResponse,
 } from "../core/messages";
-import { CATALOG_BACKFILL, getCatalogBackfill, setCatalogBackfill } from "../core/settings";
+import {
+  CATALOG_BACKFILL,
+  getCatalogBackfill,
+  getShowLinkedDecisions,
+  setCatalogBackfill,
+  setShowLinkedDecisions,
+} from "../core/settings";
 import type { ExtractedItem } from "../platform/types";
+import { isAlreadyLinkedElsewhere } from "../core/decisions";
 import type { BackfillProposal, Candidate, MatchResult, RefView } from "../core/decisions";
 
 // Popup controller. On open it detects whether the active tab is a page one of our platform modules
@@ -44,6 +51,9 @@ const progressEl = $("progress");
 const barEl = $("bar");
 const writeAutoBtn = $<HTMLButtonElement>("writeAuto");
 const backfillEl = $<HTMLInputElement>("backfill");
+const showLinkedOptEl = $("showLinkedOpt");
+const showLinkedEl = $<HTMLInputElement>("showLinked");
+const showLinkedLabelEl = $("showLinkedLabel");
 const overlay = $("overlay");
 const confirmMsg = $("confirmMsg");
 const confirmOk = $<HTMLButtonElement>("confirmOk");
@@ -53,6 +63,8 @@ let profile: Profile | null = null;
 let items: ExtractedItem[] = [];
 let results: MatchResult[] = [];
 let busy = false;
+/** #305 — whether decisions whose every candidate is already linked stay in the list. */
+let showLinked = false;
 /** Bumped on every profile switch, so a match still in flight for the previous target is discarded. */
 let generation = 0;
 
@@ -383,7 +395,11 @@ async function runMatch(dryRun: boolean): Promise<MatchResult[] | null> {
 
 function renderChips(): void {
   const auto = results.filter((r) => r.status === "auto" && !r.alreadySet).length;
-  const ask = results.filter((r) => r.status === "needs-confirm").length;
+  // Counts what the list shows: with the already-linked decisions folded away (#305), a chip that
+  // still counted them would send you looking for rows that aren't there.
+  const ask = results.filter(
+    (r) => r.status === "needs-confirm" && (showLinked || !isAlreadyLinkedElsewhere(r))
+  ).length;
   const linked = results.filter((r) => r.status === "auto" && r.alreadySet).length;
   const skipped = results.filter((r) => r.status === "skipped").length;
   const fills = pendingFillCount();
@@ -779,7 +795,15 @@ function section(
 
 function render(): void {
   picks = [];
-  const needsConfirm = results.filter((r) => r.status === "needs-confirm");
+  // Decisions already taken elsewhere (#305) leave the list unless asked for. The control lives in
+  // the toolbar row rather than in the section heading: with every such row hidden the section is
+  // gone, and a toggle inside it would take the only way back with it.
+  const linkedElsewhere = results.filter(isAlreadyLinkedElsewhere);
+  showLinkedOptEl.hidden = linkedElsewhere.length === 0;
+  showLinkedLabelEl.textContent = `Show ${linkedElsewhere.length} already linked elsewhere`;
+  const needsConfirm = results.filter(
+    (r) => r.status === "needs-confirm" && (showLinked || !isAlreadyLinkedElsewhere(r))
+  );
   const willWrite = results.filter((r) => r.status === "auto" && !r.alreadySet && !r.written);
   const done = results.filter((r) => r.status === "auto" && (r.alreadySet || r.written));
   const skipped = results.filter((r) => r.status === "skipped");
@@ -853,8 +877,18 @@ backfillEl.addEventListener("change", () => {
   })();
 });
 
+// Purely a view filter over results already in hand — no re-match, so it costs nothing to flip back
+// and forth while reading the list.
+showLinkedEl.addEventListener("change", () => {
+  showLinked = showLinkedEl.checked;
+  void setShowLinkedDecisions(showLinked);
+  if (results.length > 0) render();
+});
+
 void (async () => {
   backfillEl.checked = await getCatalogBackfill();
+  showLinked = await getShowLinkedDecisions();
+  showLinkedEl.checked = showLinked;
   await refreshProfile();
   ready = true;
   await scanAndMatch();

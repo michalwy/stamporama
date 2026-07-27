@@ -37,6 +37,20 @@ shows the active one in a coloured badge, so it is always clear where a match wi
 
 You can revoke a connection at any time from the same **Settings → Assistant** screen.
 
+## Decisions that are already made
+
+The Assistant never silently replaces a Colnect ID you already have. So when one of your stamps is
+linked to a *neighbouring* Colnect item, that stamp keeps coming back under **Needs your decision**
+every time you re-scan the page — even though you settled it long ago.
+
+Those rows are hidden by default. A row disappears only when **every** stamp it could be linked to
+already carries a Colnect ID; if one of the candidates is still free, the row stays, because that
+free stamp is most likely the answer.
+
+When there are hidden rows, a **Show N already linked elsewhere** checkbox appears beside *Fill
+missing catalog numbers* — tick it to bring them back and change one. It only filters what is on
+screen (nothing is re-matched), and the extension remembers the setting.
+
 ## Keeping it up to date
 
 Nothing to do — Chrome updates it from the store. Each Stamporama release publishes a matching

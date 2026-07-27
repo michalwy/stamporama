@@ -33,6 +33,9 @@
         }
       }
       * { box-sizing: border-box; }
+      /* Several elements toggled with .hidden also set display (flex), which would win over the
+         attribute's UA rule and leave them on screen. */
+      [hidden] { display: none !important; }
       body {
         margin: 0;
         /* Hosted as a standalone window (opened centred by the service worker), so the layout is
@@ -244,6 +247,10 @@
         <label class="opt" title="Add catalog numbers Colnect lists for catalogs your stamp has none of. Existing numbers are never overwritten.">
           <input type="checkbox" id="backfill" checked />
           Fill missing catalog numbers
+        </label>
+        <label id="showLinkedOpt" class="opt" title="Stamps whose every candidate is already linked to another Colnect item. They need no decision unless you want to change one." hidden>
+          <input type="checkbox" id="showLinked" />
+          <span id="showLinkedLabel">Show already linked elsewhere</span>
         </label>
       </div>
 
