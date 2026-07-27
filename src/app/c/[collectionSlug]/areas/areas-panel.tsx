@@ -27,6 +27,7 @@ import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 
@@ -952,20 +953,23 @@ export function AreasPanel({
 
                 {/* Primary catalog badge */}
                 {primaryCatalog && (
-                  <span
-                    style={{
-                      ...catalogBadgeStyle,
-                      fontStyle: isPrimaryInherited ? "italic" : undefined,
-                      color: "var(--color-accent)",
-                      borderColor: "var(--color-accent)",
-                    }}
-                    title={isPrimaryInherited ? "Primary catalog (inherited)" : "Primary catalog"}
+                  <Tooltip
+                    content={isPrimaryInherited ? "Primary catalog (inherited)" : "Primary catalog"}
                   >
-                    {(() => {
-                      const abbr = primaryCatalog.vendorAbbreviation;
-                      return primaryPrefix ? `${abbr}·${primaryPrefix}` : abbr;
-                    })()}
-                  </span>
+                    <span
+                      style={{
+                        ...catalogBadgeStyle,
+                        fontStyle: isPrimaryInherited ? "italic" : undefined,
+                        color: "var(--color-accent)",
+                        borderColor: "var(--color-accent)",
+                      }}
+                    >
+                      {(() => {
+                        const abbr = primaryCatalog.vendorAbbreviation;
+                        return primaryPrefix ? `${abbr}·${primaryPrefix}` : abbr;
+                      })()}
+                    </span>
+                  </Tooltip>
                 )}
 
                 {/* Other prefix entry badges */}
@@ -978,16 +982,19 @@ export function AreasPanel({
                         (e) => e.catalogNameId === entry.catalogNameId
                       );
                       return (
-                        <span
+                        <Tooltip
                           key={entry.catalogNameId}
-                          style={{
-                            ...catalogBadgeStyle,
-                            fontStyle: isInherited ? "italic" : undefined,
-                          }}
-                          title={isInherited ? "Inherited from parent" : undefined}
+                          content={isInherited ? "Inherited from parent" : undefined}
                         >
-                          {entry.prefix ? `${abbr}·${entry.prefix}` : abbr}
-                        </span>
+                          <span
+                            style={{
+                              ...catalogBadgeStyle,
+                              fontStyle: isInherited ? "italic" : undefined,
+                            }}
+                          >
+                            {entry.prefix ? `${abbr}·${entry.prefix}` : abbr}
+                          </span>
+                        </Tooltip>
                       );
                     })}
                   </span>

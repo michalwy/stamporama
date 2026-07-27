@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Tooltip } from "./tooltip";
 
 const INLINE_INPUT: React.CSSProperties = {
   padding: "0.125rem 0.375rem",
@@ -77,32 +78,34 @@ export function InlineText({
       return (
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
           {display}
-          <button
-            type="button"
-            onClick={startEditing}
-            disabled={isPending}
-            aria-label={editAriaLabel}
-            title={editAriaLabel}
-            style={EDIT_CONTROL}
-          >
-            ✎
-          </button>
+          <Tooltip content={editAriaLabel}>
+            <button
+              type="button"
+              onClick={startEditing}
+              disabled={isPending}
+              aria-label={editAriaLabel}
+              style={EDIT_CONTROL}
+            >
+              ✎
+            </button>
+          </Tooltip>
         </span>
       );
     }
     return (
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={startEditing}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") startEditing();
-        }}
-        title="Click to edit"
-        style={{ cursor: "text", display: "inline-flex", alignItems: "center" }}
-      >
-        {display}
-      </span>
+      <Tooltip content="Click to edit">
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={startEditing}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") startEditing();
+          }}
+          style={{ cursor: "text", display: "inline-flex", alignItems: "center" }}
+        >
+          {display}
+        </span>
+      </Tooltip>
     );
   }
 

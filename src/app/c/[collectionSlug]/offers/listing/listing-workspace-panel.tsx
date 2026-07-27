@@ -13,6 +13,7 @@ import {
 } from "@/lib/listing-groups";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { flattenAreaTree, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -363,26 +364,33 @@ export function ListingWorkspacePanel({
         {platformId && visible.length > 0 && (
           <>
             <span style={{ flex: 1 }} />
-            <button
-              type="button"
-              onClick={() => setConfirmRegenerate(true)}
-              disabled={bulkPending !== null}
-              title={`Re-render the photos of all ${visible.length} shown ${
+            <Tooltip
+              content={`Re-render the photos of all ${visible.length} shown ${
                 visible.length === 1 ? "offer" : "offers"
               }`}
-              style={BULK_BTN}
             >
-              ↻ Regenerate photos
-            </button>
-            <button
-              type="button"
-              onClick={downloadVisibleZip}
-              disabled={bulkPending !== null}
-              title="Download every shown offer's upload set as one ZIP, a folder per offer"
-              style={{ ...BULK_BTN, color: "var(--color-accent)" }}
+              <button
+                type="button"
+                onClick={() => setConfirmRegenerate(true)}
+                disabled={bulkPending !== null}
+                style={BULK_BTN}
+              >
+                ↻ Regenerate photos
+              </button>
+            </Tooltip>
+            <Tooltip
+              content="Download every shown offer's upload set as one ZIP, a folder per offer"
+              align="end"
             >
-              {bulkPending === "zip" ? "Preparing…" : "↓ ZIP all shown"}
-            </button>
+              <button
+                type="button"
+                onClick={downloadVisibleZip}
+                disabled={bulkPending !== null}
+                style={{ ...BULK_BTN, color: "var(--color-accent)" }}
+              >
+                {bulkPending === "zip" ? "Preparing…" : "↓ ZIP all shown"}
+              </button>
+            </Tooltip>
           </>
         )}
       </div>
@@ -496,29 +504,30 @@ export function ListingWorkspacePanel({
             const heading = groupHeading(group.key);
             return (
               <section key={group.id}>
-                <h3
-                  title={heading.hint}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    margin: 0,
-                    padding: "0.5rem 1rem",
-                    borderBottom: "1px solid var(--color-border)",
-                    background: "var(--color-bg-page)",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "var(--color-text-muted)",
-                    fontStyle: group.key.mixed ? "italic" : "normal",
-                  }}
-                >
-                  {heading.label}
-                  <span style={{ fontWeight: 400, fontStyle: "normal" }}>
-                    {group.offers.length === 1 ? "1 offer" : `${group.offers.length} offers`}
-                  </span>
-                </h3>
+                <Tooltip content={heading.hint} align="start" style={{ display: "block" }}>
+                  <h3
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      margin: 0,
+                      padding: "0.5rem 1rem",
+                      borderBottom: "1px solid var(--color-border)",
+                      background: "var(--color-bg-page)",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: "var(--color-text-muted)",
+                      fontStyle: group.key.mixed ? "italic" : "normal",
+                    }}
+                  >
+                    {heading.label}
+                    <span style={{ fontWeight: 400, fontStyle: "normal" }}>
+                      {group.offers.length === 1 ? "1 offer" : `${group.offers.length} offers`}
+                    </span>
+                  </h3>
+                </Tooltip>
                 <div
                   style={{
                     display: "flex",

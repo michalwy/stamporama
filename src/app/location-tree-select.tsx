@@ -2,6 +2,7 @@
 
 import type { LocationData } from "@/lib/locations";
 import { buildTree, type TreeNode } from "@/app/tree-picker-utils";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   TREE_SELECT_NONE_ID,
   TreeSelectButton,
@@ -252,14 +253,15 @@ function LocationTreeSelectNode({
         ) : (
           // Grouping-only node in assignment mode: a non-selectable header. Clicking
           // it toggles expansion so the user can drill into its assignable children.
-          <button
-            className="min-h-9 w-full cursor-default rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--color-text-muted)] transition"
-            type="button"
-            title="Grouping location — pick an assignable child"
-            onClick={() => hasChildren && onToggleExpanded(location.id)}
-          >
-            <span className="block truncate">{location.name}</span>
-          </button>
+          <Tooltip content="Grouping location — pick an assignable child" style={{ width: "100%" }}>
+            <button
+              className="min-h-9 w-full cursor-default rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--color-text-muted)] transition"
+              type="button"
+              onClick={() => hasChildren && onToggleExpanded(location.id)}
+            >
+              <span className="block truncate">{location.name}</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       {hasChildren && isExpanded ? (

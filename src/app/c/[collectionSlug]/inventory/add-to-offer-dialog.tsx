@@ -31,6 +31,7 @@ import {
 } from "@/app/c/[collectionSlug]/offers/use-last-offer-defaults";
 import { useInvalidateInventory } from "./use-inventory-query";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 const MUTED = "var(--color-text-muted)";
@@ -595,7 +596,9 @@ function OfferGroup({
             {offer.label}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
-            <span style={CHIP} title="Platform">{offer.platformName}</span>
+            <Tooltip content="Platform">
+              <span style={CHIP}>{offer.platformName}</span>
+            </Tooltip>
             <OfferStateChip state={offer.state} />
             <span style={{ fontSize: "0.75rem", color: MUTED }}>
               {offer.sets.length} set{offer.sets.length === 1 ? "" : "s"}

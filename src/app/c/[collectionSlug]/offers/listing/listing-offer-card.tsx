@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { PhotoLightbox } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatBytes } from "@/lib/format-bytes";
 import { normalizeDescriptionFormat } from "@/lib/description-format";
@@ -165,94 +166,101 @@ export function ListingOfferCard({
           padding: "0.5rem 0.75rem",
         }}
       >
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          title={expanded ? "Collapse" : "Show the posting kit"}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flex: 1,
-            minWidth: 0,
-            padding: 0,
-            border: "none",
-            background: "none",
-            textAlign: "left",
-            cursor: "pointer",
-          }}
+        <Tooltip
+          content={expanded ? "Collapse" : "Show the posting kit"}
+          align="start"
+          style={{ flex: 1, minWidth: 0 }}
         >
-          <span aria-hidden style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-            {expanded ? "▾" : "▸"}
-          </span>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              width: "100%",
+              minWidth: 0,
+              padding: 0,
+              border: "none",
+              background: "none",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+              {expanded ? "▾" : "▸"}
+            </span>
+            <span
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={title}
+            >
+              {title}
+            </span>
+            {offer.setCount > 1 && (
+              <Tooltip content="Sets in this offer" style={{ flexShrink: 0 }}>
+                <span style={CHIP}>{offer.setCount}×</span>
+              </Tooltip>
+            )}
+            <Tooltip content="Generated images stored for this offer" style={{ flexShrink: 0 }}>
+              <span
+                style={{
+                  ...CHIP,
+                  ...(photos.warn
+                    ? { color: "var(--color-warning)", borderColor: "var(--color-warning)" }
+                    : {}),
+                }}
+              >
+                {photos.label}
+              </span>
+            </Tooltip>
+          </button>
+        </Tooltip>
+
+        <Tooltip content="Asking price">
           <span
             style={{
               fontSize: "0.875rem",
               fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
               color: "var(--color-text-primary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
-            title={title}
           >
-            {title}
+            {offer.price} {offer.currency}
+            {offer.priceBase && (
+              <span
+                style={{
+                  marginLeft: "0.375rem",
+                  fontWeight: 500,
+                  fontSize: "0.75rem",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                ≈ {offer.priceBase} {offer.baseCurrency}
+              </span>
+            )}
           </span>
-          {offer.setCount > 1 && (
-            <span style={{ ...CHIP, flexShrink: 0 }} title="Sets in this offer">
-              {offer.setCount}×
-            </span>
-          )}
-          <span
-            style={{
-              ...CHIP,
-              flexShrink: 0,
-              ...(photos.warn
-                ? { color: "var(--color-warning)", borderColor: "var(--color-warning)" }
-                : {}),
-            }}
-            title="Generated images stored for this offer"
+        </Tooltip>
+
+        <Tooltip content="Mark this offer live and record its listing URL" align="end">
+          <button
+            type="button"
+            onClick={onPublish}
+            disabled={isPublishing}
+            style={{ ...PUBLISH_BTN, opacity: isPublishing ? 0.6 : 1 }}
           >
-            {photos.label}
-          </span>
-        </button>
-
-        <span
-          style={{
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            fontVariantNumeric: "tabular-nums",
-            color: "var(--color-text-primary)",
-            whiteSpace: "nowrap",
-          }}
-          title="Asking price"
-        >
-          {offer.price} {offer.currency}
-          {offer.priceBase && (
-            <span
-              style={{
-                marginLeft: "0.375rem",
-                fontWeight: 500,
-                fontSize: "0.75rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              ≈ {offer.priceBase} {offer.baseCurrency}
-            </span>
-          )}
-        </span>
-
-        <button
-          type="button"
-          onClick={onPublish}
-          disabled={isPublishing}
-          title="Mark this offer live and record its listing URL"
-          style={{ ...PUBLISH_BTN, opacity: isPublishing ? 0.6 : 1 }}
-        >
-          <span aria-hidden>▲</span>
-          {isPublishing ? "Publishing…" : "Publish"}
-        </button>
+            <span aria-hidden>▲</span>
+            {isPublishing ? "Publishing…" : "Publish"}
+          </button>
+        </Tooltip>
 
         <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
       </div>
@@ -367,30 +375,30 @@ function PostingKit({
           </span>
           <span style={{ flex: 1 }} />
           {plan?.outOfDate && (
-            <span
-              style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning)" }}
-              title="The offer changed after these images were rendered — regenerate them on the offer screen"
-            >
-              Out of date
-            </span>
+            <Tooltip content="The offer changed after these images were rendered — regenerate them on the offer screen">
+              <span
+                style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning)" }}
+              >
+                Out of date
+              </span>
+            </Tooltip>
           )}
           {uploadable.length > 0 && (
-            <a
-              href={`/api/collections/${collectionId}/offers/${offerId}/photos/zip`}
-              download
-              title="Download the upload set as a ZIP, numbered in upload order"
-              style={{ ...SMALL_BTN, color: "var(--color-accent)" }}
-            >
-              ↓ ZIP
-            </a>
+            <Tooltip content="Download the upload set as a ZIP, numbered in upload order">
+              <a
+                href={`/api/collections/${collectionId}/offers/${offerId}/photos/zip`}
+                download
+                style={{ ...SMALL_BTN, color: "var(--color-accent)" }}
+              >
+                ↓ ZIP
+              </a>
+            </Tooltip>
           )}
-          <Link
-            href={`/c/${collectionSlug}/offers/${offerId}`}
-            style={SMALL_BTN}
-            title="Open the offer to edit its texts, photos or composition"
-          >
-            Open offer ↗
-          </Link>
+          <Tooltip content="Open the offer to edit its texts, photos or composition" align="end">
+            <Link href={`/c/${collectionSlug}/offers/${offerId}`} style={SMALL_BTN}>
+              Open offer ↗
+            </Link>
+          </Tooltip>
         </div>
 
         {images.length === 0 && !planLoading && (
@@ -422,42 +430,47 @@ function PostingKit({
                   opacity: image.publish && !image.overLimit ? 1 : 0.5,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setLightbox(index)}
-                  title={imageTitle(image)}
-                  aria-label={`View ${imageTitle(image)}`}
-                  style={{
-                    width: "4.5rem",
-                    height: "4.5rem",
-                    padding: 0,
-                    borderRadius: "0.375rem",
-                    overflow: "hidden",
-                    border: "1px solid var(--color-border)",
-                    background: "var(--color-bg-elevated)",
-                    cursor: "pointer",
-                  }}
+                <Tooltip content={imageTitle(image)}>
+                  <button
+                    type="button"
+                    onClick={() => setLightbox(index)}
+                    aria-label={`View ${imageTitle(image)}`}
+                    style={{
+                      width: "4.5rem",
+                      height: "4.5rem",
+                      padding: 0,
+                      borderRadius: "0.375rem",
+                      overflow: "hidden",
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-bg-elevated)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrl(collectionId, image.photoId, "thumb")}
+                      alt={imageTitle(image)}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  </button>
+                </Tooltip>
+                <Tooltip
+                  content={`Download as ${image.fileName} · ${formatBytes(image.sizeBytes)}`}
+                  placement="bottom"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photoUrl(collectionId, image.photoId, "thumb")}
-                    alt={imageTitle(image)}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
-                </button>
-                <a
-                  href={photoDownloadUrl(collectionId, image.photoId, image.fileName)}
-                  download={image.fileName}
-                  title={`Download as ${image.fileName} · ${formatBytes(image.sizeBytes)}`}
-                  style={{
-                    fontSize: "0.6875rem",
-                    fontWeight: 600,
-                    color: "var(--color-accent)",
-                    textDecoration: "none",
-                  }}
-                >
-                  ↓ {image.fileName.replace(/\.[^.]+$/, "")}
-                </a>
+                  <a
+                    href={photoDownloadUrl(collectionId, image.photoId, image.fileName)}
+                    download={image.fileName}
+                    style={{
+                      fontSize: "0.6875rem",
+                      fontWeight: 600,
+                      color: "var(--color-accent)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    ↓ {image.fileName.replace(/\.[^.]+$/, "")}
+                  </a>
+                </Tooltip>
               </li>
             ))}
           </ul>

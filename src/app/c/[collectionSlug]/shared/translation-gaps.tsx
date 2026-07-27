@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { languageLabel } from "@/lib/languages";
 import type { TitleFallback } from "@/lib/offer-title-template";
+import { Tooltip } from "./tooltip";
 
 // Filling a **missing translation where the generated title needs it** (#299/#300).
 //
@@ -135,16 +136,16 @@ function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps
         autoFocus={autoFocus}
         style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
       />
-      <span
-        style={{
-          flex: "0 0 4.5rem",
-          fontSize: "0.6875rem",
-          color: state === "error" ? "var(--color-danger)" : "var(--color-text-muted)",
-        }}
-        title={error}
-      >
-        {state === "saving" ? "Saving…" : state === "saved" ? "✓ Saved" : state === "error" ? "Failed" : ""}
-      </span>
+      <Tooltip content={error} style={{ flex: "0 0 4.5rem" }}>
+        <span
+          style={{
+            fontSize: "0.6875rem",
+            color: state === "error" ? "var(--color-danger)" : "var(--color-text-muted)",
+          }}
+        >
+          {state === "saving" ? "Saving…" : state === "saved" ? "✓ Saved" : state === "error" ? "Failed" : ""}
+        </span>
+      </Tooltip>
     </div>
   );
 }

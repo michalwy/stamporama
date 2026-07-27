@@ -1,6 +1,7 @@
 "use client";
 
 import { type OfferState, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Shared chip presentation for an offer's lifecycle state (ADR-0012, #165), reused by the list
 // rows, the lot detail panel's Offers section, and the dialog header so an offer reads
@@ -19,17 +20,18 @@ const CHIP: React.CSSProperties = {
 
 function tinted(token: string, label: string, title?: string) {
   return (
-    <span
-      style={{
-        ...CHIP,
-        color: `var(--color-${token})`,
-        borderColor: `var(--color-${token}-border, var(--color-border))`,
-        background: `var(--color-${token}-soft, var(--color-bg-page))`,
-      }}
-      title={title}
-    >
-      {label}
-    </span>
+    <Tooltip content={title}>
+      <span
+        style={{
+          ...CHIP,
+          color: `var(--color-${token})`,
+          borderColor: `var(--color-${token}-border, var(--color-border))`,
+          background: `var(--color-${token}-soft, var(--color-bg-page))`,
+        }}
+      >
+        {label}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -45,7 +47,12 @@ const STATE: Record<OfferState, { token: string | null; title: string }> = {
 export function OfferStateChip({ state }: { state: OfferState }) {
   const meta = STATE[state];
   const label = OFFER_STATE_LABEL[state];
-  if (!meta.token) return <span style={CHIP} title={meta.title}>{label}</span>;
+  if (!meta.token)
+    return (
+      <Tooltip content={meta.title}>
+        <span style={CHIP}>{label}</span>
+      </Tooltip>
+    );
   return tinted(meta.token, label, meta.title);
 }
 

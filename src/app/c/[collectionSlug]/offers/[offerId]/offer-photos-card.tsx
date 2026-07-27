@@ -14,6 +14,7 @@ import {
   DragGrip,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 
@@ -105,17 +106,18 @@ const SECTION_HEADING: React.CSSProperties = {
 
 function tinted(token: string, label: string, title?: string) {
   return (
-    <span
-      style={{
-        ...CHIP,
-        color: `var(--color-${token})`,
-        borderColor: `var(--color-${token}-border, var(--color-border))`,
-        background: `var(--color-${token}-soft, var(--color-bg-page))`,
-      }}
-      title={title}
-    >
-      {label}
-    </span>
+    <Tooltip content={title}>
+      <span
+        style={{
+          ...CHIP,
+          color: `var(--color-${token})`,
+          borderColor: `var(--color-${token}-border, var(--color-border))`,
+          background: `var(--color-${token}-soft, var(--color-bg-page))`,
+        }}
+      >
+        {label}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -255,30 +257,30 @@ function PlanPreview({
                 <DragGrip label="Drag to change the upload order" />
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setLightbox(index)}
-              title="View full size"
-              aria-label={`View ${imageTitle(image)}`}
-              style={{
-                flexShrink: 0,
-                width: "4rem",
-                height: "4rem",
-                padding: 0,
-                borderRadius: "0.375rem",
-                overflow: "hidden",
-                border: "1px solid var(--color-border)",
-                background: "var(--color-bg-elevated)",
-                cursor: "pointer",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photoUrl(collectionId, image.photoId, "thumb")}
-                alt={imageTitle(image)}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              />
-            </button>
+            <Tooltip content="View full size" style={{ flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setLightbox(index)}
+                aria-label={`View ${imageTitle(image)}`}
+                style={{
+                  width: "4rem",
+                  height: "4rem",
+                  padding: 0,
+                  borderRadius: "0.375rem",
+                  overflow: "hidden",
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-bg-elevated)",
+                  cursor: "pointer",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoUrl(collectionId, image.photoId, "thumb")}
+                  alt={imageTitle(image)}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              </button>
+            </Tooltip>
 
             <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
               <span
@@ -309,20 +311,21 @@ function PlanPreview({
                   Over the platform&rsquo;s photo limit — left out of the upload
                 </span>
               )}
-              <a
-                href={photoDownloadUrl(collectionId, image.photoId, image.fileName)}
-                download={image.fileName}
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: "var(--color-accent)",
-                  textDecoration: "none",
-                  width: "fit-content",
-                }}
-                title={`Download as ${image.fileName}`}
-              >
-                ↓ {image.fileName}
-              </a>
+              <Tooltip content={`Download as ${image.fileName}`} align="start">
+                <a
+                  href={photoDownloadUrl(collectionId, image.photoId, image.fileName)}
+                  download={image.fileName}
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "var(--color-accent)",
+                    textDecoration: "none",
+                    width: "fit-content",
+                  }}
+                >
+                  ↓ {image.fileName}
+                </a>
+              </Tooltip>
             </div>
           </li>
         ))}
@@ -464,27 +467,30 @@ function PlanSequence({
               <span aria-hidden style={{ width: "1.25rem" }} />
             )}
             {image.previewPhotoId ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={photoUrl(collectionId, image.previewPhotoId, "thumb")}
-                alt=""
-                title={
+              <Tooltip
+                content={
                   image.generatedPhotoId
                     ? "The image generated for this entry"
                     : "Not generated yet — showing what it will be made from"
                 }
-                style={{
-                  width: "2.5rem",
-                  height: "2.5rem",
-                  objectFit: "cover",
-                  borderRadius: "0.375rem",
-                  // A dashed border says the thumbnail is a stand-in, not the image itself.
-                  border: image.generatedPhotoId
-                    ? "1px solid var(--color-border)"
-                    : "1px dashed var(--color-border-strong)",
-                  flexShrink: 0,
-                }}
-              />
+                style={{ flexShrink: 0 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoUrl(collectionId, image.previewPhotoId, "thumb")}
+                  alt=""
+                  style={{
+                    width: "2.5rem",
+                    height: "2.5rem",
+                    objectFit: "cover",
+                    borderRadius: "0.375rem",
+                    // A dashed border says the thumbnail is a stand-in, not the image itself.
+                    border: image.generatedPhotoId
+                      ? "1px solid var(--color-border)"
+                      : "1px dashed var(--color-border-strong)",
+                  }}
+                />
+              </Tooltip>
             ) : (
               <span aria-hidden style={{ width: "2.5rem" }} />
             )}
@@ -516,49 +522,54 @@ function PlanSequence({
             {/* Publishing is offered on collages only: an attachment the collector does not want is
                 simply removed, and two ways out of one list would be a puzzle rather than a choice. */}
             {!image.attachmentId && (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onSetPublish(image.token, !image.publish)}
-                title={
+              <Tooltip
+                content={
                   image.publish
                     ? "Do not publish this image — it stays generated, but is left out of the upload"
                     : "Publish this image again"
                 }
-                aria-label={image.publish ? "Do not publish this image" : "Publish this image"}
-                aria-pressed={!image.publish}
-                style={{
-                  border: "none",
-                  background: "none",
-                  color: image.publish
-                    ? "var(--color-text-secondary)"
-                    : "var(--color-warning, var(--color-text-secondary))",
-                  cursor: disabled ? "default" : "pointer",
-                  fontSize: "0.875rem",
-                  padding: "0 0.25rem",
-                }}
+                align="end"
               >
-                {image.publish ? "👁" : "🚫"}
-              </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onSetPublish(image.token, !image.publish)}
+                  aria-label={image.publish ? "Do not publish this image" : "Publish this image"}
+                  aria-pressed={!image.publish}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: image.publish
+                      ? "var(--color-text-secondary)"
+                      : "var(--color-warning, var(--color-text-secondary))",
+                    cursor: disabled ? "default" : "pointer",
+                    fontSize: "0.875rem",
+                    padding: "0 0.25rem",
+                  }}
+                >
+                  {image.publish ? "👁" : "🚫"}
+                </button>
+              </Tooltip>
             )}
             {image.attachmentId && (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onRemove(image.attachmentId!)}
-                title="Remove this attachment from the plan"
-                aria-label={`Remove ${plannedTitle(image, uploadIndex)}`}
-                style={{
-                  border: "none",
-                  background: "none",
-                  color: "var(--color-error)",
-                  cursor: disabled ? "default" : "pointer",
-                  fontSize: "0.875rem",
-                  padding: "0 0.25rem",
-                }}
-              >
-                ✕
-              </button>
+              <Tooltip content="Remove this attachment from the plan" align="end">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onRemove(image.attachmentId!)}
+                  aria-label={`Remove ${plannedTitle(image, uploadIndex)}`}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "var(--color-error)",
+                    cursor: disabled ? "default" : "pointer",
+                    fontSize: "0.875rem",
+                    padding: "0 0.25rem",
+                  }}
+                >
+                  ✕
+                </button>
+              </Tooltip>
             )}
           </li>
         </Fragment>
@@ -833,122 +844,128 @@ export function OfferPhotosCard({
     <div style={expanded ? CARD : { ...CARD, padding: "0.875rem 1.5rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
         {/* The whole left-hand group is the toggle, so the heading and its chips are all clickable. */}
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          aria-expanded={expanded}
-          title={expanded ? "Collapse" : "Show the plan in upload order"}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flexWrap: "wrap",
-            padding: 0,
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              fontSize: "0.75rem",
-              color: "var(--color-text-secondary)",
-              transform: expanded ? "rotate(90deg)" : "none",
-              transition: "transform 120ms ease",
-            }}
-          >
-            ▶
-          </span>
-          {heading}
-          <StatusChip plan={plan} />
-          {plan.outOfDate &&
-            tinted(
-              "warning",
-              "Out of date",
-              "The offer changed after these images were generated — they are still served as they are"
-            )}
-          {/* Collapsed, this chip is the only trace of a set the plan had to leave out (#315). It is
-              a warning only while the stored images still show it — after a regeneration the sets
-              are simply out of the plan, which is a fact, not something to fix. */}
-          {plan.plan.excludedSets.length > 0 &&
-            (showsExcludedSets(plan.plan.excludedSets, plan.images) ? (
-              tinted(
-                "warning",
-                plan.plan.excludedSets.length === 1 ? "1 set gone" : `${plan.plan.excludedSets.length} sets gone`,
-                "A set has sold or is committed elsewhere and is still in the stored images — expand for which"
-              )
-            ) : (
-              <span
-                style={CHIP}
-                title="A set has sold or is committed elsewhere — it is out of the plan; expand for which"
-              >
-                {plan.plan.excludedSets.length === 1
-                  ? "1 set gone"
-                  : `${plan.plan.excludedSets.length} sets gone`}
-              </span>
-            ))}
-          {/* Collapsed, this chip is the only trace of a side that could not be rendered. */}
-          {plan.plan.skipped.length > 0 &&
-            tinted(
-              "warning",
-              plan.plan.skipped.length === 1
-                ? "1 side skipped"
-                : `${plan.plan.skipped.length} sides skipped`,
-              "A group has no complete set of scans for that side — expand for which copies"
-            )}
-          {stored > 0 && (
-            <span style={{ ...NOTE, fontSize: "0.75rem" }}>
-              {stored} image{stored === 1 ? "" : "s"} · {formatBytes(storedBytes)}
-            </span>
-          )}
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          {stored > 0 && (
-            <a
-              href={`/api/collections/${collectionId}/offers/${offerId}/photos/zip`}
-              // The archive's own name comes from the server's Content-Disposition, which knows the
-              // offer; the attribute is only here to make this a download rather than a navigation.
-              download
-              style={{ ...BTN, textDecoration: "none" }}
-              title="Download the whole plan as a ZIP, numbered in upload order"
-            >
-              ↓ Download all
-            </a>
-          )}
+        <Tooltip content={expanded ? "Collapse" : "Show the plan in upload order"} align="start">
           <button
             type="button"
-            disabled={isPending || running || !plan.plan.configured || plan.plan.imageCount === 0}
-            onClick={generate}
+            onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
             style={{
-              ...BTN,
-              opacity: isPending || running || !plan.plan.configured || plan.plan.imageCount === 0 ? 0.5 : 1,
-              cursor:
-                isPending || running || !plan.plan.configured || plan.plan.imageCount === 0
-                  ? "default"
-                  : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              flexWrap: "wrap",
+              padding: 0,
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              textAlign: "left",
             }}
-            title={
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--color-text-secondary)",
+                transform: expanded ? "rotate(90deg)" : "none",
+                transition: "transform 120ms ease",
+              }}
+            >
+              ▶
+            </span>
+            {heading}
+            <StatusChip plan={plan} />
+            {plan.outOfDate &&
+              tinted(
+                "warning",
+                "Out of date",
+                "The offer changed after these images were generated — they are still served as they are"
+              )}
+            {/* Collapsed, this chip is the only trace of a set the plan had to leave out (#315). It is
+                a warning only while the stored images still show it — after a regeneration the sets
+                are simply out of the plan, which is a fact, not something to fix. */}
+            {plan.plan.excludedSets.length > 0 &&
+              (showsExcludedSets(plan.plan.excludedSets, plan.images) ? (
+                tinted(
+                  "warning",
+                  plan.plan.excludedSets.length === 1 ? "1 set gone" : `${plan.plan.excludedSets.length} sets gone`,
+                  "A set has sold or is committed elsewhere and is still in the stored images — expand for which"
+                )
+              ) : (
+                <Tooltip content="A set has sold or is committed elsewhere — it is out of the plan; expand for which">
+                  <span style={CHIP}>
+                    {plan.plan.excludedSets.length === 1
+                      ? "1 set gone"
+                      : `${plan.plan.excludedSets.length} sets gone`}
+                  </span>
+                </Tooltip>
+              ))}
+            {/* Collapsed, this chip is the only trace of a side that could not be rendered. */}
+            {plan.plan.skipped.length > 0 &&
+              tinted(
+                "warning",
+                plan.plan.skipped.length === 1
+                  ? "1 side skipped"
+                  : `${plan.plan.skipped.length} sides skipped`,
+                "A group has no complete set of scans for that side — expand for which copies"
+              )}
+            {stored > 0 && (
+              <span style={{ ...NOTE, fontSize: "0.75rem" }}>
+                {stored} image{stored === 1 ? "" : "s"} · {formatBytes(storedBytes)}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {stored > 0 && (
+            <Tooltip content="Download the whole plan as a ZIP, numbered in upload order">
+              <a
+                href={`/api/collections/${collectionId}/offers/${offerId}/photos/zip`}
+                // The archive's own name comes from the server's Content-Disposition, which knows
+                // the offer; the attribute is only here to make this a download rather than a
+                // navigation.
+                download
+                style={{ ...BTN, textDecoration: "none" }}
+              >
+                ↓ Download all
+              </a>
+            </Tooltip>
+          )}
+          <Tooltip
+            content={
               stored > 0
                 ? "Render this offer's images again, replacing the stored ones"
                 : "Render this offer's images in the background"
             }
           >
-            {stored > 0 ? "Regenerate" : "Generate"}
-          </button>
+            <button
+              type="button"
+              disabled={isPending || running || !plan.plan.configured || plan.plan.imageCount === 0}
+              onClick={generate}
+              style={{
+                ...BTN,
+                opacity: isPending || running || !plan.plan.configured || plan.plan.imageCount === 0 ? 0.5 : 1,
+                cursor:
+                  isPending || running || !plan.plan.configured || plan.plan.imageCount === 0
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+              {stored > 0 ? "Regenerate" : "Generate"}
+            </button>
+          </Tooltip>
           {/* Photo settings (#308) live here rather than in the offer's ⋮ menu: the configuration is
               what this card renders from, so it is edited where its effect is read. */}
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Photo settings"
-            title="Photo settings — sides, tile label and collage numbers"
-            style={{ ...ICON_BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
-          >
-            <span aria-hidden>⚙</span>
-          </button>
+          <Tooltip content="Photo settings — sides, tile label and collage numbers" align="end">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Photo settings"
+              style={{ ...ICON_BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+            >
+              <span aria-hidden>⚙</span>
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -976,15 +993,19 @@ export function OfferPhotosCard({
               (collages and attachments) can be seen and changed (#313). Stored files follow below. */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
             <h4 style={SECTION_HEADING}>Plan</h4>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => setAttachOpen(true)}
-              style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
-              title="Attach photos of copies, upload images, or build a collage from a selection"
+            <Tooltip
+              content="Attach photos of copies, upload images, or build a collage from a selection"
+              align="end"
             >
-              + Add attachments
-            </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setAttachOpen(true)}
+                style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+              >
+                + Add attachments
+              </button>
+            </Tooltip>
           </div>
           {plan.plan.images.length > 0 ? (
             <PlanSequence

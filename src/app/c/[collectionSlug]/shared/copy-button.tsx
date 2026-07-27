@@ -8,6 +8,7 @@ import {
   type DescriptionFormat,
 } from "@/lib/description-format";
 import { sanitizeDescriptionHtml } from "./rendered-description";
+import { Tooltip } from "./tooltip";
 
 /**
  * Copy one field's text to the clipboard (#327), with a moment of confirmation on the button
@@ -175,12 +176,8 @@ export function CopyButton({
       : "var(--color-text-secondary)";
 
   const mainButton = (
-    <button
-      type="button"
-      disabled={isDisabled}
-      onClick={() => copy("formatted")}
-      aria-label={copied ? `${label} copied` : `Copy ${label}`}
-      title={
+    <Tooltip
+      content={
         empty
           ? `Nothing to copy — this ${label} is empty`
           : failed
@@ -189,19 +186,26 @@ export function CopyButton({
               ? `Copy the formatted ${label} — use ▾ for the source`
               : `Copy ${label} to the clipboard`
       }
-      style={{
-        ...SMALL_BTN,
-        cursor: isDisabled ? "not-allowed" : "pointer",
-        opacity: isDisabled ? 0.5 : 1,
-        color: tone,
-        ...(hasChoice
-          ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 }
-          : {}),
-        ...style,
-      }}
     >
-      <span aria-hidden>{glyph}</span>
-    </button>
+      <button
+        type="button"
+        disabled={isDisabled}
+        onClick={() => copy("formatted")}
+        aria-label={copied ? `${label} copied` : `Copy ${label}`}
+        style={{
+          ...SMALL_BTN,
+          cursor: isDisabled ? "not-allowed" : "pointer",
+          opacity: isDisabled ? 0.5 : 1,
+          color: tone,
+          ...(hasChoice
+            ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 }
+            : {}),
+          ...style,
+        }}
+      >
+        <span aria-hidden>{glyph}</span>
+      </button>
+    </Tooltip>
   );
 
   if (!hasChoice) return mainButton;
@@ -209,36 +213,40 @@ export function CopyButton({
   return (
     <span style={{ display: "inline-flex" }}>
       {mainButton}
-      <button
-        ref={caretRef}
-        type="button"
-        disabled={isDisabled}
-        aria-haspopup="menu"
-        aria-expanded={!!menuAt}
-        aria-label={`Copy ${label} as…`}
-        title={`Copy ${label} as…`}
-        onClick={() => {
-          if (menuAt) {
-            setMenuAt(null);
-            return;
-          }
-          const rect = caretRef.current?.getBoundingClientRect();
-          if (rect) {
-            setMenuAt({ top: rect.bottom + 4, right: Math.max(4, window.innerWidth - rect.right) });
-          }
-        }}
-        style={{
-          ...SMALL_BTN,
-          padding: "0.1875rem 0.3125rem",
-          borderTopLeftRadius: 0,
-          borderBottomLeftRadius: 0,
-          cursor: isDisabled ? "not-allowed" : "pointer",
-          opacity: isDisabled ? 0.5 : 1,
-          color: "var(--color-text-secondary)",
-        }}
-      >
-        <span aria-hidden>▾</span>
-      </button>
+      <Tooltip content={`Copy ${label} as…`}>
+        <button
+          ref={caretRef}
+          type="button"
+          disabled={isDisabled}
+          aria-haspopup="menu"
+          aria-expanded={!!menuAt}
+          aria-label={`Copy ${label} as…`}
+          onClick={() => {
+            if (menuAt) {
+              setMenuAt(null);
+              return;
+            }
+            const rect = caretRef.current?.getBoundingClientRect();
+            if (rect) {
+              setMenuAt({
+                top: rect.bottom + 4,
+                right: Math.max(4, window.innerWidth - rect.right),
+              });
+            }
+          }}
+          style={{
+            ...SMALL_BTN,
+            padding: "0.1875rem 0.3125rem",
+            borderTopLeftRadius: 0,
+            borderBottomLeftRadius: 0,
+            cursor: isDisabled ? "not-allowed" : "pointer",
+            opacity: isDisabled ? 0.5 : 1,
+            color: "var(--color-text-secondary)",
+          }}
+        >
+          <span aria-hidden>▾</span>
+        </button>
+      </Tooltip>
       {menuAt &&
         typeof document !== "undefined" &&
         createPortal(

@@ -737,34 +737,35 @@ function EditableLinePrice({
     );
   }
   return (
-    <button
-      type="button"
-      onClick={open}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title="Click to edit the sale price"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.3rem",
-        border: "none",
-        background: hovered ? "var(--color-bg-muted)" : "transparent",
-        cursor: "pointer",
-        padding: "0.05rem 0.3rem",
-        borderRadius: "0.25rem",
-        fontVariantNumeric: "tabular-nums",
-        fontSize: "0.875rem",
-        fontWeight: 600,
-        color: "var(--color-text-primary)",
-      }}
-    >
-      <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-        ✎
-      </span>
-      <span>
-        {value} {currency}
-      </span>
-    </button>
+    <Tooltip content="Click to edit the sale price">
+      <button
+        type="button"
+        onClick={open}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.3rem",
+          border: "none",
+          background: hovered ? "var(--color-bg-muted)" : "transparent",
+          cursor: "pointer",
+          padding: "0.05rem 0.3rem",
+          borderRadius: "0.25rem",
+          fontVariantNumeric: "tabular-nums",
+          fontSize: "0.875rem",
+          fontWeight: 600,
+          color: "var(--color-text-primary)",
+        }}
+      >
+        <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+          ✎
+        </span>
+        <span>
+          {value} {currency}
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 

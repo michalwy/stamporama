@@ -432,11 +432,17 @@ function SetCard({
             {copies.length} cop{copies.length === 1 ? "y" : "ies"}
           </div>
         </div>
-        {set.sold && <span style={CHIP} title="Sold through this offer">Sold</span>}
+        {set.sold && (
+          <Tooltip content="Sold through this offer">
+            <span style={CHIP}>Sold</span>
+          </Tooltip>
+        )}
         {set.needsAction && (
-          <span style={{ ...CHIP, color: "var(--color-error)", borderColor: "var(--color-error-border, var(--color-border))" }} title="A copy of this set sold elsewhere — remove it">
-            Sold elsewhere
-          </span>
+          <Tooltip content="A copy of this set sold elsewhere — remove it">
+            <span style={{ ...CHIP, color: "var(--color-error)", borderColor: "var(--color-error-border, var(--color-border))" }}>
+              Sold elsewhere
+            </span>
+          </Tooltip>
         )}
         {editable && !set.sold && (
           <span onClick={(e) => e.stopPropagation()}>

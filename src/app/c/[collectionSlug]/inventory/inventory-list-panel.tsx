@@ -42,6 +42,7 @@ import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dial
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 type DialogState =
   | { kind: "none" }
@@ -432,53 +433,56 @@ export function InventoryListPanel({
                     </button>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={() => updateParams({ noPhotos: noPhotos ? "" : "true" })}
-                  title="Show only copies with no attached photos"
-                  style={{
-                    ...CONTROL_STYLE,
-                    cursor: "pointer",
-                    fontWeight: noPhotos ? 600 : 400,
-                    color: noPhotos ? "var(--color-accent)" : "var(--color-text-secondary)",
-                    borderColor: noPhotos ? "var(--color-accent)" : "var(--color-border-strong)",
-                    background: noPhotos ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                  }}
-                >
-                  No photos
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateParams({ missingCatalogValue: missingCatalogValue ? "" : "true" })
-                  }
-                  title="Show only copies with no catalog value recorded for their condition"
-                  style={{
-                    ...CONTROL_STYLE,
-                    cursor: "pointer",
-                    fontWeight: missingCatalogValue ? 600 : 400,
-                    color: missingCatalogValue ? "var(--color-accent)" : "var(--color-text-secondary)",
-                    borderColor: missingCatalogValue ? "var(--color-accent)" : "var(--color-border-strong)",
-                    background: missingCatalogValue ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                  }}
-                >
-                  Missing catalog value
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateParams({ includeSold: includeSold ? "" : "true" })}
-                  title="Also show copies that have already sold (hidden by default)"
-                  style={{
-                    ...CONTROL_STYLE,
-                    cursor: "pointer",
-                    fontWeight: includeSold ? 600 : 400,
-                    color: includeSold ? "var(--color-accent)" : "var(--color-text-secondary)",
-                    borderColor: includeSold ? "var(--color-accent)" : "var(--color-border-strong)",
-                    background: includeSold ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                  }}
-                >
-                  Include sold
-                </button>
+                <Tooltip content="Show only copies with no attached photos">
+                  <button
+                    type="button"
+                    onClick={() => updateParams({ noPhotos: noPhotos ? "" : "true" })}
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: "pointer",
+                      fontWeight: noPhotos ? 600 : 400,
+                      color: noPhotos ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: noPhotos ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: noPhotos ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    No photos
+                  </button>
+                </Tooltip>
+                <Tooltip content="Show only copies with no catalog value recorded for their condition">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateParams({ missingCatalogValue: missingCatalogValue ? "" : "true" })
+                    }
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: "pointer",
+                      fontWeight: missingCatalogValue ? 600 : 400,
+                      color: missingCatalogValue ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: missingCatalogValue ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: missingCatalogValue ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    Missing catalog value
+                  </button>
+                </Tooltip>
+                <Tooltip content="Also show copies that have already sold (hidden by default)">
+                  <button
+                    type="button"
+                    onClick={() => updateParams({ includeSold: includeSold ? "" : "true" })}
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: "pointer",
+                      fontWeight: includeSold ? 600 : 400,
+                      color: includeSold ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: includeSold ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: includeSold ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    Include sold
+                  </button>
+                </Tooltip>
               </div>
 
               <select
@@ -547,33 +551,34 @@ export function InventoryListPanel({
                   that haven't been used yet. Only shown once at least one platform contact
                   exists. */}
               {offerPlatforms.length > 0 && (
-                <select
-                  value={notOfferedPlatformId}
-                  onChange={(e) => {
-                    rememberNotOfferedPlatform(e.target.value);
-                    updateParams({ notOfferedPlatform: e.target.value });
-                  }}
-                  style={{
-                    ...CONTROL_STYLE,
-                    ...(notOfferedPlatformId
-                      ? {
-                          fontWeight: 600,
-                          color: "var(--color-accent)",
-                          border: "1px solid var(--color-accent)",
-                          background: "var(--color-accent-soft)",
-                        }
-                      : null),
-                  }}
-                  aria-label="Show for-sale copies not yet offered on a platform"
-                  title="Show for-sale copies with no active offer on the chosen platform"
-                >
-                  <option value="">For sale: any platform</option>
-                  {offerPlatforms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      Not offered on {p.name}
-                    </option>
-                  ))}
-                </select>
+                <Tooltip content="Show for-sale copies with no active offer on the chosen platform">
+                  <select
+                    value={notOfferedPlatformId}
+                    onChange={(e) => {
+                      rememberNotOfferedPlatform(e.target.value);
+                      updateParams({ notOfferedPlatform: e.target.value });
+                    }}
+                    style={{
+                      ...CONTROL_STYLE,
+                      ...(notOfferedPlatformId
+                        ? {
+                            fontWeight: 600,
+                            color: "var(--color-accent)",
+                            border: "1px solid var(--color-accent)",
+                            background: "var(--color-accent-soft)",
+                          }
+                        : null),
+                    }}
+                    aria-label="Show for-sale copies not yet offered on a platform"
+                  >
+                    <option value="">For sale: any platform</option>
+                    {offerPlatforms.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        Not offered on {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </Tooltip>
               )}
 
               {locations.length > 0 && (

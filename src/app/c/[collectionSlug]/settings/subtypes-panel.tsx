@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/subtypes";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { languageLabel } from "@/lib/languages";
 import {
   fillTranslationValues,
@@ -350,25 +351,26 @@ export function SubtypesPanel({
               ⠿
             </span>
 
-            <label
-              title={subtype.isDefault ? "Default subtype" : "Make default"}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                cursor: isPending || subtype.isDefault ? "default" : "pointer",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <input
-                type="radio"
-                name={`default-subtype-${collectionId}`}
-                checked={subtype.isDefault}
-                disabled={isPending || subtype.isDefault}
-                onChange={() =>
-                  runRowMutation(() => setDefaultSubtypeAction(subtype.id))
-                }
-              />
-            </label>
+            <Tooltip content={subtype.isDefault ? "Default subtype" : "Make default"}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  cursor: isPending || subtype.isDefault ? "default" : "pointer",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="radio"
+                  name={`default-subtype-${collectionId}`}
+                  checked={subtype.isDefault}
+                  disabled={isPending || subtype.isDefault}
+                  onChange={() =>
+                    runRowMutation(() => setDefaultSubtypeAction(subtype.id))
+                  }
+                />
+              </label>
+            </Tooltip>
 
             <span
               style={{
@@ -382,29 +384,30 @@ export function SubtypesPanel({
               {subtype.isDefault && <span style={defaultBadgeStyle}>Default</span>}
             </span>
 
-            <label
-              title="Acts as a variant"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-                cursor: isPending ? "default" : "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={subtype.actsAsVariant}
-                disabled={isPending}
-                onChange={(e) =>
-                  runRowMutation(() =>
-                    setSubtypeActsAsVariantAction(subtype.id, e.target.checked)
-                  )
-                }
-              />
-              Acts as variant
-            </label>
+            <Tooltip content="Acts as a variant">
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  cursor: isPending ? "default" : "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={subtype.actsAsVariant}
+                  disabled={isPending}
+                  onChange={(e) =>
+                    runRowMutation(() =>
+                      setSubtypeActsAsVariantAction(subtype.id, e.target.checked)
+                    )
+                  }
+                />
+                Acts as variant
+              </label>
+            </Tooltip>
 
             <RowActionsMenu
               ariaLabel="Subtype actions"

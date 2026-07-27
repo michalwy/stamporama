@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
@@ -396,27 +397,28 @@ export function PhotoSettingsDialog({
           disabled={isPending}
           error={error}
           leading={
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.4375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-secondary)",
-                cursor: isPending ? "default" : "pointer",
-              }}
-              title="Render this offer's images again once the settings are saved, replacing the stored ones"
-            >
-              <input
-                type="checkbox"
-                name="regeneratePhotos"
-                checked={regenerate}
-                onChange={(e) => setRegenerate(e.target.checked)}
-                disabled={isPending}
-                style={{ cursor: isPending ? "default" : "pointer" }}
-              />
-              Regenerate photos after saving
-            </label>
+            <Tooltip content="Render this offer's images again once the settings are saved, replacing the stored ones">
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4375rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-secondary)",
+                  cursor: isPending ? "default" : "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="regeneratePhotos"
+                  checked={regenerate}
+                  onChange={(e) => setRegenerate(e.target.checked)}
+                  disabled={isPending}
+                  style={{ cursor: isPending ? "default" : "pointer" }}
+                />
+                Regenerate photos after saving
+              </label>
+            </Tooltip>
           }
         />
       </form>

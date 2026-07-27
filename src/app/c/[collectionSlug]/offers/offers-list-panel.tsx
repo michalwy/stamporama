@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { OfferListItem } from "@/lib/offers";
 import { type OfferState, type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
@@ -295,18 +296,19 @@ export function OffersListPanel({
             Bulk listing →
           </Link>
           {/* Sell a new item end-to-end (#241): create the stamp, copy, and offer in one pass. */}
-          <button
-            type="button"
-            onClick={() => setDialog({ kind: "quickOffer" })}
-            title="Create the stamp, inventory copy, and offer in one flow"
-            style={{
-              ...CONTROL_STYLE,
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Sell a new item
-          </button>
+          <Tooltip content="Create the stamp, inventory copy, and offer in one flow">
+            <button
+              type="button"
+              onClick={() => setDialog({ kind: "quickOffer" })}
+              style={{
+                ...CONTROL_STYLE,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Sell a new item
+            </button>
+          </Tooltip>
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}

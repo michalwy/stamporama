@@ -1,6 +1,7 @@
 "use client";
 
 import { colnectStampUrl } from "@/lib/colnect-link";
+import { Tooltip } from "./tooltip";
 
 // The Colnect tag shown next to a stamp's catalog numbers when the stamp has a Colnect
 // Marketplace item-ID (#247): a link to that stamp's Colnect page, opened in a new tab
@@ -59,21 +60,22 @@ export function ColnectChip({
   const medium = size === "medium";
   const label = `Open Colnect item-ID ${colnectId?.trim()} on colnect.com`;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={label}
-      aria-label={label}
-      style={{
-        ...CHIP,
-        fontSize: medium ? "0.75rem" : "0.6875rem",
-        padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      Colnect
-      <ExternalLinkIcon />
-    </a>
+    <Tooltip content={label}>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={label}
+        style={{
+          ...CHIP,
+          fontSize: medium ? "0.75rem" : "0.6875rem",
+          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        Colnect
+        <ExternalLinkIcon />
+      </a>
+    </Tooltip>
   );
 }

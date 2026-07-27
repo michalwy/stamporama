@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SaleListItem } from "@/lib/sales";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 
 const CHIP: React.CSSProperties = {
@@ -122,42 +123,51 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
             flexWrap: "wrap",
           }}
         >
-          <span style={saleStatusChipStyle(status.token)} title="Fulfillment status">
-            {status.label}
-          </span>
-          <span style={CHIP} title="Sold units">
-            {sale.lineCount} {lineWord}
-          </span>
-          <span style={CHIP} title="Physical copies that left">
-            {sale.itemCount} {unitWord}
-          </span>
+          <Tooltip content="Fulfillment status">
+            <span style={saleStatusChipStyle(status.token)}>{status.label}</span>
+          </Tooltip>
+          <Tooltip content="Sold units">
+            <span style={CHIP}>
+              {sale.lineCount} {lineWord}
+            </span>
+          </Tooltip>
+          <Tooltip content="Physical copies that left">
+            <span style={CHIP}>
+              {sale.itemCount} {unitWord}
+            </span>
+          </Tooltip>
           {/* Transaction link (#292) — opens the marketplace's order page without opening the sale.
               Stops the click so the row's own navigation doesn't fire too. */}
           {sale.transactionUrl && (
-            <a
-              href={sale.transactionUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Open the transaction on the marketplace"
-              style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
-            >
-              🔗 Transaction
-            </a>
+            <Tooltip content="Open the transaction on the marketplace">
+              <a
+                href={sale.transactionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                🔗 Transaction
+              </a>
+            </Tooltip>
           )}
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: "var(--color-text-primary)",
-              whiteSpace: "nowrap",
-            }}
-            title="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
+          <Tooltip
+            content="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
+            align="end"
+            style={{ marginLeft: "auto" }}
           >
-            {sale.netProceeds} {sale.baseCurrency}
-          </span>
+            <span
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+                color: "var(--color-text-primary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {sale.netProceeds} {sale.baseCurrency}
+            </span>
+          </Tooltip>
         </div>
       </div>
     </div>

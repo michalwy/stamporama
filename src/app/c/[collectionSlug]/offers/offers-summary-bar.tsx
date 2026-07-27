@@ -2,6 +2,7 @@
 
 import type { OffersSummary } from "@/lib/offers";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Summary bar for the offer list (#317), over the currently filtered offers. It leads with the one
 // figure the toolbar cannot already give: the **asking value** — what the filtered offers would
@@ -272,20 +273,24 @@ export function OffersSummaryBar({
           {summary.offerCount} {summary.offerCount === 1 ? "offer" : "offers"} ·{" "}
           {askingNotes.join(" · ")}
         </span>
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          aria-expanded={expanded}
-          title={
+        <Tooltip
+          content={
             expanded
               ? "Hide the catalog value, purchase cost, and per-platform split"
               : "Show the catalog value, purchase cost, and per-platform split"
           }
-          style={TOGGLE_STYLE}
+          align="end"
         >
-          {expanded ? "Less" : "More"}
-          <span aria-hidden>{expanded ? "▾" : "▸"}</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
+            style={TOGGLE_STYLE}
+          >
+            {expanded ? "Less" : "More"}
+            <span aria-hidden>{expanded ? "▾" : "▸"}</span>
+          </button>
+        </Tooltip>
       </div>
 
       {expanded && (

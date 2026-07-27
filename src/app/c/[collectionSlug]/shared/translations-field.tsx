@@ -7,6 +7,7 @@ import {
   type TranslationField,
   type TranslationValues,
 } from "./translations-dialog";
+import { Tooltip } from "./tooltip";
 
 // The opener half of the per-language entity text UI (#293–#296): a 🌐 icon button that sits beside
 // an entity form's default-language input, badged with how many languages still fall back, plus the
@@ -123,21 +124,25 @@ export function TranslationsField({
           />
         ))
       )}
-      <button
-        type="button"
-        onClick={() => setOpenState(true)}
-        disabled={disabled}
-        title={
+      <Tooltip
+        content={
           missing > 0
             ? `Translations — ${missing} of ${languages.length} language${languages.length !== 1 ? "s" : ""} still using the default`
             : "Translations — every language set"
         }
-        aria-label={ariaLabel}
-        style={buttonStyle}
+        style={{ flexShrink: 0 }}
       >
-        🌐
-        {missing > 0 && <span style={badgeStyle}>{missing}</span>}
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpenState(true)}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          style={buttonStyle}
+        >
+          🌐
+          {missing > 0 && <span style={badgeStyle}>{missing}</span>}
+        </button>
+      </Tooltip>
 
       {open && (
         <TranslationsDialog

@@ -143,22 +143,22 @@ export function IssueCatalogChips({
 /** "required/total" monospace badge. */
 export function StampCountBadge({ required, total }: { required: number; total: number }) {
   return (
-    <span
-      style={{
-        fontSize: "0.75rem",
-        fontFamily: "monospace",
-        color: "var(--color-text-muted)",
-        background: "var(--color-bg-muted)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.25rem",
-        padding: "0.1rem 0.4rem",
-        flexShrink: 0,
-        whiteSpace: "nowrap",
-      }}
-      title="Required / Total stamps"
-    >
-      {required}/{total}
-    </span>
+    <Tooltip content="Required / Total stamps" style={{ flexShrink: 0 }}>
+      <span
+        style={{
+          fontSize: "0.75rem",
+          fontFamily: "monospace",
+          color: "var(--color-text-muted)",
+          background: "var(--color-bg-muted)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.25rem",
+          padding: "0.1rem 0.4rem",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {required}/{total}
+      </span>
+    </Tooltip>
   );
 }
 

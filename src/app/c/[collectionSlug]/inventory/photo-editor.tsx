@@ -16,6 +16,7 @@ import {
   isSlotRole,
   type SlotRole,
 } from "./photo-slot-meta";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -574,31 +575,32 @@ function PhotoCard({
             }}
           >
             {onPromote && (
-              <button
-                ref={promoteBtnRef}
-                type="button"
-                aria-label="Promote photo to stamp"
-                title="Promote to stamp"
-                aria-pressed={promoteOpen}
-                onClick={() => setPromoteOpen((o) => !o)}
-                style={{
-                  width: "1.375rem",
-                  height: "1.375rem",
-                  borderRadius: "999px",
-                  border: "none",
-                  background: "var(--color-bg-elevated)",
-                  color: "var(--color-text-secondary)",
-                  fontSize: "0.75rem",
-                  lineHeight: 1,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-                }}
-              >
-                ⬆
-              </button>
+              <Tooltip content="Promote to stamp">
+                <button
+                  ref={promoteBtnRef}
+                  type="button"
+                  aria-label="Promote photo to stamp"
+                  aria-pressed={promoteOpen}
+                  onClick={() => setPromoteOpen((o) => !o)}
+                  style={{
+                    width: "1.375rem",
+                    height: "1.375rem",
+                    borderRadius: "999px",
+                    border: "none",
+                    background: "var(--color-bg-elevated)",
+                    color: "var(--color-text-secondary)",
+                    fontSize: "0.75rem",
+                    lineHeight: 1,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  ⬆
+                </button>
+              </Tooltip>
             )}
             <button
               type="button"
@@ -679,27 +681,28 @@ function PhotoCard({
             }}
           />
         ) : (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setEditingTitle(true)}
-            title="Add a title"
-            style={{
-              width: "100%",
-              textAlign: "left",
-              border: "none",
-              background: "transparent",
-              cursor: disabled ? "default" : "pointer",
-              fontSize: "0.75rem",
-              color: entry.title ? "var(--color-text-primary)" : "var(--color-text-muted)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              padding: 0,
-            }}
-          >
-            {entry.title || "＋ Title"}
-          </button>
+          <Tooltip content="Add a title" align="start" style={{ width: "100%" }}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setEditingTitle(true)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: "transparent",
+                cursor: disabled ? "default" : "pointer",
+                fontSize: "0.75rem",
+                color: entry.title ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                padding: 0,
+              }}
+            >
+              {entry.title || "＋ Title"}
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>
@@ -932,32 +935,33 @@ function RoleButton({
   // Active reads as a delicate soft-tinted chip (coloured text + border on a pale fill),
   // not a loud solid fill; inactive stays neutral.
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onClick}
-      style={{
-        width: "1.375rem",
-        height: "1.375rem",
-        borderRadius: "0.3rem",
-        border: `1px solid ${active ? color : "var(--color-border-strong)"}`,
-        background: active ? soft : "var(--color-bg-elevated)",
-        color: active ? color : "var(--color-text-secondary)",
-        fontSize: "0.6875rem",
-        fontWeight: 700,
-        lineHeight: 1,
-        cursor: disabled ? "default" : "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
-      }}
-    >
-      {label}
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        aria-label={title}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={onClick}
+        style={{
+          width: "1.375rem",
+          height: "1.375rem",
+          borderRadius: "0.3rem",
+          border: `1px solid ${active ? color : "var(--color-border-strong)"}`,
+          background: active ? soft : "var(--color-bg-elevated)",
+          color: active ? color : "var(--color-text-secondary)",
+          fontSize: "0.6875rem",
+          fontWeight: 700,
+          lineHeight: 1,
+          cursor: disabled ? "default" : "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+        }}
+      >
+        {label}
+      </button>
+    </Tooltip>
   );
 }
 

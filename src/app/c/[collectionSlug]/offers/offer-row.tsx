@@ -13,6 +13,7 @@ import {
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
 
 const CHIP: React.CSSProperties = {
@@ -200,67 +201,73 @@ export function OfferRow({
 
         {/* Line 2: platform / state / quantity / price */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
-          <span style={CHIP} title="Platform">{offer.platformName}</span>
+          <Tooltip content="Platform">
+            <span style={CHIP}>{offer.platformName}</span>
+          </Tooltip>
           <OfferStateChip state={offer.state} />
           {canAdvance && advanceTo && (() => {
             const { label, icon } = advanceLabel(advanceTo);
             return (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSetState(offer, advanceTo);
-                }}
-                title={label}
-                aria-label={label}
-                style={QUICK_ADVANCE_BTN}
-              >
-                <span aria-hidden>{icon}</span>
-                {label}
-              </button>
+              <Tooltip content={label}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetState(offer, advanceTo);
+                  }}
+                  aria-label={label}
+                  style={QUICK_ADVANCE_BTN}
+                >
+                  <span aria-hidden>{icon}</span>
+                  {label}
+                </button>
+              </Tooltip>
             );
           })()}
           {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
           {offer.inActiveBidding && <InActiveBiddingChip />}
           {offer.setCount > 1 && (
-            <span style={CHIP} title="Sets in this offer">{offer.setCount}×</span>
+            <Tooltip content="Sets in this offer">
+              <span style={CHIP}>{offer.setCount}×</span>
+            </Tooltip>
           )}
           {offer.url && (
-            <a
-              href={offer.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Open the platform listing"
-              style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
-            >
-              🔗 Listing
-            </a>
+            <Tooltip content="Open the platform listing">
+              <a
+                href={offer.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                🔗 Listing
+              </a>
+            </Tooltip>
           )}
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: "var(--color-text-primary)",
-              whiteSpace: "nowrap",
-            }}
-            title="Asking price"
-          >
-            {offer.price === "0.00" ? (
-              <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>No price yet</span>
-            ) : (
-              <>
-                {offer.price} {offer.currency}
-                {offer.priceBase && (
-                  <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                    ≈ {offer.priceBase} {offer.baseCurrency}
-                  </span>
-                )}
-              </>
-            )}
-          </span>
+          <Tooltip content="Asking price" align="end" style={{ marginLeft: "auto" }}>
+            <span
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+                color: "var(--color-text-primary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {offer.price === "0.00" ? (
+                <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>No price yet</span>
+              ) : (
+                <>
+                  {offer.price} {offer.currency}
+                  {offer.priceBase && (
+                    <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      ≈ {offer.priceBase} {offer.baseCurrency}
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
+          </Tooltip>
         </div>
       </div>
     </div>

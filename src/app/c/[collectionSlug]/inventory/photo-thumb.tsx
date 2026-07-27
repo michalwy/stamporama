@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Read-only photo display for a list row (#112, #137). Shows a single, larger thumbnail — the
 // first attached photo — meant to sit at the left of a row with the rest of the row's content
@@ -106,34 +107,34 @@ export function PhotoThumb({
           background: "var(--color-bg-page)",
         }}
       >
-        <button
-          type="button"
-          onClick={() => setLightbox(true)}
-          title={roleLabel(current)}
-          aria-label={`View ${roleLabel(current)}`}
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            padding: 0,
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={thumbUrl(collectionId, current.id)}
-            alt={roleLabel(current)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        </button>
+        <Tooltip content={roleLabel(current)} style={{ width: "100%", height: "100%" }}>
+          <button
+            type="button"
+            onClick={() => setLightbox(true)}
+            aria-label={`View ${roleLabel(current)}`}
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+              padding: 0,
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumbUrl(collectionId, current.id)}
+              alt={roleLabel(current)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          </button>
+        </Tooltip>
 
         {/* Reserved-slot marker: a corner badge instead of a coloured frame. */}
         {slotMeta && (
           <span
             aria-hidden="true"
-            title={roleLabel(current)}
             style={{
               position: "absolute",
               top: "0.15rem",
@@ -217,58 +218,57 @@ export function PhotoStrip({
       {photos.map((p, i) => {
         const slotMeta = isSlotRole(p.role) ? SLOT_ROLE_META[p.role] : null;
         return (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setLightboxIndex(i)}
-            title={roleLabel(p)}
-            aria-label={`View ${roleLabel(p)}`}
-            style={{
-              position: "relative",
-              flexShrink: 0,
-              width: size,
-              height: size,
-              padding: 0,
-              borderRadius: "0.375rem",
-              overflow: "hidden",
-              border: "1px solid var(--color-border)",
-              background: "var(--color-bg-page)",
-              cursor: "pointer",
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={thumbUrl(collectionId, p.id)}
-              alt={roleLabel(p)}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            />
-            {slotMeta && (
-              <span
-                aria-hidden="true"
-                title={roleLabel(p)}
-                style={{
-                  position: "absolute",
-                  top: "0.15rem",
-                  left: "0.15rem",
-                  minWidth: "0.95rem",
-                  height: "0.95rem",
-                  padding: "0 0.2rem",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "0.5625rem",
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  color: "#fff",
-                  background: slotMeta.color,
-                  borderRadius: "0.25rem",
-                  boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
-                }}
-              >
-                {slotMeta.short}
-              </span>
-            )}
-          </button>
+          <Tooltip key={p.id} content={roleLabel(p)} style={{ flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(i)}
+              aria-label={`View ${roleLabel(p)}`}
+              style={{
+                position: "relative",
+                flexShrink: 0,
+                width: size,
+                height: size,
+                padding: 0,
+                borderRadius: "0.375rem",
+                overflow: "hidden",
+                border: "1px solid var(--color-border)",
+                background: "var(--color-bg-page)",
+                cursor: "pointer",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbUrl(collectionId, p.id)}
+                alt={roleLabel(p)}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+              {slotMeta && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: "0.15rem",
+                    left: "0.15rem",
+                    minWidth: "0.95rem",
+                    height: "0.95rem",
+                    padding: "0 0.2rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "0.5625rem",
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    color: "#fff",
+                    background: slotMeta.color,
+                    borderRadius: "0.25rem",
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  {slotMeta.short}
+                </span>
+              )}
+            </button>
+          </Tooltip>
         );
       })}
       {lightboxIndex !== null && (

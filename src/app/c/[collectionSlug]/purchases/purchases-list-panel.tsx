@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { PurchaseListItem, PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
 import {
   usePurchasesInfinite,
@@ -151,14 +152,16 @@ export function PurchasesListPanel({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={() => updateParams({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
-            style={{ ...CONTROL_STYLE, cursor: "pointer", padding: "0.375rem 0.5rem" }}
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-          >
-            {sortDir === "asc" ? "↑" : "↓"}
-          </button>
+          <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
+            <button
+              type="button"
+              onClick={() => updateParams({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
+              aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+              style={{ ...CONTROL_STYLE, cursor: "pointer", padding: "0.375rem 0.5rem" }}
+            >
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+          </Tooltip>
         </div>
 
         <button

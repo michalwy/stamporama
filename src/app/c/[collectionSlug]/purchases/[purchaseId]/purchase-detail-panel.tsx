@@ -1625,20 +1625,23 @@ function LotCard({
         >
           {expanded ? "▾" : "▸"}
         </button>
-        <span
-          style={{
-            fontWeight: 600,
-            color: "var(--color-text-primary)",
-            fontStyle: lot.title ? undefined : "italic",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "22rem",
-          }}
-          title={lot.title ? undefined : "Derived from the lot's copies — add a title to name it"}
+        <Tooltip
+          content={lot.title ? undefined : "Derived from the lot's copies — add a title to name it"}
         >
-          {lotName}
-        </span>
+          <span
+            style={{
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+              fontStyle: lot.title ? undefined : "italic",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: "22rem",
+            }}
+          >
+            {lotName}
+          </span>
+        </Tooltip>
         <span style={statusChip.style}>{statusChip.label}</span>
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
@@ -1808,30 +1811,31 @@ function LotCard({
                     borderBottom: "1px solid var(--color-border)",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode("none")}
-                    title="Clear filter"
-                    style={{
-                      ...tintChip(
-                        filterMode === "unpriced"
-                          ? "error"
-                          : filterMode === "no-photos"
-                            ? "accent"
-                            : "warning",
-                        ""
-                      ).style,
-                      cursor: "pointer",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {filterMode === "unpriced"
-                      ? "Unpriced only"
-                      : filterMode === "no-photos"
-                        ? "No photos only"
-                        : "To sort only"}{" "}
-                    ✕
-                  </button>
+                  <Tooltip content="Clear filter">
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode("none")}
+                      style={{
+                        ...tintChip(
+                          filterMode === "unpriced"
+                            ? "error"
+                            : filterMode === "no-photos"
+                              ? "accent"
+                              : "warning",
+                          ""
+                        ).style,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {filterMode === "unpriced"
+                        ? "Unpriced only"
+                        : filterMode === "no-photos"
+                          ? "No photos only"
+                          : "To sort only"}{" "}
+                      ✕
+                    </button>
+                  </Tooltip>
                 </div>
               )}
 

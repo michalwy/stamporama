@@ -11,6 +11,7 @@ import {
 } from "@/lib/offer-title-template";
 import { TitlePreviewText, TitleFallbackNote } from "./title-preview";
 import { RenderedDescription } from "./rendered-description";
+import { Tooltip } from "./tooltip";
 import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 
@@ -178,12 +179,16 @@ export function TemplateSamplePicker({ samples }: { samples: TemplateSamples }) 
             </span>
           )}
         </span>
-        <button type="button" onClick={samples.shuffle} disabled={samples.loading} style={SMALL_BTN} title="Preview on other random copies">
-          🎲 Random
-        </button>
-        <button type="button" onClick={() => samples.setPicking(!samples.picking)} style={SMALL_BTN} title="Preview on a specific copy">
-          Pick copy…
-        </button>
+        <Tooltip content="Preview on other random copies">
+          <button type="button" onClick={samples.shuffle} disabled={samples.loading} style={SMALL_BTN}>
+            🎲 Random
+          </button>
+        </Tooltip>
+        <Tooltip content="Preview on a specific copy">
+          <button type="button" onClick={() => samples.setPicking(!samples.picking)} style={SMALL_BTN}>
+            Pick copy…
+          </button>
+        </Tooltip>
       </div>
       <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
         Multi-line templates preview each copy as its own set, so a <code>{"{#set}"}</code> block
@@ -433,26 +438,22 @@ export function TemplateBuilder({
       {/* Click-to-insert token (and block) chips. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", margin: "0.5rem 0 0.75rem" }}>
         {tokens.map((t) => (
-          <button
-            key={t.token}
-            type="button"
-            title={`${t.label} — e.g. ${t.example}`}
-            onClick={() => insert(t.token)}
-            style={TOKEN_CHIP}
-          >
-            {t.token}
-          </button>
+          <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}`}>
+            <button type="button" onClick={() => insert(t.token)} style={TOKEN_CHIP}>
+              {t.token}
+            </button>
+          </Tooltip>
         ))}
         {blocks?.map((b) => (
-          <button
-            key={b.open}
-            type="button"
-            title={`${b.label} — wraps the selection`}
-            onClick={() => insert(b.open, b.close)}
-            style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
-          >
-            {b.open}…{b.close}
-          </button>
+          <Tooltip key={b.open} content={`${b.label} — wraps the selection`}>
+            <button
+              type="button"
+              onClick={() => insert(b.open, b.close)}
+              style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
+            >
+              {b.open}…{b.close}
+            </button>
+          </Tooltip>
         ))}
       </div>
 
@@ -472,18 +473,22 @@ export function TemplateBuilder({
           {formatted && (
             <>
               <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={() => setShowRendered((v) => !v)}
-                title={
+              <Tooltip
+                content={
                   showRendered
                     ? "Show the text as written, with untranslated runs marked"
                     : "Show it the way the platform will"
                 }
-                style={{ ...SMALL_BTN, fontSize: "0.6875rem", padding: "0.125rem 0.5rem" }}
+                align="end"
               >
-                {showRendered ? "Source" : "Rendered"}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRendered((v) => !v)}
+                  style={{ ...SMALL_BTN, fontSize: "0.6875rem", padding: "0.125rem 0.5rem" }}
+                >
+                  {showRendered ? "Source" : "Rendered"}
+                </button>
+              </Tooltip>
             </>
           )}
         </div>

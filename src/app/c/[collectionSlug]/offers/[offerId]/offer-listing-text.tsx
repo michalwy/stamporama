@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DESCRIPTION_FORMATS,
   DESCRIPTION_FORMAT_LABELS,
@@ -178,39 +179,39 @@ export function OfferListingText({
                       because it belongs to the same set of decisions — how this text is shown,
                       copied and rewritten. */}
                   {f.key === "description" && (
-                    <select
-                      value={format}
-                      onChange={(e) => onFormatChange(normalizeDescriptionFormat(e.target.value))}
-                      disabled={isPending}
-                      aria-label="Description format"
-                      title="How this platform reads the description — it renders and copies accordingly"
-                      style={{
-                        ...SMALL_BTN,
-                        padding: "0.125rem 0.25rem",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {DESCRIPTION_FORMATS.map((v) => (
-                        <option key={v} value={v}>
-                          {DESCRIPTION_FORMAT_LABELS[v]}
-                        </option>
-                      ))}
-                    </select>
+                    <Tooltip content="How this platform reads the description — it renders and copies accordingly">
+                      <select
+                        value={format}
+                        onChange={(e) => onFormatChange(normalizeDescriptionFormat(e.target.value))}
+                        disabled={isPending}
+                        aria-label="Description format"
+                        style={{
+                          ...SMALL_BTN,
+                          padding: "0.125rem 0.25rem",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {DESCRIPTION_FORMATS.map((v) => (
+                          <option key={v} value={v}>
+                            {DESCRIPTION_FORMAT_LABELS[v]}
+                          </option>
+                        ))}
+                      </select>
+                    </Tooltip>
                   )}
                   {/* Only worth offering where source and rendering differ. */}
                   {f.key === "description" && formatted && value && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSource((v) => !v)}
-                      title={
+                    <Tooltip
+                      content={
                         showSource
                           ? "Show the description the way the platform will"
                           : "Show the description as it is stored"
                       }
-                      style={SMALL_BTN}
                     >
-                      {showSource ? "Rendered" : "Source"}
-                    </button>
+                      <button type="button" onClick={() => setShowSource((v) => !v)} style={SMALL_BTN}>
+                        {showSource ? "Rendered" : "Source"}
+                      </button>
+                    </Tooltip>
                   )}
                   {/* Copy first (#327): getting the generated wording into the platform's own form
                       is the routine act here — regenerating and editing are the exceptions. */}
@@ -219,29 +220,31 @@ export function OfferListingText({
                     label={f.label.toLowerCase()}
                     format={f.key === "description" ? format : undefined}
                   />
-                  <button
-                    type="button"
-                    onClick={() => onRegenerate(f.key)}
-                    disabled={isPending || !offer.regeneratable[f.key]}
-                    title={offer.regeneratable[f.key] ? f.regenerateTitle : f.noTemplateTitle}
-                    style={{
-                      ...SMALL_BTN,
-                      cursor: offer.regeneratable[f.key] ? "pointer" : "not-allowed",
-                      opacity: offer.regeneratable[f.key] ? 1 : 0.5,
-                    }}
-                  >
-                    ↻ Regenerate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startEditing(f.key, value)}
-                    disabled={isPending}
-                    aria-label={`Edit ${f.label.toLowerCase()}`}
-                    title={`Edit ${f.label.toLowerCase()}`}
-                    style={SMALL_BTN}
-                  >
-                    ✎
-                  </button>
+                  <Tooltip content={offer.regeneratable[f.key] ? f.regenerateTitle : f.noTemplateTitle}>
+                    <button
+                      type="button"
+                      onClick={() => onRegenerate(f.key)}
+                      disabled={isPending || !offer.regeneratable[f.key]}
+                      style={{
+                        ...SMALL_BTN,
+                        cursor: offer.regeneratable[f.key] ? "pointer" : "not-allowed",
+                        opacity: offer.regeneratable[f.key] ? 1 : 0.5,
+                      }}
+                    >
+                      ↻ Regenerate
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={`Edit ${f.label.toLowerCase()}`} align="end">
+                    <button
+                      type="button"
+                      onClick={() => startEditing(f.key, value)}
+                      disabled={isPending}
+                      aria-label={`Edit ${f.label.toLowerCase()}`}
+                      style={SMALL_BTN}
+                    >
+                      ✎
+                    </button>
+                  </Tooltip>
                 </>
               )}
             </div>

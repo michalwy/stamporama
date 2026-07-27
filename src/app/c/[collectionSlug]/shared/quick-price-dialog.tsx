@@ -19,6 +19,7 @@ import {
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -198,13 +199,16 @@ export function QuickPriceDialog({
             {catalogNumbers.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
                 {catalogNumbers.map((cn) => (
-                  <span
+                  <Tooltip
                     key={cn.catalogVendorId}
-                    style={cn.catalogVendorId === primaryVendorId ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
-                    title={cn.catalogVendorId === primaryVendorId ? "Primary catalog" : undefined}
+                    content={cn.catalogVendorId === primaryVendorId ? "Primary catalog" : undefined}
                   >
-                    {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-                  </span>
+                    <span
+                      style={cn.catalogVendorId === primaryVendorId ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
+                    >
+                      {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
+                    </span>
+                  </Tooltip>
                 ))}
               </div>
             )}

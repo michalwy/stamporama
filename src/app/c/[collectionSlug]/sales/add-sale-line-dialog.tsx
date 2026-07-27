@@ -18,6 +18,7 @@ import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
@@ -539,9 +540,12 @@ function QuantityGroup({
           </div>
         </div>
         {stale ? (
-          <span style={STALE_CHIP} title={`Listed in ${group.offerCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}>
-            ⚠ {group.offerCurrency} — re-list
-          </span>
+          <Tooltip
+            content={`Listed in ${group.offerCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}
+            align="end"
+          >
+            <span style={STALE_CHIP}>⚠ {group.offerCurrency} — re-list</span>
+          </Tooltip>
         ) : (
           <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap", flexShrink: 0 }}>
             asking {group.offerPrice} {group.offerCurrency}
@@ -656,9 +660,12 @@ function SetPickRow({
         </div>
 
         {stale ? (
-          <span style={STALE_CHIP} title={`Listed in ${askingCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}>
-            ⚠ {askingCurrency} — re-list
-          </span>
+          <Tooltip
+            content={`Listed in ${askingCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}
+            align="end"
+          >
+            <span style={STALE_CHIP}>⚠ {askingCurrency} — re-list</span>
+          </Tooltip>
         ) : checked ? (
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
             <NumericInput placeholder="0.00" value={price} onChange={(e) => onPrice(e.target.value)} aria-label="Sale price" style={PRICE_INPUT_STYLE} />

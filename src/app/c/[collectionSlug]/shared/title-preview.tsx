@@ -1,6 +1,7 @@
 "use client";
 
 import type { TitleSegment } from "@/lib/offer-title-template";
+import { Tooltip } from "./tooltip";
 
 // Shared rendering of a generated-title preview with its **untranslated** parts flagged (#298).
 // Used by the platform's template builder (which renders segments client-side as you type) and by
@@ -42,26 +43,36 @@ export function TitlePreviewText({ segments, onFixField }: TitlePreviewTextProps
       {segments.map((s, i) => {
         if (!s.fellBack) return <span key={i}>{s.text}</span>;
         const field = s.field;
+        // The wrapper stays `display: inline` so a flagged run keeps flowing (and line-breaking)
+        // with the rest of the title instead of becoming an atomic inline-flex box.
         if (!onFixField || !field) {
           return (
-            <span key={i} style={MARK_STYLE} title="No translation for this language — the default text is used">
-              {s.text}
-            </span>
+            <Tooltip
+              key={i}
+              content="No translation for this language — the default text is used"
+              style={{ display: "inline" }}
+            >
+              <span style={MARK_STYLE}>{s.text}</span>
+            </Tooltip>
           );
         }
         return (
-          <button
+          <Tooltip
             key={i}
-            type="button"
-            style={FIXABLE_STYLE}
-            title="No translation for this language — click to add one"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              onFixField(field, { left: rect.left, bottom: rect.bottom });
-            }}
+            content="No translation for this language — click to add one"
+            style={{ display: "inline" }}
           >
-            {s.text}
-          </button>
+            <button
+              type="button"
+              style={FIXABLE_STYLE}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                onFixField(field, { left: rect.left, bottom: rect.bottom });
+              }}
+            >
+              {s.text}
+            </button>
+          </Tooltip>
         );
       })}
     </>

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, type KeyboardEvent } from "react";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 import type { CatalogVendorData } from "@/lib/catalog";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -419,15 +420,17 @@ export function StampCatalogPricesTab({
                               {price.trim() === "" ? "—" : price}
                             </span>
                             {canCopy && (
-                              <button
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => onPriceChange(newestKey, formatPrice(price))}
-                                title={`Copy this price into the newest edition to update it.`}
-                                style={warnBtnStyle}
-                              >
-                                ⤴
-                              </button>
+                              <Tooltip content="Copy this price into the newest edition to update it." align="end">
+                                <button
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => onPriceChange(newestKey, formatPrice(price))}
+                                  aria-label="Copy this price into the newest edition"
+                                  style={warnBtnStyle}
+                                >
+                                  ⤴
+                                </button>
+                              </Tooltip>
                             )}
                           </div>
                         </td>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { Tooltip } from "./tooltip";
 
 // Whole-panel collapse state, persisted in localStorage (not a cookie, which
 // would ride on every request), keyed per panel so each filter column remembers
@@ -124,24 +125,26 @@ export function CollapsibleFilterPanel({
           alignItems: "center",
         }}
       >
-        <button
-          type="button"
-          onClick={toggle}
-          title={`Show ${title}`}
-          style={{
-            width: "100%",
-            height: "2.5rem",
-            padding: 0,
-            background: "transparent",
-            border: "none",
-            borderBottom: "1px solid var(--color-border)",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-          }}
-        >
-          ▸
-        </button>
+        <Tooltip content={`Show ${title}`} placement="bottom" style={{ width: "100%" }}>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={`Show ${title}`}
+            style={{
+              width: "100%",
+              height: "2.5rem",
+              padding: 0,
+              background: "transparent",
+              border: "none",
+              borderBottom: "1px solid var(--color-border)",
+              cursor: "pointer",
+              color: "var(--color-text-muted)",
+              fontSize: "0.75rem",
+            }}
+          >
+            ▸
+          </button>
+        </Tooltip>
         <span
           style={{
             ...LABEL_STYLE,
@@ -190,21 +193,23 @@ export function CollapsibleFilterPanel({
           }}
         >
           <span style={LABEL_STYLE}>{title}</span>
-          <button
-            type="button"
-            onClick={toggle}
-            title={`Hide ${title}`}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              fontSize: "0.75rem",
-              padding: "0 0.25rem",
-            }}
-          >
-            ◂
-          </button>
+          <Tooltip content={`Hide ${title}`} placement="bottom" align="end">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={`Hide ${title}`}
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--color-text-muted)",
+                fontSize: "0.75rem",
+                padding: "0 0.25rem",
+              }}
+            >
+              ◂
+            </button>
+          </Tooltip>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>{children}</div>

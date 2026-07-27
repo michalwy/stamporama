@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -112,9 +113,9 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             {p.contactName ?? "No supplier"}
           </span>
           {p.platformName && (
-            <span style={META_INLINE} title={`Bought via ${p.platformName}`}>
-              via {p.platformName}
-            </span>
+            <Tooltip content={`Bought via ${p.platformName}`}>
+              <span style={META_INLINE}>via {p.platformName}</span>
+            </Tooltip>
           )}
           <span style={{ flex: 1 }} />
           <span onClick={(e) => e.stopPropagation()}>
@@ -125,9 +126,9 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
         {/* Line 2: date + status */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem" }}>
           <span style={META_INLINE}>{p.purchasedAt}</span>
-          <span style={status.style} title="Delivery status">
-            {status.label}
-          </span>
+          <Tooltip content="Delivery status">
+            <span style={status.style}>{status.label}</span>
+          </Tooltip>
         </div>
 
         {/* Line 3: line-count / shipping chips + total */}
@@ -149,23 +150,29 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             </span>
           )}
           {p.shippingCost && (
-            <span style={CHIP} title="Shipping / shared cost">
-              🚚 {p.shippingCost} {p.currency}
-            </span>
+            <Tooltip content="Shipping / shared cost">
+              <span style={CHIP}>
+                🚚 {p.shippingCost} {p.currency}
+              </span>
+            </Tooltip>
           )}
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: "var(--color-text-primary)",
-              whiteSpace: "nowrap",
-            }}
-            title="Total (lots + expenses + shipping)"
+          <Tooltip
+            content="Total (lots + expenses + shipping)"
+            align="end"
+            style={{ marginLeft: "auto" }}
           >
-            {p.total} {p.currency}
-          </span>
+            <span
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+                color: "var(--color-text-primary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {p.total} {p.currency}
+            </span>
+          </Tooltip>
         </div>
       </div>
     </div>

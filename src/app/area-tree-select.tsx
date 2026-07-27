@@ -2,6 +2,7 @@
 
 import type { CollectionAreaData } from "@/lib/areas";
 import { buildTree, type TreeNode } from "@/app/tree-picker-utils";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   TREE_SELECT_NONE_ID,
   TreeSelectButton,
@@ -246,14 +247,15 @@ function AreaTreeSelectNode({
         ) : (
           // Grouping-only area in assignment mode (#263): a non-selectable header. Clicking
           // it toggles expansion so the user can drill into its assignable children.
-          <button
-            className="min-h-9 w-full cursor-default rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--color-text-muted)] transition"
-            type="button"
-            title="Grouping-only area — pick a specific area inside it"
-            onClick={() => hasChildren && onToggleExpanded(area.id)}
-          >
-            <span className="block truncate">{area.name}</span>
-          </button>
+          <Tooltip content="Grouping-only area — pick a specific area inside it" style={{ width: "100%" }}>
+            <button
+              className="min-h-9 w-full cursor-default rounded-md px-2 py-1.5 text-left text-sm font-medium text-[var(--color-text-muted)] transition"
+              type="button"
+              onClick={() => hasChildren && onToggleExpanded(area.id)}
+            >
+              <span className="block truncate">{area.name}</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       {hasChildren && isExpanded ? (

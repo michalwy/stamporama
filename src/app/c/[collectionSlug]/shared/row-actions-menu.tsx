@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Tooltip } from "./tooltip";
 
 /** One entry in a row's action menu. `onSelect` runs after the menu closes, so it
  * may open a dialog that lives at the row level (see the dialog-opener hooks). */
@@ -156,37 +157,38 @@ export function RowActionsMenu({
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={ariaLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={ariaLabel}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        onMouseEnter={(e) => {
-          if (!open) {
-            e.currentTarget.style.background = "var(--color-bg-row-hover)";
-            e.currentTarget.style.borderColor = "var(--color-border-hover)";
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!open) {
-            e.currentTarget.style.background = "var(--color-bg-page)";
-            e.currentTarget.style.borderColor = "var(--color-border-strong)";
-          }
-        }}
-        style={{
-          ...triggerStyle,
-          background: open ? "var(--color-bg-row-hover)" : "var(--color-bg-page)",
-          borderColor: open ? "var(--color-border-hover)" : "var(--color-border-strong)",
-        }}
-      >
-        ⋮
-      </button>
+      <Tooltip content={ariaLabel} align="end">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={ariaLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+          onMouseEnter={(e) => {
+            if (!open) {
+              e.currentTarget.style.background = "var(--color-bg-row-hover)";
+              e.currentTarget.style.borderColor = "var(--color-border-hover)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!open) {
+              e.currentTarget.style.background = "var(--color-bg-page)";
+              e.currentTarget.style.borderColor = "var(--color-border-strong)";
+            }
+          }}
+          style={{
+            ...triggerStyle,
+            background: open ? "var(--color-bg-row-hover)" : "var(--color-bg-page)",
+            borderColor: open ? "var(--color-border-hover)" : "var(--color-border-strong)",
+          }}
+        >
+          ⋮
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         typeof document !== "undefined" &&

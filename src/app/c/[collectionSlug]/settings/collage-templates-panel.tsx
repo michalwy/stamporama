@@ -29,6 +29,7 @@ import {
   DEFAULT_COLLAGE_LABEL_PERCENT,
 } from "@/lib/collage-template-rules";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -314,18 +315,18 @@ export function CollageTemplatesPanel({
                 i < initialTemplates.length - 1 ? "1px solid var(--color-border)" : "none",
             }}
           >
-            <span
-              aria-hidden
-              title={template.background}
-              style={{
-                width: "1.25rem",
-                height: "1.25rem",
-                borderRadius: "0.25rem",
-                border: "1px solid var(--color-border-strong)",
-                background: template.background,
-                flexShrink: 0,
-              }}
-            />
+            <Tooltip content={template.background} style={{ flexShrink: 0 }}>
+              <span
+                aria-hidden
+                style={{
+                  width: "1.25rem",
+                  height: "1.25rem",
+                  borderRadius: "0.25rem",
+                  border: "1px solid var(--color-border-strong)",
+                  background: template.background,
+                }}
+              />
+            </Tooltip>
 
             <span
               style={{

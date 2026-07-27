@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "../offer-badges";
 import {
   useOfferDetail,
@@ -328,17 +329,18 @@ export function OfferDetailPanel({
             {canAdvance && advanceTo && (() => {
               const { label, icon } = advanceLabel(advanceTo);
               return (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => setState(advanceTo)}
-                  title={label}
-                  aria-label={label}
-                  style={QUICK_ADVANCE_BTN}
-                >
-                  <span aria-hidden>{icon}</span>
-                  {label}
-                </button>
+                <Tooltip content={label}>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setState(advanceTo)}
+                    aria-label={label}
+                    style={QUICK_ADVANCE_BTN}
+                  >
+                    <span aria-hidden>{icon}</span>
+                    {label}
+                  </button>
+                </Tooltip>
               );
             })()}
             {offer.needsAction && (
@@ -351,16 +353,16 @@ export function OfferDetailPanel({
 
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "flex-start" }}>
           {/* Currency — inherited from the platform and locked (#196), shown as a read-only chip. */}
-          <span style={CHIP} title="Inherited from the platform — set it on the platform's contact">
-            {offer.currency}
-          </span>
+          <Tooltip content="Inherited from the platform — set it on the platform's contact">
+            <span style={CHIP}>{offer.currency}</span>
+          </Tooltip>
 
           {/* Listing date (#257): when the listing went live, captured at creation. Read-only here —
               editable from the offer header form. Hidden when not recorded. */}
           {offer.listingDate && (
-            <span style={CHIP} title="Listing date — when this listing went live">
-              📅 {new Date(offer.listingDate).toISOString().slice(0, 10)}
-            </span>
+            <Tooltip content="Listing date — when this listing went live">
+              <span style={CHIP}>📅 {new Date(offer.listingDate).toISOString().slice(0, 10)}</span>
+            </Tooltip>
           )}
 
           {/* Listing URL — editable in any state, including sold/withdrawn, for record-keeping
@@ -422,19 +424,22 @@ export function OfferDetailPanel({
               </span>
             )}
             {offer.priceBase && (
-              <span
-                style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}
-                title={`Converted to ${offer.baseCurrency} at the current rate`}
-              >
-                ≈ {offer.priceBase} {offer.baseCurrency}
-              </span>
+              <Tooltip content={`Converted to ${offer.baseCurrency} at the current rate`} align="end">
+                <span
+                  style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}
+                >
+                  ≈ {offer.priceBase} {offer.baseCurrency}
+                </span>
+              </Tooltip>
             )}
             {editable && offer.suggestedPrice && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                <span title="Average catalog value per set, in this offer's currency">
-                  💡 suggested {offer.suggestedPrice} {offer.currency}
-                  {offer.suggestedUnpricedSets > 0 && ` · ${offer.suggestedUnpricedSets} set${offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced`}
-                </span>
+                <Tooltip content="Average catalog value per set, in this offer's currency" align="end">
+                  <span>
+                    💡 suggested {offer.suggestedPrice} {offer.currency}
+                    {offer.suggestedUnpricedSets > 0 && ` · ${offer.suggestedUnpricedSets} set${offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced`}
+                  </span>
+                </Tooltip>
                 {offer.price !== offer.suggestedPrice && (
                   <button
                     type="button"

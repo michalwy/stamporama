@@ -503,24 +503,24 @@ export function IssueRow({
           style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
         >
           {showAreaChip && areaName && (
-            <button
-              type="button"
-              onClick={() => onFilterByArea?.(issue.collectionAreaId)}
-              title={`Filter by ${areaName}`}
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--color-text-muted)",
-                background: "var(--color-bg-page)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.25rem",
-                padding: "0.1rem 0.4rem",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-            >
-              {areaName}
-            </button>
+            <Tooltip content={`Filter by ${areaName}`} style={{ flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => onFilterByArea?.(issue.collectionAreaId)}
+                style={{
+                  fontSize: "0.75rem",
+                  color: "var(--color-text-muted)",
+                  background: "var(--color-bg-page)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.25rem",
+                  padding: "0.1rem 0.4rem",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {areaName}
+              </button>
+            </Tooltip>
           )}
 
           <span
@@ -587,87 +587,91 @@ export function IssueRow({
               const secondary = moneySecondaryText(t);
               const warningLabel = t.usesOlderEdition ? "Older-edition prices" : "Partial total";
               return (
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.35rem",
-                  }}
-                  title={showWarning ? undefined : "Total of required stamps (main catalog)"}
+                <Tooltip
+                  content={showWarning ? undefined : "Total of required stamps (main catalog)"}
+                  align="end"
+                  style={{ marginLeft: "auto" }}
                 >
-                  {estimated && (
-                    <Tooltip
-                      align="end"
-                      content={
-                        <>
-                          <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
-                            Includes an estimate
-                          </div>
-                          {t.estimatedCount > 0 && (
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                              {t.estimatedCount} required stamp{t.estimatedCount !== 1 ? "s" : ""} priced
-                              from the lowest variant (no own price).
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                    }}
+                  >
+                    {estimated && (
+                      <Tooltip
+                        align="end"
+                        content={
+                          <>
+                            <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
+                              Includes an estimate
                             </div>
-                          )}
-                          {t.derivedCount > 0 && (
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                              {t.derivedCount} required stamp{t.derivedCount !== 1 ? "s" : ""} priced
-                              from the single by this format&apos;s multiplier.
-                            </div>
-                          )}
-                        </>
-                      }
-                    >
-                      <span
-                        aria-label="Includes an estimate"
-                        style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
+                            {t.estimatedCount > 0 && (
+                              <div style={{ color: "var(--color-text-secondary)" }}>
+                                {t.estimatedCount} required stamp{t.estimatedCount !== 1 ? "s" : ""} priced
+                                from the lowest variant (no own price).
+                              </div>
+                            )}
+                            {t.derivedCount > 0 && (
+                              <div style={{ color: "var(--color-text-secondary)" }}>
+                                {t.derivedCount} required stamp{t.derivedCount !== 1 ? "s" : ""} priced
+                                from the single by this format&apos;s multiplier.
+                              </div>
+                            )}
+                          </>
+                        }
                       >
-                        ~
-                      </span>
-                    </Tooltip>
-                  )}
-                  {showWarning && (
-                    <Tooltip
-                      align="end"
-                      content={
-                        <>
-                          <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
-                            {warningLabel}
-                          </div>
-                          {t.usesOlderEdition ? (
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                              No required stamp is priced on the current edition — the total uses
-                              older-edition prices.
+                        <span
+                          aria-label="Includes an estimate"
+                          style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
+                        >
+                          ~
+                        </span>
+                      </Tooltip>
+                    )}
+                    {showWarning && (
+                      <Tooltip
+                        align="end"
+                        content={
+                          <>
+                            <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
+                              {warningLabel}
                             </div>
-                          ) : (
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                              {t.pricedCount} of {t.requiredCount} required stamps priced on the
-                              current edition
-                            </div>
-                          )}
-                          {!t.usesOlderEdition && t.olderEditionExcludedCount > 0 && (
-                            <div style={{ color: "var(--color-text-muted)" }}>
-                              {t.olderEditionExcludedCount} priced only on an older edition (not
-                              counted)
-                            </div>
-                          )}
-                          {unpriced > 0 && (
-                            <div style={{ color: "var(--color-text-muted)" }}>
-                              {unpriced} without any catalog price
-                            </div>
-                          )}
-                        </>
-                      }
-                    >
-                      <span aria-label={warningLabel} style={PRICE_STALE_ICON}>
-                        ⚠
-                      </span>
-                    </Tooltip>
-                  )}
-                  {secondary && <span style={PRICE_CONVERTED}>{secondary}</span>}
-                  <span style={PRICE_MAIN}>{moneyPrimaryText(t)}</span>
-                </span>
+                            {t.usesOlderEdition ? (
+                              <div style={{ color: "var(--color-text-secondary)" }}>
+                                No required stamp is priced on the current edition — the total uses
+                                older-edition prices.
+                              </div>
+                            ) : (
+                              <div style={{ color: "var(--color-text-secondary)" }}>
+                                {t.pricedCount} of {t.requiredCount} required stamps priced on the
+                                current edition
+                              </div>
+                            )}
+                            {!t.usesOlderEdition && t.olderEditionExcludedCount > 0 && (
+                              <div style={{ color: "var(--color-text-muted)" }}>
+                                {t.olderEditionExcludedCount} priced only on an older edition (not
+                                counted)
+                              </div>
+                            )}
+                            {unpriced > 0 && (
+                              <div style={{ color: "var(--color-text-muted)" }}>
+                                {unpriced} without any catalog price
+                              </div>
+                            )}
+                          </>
+                        }
+                      >
+                        <span aria-label={warningLabel} style={PRICE_STALE_ICON}>
+                          ⚠
+                        </span>
+                      </Tooltip>
+                    )}
+                    {secondary && <span style={PRICE_CONVERTED}>{secondary}</span>}
+                    <span style={PRICE_MAIN}>{moneyPrimaryText(t)}</span>
+                  </span>
+                </Tooltip>
               );
             })()}
           </div>

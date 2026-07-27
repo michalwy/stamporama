@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
+import { Tooltip } from "./tooltip";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -113,20 +114,24 @@ export function ListToolbar({
             style={{ ...INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
           />
           {localSearch && (
-            <button
-              type="button"
-              onClick={() => setLocalSearch("")}
+            <Tooltip
+              content="Clear search"
               style={{
-                ...CLEAR_BTN,
                 position: "absolute",
                 right: "0.375rem",
                 top: "50%",
                 transform: "translateY(-50%)",
               }}
-              title="Clear search"
             >
-              ✕
-            </button>
+              <button
+                type="button"
+                onClick={() => setLocalSearch("")}
+                aria-label="Clear search"
+                style={CLEAR_BTN}
+              >
+                ✕
+              </button>
+            </Tooltip>
           )}
         </div>
 
@@ -143,20 +148,22 @@ export function ListToolbar({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
-            style={{
-              ...INPUT_STYLE,
-              cursor: "pointer",
-              padding: "0.375rem 0.5rem",
-              fontSize: "0.75rem",
-              lineHeight: 1,
-            }}
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-          >
-            {sortDir === "asc" ? "↑" : "↓"}
-          </button>
+          <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
+            <button
+              type="button"
+              onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
+              aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+              style={{
+                ...INPUT_STYLE,
+                cursor: "pointer",
+                padding: "0.375rem 0.5rem",
+                fontSize: "0.75rem",
+                lineHeight: 1,
+              }}
+            >
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+          </Tooltip>
         </div>
 
         {children}
@@ -193,14 +200,16 @@ export function ListToolbar({
             style={{ ...INPUT_STYLE, width: "10rem" }}
           />
           {(catalogVendorId || catalogNumber) && (
-            <button
-              type="button"
-              onClick={() => onCatalogSearchChange("", "")}
-              style={CLEAR_BTN}
-              title="Clear catalog search"
-            >
-              ✕
-            </button>
+            <Tooltip content="Clear catalog search">
+              <button
+                type="button"
+                onClick={() => onCatalogSearchChange("", "")}
+                aria-label="Clear catalog search"
+                style={CLEAR_BTN}
+              >
+                ✕
+              </button>
+            </Tooltip>
           )}
         </div>
       )}

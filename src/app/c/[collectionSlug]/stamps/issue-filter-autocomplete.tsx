@@ -7,6 +7,7 @@ import {
   useDebouncedValue,
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useIssueSearch } from "./use-stamps-query";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...SEARCH_INPUT_STYLE,
@@ -79,22 +80,24 @@ export function IssueFilterAutocomplete({
           }}
         >
           {selectedLabel}
-          <button
-            type="button"
-            onClick={handleClear}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              fontSize: "0.75rem",
-              padding: "0 0.125rem",
-              lineHeight: 1,
-            }}
-            title="Clear issue filter"
-          >
-            ✕
-          </button>
+          <Tooltip content="Clear issue filter">
+            <button
+              type="button"
+              onClick={handleClear}
+              aria-label="Clear issue filter"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--color-text-muted)",
+                fontSize: "0.75rem",
+                padding: "0 0.125rem",
+                lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          </Tooltip>
         </span>
       </div>
     );

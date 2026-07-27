@@ -4,6 +4,7 @@ import { useMemo, useCallback, useSyncExternalStore } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import { getDescendantIds, flattenAreaTree } from "./area-helpers";
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
+import { Tooltip } from "./tooltip";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
 
@@ -175,55 +176,56 @@ export function AreaFilterSidebar({
         </button>
 
         {extraEntry && (
-          <button
-            type="button"
-            onClick={extraEntry.onSelect}
-            title={extraEntry.title}
-            onMouseEnter={(e) => {
-              if (!extraEntry.selected)
-                e.currentTarget.style.background = "var(--color-bg-muted)";
-            }}
-            onMouseLeave={(e) => {
-              if (!extraEntry.selected) e.currentTarget.style.background = "transparent";
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.5rem",
-              width: "100%",
-              textAlign: "left",
-              padding: "0.4rem 1rem",
-              background: extraEntry.selected ? "var(--color-accent-soft)" : "transparent",
-              border: "none",
-              borderBottom: "1px solid var(--color-border)",
-              cursor: "pointer",
-              fontSize: "0.8125rem",
-              fontStyle: "italic",
-              fontWeight: extraEntry.selected ? 600 : 400,
-              color: extraEntry.selected
-                ? "var(--color-accent)"
-                : "var(--color-text-secondary)",
-            }}
-          >
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {extraEntry.label}
-            </span>
-            {extraEntry.count !== undefined && (
-              <span
-                style={{
-                  flexShrink: 0,
-                  fontSize: "0.75rem",
-                  fontWeight: 400,
-                  fontStyle: "normal",
-                  color: "var(--color-text-muted)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {extraEntry.count}
+          <Tooltip content={extraEntry.title} placement="bottom" style={{ width: "100%" }}>
+            <button
+              type="button"
+              onClick={extraEntry.onSelect}
+              onMouseEnter={(e) => {
+                if (!extraEntry.selected)
+                  e.currentTarget.style.background = "var(--color-bg-muted)";
+              }}
+              onMouseLeave={(e) => {
+                if (!extraEntry.selected) e.currentTarget.style.background = "transparent";
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "0.5rem",
+                width: "100%",
+                textAlign: "left",
+                padding: "0.4rem 1rem",
+                background: extraEntry.selected ? "var(--color-accent-soft)" : "transparent",
+                border: "none",
+                borderBottom: "1px solid var(--color-border)",
+                cursor: "pointer",
+                fontSize: "0.8125rem",
+                fontStyle: "italic",
+                fontWeight: extraEntry.selected ? 600 : 400,
+                color: extraEntry.selected
+                  ? "var(--color-accent)"
+                  : "var(--color-text-secondary)",
+              }}
+            >
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {extraEntry.label}
               </span>
-            )}
-          </button>
+              {extraEntry.count !== undefined && (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontSize: "0.75rem",
+                    fontWeight: 400,
+                    fontStyle: "normal",
+                    color: "var(--color-text-muted)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {extraEntry.count}
+                </span>
+              )}
+            </button>
+          </Tooltip>
         )}
 
         {loaded &&

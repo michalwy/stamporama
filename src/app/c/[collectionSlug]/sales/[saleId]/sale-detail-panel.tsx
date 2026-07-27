@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -192,9 +193,9 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
           <span style={CHIP}>{soldDate}</span>
           <span style={CHIP}>{sale.currency}</span>
           {sale.externalRef && (
-            <span style={CHIP} title="Order number in the marketplace">
-              # {sale.externalRef}
-            </span>
+            <Tooltip content="Order number in the marketplace">
+              <span style={CHIP}># {sale.externalRef}</span>
+            </Tooltip>
           )}
           {/* Transaction link (#292): the order page on the marketplace. Editable whatever the
               fulfillment status is — the order page is most often what you come back to *after* the
@@ -205,16 +206,17 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             placeholder="Add transaction link"
             display={
               sale.transactionUrl ? (
-                <a
-                  href={sale.transactionUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
-                  title="Open the transaction on the marketplace"
-                >
-                  🔗 Transaction
-                </a>
+                <Tooltip content="Open the transaction on the marketplace">
+                  <a
+                    href={sale.transactionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+                  >
+                    🔗 Transaction
+                  </a>
+                </Tooltip>
               ) : (
                 <span style={{ ...CHIP, color: "var(--color-text-muted)", cursor: "text" }}>
                   Add transaction link
@@ -234,16 +236,17 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             }
           />
           {sale.fxRateToBase && (
-            <span style={CHIP} title={`Frozen FX rate to ${sale.baseCurrency}: ${sale.fxRateToBase}`}>
-              → {sale.baseCurrency} @ {formatRate(sale.fxRateToBase)}
-            </span>
+            <Tooltip content={`Frozen FX rate to ${sale.baseCurrency}: ${sale.fxRateToBase}`}>
+              <span style={CHIP}>
+                → {sale.baseCurrency} @ {formatRate(sale.fxRateToBase)}
+              </span>
+            </Tooltip>
           )}
-          <span
-            style={{ marginLeft: "auto", fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
-            title="Net proceeds (base currency)"
-          >
-            {sale.netProceeds} {sale.baseCurrency}
-          </span>
+          <Tooltip content="Net proceeds (base currency)" align="end" style={{ marginLeft: "auto" }}>
+            <span style={{ fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+              {sale.netProceeds} {sale.baseCurrency}
+            </span>
+          </Tooltip>
         </div>
         {sale.fxRateToBase == null && sale.currency !== sale.baseCurrency && (
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.75rem", color: "var(--color-warning, var(--color-text-muted))" }}>
@@ -289,30 +292,32 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             ))}
           </select>
           {nextStatus && (
-            <button
-              type="button"
-              onClick={() => applyStatus(nextStatus)}
-              disabled={isPending}
-              style={SECONDARY_BTN}
-              title={`Advance to ${SALE_STATUS_META[nextStatus as SaleStatus].label}`}
-            >
-              → {SALE_STATUS_META[nextStatus as SaleStatus].label}
-            </button>
+            <Tooltip content={`Advance to ${SALE_STATUS_META[nextStatus as SaleStatus].label}`}>
+              <button
+                type="button"
+                onClick={() => applyStatus(nextStatus)}
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                → {SALE_STATUS_META[nextStatus as SaleStatus].label}
+              </button>
+            </Tooltip>
           )}
           {showPackedHint && (
-            <span
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--color-accent)",
-                background: "var(--color-accent-soft, var(--color-bg-page))",
-                border: "1px solid var(--color-accent-border, var(--color-border))",
-                borderRadius: "0.375rem",
-                padding: "0.125rem 0.5rem",
-              }}
-              title="Every copy on this sale is packed"
-            >
-              All copies packed — advance to Packed?
-            </span>
+            <Tooltip content="Every copy on this sale is packed">
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: "var(--color-accent)",
+                  background: "var(--color-accent-soft, var(--color-bg-page))",
+                  border: "1px solid var(--color-accent-border, var(--color-border))",
+                  borderRadius: "0.375rem",
+                  padding: "0.125rem 0.5rem",
+                }}
+              >
+                All copies packed — advance to Packed?
+              </span>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -366,11 +371,13 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               />
               {/* Derived handling (read-only) */}
               <div style={ROW_LABEL}>+ Buyer handling</div>
-              <div style={ORIG_CELL} title="Derived from the total paid minus the offer prices">
-                <span style={{ paddingRight: VALUE_INSET }}>
-                  {sale.buyerHandling} {sale.currency}
-                </span>
-              </div>
+              <Tooltip content="Derived from the total paid minus the offer prices" style={{ display: "block" }}>
+                <div style={ORIG_CELL}>
+                  <span style={{ paddingRight: VALUE_INSET }}>
+                    {sale.buyerHandling} {sale.currency}
+                  </span>
+                </div>
+              </Tooltip>
               <div style={BASE_CELL}>{baseEqText(toBase(sale.buyerHandling), sale.baseCurrency)}</div>
               {sale.totalBelowGross && (
                 <p style={{ gridColumn: "1 / -1", margin: "0.125rem 0 0.25rem", fontSize: "0.75rem", color: "var(--color-error)" }}>
@@ -697,32 +704,33 @@ function EditableAmountRow({
             style={{ ...INPUT_STYLE, width: "8rem", textAlign: "right", padding: "0.125rem 0.375rem" }}
           />
         ) : (
-          <button
-            type="button"
-            onClick={open}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            disabled={disabled}
-            title="Click to edit"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              border: "none",
-              background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
-              cursor: disabled ? "default" : "pointer",
-              padding: `0.125rem ${VALUE_INSET}`,
-              borderRadius: "0.25rem",
-              fontVariantNumeric: "tabular-nums",
-              fontSize: "0.8125rem",
-              color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
-            }}
-          >
-            <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-              ✎
-            </span>
-            <span>{value ? `${value} ${currency}` : "Set"}</span>
-          </button>
+          <Tooltip content="Click to edit">
+            <button
+              type="button"
+              onClick={open}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
+              disabled={disabled}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                border: "none",
+                background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
+                cursor: disabled ? "default" : "pointer",
+                padding: `0.125rem ${VALUE_INSET}`,
+                borderRadius: "0.25rem",
+                fontVariantNumeric: "tabular-nums",
+                fontSize: "0.8125rem",
+                color: value ? "var(--color-text-primary)" : "var(--color-text-muted)",
+              }}
+            >
+              <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+                ✎
+              </span>
+              <span>{value ? `${value} ${currency}` : "Set"}</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       <div style={BASE_CELL}>{baseEqText(baseEquivalent, baseCurrency ?? "")}</div>
@@ -816,47 +824,54 @@ function EditableShippingRow({
                 </option>
               ))}
             </select>
-            <button type="button" onClick={commit} title="Save" aria-label="Save shipping" style={SHIP_ICON_BTN}>
-              ✓
-            </button>
-            <button type="button" onClick={() => setEditing(false)} title="Cancel" aria-label="Cancel" style={SHIP_ICON_BTN}>
-              ✕
-            </button>
+            <Tooltip content="Save">
+              <button type="button" onClick={commit} aria-label="Save shipping" style={SHIP_ICON_BTN}>
+                ✓
+              </button>
+            </Tooltip>
+            <Tooltip content="Cancel">
+              <button type="button" onClick={() => setEditing(false)} aria-label="Cancel" style={SHIP_ICON_BTN}>
+                ✕
+              </button>
+            </Tooltip>
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={open}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            disabled={disabled}
-            title="Click to edit"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              border: "none",
-              background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
-              cursor: disabled ? "default" : "pointer",
-              padding: `0.125rem ${VALUE_INSET}`,
-              borderRadius: "0.25rem",
-              fontVariantNumeric: "tabular-nums",
-              fontSize: "0.8125rem",
-              color: amount ? "var(--color-text-primary)" : "var(--color-text-muted)",
-            }}
-          >
-            <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-              ✎
-            </span>
-            <span>{amount ? `${amount} ${currency}` : "Set"}</span>
-          </button>
+          <Tooltip content="Click to edit">
+            <button
+              type="button"
+              onClick={open}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
+              disabled={disabled}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                border: "none",
+                background: hovered && !disabled ? "var(--color-bg-muted)" : "transparent",
+                cursor: disabled ? "default" : "pointer",
+                padding: `0.125rem ${VALUE_INSET}`,
+                borderRadius: "0.25rem",
+                fontVariantNumeric: "tabular-nums",
+                fontSize: "0.8125rem",
+                color: amount ? "var(--color-text-primary)" : "var(--color-text-muted)",
+              }}
+            >
+              <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
+                ✎
+              </span>
+              <span>{amount ? `${amount} ${currency}` : "Set"}</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       <div style={rateMissing ? { ...BASE_CELL, color: "var(--color-error)" } : BASE_CELL}>
         {rateMissing ? (
-          <span title={`No exchange rate from ${currency} to ${baseCurrency} is known yet, so this cost is not in the base net.`}>
-            no rate
-          </span>
+          <Tooltip
+            content={`No exchange rate from ${currency} to ${baseCurrency} is known yet, so this cost is not in the base net.`}
+          >
+            <span>no rate</span>
+          </Tooltip>
         ) : baseEquivalent ? (
           // The base column always carries the shipping cost in base (#208/#206) — shown even when
           // paid in the base currency, but then it's exact, so no "≈".

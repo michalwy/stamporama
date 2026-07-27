@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { SaleListItem } from "@/lib/sales";
 import {
@@ -107,25 +108,31 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
             style={{ ...SEARCH_INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
           />
           {localSearch && (
-            <button
-              type="button"
-              onClick={() => setLocalSearch("")}
-              title="Clear search"
+            <Tooltip
+              content="Clear search"
               style={{
                 position: "absolute",
                 right: "0.375rem",
                 top: "50%",
                 transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--color-text-muted)",
-                fontSize: "0.75rem",
-                padding: "0 0.25rem",
               }}
             >
-              ✕
-            </button>
+              <button
+                type="button"
+                onClick={() => setLocalSearch("")}
+                aria-label="Clear search"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.75rem",
+                  padding: "0 0.25rem",
+                }}
+              >
+                ✕
+              </button>
+            </Tooltip>
           )}
         </div>
         <select

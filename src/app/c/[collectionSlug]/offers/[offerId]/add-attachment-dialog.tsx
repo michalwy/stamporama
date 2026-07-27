@@ -11,6 +11,7 @@ import {
 import { useOfferCopies } from "../use-offers-query";
 import type { ItemListItem } from "@/lib/items";
 import { formatBytes } from "@/lib/format-bytes";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -242,17 +243,18 @@ export function AddAttachmentDialog({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-          <label
-            title="One image out of everything picked on both tabs. Gap, background and the label strip come from this offer's collage settings, like every other image."
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--color-text-primary)", whiteSpace: "nowrap" }}
-          >
-            <input
-              type="checkbox"
-              checked={asCollage}
-              onChange={(e) => setAsCollage(e.target.checked)}
-            />
-            Combine into one collage
-          </label>
+          <Tooltip content="One image out of everything picked on both tabs. Gap, background and the label strip come from this offer's collage settings, like every other image.">
+            <label
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--color-text-primary)", whiteSpace: "nowrap" }}
+            >
+              <input
+                type="checkbox"
+                checked={asCollage}
+                onChange={(e) => setAsCollage(e.target.checked)}
+              />
+              Combine into one collage
+            </label>
+          </Tooltip>
           {asCollage && (
             <>
               <label htmlFor="collage-columns" style={{ ...NOTE, fontSize: "0.75rem" }}>
@@ -279,15 +281,19 @@ export function AddAttachmentDialog({
                 ? "Pick photos on either tab — they all go into this one image."
                 : `${collageTiles.length} photo${collageTiles.length === 1 ? "" : "s"} · ${rows} row${rows === 1 ? "" : "s"} · laid out in the order below`}
           </span>
-          <input
-            id="attachment-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={`Caption (optional${!asCollage && count > 1 ? ", applied to all" : ""})`}
-            aria-label="Caption"
-            title="Shown in the plan only — never drawn on the image"
-            style={{ ...INPUT_STYLE, width: "auto", flex: 1, minWidth: "14rem" }}
-          />
+          <Tooltip
+            content="Shown in the plan only — never drawn on the image"
+            style={{ flex: 1, minWidth: "14rem" }}
+          >
+            <input
+              id="attachment-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={`Caption (optional${!asCollage && count > 1 ? ", applied to all" : ""})`}
+              aria-label="Caption"
+              style={{ ...INPUT_STYLE, width: "100%" }}
+            />
+          </Tooltip>
         </div>
         {asCollage && collageTiles.length > 0 && (
           /* The tiles in the order they will be laid out, so the layout is not a guess. Scrolls
@@ -302,40 +308,41 @@ export function AddAttachmentDialog({
             }}
           >
             {collageTiles.map((tile, index) => (
-              <span
+              <Tooltip
                 key={tile.kind === "copy_photo" ? tile.photoId : tile.uploadId}
-                title={`Tile ${index + 1}`}
-                style={{ position: "relative", display: "inline-flex" }}
+                content={`Tile ${index + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={tileThumb(tile)}
-                  alt={`Tile ${index + 1}`}
-                  style={{
-                    width: "2.5rem",
-                    height: "2.5rem",
-                    objectFit: "cover",
-                    borderRadius: "0.25rem",
-                    border: "1px solid var(--color-border)",
-                    display: "block",
-                  }}
-                />
-                <span
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    bottom: 0,
-                    right: 0,
-                    padding: "0 0.2rem",
-                    fontSize: "0.625rem",
-                    borderRadius: "0.25rem 0 0.25rem 0",
-                    background: "var(--color-bg-elevated)",
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  {index + 1}
+                <span style={{ position: "relative", display: "inline-flex" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={tileThumb(tile)}
+                    alt={`Tile ${index + 1}`}
+                    style={{
+                      width: "2.5rem",
+                      height: "2.5rem",
+                      objectFit: "cover",
+                      borderRadius: "0.25rem",
+                      border: "1px solid var(--color-border)",
+                      display: "block",
+                    }}
+                  />
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      right: 0,
+                      padding: "0 0.2rem",
+                      fontSize: "0.625rem",
+                      borderRadius: "0.25rem 0 0.25rem 0",
+                      background: "var(--color-bg-elevated)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {index + 1}
+                  </span>
                 </span>
-              </span>
+              </Tooltip>
             ))}
           </div>
         )}
@@ -404,63 +411,66 @@ export function AddAttachmentDialog({
                     {item.photos.map((photo, index) => {
                       const selected = picked.has(photo.id);
                       return (
-                        <button
+                        <Tooltip
                           key={photo.id}
-                          type="button"
-                          onClick={() => togglePick({ itemId: item.id, photoId: photo.id })}
-                          aria-pressed={selected}
-                          title={photo.title ?? photoLabel(photo.role, index)}
-                          style={{
-                            position: "relative",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                            padding: "0.25rem",
-                            borderRadius: "0.5rem",
-                            border: `2px solid ${selected ? "var(--color-accent)" : "var(--color-border)"}`,
-                            background: selected
-                              ? "var(--color-accent-soft, var(--color-bg-page))"
-                              : "var(--color-bg-page)",
-                            cursor: "pointer",
-                          }}
+                          content={photo.title ?? photoLabel(photo.role, index)}
                         >
-                          {selected && (
-                            <span
-                              aria-hidden
-                              style={{
-                                position: "absolute",
-                                top: "0.25rem",
-                                right: "0.25rem",
-                                width: "1.1rem",
-                                height: "1.1rem",
-                                borderRadius: "999px",
-                                background: "var(--color-accent)",
-                                color: "#fff",
-                                fontSize: "0.7rem",
-                                lineHeight: "1.1rem",
-                                textAlign: "center",
-                              }}
-                            >
-                              ✓
-                            </span>
-                          )}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`/api/collections/${collectionId}/photos/${photo.id}/thumb`}
-                            alt={photoLabel(photo.role, index)}
+                          <button
+                            type="button"
+                            onClick={() => togglePick({ itemId: item.id, photoId: photo.id })}
+                            aria-pressed={selected}
                             style={{
-                              width: "4rem",
-                              height: "4rem",
-                              objectFit: "cover",
-                              borderRadius: "0.375rem",
-                              display: "block",
+                              position: "relative",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: "0.25rem",
+                              padding: "0.25rem",
+                              borderRadius: "0.5rem",
+                              border: `2px solid ${selected ? "var(--color-accent)" : "var(--color-border)"}`,
+                              background: selected
+                                ? "var(--color-accent-soft, var(--color-bg-page))"
+                                : "var(--color-bg-page)",
+                              cursor: "pointer",
                             }}
-                          />
-                          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-secondary)" }}>
-                            {photoLabel(photo.role, index)}
-                          </span>
-                        </button>
+                          >
+                            {selected && (
+                              <span
+                                aria-hidden
+                                style={{
+                                  position: "absolute",
+                                  top: "0.25rem",
+                                  right: "0.25rem",
+                                  width: "1.1rem",
+                                  height: "1.1rem",
+                                  borderRadius: "999px",
+                                  background: "var(--color-accent)",
+                                  color: "#fff",
+                                  fontSize: "0.7rem",
+                                  lineHeight: "1.1rem",
+                                  textAlign: "center",
+                                }}
+                              >
+                                ✓
+                              </span>
+                            )}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/collections/${collectionId}/photos/${photo.id}/thumb`}
+                              alt={photoLabel(photo.role, index)}
+                              style={{
+                                width: "4rem",
+                                height: "4rem",
+                                objectFit: "cover",
+                                borderRadius: "0.375rem",
+                                display: "block",
+                              }}
+                            />
+                            <span style={{ fontSize: "0.6875rem", color: "var(--color-text-secondary)" }}>
+                              {photoLabel(photo.role, index)}
+                            </span>
+                          </button>
+                        </Tooltip>
                       );
                     })}
                   </div>
@@ -498,42 +508,44 @@ export function AddAttachmentDialog({
             >
               {staged.map((s) => (
                 <div key={s.id} style={{ position: "relative" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={s.previewUrl}
-                    alt="Uploaded image"
-                    title={`${s.width}×${s.height} · ${formatBytes(s.sizeBytes)}`}
-                    style={{
-                      width: "6rem",
-                      height: "6rem",
-                      objectFit: "cover",
-                      borderRadius: "0.375rem",
-                      border: "1px solid var(--color-border)",
-                      display: "block",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setStaged((prev) => prev.filter((x) => x.id !== s.id))}
-                    aria-label="Remove this image"
-                    title="Remove"
-                    style={{
-                      position: "absolute",
-                      top: "-0.4rem",
-                      right: "-0.4rem",
-                      width: "1.3rem",
-                      height: "1.3rem",
-                      borderRadius: "999px",
-                      border: "1px solid var(--color-border)",
-                      background: "var(--color-bg-elevated)",
-                      color: "var(--color-error)",
-                      cursor: "pointer",
-                      fontSize: "0.75rem",
-                      lineHeight: 1,
-                    }}
+                  <Tooltip content={`${s.width}×${s.height} · ${formatBytes(s.sizeBytes)}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={s.previewUrl}
+                      alt="Uploaded image"
+                      style={{
+                        width: "6rem",
+                        height: "6rem",
+                        objectFit: "cover",
+                        borderRadius: "0.375rem",
+                        border: "1px solid var(--color-border)",
+                        display: "block",
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip
+                    content="Remove"
+                    style={{ position: "absolute", top: "-0.4rem", right: "-0.4rem" }}
                   >
-                    ✕
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaged((prev) => prev.filter((x) => x.id !== s.id))}
+                      aria-label="Remove this image"
+                      style={{
+                        width: "1.3rem",
+                        height: "1.3rem",
+                        borderRadius: "999px",
+                        border: "1px solid var(--color-border)",
+                        background: "var(--color-bg-elevated)",
+                        color: "var(--color-error)",
+                        cursor: "pointer",
+                        fontSize: "0.75rem",
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </Tooltip>
                 </div>
               ))}
               {staged.length === 0 && (

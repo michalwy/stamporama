@@ -2,6 +2,7 @@
 
 import type { StampCopyCounts } from "@/lib/copy-counts";
 import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { Tooltip } from "./tooltip";
 
 // How many copies of a stamp you hold, shown beside its catalog numbers wherever stamps are
 // listed (#348): the issue tree, the flat stamp list, and the stamp pickers that reuse the tree.
@@ -47,18 +48,19 @@ export function CopyCountBadge({
   if (!copies || copies.total === 0) return null;
   const medium = size === "medium";
   return (
-    <span
-      title={describe(copies)}
-      aria-label={describe(copies)}
-      style={{
-        ...CHIP,
-        fontSize: medium ? "0.75rem" : "0.6875rem",
-        padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
-      }}
-    >
-      {/* Spelled out rather than a bare number or "×3": the price sits at the other end of the
-          same line, and a lone multiplier there reads as a quantity *of the price*. */}
-      {copies.total} {copies.total === 1 ? "copy" : "copies"}
-    </span>
+    <Tooltip content={describe(copies)}>
+      <span
+        aria-label={describe(copies)}
+        style={{
+          ...CHIP,
+          fontSize: medium ? "0.75rem" : "0.6875rem",
+          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+        }}
+      >
+        {/* Spelled out rather than a bare number or "×3": the price sits at the other end of the
+            same line, and a lone multiplier there reads as a quantity *of the price*. */}
+        {copies.total} {copies.total === 1 ? "copy" : "copies"}
+      </span>
+    </Tooltip>
   );
 }

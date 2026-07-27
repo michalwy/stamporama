@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Tooltip } from "./tooltip";
 
 // ── Drag-to-reorder (#306, #313) ────────────────────────────────────────────
 // The **container** is the drop target, not the individual cards / rows: the landing gap is derived
@@ -179,19 +180,19 @@ export function dragStyle(drag: DragList | null, index: number): React.CSSProper
  * no thin handle to hit. */
 export function DragGrip({ label }: { label: string }) {
   return (
-    <span
-      aria-hidden
-      title={label}
-      style={{
-        flexShrink: 0,
-        padding: "0 0.25rem",
-        color: "var(--color-text-muted)",
-        fontSize: "0.75rem",
-        lineHeight: 1,
-        userSelect: "none",
-      }}
-    >
-      ⠿
-    </span>
+    <Tooltip content={label} style={{ flexShrink: 0 }}>
+      <span
+        aria-hidden
+        style={{
+          padding: "0 0.25rem",
+          color: "var(--color-text-muted)",
+          fontSize: "0.75rem",
+          lineHeight: 1,
+          userSelect: "none",
+        }}
+      >
+        ⠿
+      </span>
+    </Tooltip>
   );
 }
