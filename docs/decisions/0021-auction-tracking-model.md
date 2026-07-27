@@ -1,0 +1,172 @@
+# ADR-0021: Auction Tracking as a Bidding Watchlist
+
+## Status
+
+Accepted. Resolves the design question in #23; schema and arithmetic in #350.
+
+## Context
+
+Auction tracking was originally framed as a **register of market auction results** — a table of
+what things sold for, fed from external sources, to be mined for valuation (#24) and bid
+recommendations (#25).
+
+That framing does not match the workflow the feature exists to serve. What the collector actually
+does is bid: browse a house catalogue or a marketplace, note the interesting lots, watch the price
+climb, decide a ceiling, and find out afterwards whether the lot was won or lost. The market data
+is a *by-product* of that — a lost lot's final price is the price signal — not a separate corpus
+somebody has to go and populate.
+
+Much of the original scope has also been absorbed by work landed since. `Purchase`/`PurchaseLot`
+(ADR-0009) covers acquisition with its platform, currency and frozen FX rate. `Offer.inActiveBidding`
+(#215) covers auctions where we *sell*. `ExchangeRate` (#20) and `StampCatalogPrice` (ADR-0006)
+cover currency conversion and catalogue value. What was missing was only the part before the
+purchase exists: the watchlist, and the fork at its end.
+
+## Decisions
+
+### 1. The parent entity is a settlement with one seller, not an auction event
+
+`AuctionSale` is **what ships in one parcel from one seller**. For an auction house that coincides
+with the house's own sale (`Köhler 385`); on a marketplace it is an open-ended basket of everything
+currently being bid on with one seller. Winning something else from that seller after the parcel
+has shipped closes one sale and starts another.
+
+Modelling the event instead — "Köhler 385" as a thing in the world, with the collector's lots
+hanging off it — would have been the obvious choice and is the wrong one, because the interesting
+question is never "what was in that sale?" but "what is this parcel going to cost me?".
+
+The payoff is that **shipping distribution falls out of ADR-0009 §3 for free**. Shared cost has to
+be spread over a group, and choosing the group is the hard part of any settlement flow. Here the
+grouping is made at bidding time, when it is natural and cheap — the collector already knows which
+seller a lot is with — so settlement never has to ask "which purchase does this go into?". Had the
+parent been the event, a marketplace basket would have had no parent at all and shipping would have
+needed a mechanism of its own.
+
+### 2. Seller and platform are two separate contacts
+
+`sellerId` is who is being bought from; `platformId` is what the sale is routed through. A house
+selling directly is the same `Contact` in both fields; a house listing through philasearch is
+seller = house, platform = philasearch. This mirrors `Purchase.contactId` / `Purchase.platformId`
+exactly (ADR-0009 §1), down to the `onDelete: Restrict` detach-before-delete guard from ADR-0008 §4.
+
+Collapsing the two would make an aggregator indistinguishable from the houses behind it, and the
+distinction is not cosmetic: the seller decides the terms, the platform decides how one gets there.
+
+### 3. Currency and fee defaults live on the seller and are seeded onto the sale
+
+`Contact` gains `defaultCurrency`, `defaultShippingCost`, `buyerPremiumPercent` and
+`buyerPremiumFixed`, all optional. They are **copied onto the `AuctionSale` at creation** and freely
+edited there afterwards — never read live.
+
+This is the same decision already made twice: listing templates and photo configuration seed from a
+platform onto an offer (#308), and the description format seeds the same way (#319, ADR-0019). The
+reasoning does not change with the entity. A seller who raises their premium next season must not
+silently re-price a parcel already being tracked, and must certainly not re-price one already
+settled into a purchase — the amounts there are what was actually paid.
+
+Currency belongs to the **seller**, so `platformCurrency` (#196) does not apply. That column exists
+because a marketplace really does fix one currency for everything transacted on it, which is what
+guarantees offer↔sale consistency. An auction aggregator does the opposite: philasearch carries
+houses listing in EUR, CHF and GBP side by side, so a platform-level currency would be wrong for
+most of what passes through it.
+
+### 4. Outcome lives on the lot, never on the sale
+
+`AuctionLot.status` is `watching | won | lost | cancelled`. The sale's own `status`
+(`open | settled | closed`) is about the parcel's lifecycle, not about how the bidding went.
+
+Within one settlement some lots are won and others lost, and that is the ordinary case rather than
+an edge one — it is what bidding *is*. A sale-level outcome would have no meaning to record.
+
+### 5. The bid is a single overwritten figure with `checkedAt`, not a history
+
+`currentBid` is overwritten in place and `checkedAt` records when it was read. There is no bid
+history table.
+
+Refreshing is manual — see §8 — so every field that must be kept current is real work done by a
+person. A history bought with that work would answer questions nobody asks; the one question that
+does get asked before a lot closes is "how stale is this?", and `checkedAt` answers it in one
+column. `finalPrice` is separately optional, because a lot that simply vanished from view yields no
+datapoint: that is an absent observation, not an error state to be filled in.
+
+### 6. Composition is structured, and reuses the pricing machinery that exists
+
+`AuctionLotLine` is `stamp × condition × format × quantity`. Not free text.
+
+Free text would be quicker to enter and would make the whole feature useless: a lot's catalogue
+value could not be computed before it closes, and a lost lot could not be attached to anything
+afterwards. Structure is what turns the watchlist into an input for #24.
+
+Two things are deliberately **reused rather than re-decided**. A line pointed at an unknown-variant
+umbrella covers "variant not identified yet" — the everyday state of material one is bidding on —
+and its value rolls up from the cheapest variant child exactly as the issue list does (#238). And
+`formatId` prices multiples through `StampFormatFactor` (ADR-0020), with null meaning single. A
+lot's catalogue value is therefore a sum over its lines using machinery already in place; there is
+no auction pricing engine.
+
+The arithmetic that *is* new is small and pure (`src/lib/auction-lot.ts`, no Prisma, unit-tested,
+mirroring `offer-summary.ts`):
+
+```
+allIn(bid) = bid + bid × premiumPercent / 100 + premiumFixed + shippingCost
+headroom   = catalogueValue − allIn(bid)
+```
+
+The all-in figure, not the hammer price, is what a ceiling has to be set against. Comparing
+catalogue value to the hammer price alone systematically overpays on cheap lots, where shipping and
+a fixed lot fee are a large share of what leaves the bank account. Shipping belongs to the parcel,
+so the sale-level rollup adds it **once** however many lots are in the sale — which is only
+expressible because of §1.
+
+### 7. Settlement is a 1:1 transcription, and a lost lot is the price signal
+
+Winning settles the sale into the acquisition model rather than creating a parallel one:
+`AuctionSale` → `Purchase` (seller, platform, currency, `shippingCost`), each `won` lot →
+`PurchaseLot` priced at hammer + premium, lost lots skipped. Shipping is then distributed across
+lines by ADR-0009 §3, and the lot composition carries over as a proposal for copy identification.
+`AuctionSale.purchaseId` and `AuctionLot.purchaseLotId` are unique and `onDelete: SetNull` — the
+link is 1:1, and deleting the purchase must leave the bidding record standing, because that record
+is a datapoint in its own right.
+
+Losing produces the other output: `finalPrice` + `endsAt` + the composition, with `fxRateToBase`
+frozen at `endsAt` through the `Purchase` mechanism from #20. That is what #24 consumes. It costs
+nothing extra to capture — the composition was entered to decide the bid — which is the whole
+argument for getting market data this way instead of importing it.
+
+### 8. Data entry is manual, plus one assisted capture path
+
+Manual entry, plus Stamporama Assistant support for `allegro.pl` (#355; ADR-0015/ADR-0017): a click
+on a listing captures URL, title, closing date and current bid through an `AssistantToken`-
+authenticated endpoint. Composition is always entered by hand — it cannot be extracted from a
+listing reliably.
+
+There is no scraping and no scheduled bid refreshing. Both are fragile dependencies on markup and
+terms of service we do not control, and they would be a separate architectural decision, not a
+detail of this one.
+
+### 9. The flat list of lots is the primary screen; the sale is a grouping
+
+The **Auction sales** nav page leads with a flat list of lots across all sales — status / platform /
+seller filter chips (#332), sale as a column with optional grouping, inline bid editing — so
+"everything I have running on Allegro" needs no navigating between sales. Sale detail exists
+separately, for settlement and shipping.
+
+This follows from §1 again. The sale is a settlement boundary, which matters twice (when a lot is
+added, and when the parcel is paid for) and is in the way the rest of the time. What the collector
+does daily is scan closing times and refresh bids, and that is a list of lots.
+
+Consequently, adding a lot never starts by picking a sale: the dialog takes seller and platform, and
+proposes the open sale for that pair if one exists, with the option to start a new one.
+
+## Consequences
+
+- Three new tables — `auction_sale`, `auction_lot`, `auction_lot_line` — and four nullable columns
+  on `contact`. No backfill: an existing contact simply states no defaults.
+- No new pricing, currency or cost-distribution mechanism. Catalogue value, format factors, FX
+  freezing and shipping allocation are all existing machinery, reached through existing modules.
+- The auction layer is **optional and skippable**: a purchase can still be entered directly. Nothing
+  outside the auction screens depends on these tables.
+- Market price data accumulates only for lots the collector actually bid on. That is a deliberately
+  narrow sample, and #24 must treat it as such.
+- If bid refreshing ever becomes automated, `checkedAt` is already the field it would write, but
+  §5's "no history" decision would have to be revisited — cheap polling changes what a history costs.

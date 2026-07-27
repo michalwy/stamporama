@@ -65,6 +65,7 @@ model Collection {
   purchases       Purchase[]
   offers          Offer[]
   sales           Sale[]
+  auctionSales    AuctionSale[]
   colnectCatalogMappings ColnectCatalogMapping[]
   assistantTokens AssistantToken[]
   assistantRegistrationCodes AssistantRegistrationCode[]
@@ -85,6 +86,7 @@ model StampCondition {
   items         Item[]
   translations  StampConditionTranslation[]
   formatFactors StampFormatFactor[]
+  auctionLotLines AuctionLotLine[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -120,6 +122,7 @@ model StampFormat {
   items         Item[]
   factors       StampFormatFactor[]
   translations  StampFormatTranslation[]
+  auctionLotLines AuctionLotLine[]
 
   @@index([collectionId])
   @@map("stamp_format")
@@ -526,6 +529,7 @@ model Stamp {
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
+  auctionLotLines    AuctionLotLine[]
   photos             Photo[]
   translations       StampTranslation[]
 
@@ -789,6 +793,8 @@ model Purchase {
   platform   Contact?          @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   lots       PurchaseLot[]
   expenses   PurchaseExpense[]
+  // The auction settlement this purchase was transcribed from, when it came from one (ADR-0021).
+  auctionSale AuctionSale?
 
   @@index([collectionId])
   @@index([contactId])
@@ -814,6 +820,8 @@ model PurchaseLot {
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   items    Item[]
+  // The won auction lot this line was transcribed from, when it came from one (ADR-0021).
+  auctionLot AuctionLot?
 
   @@index([purchaseId])
   @@map("purchase_lot")
@@ -834,6 +842,129 @@ model PurchaseExpense {
 
   @@index([purchaseId])
   @@map("purchase_expense")
+}
+
+// Auction tracking (ADR-0021, #23/#350): a bidding watchlist with a fork at the end. Three levels,
+// `AuctionSale` ⊃ `AuctionLot` ⊃ `AuctionLotLine`, and the whole thing settles into the purchase
+// model that already exists rather than growing an acquisition path of its own.
+//
+// An `AuctionSale` is **one settlement with one seller** — what ships in one parcel — not "an
+// auction as an event". For an auction house it coincides with the house's own sale (`Köhler 385`);
+// on a marketplace it is an open-ended basket of everything currently being bid on with one seller.
+// That framing is what makes shipping distribution fall out of ADR-0009 §3 for free: the grouping
+// the shipping cost has to be spread over was made when it was natural, at bidding time.
+//
+// Two contacts, exactly as `Purchase` has: `sellerId` is who is being bought from, `platformId`
+// what the sale is routed through. A house selling directly is the same contact in both; a house
+// listing through philasearch is seller = house, platform = philasearch. Both `Restrict`, the same
+// detach-before-delete guard purchases use (ADR-0008 §4).
+model AuctionSale {
+  id           String  @id @default(cuid())
+  collectionId String
+  sellerId     String
+  platformId   String
+  // `Köhler 385`, or a derived `Philkam · Allegro` for a marketplace basket. There is no separate
+  // sale-number column: a house's sale identifier is part of the name.
+  name         String
+  // The house's catalogue URL, or the seller's marketplace page. Optional.
+  url          String?
+  // A **default for new lots in this sale**, never the sale's own date. A house sale has one
+  // closing date and a marketplace basket has none, so the outcome-bearing date lives on the lot.
+  endsAt       DateTime?
+  // Transaction currency for every amount on this sale and its lots. Seeded from the seller's
+  // `defaultCurrency` at creation and freely editable here. Currency belongs to the **seller**,
+  // not the platform: philasearch aggregates houses listing in EUR, CHF and GBP, so the platform's
+  // fixed `Contact.platformCurrency` (#196) does not apply.
+  currency     String
+  // The seller's fees, seeded from the contact's defaults at creation and editable here (#308/#319
+  // seeding pattern): changing a seller's settings must never re-price a sale already tracked.
+  // Both premium components apply — a house charging 20% + a lot fee is one sale, not two.
+  shippingCost   Decimal? @db.Decimal(10, 2)
+  premiumPercent Decimal? @db.Decimal(5, 2)
+  premiumFixed   Decimal? @db.Decimal(10, 2)
+  // open (lots still being added) | settled (converted to a purchase) | closed (nothing won).
+  // Winning something else from the same seller after the parcel has shipped closes one sale and
+  // starts another: two parcels, two purchases, correct cost distribution.
+  status       String  @default("open")
+  // Set on settlement (#28). `SetNull` so deleting the purchase leaves the auction history intact
+  // rather than taking it along; unique because a settlement is 1:1.
+  purchaseId   String?
+
+  collection Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  seller     Contact      @relation("AuctionSaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  platform   Contact      @relation("AuctionSalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  purchase   Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  lots       AuctionLot[]
+  createdAt  DateTime     @default(now())
+
+  @@unique([purchaseId])
+  @@index([collectionId])
+  @@index([sellerId])
+  @@index([platformId])
+  @@map("auction_sale")
+}
+
+// One thing being bid on. Outcome lives **on the lot, never on the sale**: within one sale some
+// lots are won and others lost, and that is the normal case rather than an edge one.
+model AuctionLot {
+  id             String   @id @default(cuid())
+  auctionSaleId  String
+  lotNo          String?
+  url            String?
+  title          String?
+  // The lot's own closing time. On a marketplace every lot closes at a different moment, so this
+  // is per-lot even though a house sale seeds them all from `AuctionSale.endsAt`.
+  endsAt         DateTime
+  // A single overwritten figure with the moment it was read, **not** a history. Refreshing is
+  // manual, so every field that must be kept current is real work; `checkedAt` already answers
+  // the only question a history would ("what is stale before it closes?").
+  currentBid     Decimal? @db.Decimal(10, 2)
+  checkedAt      DateTime?
+  // The collector's own ceiling, and what the lot actually fetched. `finalPrice` is optional
+  // because a lot that simply vanished from view yields no datapoint (#24) — that is not an error
+  // state, just an absent observation.
+  maxBid         Decimal? @db.Decimal(10, 2)
+  finalPrice     Decimal? @db.Decimal(10, 2)
+  // watching | won | lost | cancelled.
+  status         String   @default("watching")
+  // Set when the lot is settled into the purchase (#28). `SetNull`/unique for the same reasons as
+  // `AuctionSale.purchaseId`.
+  purchaseLotId  String?
+  notes          String?
+
+  auctionSale AuctionSale      @relation(fields: [auctionSaleId], references: [id], onDelete: Cascade)
+  purchaseLot PurchaseLot?     @relation(fields: [purchaseLotId], references: [id], onDelete: SetNull)
+  lines       AuctionLotLine[]
+  createdAt   DateTime         @default(now())
+
+  @@unique([purchaseLotId])
+  @@index([auctionSaleId])
+  @@map("auction_lot")
+}
+
+// What a lot contains: structured `stamp × condition × format × quantity`, never free text. That
+// is what makes the catalogue value computable and what makes a lost lot a usable price datapoint.
+// Nothing new is decided here — pointing a line at an unknown-variant umbrella covers "variant
+// unspecified" and rolls up from the cheapest child exactly as the issue list does (#238), and
+// `formatId` prices multiples through `StampFormatFactor` (ADR-0020, null = single).
+model AuctionLotLine {
+  id           String @id @default(cuid())
+  auctionLotId String
+  stampId      String
+  conditionId  String
+  formatId     String?
+  quantity     Int    @default(1)
+
+  auctionLot AuctionLot     @relation(fields: [auctionLotId], references: [id], onDelete: Cascade)
+  stamp      Stamp          @relation(fields: [stampId], references: [id], onDelete: Restrict)
+  condition  StampCondition @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  format     StampFormat?   @relation(fields: [formatId], references: [id], onDelete: Restrict)
+
+  @@index([auctionLotId])
+  @@index([stampId])
+  @@index([conditionId])
+  @@index([formatId])
+  @@map("auction_lot_line")
 }
 
 // A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its
@@ -1343,6 +1474,17 @@ model Contact {
   // Null — or a template later deleted — leaves the offer without collage numbers until one is
   // picked on the offer itself.
   defaultCollageTemplateId String?
+  // ── Seller defaults for auction sales (#350; ADR-0021) ─────────────────────────────────────
+  // The currency and fees this seller normally trades on, all optional. **Seeded** onto an
+  // `AuctionSale` at creation and freely editable there — the same rule as the listing templates
+  // and photo defaults above: changing a seller's settings must never re-price a sale already
+  // being tracked or already settled. Only meaningful for contacts carrying the `seller` (or
+  // `auctionHouse`) role. Currency lives here rather than on the platform because philasearch
+  // aggregates houses listing in EUR, CHF and GBP, so `platformCurrency` (#196) cannot answer it.
+  defaultCurrency     String?
+  defaultShippingCost Decimal? @db.Decimal(10, 2)
+  buyerPremiumPercent Decimal? @db.Decimal(5, 2)
+  buyerPremiumFixed   Decimal? @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -1362,6 +1504,10 @@ model Contact {
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")
+  // Auction settlements this contact is the seller of, and those routed through it as the
+  // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
+  auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
+  auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

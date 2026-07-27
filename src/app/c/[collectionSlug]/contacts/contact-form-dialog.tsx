@@ -15,6 +15,7 @@ import {
   type ListingTemplates,
 } from "./listing-templates-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
+import { NumericInput } from "../shared/numeric-input";
 import {
   normalizeDescriptionFormat,
   DESCRIPTION_FORMAT_LABELS,
@@ -110,6 +111,10 @@ export function ContactFormDialog({
   // The platform currency field is only shown while the `platform` role is checked (#196), so the
   // platform checkbox is tracked here to reveal it.
   const [isPlatform, setIsPlatform] = useState(contact?.platform ?? false);
+  // Seller defaults for auction sales (#350) are revealed the same way, off either buying-from
+  // role: an auction house is a seller that happens to run sales.
+  const [isSeller, setIsSeller] = useState(contact?.seller ?? false);
+  const [isAuctionHouse, setIsAuctionHouse] = useState(contact?.auctionHouse ?? false);
   // The three listing templates (#210, #266, #267) live in their own dialog rather than on this
   // form — held here and submitted via hidden fields, so the existing save flow is unchanged.
   const [templates, setTemplates] = useState<ListingTemplates>({
@@ -235,7 +240,11 @@ export function ContactFormDialog({
                     onChange={
                       key === "platform"
                         ? (e) => setIsPlatform(e.target.checked)
-                        : undefined
+                        : key === "seller"
+                          ? (e) => setIsSeller(e.target.checked)
+                          : key === "auctionHouse"
+                            ? (e) => setIsAuctionHouse(e.target.checked)
+                            : undefined
                     }
                   />
                   {label}
@@ -243,6 +252,75 @@ export function ContactFormDialog({
               ))}
             </div>
           </div>
+
+          {/* Seller defaults for auction sales (#350, ADR-0021). The currency and the fee terms
+              this seller normally trades on, *seeded* onto each auction sale at creation and
+              editable there — the same rule as the platform's templates below, so changing a
+              seller's terms never re-prices a sale already being tracked or settled. Currency lives
+              on the seller rather than the platform because an aggregator like philasearch carries
+              houses listing in EUR, CHF and GBP alike (#196 cannot answer it). */}
+          {(isSeller || isAuctionHouse) && (
+            <div style={FIELD_GAP}>
+              <LabelWithError>Auction sale defaults</LabelWithError>
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-default-currency">Currency</LabelWithError>
+                  <select
+                    id="contact-default-currency"
+                    name="defaultCurrency"
+                    defaultValue={contact?.defaultCurrency ?? ""}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    <option value="">— not set —</option>
+                    {COMMON_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-default-shipping">Shipping</LabelWithError>
+                  <NumericInput
+                    id="contact-default-shipping"
+                    name="defaultShippingCost"
+                    defaultValue={contact?.defaultShippingCost ?? ""}
+                    placeholder="—"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-premium-percent">Premium %</LabelWithError>
+                  <NumericInput
+                    id="contact-premium-percent"
+                    name="buyerPremiumPercent"
+                    defaultValue={contact?.buyerPremiumPercent ?? ""}
+                    placeholder="—"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="contact-premium-fixed">Premium fixed</LabelWithError>
+                  <NumericInput
+                    id="contact-premium-fixed"
+                    name="buyerPremiumFixed"
+                    defaultValue={contact?.buyerPremiumFixed ?? ""}
+                    placeholder="—"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                Copied onto every new auction sale with this seller. Both premium parts apply — a
+                house charging 20% plus a lot fee sets both. Changing them here leaves sales already
+                tracked untouched.
+              </p>
+            </div>
+          )}
 
           {/* Platform currency (#196) and listing language (#293), side by side — both are
               platform-only, both are one small select. The currency is inherited and locked by every

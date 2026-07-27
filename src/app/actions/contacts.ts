@@ -15,6 +15,7 @@ import {
   type CollectionTranslationContext,
 } from "@/lib/contacts";
 import { parsePlatformPhotoLimits } from "@/lib/offer-photo-config";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type ContactActionState =
   | { status: "idle" }
@@ -59,6 +60,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
   // Photo configuration (#308) is platform-only, like the currency and the templates: dropped
   // entirely when the role is not set. Blank limits mean "no limit stated".
   const isPlatform = bool(formData, "platform");
+  // Auction-sale defaults (#350) hang off the buying-from side of the address book, which is either
+  // role: an auction house is a seller that happens to run sales.
+  const isSeller = bool(formData, "seller") || bool(formData, "auctionHouse");
   const limits = isPlatform
     ? parsePlatformPhotoLimits({
         maxPhotos: str(formData, "maxPhotos"),
@@ -118,6 +122,22 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     defaultCollageTemplateId: isPlatform
       ? str(formData, "defaultCollageTemplateId") || null
       : null,
+    // The seller's defaults for auction sales (#350). Role-gated exactly like the platform fields
+    // above — an `auctionHouse` counts as a seller here, since a house is who one buys from — and
+    // the amounts accept either decimal separator (#233).
+    ...(isSeller
+      ? {
+          defaultCurrency: str(formData, "defaultCurrency") || null,
+          defaultShippingCost: normalizeDecimalInput(str(formData, "defaultShippingCost")) || null,
+          buyerPremiumPercent: normalizeDecimalInput(str(formData, "buyerPremiumPercent")) || null,
+          buyerPremiumFixed: normalizeDecimalInput(str(formData, "buyerPremiumFixed")) || null,
+        }
+      : {
+          defaultCurrency: null,
+          defaultShippingCost: null,
+          buyerPremiumPercent: null,
+          buyerPremiumFixed: null,
+        }),
   };
 }
 

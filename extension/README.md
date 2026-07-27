@@ -110,6 +110,15 @@ Pausing exists because **the store refuses an upload while a previous version of
 in review**, which would otherwise turn every app release red until the reviewers get to it. App
 releases and store submissions run on different clocks, and the release must not wait on Google.
 
+That is also why the job can be run by hand on a release tag:
+
+```bash
+gh workflow run CI --ref v0.37.0
+```
+
+Only the checks and this job run — the image build is gated on a push — so a release cut while the
+switch was off, or a submission the store refused, is retried without moving the tag.
+
 Three things have to be done by hand first, because the API can only update an item that exists:
 
 1. **Create the listing.** Chrome Web Store developer account (one-off 5 USD) → new item → upload

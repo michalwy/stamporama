@@ -1,4 +1,5 @@
 import "server-only";
+import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
@@ -115,6 +116,15 @@ export interface ContactData extends ContactRoles {
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
+  /** Seller defaults for auction sales (#350, ADR-0021): the currency and fees this seller normally
+   * trades on. **Seeded** onto an `AuctionSale` at creation and editable there, so changing them
+   * here never re-prices a sale already tracked or settled. Only meaningful for the `seller` /
+   * `auctionHouse` roles; the amounts are 2-dp strings, like every other money field crossing this
+   * boundary. */
+  defaultCurrency: string | null;
+  defaultShippingCost: string | null;
+  buyerPremiumPercent: string | null;
+  buyerPremiumFixed: string | null;
   createdAt: Date;
 }
 
@@ -144,8 +154,55 @@ const CONTACT_SELECT = {
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
   defaultCollageTemplateId: true,
+  defaultCurrency: true,
+  defaultShippingCost: true,
+  buyerPremiumPercent: true,
+  buyerPremiumFixed: true,
   createdAt: true,
 } as const;
+
+/** A contact row as Prisma returns it under {@link CONTACT_SELECT} — identical to
+ * {@link ContactData} except that the seller defaults are still `Decimal`s. */
+type ContactRow = Omit<
+  ContactData,
+  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed"
+> & {
+  defaultShippingCost: Decimal | null;
+  buyerPremiumPercent: Decimal | null;
+  buyerPremiumFixed: Decimal | null;
+};
+
+/** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
+ * (`offers.ts`, `valuation.ts`) — a `Decimal` does not survive the server/client boundary. */
+function toContactData(row: ContactRow): ContactData {
+  return {
+    ...row,
+    defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
+    buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
+    buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
+  };
+}
+
+/** The seller-default columns as Prisma writes them. Blank normalises to null (not recorded);
+ * an unparseable amount is dropped rather than stored as zero, since zero shipping is a claim. */
+function sellerDefaults(data: ContactCreateInput): {
+  defaultCurrency: string | null;
+  defaultShippingCost: string | null;
+  buyerPremiumPercent: string | null;
+  buyerPremiumFixed: string | null;
+} {
+  const amount = (raw: string | null | undefined): string | null => {
+    const value = raw?.trim();
+    if (!value) return null;
+    return Number.isFinite(Number(value)) ? value : null;
+  };
+  return {
+    defaultCurrency: data.defaultCurrency?.trim() || null,
+    defaultShippingCost: amount(data.defaultShippingCost),
+    buyerPremiumPercent: amount(data.buyerPremiumPercent),
+    buyerPremiumFixed: amount(data.buyerPremiumFixed),
+  };
+}
 
 export interface ContactCreateInput {
   name: string;
@@ -183,6 +240,13 @@ export interface ContactCreateInput {
   /** The collage template (#307) new offers copy their render numbers from, or null for none. A
    * template id from another collection is rejected. */
   defaultCollageTemplateId?: string | null;
+  /** The seller's defaults for auction sales (#350) — currency and fees, each null when the seller
+   * states none. Only meaningful for the `seller` / `auctionHouse` roles; amounts arrive as
+   * decimal strings from the form. */
+  defaultCurrency?: string | null;
+  defaultShippingCost?: string | null;
+  buyerPremiumPercent?: string | null;
+  buyerPremiumFixed?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -208,7 +272,7 @@ export async function listContacts(
     orderBy: { name: "asc" },
   });
   return rows.map(({ _count, ...contact }) => ({
-    ...contact,
+    ...toContactData(contact),
     referenceCount: _count.purchases + _count.platformPurchases,
   }));
 }
@@ -224,7 +288,7 @@ export async function searchContacts(
   role?: keyof ContactRoles
 ): Promise<ContactData[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.contact.findMany({
+  const rows = await prisma.contact.findMany({
     where: {
       collectionId,
       name: { contains: query, mode: "insensitive" },
@@ -234,6 +298,7 @@ export async function searchContacts(
     orderBy: { name: "asc" },
     take: 20,
   });
+  return rows.map(toContactData);
 }
 
 /** Resolve a purchase contact field (supplier / platform) to a contact id, creating the
@@ -334,11 +399,12 @@ export async function createContact(
   if (!name) throw new Error("Contact name is required.");
   const photos = await photoData(collectionId, data);
   try {
-    return await prisma.contact.create({
+    return toContactData(await prisma.contact.create({
       data: {
         collectionId,
         name,
         ...photos,
+        ...sellerDefaults(data),
         notes: data.notes ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
@@ -356,7 +422,7 @@ export async function createContact(
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
-    });
+    }));
   } catch (err) {
     if (isUniqueViolation(err)) throw new ContactNameTakenError(name);
     throw err;
@@ -379,11 +445,12 @@ export async function updateContact(
   if (!name) throw new Error("Contact name is required.");
   const photos = await photoData(collectionId, data);
   try {
-    return await prisma.contact.update({
+    return toContactData(await prisma.contact.update({
       where: { id: contactId },
       data: {
         name,
         ...photos,
+        ...sellerDefaults(data),
         notes: data.notes ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
@@ -401,7 +468,7 @@ export async function updateContact(
         titleLanguage: normalizeLanguage(data.titleLanguage),
       },
       select: CONTACT_SELECT,
-    });
+    }));
   } catch (err) {
     if (isUniqueViolation(err)) throw new ContactNameTakenError(name);
     throw err;
