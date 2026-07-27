@@ -1,19 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import type { ItemListItem } from "@/lib/items";
-import type { OfferListItem } from "@/lib/offers";
+import { useParams, useRouter } from "next/navigation";
+import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
 import { isTerminalState } from "@/lib/offer-rules";
-import { formatItemNo } from "@/lib/item-number";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
-import {
-  OfferStateChip,
-  NeedsActionChip,
-  InActiveBiddingChip,
-} from "@/app/c/[collectionSlug]/offers/offer-badges";
-import { useOffersForItem } from "@/app/c/[collectionSlug]/offers/use-offers-query";
-import { useCollectionItemNoPad } from "./use-inventory-query";
+import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
+import { useOffersForTarget } from "./use-offers-query";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -33,35 +26,41 @@ const HINT: React.CSSProperties = {
   fontSize: "0.9375rem",
 };
 
-interface ItemOffersPopupDialogProps {
+/** What the popup is scoped to: one copy (#276), a stamp, or an issue (#349). The label names the
+ * dialog. Mirrors the read-only copies popup's targeting (#110). */
+export type OffersPopupTarget = OfferLookupTarget & { label: string };
+
+/** Empty-state wording per target — the sentence a collector reads is about the thing they clicked,
+ * not about "the target". */
+const EMPTY_TEXT: Record<OffersPopupTarget["kind"], string> = {
+  item: "This copy is not listed in any offer yet.",
+  stamp: "No copy of this stamp is listed in any offer yet.",
+  issue: "No copy from this issue is listed in any offer yet.",
+};
+
+interface OffersPopupDialogProps {
   collectionId: string;
-  collectionSlug: string;
-  /** The copy whose offers are listed; also names the dialog. */
-  item: ItemListItem;
+  target: OffersPopupTarget;
   onClose: () => void;
 }
 
 /**
- * Read-focused popup listing every offer that references one copy (#276) — all platforms, all
- * states, live listings first. Opened from the Copies list row menu so "where is this copy listed,
- * and for how much?" is answered without leaving the list; closing returns to it. Each row shows
- * the same platform / state / price presentation as the Offers list, opens the offer's detail
- * screen on click, and carries the platform listing link when one is recorded.
+ * Read-focused popup listing every offer that references a copy of the target (#276, #349) — one
+ * copy, a stamp, or an issue — across all platforms and all states, live listings first. Opened
+ * from the Copies / Stamps / Issues row menus so "is this listed, where, and for how much?" is
+ * answered without leaving the list; closing returns to it. Each row shows the same platform /
+ * state / price presentation as the Offers list, opens the offer's detail screen on click, and
+ * carries the platform listing link when one is recorded.
  */
-export function ItemOffersPopupDialog({
-  collectionId,
-  collectionSlug,
-  item,
-  onClose,
-}: ItemOffersPopupDialogProps) {
-  const itemNoPad = useCollectionItemNoPad(collectionId);
-  const { data: offers = [], isLoading } = useOffersForItem(collectionId, item.id, true);
-
-  const label = item.stampName ?? formatItemNo(item.itemNo, itemNoPad);
+export function OffersPopupDialog({ collectionId, target, onClose }: OffersPopupDialogProps) {
+  // The popup only ever renders under /c/[collectionSlug], so the slug the offer links need is read
+  // from the route rather than threaded through every list row that can open it.
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
+  const { data: offers = [], isLoading } = useOffersForTarget(collectionId, target, true);
 
   return (
     <DialogShell
-      title={`Offers · ${label}`}
+      title={`Offers · ${target.label}`}
       onClose={onClose}
       maxWidth="min(94vw, 56rem)"
       height="min(80vh, 40rem)"
@@ -69,9 +68,7 @@ export function ItemOffersPopupDialog({
       <DialogBody>
         {isLoading && <div style={HINT}>Loading offers…</div>}
 
-        {!isLoading && offers.length === 0 && (
-          <div style={HINT}>This copy is not listed in any offer yet.</div>
-        )}
+        {!isLoading && offers.length === 0 && <div style={HINT}>{EMPTY_TEXT[target.kind]}</div>}
 
         {offers.length > 0 && (
           <div
@@ -83,7 +80,7 @@ export function ItemOffersPopupDialog({
             }}
           >
             {offers.map((offer, i) => (
-              <ItemOfferRow
+              <PopupOfferRow
                 key={offer.id}
                 offer={offer}
                 collectionSlug={collectionSlug}
@@ -100,7 +97,7 @@ export function ItemOffersPopupDialog({
 /** One offer as a read-only row: label on top, then platform / state / quantity / listing link and
  * the asking price. Mirrors the Offers list row's presentation minus its actions and lifecycle
  * controls — this popup answers a question, it does not manage the listing. */
-function ItemOfferRow({
+function PopupOfferRow({
   offer,
   collectionSlug,
   isLast,

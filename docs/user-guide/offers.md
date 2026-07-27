@@ -90,8 +90,9 @@ an **existing set** to build a series. That's the quick path for listing one cop
 here when composing several copies at once.
 
 Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer
-that already references that copy, across all platforms and states. See
-[Inventory](inventory.md#seeing-which-offers-a-copy-is-in).
+that already references that copy, across all platforms and states. The **Stamps** and **Issues**
+lists carry it too, scoped to a stamp or to a whole issue. See
+[Inventory](inventory.md#seeing-which-offers-something-is-in).
 
 ## Sell a new item — from nothing to a live offer
 

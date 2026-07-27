@@ -9,6 +9,7 @@ import type {
   OfferFilterCounts,
   OffersSummary,
   ListingWorkspaceOffer,
+  OfferLookupTarget,
 } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
@@ -156,18 +157,28 @@ export function useListingOffers(collectionId: string, platformId: string | unde
   });
 }
 
-/** Every offer referencing one copy, across all platforms and states (#276) — the Copies list's
- * "View offers" popup. Disabled until the popup opens. Lives under the offers key, so listing the
- * copy elsewhere or changing an offer's state refreshes it. */
-export function useOffersForItem(collectionId: string, itemId: string, enabled: boolean) {
+/** Every offer referencing a copy of one target — a copy, a stamp, or an issue — across all
+ * platforms and states (#276, #349): the "View offers" popup. Disabled until the popup opens. Lives
+ * under the offers key, so listing a copy elsewhere or changing an offer's state refreshes it. */
+export function useOffersForTarget(
+  collectionId: string,
+  target: OfferLookupTarget,
+  enabled: boolean
+) {
+  const param: Record<string, string> =
+    target.kind === "item"
+      ? { itemId: target.itemId }
+      : target.kind === "stamp"
+        ? { stampId: target.stampId }
+        : { issueId: target.issueId };
   return useQuery<OfferListItem[]>({
-    queryKey: ["offers", collectionId, "for-item", itemId] as const,
+    queryKey: ["offers", collectionId, "for-target", param] as const,
     queryFn: async () => {
-      const params = new URLSearchParams({ itemId });
+      const params = new URLSearchParams(param);
       const res = await fetch(
-        `/api/collections/${collectionId}/offers/for-item?${params.toString()}`
+        `/api/collections/${collectionId}/offers/for-target?${params.toString()}`
       );
-      if (!res.ok) throw new Error("Failed to load the copy's offers");
+      if (!res.ok) throw new Error("Failed to load the offers");
       return (await res.json()).items;
     },
     enabled,

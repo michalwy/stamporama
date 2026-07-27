@@ -19,6 +19,7 @@ import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import {
   useInventoryPopupAction,
   useInventoryAddAction,
@@ -104,11 +105,18 @@ export function StampRow({
     baseCurrency,
     target: { kind: "stamp", stampId: stamp.id, label: popupLabel },
   });
+  // Every offer holding a copy of this stamp (#349) — counted per stamp exactly, like the copies
+  // popup beside it, never rolled up from variant children.
+  const offers = useOffersPopupAction({
+    collectionId,
+    target: { kind: "stamp", stampId: stamp.id, label: popupLabel },
+  });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: stamp.id });
 
   const actions: RowAction[] = [
     addCopy.action,
     copies.action,
+    offers.action,
     ...(stamp.mainCatalogPrice ? [prices.action] : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(stamp) },
     {
@@ -126,6 +134,7 @@ export function StampRow({
       <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
       {addCopy.dialog}
       {copies.dialog}
+      {offers.dialog}
       {prices.dialog}
     </>
   );

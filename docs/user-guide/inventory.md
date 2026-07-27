@@ -457,12 +457,22 @@ same offer. A copy that has already **sold** elsewhere can't be added at all.
 To compose an offer from several copies at once, use **Add set** on the offer detail screen
 instead — see [Offers](offers.md).
 
-## Seeing which offers a copy is in
+## Seeing which offers something is in
 
 Every copy row's **⋮** menu has a **View offers** action. It opens a read-only popup listing
 **every offer that references this copy**, across all platforms and all states — live listings
 first (**Active**, **Paused**), then the ones you're still preparing, then the closed ones
 (**Sold**, **Withdrawn**). A copy you have never listed says so.
+
+The same action is on the **Stamps** and **Issues** lists, next to
+[View copies](#viewing-copies-from-the-catalog) and scoped the same way:
+
+- On a **stamp** row — and on each stamp inside an expanded issue — it lists every offer holding a
+  copy of *that stamp*. Like the [copies-held badge](collections.md), it counts the stamp
+  **exactly**: a variant child's listings are on the child's own row, one line down, so nothing is
+  reported twice.
+- On an **issue** row, it lists every offer holding a copy of *any* stamp in that issue — what the
+  whole issue currently has on sale.
 
 Each row shows the offer's title, its **platform**, its **state**, the number of sets when it
 holds more than one, and its **asking price** (with the base-currency equivalent when the offer is
@@ -472,7 +482,7 @@ in another currency). The same **Needs action** and **In bidding** badges you se
 - Click a row to open that offer's detail screen.
 - Click the **🔗 Listing** chip to open the listing on the platform itself, when you have recorded
   its URL.
-- Closing the popup returns you to the Inventory list, right where you were.
+- Closing the popup returns you to the list you opened it from, right where you were.
 
 The action is always available — including for copies that have already sold, so a piece's past
 listings stay reachable.

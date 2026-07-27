@@ -946,19 +946,44 @@ const ITEM_OFFER_RANK: Record<OfferState, number> = {
   withdrawn: 5,
 };
 
-/** Every offer referencing one copy, across all platforms and **all** states — the Copies list's
- * "View offers" popup (#276). Unpaginated: a single copy is listed on a handful of platforms at
- * most, and the popup answers a whole question rather than a page of one. Terminal offers are
- * included (unlike the offers list, which hides them by default, #245) — a sold or withdrawn
- * listing is exactly what one asks a copy's history for. */
-export async function listOffersForItem(
+/** What the "View offers" popup is scoped to (#276, #349): one copy, every copy of a stamp, or
+ * every copy of any stamp in an issue — mirroring the read-only copies popup's targeting (#110). */
+export type OfferLookupTarget =
+  | { kind: "item"; itemId: string }
+  | { kind: "stamp"; stampId: string }
+  | { kind: "issue"; issueId: string };
+
+/** The copies a target covers, as the `OfferSetItem` filter reaching them. A stamp matches
+ * **exactly**, never rolled up from its variant children — the same rule the copies popup and the
+ * copies-held badge follow (#348): the tree shows a child's own entry one line down, so a rollup
+ * would report one listing twice. */
+function offerTargetItemWhere(target: OfferLookupTarget): Prisma.OfferSetItemWhereInput {
+  switch (target.kind) {
+    case "item":
+      return { itemId: target.itemId };
+    case "stamp":
+      return { item: { stampId: target.stampId } };
+    case "issue":
+      return {
+        item: { stamp: { issueMemberships: { some: { issueId: target.issueId } } } },
+      };
+  }
+}
+
+/** Every offer referencing a copy of the target, across all platforms and **all** states — the
+ * "View offers" popup on the Copies list (#276) and on the Stamps / Issues lists (#349).
+ * Unpaginated: what one stamp or issue has been listed in is a handful of offers, and the popup
+ * answers a whole question rather than a page of one. Terminal offers are included (unlike the
+ * offers list, which hides them by default, #245) — a sold or withdrawn listing is exactly what one
+ * asks a piece's history for. */
+export async function listOffersForTarget(
   ownerId: string,
   collectionId: string,
-  itemId: string
+  target: OfferLookupTarget
 ): Promise<OfferListItem[]> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.offer.findMany({
-    where: { collectionId, sets: { some: { items: { some: { itemId } } } } },
+    where: { collectionId, sets: { some: { items: { some: offerTargetItemWhere(target) } } } },
     orderBy: { createdAt: "desc" },
     select: OFFER_SELECT,
   });

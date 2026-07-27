@@ -24,6 +24,7 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
@@ -132,6 +133,12 @@ function StampTreeNode({
     baseCurrency,
     target: { kind: "stamp", stampId: node.stampId, label: popupLabel },
   });
+  // Every offer holding a copy of this stamp (#349) — per stamp exactly, never rolled up from the
+  // variant children below it, which carry their own entry.
+  const offers = useOffersPopupAction({
+    collectionId,
+    target: { kind: "stamp", stampId: node.stampId, label: popupLabel },
+  });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: node.stampId });
   // Quick-add a catalog value for exactly the condition the list is showing (#341): a
   // "+ catalog value" link in the price slot, as on the Copies list (#228), shown only while
@@ -168,6 +175,7 @@ function StampTreeNode({
     { key: "move", label: "Move to another issue…", icon: "⇄", onSelect: () => onMove(node.stampId) },
     addCopy.action,
     copies.action,
+    offers.action,
     ...(node.mainCatalogPrice ? [prices.action] : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(node.stampId) },
     {
@@ -240,6 +248,7 @@ function StampTreeNode({
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
               {addCopy.dialog}
               {copies.dialog}
+              {offers.dialog}
               {prices.dialog}
               {quickPrice.dialog}
             </div>
@@ -394,6 +403,16 @@ export function IssueRow({
       label: issue.name ?? "(unnamed issue)",
     },
   });
+  // Every offer holding a copy of any stamp in this issue (#349) — the issue-level counterpart of
+  // the copies popup beside it.
+  const offers = useOffersPopupAction({
+    collectionId,
+    target: {
+      kind: "issue",
+      issueId: issue.id,
+      label: issue.name ?? "(unnamed issue)",
+    },
+  });
   const prices = usePriceDetailsAction({ kind: "issue", collectionId, issueId: issue.id });
   // An issue's format multipliers are edited here rather than in Settings: the issue is the
   // narrowest anchor a factor can take, and it is the one a catalog actually prints them against.
@@ -414,6 +433,7 @@ export function IssueRow({
     { key: "add-stamp-range", label: "Add stamp range…", icon: "⋯", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
     copies.action,
+    offers.action,
     ...(issue.requiredPriceTotal ? [prices.action] : []),
     formatFactors.action,
     {
@@ -518,6 +538,7 @@ export function IssueRow({
           <RowActionsMenu actions={actions} ariaLabel="Issue actions" />
           {addCopy.dialog}
           {copies.dialog}
+          {offers.dialog}
           {prices.dialog}
           {formatFactors.dialog}
           {recomputeOpen && (

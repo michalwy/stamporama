@@ -21,11 +21,13 @@ import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
+import { formatItemNo } from "@/lib/item-number";
 import {
   useInventoryItemsInfinite,
   useHoldingsValuation,
   useItemYears,
   useInvalidateInventory,
+  useCollectionItemNoPad,
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
 } from "./use-inventory-query";
@@ -35,7 +37,7 @@ import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
-import { ItemOffersPopupDialog } from "./item-offers-popup-dialog";
+import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
@@ -167,6 +169,9 @@ export function InventoryListPanel({
   const deliveryState = searchParams.get("deliveryState") ?? "";
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
+  // Names the offers popup for a copy whose stamp is unnamed (#276) — the internal copy number,
+  // padded to the collection's chosen width.
+  const itemNoPad = useCollectionItemNoPad(collectionId);
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -750,10 +755,13 @@ export function InventoryListPanel({
       {/* Every offer this copy is in (#276): read-only, all platforms and states. Closing returns
           to the list; a row opens the offer's detail screen. */}
       {dialog.kind === "viewOffers" && (
-        <ItemOffersPopupDialog
+        <OffersPopupDialog
           collectionId={collectionId}
-          collectionSlug={collectionSlug}
-          item={dialog.item}
+          target={{
+            kind: "item",
+            itemId: dialog.item.id,
+            label: dialog.item.stampName ?? formatItemNo(dialog.item.itemNo, itemNoPad),
+          }}
           onClose={closeDialog}
         />
       )}
