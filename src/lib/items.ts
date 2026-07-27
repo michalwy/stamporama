@@ -1552,30 +1552,107 @@ export async function getHoldingsValuation(
     },
   });
 
+  return (await makeHoldingsSummarizer(collectionId, rows))();
+}
+
+/** The copy fields a holdings summary is computed from — everything {@link makeHoldingsSummarizer}
+ * reads, so any query feeding it can be checked against one shape. */
+const HOLDINGS_ROW_SELECT = {
+  id: true,
+  stampId: true,
+  conditionId: true,
+  certificateStatusId: true,
+  formatId: true,
+  costBasis: true,
+  lotId: true,
+  lot: { select: { status: true } },
+  stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+} as const;
+
+type HoldingsRow = Prisma.ItemGetPayload<{ select: typeof HOLDINGS_ROW_SELECT }>;
+
+/**
+ * Value an already-fetched copy set **once** (#134), then summarize it — whole, or any subset of
+ * it. Split out of {@link getHoldingsValuation} because the offer summary bar (#317) needs the same
+ * two totals over an explicit copy list *and* over each platform's slice of it: the valuation is
+ * the expensive part (catalog prices, format factors, rates), and doing it per slice would repeat
+ * it for every platform.
+ *
+ * The returned function takes copy ids and ignores any it was not given rows for, so a caller may
+ * pass a slice's ids without pre-intersecting them.
+ */
+async function makeHoldingsSummarizer(
+  collectionId: string,
+  rows: HoldingsRow[]
+): Promise<(itemIds?: string[]) => HoldingsSummary> {
   const valuationRows: ValuationRow[] = rows.map((row) => ({
     id: row.id,
     stampId: row.stampId,
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
     formatId: row.formatId,
-    unknownVariant:
-      isUnknownVariantStamp(row.stamp),
+    unknownVariant: isUnknownVariantStamp(row.stamp),
   }));
 
-  // Actual purchase cost-basis over the same filtered set (#134). Snapshots are frozen in
+  // Actual purchase cost-basis over the same copy set (#134). Snapshots are frozen in
   // the base currency, so this needs no rate handling — unlike the catalog valuation above.
-  const costInputs: CostBasisInput[] = rows.map((row) => ({
-    costBasis: row.costBasis == null ? null : row.costBasis.toString(),
-    lotId: row.lotId,
-    lotStatus: row.lot?.status ?? null,
-  }));
+  const costById = new Map<string, CostBasisInput>(
+    rows.map((row) => [
+      row.id,
+      {
+        costBasis: row.costBasis == null ? null : row.costBasis.toString(),
+        lotId: row.lotId,
+        lotStatus: row.lot?.status ?? null,
+      },
+    ])
+  );
 
   const valuations = await valuateItemRows(collectionId, valuationRows);
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  return {
-    ...aggregateHoldings([...valuations.values()], baseCurrency),
-    cost: aggregateCostBasis(costInputs, baseCurrency),
+
+  return (itemIds) => {
+    const ids = itemIds ?? rows.map((r) => r.id);
+    return {
+      ...aggregateHoldings(
+        ids.map((id) => valuations.get(id)).filter((v) => v !== undefined),
+        baseCurrency
+      ),
+      cost: aggregateCostBasis(
+        ids.map((id) => costById.get(id)).filter((c) => c !== undefined),
+        baseCurrency
+      ),
+    };
   };
+}
+
+/** Holdings summary over an explicit set of copy ids (#317) — the copies sitting under a set of
+ * offers, deduplicated by the caller. Ownership is the caller's to assert; ids are still scoped to
+ * the collection here so a stray id cannot pull a foreign copy into the total. */
+export async function getHoldingsValuationForItems(
+  collectionId: string,
+  itemIds: string[]
+): Promise<HoldingsSummary> {
+  return (await getHoldingsValuationByGroup(collectionId, [{ key: "", itemIds }])).get("")!;
+}
+
+/** Holdings summaries for several overlapping copy sets at once (#317): the offer summary's whole
+ * filtered set alongside each platform's slice of it. Every copy is fetched and valued once, so
+ * adding a platform costs an aggregation, not a valuation. Returned as group key → summary; a group
+ * with no copies gets an all-zero summary rather than being absent. */
+export async function getHoldingsValuationByGroup(
+  collectionId: string,
+  groups: { key: string; itemIds: string[] }[]
+): Promise<Map<string, HoldingsSummary>> {
+  const allIds = [...new Set(groups.flatMap((g) => g.itemIds))];
+  const rows =
+    allIds.length === 0
+      ? []
+      : await prisma.item.findMany({
+          where: { id: { in: allIds }, collectionId },
+          select: HOLDINGS_ROW_SELECT,
+        });
+  const summarize = await makeHoldingsSummarizer(collectionId, rows);
+  return new Map(groups.map((g) => [g.key, summarize(g.itemIds)]));
 }
 
 export interface ItemYearFacet {

@@ -2,7 +2,20 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
-import { listItemsPaginated, valuateItemsByIds, type ItemListItem } from "./items";
+import {
+  getHoldingsValuationByGroup,
+  getHoldingsValuationForItems,
+  listItemsPaginated,
+  valuateItemsByIds,
+  type ItemListItem,
+} from "./items";
+import type { HoldingsSummary } from "./valuation";
+import {
+  aggregateOfferAsking,
+  type OfferPlatformTotal,
+  type OfferSummaryRow,
+  type OffersAskingSummary,
+} from "./offer-summary";
 import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
 import type { BaseCurrency } from "./currencies";
 import {
@@ -854,6 +867,29 @@ export interface PaginatedOffersResult {
   nextCursor: string | null;
 }
 
+/** The offer list's `where`, shared by the paginated list and the summary bar (#317) so both read
+ * exactly the same offer set. Pass `needsActionIds` for the derived overlay (ADR-0013 §4): it is
+ * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice. */
+function offerListWhere(
+  collectionId: string,
+  filters: Pick<OfferListFilters, "platformId" | "state" | "includeClosed">,
+  needsActionIds?: string[]
+): Prisma.OfferWhereInput {
+  return {
+    collectionId,
+    ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    ...(needsActionIds
+      ? { id: { in: needsActionIds } }
+      : // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the
+        // user opted in (#245).
+        filters.state
+        ? { state: filters.state }
+        : filters.includeClosed
+          ? {}
+          : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
+  };
+}
+
 /** Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or by the
  * derived "needs action" overlay — resolved to its flagged offer ids first, then paginated as a
  * normal `where`, so a page never costs more than the offers it shows. */
@@ -870,11 +906,7 @@ export async function listOffersPaginated(
     const counts = await needsActionCounts(collectionId);
     if (counts.size === 0) return { items: [], nextCursor: null };
     const rows = await prisma.offer.findMany({
-      where: {
-        collectionId,
-        id: { in: [...counts.keys()] },
-        ...(filters.platformId ? { platformId: filters.platformId } : {}),
-      },
+      where: offerListWhere(collectionId, filters, [...counts.keys()]),
       orderBy: { createdAt: "desc" },
       take: pageSize + 1,
       skip: offset,
@@ -888,17 +920,7 @@ export async function listOffersPaginated(
   }
 
   const rows = await prisma.offer.findMany({
-    where: {
-      collectionId,
-      ...(filters.platformId ? { platformId: filters.platformId } : {}),
-      // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the
-      // user opted in (#245).
-      ...(filters.state
-        ? { state: filters.state }
-        : filters.includeClosed
-          ? {}
-          : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
-    },
+    where: offerListWhere(collectionId, filters),
     orderBy: { createdAt: "desc" },
     take: pageSize + 1,
     skip: offset,
@@ -1011,6 +1033,116 @@ export async function offerFilterCounts(
       : flagged.length,
     platforms,
     total,
+  };
+}
+
+// ── Summary bar (#317) ───────────────────────────────────────────────────────
+
+/** What the offer list's summary bar shows over the currently filtered offers (#317): the asking
+ * value it leads with, and — behind the expander — the catalog value and purchase cost of the
+ * copies those offers hold, so "what am I asking" can be read against "what is it worth" and "what
+ * did it cost me". */
+export interface OffersSummary extends Omit<OffersAskingSummary, "platforms"> {
+  /** Catalog value + cost basis over the copies under these offers, **deduplicated**: a copy listed
+   * on two platforms is one piece of stock and is valued once, unlike `itemCount`. */
+  holdings: HoldingsSummary;
+  /** The same three figures per platform, largest asking value first. The catalog/cost columns are
+   * deduplicated within each platform, so a copy listed on two of them contributes to both — the
+   * platform rows answer "what is on this marketplace", and they do not sum to the total. */
+  platforms: OffersSummaryPlatform[];
+}
+
+export interface OffersSummaryPlatform extends Omit<OfferPlatformTotal, "itemIds"> {
+  holdings: HoldingsSummary;
+}
+
+/**
+ * Aggregate figures for the offer list's summary bar (#317), over exactly the offers the list is
+ * showing — same platform / state / needs-action / show-closed filters, resolved through the same
+ * `where`. It deliberately re-reads the whole filtered set rather than summing the loaded pages:
+ * a total that grows as you scroll is worse than no total.
+ *
+ * Rates are fetched once per distinct currency and handed to the pure aggregator; a lookup failure
+ * (offline, no cache) leaves those offers counted as unconvertible rather than failing the bar,
+ * matching how the list's own per-row conversion degrades (#208).
+ */
+export async function offersSummary(
+  ownerId: string,
+  collectionId: string,
+  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+): Promise<OffersSummary> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+
+  // The needs-action overlay is derived, not a column (ADR-0013 §4), so it resolves to ids first —
+  // exactly as the list page does. No flagged offers means an empty slice, not an unfiltered one.
+  let needsActionIds: string[] | undefined;
+  if (filters.needsAction) {
+    needsActionIds = [...(await needsActionCounts(collectionId)).keys()];
+    if (needsActionIds.length === 0) {
+      return {
+        ...aggregateOfferAsking([], baseCurrency, new Map()),
+        holdings: await getHoldingsValuationForItems(collectionId, []),
+        platforms: [],
+      };
+    }
+  }
+
+  const offers = await prisma.offer.findMany({
+    where: offerListWhere(collectionId, filters, needsActionIds),
+    select: {
+      platformId: true,
+      price: true,
+      currency: true,
+      platform: { select: { name: true } },
+      sets: { select: { items: { select: { itemId: true } } } },
+    },
+  });
+
+  const rows: OfferSummaryRow[] = offers.map((o) => ({
+    platformId: o.platformId,
+    platformName: o.platform.name,
+    price: o.price.toFixed(2),
+    currency: o.currency,
+    setCount: o.sets.length,
+    itemIds: o.sets.flatMap((s) => s.items.map((i) => i.itemId)),
+  }));
+
+  const currencies = [...new Set(rows.map((r) => r.currency).filter((c) => c !== baseCurrency))];
+  const rates = new Map<string, number>();
+  if (currencies.length > 0) {
+    try {
+      for (const [currency, { rate }] of await getOrFetchRates(
+        collectionId,
+        baseCurrency as BaseCurrency,
+        currencies
+      )) {
+        rates.set(currency, rate);
+      }
+    } catch {
+      // Leave `rates` empty: those offers land in `unconvertibleCount`, which is the honest answer.
+    }
+  }
+
+  const { platforms, ...asking } = aggregateOfferAsking(rows, baseCurrency, rates);
+
+  // One valuation pass covers the total and every platform slice: the groups overlap (a copy listed
+  // on two marketplaces belongs to both), and valuing each slice on its own would price it twice.
+  const TOTAL = "";
+  const holdingsByGroup = await getHoldingsValuationByGroup(collectionId, [
+    { key: TOTAL, itemIds: [...new Set(rows.flatMap((r) => r.itemIds))] },
+    ...platforms.map((p) => ({ key: p.platformId, itemIds: p.itemIds })),
+  ]);
+
+  return {
+    ...asking,
+    holdings: holdingsByGroup.get(TOTAL)!,
+    // `itemIds` is the aggregator's handoff to the valuation above, not something the bar renders,
+    // so it is dropped rather than shipped to the client.
+    platforms: platforms.map((p) => {
+      const { itemIds, ...rest } = p;
+      void itemIds;
+      return { ...rest, holdings: holdingsByGroup.get(p.platformId)! };
+    }),
   };
 }
 

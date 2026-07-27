@@ -7,6 +7,7 @@ import type {
   OfferDetail,
   ComposeTargets,
   OfferFilterCounts,
+  OffersSummary,
   ListingWorkspaceOffer,
 } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
@@ -104,6 +105,27 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
         `/api/collections/${collectionId}/offers/counts?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch offer counts");
+      return res.json();
+    },
+  });
+}
+
+/** Aggregate figures for the offer list's summary bar (#317), over the same filtered set the list
+ * shows. Lives under the offers key so `invalidateAll` refreshes the totals whenever an offer's
+ * price, platform, or state changes. */
+export function useOffersSummary(collectionId: string, filters: OfferFilters) {
+  return useQuery<OffersSummary>({
+    queryKey: ["offers", collectionId, "summary", filters] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.needsAction) params.set("needsAction", "1");
+      else if (filters.state) params.set("state", filters.state);
+      else if (filters.includeClosed) params.set("includeClosed", "1");
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/summary?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the offer summary");
       return res.json();
     },
   });

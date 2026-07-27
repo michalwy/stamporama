@@ -725,6 +725,39 @@ The **Needs action** chip turns **red** as soon as its count is above zero, so a
 visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
 count — it widens the list rather than selecting a slice of it.
 
+## The summary bar
+
+Above the toolbar, a summary bar sums the offers you are currently looking at — it follows the
+platform, state, **Needs action** and **Show sold/withdrawn** filters, so narrowing the list
+narrows the totals with it. It covers the **whole filtered set**, not just the rows loaded so far,
+so the figures do not creep upward as you scroll.
+
+Collapsed, it shows one line:
+
+- **Asking value** — what these offers would bring in at their listed prices, summed in your
+  collection's **base currency**. Beside it: how many offers, sets and copies that is, how many
+  offers are **not priced yet** (a `preparing` listing usually has no price), and how many are
+  priced in a currency with **no available exchange rate** — those are counted but not summed,
+  the same way the per-row conversion behaves.
+
+Click **More** to expand it (the choice is remembered per collection). That adds:
+
+- **Catalog value** and **Purchase cost** of the copies these offers hold — the same pair the
+  [holdings summary](inventory.md) shows, with the same notes about uncertain, unpriced and
+  pending figures. Reading the three lines together answers whether you are asking above or below
+  catalogue, and what the stock cost you. A copy listed on **two** platforms is valued **once**
+  here — it is one piece of stock — even though the copy count on the asking line counts it per
+  offer, because each of those offers is separately sellable.
+- A **per-platform breakdown** — the same three figures again, one row per platform, largest
+  asking value first, with the offer / set / copy counts beside them. The amount columns sit
+  right next to the platform name so a wide screen doesn't make you read across empty space,
+  and the asking column lines up under the total above it.
+
+The platform rows are each **complete in themselves** rather than a partition of the total: a copy
+listed on two marketplaces is counted in both rows' catalog and cost figures, because each row
+answers "what is on this platform". They will therefore not always add up to the total line, which
+counts that copy once.
+
 ## Related
 
 - [Inventory](inventory.md) — the copies you compose offers from.

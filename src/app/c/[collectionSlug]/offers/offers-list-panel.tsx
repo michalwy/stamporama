@@ -13,9 +13,11 @@ import {
   useOffersInfinite,
   useOfferPlatforms,
   useOfferFilterCounts,
+  useOffersSummary,
   useInvalidateOffers,
   type OfferFilters,
 } from "./use-offers-query";
+import { OffersSummaryBar } from "./offers-summary-bar";
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "./sell-offer-flow-dialog";
@@ -167,6 +169,9 @@ export function OffersListPanel({
   // badge says how many offers clicking it would show. Absent until the first fetch lands — the
   // chips render without badges rather than flashing zeros.
   const { data: counts } = useOfferFilterCounts(collectionId, filters);
+  // Aggregate figures over the same filtered set (#317), read whole rather than summed from the
+  // loaded pages — a total that grows as you scroll would be worse than none.
+  const { data: summary } = useOffersSummary(collectionId, filters);
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   function closeDialog() {
@@ -210,6 +215,9 @@ export function OffersListPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
+      {/* Aggregate figures over the filtered set (#317) */}
+      <OffersSummaryBar summary={summary} collectionId={collectionId} />
+
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
