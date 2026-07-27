@@ -29,7 +29,7 @@ import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { sortCopies } from "./copy-sort";
 import { parseItemNoSearch } from "./item-number";
-import { isDeliveryState } from "./delivery-state";
+import { isDeliveryState, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -667,6 +667,10 @@ function buildItemWhere(
         none: { offerSet: { offer: { state: "active", inActiveBidding: true } } },
       },
     });
+    // …and copies that never arrived or arrived damaged: they are paid for but not in hand and
+    // never will be, so they can't be listed. The in-flight states stay — a copy still on its
+    // way is exactly what one plans a listing for.
+    and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
   }
   return {
     collectionId,

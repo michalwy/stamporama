@@ -22,7 +22,7 @@ Each row shows:
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
 - Its **delivery state** — but only when the copy is **not** delivered yet: a chip reading
-  *Ordered*, *In transit*, *To sort*, *Not delivered*, or *Damaged*. A delivered copy shows no
+  *Ordered*, *In transit*, *To sort*, *Not delivered / missing*, or *Damaged*. A delivered copy shows no
   chip, since that is the normal state of everything you hold. See
   [Delivery state](#delivery-state).
 - A notes indicator when the copy has notes (hover to read them).
@@ -84,6 +84,9 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
   is treated as already handled. One exception to the "other platforms don't count" rule: a copy
   held by an offer that is **in active bidding** anywhere is left out entirely — a bid commits it
   to a pending sale, so listing it again would risk selling the same piece twice.
+  Copies marked **Not delivered / missing** or **Damaged** are left out as well: they are not in
+  your hands and never will be, so they cannot be listed. Copies still on their way to you
+  (*Ordered*, *In transit*, *To sort*) do show up — those are exactly the ones worth preparing.
   This filter appears once you have at least one offer platform,
   and the holdings totals and year panel follow it too. Your chosen platform here is **remembered**
   for this collection, so the filter comes back the way you left it next time.
@@ -171,7 +174,8 @@ intend to do with it (that is its [disposition](#the-inventory-list)):
 - **In transit** — on its way to you.
 - **To sort** — arrived, still waiting to be sorted.
 - **Delivered** — sorted and in hand. A copy you add by hand starts here.
-- **Not delivered** — never arrived. It is dropped from its purchase lot when the lot closes.
+- **Not delivered / missing** — never arrived, or went missing. It is dropped from its purchase
+  lot when the lot closes.
 - **Damaged** — arrived damaged. It stays in its lot and keeps its cost share.
 
 On the Copies list only a copy that is **not** delivered is chipped, so the common case stays

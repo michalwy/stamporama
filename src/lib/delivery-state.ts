@@ -34,7 +34,7 @@ export const DELIVERY_STATE_META: Record<DeliveryState, { label: string; token: 
   in_transit: { label: "In transit", token: "accent" },
   to_sort: { label: "To sort", token: "warning" },
   delivered: { label: "Delivered", token: "success" },
-  not_delivered: { label: "Not delivered", token: "error" },
+  not_delivered: { label: "Not delivered / missing", token: "error" },
   damaged: { label: "Damaged", token: "error" },
 };
 
@@ -48,6 +48,12 @@ export function deliveryStateLabel(state: string): string {
 export function deliveryStateToken(state: string): string {
   return DELIVERY_STATE_META[state as DeliveryState]?.token ?? "muted";
 }
+
+/** The two exception outcomes — the copy was paid for but is not in the collector's hands and
+ * never will be. Nothing that asks "what can still be listed for sale?" should surface them
+ * (#259's not-offered-on-platform filter), unlike the in-flight states, which are copies on
+ * their way in. */
+export const UNAVAILABLE_DELIVERY_STATES = ["not_delivered", "damaged"] as const;
 
 /** A copy is *in hand* only when it is delivered — the precondition for listing it for sale
  * (#188) and the reason the offer actions are unavailable otherwise (#273). */

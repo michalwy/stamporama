@@ -15,7 +15,8 @@ import {
 //
 //   #334 — "not offered on X" is an *availability* worklist. A copy held by an offer that is in
 //          active bidding (#215) is committed to a pending sale, so it must drop out of the
-//          filter on every platform, not just the one it is being bid on.
+//          filter on every platform, not just the one it is being bid on. For the same reason a
+//          copy that never arrived or arrived damaged drops out — it is not in hand at all.
 //   #303 — free text also matches a copy's `locationRef`, on the inventory list and on the
 //          stamp picker (where the ref reaches the stamp through the copies filed under it).
 
@@ -25,6 +26,7 @@ describe("inventory availability + location-ref search", () => {
   let delcampeId: string;
   let allegroId: string;
   let plain: string, bidHeld: string, refFiled: string;
+  let missing: string, damaged: string, inTransit: string;
   let stampAId: string;
   let stampBId: string;
 
@@ -53,6 +55,9 @@ describe("inventory availability + location-ref search", () => {
 
     const stampA = await prisma.stamp.create({ data: { collectionId, name: "Mercury" } });
     const stampB = await prisma.stamp.create({ data: { collectionId, name: "Zeppelin" } });
+    // The delivery-outcome fixtures get a stamp of their own so they stay out of the identity
+    // searches below, which assert on exact result sets.
+    const stampC = await prisma.stamp.create({ data: { collectionId, name: "Kite" } });
     stampAId = stampA.id;
     stampBId = stampB.id;
     const condition = await prisma.stampCondition.create({
@@ -92,6 +97,33 @@ describe("inventory availability + location-ref search", () => {
         forSale: true,
         locationId: box.id,
         locationRef: "A234",
+      })
+    ).id;
+
+    // The delivery outcomes: a copy that never arrived and one that arrived damaged are for sale
+    // on paper but not in hand, while a copy still on its way is a legitimate worklist entry.
+    missing = (
+      await createItem(userId, collectionId, {
+        stampId: stampC.id,
+        conditionId: condition.id,
+        forSale: true,
+        deliveryState: "not_delivered",
+      })
+    ).id;
+    damaged = (
+      await createItem(userId, collectionId, {
+        stampId: stampC.id,
+        conditionId: condition.id,
+        forSale: true,
+        deliveryState: "damaged",
+      })
+    ).id;
+    inTransit = (
+      await createItem(userId, collectionId, {
+        stampId: stampC.id,
+        conditionId: condition.id,
+        forSale: true,
+        deliveryState: "in_transit",
       })
     ).id;
 
@@ -136,6 +168,16 @@ describe("inventory availability + location-ref search", () => {
     );
     assert.ok(ids.includes(plain), "an uncommitted for-sale copy is still on the worklist");
     assert.ok(ids.includes(refFiled), "…as is every other unoffered copy");
+  });
+
+  it("keeps missing and damaged copies off 'not offered on X', but not in-flight ones", async () => {
+    const { items } = await listItemsPaginated(userId, collectionId, {
+      notOfferedPlatformId: delcampeId,
+    });
+    const ids = items.map((i) => i.id);
+    assert.ok(!ids.includes(missing), "a copy that never arrived cannot be listed");
+    assert.ok(!ids.includes(damaged), "nor can one that arrived damaged");
+    assert.ok(ids.includes(inTransit), "a copy on its way is still worth preparing a listing for");
   });
 
   it("still lists a copy offered elsewhere without a bid (#259 is unchanged)", async () => {

@@ -218,7 +218,7 @@ disposition (in collection / for sale / for trade). A purchased copy moves throu
   collection.
 - **Delivered** — sorted and filed; now counted **in your collection**.
 
-with **Not delivered** and **Damaged** as outcomes you may discover while sorting.
+with **Not delivered / missing** and **Damaged** as outcomes you may discover while sorting.
 
 While a lot is open, each copy's delivery-status chip is a dropdown, and a small **→** button
 beside it advances the copy one step along the happy path (*ordered → in transit → to sort →
