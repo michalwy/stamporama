@@ -9,6 +9,7 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, addOfferSet, deleteOffer, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
+import { FULL_MAX_EDGE } from "../../src/lib/photos/process";
 import { attachOfferCopyPhoto } from "../../src/lib/offer-photo-attachments";
 import { createSale, addSaleLines } from "../../src/lib/sales";
 import { inflateRawSync } from "node:zlib";
@@ -808,5 +809,31 @@ describe("offer photo generation (#311)", () => {
     }
     // Idempotent: cleaning an offer with nothing left is a no-op, not an error.
     await deleteOfferPhotoBytes(offerId);
+  });
+
+  it("records the pre-downscale dimensions of an oversized scan", async () => {
+    // The original bytes are never stored, so this row is the only record of how far the scan was
+    // shrunk — and the only thing that lets the renderer put it back beside an unclamped one.
+    const upload = await stageUpload(userId, collectionId, {
+      bytes: await scan(FULL_MAX_EDGE * 2, FULL_MAX_EDGE, 90),
+      mime: "image/png",
+    });
+
+    const row = await prisma.photoUpload.findUniqueOrThrow({ where: { id: upload.id } });
+    assert.equal(row.width, FULL_MAX_EDGE);
+    assert.equal(row.originalWidth, FULL_MAX_EDGE * 2);
+    assert.equal(row.originalHeight, FULL_MAX_EDGE);
+  });
+
+  it("records an unclamped scan's dimensions as its stored ones", async () => {
+    const upload = await stageUpload(userId, collectionId, {
+      bytes: await scan(300, 200, 90),
+      mime: "image/png",
+    });
+
+    const row = await prisma.photoUpload.findUniqueOrThrow({ where: { id: upload.id } });
+    assert.equal(row.width, 300);
+    assert.equal(row.originalWidth, 300);
+    assert.equal(row.originalHeight, 200);
   });
 });

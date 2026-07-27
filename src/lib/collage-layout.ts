@@ -52,6 +52,45 @@ export interface CollageTileSize {
   height: number;
 }
 
+/** One tile's stored size paired with the size its upload was measured at, before the
+ * `FULL_MAX_EDGE` downscale. Equal whenever the scan came in under the cap. */
+export interface CollageTileTrueSize {
+  stored: CollageTileSize;
+  /** Null for a photo predating the recorded originals — read as "never downscaled". */
+  original: CollageTileSize | null;
+}
+
+/**
+ * The factor each tile must be scaled by so that all of them sit on one common scale again.
+ *
+ * The renderer's "true proportions" rest on every scan sharing a scanner DPI, which makes stored
+ * pixel sizes proportional to physical ones. `FULL_MAX_EDGE` breaks that: a scan clamped to 2500 px
+ * and one that arrived at 2400 px come out nearly the same size however far apart their originals
+ * were. Each tile's own shrink factor `r = originalEdge / storedEdge` is what recovers the ratio.
+ *
+ * Normalised against `max(r)` rather than `min(r)`, so every factor lands in `(0, 1]` and the
+ * correction is applied by **downscaling** — never by interpolating a clamped tile back up, which
+ * would spend real pixels on invented ones. The resolution the smaller tiles give up is largely
+ * notional: the finished canvas is scaled to the platform's output limits afterwards anyway.
+ *
+ * Returns all-1 when nothing was downscaled, which is both the common case and what every photo
+ * predating the recorded originals falls back to.
+ */
+export function trueSizeScales(tiles: readonly CollageTileTrueSize[]): number[] {
+  const shrink = tiles.map((tile) => {
+    const stored = Math.max(tile.stored.width, tile.stored.height);
+    const original = tile.original
+      ? Math.max(tile.original.width, tile.original.height)
+      : 0;
+    // A stored edge of 0 is not renderable anyway; an original at or below the stored size means
+    // the scan was never clamped. Either way the tile is left where it is.
+    if (stored <= 0 || original <= stored) return 1;
+    return original / stored;
+  });
+  const worst = shrink.reduce((max, r) => Math.max(max, r), 1);
+  return shrink.map((r) => r / worst);
+}
+
 /** The render values an offer carries, copied from a collage template (#307). */
 export interface CollageLayoutStyle {
   /** Tiles per row — the collage template's `columns`. */

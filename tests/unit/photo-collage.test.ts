@@ -62,6 +62,42 @@ describe("renderCollage", () => {
     assert.equal(rendered.width, 100 + 10 + 200 + 10 * 2);
   });
 
+  it("restores true relative sizes when one scan was clamped on upload", async () => {
+    // Both scanned at the same DPI, the second block physically twice the first — but the upload
+    // cap stored both at the same size, so their stored pixels no longer say so. The recorded
+    // originals do, and the smaller tile gives the difference back.
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(200, 200)), originalSize: { width: 200, height: 200 } },
+        { ...(await scan(200, 200)), originalSize: { width: 400, height: 400 } },
+      ],
+      style,
+      noLimits
+    );
+
+    const [small, large] = rendered.layout.tiles;
+    assert.equal(large.width, 200);
+    assert.equal(small.width, 100);
+    assert.equal(large.height, 200);
+    assert.equal(small.height, 100);
+  });
+
+  it("leaves tiles untouched when no scan carries a recorded original", async () => {
+    // Pre-migration photos: nothing to correct against, so the render is the one it always was.
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(200, 200)), originalSize: null },
+        { ...(await scan(100, 100)) },
+      ],
+      style,
+      noLimits
+    );
+
+    const [first, second] = rendered.layout.tiles;
+    assert.equal(first.width, 200);
+    assert.equal(second.width, 100);
+  });
+
   it("shrinks the canvas to the contents and stacks rows past the column count", async () => {
     const rendered = await renderCollage(
       [await scan(100, 100), await scan(100, 100), await scan(100, 100)],

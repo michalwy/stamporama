@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { layOutCollage, type CollageTileSize } from "../../src/lib/collage-layout";
+import {
+  layOutCollage,
+  trueSizeScales,
+  type CollageTileSize,
+  type CollageTileTrueSize,
+} from "../../src/lib/collage-layout";
 
 const size = (width: number, height: number): CollageTileSize => ({ width, height });
 
@@ -169,5 +174,63 @@ describe("layOutCollage", () => {
       tiles: [],
       rowCount: 0,
     });
+  });
+});
+
+describe("trueSizeScales", () => {
+  const tile = (
+    stored: [number, number],
+    original: [number, number] | null
+  ): CollageTileTrueSize => ({
+    stored: size(stored[0], stored[1]),
+    original: original ? size(original[0], original[1]) : null,
+  });
+
+  it("leaves every tile alone when nothing was downscaled", () => {
+    assert.deepEqual(
+      trueSizeScales([tile([100, 140], [100, 140]), tile([200, 140], [200, 140])]),
+      [1, 1]
+    );
+  });
+
+  it("puts a clamped scan and an untouched one back on a common scale", () => {
+    // Both scanned at the same DPI: the second block is physically twice the first. The upload cap
+    // shrank it to the same stored size, so the smaller one has to give the difference back.
+    const [small, large] = trueSizeScales([
+      tile([2500, 2000], [2500, 2000]),
+      tile([2500, 2000], [5000, 4000]),
+    ]);
+    assert.equal(large, 1);
+    assert.equal(small, 0.5);
+  });
+
+  it("never scales a tile up — the worst-shrunk tile keeps its pixels", () => {
+    const scales = trueSizeScales([
+      tile([2500, 2500], [10000, 10000]),
+      tile([2500, 2500], [5000, 5000]),
+      tile([1000, 1000], [1000, 1000]),
+    ]);
+    // The 4×-shrunk tile sets the common scale, so the untouched 1000 px tile lands at a quarter —
+    // 2500:250, the 10:1 its 10000:1000 originals call for.
+    assert.deepEqual(scales, [1, 0.5, 0.25]);
+    assert.ok(scales.every((s) => s <= 1));
+  });
+
+  it("reads a photo with no recorded original as never downscaled", () => {
+    // Pre-migration rows: the original bytes are gone, so `r = 1` and the pair behaves exactly as
+    // it did before the originals were recorded.
+    assert.deepEqual(trueSizeScales([tile([2500, 2000], null), tile([1200, 1000], null)]), [1, 1]);
+  });
+
+  it("ignores an original that is not larger than what was stored", () => {
+    // `withoutEnlargement` means a small upload is stored at its native size; a recorded original
+    // at or under the stored size is therefore not evidence of a downscale.
+    assert.deepEqual(trueSizeScales([tile([800, 600], [800, 600]), tile([400, 300], [380, 285])]), [
+      1, 1,
+    ]);
+  });
+
+  it("returns nothing for no tiles", () => {
+    assert.deepEqual(trueSizeScales([]), []);
   });
 });

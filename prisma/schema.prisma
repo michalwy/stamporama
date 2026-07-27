@@ -699,6 +699,11 @@ model Photo {
   mime           String
   width          Int
   height         Int
+  /** Dimensions measured before the FULL_MAX_EDGE downscale, so the collage renderer can restore
+   * true relative sizes across scans. Null on rows predating the columns — originals are never
+   * stored, so there is nothing to backfill from; readers fall back to `width`/`height`. */
+  originalWidth  Int?     @map("original_width")
+  originalHeight Int?     @map("original_height")
   sizeBytes      Int
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
@@ -736,6 +741,9 @@ model PhotoUpload {
   mime           String
   width          Int
   height         Int
+  /** Carried from the upload to the `Photo` row on commit — see the note on `Photo`. */
+  originalWidth  Int?     @map("original_width")
+  originalHeight Int?     @map("original_height")
   sizeBytes      Int
   createdAt      DateTime @default(now())
 

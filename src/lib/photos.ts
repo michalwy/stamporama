@@ -198,7 +198,7 @@ export async function stageUpload(
     );
   }
   if (file.bytes.byteLength > MAX_UPLOAD_BYTES) {
-    throw new PhotoValidationError("Image is too large (max 15 MB).");
+    throw new PhotoValidationError("Image is too large (max 60 MB).");
   }
 
   let processed;
@@ -243,6 +243,8 @@ export async function stageUpload(
         mime,
         width: processed.full.width,
         height: processed.full.height,
+        originalWidth: processed.original.width,
+        originalHeight: processed.original.height,
         sizeBytes,
       },
     });
@@ -423,6 +425,8 @@ async function applyPhotoChangeSetForOwner(
           mime: p.upload.mime,
           width: p.upload.width,
           height: p.upload.height,
+          originalWidth: p.upload.originalWidth,
+          originalHeight: p.upload.originalHeight,
           sizeBytes: p.upload.sizeBytes,
           sortOrder: p.add.sortOrder,
         },
@@ -507,6 +511,8 @@ export async function promoteCopyPhotoToStamp(
       mime: true,
       width: true,
       height: true,
+      originalWidth: true,
+      originalHeight: true,
       sizeBytes: true,
       item: { select: { collectionId: true, stampId: true } },
     },
@@ -569,6 +575,8 @@ async function duplicatePhotoOntoStamp(
     mime: string;
     width: number;
     height: number;
+    originalWidth: number | null;
+    originalHeight: number | null;
     sizeBytes: number;
   },
   role: PhotoRole,
@@ -613,6 +621,10 @@ async function duplicatePhotoOntoStamp(
         mime: source.mime,
         width: source.width,
         height: source.height,
+        // The bytes are copied verbatim, so the duplicate was downscaled exactly as much as its
+        // source was — carry the original dimensions rather than letting the copy read as native.
+        originalWidth: source.originalWidth,
+        originalHeight: source.originalHeight,
         sizeBytes: source.sizeBytes,
         sortOrder,
       },

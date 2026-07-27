@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 
 // `sharp` image processing for photo uploads (#112). On upload, in a single decode, the
 // original is downscaled to the full-size derivative and a thumbnail is generated. Both are
@@ -10,8 +10,9 @@ export const FULL_MAX_EDGE = 2500;
  * a one-off backfill script to regenerate existing thumbnails. */
 export const THUMB_MAX_EDGE = 320;
 
-/** Max accepted upload size (bytes). ~15 MB default, adjustable. */
-export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+/** Max accepted upload size (bytes). ~60 MB default, adjustable. The whole file is buffered in
+ * memory before `sharp` decodes it, so this is a memory bound as much as a policy. */
+export const MAX_UPLOAD_BYTES = 60 * 1024 * 1024;
 
 /** Accepted upload formats. Anything else is rejected before processing. */
 export const ACCEPTED_MIMES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -41,10 +42,16 @@ export interface ProcessedVariant {
 }
 
 /** Result of processing one upload: the `full` derivative (drives the persisted photo's
- * dimensions/mime) and its `thumb`. */
+ * dimensions/mime), its `thumb`, and the source's own dimensions. */
 export interface ProcessedImage {
   full: ProcessedVariant;
   thumb: ProcessedVariant;
+  /** The upload's dimensions *before* the `FULL_MAX_EDGE` downscale, EXIF rotation already applied
+   * so they describe the visible image like the derivatives' do. Persisted because the original
+   * bytes are not: it is the only record of how much a scan was shrunk, which is what lets the
+   * collage renderer put two scans back on a common scale. Equal to `full`'s when nothing was
+   * clamped, which is the common case. */
+  original: { width: number; height: number };
 }
 
 export class UnsupportedImageError extends Error {}
@@ -94,7 +101,23 @@ export async function processImage(
     encode(THUMB_MAX_EDGE),
   ]);
 
-  return { full, thumb };
+  return { full, thumb, original: orientedSize(meta, full) };
+}
+
+/** The source's visible dimensions. `metadata()` reports what is stored in the file, before the
+ * `.rotate()` in the pipeline is applied, so a quarter-turn EXIF orientation has them the wrong way
+ * round — the same normalisation the derivatives get from `.rotate()`, done by hand. A source that
+ * reports no dimensions at all falls back to the `full` derivative's, which reads as "never
+ * downscaled" and so leaves the collage's scaling exactly where it is today. */
+function orientedSize(
+  meta: Metadata,
+  full: ProcessedVariant
+): { width: number; height: number } {
+  if (!meta.width || !meta.height) return { width: full.width, height: full.height };
+  const quarterTurned = meta.orientation != null && meta.orientation >= 5;
+  return quarterTurned
+    ? { width: meta.height, height: meta.width }
+    : { width: meta.width, height: meta.height };
 }
 
 /**

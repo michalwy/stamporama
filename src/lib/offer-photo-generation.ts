@@ -250,7 +250,27 @@ interface SourcePhoto {
   storageBackend: string;
   storageKey: string;
   mime: string;
+  /** The stored `full` derivative's size, and the size the upload was measured at before
+   * `FULL_MAX_EDGE` clamped it. The renderer needs the pair to put scans back on a common scale;
+   * `originalWidth`/`originalHeight` are null for photos uploaded before they were recorded. */
+  width: number;
+  height: number;
+  originalWidth: number | null;
+  originalHeight: number | null;
 }
+
+/** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
+ * whether a tile arrives from a copy's scan, an attachment's photo or a manual collage's tile. */
+const SOURCE_PHOTO_SELECT = {
+  id: true,
+  storageBackend: true,
+  storageKey: true,
+  mime: true,
+  width: true,
+  height: true,
+  originalWidth: true,
+  originalHeight: true,
+} as const;
 
 /** Display labels for the ids a plan is written in terms of — the panel's only job for them. */
 interface PlanLabels {
@@ -452,13 +472,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
                   },
                   photos: {
                     where: { role: { in: SIDE_ROLES } },
-                    select: {
-                      id: true,
-                      role: true,
-                      storageBackend: true,
-                      storageKey: true,
-                      mime: true,
-                    },
+                    select: { ...SOURCE_PHOTO_SELECT, role: true },
                   },
                 },
               },
@@ -479,26 +493,14 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           collageColumns: true,
           title: true,
           photo: {
-            select: {
-              id: true,
-              storageBackend: true,
-              storageKey: true,
-              mime: true,
-            },
+            select: SOURCE_PHOTO_SELECT,
           },
           // A manual collage (#331) shows its tiles instead of a single photo, in their own order.
           tiles: {
             orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
             select: {
               itemId: true,
-              photo: {
-                select: {
-                  id: true,
-                  storageBackend: true,
-                  storageKey: true,
-                  mime: true,
-                },
-              },
+              photo: { select: SOURCE_PHOTO_SELECT },
             },
           },
         },
@@ -519,12 +521,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
         li.item.stamp.catalogNumbers[0]?.number ?? li.item.stamp.name ?? "Copy"
       );
       for (const photo of li.item.photos) {
-        sourceById.set(photo.id, {
-          id: photo.id,
-          storageBackend: photo.storageBackend,
-          storageKey: photo.storageKey,
-          mime: photo.mime,
-        });
+        sourceById.set(photo.id, photo);
       }
       return {
         itemId: li.itemId,
@@ -600,12 +597,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     attachmentTitles.set(row.id, row.title);
     attachmentSources.set(row.id, source);
     for (const { photo } of photos) {
-      sourceById.set(photo.id, {
-        id: photo.id,
-        storageBackend: photo.storageBackend,
-        storageKey: photo.storageKey,
-        mime: photo.mime,
-      });
+      sourceById.set(photo.id, photo);
     }
   }
 
@@ -1160,7 +1152,11 @@ export async function requeueStalledOfferPhotoGenerations(only?: { offerId: stri
 
 /** Read a stored photo's `full` bytes into memory — a collage tile has to be decoded as a whole, and
  * an archived image has to be handed over whole. */
-async function readFullBytes(photo: Omit<SourcePhoto, "id">): Promise<Buffer> {
+async function readFullBytes(photo: {
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+}): Promise<Buffer> {
   const object = await getStorage(photo.storageBackend).get(
     variantKey(photo.storageKey, "full", photo.mime),
     photo.mime
@@ -1233,7 +1229,16 @@ async function tileSource(
     // The plan was built from the same read, so a missing source is a bug, not a race.
     throw new Error(`Planned tile references unknown photo ${photoId}.`);
   }
-  return { buffer: await readFullBytes(source), labels };
+  return {
+    buffer: await readFullBytes(source),
+    labels,
+    // Null on anything uploaded before the originals were recorded; the renderer reads that as
+    // "never downscaled", which is what it assumed of every scan until then.
+    originalSize:
+      source.originalWidth != null && source.originalHeight != null
+        ? { width: source.originalWidth, height: source.originalHeight }
+        : null,
+  };
 }
 
 /**

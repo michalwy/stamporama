@@ -1,8 +1,10 @@
 import sharp from "sharp";
 import {
   layOutCollage,
+  trueSizeScales,
   type CollageLayout,
   type CollageLayoutStyle,
+  type CollageTileSize,
 } from "../collage-layout";
 import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
 
@@ -16,6 +18,13 @@ import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
  * Tiles are composited at their native size (`src/lib/collage-layout.ts`) and the finished canvas is
  * scaled by **one shared factor** when the output limits are applied — never per tile, never per
  * row. Nothing here needs physical dimensions in millimetres.
+ *
+ * The upload pipeline is the one thing that breaks this, and `trueSizeScales` is the repair: a scan
+ * over `FULL_MAX_EDGE` is stored downscaled, so a tile that was clamped and one that was not are no
+ * longer on a common scale. Each tile's recorded original size says how far it was shrunk, and the
+ * tiles are scaled back into agreement **downwards** before anything is measured — so a block twice
+ * the size of its neighbour composites twice as large again. Photos predating those recorded
+ * originals read as un-downscaled and behave exactly as they did before.
  *
  * Output constraints
  * ------------------
@@ -56,6 +65,10 @@ const MAX_SHRINK_ROUNDS = 4;
 /** One tile's source bytes. `sharp` decodes and EXIF-rotates it before anything is measured. */
 export interface CollageTileSource {
   buffer: Buffer;
+  /** The dimensions this scan was uploaded at, before `FULL_MAX_EDGE` clamped the bytes above.
+   * Absent — or absent on the photo row, for anything uploaded before they were recorded — reads
+   * as "never downscaled", which is what the renderer assumed of everything until now. */
+  originalSize?: CollageTileSize | null;
   /** The two annotations drawn on the tile's label strip (#312), already resolved from the offer's
    * left / right label templates against this copy. Blank or absent leaves that side undrawn — a
    * copy with no value for a template's tokens is not special-cased. */
@@ -119,6 +132,24 @@ async function decodeTile(source: CollageTileSource): Promise<DecodedTile> {
 }
 
 /**
+ * Put one decoded tile back on the collage's common scale (`trueSizeScales`). A factor of 1 — every
+ * tile, whenever no scan hit `FULL_MAX_EDGE` — returns the tile untouched, so the usual render is
+ * exactly the decode it always was. Rounding never yields 0: a tile has to stay compositable.
+ */
+async function rescaleTile(tile: DecodedTile, scale: number): Promise<DecodedTile> {
+  if (scale >= 1) return tile;
+  const width = Math.max(1, Math.round(tile.width * scale));
+  const height = Math.max(1, Math.round(tile.height * scale));
+  const { data, info } = await sharp(tile.data, {
+    raw: { width: tile.width, height: tile.height, channels: tile.channels },
+  })
+    .resize(width, height, { fit: "fill" })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height, channels: info.channels };
+}
+
+/**
  * Composites the tiles — and the label strips over them (#312) — onto the background and returns the
  * finished canvas as raw pixels, so the file-size search can re-encode it as often as it likes
  * without compositing again.
@@ -170,7 +201,15 @@ export async function renderCollage(
     throw new EmptyCollageError("A collage needs at least one tile.");
   }
 
-  const tiles = await Promise.all(sources.map(decodeTile));
+  const decoded = await Promise.all(sources.map(decodeTile));
+  const tiles = await Promise.all(
+    trueSizeScales(
+      decoded.map((tile, index) => ({
+        stored: { width: tile.width, height: tile.height },
+        original: sources[index].originalSize ?? null,
+      }))
+    ).map((scale, index) => rescaleTile(decoded[index], scale))
+  );
   const layout = layOutCollage(tiles, style);
   const canvas = await compositeCanvas(
     tiles,
