@@ -22,6 +22,7 @@ import {
 import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
+import { CopyCountBadge } from "./copy-count-badge";
 
 // Shared presentational building blocks for an issue and its stamp/variant tree,
 // so the main issues list (issue-row.tsx) and the inventory stamp-picker popup
@@ -211,6 +212,7 @@ export function StampDetailLine({
     secondaryCNs.length === 0 &&
     !node.colnectId &&
     !showsSubtype &&
+    node.copies.total === 0 &&
     !node.mainCatalogPrice &&
     !onSetPrice
   )
@@ -238,6 +240,7 @@ export function StampDetailLine({
       ))}
       <ColnectChip colnectId={node.colnectId} />
       <SubtypeChip subtype={node.subtype} />
+      <CopyCountBadge copies={node.copies} />
       {!node.mainCatalogPrice && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip

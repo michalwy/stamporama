@@ -30,6 +30,7 @@ import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorResolver } from "./format-pricing";
+import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -340,6 +341,9 @@ export interface StampListItem {
   /** Catalog-level photos (#137), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
+  /** Copies held of this stamp (#348), counted for this stamp exactly — a variant's copies are
+   *  its own, never rolled into its parent's badge. */
+  copies: StampCopyCounts;
 }
 
 export interface PaginatedStampsResult {
@@ -414,7 +418,8 @@ function toStampListItem(
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   displayFormatId: string | null,
-  factorFor: (areaId: string | null, issueId: string | null) => number | null
+  factorFor: (areaId: string | null, issueId: string | null) => number | null,
+  copyCounts: Map<string, StampCopyCounts>
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
@@ -470,6 +475,7 @@ function toStampListItem(
         sortOrder: p.sortOrder,
       }))
       .sort(sortPhotos),
+    copies: copyCounts.get(stamp.id) ?? NO_COPIES,
   };
 }
 
@@ -482,9 +488,11 @@ async function buildStampListItems(
   displayConditionId: string | null,
   displayFormatId: string | null
 ): Promise<StampListItem[]> {
-  const [latestYearByName, factorFor] = await Promise.all([
+  const [latestYearByName, factorFor, copyCounts] = await Promise.all([
     getLatestEditionYearByName(collectionId),
     makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
+    // Only the page's stamps (#348) — this funnel is reached with the rows already sliced.
+    countCopiesByStamp(collectionId, stamps.map((s) => s.id)),
   ]);
   const items = stamps.map((s) =>
     toStampListItem(
@@ -494,7 +502,8 @@ async function buildStampListItems(
       latestYearByName,
       displayConditionId,
       displayFormatId,
-      factorFor
+      factorFor,
+      copyCounts
     )
   );
   const currencies = items

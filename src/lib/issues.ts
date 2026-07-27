@@ -23,6 +23,7 @@ import {
 } from "./translations";
 import { syncStampTranslations } from "./stamps";
 import { makeFormatFactorResolver } from "./format-pricing";
+import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -129,6 +130,9 @@ export interface StampNodeData {
   subtype: SubtypeLabel | null;
   /** Catalog-level photos (#137), ordered main then extras — shown under the expanded row. */
   photos: PhotoSummary[];
+  /** Copies held of this stamp (#348), counted for this stamp exactly — a variant child's copies
+   *  belong to the child's own badge. Zero for every stamp when the caller loaded no counts. */
+  copies: StampCopyCounts;
 }
 
 export interface IssueCatalogNumberData {
@@ -265,7 +269,9 @@ function toStampNode(
     rates: Map<string, number | null>;
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
     variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
-  }
+  },
+  /** Copies held per stamp (#348); absent stamps read as none. */
+  copyCounts?: Map<string, StampCopyCounts>
 ): StampNodeData {
   const headline = pricing
     ? pickHeadlineCatalogPrice({
@@ -315,6 +321,7 @@ function toStampNode(
     actsAsVariant: childIsVariant(m.stamp),
     subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
+    copies: copyCounts?.get(m.stampId) ?? NO_COPIES,
   };
 }
 
@@ -364,7 +371,7 @@ function toIssueData(issue: {
     };
   }[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-}): IssueData {
+}, copyCounts?: Map<string, StampCopyCounts>): IssueData {
   const required = issue.members.filter((m) => m.requiredForCompleteness).length;
   return {
     id: issue.id,
@@ -375,7 +382,7 @@ function toIssueData(issue: {
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
-    members: issue.members.map((m) => toStampNode(m)),
+    members: issue.members.map((m) => toStampNode(m, undefined, copyCounts)),
     catalogNumbers: issue.catalogNumbers,
     completeness: { required, owned: 0 },
   };
@@ -392,7 +399,11 @@ export async function listIssuesForArea(
     orderBy: [{ year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
     select: ISSUE_SELECT,
   });
-  return issues.map(toIssueData);
+  const copyCounts = await countCopiesByStamp(
+    collectionId,
+    issues.flatMap((i) => i.members.map((m) => m.stampId))
+  );
+  return issues.map((i) => toIssueData(i, copyCounts));
 }
 
 /** A lightweight reference to an existing issue that shares a proposed name, for the
@@ -441,7 +452,11 @@ export async function listAllIssues(
     orderBy: [{ collectionAreaId: "asc" }, { year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
     select: ISSUE_SELECT,
   });
-  return issues.map(toIssueData);
+  const copyCounts = await countCopiesByStamp(
+    collectionId,
+    issues.flatMap((i) => i.members.map((m) => m.stampId))
+  );
+  return issues.map((i) => toIssueData(i, copyCounts));
 }
 
 /** Just the fields needed to render an issue header (title, catalog chips, counts) —
@@ -1063,7 +1078,10 @@ export async function listIssueMembers(
     ...members.flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency)),
     ...variantCurrencies,
   ];
-  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
+  const [rates, copyCounts] = await Promise.all([
+    safeRateMap(collectionId, baseCurrency, currencies),
+    countCopiesByStamp(collectionId, members.map((m) => m.stampId)),
+  ]);
 
   return members.map((m) =>
     toStampNode(m, {
@@ -1075,7 +1093,7 @@ export async function listIssueMembers(
       formatFactor,
       rates,
       variantPricesByStamp,
-    })
+    }, copyCounts)
   );
 }
 

@@ -39,6 +39,28 @@ On the **Issues** list, the toolbar's search box matches the issue name, the nam
 
 All filtering and sorting happens on the server, and the active area, year, search, and sort are kept in the page URL so a view can be bookmarked or shared. Whatever sort you pick (name, year, issue date, …), items that share the same sort value are then ordered by their **primary catalog number**, so a run of same-year issues still reads in catalog order rather than an arbitrary one. The **area** and **year** selections are also remembered per collection and shared across these three lists: pick an area and year on one list and they carry over when you switch to another, and they are restored when you come back after visiting an unrelated page. The **catalog** chosen in the catalog-number filter is likewise remembered per collection and shared between the Issues and Stamps lists, so your preferred catalog stays selected across reloads. Other filters (search, catalog number, sort, and the copies-only filters) stay per list. When you add an issue while a year is selected, the new issue's year is pre-filled to match.
 
+## Copies held, on the catalog lists
+
+Wherever a stamp is listed — the **Issues** list stamp tree, the **Stamps** list, and the stamp
+pickers — a green **“2 copies”** badge sits beside its catalog numbers when you hold copies of it,
+so you can see what you already own without opening anything. Hover it for the breakdown:
+*2 copies held · 1 in collection · 1 for sale*. The disposition figures are markers, not slices —
+one copy can be both in the collection and for sale — so they are listed rather than added up.
+
+Three rules worth knowing:
+
+- **A stamp you own none of shows no badge.** Most of a catalog is stamps you do not have yet, so a
+  “0” on every row would be pure noise. The badge only ever means *you have some*.
+- **The count is that stamp's own copies.** A copy filed under a variant belongs to the variant's
+  badge, not its parent's — in the issue tree the child's badge is right underneath, so counting it
+  twice would be misleading.
+- **Sold copies are not counted**, matching the **View copies** popup the badge sits beside: what
+  the badge says and what the popup lists are always the same set. Copies still on their way to you
+  *are* counted — they are bought and yours; see
+  [Delivery state](inventory.md#delivery-state).
+
+To see the copies themselves, use **View copies** in the row's **⋮** menu.
+
 ## Row actions
 
 Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.

@@ -16,6 +16,7 @@ import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import {
@@ -230,7 +231,11 @@ export function StampRow({
         </div>
 
         {/* Line 3: catalog numbers + main-catalog price */}
-        {(primaryCN || secondaryCNs.length > 0 || stamp.colnectId || stamp.mainCatalogPrice) && (
+        {(primaryCN ||
+          secondaryCNs.length > 0 ||
+          stamp.colnectId ||
+          stamp.copies.total > 0 ||
+          stamp.mainCatalogPrice) && (
         <div
           style={{
             display: "flex",
@@ -252,6 +257,7 @@ export function StampRow({
           ))}
           <ColnectChip colnectId={stamp.colnectId} size="medium" />
           <SubtypeChip subtype={stamp.subtype} size="medium" />
+          <CopyCountBadge copies={stamp.copies} size="medium" />
           {stamp.mainCatalogPrice && (
             <span
               style={{
