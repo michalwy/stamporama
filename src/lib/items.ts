@@ -8,6 +8,7 @@ import {
   safeRateMap,
 } from "./pricing";
 import type { RawCatalogPrice } from "./catalog-price";
+import { makeFormatFactorLookup } from "./format-pricing";
 import {
   valuateCopy,
   aggregateHoldings,
@@ -482,6 +483,9 @@ export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
   certificateStatusId?: string;
+  /** Restrict to copies of one physical format (#343). The literal `"single"` matches the copies
+   *  with no format — null *is* the single (ADR-0020), and an absent filter cannot express it. */
+  formatId?: string;
   /** Restrict to copies whose linked stamp belongs to any of these areas (the selected
    * area plus its descendants, resolved by the caller). Mirrors the stamps list area
    * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
@@ -633,6 +637,9 @@ function buildItemWhere(
     ...(filters.certificateStatusId
       ? { certificateStatusId: filters.certificateStatusId }
       : {}),
+    ...(filters.formatId
+      ? { formatId: filters.formatId === "single" ? null : filters.formatId }
+      : {}),
     ...(filters.stampId ? { stampId: filters.stampId } : {}),
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.excludeIds && filters.excludeIds.length > 0
@@ -678,6 +685,7 @@ async function resolveMissingCatalogItemIds(
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -686,6 +694,7 @@ async function resolveMissingCatalogItemIds(
     stampId: row.stampId,
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
   }));
@@ -820,14 +829,15 @@ const ITEM_LIST_SELECT = {
 
 type ItemListRow = Prisma.ItemGetPayload<{ select: typeof ITEM_LIST_SELECT }>;
 
-/** The valuation input for one enriched copy row — its stamp/condition/certificate plus the
- * unknown-variant flag — as consumed by {@link valuateItemRows}. */
+/** The valuation input for one enriched copy row — its stamp/condition/certificate/format plus
+ * the unknown-variant flag — as consumed by {@link valuateItemRows}. */
 function valuationInputFromRow(row: ItemListRow): ValuationRow {
   return {
     id: row.id,
     stampId: row.stampId,
     conditionId: row.condition.id,
     certificateStatusId: row.certificateStatus?.id ?? null,
+    formatId: row.format?.id ?? null,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
   };
@@ -1355,6 +1365,8 @@ interface ValuationRow {
   stampId: string;
   conditionId: string;
   certificateStatusId: string | null;
+  /** The copy's physical format (#343); null is the single. */
+  formatId: string | null;
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
 }
@@ -1397,18 +1409,26 @@ async function valuateItemRows(
     for (const id of set) stampIds.add(id);
   }
 
-  const stamps = await prisma.stamp.findMany({
-    where: { id: { in: [...stampIds] } },
-    select: {
-      id: true,
-      catalogPrices: { select: VALUATION_PRICE_SELECT },
-      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-      ...VARIANT_FLAG_SELECT,
-    },
-  });
+  const [stamps, factorLookup] = await Promise.all([
+    prisma.stamp.findMany({
+      where: { id: { in: [...stampIds] } },
+      select: {
+        id: true,
+        catalogPrices: { select: VALUATION_PRICE_SELECT },
+        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        // The issue anchors a format multiplier (#343) — the narrowest anchor a catalog prints one
+        // against. A stamp belongs to at most one issue in practice.
+        issueMemberships: { select: { issueId: true }, take: 1 },
+        ...VARIANT_FLAG_SELECT,
+      },
+    }),
+    makeFormatFactorLookup(collectionId),
+  ]);
 
   const pricesByStamp = new Map<string, RawCatalogPrice[]>();
   const primaryCatalogByStamp = new Map<string, string | null>();
+  const areaByStamp = new Map<string, string | null>();
+  const issueByStamp = new Map<string, string | null>();
   // Which descendants count as variants (ADR-0010 §3): only variant-kind children
   // feed the lowest-child price; distinct-entry descendants are excluded.
   const isVariantByStamp = new Map<string, boolean>();
@@ -1423,6 +1443,8 @@ async function valuateItemRows(
       s.id,
       areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null
     );
+    areaByStamp.set(s.id, areaId);
+    issueByStamp.set(s.id, s.issueMemberships[0]?.issueId ?? null);
   }
 
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
@@ -1439,6 +1461,15 @@ async function valuateItemRows(
       valuateCopy({
         conditionId: r.conditionId,
         certificateStatusId: r.certificateStatusId,
+        formatId: r.formatId,
+        // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
+        // one, is scaled by the same rule, since it shares the umbrella's issue and area.
+        formatFactor: factorLookup(
+          r.formatId,
+          areaByStamp.get(r.stampId) ?? null,
+          issueByStamp.get(r.stampId) ?? null,
+          r.conditionId
+        ),
         unknownVariant: r.unknownVariant,
         primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
         ownPrices: pricesByStamp.get(r.stampId) ?? [],
@@ -1471,6 +1502,7 @@ export async function valuateItemsByIds(
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -1479,6 +1511,7 @@ export async function valuateItemsByIds(
     stampId: row.stampId,
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
   }));
@@ -1511,6 +1544,7 @@ export async function getHoldingsValuation(
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       costBasis: true,
       lotId: true,
       lot: { select: { status: true } },
@@ -1523,6 +1557,7 @@ export async function getHoldingsValuation(
     stampId: row.stampId,
     conditionId: row.conditionId,
     certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
   }));

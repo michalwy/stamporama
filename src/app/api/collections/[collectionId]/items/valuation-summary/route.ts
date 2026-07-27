@@ -30,6 +30,7 @@ export async function GET(
     const total = await getHoldingsValuation(session.user.id, collectionId, {
       conditionId: sp.get("conditionId") || undefined,
       certificateStatusId: sp.get("certificateStatusId") || undefined,
+      formatId: sp.get("formatId") || undefined,
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
       catalogVendorId: sp.get("catalogVendorId") || undefined,

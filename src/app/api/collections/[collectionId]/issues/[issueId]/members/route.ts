@@ -13,15 +13,17 @@ export async function GET(
   }
 
   const { collectionId, issueId } = await params;
-  const displayConditionId =
-    new URL(request.url).searchParams.get("displayConditionId") || undefined;
+  const sp = new URL(request.url).searchParams;
+  const displayConditionId = sp.get("displayConditionId") || undefined;
+  const displayFormatId = sp.get("displayFormatId") || null;
 
   try {
     const members = await listIssueMembers(
       session.user.id,
       collectionId,
       issueId,
-      displayConditionId
+      displayConditionId,
+      displayFormatId
     );
     return NextResponse.json({ members });
   } catch {

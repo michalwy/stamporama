@@ -14,7 +14,8 @@
 // so rendering scope is grouped by `OfferSet` rather than flat: line breaks are preserved, a line
 // whose placeholders all came out empty is dropped whole, and the repeating blocks `{#set}…{/set}` /
 // `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
-// `{#conditionLegend}…{/conditionLegend}` / `{#certificateLegend}…{/certificateLegend}` (#318) are the
+// `{#conditionLegend}…{/conditionLegend}` / `{#certificateLegend}…{/certificateLegend}` (#318) and
+// `{#formatLegend}…{/formatLegend}` (#345) are the
 // same mechanism over the *distinct dictionary entries* the copies use, which is how a description
 // appends a legend of the abbreviations it just printed — the collector writes the entry's format
 // inside the block.
@@ -55,6 +56,14 @@ export interface TitleTemplateCopy {
    * no subtype, **and** for the collection's default subtype: the default is the unmarked case, so
    * `{subtype}` renders empty rather than stamping a redundant "Variant" on every listing. */
   subtype: string | null;
+  /** The copy's physical format (#345) — `Block of 4`, `Horizontal pair`… — or **null for a
+   * single**, which is most copies (ADR-0020: a null `Item.formatId` *is* the single). The token
+   * therefore resolves empty far more often than it resolves, which the existing tidy pass already
+   * handles: a line whose placeholders all came out empty is dropped whole, and a separator glued
+   * to an emptied slot goes with it. */
+  format: string | null;
+  /** Format abbreviation (e.g. `Blk4`), or null for a single. */
+  formatAbbr: string | null;
   /** Name of the issue the stamp belongs to (its first membership), or null. */
   issueName: string | null;
   /** Year of that issue, or null. */
@@ -70,7 +79,7 @@ export interface TitleTemplateCopy {
  *
  * `field` is the {@link TitleTemplateCopy} key the token renders from (`conditionAbbr`);
  * `entityField` is the translation column on the entity itself (`abbreviation`). They differ because
- * one copy flattens five entities: `{condition}` and `{conditionAbbr}` are both the condition's
+ * one copy flattens six entities: `{condition}` and `{conditionAbbr}` are both the condition's
  * `name` / `abbreviation`, and `{area}` is a `titleName` possibly inherited from an ancestor area —
  * `entityId` is then that ancestor, the row a translation must actually be written on. */
 export interface TitleFallback {
@@ -96,6 +105,8 @@ const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   area: "area",
   issuename: "issueName",
   subtype: "subtype",
+  format: "format",
+  formatabbr: "formatAbbr",
 };
 
 /** A token usable in a template, with the label + example the config UI shows as a legend. */
@@ -120,6 +131,8 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{issueName}", label: "Issue name", example: "1850 First Issue" },
   { token: "{issueYear}", label: "Issue year", example: "1850" },
   { token: "{subtype}", label: "Subtype", example: "Overprint" },
+  { token: "{format}", label: "Format", example: "Block of 4" },
+  { token: "{formatAbbr}", label: "Format (abbr.)", example: "Blk4" },
 ];
 
 /** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
@@ -144,6 +157,11 @@ export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; l
     open: "{#certificateLegend}",
     close: "{/certificateLegend}",
     label: "Repeat once per distinct certificate status used — a legend of abbreviations",
+  },
+  {
+    open: "{#formatLegend}",
+    close: "{/formatLegend}",
+    label: "Repeat once per distinct format used — singles are not listed",
   },
 ];
 
@@ -349,6 +367,13 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.issueName)).join(" / ");
     case "subtype":
       return distinct(copies.map((c) => c.subtype)).join(" / ");
+    // A batch mixing a pair and two singles renders just "Horizontal pair" — `distinct` drops the
+    // singles' nulls, exactly as `{certificate}` handles copies without a certificate. Two
+    // different multiples join with `/`, like every other per-copy token.
+    case "format":
+      return distinct(copies.map((c) => c.format)).join(" / ");
+    case "formatabbr":
+      return distinct(copies.map((c) => c.formatAbbr)).join(" / ");
     case "issueyear":
       return yearSpan(copies, (c) => c.issueYear);
     default:
@@ -483,17 +508,23 @@ interface TemplateScope {
  * abbreviations (#318) — the distinct conditions / certificate statuses those copies use. The legend
  * blocks are named `…Legend` rather than after the dictionary itself so `{#conditionLegend}` cannot
  * be misread as the `{condition}` token it is normally wrapped around. */
-type BlockOver = "set" | "copy" | "conditionLegend" | "certificateLegend";
+type BlockOver = "set" | "copy" | "conditionLegend" | "certificateLegend" | "formatLegend";
 
-/** The two legend blocks, and which pair of {@link TitleTemplateCopy} fields each iterates. */
-type LegendOver = "conditionLegend" | "certificateLegend";
+/** The legend blocks, and which pair of {@link TitleTemplateCopy} fields each iterates. */
+type LegendOver = "conditionLegend" | "certificateLegend" | "formatLegend";
 
 /** A parsed template: literal runs (still carrying `{token}` placeholders) and repeating blocks. */
 type TemplateNode =
   | { kind: "text"; text: string }
   | { kind: "block"; over: BlockOver; body: TemplateNode[] };
 
-const BLOCK_TAGS: readonly BlockOver[] = ["set", "copy", "conditionLegend", "certificateLegend"];
+const BLOCK_TAGS: readonly BlockOver[] = [
+  "set",
+  "copy",
+  "conditionLegend",
+  "certificateLegend",
+  "formatLegend",
+];
 
 const BLOCK_TAG_RE = new RegExp(`\\{(${BLOCK_TAGS.map((t) => `#${t}|/${t}`).join("|")})\\}`, "g");
 
@@ -552,17 +583,29 @@ function isBlankRender(rendered: string): boolean {
   return rendered.replace(/[\u0000-\u0004]/g, "").trim() === "";
 }
 
-/** The dictionary entry one copy contributes to a `{#conditionLegend}` / `{#certificateLegend}` block
- * (#318): the (full name, abbreviation) pair, as a key that de-duplicates the copies using it. Null
- * when the copy records neither — it has nothing to explain and is left out of the legend. */
+/** The (full name, abbreviation) pair of {@link TitleTemplateCopy} fields each legend block reads
+ * off a copy. */
+const LEGEND_FIELDS: Readonly<Record<LegendOver, readonly [string, string]>> = {
+  conditionLegend: ["condition", "conditionAbbr"],
+  certificateLegend: ["certificate", "certificateAbbr"],
+  formatLegend: ["format", "formatAbbr"],
+};
+
+/** The dictionary entry one copy contributes to a legend block (#318, #345): the (full name,
+ * abbreviation) pair, as a key that de-duplicates the copies using it. Null when the copy records
+ * neither — it has nothing to explain and is left out of the legend. That is exactly what keeps
+ * **singles** out of `{#formatLegend}`: a single carries no format, the way a copy without a
+ * certificate carries no certificate entry. */
 function legendKey(copy: TitleTemplateCopy, over: LegendOver): string | null {
-  const isCondition = over === "conditionLegend";
-  const name = (isCondition ? copy.condition : copy.certificate)?.trim() ?? "";
-  const abbr = (isCondition ? copy.conditionAbbr : copy.certificateAbbr)?.trim() ?? "";
+  const [nameField, abbrField] = LEGEND_FIELDS[over];
+  const fields = copy as unknown as Record<string, string | null | undefined>;
+  const name = fields[nameField]?.trim() ?? "";
+  const abbr = fields[abbrField]?.trim() ?? "";
   return name || abbr ? `${name} ${abbr}` : null;
 }
 
-/** One scope per distinct condition / certificate status used by the copies in `scope` (#318), in
+/** One scope per distinct condition / certificate status / format used by the copies in `scope`
+ * (#318, #345), in
  * first-seen order. Each narrows the scope to exactly the copies carrying that entry, so inside the
  * block `{condition}` / `{conditionAbbr}` name that one entry — and every other token (`{catalog}`,
  * `{year}`, a nested `{#copy}`) describes the copies it applies to, which is what makes the block a
@@ -587,8 +630,8 @@ function legendScopes(scope: TemplateScope, over: LegendOver): TemplateScope[] {
 /** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
  * with tokens narrowed to that set's copies; a `{#copy}` block once per copy in scope — nested in a
  * set block that means that set's copies, at the top level every copy of the offer. The legend blocks
- * `{#conditionLegend}` / `{#certificateLegend}` (#318) repeat once per distinct dictionary entry the
- * copies use, narrowed to the copies using it. */
+ * `{#conditionLegend}` / `{#certificateLegend}` (#318) / `{#formatLegend}` (#345) repeat once per
+ * distinct dictionary entry the copies use, narrowed to the copies using it. */
 function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): string {
   let out = "";
   for (const node of nodes) {
@@ -599,8 +642,8 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
     const iterations: TemplateScope[] =
       node.over === "set"
         ? scope.sets.map((s) => ({ sets: [s], copies: s.copies, setTitle: s.title }))
-        : node.over === "conditionLegend" || node.over === "certificateLegend"
-          ? legendScopes(scope, node.over)
+        : node.over in LEGEND_FIELDS
+          ? legendScopes(scope, node.over as LegendOver)
           : scope.copies.map((c) => ({
               sets: [{ title: scope.setTitle, copies: [c] }],
               copies: [c],

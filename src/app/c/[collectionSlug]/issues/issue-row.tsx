@@ -27,6 +27,7 @@ import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import type { StampFormatData } from "@/lib/stamp-formats";
 import {
   useInventoryPopupAction,
   useInventoryAddAction,
@@ -38,6 +39,13 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 /** The condition the list's price column is showing, so a quick-add prices what's on screen. */
 export interface DisplayConditionRef {
+  id: string;
+  abbreviation: string;
+}
+
+/** The format the list's price column is showing (#343), or null for the single — what a
+ * quick-added catalog value is recorded against. */
+export interface DisplayFormatRef {
   id: string;
   abbreviation: string;
 }
@@ -57,6 +65,9 @@ interface StampTreeNodeProps {
   areaName: string | null;
   /** Condition a quick-added catalog value is recorded at — the one the list displays (#341). */
   displayCondition: DisplayConditionRef | null;
+  /** Format a quick-added catalog value is recorded at — the one the list displays, null for the
+   *  single (#343). */
+  displayFormat: DisplayFormatRef | null;
   onPriceSaved: () => void | Promise<unknown>;
   onEdit: (stampId: string) => void;
   onAddChild: (parentStampId: string) => void;
@@ -77,6 +88,7 @@ function StampTreeNode({
   issueYear,
   areaName,
   displayCondition,
+  displayFormat,
   onPriceSaved,
   onEdit,
   onAddChild,
@@ -137,6 +149,10 @@ function StampTreeNode({
           conditionAbbreviation: displayCondition.abbreviation,
           certificateStatusId: null,
           certificateStatusName: null,
+          // Record against the format the column is showing (#343), never silently against the
+          // single — otherwise typing a value while a block column is up would write the wrong row.
+          formatId: displayFormat?.id ?? null,
+          formatAbbreviation: displayFormat?.abbreviation ?? null,
           catalogNumbers: node.catalogNumbers,
           photos: node.photos,
         }
@@ -253,6 +269,7 @@ function StampTreeNode({
             issueYear={issueYear}
             areaName={areaName}
             displayCondition={displayCondition}
+            displayFormat={displayFormat}
             onPriceSaved={onPriceSaved}
             onEdit={onEdit}
             onAddChild={onAddChild}
@@ -298,6 +315,11 @@ interface IssueRowProps {
   /** Condition whose price fills each member's headline price, matching the list's
    *  price column so the expanded rows track the condition switcher (#238). */
   displayConditionId?: string | null;
+  /** Format whose price fills each member's headline price, tracking the format switcher the same
+   *  way (#343). Null is the single. */
+  displayFormatId?: string | null;
+  /** The collection's formats, for naming {@link displayFormatId} on the quick-price badge. */
+  formats?: StampFormatData[];
 }
 
 export function IssueRow({
@@ -314,6 +336,8 @@ export function IssueRow({
   callbacks,
   defaultExpanded,
   displayConditionId,
+  displayFormatId,
+  formats,
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const [hovered, setHovered] = useState(false);
@@ -322,7 +346,8 @@ export function IssueRow({
     collectionId,
     issue.id,
     isExpanded,
-    displayConditionId
+    displayConditionId,
+    displayFormatId
   );
 
   // The condition the price column is filled from — the switcher's choice, or (when the list
@@ -336,6 +361,13 @@ export function IssueRow({
       : list[0];
     return chosen ? { id: chosen.id, abbreviation: chosen.abbreviation } : null;
   }, [conditions, displayConditionId]);
+
+  // The format the price column is filled from. Null — the single — is the default and needs no
+  // lookup; a chosen one is named so the quick-price badge can spell out what it will write (#343).
+  const displayFormat = useMemo<DisplayFormatRef | null>(() => {
+    const chosen = displayFormatId ? formats?.find((f) => f.id === displayFormatId) : undefined;
+    return chosen ? { id: chosen.id, abbreviation: chosen.abbreviation } : null;
+  }, [formats, displayFormatId]);
 
   const stampTree = members ? buildStampTree(members) : [];
 
@@ -528,7 +560,9 @@ export function IssueRow({
               const incomplete = t.pricedCount < t.requiredCount;
               const unpriced = t.requiredCount - t.pricedCount - t.olderEditionExcludedCount;
               const showWarning = t.usesOlderEdition || incomplete;
-              const estimated = t.estimatedCount > 0;
+              // Both ways a total stops being a plain sum of recorded figures (#238, #343). One
+              // marker, one tooltip listing whichever applies.
+              const estimated = t.estimatedCount > 0 || t.derivedCount > 0;
               const secondary = moneySecondaryText(t);
               const warningLabel = t.usesOlderEdition ? "Older-edition prices" : "Partial total";
               return (
@@ -549,10 +583,18 @@ export function IssueRow({
                           <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>
                             Includes an estimate
                           </div>
-                          <div style={{ color: "var(--color-text-secondary)" }}>
-                            {t.estimatedCount} required stamp{t.estimatedCount !== 1 ? "s" : ""} priced
-                            from the lowest variant (no own price).
-                          </div>
+                          {t.estimatedCount > 0 && (
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                              {t.estimatedCount} required stamp{t.estimatedCount !== 1 ? "s" : ""} priced
+                              from the lowest variant (no own price).
+                            </div>
+                          )}
+                          {t.derivedCount > 0 && (
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                              {t.derivedCount} required stamp{t.derivedCount !== 1 ? "s" : ""} priced
+                              from the single by this format&apos;s multiplier.
+                            </div>
+                          )}
                         </>
                       }
                     >
@@ -678,6 +720,7 @@ export function IssueRow({
                     null
                   }
                   displayCondition={displayCondition}
+                  displayFormat={displayFormat}
                   onPriceSaved={() => invalidateList(collectionId)}
                   onEdit={(stampId) => {
                     const stampNode = members?.find(

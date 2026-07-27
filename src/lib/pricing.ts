@@ -9,6 +9,7 @@ import { getOrFetchRate } from "./exchange-rates";
 export {
   pickMainCatalogPrice,
   pickCatalogPriceFor,
+  pickFormatCatalogPrice,
   pickHeadlineCatalogPrice,
   pickLowestByBase,
   baseValueOf,
@@ -20,6 +21,7 @@ export type {
   IssuePriceTotal,
   RawCatalogPrice,
   PickedPrice,
+  FormatPricePick,
 } from "./catalog-price";
 
 /**

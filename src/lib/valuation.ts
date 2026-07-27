@@ -1,5 +1,5 @@
 import {
-  pickCatalogPriceFor,
+  pickFormatCatalogPrice,
   pickLowestByBase,
   baseValueOf,
   type PickedPrice,
@@ -10,9 +10,14 @@ import type { CostBasisTotal } from "./cost-basis";
 // Pure copy-valuation domain logic (ADR-0007 §7). No Prisma / server-only, so it is
 // unit-testable in isolation; the server assembles the inputs in `items.ts`.
 //
-// A physical copy (`Item`) is valued from the catalog at the copy's own condition and
-// certificate status, using the stamp's area primary catalog name at its latest
-// recorded edition (the same "headline" selection lists use), with:
+// A physical copy (`Item`) is valued from the catalog at the copy's own condition,
+// certificate status **and physical format** (#343), using the stamp's area primary catalog name
+// at its latest recorded edition (the same "headline" selection lists use), with:
+//
+// A copy that is a multiple is valued as that multiple, never as a single: an explicit price for
+// its format wins, and failing that the single's price is scaled by the format's multiplier
+// (ADR-0020 — catalogs publish one factor per issue and an explicit price only where the multiple
+// deviates). Only with neither is the copy unpriced.
 //
 //   - Identified copy (links to a variant row) → that variant's own price.
 //   - Unknown-variant copy (links to a base stamp that has variants):
@@ -26,6 +31,12 @@ import type { CostBasisTotal } from "./cost-basis";
 export interface CopyValuationInput {
   conditionId: string;
   certificateStatusId: string | null;
+  /** The copy's physical format (#343); null is the single, which is most copies. */
+  formatId?: string | null;
+  /** Multiplier deriving that format's price from the single's, when no explicit price for the
+   *  format exists. Null when none applies — the copy is then unpriced rather than valued as a
+   *  single, which would be a different stamp's figure. */
+  formatFactor?: number | null;
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
   /** Primary catalog name id resolved from the copy's stamp area (may be null). */
@@ -58,7 +69,14 @@ export interface CopyValuation {
 export function valuateCopy(input: CopyValuationInput): CopyValuation {
   const { conditionId, certificateStatusId, primaryCatalogNameId, baseCurrency, rates } = input;
   const pick = (prices: RawCatalogPrice[]) =>
-    pickCatalogPriceFor(prices, primaryCatalogNameId, conditionId, certificateStatusId);
+    pickFormatCatalogPrice(
+      prices,
+      primaryCatalogNameId,
+      conditionId,
+      certificateStatusId,
+      input.formatId ?? null,
+      input.formatFactor ?? null
+    ).picked;
 
   const own = pick(input.ownPrices);
 

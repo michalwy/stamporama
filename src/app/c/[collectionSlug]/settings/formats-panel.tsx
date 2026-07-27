@@ -18,13 +18,20 @@ import {
 } from "@/app/actions/stamp-formats";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { languageLabel } from "@/lib/languages";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "@/app/c/[collectionSlug]/shared/translations-dialog";
+import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 
 // The physical-format dictionary. Mirrors `conditions-panel.tsx` rather than reinventing the
 // list/drag/dialog scaffolding — a format is the same kind of per-collection taxonomy, set up once
 // and then left alone, which is why it lives in Settings and not on its own nav page.
 //
-// Formats carry no translations yet, unlike conditions (#294): nothing renders a format into a
-// listing title so far. When something does, this panel grows the same 🌐 buttons.
+// Formats are translatable exactly as conditions are (#344), now that `{format}` / `{formatAbbr}`
+// render one into a listing (#345): a German listing should read "Viererblock", not "Block of 4".
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -49,6 +56,11 @@ const FORM_STYLE: React.CSSProperties = {
 interface FormatsPanelProps {
   collectionId: string;
   initialFormats: StampFormatData[];
+  /** Languages needing a translation (#344): the platforms' listing languages minus the
+   * collection's default language. Empty means no translation UI at all. */
+  titleLanguages: string[];
+  /** The language the plain Name / Abbreviation fields are written in (#344). */
+  defaultLanguage: string;
 }
 
 type DialogState =
@@ -57,50 +69,129 @@ type DialogState =
   | { kind: "edit"; format: StampFormatData }
   | { kind: "delete"; format: StampFormatData };
 
+// One 🌐 per field, as on conditions (#294): the badge then counts what is missing for that field
+// alone. Together they mirror `FORMAT_TRANSLATION_FIELDS`, which the action parses the submitted
+// `<field>:<lang>` inputs with.
+const NAME_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+const ABBREVIATION_FIELDS: TranslationField[] = [{ key: "abbreviation", label: "Abbreviation" }];
+
 function FormatForm({
   defaultName,
   defaultAbbreviation,
+  defaultTranslations,
+  titleLanguages,
+  defaultLanguage,
   isPending,
+  onNestedDialogOpenChange,
 }: {
   defaultName?: string;
   defaultAbbreviation?: string;
+  /** Stored per-language values, field-major (#344); absent when adding. */
+  defaultTranslations?: { name: Record<string, string>; abbreviation: Record<string, string> };
+  titleLanguages: string[];
+  defaultLanguage: string;
   isPending: boolean;
+  /** Raised while a translations dialog is open on top of this form, so the enclosing dialog stops
+   * dismissing itself on Esc / backdrop click — otherwise one Esc closes both. */
+  onNestedDialogOpenChange?: (open: boolean) => void;
 }) {
+  const translatable = titleLanguages.length > 0;
+  // Controlled so the translations dialog's placeholders show the *live* default-language text a
+  // blank entry falls back to.
+  const [name, setName] = useState(defaultName ?? "");
+  const [abbreviation, setAbbreviation] = useState(defaultAbbreviation ?? "");
+  const [nameTranslations, setNameTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, NAME_FIELDS, defaultTranslations)
+  );
+  const [abbrTranslations, setAbbrTranslations] = useState<TranslationValues>(() =>
+    fillTranslationValues(titleLanguages, ABBREVIATION_FIELDS, defaultTranslations)
+  );
+
   return (
     <>
       <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-fmt-abbr">Abbreviation</LabelWithError>
-        <input
-          id="f-fmt-abbr"
-          name="abbreviation"
-          type="text"
-          defaultValue={defaultAbbreviation}
-          disabled={isPending}
-          placeholder="e.g. Blk4"
-          style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
-        />
+        <LabelWithError htmlFor="f-fmt-abbr">
+          {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-fmt-abbr"
+            name="abbreviation"
+            type="text"
+            value={abbreviation}
+            onChange={(e) => setAbbreviation(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Blk4"
+            style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Format abbreviation translations"
+              description={`How this format is abbreviated on each language's platforms. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} abbreviation above — abbreviations are often left untranslated. Saved together with the format.`}
+              languages={titleLanguages}
+              fields={[{ ...ABBREVIATION_FIELDS[0], defaultValue: abbreviation }]}
+              values={abbrTranslations}
+              onChange={setAbbrTranslations}
+              onOpenChange={onNestedDialogOpenChange}
+              ariaLabel="Edit format abbreviation translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
       </div>
       <div>
-        <LabelWithError htmlFor="f-fmt-name">Name</LabelWithError>
-        <input
-          id="f-fmt-name"
-          name="name"
-          type="text"
-          defaultValue={defaultName}
-          disabled={isPending}
-          placeholder="e.g. Block of 4"
-          style={INPUT_STYLE}
-        />
+        <LabelWithError htmlFor="f-fmt-name">
+          {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
+        </LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            id="f-fmt-name"
+            name="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Block of 4"
+            style={INPUT_STYLE}
+          />
+          {translatable && (
+            <TranslationsField
+              dialogTitle="Format name translations"
+              description={`The name each language's platforms use for this format. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} name above. Saved together with the format.`}
+              languages={titleLanguages}
+              fields={[{ ...NAME_FIELDS[0], defaultValue: name }]}
+              values={nameTranslations}
+              onChange={setNameTranslations}
+              onOpenChange={onNestedDialogOpenChange}
+              ariaLabel="Edit format name translations"
+              disabled={isPending}
+            />
+          )}
+        </div>
+        {translatable && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+            Used for the <code>{"{format}"}</code> and <code>{"{formatAbbr}"}</code> tokens in
+            listing titles. Translations (🌐) are saved together with the format.
+          </p>
+        )}
       </div>
     </>
   );
 }
 
-export function FormatsPanel({ collectionId, initialFormats }: FormatsPanelProps) {
+export function FormatsPanel({
+  collectionId,
+  initialFormats,
+  titleLanguages,
+  defaultLanguage,
+}: FormatsPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<StampFormatActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
+  // A translations dialog (🌐) opens *on top of* the format dialog. While it is up, this one must
+  // stop dismissing itself, or one Esc would close both.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
   // Local ordering for optimistic drag-and-drop; re-synced on server refresh via the
   // render-phase "reset state when a prop changes" pattern.
@@ -285,13 +376,18 @@ export function FormatsPanel({ collectionId, initialFormats }: FormatsPanelProps
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add" && (
-        <DialogShell title="Add format" onClose={closeDialog}>
+        <DialogShell title="Add format" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => createStampFormatAction(collectionId, fd), e)}
           >
             <DialogBody>
-              <FormatForm isPending={isPending} />
+              <FormatForm
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
+                isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
+              />
             </DialogBody>
             <DialogActions
               actionLabel={isPending ? "Saving…" : "Save"}
@@ -304,7 +400,7 @@ export function FormatsPanel({ collectionId, initialFormats }: FormatsPanelProps
       )}
 
       {dialog.kind === "edit" && (
-        <DialogShell title="Edit format" onClose={closeDialog}>
+        <DialogShell title="Edit format" onClose={closeDialog} dismissable={!nestedDialogOpen}>
           <form
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => updateStampFormatAction(dialog.format.id, fd), e)}
@@ -313,7 +409,14 @@ export function FormatsPanel({ collectionId, initialFormats }: FormatsPanelProps
               <FormatForm
                 defaultName={dialog.format.name}
                 defaultAbbreviation={dialog.format.abbreviation}
+                defaultTranslations={{
+                  name: dialog.format.nameByLanguage,
+                  abbreviation: dialog.format.abbreviationByLanguage,
+                }}
+                titleLanguages={titleLanguages}
+                defaultLanguage={defaultLanguage}
                 isPending={isPending}
+                onNestedDialogOpenChange={setNestedDialogOpen}
               />
             </DialogBody>
             <DialogActions

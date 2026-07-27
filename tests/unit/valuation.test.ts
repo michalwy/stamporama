@@ -300,3 +300,89 @@ describe("aggregateHoldings", () => {
     assert.equal(total.baseCurrency, "USD");
   });
 });
+
+// A copy that is a multiple is valued as that multiple (#343): explicit price first, else the
+// single's scaled by the format's multiplier, else unpriced. Never the single's own figure —
+// that is a different stamp's price.
+const BLK4 = "fmt-blk4";
+
+describe("valuateCopy — physical format (#343)", () => {
+  it("prefers an explicit price recorded for the copy's format", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      formatId: BLK4,
+      formatFactor: 4.5,
+      unknownVariant: false,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [price(50), price(180, { formatId: BLK4 })],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.equal(v.amount, "180.00");
+    assert.equal(v.unpriced, false);
+  });
+
+  it("derives from the single's price when the format has none of its own", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      formatId: BLK4,
+      formatFactor: 4.5,
+      unknownVariant: false,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [price(50)],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.equal(v.amount, "225.00");
+    assert.equal(v.currency, "EUR");
+  });
+
+  it("is unpriced when no multiplier applies, rather than falling back to the single", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      formatId: BLK4,
+      formatFactor: null,
+      unknownVariant: false,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [price(50)],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.equal(v.unpriced, true);
+    assert.equal(v.amount, null);
+  });
+
+  it("values a single from the single's price, ignoring any format rows", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      formatId: null,
+      unknownVariant: false,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [price(50), price(180, { formatId: BLK4 })],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.equal(v.amount, "50.00");
+  });
+
+  it("scales the lowest variant's price for an unknown-variant multiple", () => {
+    const v = valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      formatId: BLK4,
+      formatFactor: 4,
+      unknownVariant: true,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [],
+      variantPrices: [[price(30)], [price(10)], [price(20)]],
+      baseCurrency: "EUR",
+      rates: noRates,
+    });
+    assert.equal(v.amount, "40.00");
+    assert.equal(v.uncertain, true);
+  });
+});

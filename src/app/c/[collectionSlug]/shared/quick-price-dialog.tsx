@@ -46,9 +46,10 @@ const CONDITION_BADGE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** What the dialog prices: a stamp at one condition × certificate, plus the context it shows.
- * `ItemListItem` satisfies it structurally (a copy carries its own condition), and the Issue
- * list builds one from a stamp-tree node plus the list's display condition (#341). */
+/** What the dialog prices: a stamp at one condition × certificate × format, plus the context it
+ * shows. `ItemListItem` satisfies it structurally (a copy carries its own condition and format),
+ * and the Issue list builds one from a stamp-tree node plus the list's display condition and
+ * display format (#341, #343). */
 export interface QuickPriceSubject {
   stampId: string;
   stampName: string | null;
@@ -58,6 +59,10 @@ export interface QuickPriceSubject {
   conditionAbbreviation: string;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
+  /** Physical format the value is recorded for (#343); null / absent is the single. */
+  formatId?: string | null;
+  /** Abbreviation shown on the badge, so the dialog names what it is about to write. */
+  formatAbbreviation?: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   photos: PhotoSummary[];
 }
@@ -107,11 +112,17 @@ export function QuickPriceDialog({
   // Keyed on the identity fields, not the subject object: a caller building the subject
   // inline (the Issue list's stamp rows) would otherwise refetch on every render.
   const { stampId, conditionId, certificateStatusId } = item;
+  const formatId = item.formatId ?? null;
   useEffect(() => {
     let active = true;
     (async () => {
       const { getQuickCatalogPriceContextAction } = await import("@/app/actions/stamps");
-      const r = await getQuickCatalogPriceContextAction(stampId, conditionId, certificateStatusId);
+      const r = await getQuickCatalogPriceContextAction(
+        stampId,
+        conditionId,
+        certificateStatusId,
+        formatId
+      );
       if (!active) return;
       if (r.status === "success") {
         setContext(r.context);
@@ -128,7 +139,7 @@ export function QuickPriceDialog({
     return () => {
       active = false;
     };
-  }, [stampId, conditionId, certificateStatusId]);
+  }, [stampId, conditionId, certificateStatusId, formatId]);
 
   const filledEntries = useMemo(
     () =>
@@ -144,9 +155,12 @@ export function QuickPriceDialog({
     onSubmit(filledEntries);
   }
 
+  // The badge names every axis the value is keyed on, so a block price entered while the list
+  // shows blocks can't be mistaken for a single's (#343). A single adds nothing — null *is* the
+  // single, and spelling it out on every ordinary entry would be noise.
   const condLabel = `${item.conditionAbbreviation}${
     item.certificateStatusName ? ` · ${item.certificateStatusName}` : ""
-  }`;
+  }${item.formatAbbreviation ? ` · ${item.formatAbbreviation}` : ""}`;
   const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
   const canSave = !isPending && !loading && !loadError && filledEntries.length > 0;
 
@@ -241,6 +255,7 @@ export function QuickPriceDialog({
                     <span style={{ whiteSpace: "nowrap" }}>
                       {p.conditionAbbreviation}
                       {p.certificateStatusName ? ` · ${p.certificateStatusName}` : ""}
+                      {p.formatAbbreviation ? ` · ${p.formatAbbreviation}` : ""}
                     </span>
                     <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                       {p.price} {p.currency}
@@ -337,7 +352,7 @@ export function QuickPriceDialog({
               </div>
               <p style={{ margin: "0.625rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                 Each value is saved on the latest edition of its catalog for this condition ×
-                certificate. Leave a field blank to skip it.
+                certificate × format. Leave a field blank to skip it.
               </p>
             </>
           )}

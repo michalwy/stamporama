@@ -1,8 +1,8 @@
 import { normalizeLanguage } from "./languages";
 
-// Shared rules for per-language entity text (#265, #293–#296, #338). Six entities now carry
-// translation child tables — area title name, condition and certificate status (name +
-// abbreviation), issue name, stamp name and stamp subtype name — and every one of them parses the
+// Shared rules for per-language entity text (#265, #293–#296, #338, #344). Seven entities now
+// carry translation child tables — area title name, condition, certificate status and format (name
+// + abbreviation), issue name, stamp name and stamp subtype name — and every one of them parses the
 // same form fields, writes rows the same way, and resolves the same fallback. That logic lives here
 // once.
 //
@@ -17,16 +17,17 @@ import { normalizeLanguage } from "./languages";
  */
 export type TranslationValueMap = Record<string, Record<string, string | null>>;
 
-/** The entities that carry a translation child table (#293–#296, #338). Names the row a missing
- * translation is filled on (#299), which is why it lives here rather than in any one entity's
- * module — the gap-filling path dispatches over it. */
+/** The entities that carry a translation child table (#293–#296, #338, #344). Names the row a
+ * missing translation is filled on (#299), which is why it lives here rather than in any one
+ * entity's module — the gap-filling path dispatches over it. */
 export type TranslatableEntity =
   | "stamp"
   | "issue"
   | "condition"
   | "certificateStatus"
   | "area"
-  | "subtype";
+  | "subtype"
+  | "format";
 
 /** The translatable columns of each entity, in the order their forms show them. Also the guard the
  * single-field save path validates an incoming field name against. */
@@ -37,6 +38,7 @@ export const TRANSLATABLE_ENTITY_FIELDS: Readonly<Record<TranslatableEntity, rea
   certificateStatus: ["name", "abbreviation"],
   area: ["titleName"],
   subtype: ["name"],
+  format: ["name", "abbreviation"],
 };
 
 /** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */

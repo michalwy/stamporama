@@ -28,6 +28,8 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
   "certificateStatus:abbreviation": "Certificate (abbr.)",
   "area:titleName": "Area",
   "subtype:name": "Subtype",
+  "format:name": "Format",
+  "format:abbreviation": "Format (abbr.)",
 };
 
 /** A stable identity for one gap — the entity row + field it would be written on. */

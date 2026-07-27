@@ -27,6 +27,8 @@ export interface IssueListFilters {
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the price column / issue totals. */
   displayConditionId?: string | null;
+  /** Format whose price fills the price column / issue totals (#343); null is the single. */
+  displayFormatId?: string | null;
 }
 
 /** Filters that affect the year facet counts (everything except year itself). */
@@ -45,8 +47,20 @@ export const issueKeys = {
     ["issues", collectionId, "list", filters] as const,
   years: (collectionId: string, filters: IssueYearFacetFilters) =>
     ["issues", collectionId, "years", filters] as const,
-  members: (collectionId: string, issueId: string, displayConditionId?: string | null) =>
-    ["issues", collectionId, "members", issueId, displayConditionId ?? null] as const,
+  members: (
+    collectionId: string,
+    issueId: string,
+    displayConditionId?: string | null,
+    displayFormatId?: string | null
+  ) =>
+    [
+      "issues",
+      collectionId,
+      "members",
+      issueId,
+      displayConditionId ?? null,
+      displayFormatId ?? null,
+    ] as const,
 };
 
 export function useIssuesInfinite(
@@ -69,6 +83,7 @@ export function useIssuesInfinite(
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
+      if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -113,13 +128,15 @@ export function useIssueMembers(
   collectionId: string,
   issueId: string,
   enabled: boolean,
-  displayConditionId?: string | null
+  displayConditionId?: string | null,
+  displayFormatId?: string | null
 ) {
   return useQuery<StampNodeData[]>({
-    queryKey: issueKeys.members(collectionId, issueId, displayConditionId),
+    queryKey: issueKeys.members(collectionId, issueId, displayConditionId, displayFormatId),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (displayConditionId) params.set("displayConditionId", displayConditionId);
+      if (displayFormatId) params.set("displayFormatId", displayFormatId);
       const qs = params.toString();
       const res = await fetch(
         `/api/collections/${collectionId}/issues/${issueId}/members${qs ? `?${qs}` : ""}`
@@ -140,8 +157,8 @@ export function useInvalidateIssues() {
         queryKey: issueKeys.all(collectionId),
       }),
     invalidateMembers: (collectionId: string, issueId: string) =>
-      // Prefix match so every display-condition variant of this issue's members is
-      // invalidated (the full key carries a trailing displayConditionId, #238).
+      // Prefix match so every display-condition / display-format variant of this issue's members
+      // is invalidated (the full key carries both as trailing segments, #238/#343).
       queryClient.invalidateQueries({
         queryKey: ["issues", collectionId, "members", issueId],
       }),

@@ -11,7 +11,7 @@ import {
   type MoneyDisplay,
   type RawCatalogPrice,
   buildEffectivePrimaryCatalogMap,
-  pickMainCatalogPrice,
+  pickFormatCatalogPrice,
   getLatestEditionYearByName,
   safeRateMap,
   applyConversion,
@@ -29,6 +29,7 @@ import {
 import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
+import { makeFormatFactorResolver } from "./format-pricing";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -333,6 +334,9 @@ export interface StampListItem {
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
+  /** True when the displayed main price was **derived** from the single's by a format multiplier
+   *  rather than recorded for the displayed format (#343) — an estimate, not a catalog figure. */
+  mainCatalogPriceDerived: boolean;
   /** Catalog-level photos (#137), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -408,12 +412,23 @@ function toStampListItem(
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   latestYearByName: Map<string, number>,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  displayFormatId: string | null,
+  factorFor: (areaId: string | null, issueId: string | null) => number | null
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
   const primaryNameId = areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null;
-  const main = pickMainCatalogPrice(stamp.catalogPrices, primaryNameId, displayConditionId);
+  // A format's price is explicit or derived (#343): the recorded row for the format wins, else the
+  // single's price × the multiplier resolved for this stamp's area and issue.
+  const { picked: main, derived: mainCatalogPriceDerived } = pickFormatCatalogPrice(
+    stamp.catalogPrices,
+    primaryNameId,
+    displayConditionId,
+    null,
+    displayFormatId,
+    factorFor(areaId, stamp.issueMemberships[0]?.issueId ?? null)
+  );
   const mainCatalogPriceStale = main
     ? (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear
     : false;
@@ -443,6 +458,7 @@ function toStampListItem(
       ? { amount: main.amount.toFixed(2), currency: main.currency, convertedAmount: null, baseCurrency }
       : null,
     mainCatalogPriceStale,
+    mainCatalogPriceDerived,
     photos: stamp.photos
       .map((p) => ({
         id: p.id,
@@ -463,11 +479,23 @@ async function buildStampListItems(
   collectionId: string,
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  displayFormatId: string | null
 ): Promise<StampListItem[]> {
-  const latestYearByName = await getLatestEditionYearByName(collectionId);
+  const [latestYearByName, factorFor] = await Promise.all([
+    getLatestEditionYearByName(collectionId),
+    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
+  ]);
   const items = stamps.map((s) =>
-    toStampListItem(s, primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId)
+    toStampListItem(
+      s,
+      primaryCatalogByArea,
+      baseCurrency,
+      latestYearByName,
+      displayConditionId,
+      displayFormatId,
+      factorFor
+    )
   );
   const currencies = items
     .map((i) => i.mainCatalogPrice?.currency)
@@ -500,6 +528,9 @@ export interface StampListFilterOpts {
   /** Condition whose price fills the list price column. When omitted, defaults
    *  to the collection's first condition by sortOrder. */
   displayConditionId?: string | null;
+  /** Physical format whose price fills the list price column (#343). Null / omitted is the
+   *  single — the default, and the only value a collection with no formats can have. */
+  displayFormatId?: string | null;
 }
 
 
@@ -599,6 +630,9 @@ export async function listStampsPaginated(
     getCollectionBaseCurrency(collectionId),
     resolveDisplayConditionId(collectionId, opts.displayConditionId),
   ]);
+  // Null is the single (ADR-0020) — no resolution step, unlike the condition, because there is no
+  // "first format" row to fall back to.
+  const displayFormatId = opts.displayFormatId ?? null;
 
   const where = buildStampListWhere(collectionId, opts);
 
@@ -651,7 +685,8 @@ export async function listStampsPaginated(
       collectionId,
       primaryCatalogByArea,
       baseCurrency,
-      displayConditionId
+      displayConditionId,
+      displayFormatId
     );
     return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
   }
@@ -686,7 +721,8 @@ export async function listStampsPaginated(
     collectionId,
     primaryCatalogByArea,
     baseCurrency,
-    displayConditionId
+    displayConditionId,
+    displayFormatId
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
@@ -990,10 +1026,12 @@ export interface QuickCatalogPriceReference {
   editionYear: number;
   conditionAbbreviation: string;
   certificateStatusName: string | null;
+  /** Abbreviation of the format this price is for (#343), or null for the single. */
+  formatAbbreviation: string | null;
   price: string;
   currency: string;
   /** True for the exact target the field writes to (primary catalog's latest edition ×
-   * this condition × this certificate) — the value the amount field prefills from. */
+   * this condition × this certificate × this format) — the value the amount field prefills from. */
   isTarget: boolean;
 }
 
@@ -1108,11 +1146,15 @@ export async function getQuickCatalogPriceContext(
   ownerId: string,
   stampId: string,
   conditionId: string,
-  certificateStatusId: string | null
+  certificateStatusId: string | null,
+  /** The format the value is recorded for (#343); null is the single. The list's format switcher
+   *  supplies it, so the link prices what the column on screen is showing. */
+  formatId: string | null = null
 ): Promise<QuickCatalogPriceContext> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
   const certId = certificateStatusId ?? null;
+  const fmtId = formatId ?? null;
   const targets = await resolveAreaCatalogTargets(collectionId, stampId);
 
   const prices = await prisma.stampCatalogPrice.findMany({
@@ -1121,10 +1163,12 @@ export async function getQuickCatalogPriceContext(
       catalogEditionId: true,
       conditionId: true,
       certificateStatusId: true,
+      formatId: true,
       price: true,
       currency: true,
       condition: { select: { abbreviation: true } },
       certificateStatus: { select: { name: true } },
+      format: { select: { abbreviation: true } },
       catalogEdition: {
         select: { year: true, catalogName: { select: { name: true } } },
       },
@@ -1137,7 +1181,8 @@ export async function getQuickCatalogPriceContext(
       (p) =>
         p.catalogEditionId === editionId &&
         p.conditionId === conditionId &&
-        p.certificateStatusId === certId
+        p.certificateStatusId === certId &&
+        p.formatId === fmtId
     );
     return existing ? existing.price.toFixed(2) : null;
   };
@@ -1161,14 +1206,16 @@ export async function getQuickCatalogPriceContext(
       editionYear: p.catalogEdition.year,
       conditionAbbreviation: p.condition.abbreviation,
       certificateStatusName: p.certificateStatus?.name ?? null,
+      formatAbbreviation: p.format?.abbreviation ?? null,
       price: p.price.toFixed(2),
       currency: p.currency,
       // A recorded price is a "target" (the value an input prefills from) when it sits on one
-      // of the editable editions for this condition × certificate.
+      // of the editable editions for this condition × certificate × format.
       isTarget:
         targetEditionIds.has(p.catalogEditionId) &&
         p.conditionId === conditionId &&
-        p.certificateStatusId === certId,
+        p.certificateStatusId === certId &&
+        p.formatId === fmtId,
     })),
   };
 }
@@ -1206,7 +1253,9 @@ export async function quickSetCatalogPrices(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: QuickCatalogPriceEntry[]
+  entries: QuickCatalogPriceEntry[],
+  /** The format the value is recorded for (#343); null is the single. */
+  formatId: string | null = null
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -1225,6 +1274,13 @@ export async function quickSetCatalogPrices(
     });
     if (!cert) throw new Error("Certificate status not found in this collection.");
   }
+  if (formatId) {
+    const fmt = await prisma.stampFormat.findFirst({
+      where: { id: formatId, collectionId },
+      select: { id: true },
+    });
+    if (!fmt) throw new Error("Format not found in this collection.");
+  }
 
   for (const entry of entries) {
     if (!Number.isFinite(entry.amount) || entry.amount < 0) {
@@ -1241,14 +1297,15 @@ export async function quickSetCatalogPrices(
     const edition = catalog.catalogEditions[0];
     if (!edition) throw new Error("That catalog has no editions yet.");
     const priceStr = entry.amount.toFixed(2);
-    // The (stamp, edition, condition, cert) uniqueness uses NULLS NOT DISTINCT, which Prisma
-    // can't target in `upsert`; find-then-write instead.
+    // The (stamp, edition, condition, cert, format) uniqueness uses NULLS NOT DISTINCT, which
+    // Prisma can't target in `upsert`; find-then-write instead.
     const existing = await prisma.stampCatalogPrice.findFirst({
       where: {
         stampId,
         catalogEditionId: edition.id,
         conditionId,
         certificateStatusId: certificateStatusId ?? null,
+        formatId: formatId ?? null,
       },
       select: { id: true },
     });
@@ -1264,6 +1321,7 @@ export async function quickSetCatalogPrices(
           catalogEditionId: edition.id,
           conditionId,
           certificateStatusId: certificateStatusId ?? null,
+          formatId: formatId ?? null,
           price: priceStr,
           currency: catalog.currency,
         },

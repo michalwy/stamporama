@@ -63,7 +63,8 @@ export function useQuickPriceDialog({
               subject.stampId,
               subject.conditionId,
               subject.certificateStatusId,
-              entries
+              entries,
+              subject.formatId ?? null
             );
             if (r.status === "error") setError(r.message);
             else {

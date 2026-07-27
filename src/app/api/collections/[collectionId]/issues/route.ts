@@ -27,6 +27,7 @@ export async function GET(
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const displayConditionId = sp.get("displayConditionId") || undefined;
+  const displayFormatId = sp.get("displayFormatId") || undefined;
   const yearParam = sp.get("year");
   const year =
     yearParam === "none"
@@ -50,6 +51,7 @@ export async function GET(
       catalogNumber,
       year,
       displayConditionId,
+      displayFormatId,
       sortBy,
       sortDir,
       pageSize: 50,

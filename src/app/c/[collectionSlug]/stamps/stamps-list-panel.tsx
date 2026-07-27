@@ -12,6 +12,8 @@ import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { FormatPriceSwitcher } from "@/app/c/[collectionSlug]/shared/format-price-switcher";
+import { useDisplayFormat } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -104,6 +106,7 @@ export function StampsListPanel({
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
+  const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
 
   const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
     const seen = new Map<string, CatalogVendorOption>();
@@ -140,10 +143,11 @@ export function StampsListPanel({
       issueId: issueId || undefined,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
+      displayFormatId: displayFormatId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, displayConditionId, sortBy, sortDir]
+    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
@@ -272,6 +276,13 @@ export function StampsListPanel({
             conditions={conditions}
             value={displayConditionId}
             onChange={setDisplayConditionId}
+          />
+          {/* Condition and format together name one cell of the price grid (#343); the format
+              control renders nothing at all when the collection defines no formats. */}
+          <FormatPriceSwitcher
+            formats={formats}
+            value={displayFormatId}
+            onChange={setDisplayFormatId}
           />
         </ListToolbar>
 

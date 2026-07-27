@@ -66,6 +66,8 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     location: null,
     ref: null,
     subtype: null,
+    format: null,
+    formatAbbr: null,
     issueName: null,
     issueYear: null,
     ...over,
@@ -356,6 +358,38 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
   it("lets a fallback group fall past an absent subtype", () => {
     const c = copy({ subtype: null, condition: "Used" });
     assert.equal(renderTitleTemplate("{subtype|condition}", [c]), "Used");
+  });
+
+  // `{format}` / `{formatAbbr}` (#345). A **single** has no format at all (ADR-0020: a null
+  // `Item.formatId` *is* the single), so the empty resolution is the common case rather than the
+  // exception — which is why the tidy pass carrying the separator away is what makes the token
+  // usable in a template at all.
+  it("resolves the format tokens", () => {
+    const c = copy({ name: "Mercury", format: "Block of 4", formatAbbr: "Blk4" });
+    assert.equal(renderTitleTemplate("{name} {format}", [c]), "Mercury Block of 4");
+    assert.equal(renderTitleTemplate("{name} {formatAbbr}", [c]), "Mercury Blk4");
+  });
+
+  it("renders nothing for a single, taking its separator with it", () => {
+    const c = copy({ name: "Mercury", condition: "Used" });
+    assert.equal(renderTitleTemplate("{name} - {format} - {condition}", [c]), "Mercury - Used");
+  });
+
+  // A batch mixing formats behaves like every other per-copy token: distinct values joined, the
+  // singles' nulls simply skipped. No "Mixed" of its own.
+  it("joins distinct formats across copies and skips the singles", () => {
+    const copies = [
+      copy({ format: "Horizontal pair" }),
+      copy({ format: null }),
+      copy({ format: "Block of 4" }),
+      copy({ format: "Horizontal pair" }),
+    ];
+    assert.equal(renderTitleTemplate("{format}", copies), "Horizontal pair / Block of 4");
+  });
+
+  it("lets a fallback group fall past a single's absent format", () => {
+    const c = copy({ format: null, condition: "Used" });
+    assert.equal(renderTitleTemplate("{format|condition}", [c]), "Used");
   });
 
   it("resolves the location tokens", () => {

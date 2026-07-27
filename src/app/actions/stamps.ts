@@ -55,11 +55,12 @@ async function getSession() {
 }
 
 /** Load the quick catalog-price editor's context (target catalog/edition/currency and the
- * current amount) for a stamp at a condition × certificate (#121). */
+ * current amount) for a stamp at a condition × certificate × format (#121, #343). */
 export async function getQuickCatalogPriceContextAction(
   stampId: string,
   conditionId: string,
-  certificateStatusId: string | null
+  certificateStatusId: string | null,
+  formatId: string | null = null
 ): Promise<QuickPriceContextState> {
   const session = await getSession();
   try {
@@ -67,7 +68,8 @@ export async function getQuickCatalogPriceContextAction(
       session.user.id,
       stampId,
       conditionId,
-      certificateStatusId
+      certificateStatusId,
+      formatId
     );
     return { status: "success", context };
   } catch (e) {
@@ -85,7 +87,8 @@ export async function quickSetCatalogPricesAction(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: Array<{ catalogNameId: string; amount: string }>
+  entries: Array<{ catalogNameId: string; amount: string }>,
+  formatId: string | null = null
 ): Promise<StampActionState> {
   const session = await getSession();
   const parsed: Array<{ catalogNameId: string; amount: number }> = [];
@@ -106,7 +109,8 @@ export async function quickSetCatalogPricesAction(
       stampId,
       conditionId,
       certificateStatusId,
-      parsed
+      parsed,
+      formatId
     );
     return { status: "success" };
   } catch (e) {

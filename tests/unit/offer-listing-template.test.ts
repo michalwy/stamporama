@@ -44,6 +44,8 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     location: null,
     ref: null,
     subtype: null,
+    format: null,
+    formatAbbr: null,
     issueName: null,
     issueYear: null,
     ...over,
@@ -208,6 +210,24 @@ describe("renderListingTemplate — legend blocks", () => {
     assert.equal(renderListingTemplate(`Legend:\n${legend}`, sets), "Legend:");
   });
 
+  // #345: the legend of formats a batch uses. Singles carry no format and simply do not appear —
+  // the same rule that keeps a copy without a certificate out of the certificate legend.
+  it("repeats once per distinct format used, leaving singles out", () => {
+    const pair = copy({ name: "Mercury", format: "Horizontal pair", formatAbbr: "HPair" });
+    const pairToo = copy({ name: "Venus", format: "Horizontal pair", formatAbbr: "HPair" });
+    const block = copy({ name: "Mars", format: "Block of 4", formatAbbr: "Blk4" });
+    const single = copy({ name: "Ceres" });
+    const sets: TemplateSet[] = [{ title: null, copies: [pair, single, pairToo, block] }];
+    const out = renderListingTemplate("{#formatLegend}{formatAbbr} = {format}\n{/formatLegend}", sets);
+    assert.equal(out, "HPair = Horizontal pair\nBlk4 = Block of 4");
+  });
+
+  it("renders no format legend for a batch of singles", () => {
+    const sets: TemplateSet[] = [{ title: null, copies: [copy({ name: "Ceres" })] }];
+    const out = renderListingTemplate("Formats:\n{#formatLegend}{format}\n{/formatLegend}", sets);
+    assert.equal(out, "Formats:");
+  });
+
   it("leaves mismatched legend tags literal", () => {
     const sets: TemplateSet[] = [{ title: null, copies: [mnh] }];
     assert.equal(renderListingTemplate("{#conditionLegend}{conditionAbbr}{/certificateLegend}", sets), "{#conditionLegend}MNH{/certificateLegend}");
@@ -239,12 +259,18 @@ describe("renderListingTemplateSegments / listingFallbackTokens", () => {
 });
 
 describe("listing token legend", () => {
-  it("offers the title tokens plus {setTitle}, and the two repeating blocks", () => {
+  it("offers the title tokens plus {setTitle}, and the repeating blocks", () => {
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{setTitle}"));
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{catalog}"));
     assert.deepEqual(
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),
-      ["{#set}{/set}", "{#copy}{/copy}", "{#conditionLegend}{/conditionLegend}", "{#certificateLegend}{/certificateLegend}"]
+      [
+        "{#set}{/set}",
+        "{#copy}{/copy}",
+        "{#conditionLegend}{/conditionLegend}",
+        "{#certificateLegend}{/certificateLegend}",
+        "{#formatLegend}{/formatLegend}",
+      ]
     );
   });
 });

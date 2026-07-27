@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import type { StampFormatData } from "@/lib/stamp-formats";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -79,6 +80,8 @@ interface InventoryListPanelProps {
   locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
+  /** The collection's physical formats (#343) — drives the format filter, and absent when empty. */
+  formats: StampFormatData[];
   baseCurrency: string;
 }
 
@@ -89,6 +92,7 @@ export function InventoryListPanel({
   locations,
   conditions,
   certificateStatuses,
+  formats,
   baseCurrency,
 }: InventoryListPanelProps) {
   const router = useRouter();
@@ -133,6 +137,10 @@ export function InventoryListPanel({
 
   const search = searchParams.get("search") ?? "";
   const conditionId = searchParams.get("conditionId") ?? "";
+  // Format is a *filter* here, not a price switcher (#343): a copy's format is a fact it carries,
+  // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
+  // choice — the copies with no format — which an absent value could not express.
+  const formatId = searchParams.get("formatId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
@@ -198,6 +206,7 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionId: conditionId || undefined,
+      formatId: formatId || undefined,
       locationId: locationId || undefined,
       issueId: issueId || undefined,
       year: year || undefined,
@@ -211,7 +220,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -221,6 +230,7 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionId: conditionId || undefined,
+      formatId: formatId || undefined,
       locationId: locationId || undefined,
       issueId: issueId || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
@@ -231,7 +241,7 @@ export function InventoryListPanel({
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       includeSold: includeSold || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -294,6 +304,7 @@ export function InventoryListPanel({
     !!search ||
     !!issueId ||
     !!conditionId ||
+    !!formatId ||
     !!locationId ||
     !!year ||
     noPhotos ||
@@ -469,6 +480,26 @@ export function InventoryListPanel({
                   </option>
                 ))}
               </select>
+
+              {/* Format filter (#343), beside the condition one. Absent entirely when the
+                  collection defines no formats — most never do. "Single" is a listed choice
+                  because it is a real answer (no format set), not the absence of a filter. */}
+              {formats.length > 0 && (
+                <select
+                  value={formatId}
+                  onChange={(e) => updateParams({ formatId: e.target.value })}
+                  style={CONTROL_STYLE}
+                  aria-label="Filter by format"
+                >
+                  <option value="">All formats</option>
+                  <option value="single">Single</option>
+                  {formats.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface
                   for-sale copies still needing a listing there. Lists every platform contact

@@ -21,6 +21,8 @@ export interface StampListFilters {
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the price column. */
   displayConditionId?: string | null;
+  /** Format whose price fills the price column (#343); null is the single. */
+  displayFormatId?: string | null;
 }
 
 /** Filters that affect the year facet counts (everything except year itself). */
@@ -59,6 +61,7 @@ export function useStampsInfinite(
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
+      if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(

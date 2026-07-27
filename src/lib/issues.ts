@@ -22,6 +22,7 @@ import {
   type TranslationValueMap,
 } from "./translations";
 import { syncStampTranslations } from "./stamps";
+import { makeFormatFactorResolver } from "./format-pricing";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -117,6 +118,9 @@ export interface StampNodeData {
   /** True when the displayed main price was rolled up from the lowest variant child because
    *  this stamp is an unknown-variant umbrella with no own price (#238) — an estimate. */
   mainCatalogPriceUncertain: boolean;
+  /** True when the displayed main price was **derived** from the single's by a format multiplier
+   *  rather than recorded for the displayed format (#343) — also an estimate. */
+  mainCatalogPriceDerived: boolean;
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
@@ -253,6 +257,11 @@ function toStampNode(
     baseCurrency: string;
     latestYearByName: Map<string, number>;
     displayConditionId: string | null;
+    /** Format the list is showing (#343); null is the single. */
+    displayFormatId?: string | null;
+    /** Multiplier applying to that format for this issue — one lookup per issue, because every
+     *  member shares the issue's area and the issue itself. */
+    formatFactor?: number | null;
     rates: Map<string, number | null>;
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
     variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
@@ -265,10 +274,12 @@ function toStampNode(
         isUmbrella: isUnknownVariantStamp(m.stamp),
         primaryCatalogNameId: pricing.primaryNameId,
         displayConditionId: pricing.displayConditionId,
+        displayFormatId: pricing.displayFormatId ?? null,
+        formatFactor: pricing.formatFactor ?? null,
         baseCurrency: pricing.baseCurrency,
         rates: pricing.rates,
       })
-    : { picked: null, uncertain: false };
+    : { picked: null, uncertain: false, derived: false };
   const main = headline.picked;
   const mainCatalogPriceStale =
     main && pricing
@@ -300,6 +311,7 @@ function toStampNode(
         : null,
     mainCatalogPriceStale,
     mainCatalogPriceUncertain: headline.uncertain,
+    mainCatalogPriceDerived: headline.derived,
     actsAsVariant: childIsVariant(m.stamp),
     subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
@@ -567,24 +579,32 @@ function computeRequiredPriceTotal(
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   rates: Map<string, number | null>,
-  variantPricesByStamp: Map<string, RawCatalogPrice[][]>
+  variantPricesByStamp: Map<string, RawCatalogPrice[][]>,
+  displayFormatId: string | null = null,
+  formatFactor: number | null = null
 ): IssuePriceTotal | null {
   let sumCurrent = 0;
   let currentCount = 0;
   let estimatedCurrent = 0;
+  let derivedCurrent = 0;
   let sumOlder = 0;
   let olderCount = 0;
   let estimatedOlder = 0;
+  let derivedOlder = 0;
   let currency: string | null = null;
   for (const m of requiredMembers) {
     // Each required member's headline price applies the unknown-variant rollup (#238): an
-    // umbrella with no own price contributes its lowest variant child's price instead.
-    const { picked: main, uncertain } = pickHeadlineCatalogPrice({
+    // umbrella with no own price contributes its lowest variant child's price instead. When a
+    // format is on screen (#343) the same pick derives from the single where nothing explicit was
+    // recorded, so a format column totals to something rather than to nothing.
+    const { picked: main, uncertain, derived } = pickHeadlineCatalogPrice({
       ownPrices: m.stamp.catalogPrices,
       variantPrices: variantPricesByStamp.get(m.stampId),
       isUmbrella: isUnknownVariantStamp(m.stamp),
       primaryCatalogNameId: primaryNameId,
       displayConditionId,
+      displayFormatId,
+      formatFactor,
       baseCurrency,
       rates,
     });
@@ -595,10 +615,12 @@ function computeRequiredPriceTotal(
       sumOlder += main.amount;
       olderCount += 1;
       if (uncertain) estimatedOlder += 1;
+      if (derived) derivedOlder += 1;
     } else {
       sumCurrent += main.amount;
       currentCount += 1;
       if (uncertain) estimatedCurrent += 1;
+      if (derived) derivedCurrent += 1;
     }
   }
 
@@ -607,7 +629,8 @@ function computeRequiredPriceTotal(
     pricedCount: number,
     usesOlderEdition: boolean,
     olderEditionExcludedCount: number,
-    estimatedCount: number
+    estimatedCount: number,
+    derivedCount: number
   ): IssuePriceTotal => ({
     amount: amount.toFixed(2),
     currency: currency!,
@@ -618,13 +641,14 @@ function computeRequiredPriceTotal(
     usesOlderEdition,
     olderEditionExcludedCount,
     estimatedCount,
+    derivedCount,
   });
 
   if (currency && currentCount > 0) {
-    return finish(sumCurrent, currentCount, false, olderCount, estimatedCurrent);
+    return finish(sumCurrent, currentCount, false, olderCount, estimatedCurrent, derivedCurrent);
   }
   if (currency && olderCount > 0) {
-    return finish(sumOlder, olderCount, true, 0, estimatedOlder);
+    return finish(sumOlder, olderCount, true, 0, estimatedOlder, derivedOlder);
   }
   return null;
 }
@@ -683,7 +707,9 @@ function toIssueListItem(
   displayConditionId: string | null,
   vendorAbbrev: ReadonlyMap<string, string>,
   rates: Map<string, number | null>,
-  variantPricesByStamp: Map<string, RawCatalogPrice[][]>
+  variantPricesByStamp: Map<string, RawCatalogPrice[][]>,
+  displayFormatId: string | null,
+  factorFor: (areaId: string | null, issueId: string | null) => number | null
 ): IssueListItem {
   const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
@@ -705,7 +731,11 @@ function toIssueListItem(
     latestYearByName,
     displayConditionId,
     rates,
-    variantPricesByStamp
+    variantPricesByStamp,
+    displayFormatId,
+    // Every member of an issue shares the issue's area and the issue itself, so the multiplier is
+    // one lookup for the whole row rather than one per member.
+    factorFor(issue.collectionAreaId, issue.id)
   );
 
   return {
@@ -733,14 +763,16 @@ async function buildIssueListItems(
   collectionId: string,
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  displayFormatId: string | null
 ): Promise<IssueListItem[]> {
-  const [latestYearByName, vendors] = await Promise.all([
+  const [latestYearByName, vendors, factorFor] = await Promise.all([
     getLatestEditionYearByName(collectionId),
     prisma.catalogVendor.findMany({
       where: { collectionId },
       select: { id: true, abbreviation: true },
     }),
+    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
   ]);
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
@@ -774,7 +806,9 @@ async function buildIssueListItems(
       displayConditionId,
       vendorAbbrev,
       rates,
-      variantPricesByStamp
+      variantPricesByStamp,
+      displayFormatId,
+      factorFor
     )
   );
 }
@@ -802,6 +836,9 @@ export interface IssueListFilterOpts {
   /** Condition whose price fills the list price column / issue totals. When
    *  omitted, defaults to the collection's first condition by sortOrder. */
   displayConditionId?: string | null;
+  /** Physical format whose price fills the list price column / issue totals (#343). Null or
+   *  omitted is the single — the default, and the only value a collection with no formats has. */
+  displayFormatId?: string | null;
 }
 
 /** Build the Prisma `where` for the issue list from the active filters.
@@ -916,6 +953,8 @@ export async function listIssuesPaginated(
     getCollectionBaseCurrency(collectionId),
     resolveDisplayConditionId(collectionId, opts.displayConditionId),
   ]);
+  // Null is the single (ADR-0020); there is no "first format" to resolve to.
+  const displayFormatId = opts.displayFormatId ?? null;
 
   const where = buildIssueListWhere(collectionId, opts);
 
@@ -949,7 +988,8 @@ export async function listIssuesPaginated(
     collectionId,
     primaryCatalogByArea,
     baseCurrency,
-    displayConditionId
+    displayConditionId,
+    displayFormatId
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
@@ -988,7 +1028,10 @@ export async function listIssueMembers(
   /** Condition whose price fills each member's headline price. Mirrors the issue list's
    *  price column (#95); when omitted, defaults to the collection's first condition so
    *  the expanded member rows track the list's condition switcher (#238). */
-  requestedDisplayConditionId?: string | null
+  requestedDisplayConditionId?: string | null,
+  /** Format whose price fills each member's headline price, tracking the list's format switcher
+   *  (#343). Null is the single. */
+  displayFormatId: string | null = null
 ): Promise<StampNodeData[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -1005,6 +1048,8 @@ export async function listIssueMembers(
     resolveDisplayConditionId(collectionId, requestedDisplayConditionId),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
+  const factorFor = await makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId);
+  const formatFactor = factorFor(collectionAreaId, issueId);
 
   // Umbrella members (unknown-variant base stamps) roll their headline price up from the
   // lowest variant child, so load those descendant prices and build one rate map covering
@@ -1026,6 +1071,8 @@ export async function listIssueMembers(
       baseCurrency,
       latestYearByName,
       displayConditionId,
+      displayFormatId,
+      formatFactor,
       rates,
       variantPricesByStamp,
     })

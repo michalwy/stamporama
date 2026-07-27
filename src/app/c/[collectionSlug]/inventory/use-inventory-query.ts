@@ -23,6 +23,9 @@ interface InventoryItemsPage {
 export interface InventoryItemFilters {
   conditionId?: string;
   certificateStatusId?: string;
+  /** Restrict to copies of one physical format (#343). `"single"` matches the copies with no
+   * format set — null *is* the single (ADR-0020), which an absent filter cannot express. */
+  formatId?: string;
   /** Restrict to copies whose linked stamp belongs to any of these areas (selected area
    * plus descendants). Mirrors the stamps list area sidebar (#106). */
   areaIds?: string[];
@@ -62,6 +65,7 @@ export interface InventoryItemFilters {
 export interface InventoryYearFacetFilters {
   conditionId?: string;
   certificateStatusId?: string;
+  formatId?: string;
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -100,6 +104,7 @@ export function useInventoryItemsInfinite(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.formatId) params.set("formatId", filters.formatId);
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
@@ -141,6 +146,7 @@ export function useHoldingsValuation(
     queryKey: ["inventory", collectionId, "valuation", {
       conditionId: filters.conditionId,
       certificateStatusId: filters.certificateStatusId,
+      formatId: filters.formatId,
       areaIds: filters.areaIds,
       search: filters.search,
       catalogVendorId: filters.catalogVendorId,
@@ -161,6 +167,7 @@ export function useHoldingsValuation(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.formatId) params.set("formatId", filters.formatId);
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
@@ -200,6 +207,7 @@ export function useItemYears(
       if (filters.conditionId) params.set("conditionId", filters.conditionId);
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.formatId) params.set("formatId", filters.formatId);
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);

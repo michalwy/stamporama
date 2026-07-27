@@ -22,6 +22,7 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const conditionId = sp.get("conditionId") || undefined;
   const certificateStatusId = sp.get("certificateStatusId") || undefined;
+  const formatId = sp.get("formatId") || undefined;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
   const search = sp.get("search") || undefined;
@@ -59,6 +60,7 @@ export async function GET(
       offset,
       conditionId,
       certificateStatusId,
+      formatId,
       areaIds,
       search,
       catalogVendorId,

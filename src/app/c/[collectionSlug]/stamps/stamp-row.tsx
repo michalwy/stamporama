@@ -13,6 +13,7 @@ import {
   formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -261,10 +262,33 @@ export function StampRow({
               }}
             >
               {stamp.mainCatalogPriceStale && <StalePriceIcon />}
+              {/* Derived from the single's price by a format multiplier (#343) — the same
+                  `~` + italics the issue list uses for an inferred figure. */}
+              {stamp.mainCatalogPriceDerived && (
+                <Tooltip
+                  align="end"
+                  content="Derived from the single's price by this format's multiplier — no price is recorded for the format itself."
+                >
+                  <span
+                    aria-label="Derived from the single's price"
+                    style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
+                  >
+                    ~
+                  </span>
+                </Tooltip>
+              )}
               {moneySecondaryText(stamp.mainCatalogPrice) && (
                 <span style={PRICE_CONVERTED}>{moneySecondaryText(stamp.mainCatalogPrice)}</span>
               )}
-              <span style={PRICE_MAIN}>{moneyPrimaryText(stamp.mainCatalogPrice)}</span>
+              <span
+                style={
+                  stamp.mainCatalogPriceDerived
+                    ? { ...PRICE_MAIN, color: "var(--color-text-muted)", fontStyle: "italic" }
+                    : PRICE_MAIN
+                }
+              >
+                {moneyPrimaryText(stamp.mainCatalogPrice)}
+              </span>
             </span>
           )}
         </div>

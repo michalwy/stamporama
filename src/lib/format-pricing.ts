@@ -105,6 +105,78 @@ export async function getStampFormatPricing(
 }
 
 /**
+ * Resolve the format multiplier for **many stamps at once** — what a list page needs (#343).
+ *
+ * `getStampFormatPricing` answers "every factor for one stamp"; a list asks the opposite question,
+ * "one factor for every stamp on the page", and answering it per stamp would be a query per row.
+ * The collection's factor rows and its area tree are both small and both loaded once here; the
+ * returned function is pure and resolves in memory, memoising each area's ancestor path because a
+ * page of an issue's members shares one area.
+ *
+ * Returns a function that is always null for the single (`formatId === null`) — nothing derives
+ * there, the single's price *is* the recorded one.
+ */
+export async function makeFormatFactorResolver(
+  collectionId: string,
+  formatId: string | null,
+  conditionId: string | null
+): Promise<(areaId: string | null, issueId: string | null) => number | null> {
+  if (!formatId) return () => null;
+  const lookup = await makeFormatFactorLookup(collectionId);
+  return (areaId, issueId) => lookup(formatId, areaId, issueId, conditionId);
+}
+
+/**
+ * The same in-memory resolution, but with the format and condition supplied **per call** — what a
+ * mixed set of copies needs (#343), where every row carries its own format and its own condition.
+ * {@link makeFormatFactorResolver} is this bound to one (format, condition) pair.
+ */
+export async function makeFormatFactorLookup(
+  collectionId: string
+): Promise<
+  (
+    formatId: string | null,
+    areaId: string | null,
+    issueId: string | null,
+    conditionId: string | null
+  ) => number | null
+> {
+  const [rows, areas] = await Promise.all([
+    getFormatFactorRows(collectionId),
+    prisma.collectionArea.findMany({ where: { collectionId }, select: { id: true, parentId: true } }),
+  ]);
+  if (rows.length === 0) return () => null;
+
+  const parentOf = new Map(areas.map((a) => [a.id, a.parentId]));
+  const pathCache = new Map<string, string[]>();
+  const pathFor = (areaId: string): string[] => {
+    const cached = pathCache.get(areaId);
+    if (cached) return cached;
+    const path: string[] = [];
+    let current: string | null | undefined = areaId;
+    // Bounded rather than trusting termination: the tree is user-built and nothing at the database
+    // level forbids a cycle (same guard as `areaPathIds`).
+    for (let depth = 0; current && depth < 50; depth++) {
+      if (path.includes(current)) break;
+      path.push(current);
+      current = parentOf.get(current) ?? null;
+    }
+    pathCache.set(areaId, path);
+    return path;
+  };
+
+  return (formatId, areaId, issueId, conditionId) =>
+    formatId
+      ? (resolveFormatFactor(rows, {
+          formatId,
+          areaPath: areaId ? pathFor(areaId) : [],
+          issueId,
+          conditionId,
+        })?.factor ?? null)
+      : null;
+}
+
+/**
  * Formats alone, for an add-stamp dialog: with no stamp there is no area and no issue, so no
  * factor can be resolved. The grid still offers the format tabs — an explicit price may be typed
  * straight away, and the derived values appear once the stamp exists somewhere.

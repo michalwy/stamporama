@@ -85,6 +85,16 @@ export const TITLE_COPY_SELECT = {
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
   },
+  // The copy's physical format behind `{format}` / `{formatAbbr}` (#345). Null for a single, which
+  // is most copies — a null relation, not a row to suppress.
+  format: {
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      translations: { select: { language: true, name: true, abbreviation: true } },
+    },
+  },
   location: { select: { name: true } },
   locationRef: true,
 } as const;
@@ -115,6 +125,12 @@ export type TitleCopyRow = {
   };
   condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] };
   certificateStatus: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    translations: LabelTranslation[];
+  } | null;
+  format: {
     id: string;
     name: string;
     abbreviation: string;
@@ -236,6 +252,27 @@ export function toTitleCopy(
           row.certificateStatus.abbreviation
         )
       : null,
+    // A single has no format row at all, so both tokens resolve null and the tidy pass removes
+    // whatever separator was gluing them in (#345). Unlike the subtype there is no "default" row to
+    // suppress here: null *is* the unmarked case (ADR-0020).
+    format: row.format
+      ? resolve(
+          "format",
+          { type: "format", id: row.format.id, field: "name" },
+          row.format.translations,
+          (t: LabelTranslation) => t.name,
+          row.format.name
+        )
+      : null,
+    formatAbbr: row.format
+      ? resolve(
+          "formatAbbr",
+          { type: "format", id: row.format.id, field: "abbreviation" },
+          row.format.translations,
+          (t: LabelTranslation) => t.abbreviation,
+          row.format.abbreviation
+        )
+      : null,
     area: areaTitle,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
@@ -287,7 +324,8 @@ export function toTitleCopy(
  * translation exists and falls back to the default value otherwise; the fallback is silent in the
  * generated title and reported per copy for the preview to flag (#298). Every translatable token
  * honours it: `{area}` (#293), `{condition}` / `{conditionAbbr}` / `{certificate}` /
- * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296) and `{subtype}` (#338/#339).
+ * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296), `{subtype}` (#338/#339) and
+ * `{format}` / `{formatAbbr}` (#344/#345).
  *
  * A language equal to the collection's own `defaultLanguage` is the same thing as no language —
  * entity columns are already written in it and carry no translation rows — so it is normalised to

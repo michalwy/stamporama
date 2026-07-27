@@ -111,9 +111,26 @@ model StampFormat {
   catalogPrices StampCatalogPrice[]
   items         Item[]
   factors       StampFormatFactor[]
+  translations  StampFormatTranslation[]
 
   @@index([collectionId])
   @@map("stamp_format")
+}
+
+// Per-language `name` / `abbreviation` for a format (#344), behind the `{format}` / `{formatAbbr}`
+// tokens (#345) — a German listing should read "Viererblock", not "Block of 4". See
+// {@link StampConditionTranslation}: identical shape, and the two fields fall back
+// **independently**, because a language often translates the name and keeps the abbreviation.
+model StampFormatTranslation {
+  stampFormatId String
+  language      String
+  name          String?
+  abbreviation  String?
+
+  stampFormat StampFormat @relation(fields: [stampFormatId], references: [id], onDelete: Cascade)
+
+  @@id([stampFormatId, language])
+  @@map("stamp_format_translation")
 }
 
 // The multiplier that derives a format's catalog price from the single's, when no explicit price

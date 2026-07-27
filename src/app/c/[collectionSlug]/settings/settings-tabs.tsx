@@ -196,7 +196,12 @@ export function SettingsTabs({
               the three axes of one catalog price, and they are set up together, once. */}
           <section>
             <h2 style={sectionHeadingStyle}>Formats</h2>
-            <FormatsPanel collectionId={collectionId} initialFormats={initialFormats} />
+            <FormatsPanel
+              collectionId={collectionId}
+              initialFormats={initialFormats}
+              titleLanguages={titleLanguages}
+              defaultLanguage={defaultLanguage}
+            />
           </section>
           <section>
             <h2 style={sectionHeadingStyle}>Format multipliers</h2>

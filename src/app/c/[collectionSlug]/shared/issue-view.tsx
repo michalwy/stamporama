@@ -266,13 +266,25 @@ export function StampDetailLine({
       {node.mainCatalogPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
           {node.mainCatalogPriceStale && <StalePriceIcon />}
-          {node.mainCatalogPriceUncertain && (
+          {/* One marker for "inferred, not recorded" (#343): the `~` + italics already mean a
+              variant rollup (#238), and a derived format price is the same kind of claim. Only the
+              tooltip distinguishes them — a row can be both, and the rollup is the deeper caveat,
+              so it wins the wording. */}
+          {(node.mainCatalogPriceUncertain || node.mainCatalogPriceDerived) && (
             <Tooltip
               align="end"
-              content="Estimated from the lowest variant's price — this stamp has no price of its own."
+              content={
+                node.mainCatalogPriceUncertain
+                  ? "Estimated from the lowest variant's price — this stamp has no price of its own."
+                  : "Derived from the single's price by this format's multiplier — no price is recorded for the format itself."
+              }
             >
               <span
-                aria-label="Estimated from lowest variant"
+                aria-label={
+                  node.mainCatalogPriceUncertain
+                    ? "Estimated from lowest variant"
+                    : "Derived from the single's price"
+                }
                 style={{ ...PRICE_MAIN, color: "var(--color-text-muted)", cursor: "help" }}
               >
                 ~
@@ -284,7 +296,7 @@ export function StampDetailLine({
           )}
           <span
             style={
-              node.mainCatalogPriceUncertain
+              node.mainCatalogPriceUncertain || node.mainCatalogPriceDerived
                 ? { ...PRICE_MAIN, color: "var(--color-text-muted)", fontStyle: "italic" }
                 : PRICE_MAIN
             }

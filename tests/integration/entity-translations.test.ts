@@ -348,6 +348,13 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         abbreviation: "Cert",
         translations: [{ language: "pl", name: "Atest", abbreviation: "At." }],
       },
+      format: {
+        id: "fmt-1",
+        name: "Block of 4",
+        abbreviation: "Blk4",
+        // As with the condition: the name is translated, the abbreviation deliberately is not.
+        translations: [{ language: "pl", name: "Czwórka", abbreviation: null }],
+      },
       location: null,
       locationRef: null,
     };
@@ -361,6 +368,8 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
     assert.equal(copy.conditionAbbr, "MNH");
     assert.equal(copy.certificate, "Certificate");
     assert.equal(copy.certificateAbbr, "Cert");
+    assert.equal(copy.format, "Block of 4");
+    assert.equal(copy.formatAbbr, "Blk4");
   });
 
   it("resolves each token in the requested language", () => {
@@ -370,11 +379,13 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
     assert.equal(copy.condition, "Czyste bez podlepki");
     assert.equal(copy.certificate, "Atest");
     assert.equal(copy.certificateAbbr, "At.");
+    assert.equal(copy.format, "Czwórka");
   });
 
   it("falls back per field, so a translated name does not imply a translated abbreviation", () => {
     const copy = toTitleCopy(row(), EMPTY_MAPS, new Map(), "pl");
     assert.equal(copy.conditionAbbr, "MNH");
+    assert.equal(copy.formatAbbr, "Blk4");
   });
 
   it("falls back for a language nothing is translated into", () => {
@@ -389,5 +400,14 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
     const copy = toTitleCopy(withoutCert, EMPTY_MAPS, new Map(), "pl");
     assert.equal(copy.certificate, null);
     assert.equal(copy.certificateAbbr, null);
+  });
+
+  // A single carries no format row (ADR-0020), which is the ordinary case — both tokens must come
+  // out null so the tidy pass can remove whatever separator was gluing them in (#345).
+  it("keeps a single's format absent rather than translating a null", () => {
+    const single = { ...row(), format: null };
+    const copy = toTitleCopy(single, EMPTY_MAPS, new Map(), "pl");
+    assert.equal(copy.format, null);
+    assert.equal(copy.formatAbbr, null);
   });
 });

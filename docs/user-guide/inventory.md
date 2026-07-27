@@ -277,6 +277,12 @@ separately, not whether it holds more than one stamp.
 Formats are managed in **Settings → Conditions & formats**. A format that is used by any copy or
 any catalog price cannot be deleted.
 
+**Formats in other languages.** Once a platform lists in a language other than your collection's
+default, the format's **Name** and **Abbreviation** fields each grow their own 🌐 button, exactly as
+[conditions](collections.md#conditions-in-other-languages) do — and they fall back independently, so
+you can translate *Block of 4* as *Viererblock* while leaving `Blk4` alone. These feed the
+`{format}` and `{formatAbbr}` tokens in [listing texts](contacts.md#adding-and-editing).
+
 ### What a multiple is worth
 
 Catalog values are recorded per format, on the same grid as everything else: the stamp editor's
@@ -306,6 +312,32 @@ You set each one where its scope lives, so you never pick the thing it applies t
 
 A scope's dialog lists only what is set on that area or issue itself — not what it inherits from
 above. To change an inherited multiplier, go to the area it was set on.
+
+A copy that is a multiple is **valued as that multiple**: its own recorded price if one exists,
+otherwise the single's scaled by the multiplier that applies to it. If neither exists the copy
+counts as unpriced — the single's own figure is never used for a block, because it is a different
+thing's price.
+
+### Filtering the list by format
+
+Once your collection has any formats, the Copies list grows a **format** filter beside the
+condition one. It works the same way: pick a format to see only those copies, or **Single** to see
+only the ordinary ones. Leaving it on *All formats* shows everything.
+
+### Seeing a format's prices on the Stamps and Issues lists
+
+The Stamps and Issues lists show one catalog value per row, picked by the **Price for**
+condition switcher. Next to it sits an **as** switcher for the format, defaulting to **Single**;
+switch it to a block and every price column shows the block's value instead. Like the filter above,
+it only appears once your collection has formats, and your choice is remembered per collection.
+
+A value that had to be **derived** from the single by a multiplier is shown in grey italics with a
+leading `~`, the same marking used for an estimate from an unidentified variant — hover it to see
+which of the two it is. An issue's total says how many of its stamps were counted that way.
+
+The **+ catalog value** link records against the format on screen, so a value typed while a block
+column is showing is stored as the block's price, not the single's. The dialog's condition badge
+names the format so there is no doubt about what is being written.
 
 ## Adding a catalog value
 

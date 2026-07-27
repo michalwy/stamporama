@@ -124,6 +124,15 @@ model StampFormat {
   sortOrder    Int
 }
 
+// #344 — mirrors StampConditionTranslation exactly; the two fields fall back independently.
+model StampFormatTranslation {
+  stampFormatId String
+  language      String
+  name          String?
+  abbreviation  String?
+  @@id([stampFormatId, language])
+}
+
 model StampFormatFactor {
   id               String  @id @default(cuid())
   collectionId     String
@@ -166,10 +175,46 @@ CREATE UNIQUE INDEX "stamp_catalog_price_unique"
 - Multiples already recorded under the #135 convention keep working — they are ordinary stamps and
   nothing migrates them. Re-recording one as a copy with a format is a manual choice, per stamp.
 
+### 9. The format axis reaches the same places the condition axis does (#343–#345)
+
+Three follow-ups closed the gaps this ADR originally left open, each by extending an existing
+mechanism rather than inventing a parallel one:
+
+- **Translations** (#344). `StampFormatTranslation` mirrors `StampConditionTranslation` field for
+  field, and `format` joins the shared `TranslatableEntity` union — so the gap-filling path (#299)
+  and the Settings panel write the same rows.
+- **Listing tokens** (#345). `{format}` / `{formatAbbr}`, plus `{#formatLegend}` beside the two
+  legend blocks of #318. A single resolves **empty**, which is the common case and not a special
+  one: the existing tidy pass eats the separator and drops a line that says nothing else. A batch
+  mixing formats lists the distinct ones, as every other per-copy token does — no "Mixed" of its
+  own. Singles leave the legend the way a copy with no certificate leaves the certificate legend.
+- **Display switcher** (#343). Lists gain an **`as`** switcher beside the condition one, defaulting
+  to Single and hidden when the collection has no formats. Its stored value is `""` for Single,
+  because Single is not a dictionary row and cannot be "the first entry".
+
+Two consequences of the switcher are worth stating, because they are where a format column would
+otherwise read as empty or as a lie:
+
+- **A list column derives.** A format column mostly finds no explicit price, so it applies §5's
+  rule — explicit first, else single × factor — and marks the result with the `~` + italics that
+  already mean "estimated" for a variant rollup (#238). One vocabulary for *inferred, not
+  recorded*; only the tooltip distinguishes the two, and the rollup wins the wording when a value
+  is both. An issue's total counts them separately (`estimatedCount` / `derivedCount`) so its
+  tooltip can say which applies.
+- **A copy is valued at its own format.** The Copies list takes format as a **filter**, not a
+  switcher — a copy's format is a fact it carries, exactly like its condition — and `valuateCopy`
+  now passes `Item.formatId` into the pick. Before #343 it always resolved the single's price, so a
+  block was silently valued as one stamp. With no explicit price and no factor the copy is
+  **unpriced** rather than falling back to the single: the single's figure is a different thing's
+  price, and reporting it would be worse than reporting nothing.
+
+Resolving a factor per list row would be a query per row, so `format-pricing.ts` gained
+`makeFormatFactorLookup` — the collection's factor rows and area tree loaded once, resolved in
+memory, with each area's ancestor path memoised. `makeFormatFactorResolver` is that bound to one
+(format, condition) pair, which is what a list with a single display format needs.
+
 ## Still open
 
 - Completeness (#133) is unimplemented; when it is built, format is its third breakdown dimension
   alongside disposition and condition.
-- List views have a condition switcher (ADR-0006 §5) but no format switcher yet.
-- Formats carry no translations (#294-style) because nothing renders one into a listing title yet.
 - #136 documents the superseded convention and needs rewriting to state the boundary in §4.

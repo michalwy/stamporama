@@ -1,4 +1,5 @@
 import type { Decimal } from "@prisma/client/runtime/client";
+import { deriveFormatPrice } from "./format-factor";
 
 // Pure catalog-price helpers — no Prisma, no `server-only`, so they are safe to
 // import from unit-tested domain modules (see `valuation.ts`). Server-side pricing
@@ -25,6 +26,9 @@ export interface IssuePriceTotal extends MoneyDisplay {
   // Counted members whose price was rolled up from the lowest variant child because they
   // are unknown-variant umbrellas with no own price (#238) — the total is then an estimate.
   estimatedCount: number;
+  // Counted members whose price was derived from the single's by a format multiplier rather than
+  // recorded for the displayed format (#343) — the other way a total becomes an estimate.
+  derivedCount: number;
 }
 
 /** Raw catalog price shape needed to pick the main-catalog price. */
@@ -89,9 +93,50 @@ export function pickCatalogPriceFor(
 export function pickMainCatalogPrice(
   prices: RawCatalogPrice[],
   primaryCatalogNameId: string | null,
-  displayConditionId: string | null
+  displayConditionId: string | null,
+  displayFormatId: string | null = null
 ): PickedPrice | null {
-  return pickCatalogPriceFor(prices, primaryCatalogNameId, displayConditionId, null);
+  return pickCatalogPriceFor(prices, primaryCatalogNameId, displayConditionId, null, displayFormatId);
+}
+
+/** A price for a format, and whether it had to be **derived** from the single's (#343). */
+export interface FormatPricePick {
+  picked: PickedPrice | null;
+  /** True when no explicit row existed for the format and the single's price was multiplied by a
+   * {@link https://github.com/michalwy/stamporama/issues/343 StampFormatFactor}. */
+  derived: boolean;
+}
+
+/**
+ * A format's price: **explicit or derived** (ADR-0020). An explicit `StampCatalogPrice` recorded
+ * for the format always wins; only in its absence is the single's price multiplied by the resolved
+ * factor. Null format short-circuits to the plain pick — the single *is* the null case, and there
+ * is nothing to derive it from.
+ *
+ * Derivation needs both halves: with no single price to scale, or no factor to scale it by, there
+ * is nothing to show. A derived figure keeps the single's currency and edition — a factor is a pure
+ * multiplier, and the value is still "what that edition says", read through a rule.
+ */
+export function pickFormatCatalogPrice(
+  prices: RawCatalogPrice[],
+  primaryCatalogNameId: string | null,
+  conditionId: string | null,
+  certificateStatusId: string | null,
+  formatId: string | null,
+  factor: number | null
+): FormatPricePick {
+  const pick = (fmt: string | null) =>
+    pickCatalogPriceFor(prices, primaryCatalogNameId, conditionId, certificateStatusId, fmt);
+  if (!formatId) return { picked: pick(null), derived: false };
+  const explicit = pick(formatId);
+  if (explicit) return { picked: explicit, derived: false };
+  if (factor === null) return { picked: null, derived: false };
+  const single = pick(null);
+  if (!single) return { picked: null, derived: false };
+  return {
+    picked: { ...single, amount: deriveFormatPrice(single.amount, factor) },
+    derived: true,
+  };
 }
 
 /** The candidate with the lowest base-currency value. Unconvertible candidates (no rate)
@@ -134,18 +179,41 @@ export function pickHeadlineCatalogPrice(input: {
   isUmbrella: boolean;
   primaryCatalogNameId: string | null;
   displayConditionId: string | null;
+  /** The format the list is showing (#343); null — the default — is the single. */
+  displayFormatId?: string | null;
+  /** The multiplier resolved for `displayFormatId` on this stamp, or null when none applies. Used
+   *  for the variant candidates too: a variant child sits in the same issue and area as its
+   *  umbrella, so the umbrella's factor is the one a catalog would print for it. */
+  formatFactor?: number | null;
   baseCurrency: string;
   rates: Map<string, number | null>;
-}): { picked: PickedPrice | null; uncertain: boolean } {
+}): { picked: PickedPrice | null; uncertain: boolean; derived: boolean } {
   const pick = (prices: RawCatalogPrice[]) =>
-    pickMainCatalogPrice(prices, input.primaryCatalogNameId, input.displayConditionId);
+    pickFormatCatalogPrice(
+      prices,
+      input.primaryCatalogNameId,
+      input.displayConditionId,
+      null,
+      input.displayFormatId ?? null,
+      input.formatFactor ?? null
+    );
   const own = pick(input.ownPrices);
-  if (own || !input.isUmbrella) return { picked: own, uncertain: false };
+  if (own.picked || !input.isUmbrella) {
+    return { picked: own.picked, uncertain: false, derived: own.derived };
+  }
   const candidates = (input.variantPrices ?? [])
     .map(pick)
-    .filter((p): p is PickedPrice => p !== null);
-  const lowest = pickLowestByBase(candidates, input.baseCurrency, input.rates);
-  return { picked: lowest, uncertain: lowest !== null };
+    .filter((p): p is FormatPricePick & { picked: PickedPrice } => p.picked !== null);
+  const lowest = pickLowestByBase(
+    candidates.map((c) => c.picked),
+    input.baseCurrency,
+    input.rates
+  );
+  return {
+    picked: lowest,
+    uncertain: lowest !== null,
+    derived: lowest !== null && (candidates.find((c) => c.picked === lowest)?.derived ?? false),
+  };
 }
 
 /**

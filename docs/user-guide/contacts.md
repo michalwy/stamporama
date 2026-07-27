@@ -93,6 +93,12 @@ always generates, falling back to your default text. The tokens fill in from the
   Empty for a top-level stamp and for anything on your collection's **default** subtype, so ordinary
   variants do not gain a redundant word — pair it as `{subtype|condition}` if you want something
   there either way.
+- `{format}` — the copy's [physical format](inventory.md#pairs-blocks-and-other-multiples)
+  (`Block of 4`, `Horizontal pair`, …), and `{formatAbbr}` for its abbreviation. **Empty for a
+  single**, which is most copies — a single has no format at all — so the surrounding separator
+  disappears with it, and a line that says nothing else is dropped whole. A batch mixing formats
+  lists the distinct ones, `/`-separated, the way every other per-copy token does; the singles in
+  it simply contribute nothing.
 - `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
   named the set, so pair it as `{setTitle|catalog}`)
 
@@ -146,9 +152,10 @@ yourself, and the platforms that offer one treat it as plain text.
 
 ### A legend of the abbreviations used
 
-Two more blocks repeat over the **distinct conditions and certificate statuses** the offer's copies
-actually use, rather than over its items: `{#conditionLegend}…{/conditionLegend}` and
-`{#certificateLegend}…{/certificateLegend}`. Each runs its body once per entry, in the order the
+Three more blocks repeat over the **distinct conditions, certificate statuses and formats** the
+offer's copies actually use, rather than over its items: `{#conditionLegend}…{/conditionLegend}`,
+`{#certificateLegend}…{/certificateLegend}` and
+`{#formatLegend}…{/formatLegend}`. Each runs its body once per entry, in the order the
 entries first appear, so you can spell out the abbreviations a description prints — in whatever
 format you like, since the entry's layout is what you write inside the block:
 
@@ -174,7 +181,8 @@ U = Used
 The block is named `…Legend` so it is never confused with the `{condition}` / `{certificate}` tokens
 you write *inside* it. Inside such a block every *other* token narrows to the copies carrying that
 entry too, so `{#conditionLegend}{conditionAbbr}: {catalog}{/conditionLegend}` reads `MNH: Mi 12,14`.
-Copies with no condition (or no certificate) recorded contribute no entry, and an entry whose
+Copies with no condition (or no certificate) recorded contribute no entry — and by the same rule
+**singles never appear in `{#formatLegend}`**, since a single carries no format. An entry whose
 dictionary row has no abbreviation set renders its full name alone — the ` = ` glue disappears with
 the empty token, as usual. Keep the body on one line if you prefer the legend inline, e.g.
 `{#conditionLegend}{conditionAbbr} = {condition}, {/conditionLegend}` — the separator is literal

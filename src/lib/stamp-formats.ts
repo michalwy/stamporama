@@ -1,6 +1,11 @@
 import "server-only";
 import { prisma } from "./db";
 import type { PrismaClient } from "@/generated/prisma/client";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
 
 // The physical-format dictionary — pairs, blocks, strips. Same shape and lifecycle as
 // `conditions.ts`: seeded on collection creation, then fully the collector's to edit.
@@ -8,6 +13,11 @@ import type { PrismaClient } from "@/generated/prisma/client";
 // There is no "single" row and none is seeded. A null `formatId` **means single**, exactly as a
 // null `certificateStatusId` means "no certificate" (ADR-0006 §2), so the list here holds only
 // the multiples.
+
+/** The format's translatable fields (#344), in the order the form shows them. Two columns, like a
+ * condition's — and they fall back independently, because a language commonly translates the name
+ * and leaves the abbreviation alone. */
+export const FORMAT_TRANSLATION_FIELDS = ["name", "abbreviation"] as const;
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -33,8 +43,15 @@ async function resolveFormatCollection(formatId: string): Promise<string> {
 
 export interface StampFormatData {
   id: string;
+  /** Default-language name (#344); {@link nameByLanguage} overrides it per language. */
   name: string;
+  /** Default-language abbreviation (#344). */
   abbreviation: string;
+  /** Per-language overrides of {@link name} (#344), keyed by ISO 639-1 code. Only languages with a
+   * stored, non-blank value appear. */
+  nameByLanguage: Record<string, string>;
+  /** Per-language overrides of {@link abbreviation} (#344). Independent of {@link nameByLanguage}. */
+  abbreviationByLanguage: Record<string, string>;
   sortOrder: number;
 }
 
@@ -78,17 +95,54 @@ export async function getStampFormats(
   collectionId: string
 ): Promise<StampFormatData[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.stampFormat.findMany({
+  const rows = await prisma.stampFormat.findMany({
     where: { collectionId },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, abbreviation: true, sortOrder: true },
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      sortOrder: true,
+      translations: { select: { language: true, name: true, abbreviation: true } },
+    },
+  });
+  return rows.map((f) => ({
+    id: f.id,
+    name: f.name,
+    abbreviation: f.abbreviation,
+    nameByLanguage: translationsByLanguage(f.translations, (t) => t.name),
+    abbreviationByLanguage: translationsByLanguage(f.translations, (t) => t.abbreviation),
+    sortOrder: f.sortOrder,
+  }));
+}
+
+/** Per-language rows for a format (#344). Shared rules — blank clears the field, an all-blank
+ * language drops the row, unlisted languages are untouched — live in
+ * {@link syncEntityTranslations}. The two columns are upserted together, which is what makes each
+ * fall back on its own. */
+async function syncFormatTranslations(
+  stampFormatId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const data = { name: fields.name ?? null, abbreviation: fields.abbreviation ?? null };
+      await prisma.stampFormatTranslation.upsert({
+        where: { stampFormatId_language: { stampFormatId, language } },
+        create: { stampFormatId, language, ...data },
+        update: data,
+      });
+    },
+    remove: async (language) => {
+      await prisma.stampFormatTranslation.deleteMany({ where: { stampFormatId, language } });
+    },
   });
 }
 
 export async function createStampFormat(
   ownerId: string,
   collectionId: string,
-  data: { name: string; abbreviation: string }
+  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampFormat.findFirst({
@@ -96,20 +150,22 @@ export async function createStampFormat(
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
-  await prisma.stampFormat.create({
+  const created = await prisma.stampFormat.create({
     data: {
       collectionId,
       name: data.name,
       abbreviation: data.abbreviation,
       sortOrder: last ? last.sortOrder + 1 : 0,
     },
+    select: { id: true },
   });
+  await syncFormatTranslations(created.id, data.translations);
 }
 
 export async function updateStampFormat(
   ownerId: string,
   formatId: string,
-  data: { name: string; abbreviation: string }
+  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
 ): Promise<void> {
   const collectionId = await resolveFormatCollection(formatId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -117,6 +173,7 @@ export async function updateStampFormat(
     where: { id: formatId },
     data: { name: data.name, abbreviation: data.abbreviation },
   });
+  await syncFormatTranslations(formatId, data.translations);
 }
 
 /**
