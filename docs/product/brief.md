@@ -33,7 +33,10 @@ Each physical copy a collector owns is a separate item (no quantity field — se
 3. **Trading** — scope agreement and progress tracking with other collectors
 4. **Purchases** — what was bought, where, for how much, in what condition
 5. **Sales** — what was sold, where listed, final price, profit/loss
-6. **Stamp hunting** — want list, auction monitoring, price history
+6. **Stamp hunting** — want list, auction tracking, price history. Auction tracking is a **bidding
+   watchlist with a fork at the end** (ADR-0021): lots being bid on, each resolved as won or lost.
+   A won settlement is transcribed into a purchase; a lost lot's final price is what feeds price
+   history. Market data is a by-product of bidding, not a register to populate.
 7. **Integrations** — Collnect, Delcampe
 
 ## Deployment
