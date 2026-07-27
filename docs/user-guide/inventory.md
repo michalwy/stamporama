@@ -396,6 +396,15 @@ photograph; the next copy of the same stamp sees a picture already there and is 
 can also **promote** any saved copy photo to the copy's stamp by hand. See
 [Collections → Stamp photos](collections.md#stamp-photos).
 
+Promotion also propagates **up the variant tree**: ancestors of the stamp that have no photo yet
+get one too, stopping at the first ancestor that already has a picture.
+
+The **automatic** promotion only happens for copies with **no format** set, that is single stamps.
+A copy recorded as a pair, block or strip shows a multiple rather than the single catalog stamp,
+so it is never chosen on its own as the stamp's reference image. Promoting **by hand** stays
+available on every copy — if a block's photo is the picture you want on the stamp, use the **⬆**
+button and it is used.
+
 ## Identifying a variant
 
 When you record a copy against a **base stamp** because you don't yet know its exact

@@ -420,7 +420,9 @@ export function InventoryItemFormDialog({
             {/* Row 6: photos (#112) — front/back slots + reorderable titled extras. Eager
                 staged uploads; the pending change-set applies on Save with the copy fields.
                 In edit mode each committed photo can be promoted to this copy's stamp (#137):
-                an independent duplicated stamp photo; the copy's own photo is untouched. */}
+                an independent duplicated stamp photo; the copy's own photo is untouched.
+                Offered on every copy regardless of physical format — only the *automatic*
+                seeding is restricted to singles (#346). */}
             <PhotoEditor
               collectionId={collectionId}
               initialPhotos={item?.photos ?? []}

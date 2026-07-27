@@ -458,8 +458,9 @@ async function applyPhotoChangeSetForOwner(
 }
 
 /** Seed a stamp's `main` image from a copy's front photo when the stamp has none yet (#149).
- * A no-op when the copy isn't identified to a stamp or the stamp already has any photo. Reuses
- * `promoteCopyPhotoToStamp`, so the stamp photo is an independent duplicate with its own bytes. */
+ * A no-op when the copy isn't identified to a stamp, carries a non-default physical format
+ * (#346), or the stamp already has any photo. Reuses `promoteCopyPhotoToStamp`, so the stamp
+ * photo is an independent duplicate with its own bytes. */
 async function autoSeedStampMainFromFront(
   ownerId: string,
   itemId: string,
@@ -467,9 +468,10 @@ async function autoSeedStampMainFromFront(
 ): Promise<void> {
   const item = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { stampId: true },
+    select: { stampId: true, formatId: true },
   });
   if (!item?.stampId) return;
+  if (item.formatId !== null) return;
   const stampPhotoCount = await prisma.photo.count({ where: { stampId: item.stampId } });
   if (stampPhotoCount > 0) return;
   await promoteCopyPhotoToStamp(ownerId, frontPhotoId, { role: "main", title: null });
@@ -481,7 +483,17 @@ const ROLE_ORDER: Record<string, number> = { main: 0, front: 0, back: 1 };
  * identified to a `Stamp`; a **new, independent** `Photo` is created on that stamp with its own
  * duplicated bytes (own `storageKey`) and lifecycle — deleting either never affects the other.
  * The caller chooses the target role: front/back replace any incumbent in that slot on the
- * stamp; an extra is appended after the stamp's existing extras and may carry a title. */
+ * stamp; an extra is appended after the stamp's existing extras and may carry a title.
+ *
+ * Deliberately **not** gated on the copy's physical format: promoting by hand is a decision the
+ * collector has already made, and a block's photo can be exactly the reference image they want.
+ * Only the *automatic* seeding is restricted to singles (#346).
+ *
+ * The promotion **propagates up the variant tree** (#347): a photo good enough for `3a` is a
+ * reasonable picture of `3` as long as `3` has none of its own, so each ancestor without any
+ * photo gets its own independent duplicate in the **same** role. The walk stops at the first
+ * ancestor that already has a photo — that collector's choice, or an earlier propagation, is
+ * never overwritten, and neither is anything above it. */
 export async function promoteCopyPhotoToStamp(
   ownerId: string,
   photoId: string,
@@ -512,6 +524,56 @@ export async function promoteCopyPhotoToStamp(
 
   const role = normalizeRole(target.role);
 
+  await duplicatePhotoOntoStamp(collectionId, stampId, source, role, target.title);
+
+  for (const ancestorId of await photolessAncestors(collectionId, stampId)) {
+    await duplicatePhotoOntoStamp(collectionId, ancestorId, source, role, target.title);
+  }
+}
+
+/** The stamp's ancestors, nearest first, up to (excluding) the first one that already has a
+ * photo (#347). `seen` bounds the walk: the tree is acyclic by intent, but a cycle here would
+ * otherwise loop forever writing photo rows. */
+async function photolessAncestors(
+  collectionId: string,
+  stampId: string
+): Promise<string[]> {
+  const out: string[] = [];
+  const seen = new Set<string>([stampId]);
+  let currentId: string | null = stampId;
+  while (currentId) {
+    const current: { parentId: string | null } | null = await prisma.stamp.findFirst({
+      where: { id: currentId, collectionId },
+      select: { parentId: true },
+    });
+    const parentId: string | null = current?.parentId ?? null;
+    if (!parentId || seen.has(parentId)) break;
+    seen.add(parentId);
+    const photoCount = await prisma.photo.count({ where: { stampId: parentId } });
+    if (photoCount > 0) break;
+    out.push(parentId);
+    currentId = parentId;
+  }
+  return out;
+}
+
+/** Byte-for-byte duplicate of a photo onto one stamp: a fresh permanent key on the active
+ * backend plus an independent `Photo` row. Singleton front/back displaces an incumbent in that
+ * slot; an extra is appended after the stamp's current extras and may carry a title. */
+async function duplicatePhotoOntoStamp(
+  collectionId: string,
+  stampId: string,
+  source: {
+    storageBackend: string;
+    storageKey: string;
+    mime: string;
+    width: number;
+    height: number;
+    sizeBytes: number;
+  },
+  role: PhotoRole,
+  title: string | null
+): Promise<void> {
   // Duplicate the bytes to a fresh permanent key on the active backend (write-one/read-many).
   const newPhotoId = randomUUID();
   const toPrefix = permanentPrefix(collectionId, newPhotoId);
@@ -525,8 +587,6 @@ export async function promoteCopyPhotoToStamp(
     await dstStorage.put(variantKey(toPrefix, v, source.mime), obj.stream, source.mime);
   }
 
-  // Where the new photo lands on the stamp: singleton front/back displaces an incumbent;
-  // an extra is appended after the stamp's current extras.
   const stampPhotos = await prisma.photo.findMany({
     where: { stampId },
     select: { id: true, role: true, sortOrder: true, storageBackend: true, storageKey: true, mime: true },
@@ -547,7 +607,7 @@ export async function promoteCopyPhotoToStamp(
         id: newPhotoId,
         stampId,
         role,
-        title: role === null ? target.title : null,
+        title: role === null ? title : null,
         storageBackend: dstStorage.backend,
         storageKey: toPrefix,
         mime: source.mime,
