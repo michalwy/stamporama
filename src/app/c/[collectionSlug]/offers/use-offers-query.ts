@@ -156,6 +156,24 @@ export function useListingOffers(collectionId: string, platformId: string | unde
   });
 }
 
+/** Every offer referencing one copy, across all platforms and states (#276) — the Copies list's
+ * "View offers" popup. Disabled until the popup opens. Lives under the offers key, so listing the
+ * copy elsewhere or changing an offer's state refreshes it. */
+export function useOffersForItem(collectionId: string, itemId: string, enabled: boolean) {
+  return useQuery<OfferListItem[]>({
+    queryKey: ["offers", collectionId, "for-item", itemId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ itemId });
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/for-item?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to load the copy's offers");
+      return (await res.json()).items;
+    },
+    enabled,
+  });
+}
+
 /** Platforms that currently have at least one offer, for the list filter dropdown. */
 export function useOfferPlatforms(collectionId: string) {
   return useQuery<{ id: string; name: string; platformCurrency: string | null }[]>({

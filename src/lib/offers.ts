@@ -935,6 +935,37 @@ export async function listOffersPaginated(
   };
 }
 
+/** Lifecycle order the copy's offers are listed in (#276): live listings first, terminal ones last,
+ * so "where is this copy on sale right now?" is answered by the top of the popup. */
+const ITEM_OFFER_RANK: Record<OfferState, number> = {
+  active: 0,
+  paused: 1,
+  ready: 2,
+  preparing: 3,
+  sold: 4,
+  withdrawn: 5,
+};
+
+/** Every offer referencing one copy, across all platforms and **all** states — the Copies list's
+ * "View offers" popup (#276). Unpaginated: a single copy is listed on a handful of platforms at
+ * most, and the popup answers a whole question rather than a page of one. Terminal offers are
+ * included (unlike the offers list, which hides them by default, #245) — a sold or withdrawn
+ * listing is exactly what one asks a copy's history for. */
+export async function listOffersForItem(
+  ownerId: string,
+  collectionId: string,
+  itemId: string
+): Promise<OfferListItem[]> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.offer.findMany({
+    where: { collectionId, sets: { some: { items: { some: { itemId } } } } },
+    orderBy: { createdAt: "desc" },
+    select: OFFER_SELECT,
+  });
+  const items = await withNeedsAction(rows, collectionId, baseCurrency);
+  return items.sort((a, b) => ITEM_OFFER_RANK[a.state] - ITEM_OFFER_RANK[b.state]);
+}
+
 /** Distinct platforms that currently have at least one offer, for the list-screen filter and the
  * new-offer dialog's derived-currency lock (#196), so it carries each platform's fixed currency. */
 export async function listOfferPlatforms(

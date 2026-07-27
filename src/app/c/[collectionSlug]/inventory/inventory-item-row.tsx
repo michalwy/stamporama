@@ -314,6 +314,10 @@ interface InventoryItemRowProps {
   /** When provided, adds an "Add to new offer" menu entry beside "Add to offer" (same eligibility),
    * jumping straight into offer creation seeded with this copy, skipping the picker (#277). */
   onAddToNewOffer?: (item: ItemListItem) => void;
+  /** When provided, adds a "View offers" menu entry opening the read-only popup of every offer
+   * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
+   * question as a live one's, and the row carries no offer count to hide it by. */
+  onViewOffers?: (item: ItemListItem) => void;
 }
 
 export function InventoryItemRow({
@@ -341,6 +345,7 @@ export function InventoryItemRow({
   onDelete,
   onAddToOffer,
   onAddToNewOffer,
+  onViewOffers,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
   const itemNoPad = useCollectionItemNoPad(collectionId);
@@ -379,6 +384,11 @@ export function InventoryItemRow({
       : []),
     ...(item.hasHistory
       ? [{ key: "history", label: "View history", icon: "↻", onSelect: () => onViewHistory?.(item) }]
+      : []),
+    ...(onViewOffers
+      // Same "▤" as the stamp/issue lists' read-only "View copies" popup — one icon for
+      // "open a read-only list of related records".
+      ? [{ key: "offers", label: "View offers", icon: "▤", onSelect: () => onViewOffers(item) }]
       : []),
     ...(onAddToOffer && item.forSale
       ? [{

@@ -457,6 +457,26 @@ same offer. A copy that has already **sold** elsewhere can't be added at all.
 To compose an offer from several copies at once, use **Add set** on the offer detail screen
 instead — see [Offers](offers.md).
 
+## Seeing which offers a copy is in
+
+Every copy row's **⋮** menu has a **View offers** action. It opens a read-only popup listing
+**every offer that references this copy**, across all platforms and all states — live listings
+first (**Active**, **Paused**), then the ones you're still preparing, then the closed ones
+(**Sold**, **Withdrawn**). A copy you have never listed says so.
+
+Each row shows the offer's title, its **platform**, its **state**, the number of sets when it
+holds more than one, and its **asking price** (with the base-currency equivalent when the offer is
+in another currency). The same **Needs action** and **In bidding** badges you see on the
+[Offers](offers.md) list appear here too.
+
+- Click a row to open that offer's detail screen.
+- Click the **🔗 Listing** chip to open the listing on the platform itself, when you have recorded
+  its URL.
+- Closing the popup returns you to the Inventory list, right where you were.
+
+The action is always available — including for copies that have already sold, so a piece's past
+listings stay reachable.
+
 ## Photos
 
 Attach photos to a copy from the **Photos** section at the bottom of the add-copy and

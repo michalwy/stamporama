@@ -35,6 +35,7 @@ import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
+import { ItemOffersPopupDialog } from "./item-offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
@@ -50,6 +51,7 @@ type DialogState =
   | { kind: "delete"; item: ItemListItem }
   | { kind: "addToOffer"; item: ItemListItem }
   | { kind: "addToNewOffer"; item: ItemListItem }
+  | { kind: "viewOffers"; item: ItemListItem }
   | { kind: "quickPrice"; item: ItemListItem };
 
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
@@ -626,6 +628,7 @@ export function InventoryListPanel({
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
                 onAddToOffer={(it) => setDialog({ kind: "addToOffer", item: it })}
                 onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", item: it })}
+                onViewOffers={(it) => setDialog({ kind: "viewOffers", item: it })}
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
             </div>
@@ -741,6 +744,17 @@ export function InventoryListPanel({
           startInCreate={dialog.kind === "addToNewOffer"}
           onClose={closeDialog}
           onDone={handleSuccess}
+        />
+      )}
+
+      {/* Every offer this copy is in (#276): read-only, all platforms and states. Closing returns
+          to the list; a row opens the offer's detail screen. */}
+      {dialog.kind === "viewOffers" && (
+        <ItemOffersPopupDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          item={dialog.item}
+          onClose={closeDialog}
         />
       )}
 

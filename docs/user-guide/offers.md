@@ -89,6 +89,10 @@ state filters and search), and you choose where the copy lands: as a **new set**
 an **existing set** to build a series. That's the quick path for listing one copy; use **Add set**
 here when composing several copies at once.
 
+Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer
+that already references that copy, across all platforms and states. See
+[Inventory](inventory.md#seeing-which-offers-a-copy-is-in).
+
 ## Sell a new item — from nothing to a live offer
 
 When you have a stamp in hand that isn't in Stamporama yet, **Sell a new item** (next to **New
