@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listItemsPaginated, type ItemSortBy } from "@/lib/items";
+import { isDeliveryState } from "@/lib/delivery-state";
 
 const VALID_SORT_BY = new Set<ItemSortBy>(["created"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -44,6 +45,10 @@ export async function GET(
   const noPhotos = boolParam(sp.get("noPhotos"));
   const missingCatalogValue = boolParam(sp.get("missingCatalogValue"));
   const notOfferedPlatformId = sp.get("notOfferedPlatformId") || undefined;
+  // Delivery state (#272): an unrecognised value turns the filter off rather than being
+  // passed through, so a stale link shows the list instead of an empty screen.
+  const deliveryStateParam = sp.get("deliveryState");
+  const deliveryState = isDeliveryState(deliveryStateParam) ? deliveryStateParam : undefined;
   // Sold copies are hidden from the inventory list by default (#207); an explicit
   // `includeSold=true` shows them again.
   const excludeSold = boolParam(sp.get("includeSold")) ? undefined : true;
@@ -75,6 +80,7 @@ export async function GET(
       noPhotos,
       missingCatalogValue,
       notOfferedPlatformId,
+      deliveryState,
       excludeSold,
       sortBy,
       sortDir,

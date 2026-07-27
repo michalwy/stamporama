@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isDeliveryState } from "@/lib/delivery-state";
 import { listItemYearFacets } from "@/lib/items";
 
 export async function GET(
@@ -34,6 +35,7 @@ export async function GET(
       noPhotos: boolParam(sp.get("noPhotos")),
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
       notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
+      deliveryState: deliveryStateParam(sp.get("deliveryState")),
       // Match the list: sold copies are excluded unless includeSold=true (#207).
       excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
     });
@@ -46,4 +48,10 @@ export async function GET(
 /** Only an explicit "true" narrows to that disposition; mirrors the list endpoint. */
 function boolParam(value: string | null): boolean | undefined {
   return value === "true" ? true : undefined;
+}
+
+/** Delivery-state filter (#272), mirroring the list endpoint: an unrecognised value turns
+ * the filter off rather than narrowing to nothing. */
+function deliveryStateParam(value: string | null): string | undefined {
+  return isDeliveryState(value) ? value : undefined;
 }

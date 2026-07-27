@@ -39,6 +39,11 @@ import {
 } from "./use-lot-copies-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
+import {
+  DELIVERY_STATES,
+  deliveryStateLabel,
+  deliveryStateToken,
+} from "@/lib/delivery-state";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
@@ -99,15 +104,6 @@ const LOCATION_SELECT_BUTTON_CLASS = defaultTreeSelectButtonClassName
   .replace("min-h-8", "min-h-9")
   .replace("py-1", "py-2");
 
-const DELIVERY: Record<string, { label: string; token: string }> = {
-  ordered: { label: "Ordered", token: "accent" },
-  to_sort: { label: "To sort", token: "warning" },
-  in_transit: { label: "In transit", token: "accent" },
-  delivered: { label: "Delivered", token: "success" },
-  not_delivered: { label: "Not delivered", token: "error" },
-  damaged: { label: "Damaged", token: "error" },
-};
-
 const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
   preparing: { label: "Preparing", token: "muted" },
   in_transit: { label: "In transit", token: "accent" },
@@ -117,16 +113,8 @@ const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
 // Purchase delivery status in lifecycle order, for the inline status select (#141).
 const PURCHASE_STATUS_ORDER = ["preparing", "in_transit", "arrived"];
 
-// Order the delivery states appear in the inline row dropdown — by lifecycle progression,
-// then the exception outcomes last (#121).
-const DELIVERY_ORDER = [
-  "ordered",
-  "in_transit",
-  "to_sort",
-  "delivered",
-  "not_delivered",
-  "damaged",
-];
+// The inline row dropdown offers the states in the shared lifecycle order (#121) — see
+// `DELIVERY_STATES` in `@/lib/delivery-state`.
 
 // The happy-path copy progression for the per-copy quick-advance button (#159): each step
 // advances one state along this line. "delivered" is terminal (no button), and the exception
@@ -1158,6 +1146,8 @@ function CopyRow({
       onSetCatalogPrice={open ? () => copy.setQuickPriceItem(item) : undefined}
       onSetLocation={open ? () => copy.setBulkMove({ kind: "ids", ids: [item.id] }) : undefined}
       hideDispositions
+      // The intake screen's own delivery control lives in `trailingChips` below (#272).
+      hideDeliveryState
       trailingChips={
         <LotCopyChips
           item={item}
@@ -2564,7 +2554,10 @@ function LotCopyChips({
   onSetDeliveryState?: (state: string) => void;
   onSetDisposition?: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
 }) {
-  const delivery = DELIVERY[item.deliveryState] ?? { label: item.deliveryState, token: "muted" };
+  const delivery = {
+    label: deliveryStateLabel(item.deliveryState),
+    token: deliveryStateToken(item.deliveryState),
+  };
   const chipStyle = tintChip(delivery.token, delivery.label).style;
 
   // Next step along the happy-path progression, for the per-copy quick-advance button (#159).
@@ -2591,9 +2584,9 @@ function LotCopyChips({
               appearance: "auto",
             }}
           >
-            {DELIVERY_ORDER.map((s) => (
+            {DELIVERY_STATES.map((s) => (
               <option key={s} value={s}>
-                {DELIVERY[s]?.label ?? s}
+                {deliveryStateLabel(s)}
               </option>
             ))}
           </select>
@@ -2605,10 +2598,10 @@ function LotCopyChips({
       {/* One-click advance to the next step in the happy-path progression (#159). Only while
           the copy is editable (lot open) and not at a terminal/exception state. */}
       {onSetDeliveryState && nextDelivery && (
-        <Tooltip content={`Advance to ${DELIVERY[nextDelivery]?.label ?? nextDelivery}`}>
+        <Tooltip content={`Advance to ${deliveryStateLabel(nextDelivery)}`}>
           <button
             type="button"
-            aria-label={`Advance delivery status to ${DELIVERY[nextDelivery]?.label ?? nextDelivery}`}
+            aria-label={`Advance delivery status to ${deliveryStateLabel(nextDelivery)}`}
             onClick={() => onSetDeliveryState(nextDelivery)}
             style={{
               ...CHIP,

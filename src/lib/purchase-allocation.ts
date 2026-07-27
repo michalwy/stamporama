@@ -22,6 +22,8 @@
 // shipping cost, and per-item snapshots sum exactly to the lot pool, via largest-remainder
 // (Hamilton) apportionment done in integer cents.
 
+import type { DeliveryState } from "./delivery-state";
+
 /** A priced line of a purchase — a `PurchaseLot` or a `PurchaseExpense`. */
 export interface PurchaseLine {
   id: string;
@@ -61,13 +63,9 @@ export interface LotPool {
   poolBase: number;
 }
 
-export type DeliveryState =
-  | "ordered"
-  | "to_sort"
-  | "in_transit"
-  | "delivered"
-  | "not_delivered"
-  | "damaged";
+// The delivery axis vocabulary lives in `./delivery-state`, shared with the domain layer and
+// the screens; re-exported here so existing importers of the allocation engine keep working.
+export type { DeliveryState };
 
 /** An item participating in a lot close. */
 export interface LotItem {

@@ -18,6 +18,7 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { parseCatalogSearch } from "@/lib/catalog-number";
+import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import {
@@ -159,6 +160,9 @@ export function InventoryListPanel({
     notOfferedPlatformParam && offerPlatforms.some((p) => p.id === notOfferedPlatformParam)
       ? notOfferedPlatformParam
       : "";
+  // Physical delivery state (#272): a plain single-select like the condition one — a copy is in
+  // exactly one state, and the chip on the row is what this filter narrows to.
+  const deliveryState = searchParams.get("deliveryState") ?? "";
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
@@ -216,11 +220,12 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
+      deliveryState: deliveryState || undefined,
       includeSold: includeSold || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -239,9 +244,10 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
+      deliveryState: deliveryState || undefined,
       includeSold: includeSold || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, includeSold]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -310,6 +316,7 @@ export function InventoryListPanel({
     noPhotos ||
     missingCatalogValue ||
     !!notOfferedPlatformId ||
+    !!deliveryState ||
     includeSold ||
     activeDispositions.size > 0;
 
@@ -477,6 +484,32 @@ export function InventoryListPanel({
                 {conditions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Delivery state filter (#272), beside the condition one: the axis the row chip
+                  shows, so "what is still in transit?" is one click from seeing it flagged. */}
+              <select
+                value={deliveryState}
+                onChange={(e) => updateParams({ deliveryState: e.target.value })}
+                style={{
+                  ...CONTROL_STYLE,
+                  ...(deliveryState
+                    ? {
+                        fontWeight: 600,
+                        color: "var(--color-accent)",
+                        border: "1px solid var(--color-accent)",
+                        background: "var(--color-accent-soft)",
+                      }
+                    : null),
+                }}
+                aria-label="Filter by delivery state"
+              >
+                <option value="">All delivery states</option>
+                {DELIVERY_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {DELIVERY_STATE_META[state].label}
                   </option>
                 ))}
               </select>

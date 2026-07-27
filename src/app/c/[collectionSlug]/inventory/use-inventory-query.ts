@@ -55,6 +55,9 @@ export interface InventoryItemFilters {
   /** Restrict to for-sale copies not yet offered on this platform (#259) — no non-terminal offer
    * on it. Implies "for sale". */
   notOfferedPlatformId?: string;
+  /** Restrict to copies in one physical delivery state (ADR-0009 §5, #272) — e.g. only the
+   * copies still in transit. */
+  deliveryState?: string;
   /** Show copies that have already sold (#207). Sold copies are hidden by default; set true to
    * include them. */
   includeSold?: boolean;
@@ -81,6 +84,9 @@ export interface InventoryYearFacetFilters {
   missingCatalogValue?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259). */
   notOfferedPlatformId?: string;
+  /** Restrict to copies in one physical delivery state (ADR-0009 §5, #272) — e.g. only the
+   * copies still in transit. */
+  deliveryState?: string;
   /** Include already-sold copies in the facet counts (#207); hidden by default. */
   includeSold?: boolean;
 }
@@ -122,6 +128,7 @@ export function useInventoryItemsInfinite(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
       if (filters.includeSold) params.set("includeSold", "true");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
@@ -161,6 +168,7 @@ export function useHoldingsValuation(
       noPhotos: filters.noPhotos,
       missingCatalogValue: filters.missingCatalogValue,
       notOfferedPlatformId: filters.notOfferedPlatformId,
+      deliveryState: filters.deliveryState,
       includeSold: filters.includeSold,
     }] as const,
     queryFn: async () => {
@@ -184,6 +192,7 @@ export function useHoldingsValuation(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
       if (filters.includeSold) params.set("includeSold", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
@@ -224,6 +233,7 @@ export function useItemYears(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
       if (filters.includeSold) params.set("includeSold", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`

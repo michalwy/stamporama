@@ -29,6 +29,7 @@ import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { sortCopies } from "./copy-sort";
 import { parseItemNoSearch } from "./item-number";
+import { isDeliveryState } from "./delivery-state";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -298,19 +299,9 @@ export interface ItemCreateInput {
   deliveryState?: string | null;
 }
 
-/** The delivery axis values a copy may carry (ADR-0009 §5). Lifecycle for a purchased copy:
- * `ordered` (intake default, #121) → `to_sort` (arrived, awaiting sorting) → `delivered`
- * (sorted / in hand / in collection), with `not_delivered` and `damaged` as outcomes found
- * while sorting. Both `ordered` and `to_sort` stay in the lot for allocation (only
- * `not_delivered` is dropped) and keep the copy out of the collection until it is sorted. */
-const VALID_DELIVERY_STATES = new Set([
-  "ordered",
-  "to_sort",
-  "in_transit",
-  "delivered",
-  "not_delivered",
-  "damaged",
-]);
+// The delivery axis values a copy may carry live in `./delivery-state` (ADR-0009 §5). Both
+// `ordered` and `to_sort` stay in the lot for allocation (only `not_delivered` is dropped)
+// and keep the copy out of the collection until it is sorted.
 
 /** A lot referenced during intake must belong to this collection and be open — a copy
  * cannot be identified into another user's lot, nor into a lot whose cost is already
@@ -373,10 +364,7 @@ export async function createItem(
   if (data.lotId) {
     await assertLotOpenInCollection(collectionId, data.lotId);
   }
-  const deliveryState =
-    data.deliveryState && VALID_DELIVERY_STATES.has(data.deliveryState)
-      ? data.deliveryState
-      : "delivered";
+  const deliveryState = isDeliveryState(data.deliveryState) ? data.deliveryState : "delivered";
   const itemNo = await allocateItemNumber(prisma, collectionId);
   const item = await prisma.item.create({
     data: {
@@ -488,7 +476,7 @@ export async function updateItem(
     ...(fields.inCollection !== undefined ? { inCollection: fields.inCollection } : {}),
     ...(fields.forSale !== undefined ? { forSale: fields.forSale } : {}),
     ...(fields.forTrade !== undefined ? { forTrade: fields.forTrade } : {}),
-    ...(fields.deliveryState && VALID_DELIVERY_STATES.has(fields.deliveryState)
+    ...(isDeliveryState(fields.deliveryState)
       ? { deliveryState: fields.deliveryState }
       : {}),
     ...(fields.notes !== undefined ? { notes: fields.notes } : {}),

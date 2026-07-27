@@ -9,6 +9,7 @@ import {
 } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
 import { resolveCostBasis } from "@/lib/cost-basis";
+import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
 import { formatItemNo } from "@/lib/item-number";
 import { useCollectionItemNoPad } from "./use-inventory-query";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
@@ -47,6 +48,19 @@ function dispositionChip(token: string): React.CSSProperties {
     color: `var(--color-disposition-${token})`,
     borderColor: `var(--color-disposition-${token}-border)`,
     background: `var(--color-disposition-${token}-soft)`,
+  };
+}
+
+/** Delivery-state chip (#272), tinted from the shared vocabulary the same way a disposition is.
+ * `muted` (a value outside the vocabulary) falls back to the plain chip. */
+function deliveryChipStyle(state: string): React.CSSProperties {
+  const token = deliveryStateToken(state);
+  if (token === "muted") return CHIP;
+  return {
+    ...CHIP,
+    color: `var(--color-${token})`,
+    borderColor: `var(--color-${token}-border, var(--color-border))`,
+    background: `var(--color-${token}-soft, var(--color-bg-page))`,
   };
 }
 
@@ -279,6 +293,10 @@ interface InventoryItemRowProps {
   /** Suppress the built-in disposition chips — the lot view renders its own interactive
    * disposition editor in `trailingChips` instead (#121). */
   hideDispositions?: boolean;
+  /** Suppress the built-in delivery-state chip (#272), for the same reason as
+   * `hideDispositions`: the lot intake screen renders an editable delivery control of its
+   * own in `trailingChips` and would otherwise show the state twice. */
+  hideDeliveryState?: boolean;
   /** Show the copy's acquisition cost-basis chip (#123). On by default for the general
    * copy views (Copies list, inventory popup); the lot intake screen leaves it off because
    * it renders its own live/frozen cost chip in `trailingChips`. */
@@ -314,6 +332,7 @@ export function InventoryItemRow({
   onSetCatalogPrice,
   onSetLocation,
   hideDispositions = false,
+  hideDeliveryState = false,
   showCostBasis = false,
   onEdit,
   onEditStamp,
@@ -342,6 +361,18 @@ export function InventoryItemRow({
 
   const locationPath = buildLocationPath(locations, item.locationId);
 
+  // Only a for-sale, in-hand copy is listable — matches the offer compose picker's eligibility
+  // (For sale + delivered + unsold); the sold guard is enforced server-side (#188, ADR-0013 §4).
+  // A for-sale copy that has not arrived keeps both entries **visible but disabled**, carrying the
+  // reason: dropping them silently left the restriction unguessable (#273). Not-for-sale copies
+  // still show nothing — that disposition is set on the row itself, so it explains itself.
+  const delivered = isDelivered(item.deliveryState);
+  const offerHint = delivered
+    ? undefined
+    : `Only a delivered copy can be listed — this one is ${deliveryStateLabel(
+        item.deliveryState
+      ).toLowerCase()}.`;
+
   const menuActions: RowAction[] = [
     ...(item.unknownVariant
       ? [{ key: "identify", label: "Identify variant", icon: "◈", onSelect: () => onIdentify?.(item) }]
@@ -349,13 +380,25 @@ export function InventoryItemRow({
     ...(item.hasHistory
       ? [{ key: "history", label: "View history", icon: "↻", onSelect: () => onViewHistory?.(item) }]
       : []),
-    // Only a for-sale, in-hand copy is listable — matches the offer compose picker's eligibility
-    // (For sale + delivered + unsold); the sold guard is enforced server-side (#188, ADR-0013 §4).
-    ...(onAddToOffer && item.forSale && item.deliveryState === "delivered"
-      ? [{ key: "add-to-offer", label: "Add to offer", icon: "🏷", onSelect: () => onAddToOffer(item) }]
+    ...(onAddToOffer && item.forSale
+      ? [{
+          key: "add-to-offer",
+          label: "Add to offer",
+          icon: "🏷",
+          disabled: !delivered,
+          hint: offerHint,
+          onSelect: () => onAddToOffer(item),
+        }]
       : []),
-    ...(onAddToNewOffer && item.forSale && item.deliveryState === "delivered"
-      ? [{ key: "add-to-new-offer", label: "Add to new offer", icon: "🆕", onSelect: () => onAddToNewOffer(item) }]
+    ...(onAddToNewOffer && item.forSale
+      ? [{
+          key: "add-to-new-offer",
+          label: "Add to new offer",
+          icon: "🆕",
+          disabled: !delivered,
+          hint: offerHint,
+          onSelect: () => onAddToNewOffer(item),
+        }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
     ...(onEditStamp
@@ -551,6 +594,21 @@ export function InventoryItemRow({
                 </span>
               </Tooltip>
             )
+          )}
+          {/* Delivery state (#272). Only a copy that is *not* delivered is chipped: delivered is
+              what a copy added by hand starts as and what every sorted copy ends as, so badging
+              it would put a label on nearly every row and say nothing — the same reasoning that
+              leaves a single format unlabelled above. */}
+          {!hideDeliveryState && !delivered && (
+            <Tooltip
+              content={`Delivery state: ${deliveryStateLabel(
+                item.deliveryState
+              )}. A copy must be delivered before it can be listed for sale.`}
+            >
+              <span style={deliveryChipStyle(item.deliveryState)}>
+                {deliveryStateLabel(item.deliveryState)}
+              </span>
+            </Tooltip>
           )}
           {!hideDispositions &&
             dispositions.map((d) => (

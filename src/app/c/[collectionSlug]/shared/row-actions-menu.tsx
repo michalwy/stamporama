@@ -20,6 +20,10 @@ export interface RowAction {
   /** Renders in the error color (used for delete). */
   danger?: boolean;
   disabled?: boolean;
+  /** Muted second line under the label. Written for a `disabled` entry, to say *why* it is
+   * unavailable — a greyed-out row with no explanation is the mystery #273 is about. Shown
+   * in place of a tooltip because a disabled control never receives hover events. */
+  hint?: string;
   /** Draw a divider line above this item (used to set destructive actions apart). */
   separatorBefore?: boolean;
 }
@@ -107,7 +111,8 @@ export function RowActionsMenu({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const gap = 4;
-    const estHeight = actions.length * 34 + 12;
+    // A hinted entry wraps to two lines, so it counts for roughly one and a half rows.
+    const estHeight = actions.reduce((h, a) => h + (a.hint ? 50 : 34), 12);
     const below = rect.bottom + gap;
     const flip = below + estHeight > window.innerHeight && rect.top - gap - estHeight > 0;
     setPos({
@@ -230,7 +235,24 @@ export function RowActionsMenu({
                   }}
                 >
                   {a.icon != null && <span style={iconStyle}>{a.icon}</span>}
-                  <span style={{ flex: 1 }}>{a.label}</span>
+                  <span style={{ flex: 1 }}>
+                    {a.label}
+                    {a.hint && (
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: "0.15rem",
+                          fontSize: "0.6875rem",
+                          fontWeight: 400,
+                          color: "var(--color-text-muted)",
+                          whiteSpace: "normal",
+                          maxWidth: "14rem",
+                        }}
+                      >
+                        {a.hint}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </Fragment>
             ))}

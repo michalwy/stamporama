@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { allocateItemNumbers, valuateItemsByIds } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
+import { isDeliveryState } from "./delivery-state";
 import {
   computeLotPool,
   allocateLot,
@@ -668,16 +669,6 @@ export async function markPurchaseArrived(
   });
 }
 
-/** The delivery states a copy may carry (mirrors `VALID_DELIVERY_STATES` in items.ts). */
-const DELIVERY_STATES = new Set([
-  "ordered",
-  "to_sort",
-  "in_transit",
-  "delivered",
-  "not_delivered",
-  "damaged",
-]);
-
 /** How setting a delivery state affects collection membership (#121): the pre-arrival states
  * (`ordered`/`to_sort`/`in_transit`) are never a holding → not in collection. `delivered`
  * deliberately leaves membership **untouched** — the collector picks the disposition (in
@@ -780,7 +771,7 @@ export async function bulkUpdateLotItems(
 ): Promise<number> {
   const ids = [...new Set(itemIds.filter((id) => id))];
   if (ids.length === 0) return 0;
-  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
+  if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
   if (isNoopBulk(changes)) return 0;
@@ -850,7 +841,7 @@ export async function bulkUpdateLotItemsScoped(
   if (!scope.lotId && !scope.purchaseId) {
     throw new Error("A lot or purchase must be given for a scoped bulk update.");
   }
-  if (changes.deliveryState && !DELIVERY_STATES.has(changes.deliveryState)) {
+  if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
   if (isNoopBulk(changes)) return 0;

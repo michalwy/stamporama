@@ -21,6 +21,10 @@ Each row shows:
   [purchase](purchases.md) (see [Cost-basis](#cost-basis)).
 - Its **storage location** (a 📍 chip with the location path and any in-location ref),
   when the copy has been filed — see [Locations](locations.md).
+- Its **delivery state** — but only when the copy is **not** delivered yet: a chip reading
+  *Ordered*, *In transit*, *To sort*, *Not delivered*, or *Damaged*. A delivered copy shows no
+  chip, since that is the normal state of everything you hold. See
+  [Delivery state](#delivery-state).
 - A notes indicator when the copy has notes (hover to read them).
 - A **photo thumbnail** at the left of the row, when the copy has any — a single larger
   preview of the first photo. If the copy has more than one photo, a counter (e.g. **1/3**)
@@ -86,6 +90,8 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
   to look up what a piece went for). The holdings totals and year panel follow this filter too.
+- **Delivery state** — show only copies in one delivery state, e.g. everything still
+  *In transit* or every copy marked *Damaged*. See [Delivery state](#delivery-state).
 - **Condition** — show only copies of one condition.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
@@ -154,6 +160,31 @@ On a copy's row the cost-basis shows as:
 A frozen cost-basis is **not** recomputed automatically if you later edit catalog prices
 or re-point the copy to another variant — to change it, reopen the lot, correct the copies,
 and close it again.
+
+## Delivery state
+
+Every copy carries a **delivery state** — where the physical piece is, as opposed to what you
+intend to do with it (that is its [disposition](#the-inventory-list)):
+
+- **Ordered** — bought but not yet on its way. This is what [purchase](purchases.md) intake
+  starts a copy as.
+- **In transit** — on its way to you.
+- **To sort** — arrived, still waiting to be sorted.
+- **Delivered** — sorted and in hand. A copy you add by hand starts here.
+- **Not delivered** — never arrived. It is dropped from its purchase lot when the lot closes.
+- **Damaged** — arrived damaged. It stays in its lot and keeps its cost share.
+
+On the Copies list only a copy that is **not** delivered is chipped, so the common case stays
+uncluttered; the chip is tinted by state and explains itself on hover. To see the whole picture,
+use the **Delivery state** filter in the toolbar. The full lifecycle, including the quick-advance
+control and bulk edits, is described under
+[The delivery lifecycle](purchases.md#the-delivery-lifecycle-ordered--to-sort--delivered).
+
+You can change a single copy's delivery state in the **Edit copy** dialog, or many at once from
+the [purchase intake screen](purchases.md).
+
+Delivery state matters beyond bookkeeping: **only a delivered copy can be listed for sale**
+(see [Adding a copy to an offer](#adding-a-copy-to-an-offer)).
 
 ## Viewing copies from the catalog
 
@@ -389,8 +420,8 @@ copies that still need pricing, then click each row's **+ catalog value** in tur
 ## Adding a copy to an offer
 
 You can list a copy for sale without leaving the Inventory screen. On a copy that is
-marked **For sale** and has been **delivered** (in hand), the row's **⋮** menu shows an
-**Add to offer** action. It opens a picker of your [offers](offers.md):
+marked **For sale**, the row's **⋮** menu shows an **Add to offer** action. It opens a picker of
+your [offers](offers.md):
 
 - A **state** panel on the left filters by **Preparing / Active / Paused** (with counts) — the
   offers you're still composing come first.
@@ -413,6 +444,12 @@ When you already know you want a fresh offer, the **⋮** menu also has **Add to
 skips the picker and opens that create form straight away, seeded with this copy. Cancelling it
 closes the dialog. (The full **Add to offer** picker is still there when you want to add the copy
 to an offer you already have.)
+
+Both actions need the copy to be **delivered** (in hand). On a for-sale copy that has not
+arrived, they stay in the menu but are **greyed out**, with the reason spelled out underneath
+(*"Only a delivered copy can be listed — this one is in transit."*). Set the copy's
+[delivery state](#delivery-state) to *Delivered* to list it. A copy that is not marked
+**For sale** shows neither action — mark it for sale first.
 
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.

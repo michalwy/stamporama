@@ -12,6 +12,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import { useCollectionFormats, useCollectionItemNoPad } from "./use-inventory-query";
 import type { ItemListItem } from "@/lib/items";
 import { formatItemNo } from "@/lib/item-number";
+import { DELIVERY_STATES, deliveryStateLabel } from "@/lib/delivery-state";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { StampSelect } from "./stamp-select";
@@ -89,15 +90,13 @@ const DISPOSITIONS = [
 
 type DispositionKey = (typeof DISPOSITIONS)[number]["key"];
 
-/** Physical delivery axis (ADR-0009 §5, #121), orthogonal to disposition. */
-const DELIVERY_STATES = [
-  { value: "ordered", label: "Ordered" },
-  { value: "to_sort", label: "To sort" },
-  { value: "in_transit", label: "In transit" },
-  { value: "delivered", label: "Delivered (sorted / in collection)" },
-  { value: "not_delivered", label: "Not delivered" },
-  { value: "damaged", label: "Damaged" },
-];
+/** Physical delivery axis (ADR-0009 §5, #121), orthogonal to disposition — the shared
+ * vocabulary in lifecycle order, with `delivered` spelled out because in this dialog it sits
+ * next to the disposition toggles it is easily confused with. */
+const DELIVERY_OPTIONS = DELIVERY_STATES.map((value) => ({
+  value,
+  label: value === "delivered" ? "Delivered (sorted / in collection)" : deliveryStateLabel(value),
+}));
 
 export interface InventoryItemFormDialogProps {
   mode: "add" | "edit";
@@ -346,7 +345,7 @@ export function InventoryItemFormDialog({
                   disabled={isPending}
                   style={INPUT_STYLE}
                 >
-                  {DELIVERY_STATES.map((o) => (
+                  {DELIVERY_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
