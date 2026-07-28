@@ -31,6 +31,14 @@ so an offer and its sale can never disagree. You can set it here, or leave it un
 inline the first time you list or sell on the platform. Changing it later leaves existing offers
 and sales untouched — each keeps the currency it was created with.
 
+Ticking **Platform** also reveals a **Default offer price** — a flat asking price for a platform you
+list at one price ("everything 5 zł"), in the platform's own currency. It is the **last resort**: a
+new offer takes it only when nothing about the goods themselves suggests a price — the lot's
+suggested price and the copies' catalog value both win over it. It is read when the offer is
+created and never afterwards, so the price stays yours to edit on the offer, and changing the
+default here leaves offers already created untouched. Leave it empty for platforms you price
+individually.
+
 Ticking **Platform** also reveals a **Listing language** — the language this platform's listings are
 written in. Pick the one it uses; platforms that write in your collection's
 [default language](collections.md#default-language) need nothing further, and neither does leaving it

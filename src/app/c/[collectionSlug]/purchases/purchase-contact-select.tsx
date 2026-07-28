@@ -37,11 +37,13 @@ interface PurchaseContactSelectProps {
    * edited to a name that has not been matched to a suggestion), the current text, and — when a
    * suggestion was picked — that contact's fixed platform currency (#196; `null` when unset,
    * `undefined` when no suggestion is matched). Lets a parent react live to the choice — e.g. the
-   * offer dialog's collision check (#165) and the derived-currency lock (#196). */
+   * offer dialog's collision check (#165), the derived-currency lock (#196) and the platform's
+   * fallback asking price (#362, likewise `undefined` when no suggestion is matched). */
   onSelectionChange?: (
     contactId: string,
     name: string,
-    platformCurrency?: string | null
+    platformCurrency?: string | null,
+    defaultOfferPrice?: string | null
   ) => void;
 }
 
@@ -78,13 +80,18 @@ export function PurchaseContactSelect({
     // platform currency is unknown until a suggestion is matched, so it is left undefined (#196).
     setSelectedId("");
     setValue(next);
-    onSelectionChange?.("", next, undefined);
+    onSelectionChange?.("", next, undefined, undefined);
   }
 
-  function pick(contact: { id: string; name: string; platformCurrency: string | null }) {
+  function pick(contact: {
+    id: string;
+    name: string;
+    platformCurrency: string | null;
+    defaultOfferPrice: string | null;
+  }) {
     setSelectedId(contact.id);
     setValue(contact.name);
-    onSelectionChange?.(contact.id, contact.name, contact.platformCurrency);
+    onSelectionChange?.(contact.id, contact.name, contact.platformCurrency, contact.defaultOfferPrice);
   }
 
   return (
@@ -101,7 +108,14 @@ export function PurchaseContactSelect({
         renderItem={(c) => (
           <span style={{ fontWeight: c.id === selectedId ? 600 : 400 }}>{c.name}</span>
         )}
-        onSelect={(c) => pick({ id: c.id, name: c.name, platformCurrency: c.platformCurrency })}
+        onSelect={(c) =>
+          pick({
+            id: c.id,
+            name: c.name,
+            platformCurrency: c.platformCurrency,
+            defaultOfferPrice: c.defaultOfferPrice,
+          })
+        }
         placeholder={placeholder}
         inputStyle={INPUT_STYLE}
         inputId={inputId}

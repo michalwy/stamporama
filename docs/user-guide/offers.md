@@ -29,6 +29,10 @@ sets". A plain single-stamp offer is just the one-set case.
    is shown locked and applies to every offer and sale there. The first time you list or sell on a
    platform that has no currency yet, you pick one inline and it is saved to the platform. That's
    all you need — you usually don't know the asking price yet (it follows from the copies you add).
+   If the platform carries a [default offer price](contacts.md), the new offer starts at it, so a
+   platform you list at one flat price needs no price typed at all; anything that suggests a price
+   from the goods themselves — a lot's suggested price, or the copies' catalog value — wins over it,
+   and the price is editable on the offer either way.
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The

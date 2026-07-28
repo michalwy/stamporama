@@ -47,8 +47,14 @@ export interface OfferFormDialogProps {
   offer?: Pick<OfferDetail, "platformId" | "platformName" | "url" | "price" | "currency" | "listingDate">;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
-   * show a misleading editable picker. */
-  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
+   * show a misleading editable picker, and its `defaultOfferPrice` (#362) seeds the asking price
+   * when nothing better suggests one. */
+  initialPlatform?: {
+    id: string;
+    name: string;
+    platformCurrency?: string | null;
+    defaultOfferPrice?: string | null;
+  };
   isPending: boolean;
   error?: string;
   /** Raises the dialog's stacking when opened on top of another dialog (e.g. the inventory
@@ -112,6 +118,14 @@ export function OfferFormDialog({
     ? formatListingDate(offer!.listingDate)
     : lastDefaults?.listingDate || todayIso();
   const priceControlled = priceValue !== undefined;
+  // The platform's fallback asking price (#362) — the lowest-priority suggestion, so it only fills
+  // the field while the parent has none of its own (`priceValue` unset: no lot or catalog-value
+  // figure) and the collector has not typed one. Creating only: an existing offer keeps its price.
+  // A plain create hides the price field entirely, and the server applies the same fallback there.
+  const [uncontrolledPrice, setUncontrolledPrice] = useState(
+    offer?.price ?? (isEdit ? "" : (initialPlatform?.defaultOfferPrice ?? ""))
+  );
+  const [priceTyped, setPriceTyped] = useState(false);
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
@@ -170,11 +184,16 @@ export function OfferFormDialog({
               inputId="offer-platform"
               placeholder="e.g. Delcampe, Allegro, Colnect…"
               disabled={isPending}
-              onSelectionChange={(id, _name, pc) => {
+              onSelectionChange={(id, _name, pc, dop) => {
                 setPlatformId(id);
                 // A picked platform carries its currency (null when unset); a typed name is an
                 // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
                 if (!isEdit) setPlatformCurrency(id ? pc : undefined);
+                // …and its fallback asking price (#362), which re-seeds the untouched field —
+                // switching platforms mid-form must not leave the previous platform's figure behind.
+                if (!isEdit && !priceControlled && !priceTyped) {
+                  setUncontrolledPrice((id && dop) || "");
+                }
               }}
             />
           </div>
@@ -194,7 +213,13 @@ export function OfferFormDialog({
                   style={INPUT_STYLE}
                   {...(priceControlled
                     ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
-                    : { defaultValue: offer?.price ?? "" })}
+                    : {
+                        value: uncontrolledPrice,
+                        onChange: (e) => {
+                          setUncontrolledPrice(e.target.value);
+                          setPriceTyped(true);
+                        },
+                      })}
                 />
               </div>
             )}

@@ -220,12 +220,20 @@ async function assertPlatform(
   collectionId: string,
   platformId: string
 ): Promise<
-  PlatformTemplates & PlatformPhotoDefaults & PlatformDescriptionFormat & { platformCurrency: string | null }
+  PlatformTemplates &
+    PlatformPhotoDefaults &
+    PlatformDescriptionFormat & {
+      platformCurrency: string | null;
+      /** The platform's fallback asking price (#362), already a 2-dp string, or null when it has
+       * none. Read at creation only — the lowest-priority price suggestion. */
+      defaultOfferPrice: string | null;
+    }
 > {
   const contact = await prisma.contact.findFirst({
     where: { id: platformId, collectionId, platform: true },
     select: {
       platformCurrency: true,
+      defaultOfferPrice: true,
       titleTemplate: true,
       descriptionTemplate: true,
       privateNoteTemplate: true,
@@ -242,6 +250,7 @@ async function assertPlatform(
   }
   return {
     platformCurrency: contact.platformCurrency,
+    defaultOfferPrice: contact.defaultOfferPrice?.toFixed(2) ?? null,
     titleTemplate: contact.titleTemplate,
     descriptionTemplate: contact.descriptionTemplate,
     privateNoteTemplate: contact.privateNoteTemplate,
@@ -992,19 +1001,29 @@ export async function listOffersForTarget(
 }
 
 /** Distinct platforms that currently have at least one offer, for the list-screen filter and the
- * new-offer dialog's derived-currency lock (#196), so it carries each platform's fixed currency. */
+ * new-offer dialog's derived-currency lock (#196) and price fallback (#362), so it carries each
+ * platform's fixed currency and default asking price. */
 export async function listOfferPlatforms(
   ownerId: string,
   collectionId: string
-): Promise<{ id: string; name: string; platformCurrency: string | null }[]> {
+): Promise<
+  { id: string; name: string; platformCurrency: string | null; defaultOfferPrice: string | null }[]
+> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.offer.findMany({
     where: { collectionId },
-    select: { platform: { select: { id: true, name: true, platformCurrency: true } } },
+    select: {
+      platform: {
+        select: { id: true, name: true, platformCurrency: true, defaultOfferPrice: true },
+      },
+    },
     distinct: ["platformId"],
     orderBy: { platform: { name: "asc" } },
   });
-  return rows.map((r) => r.platform);
+  return rows.map((r) => ({
+    ...r.platform,
+    defaultOfferPrice: r.platform.defaultOfferPrice?.toFixed(2) ?? null,
+  }));
 }
 
 export interface OfferFilterCounts {
@@ -1801,6 +1820,13 @@ export async function createOffer(
   const platform = await assertPlatform(collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
 
+  // Asking price, falling back to the platform's default (#362). That default is the *lowest*
+  // priority suggestion: a lot's suggested price (#190) and the copies' catalog value (#230) both
+  // reach the form as a filled-in figure, so anything submitted here already outranks it. Resolved
+  // before the live-status checks, so creating straight as `ready` on a flat-price platform is not
+  // rejected as unpriced.
+  const price = hasPrice(input.price) ? input.price : (platform.defaultOfferPrice ?? input.price);
+
   const targetState = input.state;
   if (isTerminalState(targetState)) {
     throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
@@ -1824,7 +1850,7 @@ export async function createOffer(
   }
   // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
   // `active` skips the transition, so the same rule applies here.
-  if (requiresPrice(targetState) && !hasPrice(input.price)) {
+  if (requiresPrice(targetState) && !hasPrice(price)) {
     throw new OfferActionBlockedError(
       "unpriced",
       `An offer can't start ${targetState} with no asking price — set a price first.`
@@ -1861,7 +1887,7 @@ export async function createOffer(
         descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
-        price: input.price,
+        price,
         currency,
         listingDate: input.listingDate,
         // Set the target state directly (creation states the real-world status; the step-through

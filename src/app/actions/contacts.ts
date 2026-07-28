@@ -112,6 +112,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     titleLanguage: bool(formData, "platform")
       ? str(formData, "titleLanguage") || null
       : null,
+    // The platform's fallback asking price for a new offer (#362), in its own currency. Same
+    // platform-only handling; blank normalises to null — no default price rather than a free one.
+    defaultOfferPrice: isPlatform ? str(formData, "defaultOfferPrice") || null : null,
     // The platform's photo limits, and the defaults new offers on this platform are seeded from
     // (#308). `photoSides` normalises to the default side; the collage template is verified against
     // the collection server-side.

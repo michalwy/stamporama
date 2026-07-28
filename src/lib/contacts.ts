@@ -104,6 +104,10 @@ export interface ContactData extends ContactRoles {
    * unset. Only meaningful for the `platform` role; drives which entity translations the title
    * tokens resolve. */
   titleLanguage: string | null;
+  /** Fallback asking price for a new offer on this platform (#362), a 2-dp string in the platform's
+   * own currency, or null when it has none. The lowest-priority suggestion — read at offer creation
+   * only, never seeded onto anything. Only meaningful for the `platform` role. */
+  defaultOfferPrice: string | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
   maxPhotos: number | null;
@@ -147,6 +151,7 @@ const CONTACT_SELECT = {
   privateNoteTemplate: true,
   descriptionFormat: true,
   titleLanguage: true,
+  defaultOfferPrice: true,
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -165,11 +170,12 @@ const CONTACT_SELECT = {
  * {@link ContactData} except that the seller defaults are still `Decimal`s. */
 type ContactRow = Omit<
   ContactData,
-  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed"
+  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed" | "defaultOfferPrice"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
+  defaultOfferPrice: Decimal | null;
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
@@ -180,22 +186,24 @@ function toContactData(row: ContactRow): ContactData {
     defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
+    defaultOfferPrice: row.defaultOfferPrice?.toFixed(2) ?? null,
   };
 }
 
 /** The seller-default columns as Prisma writes them. Blank normalises to null (not recorded);
  * an unparseable amount is dropped rather than stored as zero, since zero shipping is a claim. */
+function amount(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  return Number.isFinite(Number(value)) ? value : null;
+}
+
 function sellerDefaults(data: ContactCreateInput): {
   defaultCurrency: string | null;
   defaultShippingCost: string | null;
   buyerPremiumPercent: string | null;
   buyerPremiumFixed: string | null;
 } {
-  const amount = (raw: string | null | undefined): string | null => {
-    const value = raw?.trim();
-    if (!value) return null;
-    return Number.isFinite(Number(value)) ? value : null;
-  };
   return {
     defaultCurrency: data.defaultCurrency?.trim() || null,
     defaultShippingCost: amount(data.defaultShippingCost),
@@ -228,6 +236,9 @@ export interface ContactCreateInput {
   descriptionFormat?: string | null;
   /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
   titleLanguage?: string | null;
+  /** The platform's fallback asking price for a new offer (#362), or null. A blank or unparseable
+   * amount stores null — an unpriced platform, not a zero-price one. */
+  defaultOfferPrice?: string | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -420,6 +431,7 @@ export async function createContact(
         privateNoteTemplate: data.privateNoteTemplate ?? null,
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
+        defaultOfferPrice: amount(data.defaultOfferPrice),
       },
       select: CONTACT_SELECT,
     }));
@@ -466,6 +478,7 @@ export async function updateContact(
         privateNoteTemplate: data.privateNoteTemplate ?? null,
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
+        defaultOfferPrice: amount(data.defaultOfferPrice),
       },
       select: CONTACT_SELECT,
     }));

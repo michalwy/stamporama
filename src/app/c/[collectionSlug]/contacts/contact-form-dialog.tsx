@@ -375,6 +375,30 @@ export function ContactFormDialog({
             </div>
           )}
 
+          {/* Default asking price (#362) — the fallback a new offer on this platform starts at when
+              nothing about the goods themselves suggests one (a lot's suggested price, #190, and the
+              copies' catalog value, #230, both win over it). In the platform's own currency, and
+              read at creation only: an offer already created keeps its price. */}
+          {isPlatform && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="contact-default-offer-price">
+                Default offer price (optional)
+              </LabelWithError>
+              <NumericInput
+                id="contact-default-offer-price"
+                name="defaultOfferPrice"
+                defaultValue={contact?.defaultOfferPrice ?? ""}
+                placeholder="—"
+                disabled={isPending}
+                style={INPUT_STYLE}
+              />
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                In the platform&apos;s currency. Pre-fills a new offer only when neither the lot nor
+                the copies&apos; catalog value suggests a price — always editable afterwards.
+              </p>
+            </div>
+          )}
+
           {/* Listing templates (#210, #266, #267): what this platform's offer title, description
               and private note are generated from. Kept in a dedicated dialog so the contact form
               stays a contact form; carried on submit via hidden fields. */}

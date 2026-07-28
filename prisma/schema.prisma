@@ -1459,6 +1459,13 @@ model Contact {
   // translation is missing. The collection's language set is the distinct set of these values, so
   // entity forms only offer per-language inputs for languages actually in use.
   titleLanguage    String?
+  // Fallback asking price for a new offer on this platform (#362), in the platform's own
+  // `platformCurrency` — a platform that lists at one flat price ("everything 5 zł") should not have
+  // that figure retyped per listing. It is the **lowest-priority** suggestion: a lot's suggested
+  // price (#190) and the copies' catalog value (#230) both describe the goods and win over it, so it
+  // only fills a price nothing else could answer. Nullable — no default price is the normal case.
+  // Not seeded onto anything: it is read at creation and then belongs to the offer, freely editable.
+  defaultOfferPrice Decimal? @db.Decimal(10, 2)
   // ── Offer photos (#308) ────────────────────────────────────────────────────────────────────
   // Hard technical limits on what this platform physically accepts. All optional (null = no limit),
   // and **not** seeded onto offers: they describe the platform, so the renderer reads them live
