@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -178,13 +178,6 @@ export function StampPickerBrowser({
 
   const selectedYearNumber = year && year !== "none" ? Number(year) : undefined;
 
-  // Keep the capture-phase Escape handler stable while still reacting to whether a
-  // nested create dialog is currently open (synced via effect, not during render).
-  const createOpenRef = useRef(false);
-  useEffect(() => {
-    createOpenRef.current = create !== null;
-  }, [create]);
-
   function closeCreate() {
     if (!isPending) {
       setCreate(null);
@@ -197,26 +190,10 @@ export function StampPickerBrowser({
     setCreate(next);
   }
 
-  // This popup nests inside the item-form dialog, and a nested create dialog nests
-  // inside this popup — all register document-level Escape handlers. Intercept
-  // Escape in the capture phase and stop it so only the topmost surface closes: the
-  // create dialog if one is open, otherwise the browser — never the parent form
-  // (with its in-progress edits).
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        if (createOpenRef.current) {
-          setCreate(null);
-          setCreateError(undefined);
-        } else {
-          onClose();
-        }
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  // This popup nests inside the item-form dialog, and a nested create dialog nests inside this
+  // popup. Each is its own Escape layer (#361), so the topmost one closes and the parent form keeps
+  // its in-progress edits — `dismissable={!create}` below is what steps this popup aside while the
+  // create dialog is up.
 
   function handleCreateIssue(newAreaId: string, fd: FormData) {
     startTransition(async () => {

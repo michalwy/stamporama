@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -234,17 +234,6 @@ export function AddToOfferDialog({
     }),
     [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapByArea]
   );
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
 
   const raw = search.trim();
   const q = raw.toLowerCase();

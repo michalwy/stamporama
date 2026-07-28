@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -67,19 +67,8 @@ export function IssueStampPickerDialog({
     [areas, issue.collectionAreaId]
   );
 
-  // This popup nests inside the add-copy dialog (itself Escape-closable). Intercept Escape in
-  // the capture phase and stop it so only this popup closes, never the parent form with its
-  // in-progress edits — mirroring StampPickerBrowser.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  // This popup nests inside the add-copy dialog (itself Escape-closable); opened later, its own
+  // DialogShell is the topmost Escape layer, so the parent form keeps its in-progress edits (#361).
 
   function handlePick(node: StampNodeData, unknownVariant: boolean) {
     const catalogLabels = orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId);

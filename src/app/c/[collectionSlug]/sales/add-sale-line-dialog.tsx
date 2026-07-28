@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -241,17 +241,6 @@ export function AddSaleLineDialog({
   }
 
   const groups = useMemo(() => buildGroups(offers, currency), [offers, currency]);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
 
   const raw = search.trim();
   const q = raw.toLowerCase();

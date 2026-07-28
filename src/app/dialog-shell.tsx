@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
+import { useEscapeLayer } from "@/app/escape-stack";
+
 // ── Shell ────────────────────────────────────────────────────────────────────
 
 export interface DialogShellProps {
@@ -16,9 +18,10 @@ export interface DialogShellProps {
    * stacked on top of another so it paints above the one beneath (e.g. a picker opened from
    * inside another dialog). */
   zIndexBase?: number;
-  /** Whether pressing Escape or clicking the backdrop closes this dialog (default true). Set
-   * false on the underlying dialog while a nested one is open, so a single Escape only dismisses
-   * the topmost dialog. */
+  /** Whether pressing Escape or clicking the backdrop closes this dialog (default true). Nested
+   * dialogs already take Escape for themselves through the shared layer stack (#361); set this
+   * false while a surface that is *not* a layer owns the key (a popover with its own listener),
+   * or to keep a backdrop click from dismissing the dialog. */
   dismissable?: boolean;
   children: ReactNode;
 }
@@ -36,14 +39,7 @@ export function DialogShell({
   const headingId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!dismissable) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, dismissable]);
+  useEscapeLayer(onClose, dismissable);
 
   useEffect(() => {
     const el = panelRef.current;

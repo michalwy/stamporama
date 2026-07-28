@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useEscapeLayer } from "@/app/escape-stack";
 
 // Read-only photo display for a list row (#112, #137). Shows a single, larger thumbnail — the
 // first attached photo — meant to sit at the left of a row with the rest of the row's content
@@ -313,17 +314,13 @@ export function PhotoLightbox({
     [safeIndex, total, onIndex]
   );
 
-  // Capture-phase + stopPropagation so the lightbox swallows the key before an enclosing
-  // DialogShell's own document-level Escape handler runs — otherwise Esc would close both the
-  // lightbox and the dialog behind it. Capture listeners fire ahead of bubble listeners
-  // regardless of registration order, so this wins even though the dialog registered first.
+  // The lightbox is a layer like any dialog: opened last, it is topmost, so the shared stack gives
+  // it Escape and leaves the dialog it was opened from alone (#361).
+  useEscapeLayer(onClose);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      } else if (e.key === "ArrowLeft") {
+      if (e.key === "ArrowLeft") {
         e.preventDefault();
         e.stopPropagation();
         step(-1);
@@ -335,7 +332,7 @@ export function PhotoLightbox({
     }
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [step, onClose]);
+  }, [step]);
 
   if (typeof document === "undefined" || !current) return null;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -99,22 +99,6 @@ export function ComposeSetDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
-
-  // Set while the translation popover (#300) is up. This dialog's Escape handler is registered
-  // first, so it would run *before* the popover's and close the whole dialog out from under it —
-  // it defers instead, and the popover closes itself.
-  const popoverOpen = useRef(false);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !popoverOpen.current) {
-        e.stopImmediatePropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
 
   const areaIds = useMemo(() => {
     if (!areaId) return null;
@@ -238,9 +222,6 @@ export function ComposeSetDialog({
   // A token whose gaps were all just filled has nothing left to edit, so the popover closes itself
   // as soon as the refreshed preview stops reporting them.
   const openFix = fixing && fixingGaps.length > 0 ? fixing : null;
-  useEffect(() => {
-    popoverOpen.current = openFix !== null;
-  }, [openFix]);
 
   function submit(perCopy: boolean) {
     if (selectedIds.length === 0) {
@@ -262,7 +243,15 @@ export function ComposeSetDialog({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <DialogShell title="Add set" onClose={onClose} maxWidth="min(96vw, 100rem)" height="min(90vh, 60rem)">
+    // The translation popover (#300) is not an Escape layer — it keeps its own listener — so this
+    // dialog steps out of the stack while it is up instead of closing out from under it.
+    <DialogShell
+      title="Add set"
+      onClose={onClose}
+      dismissable={openFix === null}
+      maxWidth="min(96vw, 100rem)"
+      height="min(90vh, 60rem)"
+    >
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <ListFilterSidebar
           variant="dialog"
