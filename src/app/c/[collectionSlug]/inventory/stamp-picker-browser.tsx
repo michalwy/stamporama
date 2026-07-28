@@ -17,10 +17,7 @@ import {
   effectivePrimaryVendorId,
   getDescendantIds,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import {
-  formatStampCN,
-  CREATE_LINK_STYLE,
-} from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import {
   buildStampTree,
   IssueTitle,
@@ -31,7 +28,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
-import { issueLabel, type PickedStamp } from "./stamp-picker-shared";
+import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
 
@@ -348,6 +345,9 @@ export function StampPickerBrowser({
                   areaVendors={uniqueVendors}
                   prefilledIssueId={issue.id}
                   prefilledParentStampId={parentStampId ?? null}
+                  prefilledParentIssuedYear={
+                    issue.members.find((m) => m.stampId === parentStampId)?.issuedYear ?? null
+                  }
                   isPending={isPending}
                   error={createError}
                   onClose={closeCreate}
@@ -447,10 +447,11 @@ function IssueBrowser({
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueData) {
     const vm = vendorMapByArea.get(issue.collectionAreaId);
-    const cat = node.catalogNumbers
-      .map((cn) => formatStampCN(cn.number, vm?.get(cn.catalogVendorId)))
-      .join(", ");
-    const primary = [cat || null, node.name || null].filter(Boolean).join(" · ") || "(unnamed stamp)";
+    const catalogLabels = orderedCatalogLabels(
+      node.catalogNumbers,
+      vm,
+      primaryVendorByArea.get(issue.collectionAreaId) ?? null
+    );
     const areaName = areaById.get(issue.collectionAreaId)?.name ?? null;
     const context = [
       issue.name || issue.year ? issueLabel(issue.name, issue.year) : null,
@@ -458,7 +459,13 @@ function IssueBrowser({
     ]
       .filter(Boolean)
       .join(" · ");
-    onPick({ stampId: node.stampId, primary, secondary: context || null, unknownVariant });
+    onPick({
+      stampId: node.stampId,
+      catalogLabels,
+      name: node.name,
+      secondary: context || null,
+      unknownVariant,
+    });
   }
 
   return (

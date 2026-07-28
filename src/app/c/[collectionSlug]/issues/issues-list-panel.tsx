@@ -39,7 +39,13 @@ import {
   type IssueListFilters,
   type IssueYearFacetFilters,
 } from "./use-issues-query";
-import { IssueRow, InfiniteScrollSentinel, type IssueRowCallbacks } from "./issue-row";
+import {
+  IssueRow,
+  InfiniteScrollSentinel,
+  type AddStampParent,
+  type ExpandStampSignal,
+  type IssueRowCallbacks,
+} from "./issue-row";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
@@ -91,8 +97,7 @@ type DialogState =
   | {
       kind: "add-stamp";
       issueId?: string;
-      parentStampId?: string;
-      parentCatalogNumbers?: { catalogVendorId: string; number: string }[];
+      parent?: AddStampParent;
     }
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-issue-area"; issue: IssueListItem }
@@ -159,6 +164,10 @@ export function IssuesListPanel({
   });
   const [isPending, startTransition] = useTransition();
   const [autoExpandIssueId, setAutoExpandIssueId] = useState<string | null>(null);
+  // The parent a sub-stamp was just added under (#359) — the tree expands it so the new child is
+  // visible instead of disappearing behind a collapsed arrow. The nonce makes a repeat add under
+  // the same parent a fresh signal.
+  const [autoExpandStamp, setAutoExpandStamp] = useState<ExpandStampSignal | null>(null);
   const { invalidateList, invalidateMembers } = useInvalidateIssues();
 
   const search = searchParams.get("search") ?? "";
@@ -337,6 +346,9 @@ export function IssuesListPanel({
   function handleAddStampSubmit(issueId: string, fd: FormData) {
     const newIssueName = fd.get("newIssueName") as string | null;
     const newIssueYear = fd.get("newIssueYear") as string | null;
+    // Read the parent before the dialog closes, so the tree can expand it on success (#359).
+    const parentStampId =
+      dialog.kind === "add-stamp" ? (dialog.parent?.stampId ?? null) : null;
 
     startTransition(async () => {
       if (!issueId && (newIssueName !== null || newIssueYear !== null)) {
@@ -353,7 +365,15 @@ export function IssuesListPanel({
       }
       const result = await addStampToIssueAction(collectionId, issueId, fd);
       setActionState(result);
-      if (result.status === "success") handleStampSuccess(issueId);
+      if (result.status === "success") {
+        if (parentStampId) {
+          setAutoExpandStamp((prev) => ({
+            stampId: parentStampId,
+            nonce: (prev?.nonce ?? 0) + 1,
+          }));
+        }
+        handleStampSuccess(issueId);
+      }
     });
   }
 
@@ -386,13 +406,7 @@ export function IssuesListPanel({
     onMoveIssueArea: (issue) => openDialog({ kind: "move-issue-area", issue }),
     onAddStampRange: (issue) => openDialog({ kind: "add-stamp-range", issue }),
     onMergeIssue: (issue) => openDialog({ kind: "merge-issue", issue }),
-    onAddStamp: (issueId, parentStampId, parentCatalogNumbers) =>
-      openDialog({
-        kind: "add-stamp",
-        issueId,
-        parentStampId,
-        parentCatalogNumbers,
-      }),
+    onAddStamp: (issueId, parent) => openDialog({ kind: "add-stamp", issueId, parent }),
     onEditStamp: (issueId, stamp) =>
       openDialog({ kind: "edit-stamp", issueId, stamp }),
     onDeleteStamp: (issueId, stampId, stampName) =>
@@ -534,6 +548,7 @@ export function IssuesListPanel({
                   onFilterByArea={handleNavigateFilter}
                   callbacks={callbacks}
                   defaultExpanded={issue.id === autoExpandIssueId}
+                  expandStamp={autoExpandStamp}
                   displayConditionId={displayConditionId || undefined}
                   displayFormatId={displayFormatId}
                   formats={formats}
@@ -685,8 +700,9 @@ export function IssuesListPanel({
               issues={[issue]}
               areaVendors={uniqueAreaVendors}
               prefilledIssueId={issue.id}
-              prefilledParentStampId={dialog.parentStampId}
-              defaultCatalogNumbers={dialog.parentCatalogNumbers}
+              prefilledParentStampId={dialog.parent?.stampId}
+              prefilledParentIssuedYear={dialog.parent?.issuedYear ?? null}
+              defaultCatalogNumbers={dialog.parent?.catalogNumbers}
               isPending={isPending}
               error={error}
               onClose={closeDialog}

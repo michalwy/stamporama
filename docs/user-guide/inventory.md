@@ -54,6 +54,10 @@ page URL, so you can bookmark or share a filtered view.
 The inventory list filters the same way the [Stamps](collections.md) list does: a left
 **area panel** plus a toolbar of filters, all kept in the page URL.
 
+The toolbar **stays pinned to the top of the window** as you scroll a long list, so search,
+sorting and the filter chips are always in reach — on every list that has one: Issues,
+Stamps, Copies, Offers, Sales and Purchases.
+
 - **Area** — the panel on the left lists your collection's [areas](collections.md) as a
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
   area includes its nested sub-areas. Choose **All areas** to clear it.
@@ -244,7 +248,10 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
      and highlights the matching stamps while dimming the rest.
 
    Choose a specific variant if you know it, or the **base stamp** if the variant is
-   unknown. The chosen stamp appears as a summary with a **Change** link to reselect.
+   unknown. The chosen stamp appears as a summary with a **Change** link to reselect. Its
+   catalog numbers show as one **chip each**, carrying the catalog abbreviation and area
+   prefix (`Mi·PL 1B`), so a stamp numbered in several catalogs is never a bare list of
+   figures — the same is true when you reopen a copy with **Edit**.
 
    If the stamp isn't in your catalog yet, you can add it without leaving the browser
    (you must still pick an existing **area** first):

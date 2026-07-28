@@ -113,6 +113,8 @@ If the added stamps fall **outside the issue's declared catalog range**, a follo
 
 To add a **single** stamp instead, expand an issue row on the **Issues** list (the **▶** toggle) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
+To nest a stamp **under an existing one**, use **Add child stamp** in that stamp's **⋮** menu. The dialog starts from the parent: its catalog numbers are copied in as a starting point, and the **Year** is pre-filled from the **parent stamp's own year** rather than the issue's — a variant or reprint is usually dated from the node it hangs under. (A root-level stamp still starts from the issue's year.) After you save, the parent node **opens by itself** so the new child is visible instead of hiding behind a collapsed arrow.
+
 ### Issue and stamp names in other languages
 
 The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).

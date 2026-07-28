@@ -101,6 +101,10 @@ type StampFormDialogProps = {
       issues: IssueListItem[];
       prefilledIssueId?: string | null;
       prefilledParentStampId?: string | null;
+      /** The prefilled parent's own issued year (#360) — a variant or reprint is dated from the
+       *  node it hangs under, not from the issue. Passed in because the members query is skipped
+       *  when a parent is prefilled, so the dialog cannot look the parent up itself. */
+      prefilledParentIssuedYear?: number | null;
       defaultCatalogNumbers?: { catalogVendorId: string; number: string }[];
       onSubmit: (issueId: string, formData: FormData) => void;
     }
@@ -456,6 +460,21 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const stampOptions = members ?? [];
 
   const showIssueStep = !!addProps && !addProps.prefilledIssueId;
+
+  // Year a new stamp starts on (#360): the **parent node's** year when one is chosen — a variant
+  // or reprint is dated from the node it hangs under, which may differ from the issue — falling
+  // back to the issue's year for a root-level stamp (#70). Edit mode keeps the stamp's own year.
+  const parentIssuedYear = addProps
+    ? addProps.prefilledParentStampId
+      ? (addProps.prefilledParentIssuedYear ?? null)
+      : selectedParentId
+        ? (stampOptions.find((m) => m.stampId === selectedParentId)?.issuedYear ?? null)
+        : null
+    : null;
+  const defaultIssuedYear =
+    parentIssuedYear ??
+    addProps?.issues.find((i) => i.id === selectedIssueId)?.year ??
+    null;
 
   // Subtype classification applies to child stamps only: in edit mode when the stamp
   // has a parent; in add mode when a parent is chosen or prefilled.
@@ -922,15 +941,16 @@ export function StampFormDialog(props: StampFormDialogProps) {
                     max={12}
                     style={{ ...INPUT_STYLE, width: "5rem", flex: "none" }}
                   />
+                  {/* Uncontrolled, so re-seed it by key when the derived default changes —
+                      picking a different parent (or issue) must move the year with it. */}
                   <input
+                    key={editProps ? "edit" : `add-${defaultIssuedYear ?? ""}`}
                     name="issuedYear"
                     type="number"
                     disabled={isPending}
                     placeholder="Year"
                     defaultValue={
-                      editProps
-                        ? (editProps.stamp.issuedYear ?? "")
-                        : (addProps?.issues.find((i) => i.id === selectedIssueId)?.year ?? undefined)
+                      editProps ? (editProps.stamp.issuedYear ?? "") : (defaultIssuedYear ?? "")
                     }
                     min={1840}
                     max={2100}

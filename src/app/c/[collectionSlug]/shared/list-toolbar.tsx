@@ -30,6 +30,19 @@ const CLEAR_BTN: React.CSSProperties = {
   padding: "0 0.25rem",
 };
 
+/**
+ * Pins a list's filter row to the top of the viewport while the rows scroll under it (#358) —
+ * the whole page scrolls (there is no inner scroll container), so `top: 0` is the app's own top
+ * edge. The z-index sits above the rows but below the portalled row-action menus (200) and
+ * dialogs (100), which must still cover it. A panel that builds its own toolbar row instead of
+ * using {@link ListToolbar} spreads this together with an opaque background of its own.
+ */
+export const STICKY_TOOLBAR_STYLE: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 5,
+};
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface SortOption {
@@ -95,11 +108,13 @@ export function ListToolbar({
   return (
     <div
       style={{
+        ...STICKY_TOOLBAR_STYLE,
         display: "flex",
         flexDirection: "column",
         gap: "0.5rem",
         padding: "0.75rem 1.25rem",
         borderBottom: "1px solid var(--color-border)",
+        // Opaque: rows scroll underneath it.
         background: "var(--color-bg-elevated)",
       }}
     >

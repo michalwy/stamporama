@@ -26,7 +26,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import {
   issueLabel,
-  primaryLabel,
+  orderedCatalogLabels,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -82,10 +82,12 @@ export function StampRow({
       stampId: stamp.id,
       initial: {
         stampId: stamp.id,
-        primary: primaryLabel(
-          stamp.catalogNumbers.map((cn) => cn.number),
-          stamp.name
+        catalogLabels: orderedCatalogLabels(
+          stamp.catalogNumbers,
+          vendorMap,
+          primaryVendorId
         ),
+        name: stamp.name,
         secondary:
           [
             firstIssue

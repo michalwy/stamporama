@@ -72,7 +72,10 @@ import {
   StampPickerBrowser,
   type PickedIssue,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
-import type { PickedStamp } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import {
+  pickedStampText,
+  type PickedStamp,
+} from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 
 const CHIP: React.CSSProperties = {
@@ -634,7 +637,7 @@ export function PurchaseDetailPanel({
           collectionId={collectionId}
           areas={areas}
           onPick={(picked: PickedStamp) => {
-            setWsSelection({ kind: "stamp", stampId: picked.stampId, label: picked.primary });
+            setWsSelection({ kind: "stamp", stampId: picked.stampId, label: pickedStampText(picked) });
             setError(undefined);
             setWsStep("condition");
           }}
@@ -1923,7 +1926,7 @@ function LotCard({
           collectionId={collectionId}
           areas={areas}
           onPick={(picked: PickedStamp) => {
-            setPending({ kind: "stamp", stampId: picked.stampId, label: picked.primary });
+            setPending({ kind: "stamp", stampId: picked.stampId, label: pickedStampText(picked) });
             setCopyError(undefined);
             setDialog("intake-condition");
           }}

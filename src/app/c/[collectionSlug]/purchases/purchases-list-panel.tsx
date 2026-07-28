@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import type { PurchaseListItem, PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
 import {
   usePurchasesInfinite,
@@ -112,8 +113,20 @@ export function PurchasesListPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
-      {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      {/* Toolbar — pinned while the rows scroll under it (#358). Unlike the card-embedded
+          `ListToolbar`, this one sits on the page, so it carries the page background and a
+          little padding of its own to stay opaque. */}
+      <div
+        style={{
+          ...STICKY_TOOLBAR_STYLE,
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+          padding: "0.5rem 0",
+          background: "var(--color-bg-page)",
+        }}
+      >
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
           {STATUS_FILTERS.map(({ value, label }) => {
             const active = status === value;

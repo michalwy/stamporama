@@ -9,13 +9,12 @@ import {
   effectiveVendorsForArea,
   effectivePrimaryVendorId,
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { formatStampCN } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import {
   buildStampTree,
   type VendorMap,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { useIssueMembers } from "./use-inventory-query";
-import { issueLabel, type PickedStamp } from "./stamp-picker-shared";
+import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 
 /** Just the fields this picker needs to render and label an issue's stamps. */
@@ -83,11 +82,7 @@ export function IssueStampPickerDialog({
   }, [onClose]);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean) {
-    const cat = node.catalogNumbers
-      .map((cn) => formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId)))
-      .join(", ");
-    const primary =
-      [cat || null, node.name || null].filter(Boolean).join(" · ") || "(unnamed stamp)";
+    const catalogLabels = orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId);
     const context =
       [
         issue.name || issue.year ? issueLabel(issue.name, issue.year) : null,
@@ -95,7 +90,13 @@ export function IssueStampPickerDialog({
       ]
         .filter(Boolean)
         .join(" · ") || null;
-    onPick({ stampId: node.stampId, primary, secondary: context, unknownVariant });
+    onPick({
+      stampId: node.stampId,
+      catalogLabels,
+      name: node.name,
+      secondary: context,
+      unknownVariant,
+    });
   }
 
   // The parent dialog panel is transform-centered, which makes it the containing block for

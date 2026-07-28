@@ -33,10 +33,17 @@ import {
   useInventoryPopupAction,
   useInventoryAddAction,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
-import { primaryLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
+
+/** "This stamp just gained a child — show it" (#359). The `nonce` makes a *repeat* add under the
+ *  same parent a new signal, so a node the collector collapsed in between opens again. */
+export interface ExpandStampSignal {
+  stampId: string;
+  nonce: number;
+}
 
 /** The condition the list's price column is showing, so a quick-add prices what's on screen. */
 export interface DisplayConditionRef {
@@ -70,6 +77,8 @@ interface StampTreeNodeProps {
    *  single (#343). */
   displayFormat: DisplayFormatRef | null;
   onPriceSaved: () => void | Promise<unknown>;
+  /** See {@link IssueRowProps.expandStamp} — matched against this node's own id (#359). */
+  expandStamp?: ExpandStampSignal | null;
   onEdit: (stampId: string) => void;
   onAddChild: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
@@ -90,17 +99,33 @@ function StampTreeNode({
   areaName,
   displayCondition,
   displayFormat,
+  expandStamp,
   onPriceSaved,
   onEdit,
   onAddChild,
   onDelete,
   onMove,
 }: StampTreeNodeProps) {
-  const [collapsed, setCollapsed] = useState(true);
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
   const indent = `${depth * 1.25}rem`;
+
+  // Expansion is *derived*, never a setState-in-effect: a node is open when it just gained a
+  // sub-stamp (#359) or when the collector opened it themselves. The user's own toggle is
+  // remembered against the signal it was made under, so a manual collapse sticks — until the
+  // next add under this same node, whose fresh nonce supersedes it.
+  const autoExpandNonce = expandStamp?.stampId === node.stampId ? expandStamp.nonce : null;
+  const [userToggle, setUserToggle] = useState<{
+    forNonce: number | null;
+    collapsed: boolean;
+  } | null>(null);
+  const collapsed =
+    userToggle && userToggle.forNonce === autoExpandNonce
+      ? userToggle.collapsed
+      : autoExpandNonce === null;
+  const setCollapsed = (next: boolean) =>
+    setUserToggle({ forNonce: autoExpandNonce, collapsed: next });
 
   const popupLabel =
     node.name ??
@@ -116,10 +141,8 @@ function StampTreeNode({
       stampId: node.stampId,
       initial: {
         stampId: node.stampId,
-        primary: primaryLabel(
-          node.catalogNumbers.map((cn) => cn.number),
-          node.name
-        ),
+        catalogLabels: orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId),
+        name: node.name,
         secondary: null,
         // Umbrella only when a child acts as a variant (ADR-0010 §3), not for a base
         // stamp whose children are all distinct entries.
@@ -279,6 +302,7 @@ function StampTreeNode({
             areaName={areaName}
             displayCondition={displayCondition}
             displayFormat={displayFormat}
+            expandStamp={expandStamp}
             onPriceSaved={onPriceSaved}
             onEdit={onEdit}
             onAddChild={onAddChild}
@@ -292,17 +316,22 @@ function StampTreeNode({
 
 // ── IssueRow ────────────────────────────────────────────────────────────────
 
+/** The node a new stamp is being hung under, when adding from a tree row: what the add dialog
+ *  seeds itself from — the parent's catalog numbers and its own year (#360) — carried together
+ *  so the panel needs no second lookup. */
+export interface AddStampParent {
+  stampId: string;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  issuedYear: number | null;
+}
+
 export interface IssueRowCallbacks {
   onEdit: (issue: IssueListItem) => void;
   onDelete: (issue: IssueListItem) => void;
   onMoveIssueArea: (issue: IssueListItem) => void;
   onAddStampRange: (issue: IssueListItem) => void;
   onMergeIssue: (issue: IssueListItem) => void;
-  onAddStamp: (
-    issueId: string,
-    parentStampId?: string,
-    parentCatalogNumbers?: { catalogVendorId: string; number: string }[]
-  ) => void;
+  onAddStamp: (issueId: string, parent?: AddStampParent) => void;
   onEditStamp: (issueId: string, stamp: StampNodeData) => void;
   onDeleteStamp: (issueId: string, stampId: string, stampName: string) => void;
   onMoveStamp: (issueId: string, stampId: string) => void;
@@ -321,6 +350,9 @@ interface IssueRowProps {
   onFilterByArea?: (areaId: string) => void;
   callbacks: IssueRowCallbacks;
   defaultExpanded?: boolean;
+  /** The parent a sub-stamp was just added under (#359) — the tree opens that node so the new
+   *  child is visible. Collapse state is per-node, so this is the tree's only way in. */
+  expandStamp?: ExpandStampSignal | null;
   /** Condition whose price fills each member's headline price, matching the list's
    *  price column so the expanded rows track the condition switcher (#238). */
   displayConditionId?: string | null;
@@ -344,6 +376,7 @@ export function IssueRow({
   onFilterByArea,
   callbacks,
   defaultExpanded,
+  expandStamp,
   displayConditionId,
   displayFormatId,
   formats,
@@ -746,6 +779,7 @@ export function IssueRow({
                   }
                   displayCondition={displayCondition}
                   displayFormat={displayFormat}
+                  expandStamp={expandStamp}
                   onPriceSaved={() => invalidateList(collectionId)}
                   onEdit={(stampId) => {
                     const stampNode = members?.find(
@@ -757,11 +791,11 @@ export function IssueRow({
                     const parentNode = members?.find(
                       (m) => m.stampId === parentStampId
                     );
-                    callbacks.onAddStamp(
-                      issue.id,
-                      parentStampId,
-                      parentNode?.catalogNumbers ?? []
-                    );
+                    callbacks.onAddStamp(issue.id, {
+                      stampId: parentStampId,
+                      catalogNumbers: parentNode?.catalogNumbers ?? [],
+                      issuedYear: parentNode?.issuedYear ?? null,
+                    });
                   }}
                   onDelete={(stampId, stampName) =>
                     callbacks.onDeleteStamp(issue.id, stampId, stampName)

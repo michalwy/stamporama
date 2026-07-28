@@ -14,9 +14,13 @@ import type { ItemListItem } from "@/lib/items";
 import { formatItemNo } from "@/lib/item-number";
 import { DELIVERY_STATES, deliveryStateLabel } from "@/lib/delivery-state";
 import type { CollectionAreaData } from "@/lib/areas";
+import {
+  effectiveVendorsForArea,
+  effectivePrimaryVendorId,
+} from "@/app/c/[collectionSlug]/shared/area-helpers";
 import type { LocationData } from "@/lib/locations";
 import { StampSelect } from "./stamp-select";
-import { issueLabel, primaryLabel, type PickedStamp } from "./stamp-picker-shared";
+import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
@@ -186,16 +190,23 @@ export function InventoryItemFormDialog({
 
   // Prefill the picker summary. In edit mode it is derived from the item; in add mode a
   // caller may pass one (adding a copy from a stamp list row, #111). Catalog numbers on the
-  // item are raw (vendor id + number), so the summary shows the joined numbers; the popup and
-  // autocomplete render prefix-formatted labels when a fresh pick is made.
+  // item are raw (vendor id + number), so they are prefix-formatted here against the copy's own
+  // area — the same labels a fresh pick produces (#357).
   const pickerInitial: PickedStamp | undefined =
     mode === "edit" && item
       ? {
           stampId: item.stampId,
-          primary: primaryLabel(
-            item.catalogNumbers.map((c) => c.number),
-            item.stampName
+          // An area-less copy keeps the bare numbers: there is no vendor context to prefix with.
+          catalogLabels: orderedCatalogLabels(
+            item.catalogNumbers,
+            item.areaId
+              ? new Map(
+                  effectiveVendorsForArea(areas, item.areaId).map((v) => [v.catalogVendorId, v])
+                )
+              : undefined,
+            item.areaId ? effectivePrimaryVendorId(areas, item.areaId) : null
           ),
+          name: item.stampName,
           secondary:
             item.issueName || item.issueYear
               ? issueLabel(item.issueName, item.issueYear)

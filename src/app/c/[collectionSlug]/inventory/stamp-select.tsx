@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
+import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { StampPickerAutocomplete } from "./stamp-picker-autocomplete";
 import { StampPickerBrowser } from "./stamp-picker-browser";
 import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
@@ -104,11 +105,30 @@ export function StampSelect({
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
-              {selected.primary}
+            {/* Catalog numbers as one chip each (#357): a joined "1B, 39, 1" gives no way to tell
+                which catalog each number belongs to, and the chips match how every list renders
+                a stamp's numbers. The name follows as plain text. */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "0.3rem",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              {selected.catalogLabels.map((label) => (
+                <span key={label} style={STAMP_SECONDARY_CHIP}>
+                  {label}
+                </span>
+              ))}
+              {(selected.name || selected.catalogLabels.length === 0) && (
+                <span>{selected.name || "(unnamed stamp)"}</span>
+              )}
               {selected.unknownVariant && (
                 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
-                  {" "}
                   — unknown variant
                 </span>
               )}

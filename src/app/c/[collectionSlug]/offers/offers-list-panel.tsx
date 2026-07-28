@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import type { OfferListItem } from "@/lib/offers";
 import { type OfferState, type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
@@ -219,8 +220,20 @@ export function OffersListPanel({
       {/* Aggregate figures over the filtered set (#317) */}
       <OffersSummaryBar summary={summary} collectionId={collectionId} />
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      {/* Toolbar — pinned while the rows scroll under it (#358). Unlike the card-embedded
+          `ListToolbar`, this one sits on the page, so it carries the page background and a
+          little padding of its own to stay opaque. */}
+      <div
+        style={{
+          ...STICKY_TOOLBAR_STYLE,
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+          padding: "0.5rem 0",
+          background: "var(--color-bg-page)",
+        }}
+      >
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           <select
             aria-label="Filter by platform"
