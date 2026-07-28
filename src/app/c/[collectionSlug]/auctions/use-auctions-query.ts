@@ -1,7 +1,9 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AuctionLotComposition } from "@/lib/auction-lines";
 import type {
+  AuctionLotDetailItem,
   AuctionLotFilterCounts,
   AuctionLotListItem,
   AuctionSellerDefaults as AuctionSellerDefaultsData,
@@ -26,8 +28,14 @@ type Serialized<T> = {
 
 export type AuctionLotView = Serialized<AuctionLotListItem>;
 export type AuctionSaleView = Serialized<AuctionSaleListItem>;
+/** A lot on the sale's own screen: the watchlist row plus the composition its card expands over
+ * (#353). Only this read carries the lines — see `AuctionLotDetailItem`. */
+export type AuctionLotDetailView = Serialized<Omit<AuctionLotDetailItem, "lines">> & {
+  lines: AuctionLotDetailItem["lines"];
+};
+
 export type AuctionSaleDetailView = Serialized<Omit<AuctionSaleDetail, "lots">> & {
-  lots: AuctionLotView[];
+  lots: AuctionLotDetailView[];
 };
 export type AuctionSaleProposalView = Serialized<AuctionSaleProposal>;
 export type { AuctionClosingWindow, LotSignal };
@@ -165,6 +173,34 @@ export function useOpenAuctionSale(
       return res.json();
     },
     enabled: enabled && !!sellerId,
+  });
+}
+
+/** What one lot contains, valued (#353) — the composition editor's read. Nothing here is a `Date`,
+ * so the server shape carries over unchanged. */
+export type AuctionLotCompositionView = AuctionLotComposition & {
+  /** What the lot costs at the price it stands at — premium only, as on the row. */
+  allIn: string | null;
+  /** `catalogValue − allIn`. */
+  headroom: string | null;
+};
+
+/**
+ * A lot's composition. Fetched only while the editor is open: a forty-lot watchlist would otherwise
+ * pull forty compositions to draw forty collapsed rows, and the list already carries each lot's
+ * total.
+ */
+export function useAuctionLotComposition(collectionId: string, lotId: string | null) {
+  return useQuery<AuctionLotCompositionView>({
+    queryKey: ["auctions", collectionId, "composition", lotId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/auctions/lots/${lotId}/lines`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the lot's contents");
+      return res.json();
+    },
+    enabled: !!lotId,
   });
 }
 

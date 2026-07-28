@@ -91,7 +91,8 @@ datapoint: that is an absent observation, not an error state to be filled in.
 
 ### 6. Composition is structured, and reuses the pricing machinery that exists
 
-`AuctionLotLine` is `stamp × condition × format × quantity`. Not free text.
+`AuctionLotLine` is `stamp × condition × certificate × format × quantity` — the shape a
+`StampCatalogPrice` is keyed on. Not free text.
 
 Free text would be quicker to enter and would make the whole feature useless: a lot's catalogue
 value could not be computed before it closes, and a lost lot could not be attached to anything
@@ -117,6 +118,69 @@ catalogue value to the hammer price alone systematically overpays on cheap lots,
 a fixed lot fee are a large share of what leaves the bank account. Shipping belongs to the parcel,
 so the sale-level rollup adds it **once** however many lots are in the sale — which is only
 expressible because of §1.
+
+Four things settled when this was built (#353), all of them consequences of the reuse rather than
+new policy:
+
+- **The valuation is the copy valuation.** `valuateItemRows` (`items.ts`) values a
+  `stamp × condition × certificate × format` row, of which a physical copy is one instance and a lot
+  line is another at a null certificate — a lot is described before it is owned, so there is no
+  certificate to match on. Re-deriving the rollup and the factor resolution in the auction module
+  would have been two copies of #238 and ADR-0020 to keep in step. It is called **once per page of
+  lots** (`auction-lines.ts`), so the factor table and the area tree load once, not per row.
+- **Currency pivots through the base currency into the sale's.** Catalogue prices are valued into
+  the collection's base currency like everywhere else, then converted once per sale currency into
+  the sale's — because the bid, the premium and the ceiling are all denominated there, and a
+  headroom figure mixing two currencies would be arithmetic on nothing. A missing base → sale rate
+  makes a line **unconvertible**, which is deliberately not the same state as *unpriced*: it has a
+  value and cannot be counted, and reporting it as unpriced would send the collector off to enter a
+  figure that already exists.
+- **No value is not zero.** A lot whose composition is entered but unpriced reports `null`, not
+  `0.00`. A zero would make every headroom against it read as a catastrophic overbid. Unpriced and
+  unconvertible lines are counted and surfaced beside the total, for the same reason the sale
+  summary reports its unvalued lots: a total that silently omits half the lot looks complete.
+- **A lot row's headroom excludes shipping; the parcel's includes it.** The same split `allIn`
+  already makes on the row (#351). Charging shipping per row would double it the moment two lots are
+  open with one seller, and the sale's own total is where it is added once.
+
+The **certificate** was added in #353, after the first cut valued every line at "no certificate" on
+the reasoning that a lot is described before it is owned. That reasoning was wrong for exactly the
+material this feature exists for: a house lot is routinely sold *with* a Fotoattest, and the
+certificate is a large part of why it fetches what it does. Nullable, null = none, the same unmarked
+default `Item` uses. Matching stays **strict** — a line naming an Attest is unpriced until a price
+exists at that level — because the alternative is quietly valuing a certified lot at the plain
+figure, which is the error the column was added to prevent.
+
+Composition is **entered with the lot**, not only after it: `createAuctionLot` takes the lines and
+writes both in one nested create, every line validated before anything is written. Capturing a
+listing and saying what is in it is one act — the collector is reading the description as they
+type — and a flow that saves an empty lot and asks them to go find it again is the flow that leaves
+compositions unentered. Adding a line is likewise the intake's own **two-step flow**: the
+picker opens on the click that asked for a line, and condition / certificate / format / quantity
+follow in a second dialog once something has been picked. Two questions of two different sources —
+the catalogue tree answers what it is, the listing text answers what state it is in — and putting
+both on one screen means asking about the condition of nothing in particular. What can be picked is a stamp **or a whole issue**, the purchase intake's own
+picker: a house lot is routinely "Michel 1–12, complete", and twelve trips through a picker is the
+reason such a lot would go undescribed. The series is an entry shortcut that expands into one line
+per member marked required for completeness — a stored line is always one stamp, because catalogue
+value is summed per stamp and a lost lot has to be attributable per stamp.
+
+A composition also **names the lot**. `AuctionLot.title` is what the listing called it, and a lot
+captured in a hurry has none; rather than "Untitled lot", the name is derived from what the lot
+holds — catalogue numbers under their own prefix, collapsed into spans, and the shared issue. Deliberately **not** stored, which is the
+opposite of the offer-title rule (#209/#365): an offer title is *published*, so it must be stable and
+editable, while a lot name is read on our own screens only and a lot is described line by line, so a
+stored value would freeze on the first stamp entered.
+
+Composition is edited on **two surfaces**, which is the same split §9 already made between the
+watchlist and the sale. On a sale's own screen every lot is a collapsible **card over its lines** —
+the purchase-order intake and offer-detail layout, down to the shared issue-group header, the
+group / filter / sort toolbar and its persistence — because that screen asks "what am I actually
+paying for" about one parcel, and the answer is a list of stamps. The flat watchlist keeps plain
+rows and opens the same list in a dialog: there the question is "what do I bid on next" across every
+seller, and forty cards of contents is the wrong shape for it. Only the sale read carries the lines;
+the watchlist row carries the total, or a forty-lot list would fetch forty compositions to draw
+forty collapsed rows.
 
 ### 7. Settlement is a 1:1 transcription, and a lost lot is the price signal
 

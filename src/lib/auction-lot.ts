@@ -212,6 +212,92 @@ export function lotHasSignal(signal: LotSignal, lot: LotSignalInput, now: Date):
   }
 }
 
+// ── Composition (#353) ──────────────────────────────────────────────────────
+
+/**
+ * One composition line as the catalogue-value roll-up reads it.
+ *
+ * The line's value has **already been resolved** by the catalog rules that own it — the
+ * unknown-variant rollup (#238) and format pricing (ADR-0020) — and converted into the sale's
+ * currency. What is left here is arithmetic and bookkeeping, which is why it is pure.
+ */
+export interface LotLineValue {
+  /** How many of this stamp × condition × format the lot holds. */
+  quantity: number;
+  /** Value of **one** of them, in the sale's currency. Null whenever the line contributes nothing,
+   * for either of the two reasons below. */
+  unitValue: number | null;
+  /** No catalogue price at all for this stamp at that condition × format. A multiple with neither
+   * an explicit price nor a factor lands here — never valued at the single's figure (ADR-0020). */
+  unpriced: boolean;
+  /** Priced, but in a currency with no rate to the sale's. It exists and cannot be counted, which
+   * is a different fact from having no price, and reporting it as unpriced would send the collector
+   * off to enter a value that is already there. */
+  unconvertible: boolean;
+  /** The figure came from the cheapest variant child of an unknown-variant umbrella (#238) — an
+   * estimate, rendered with the same `~` + italics vocabulary the issue list uses. */
+  uncertain: boolean;
+}
+
+/** What a lot's composition is worth, and how much of it could be answered. */
+export interface LotCompositionValue {
+  /** Lines entered. Zero is the normal state while bidding. */
+  lineCount: number;
+  /** Stamps described, counting quantities — what the lot actually holds. */
+  quantity: number;
+  /**
+   * Sum of `unitValue × quantity` over the lines that carry one, in the sale's currency.
+   *
+   * **Null when no line carries a value**, rather than `0.00`: a lot whose composition is entered
+   * but unpriced is not worth nothing, it is unanswered, and a zero would make every headroom read
+   * as a catastrophic overbid.
+   */
+  catalogValue: string | null;
+  /** Lines with no catalogue price. Reported rather than hidden, exactly as the sale summary
+   * reports its unvalued lots — a total that silently omits half the lot looks complete. */
+  unpricedLines: number;
+  /** Lines priced in a currency that cannot be expressed in the sale's. */
+  unconvertibleLines: number;
+  /** Whether any line contributing to the total is a lowest-variant estimate. */
+  uncertain: boolean;
+}
+
+/**
+ * Roll a lot's composition up into one catalogue value.
+ *
+ * Quantity multiplies and nothing else does: a multiple is **never decomposed** (ADR-0020), so a
+ * line for a block of four at quantity 2 is two blocks' worth of the block's own price, not eight
+ * singles.
+ */
+export function summarizeLotComposition(lines: LotLineValue[]): LotCompositionValue {
+  let quantity = 0;
+  let total = 0;
+  let valued = 0;
+  let unpricedLines = 0;
+  let unconvertibleLines = 0;
+  let uncertain = false;
+
+  for (const line of lines) {
+    const count = Number.isFinite(line.quantity) ? Math.max(0, Math.trunc(line.quantity)) : 0;
+    quantity += count;
+    if (line.unpriced) unpricedLines++;
+    if (line.unconvertible) unconvertibleLines++;
+    if (line.unitValue === null) continue;
+    valued++;
+    total += line.unitValue * count;
+    if (line.uncertain) uncertain = true;
+  }
+
+  return {
+    lineCount: lines.length,
+    quantity,
+    catalogValue: valued > 0 ? money(total) : null,
+    unpricedLines,
+    unconvertibleLines,
+    uncertain,
+  };
+}
+
 /** One lot as the aggregation reads it. */
 export interface AuctionLotSummaryRow {
   status: AuctionLotStatus;

@@ -113,10 +113,41 @@ function resolvePending(
   return pending.value;
 }
 
-/** What the row calls the lot: its own title, else its lot number, else a plain placeholder. A lot
- * captured in a hurry off a marketplace often has neither, and an empty line reads as a bug. */
+/**
+ * What the catalogue cell says about itself — the state of the composition, in one line (#353).
+ *
+ * The gaps are named rather than hidden: a total silently missing half the lot's lines looks like a
+ * finished answer, and the collector would bid against it.
+ */
+function catalogHint(lot: AuctionLotView): string {
+  if (lot.lineCount === 0) {
+    return "Nothing described yet. Say what the lot holds and its catalogue value follows.";
+  }
+  const gaps: string[] = [];
+  if (lot.unpricedLineCount > 0) {
+    gaps.push(`${lot.unpricedLineCount} line${lot.unpricedLineCount === 1 ? "" : "s"} unpriced`);
+  }
+  if (lot.unconvertibleLineCount > 0) {
+    gaps.push(`${lot.unconvertibleLineCount} in a currency with no rate`);
+  }
+  const base = lot.catalogUncertain
+    ? "Catalogue value; part of it is the cheapest of an unidentified variant — inferred, not recorded."
+    : "Catalogue value of what this lot is described as holding.";
+  return gaps.length > 0 ? `${base} ${gaps.join(", ")}.` : base;
+}
+
+/**
+ * What the row calls the lot: what the collector typed, else what it is described as holding (#353),
+ * else its lot number, else a plain placeholder.
+ *
+ * The derived name outranks the lot number deliberately — `1-12 · Definitives (1950)` says what the
+ * lot *is*, while `Lot 385` only says where it sits in someone's catalogue, and the number is
+ * already on the row as its own chip. A lot captured in a hurry off a marketplace has none of the
+ * three, and an empty line reads as a bug.
+ */
 function lotLabel(lot: AuctionLotView): string {
   if (lot.title) return lot.title;
+  if (lot.derivedTitle) return lot.derivedTitle;
   if (lot.lotNo) return `Lot ${lot.lotNo}`;
   return "Untitled lot";
 }
@@ -130,6 +161,13 @@ interface AuctionLotRowProps {
   /** Whether the row names its own sale. False on the sale's own screen and under a group heading
    * that already says it — which also takes the redundant *Open sale* action out of the ⋮ menu. */
   showSale?: boolean;
+  /**
+   * Whether the row names the seller and the platform. False on the sale's own screen: a sale is
+   * **one settlement with one seller** (ADR-0021 §1), so both are fixed for every lot on it and the
+   * header above states them. Kept on the grouped flat list, where a sale-name heading says which
+   * parcel a lot is in but not who it is with.
+   */
+  showParties?: boolean;
   isPending: boolean;
   onEdit: (lot: AuctionLotView) => void;
   onDelete: (lot: AuctionLotView) => void;
@@ -137,6 +175,16 @@ interface AuctionLotRowProps {
   onSetMyBid: (lot: AuctionLotView, value: string) => void;
   onSetMaxBid: (lot: AuctionLotView, value: string) => void;
   onMarkChecked: (lot: AuctionLotView) => void;
+  /** Open the composition editor (#353) — what the lot contains, and what that is worth. */
+  onEditComposition: (lot: AuctionLotView) => void;
+  /**
+   * When set, the row is the **header of a collapsible card** over its composition (#353, the
+   * sale's own screen). A caret is drawn ahead of the title and is the *only* thing that toggles:
+   * the row is dense with inline-editable figures, so a click-anywhere header would fight the very
+   * fields the daily bid refresh is typed into.
+   */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
 /**
@@ -153,6 +201,7 @@ export function AuctionLotRow({
   now,
   isLast,
   showSale = true,
+  showParties = true,
   isPending,
   onEdit,
   onDelete,
@@ -160,6 +209,9 @@ export function AuctionLotRow({
   onSetMyBid,
   onSetMaxBid,
   onMarkChecked,
+  onEditComposition,
+  expanded,
+  onToggleExpanded,
 }: AuctionLotRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
@@ -242,6 +294,14 @@ export function AuctionLotRow({
       onSelect: () => onSetMyBid(lot, lot.bidRoom ?? ""),
     },
     {
+      key: "contents",
+      // Readable whether or not anything has been entered — the same entry either way, because
+      // "what is in this lot?" is the question in both cases.
+      label: lot.lineCount === 0 ? "Describe contents" : `Contents (${lot.lineCount})`,
+      icon: "☰",
+      onSelect: () => onEditComposition(lot),
+    },
+    {
       key: "edit",
       label: "Edit",
       icon: "✎",
@@ -283,6 +343,26 @@ export function AuctionLotRow({
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Line 1: what the lot is and where to see it */}
             <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+              {onToggleExpanded && (
+                <button
+                  type="button"
+                  onClick={onToggleExpanded}
+                  aria-label={expanded ? "Collapse contents" : "Expand contents"}
+                  aria-expanded={expanded}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.75rem",
+                    lineHeight: 1,
+                    padding: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  {expanded ? "▼" : "▶"}
+                </button>
+              )}
               <span
                 style={{
                   fontSize: "0.9375rem",
@@ -299,7 +379,7 @@ export function AuctionLotRow({
               >
                 {lotLabel(lot)}
               </span>
-              {lot.lotNo && lot.title && (
+              {lot.lotNo && (lot.title || lot.derivedTitle) && (
                 <Tooltip content="Lot number in the sale">
                   <span style={CHIP}>#{lot.lotNo}</span>
                 </Tooltip>
@@ -338,10 +418,12 @@ export function AuctionLotRow({
                   </a>
                 </Tooltip>
               )}
-              <Tooltip content="Seller">
-                <span style={CHIP}>{lot.sellerName}</span>
-              </Tooltip>
-              {lot.platformName !== lot.sellerName && (
+              {showParties && (
+                <Tooltip content="Seller">
+                  <span style={CHIP}>{lot.sellerName}</span>
+                </Tooltip>
+              )}
+              {showParties && lot.platformName !== lot.sellerName && (
                 <Tooltip content="Platform">
                   <span style={CHIP}>{lot.platformName}</span>
                 </Tooltip>
@@ -374,7 +456,7 @@ export function AuctionLotRow({
               display: "grid",
               // Fixed tracks, not `auto`: every row must line its columns up with the rows above
               // and below it, and content-sized ones make each row its own private table.
-              gridTemplateColumns: "3rem 5.5rem 5.5rem 5.5rem",
+              gridTemplateColumns: "3rem 5.5rem 5.5rem 5.5rem 6rem",
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
@@ -385,6 +467,11 @@ export function AuctionLotRow({
             <span style={GRID_HEAD}>Auction</span>
             <span style={GRID_HEAD}>Mine</span>
             <span style={GRID_HEAD}>Ceiling</span>
+            {/* The fourth column is what the lot is *worth*, against the three columns of what it
+                costs — the whole reason composition is structured (#353). It sits on the same two
+                lines: the catalogue value beside the bids, and the headroom beside the all-ins,
+                because headroom is exactly catalogue value less the all-in cost. */}
+            <span style={GRID_HEAD}>Catalogue</span>
 
             <span style={GRID_LABEL}>bid</span>
             {/* What the lot stands at — the one field the daily loop writes. */}
@@ -457,6 +544,47 @@ export function AuctionLotRow({
             <Tooltip content="The most you can bid with the all-in still inside your ceiling">
               <span style={MUTED_AMOUNT}>{lot.bidRoom ?? "—"}</span>
             </Tooltip>
+            {/* Catalogue value of what the lot is described as holding. The cell is the way in to
+                the composition editor, so describing a lot is one click from the row that made you
+                want to — and an empty one says so rather than showing a bare dash. */}
+            <Tooltip content={catalogHint(lot)}>
+              <button
+                type="button"
+                onClick={() => onEditComposition(lot)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  textAlign: "right",
+                }}
+              >
+                {lot.catalogValue === null ? (
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--color-accent)",
+                      textDecoration: "underline",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {lot.lineCount === 0 ? "+ contents" : "+ catalog value"}
+                  </span>
+                ) : (
+                  <span
+                    style={
+                      // The one vocabulary for *inferred, not recorded* (#238): a `~` and italics.
+                      lot.catalogUncertain
+                        ? { ...AMOUNT, color: "var(--color-text-muted)", fontStyle: "italic" }
+                        : AMOUNT
+                    }
+                  >
+                    {lot.catalogUncertain ? "~" : ""}
+                    {lot.catalogValue}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
 
             <span style={GRID_LABEL}>all-in</span>
             <Tooltip content="The current bid plus the seller's premium. Shipping is added once, on the sale.">
@@ -496,6 +624,24 @@ export function AuctionLotRow({
                     )
                   }
                 />
+              </span>
+            </Tooltip>
+            {/* Headroom: catalogue value less what the lot costs all-in. Green while there is room
+                left, red once the price has passed what the contents are worth. */}
+            <Tooltip content="Catalogue value less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
+              <span
+                style={{
+                  ...AMOUNT,
+                  fontWeight: 500,
+                  color:
+                    lot.headroom === null
+                      ? "var(--color-text-muted)"
+                      : Number(lot.headroom) < 0
+                        ? "var(--color-error)"
+                        : "var(--color-success)",
+                }}
+              >
+                {lot.headroom ?? "—"}
               </span>
             </Tooltip>
           </div>

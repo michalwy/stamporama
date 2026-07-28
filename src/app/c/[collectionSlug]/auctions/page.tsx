@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
+import { getCollectionAreas } from "@/lib/areas";
 import { AuctionLotsPanel } from "./auction-lots-panel";
 
 export const metadata = { title: "Auction sales" };
@@ -22,6 +23,10 @@ export default async function AuctionsPage({ params }: AuctionsPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
+  // The composition editor (#353) picks stamps by area and formats their catalog numbers from each
+  // area's vendor map, exactly as the inventory screens do.
+  const areas = await getCollectionAreas(session.user.id, collection.id);
+
   return (
     <div
       style={{
@@ -41,7 +46,11 @@ export default async function AuctionsPage({ params }: AuctionsPageProps) {
       >
         Auction lots
       </h2>
-      <AuctionLotsPanel collectionId={collection.id} collectionSlug={collectionSlug} />
+      <AuctionLotsPanel
+        collectionId={collection.id}
+        collectionSlug={collectionSlug}
+        areas={areas}
+      />
     </div>
   );
 }

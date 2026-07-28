@@ -9,6 +9,7 @@
 // the one to open; the same lot closing in a month is fine.
 
 import { normalizeDecimalInput } from "./decimal-input";
+import { compactCatalogNumbers } from "./offer-title-template";
 
 // ── Lot outcome ─────────────────────────────────────────────────────────────
 
@@ -183,6 +184,31 @@ export function parsePremiumPercent(
   return parsed;
 }
 
+/** The most of one stamp a single lot line may state. A house lot holding a thousand of one stamp
+ * at one condition is a typo, and the composition editor is not a bulk-intake screen. */
+const MAX_LINE_QUANTITY = 9999;
+
+/**
+ * Parse a composition line's quantity (#353).
+ *
+ * Blank means one — a line the collector added without touching the field is one stamp, which is
+ * the overwhelmingly common case and the schema's own default. Zero is refused rather than stored:
+ * a line for none of something is a line that should not exist, and deleting it says so plainly.
+ */
+export function parseLotQuantity(
+  raw: string
+): { ok: true; value: number } | { ok: false; message: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, value: 1 };
+  const n = Number(trimmed);
+  if (!Number.isInteger(n)) return { ok: false, message: "Quantity must be a whole number." };
+  if (n < 1) return { ok: false, message: "Quantity must be at least 1 — remove the line instead." };
+  if (n > MAX_LINE_QUANTITY) {
+    return { ok: false, message: `Quantity cannot be more than ${MAX_LINE_QUANTITY}.` };
+  }
+  return { ok: true, value: n };
+}
+
 /**
  * Parse a closing time. The client submits an ISO instant (it converts the `datetime-local` field
  * through the browser's own zone, which is the only place the collector's zone is known), so this
@@ -216,4 +242,78 @@ export function normalizeAuctionText(raw: string | null | undefined): string | n
  */
 export function deriveAuctionSaleName(sellerName: string, platformName: string): string {
   return sellerName === platformName ? sellerName : `${sellerName} · ${platformName}`;
+}
+
+// ── Derived lot name (#353) ─────────────────────────────────────────────────
+
+/** One composition line, as the derived lot name reads it. */
+export interface AuctionLotLabelLine {
+  /**
+   * The line's catalog number, **prefix-formatted** (`Mi·PL 12`) — the caller resolves the prefix,
+   * because which vendor is primary and how it is prefixed both depend on the stamp's area.
+   *
+   * One number, not all of them: a lot is named after one catalogue, and printing three numbering
+   * systems side by side names none of them (#357). Empty when the stamp carries no number.
+   */
+  catalogNumbers: readonly string[];
+  stampName: string | null;
+  /** Null for a stamp that belongs to no issue; groups with the other such lines. */
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  quantity: number;
+}
+
+/** Past this, a collapsed number list has stopped identifying the lot and started being a wall of
+ * digits — the count says more. Truncating mid-range would print a span the lot does not hold. */
+const MAX_LABEL_NUMBERS = 48;
+
+function stampsWord(n: number): string {
+  return `${n} stamp${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * What to call a lot the collector never named, derived from **what it holds** (#353).
+ *
+ * A house lot is identified by its numbers — "Mi 1-12, complete" — so the numbers lead, carrying
+ * their catalogue prefix and collapsed on both of #150's axes by the very engine that writes listing
+ * titles (`compactCatalogNumbers`); two implementations of that collapsing would drift apart within
+ * a release. The prefix rides *inside* the collapsing rather than being bolted on around it, which
+ * is what keeps a lot spanning two areas honest: `Mi·PL 1-3,Mi·DE 5` is two families, and each says
+ * which catalogue it belongs to. The issue follows as context when every line shares one, because
+ * even a prefixed span is ambiguous across a collection and `Mi·PL 1-12 · Definitives (1950)` is not.
+ *
+ * A lot spanning several issues is **not** enumerated: the point of a name is to be read at a
+ * glance down a watchlist, and a mixed lot's honest short answer is its size.
+ *
+ * Returns null when there is nothing to derive from, which is the normal state of a lot the moment
+ * it is captured — the caller then falls back to the lot number.
+ */
+export function deriveAuctionLotLabel(lines: readonly AuctionLotLabelLine[]): string | null {
+  if (lines.length === 0) return null;
+
+  const stamps = lines.reduce((n, l) => n + Math.max(0, l.quantity), 0);
+  const issues = new Map<string, { name: string | null; year: number | null }>();
+  for (const line of lines) {
+    issues.set(line.issueId ?? "__none__", { name: line.issueName, year: line.issueYear });
+  }
+
+  if (issues.size > 1) {
+    return `${stampsWord(stamps)} · ${issues.size} issues`;
+  }
+
+  const numbers = lines.map((l) => l.catalogNumbers[0]).filter((n): n is string => !!n);
+  const collapsed = numbers.length > 0 ? compactCatalogNumbers(numbers) : "";
+  const names = [...new Set(lines.map((l) => l.stampName?.trim()).filter((n): n is string => !!n))];
+
+  const head =
+    collapsed && collapsed.length <= MAX_LABEL_NUMBERS
+      ? collapsed
+      : names.length > 0 && names.length <= 3
+        ? names.join(", ")
+        : stampsWord(stamps);
+
+  const [{ name, year }] = [...issues.values()];
+  const issue = name || year ? [name ?? "(unnamed issue)", year ? `(${year})` : null].filter(Boolean).join(" ") : null;
+  return issue ? `${head} · ${issue}` : head;
 }

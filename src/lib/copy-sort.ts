@@ -4,11 +4,27 @@ import type { ItemListItem } from "./items";
 // view (#164), and the server-side lot-intake pagination (#172) so every path orders copies
 // identically. Sorts on the same fields the rows show. Pure (no React / Prisma) so it runs
 // on both the client and the server.
+//
+// The keys are **stamp-level**, so anything that names a stamp at a condition can be ordered by
+// them — an auction lot's composition lines (#353) are sorted by the very same toolbar, and they
+// are not copies at all. Hence {@link SortableCopy}: the fields the comparison actually reads, of
+// which `ItemListItem` is one shape. The comparable amount is passed in, because "the value" is a
+// base-currency catalog figure for a copy and a sale-currency line total for a lot line.
+
+/** What ordering reads off a row. `ItemListItem` satisfies it; so does an auction lot line. */
+export interface SortableCopy {
+  areaId: string | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  issuedYear: number | null;
+  issueYear: number | null;
+  stampName: string | null;
+  issueName: string | null;
+}
 
 /** The primary-vendor catalog number of a copy (falling back to any recorded number), or null.
  * Used as the "by catalog number" sort key. */
 export function primaryCatalogNumber(
-  item: ItemListItem,
+  item: SortableCopy,
   primaryVendorByArea: Map<string, string | null>
 ): string | null {
   const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
@@ -47,10 +63,23 @@ export function sortCopies(
   sortDir: string,
   primaryVendorByArea: Map<string, string | null>
 ): ItemListItem[] {
+  return sortSortableCopies(items, sortKey, sortDir, primaryVendorByArea, (it) => it.value.baseAmount);
+}
+
+/** {@link sortCopies} over anything stamp-shaped, with the comparable amount supplied by the
+ * caller. The copies path is the wrapper above; the auction composition view (#353) passes its
+ * lines and their sale-currency line totals. */
+export function sortSortableCopies<T extends SortableCopy>(
+  items: T[],
+  sortKey: string,
+  sortDir: string,
+  primaryVendorByArea: Map<string, string | null>,
+  amountOf: (item: T) => number | null
+): T[] {
   if (sortKey === "added") return sortDir === "desc" ? [...items].reverse() : items;
   const dir = sortDir === "desc" ? -1 : 1;
-  const yearOf = (it: ItemListItem) => it.issuedYear ?? it.issueYear ?? null;
-  const nameOf = (it: ItemListItem) => it.stampName ?? it.issueName ?? "";
+  const yearOf = (it: T) => it.issuedYear ?? it.issueYear ?? null;
+  const nameOf = (it: T) => it.stampName ?? it.issueName ?? "";
   const numCmp = (a: number | null, b: number | null) => {
     if (a == null && b == null) return 0;
     if (a == null) return 1; // blanks last, both directions
@@ -68,7 +97,7 @@ export function sortCopies(
     .sort((a, b) => {
       let cmp = 0;
       if (sortKey === "year") cmp = numCmp(yearOf(a.it), yearOf(b.it));
-      else if (sortKey === "price") cmp = numCmp(a.it.value.baseAmount, b.it.value.baseAmount);
+      else if (sortKey === "price") cmp = numCmp(amountOf(a.it), amountOf(b.it));
       else if (sortKey === "name") cmp = strCmp(nameOf(a.it), nameOf(b.it));
       else if (sortKey === "catalog")
         cmp = strCmp(

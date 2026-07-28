@@ -249,8 +249,11 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
  *    (`parseSuffixOrdinal`: letters `a`–`z`, Roman numerals), so `1294CKB,1296KB` still cannot fold.
  *
  * Entries are emitted in first-seen order, and a number without a digit run at all (e.g. `Ark.`) is
- * kept verbatim at the end. All comma-joined; duplicates dropped. */
-function compactCatalogNumbers(numbers: readonly string[]): string {
+ * kept verbatim at the end. All comma-joined; duplicates dropped.
+ *
+ * Exported for the derived **auction lot** name (#353): a house lot is "Mi 1-12" whether it is being
+ * listed or bid on, and two implementations of #150's collapsing would drift. */
+export function compactCatalogNumbers(numbers: readonly string[]): string {
   interface Family {
     prefix: string;
     suffix: string;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
+import type { CollectionAreaData } from "@/lib/areas";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -26,6 +27,7 @@ import {
 } from "./use-auctions-query";
 import { AuctionLotRow } from "./auction-lot-row";
 import { AuctionLotFormDialog } from "./auction-lot-form-dialog";
+import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
 import { CONTROL_STYLE, FilterChip, SIGNALS } from "./auction-controls";
 
 /** The closing windows offered on the toolbar. *Ended* is the one that earns its keep: those lots
@@ -40,6 +42,7 @@ type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "edit"; lot: AuctionLotView }
+  | { kind: "lines"; lot: AuctionLotView }
   | { kind: "delete"; lot: AuctionLotView };
 
 /**
@@ -59,6 +62,9 @@ function useMinuteClock(): Date {
 interface AuctionLotsPanelProps {
   collectionId: string;
   collectionSlug: string;
+  /** Needed by the composition editor (#353): the stamp picker browses by area, and catalog
+   * numbers are prefix-formatted from each area's own vendor map (#357). */
+  areas: CollectionAreaData[];
 }
 
 /**
@@ -70,7 +76,11 @@ interface AuctionLotsPanelProps {
  * and off by default, which is the same relationship the bulk listing workspace (#322) has with its
  * groups.
  */
-export function AuctionLotsPanel({ collectionId, collectionSlug }: AuctionLotsPanelProps) {
+export function AuctionLotsPanel({
+  collectionId,
+  collectionSlug,
+  areas,
+}: AuctionLotsPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const now = useMinuteClock();
@@ -441,6 +451,7 @@ export function AuctionLotsPanel({ collectionId, collectionSlug }: AuctionLotsPa
                         return touchAuctionLotCheckedAction(row.id);
                       })
                     }
+                    onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
                   />
                 ))}
               </div>
@@ -481,6 +492,7 @@ export function AuctionLotsPanel({ collectionId, collectionSlug }: AuctionLotsPa
                       return touchAuctionLotCheckedAction(row.id);
                     })
                   }
+                  onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
                 />
               ))}
             </>
@@ -500,8 +512,22 @@ export function AuctionLotsPanel({ collectionId, collectionSlug }: AuctionLotsPa
           mode={dialog.kind}
           collectionId={collectionId}
           lot={dialog.kind === "edit" ? dialog.lot : undefined}
+          areas={areas}
           onClose={closeDialog}
           onSaved={handleSuccess}
+        />
+      )}
+
+      {/* What the lot contains, and what that is worth (#353). Its own dialog rather than a tab on
+          the lot form: composition is a list that grows, and it is read far more often than the
+          lot's own fields are edited. */}
+      {dialog.kind === "lines" && (
+        <AuctionLotLinesDialog
+          collectionId={collectionId}
+          lot={dialog.lot}
+          areas={areas}
+          onClose={closeDialog}
+          onChanged={() => invalidateAll(collectionId)}
         />
       )}
 

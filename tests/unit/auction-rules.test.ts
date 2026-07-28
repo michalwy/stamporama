@@ -13,7 +13,10 @@ import {
   normalizeAuctionUrl,
   parseAuctionAmount,
   parseAuctionInstant,
+  deriveAuctionLotLabel,
+  parseLotQuantity,
   parsePremiumPercent,
+  type AuctionLotLabelLine,
 } from "../../src/lib/auction-rules";
 
 // Vocabulary -----------------------------------------------------------------
@@ -188,5 +191,134 @@ describe("deriveAuctionSaleName", () => {
   });
   it("does not repeat a house selling directly", () => {
     assert.equal(deriveAuctionSaleName("Köhler", "Köhler"), "Köhler");
+  });
+});
+
+// parseLotQuantity ----------------------------------------------------------
+
+describe("parseLotQuantity", () => {
+  it("reads a blank field as one", () => {
+    // A line added without touching the field is one stamp — the schema's own default.
+    assert.deepEqual(parseLotQuantity(""), { ok: true, value: 1 });
+    assert.deepEqual(parseLotQuantity("   "), { ok: true, value: 1 });
+  });
+
+  it("accepts a whole number", () => {
+    assert.deepEqual(parseLotQuantity("4"), { ok: true, value: 4 });
+  });
+
+  it("refuses a fraction", () => {
+    assert.equal(parseLotQuantity("1.5").ok, false);
+    assert.equal(parseLotQuantity("abc").ok, false);
+  });
+
+  it("refuses none of something — that is a line to delete", () => {
+    assert.equal(parseLotQuantity("0").ok, false);
+    assert.equal(parseLotQuantity("-2").ok, false);
+  });
+
+  it("refuses an implausible count", () => {
+    assert.equal(parseLotQuantity("10000").ok, false);
+    assert.deepEqual(parseLotQuantity("9999"), { ok: true, value: 9999 });
+  });
+});
+
+// deriveAuctionLotLabel ------------------------------------------------------
+
+describe("deriveAuctionLotLabel", () => {
+  const line = (over: Partial<AuctionLotLabelLine> = {}): AuctionLotLabelLine => ({
+    catalogNumbers: ["Mi·PL 1"],
+    stampName: null,
+    issueId: "iss",
+    issueName: "Definitives",
+    issueYear: 1950,
+    quantity: 1,
+    ...over,
+  });
+
+  it("leads with the numbers, collapsed, and follows with the issue", () => {
+    const lines = Array.from({ length: 12 }, (_, i) =>
+      line({ catalogNumbers: [`Mi·PL ${i + 1}`] })
+    );
+    // The prefix rides inside the collapsing — it is simply the numbering family's constant part —
+    // so it is written once, around the span.
+    assert.equal(deriveAuctionLotLabel(lines), "Mi·PL 1-12 · Definitives (1950)");
+  });
+
+  it("collapses on both of #150's axes, through the listing-title engine", () => {
+    const lines = [
+      line({ catalogNumbers: ["Mi BL31"] }),
+      line({ catalogNumbers: ["Mi BL32"] }),
+      line({ catalogNumbers: ["Mi BL33"] }),
+      line({ catalogNumbers: ["Mi 40"] }),
+      line({ catalogNumbers: ["Mi 41"] }),
+      line({ catalogNumbers: ["Mi 42A"] }),
+    ];
+    // Families are emitted in first-seen order, and `42A` is its own family (a different suffix),
+    // so it stands beside the `40-41` run rather than inside it.
+    assert.equal(deriveAuctionLotLabel(lines), "Mi BL31-33,Mi 40-41,Mi 42A · Definitives (1950)");
+  });
+
+  it("names only the primary catalogue, never three numbering systems at once", () => {
+    // Second and third numbers are other vendors' — printing them side by side names none of them.
+    assert.equal(
+      deriveAuctionLotLabel([line({ catalogNumbers: ["Mi·PL 7", "Sc 39", "Fi 1"] })]),
+      "Mi·PL 7 · Definitives (1950)"
+    );
+  });
+
+  it("keeps two areas' numbers apart, each under its own prefix", () => {
+    assert.equal(
+      deriveAuctionLotLabel([
+        line({ catalogNumbers: ["Mi·PL 1"] }),
+        line({ catalogNumbers: ["Mi·PL 2"] }),
+        line({ catalogNumbers: ["Mi·DE 5"] }),
+      ]),
+      "Mi·PL 1-2,Mi·DE 5 · Definitives (1950)"
+    );
+  });
+
+  it("gives a mixed lot its size rather than enumerating it", () => {
+    const lines = [
+      line({ issueId: "a", issueName: "A", quantity: 3 }),
+      line({ issueId: "b", issueName: "B", quantity: 11 }),
+    ];
+    assert.equal(deriveAuctionLotLabel(lines), "14 stamps · 2 issues");
+  });
+
+  it("falls back to stamp names when nothing carries a catalog number", () => {
+    assert.equal(
+      deriveAuctionLotLabel([
+        line({ catalogNumbers: [], stampName: "Chopin" }),
+        line({ catalogNumbers: [], stampName: "Curie" }),
+      ]),
+      "Chopin, Curie · Definitives (1950)"
+    );
+  });
+
+  it("falls back to the count when there are neither numbers nor few enough names", () => {
+    const lines = ["a", "b", "c", "d"].map((n) => line({ catalogNumbers: [], stampName: n }));
+    assert.equal(deriveAuctionLotLabel(lines), "4 stamps · Definitives (1950)");
+  });
+
+  it("drops the issue part when the stamps belong to none", () => {
+    assert.equal(
+      deriveAuctionLotLabel([line({ issueId: null, issueName: null, issueYear: null })]),
+      "Mi·PL 1"
+    );
+  });
+
+  it("counts quantity, not lines", () => {
+    assert.equal(
+      deriveAuctionLotLabel([
+        line({ issueId: "a", quantity: 2 }),
+        line({ issueId: "b", quantity: 5 }),
+      ]),
+      "7 stamps · 2 issues"
+    );
+  });
+
+  it("has nothing to derive from an empty composition", () => {
+    assert.equal(deriveAuctionLotLabel([]), null);
   });
 });

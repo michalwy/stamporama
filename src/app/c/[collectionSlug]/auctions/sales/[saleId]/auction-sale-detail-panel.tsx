@@ -3,14 +3,16 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { IssueHeader } from "@/lib/issues";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   useAuctionSaleDetail,
   useInvalidateAuctions,
-  type AuctionLotView,
+  type AuctionLotDetailView,
 } from "../../use-auctions-query";
-import { AuctionLotRow } from "../../auction-lot-row";
 import { AuctionLotFormDialog } from "../../auction-lot-form-dialog";
+import { AuctionLotCardsView } from "./auction-lot-cards-view";
 import { AuctionSaleFormDialog } from "../../auction-sale-form-dialog";
 import {
   AUCTION_LOT_STATUSES,
@@ -26,8 +28,8 @@ type DialogState =
   | { kind: "none" }
   | { kind: "addLot" }
   | { kind: "editSale" }
-  | { kind: "editLot"; lot: AuctionLotView }
-  | { kind: "deleteLot"; lot: AuctionLotView };
+  | { kind: "editLot"; lot: AuctionLotDetailView }
+  | { kind: "deleteLot"; lot: AuctionLotDetailView };
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -50,6 +52,11 @@ interface AuctionSaleDetailPanelProps {
   collectionId: string;
   collectionSlug: string;
   saleId: string;
+  /** For the composition editor's stamp picker and catalog-number formatting (#353). */
+  areas: CollectionAreaData[];
+  /** Issue headers for the lines' issue groups, so they carry the same catalog chips and stamp
+   * count the purchase-order and offer views show (#353). */
+  issueHeaderById: Record<string, IssueHeader>;
 }
 
 /**
@@ -64,6 +71,8 @@ export function AuctionSaleDetailPanel({
   collectionId,
   collectionSlug,
   saleId,
+  areas,
+  issueHeaderById,
 }: AuctionSaleDetailPanelProps) {
   const now = useMinuteClock();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
@@ -109,7 +118,7 @@ export function AuctionSaleDetailPanel({
   // The parcel's own fees price every signal here, exactly as they do server-side — shipping left
   // out, because a signal is about one lot.
   const fees = { premiumPercent: sale.premiumPercent, premiumFixed: sale.premiumFixed };
-  const carries = (lot: AuctionLotView, s: LotSignal) =>
+  const carries = (lot: AuctionLotDetailView, s: LotSignal) =>
     lotHasSignal(
       s,
       {
@@ -228,6 +237,27 @@ export function AuctionSaleDetailPanel({
           hint="Bids plus premium on every payable lot, plus shipping once."
           strong
         />
+        {/* What the parcel is worth against what it costs (#353). Unlike a lot row's headroom this
+            one has shipping in it — that is what the parcel actually costs, and shipping is added
+            here exactly once. */}
+        <Field
+          label="Catalogue"
+          value={`${summary.catalogTotal} ${sale.currency}`}
+          hint={
+            summary.unvaluedCount > 0
+              ? `Over the payable lots whose contents are described. ${summary.unvaluedCount} of them ${summary.unvaluedCount === 1 ? "is" : "are"} not, so this is lower than the parcel is worth.`
+              : "Catalogue value of everything this parcel is described as holding."
+          }
+        />
+        <Field
+          label="Headroom"
+          value={summary.headroom === null ? "—" : `${summary.headroom} ${sale.currency}`}
+          hint="Catalogue value less the all-in cost of the parcel, shipping included."
+          tone={
+            summary.headroom === null ? undefined : Number(summary.headroom) < 0 ? "bad" : "good"
+          }
+          strong
+        />
       </div>
 
       {summary.unbidCount > 0 && (
@@ -283,63 +313,75 @@ export function AuctionSaleDetailPanel({
         </div>
       )}
 
-      <div
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          overflow: "clip",
-          background: "var(--color-bg-elevated)",
-        }}
-      >
-        {sale.lots.length === 0 ? (
-          <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            No lots in this sale yet. <strong>Add lot</strong> puts one straight into this parcel;
-            adding from the lots screen and naming this seller and platform lands in it too.
-          </div>
-        ) : visibleLots.length === 0 ? (
-          <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            No lots in this parcel match that filter.
-          </div>
-        ) : (
-          visibleLots.map((lot, idx) => (
-            <AuctionLotRow
-              key={lot.id}
-              lot={lot}
-              collectionSlug={collectionSlug}
-              now={now}
-              showSale={false}
-              isLast={idx === visibleLots.length - 1}
-              isPending={isPending}
-              onEdit={(row) => setDialog({ kind: "editLot", lot: row })}
-              onDelete={(row) => setDialog({ kind: "deleteLot", lot: row })}
-              onSetBid={(row, value) =>
-                runLotAction(async () => {
-                  const { setAuctionLotBidAction } = await import("@/app/actions/auctions");
-                  return setAuctionLotBidAction(row.id, value);
-                })
-              }
-              onSetMyBid={(row, value) =>
-                runLotAction(async () => {
-                  const { setAuctionLotMyBidAction } = await import("@/app/actions/auctions");
-                  return setAuctionLotMyBidAction(row.id, value);
-                })
-              }
-              onSetMaxBid={(row, value) =>
-                runLotAction(async () => {
-                  const { setAuctionLotMaxBidAction } = await import("@/app/actions/auctions");
-                  return setAuctionLotMaxBidAction(row.id, value);
-                })
-              }
-              onMarkChecked={(row) =>
-                runLotAction(async () => {
-                  const { touchAuctionLotCheckedAction } = await import("@/app/actions/auctions");
-                  return touchAuctionLotCheckedAction(row.id);
-                })
-              }
-            />
-          ))
-        )}
-      </div>
+      {sale.lots.length === 0 ? (
+        <div
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.75rem",
+            background: "var(--color-bg-elevated)",
+            padding: "2rem",
+            color: "var(--color-text-muted)",
+            fontSize: "0.9375rem",
+          }}
+        >
+          No lots in this sale yet. <strong>Add lot</strong> puts one straight into this parcel;
+          adding from the lots screen and naming this seller and platform lands in it too.
+        </div>
+      ) : visibleLots.length === 0 ? (
+        <div
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.75rem",
+            background: "var(--color-bg-elevated)",
+            padding: "2rem",
+            color: "var(--color-text-muted)",
+            fontSize: "0.9375rem",
+          }}
+        >
+          No lots in this parcel match that filter.
+        </div>
+      ) : (
+        /* Each lot a collapsible card over what it holds (#353) — the purchase-order intake and
+           offer detail layout, applied to a parcel. The flat watchlist keeps its plain rows: there
+           the question is what to bid on next, across every seller. */
+        <AuctionLotCardsView
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          lots={visibleLots}
+          areas={areas}
+          issueHeaderById={issueHeaderById}
+          now={now}
+          isPending={isPending}
+          onChanged={() => invalidateAll(collectionId)}
+          onEditLot={(row) => setDialog({ kind: "editLot", lot: row })}
+          onDeleteLot={(row) => setDialog({ kind: "deleteLot", lot: row })}
+          onSetBid={(row, value) =>
+            runLotAction(async () => {
+              const { setAuctionLotBidAction } = await import("@/app/actions/auctions");
+              return setAuctionLotBidAction(row.id, value);
+            })
+          }
+          onSetMyBid={(row, value) =>
+            runLotAction(async () => {
+              const { setAuctionLotMyBidAction } = await import("@/app/actions/auctions");
+              return setAuctionLotMyBidAction(row.id, value);
+            })
+          }
+          onSetMaxBid={(row, value) =>
+            runLotAction(async () => {
+              const { setAuctionLotMaxBidAction } = await import("@/app/actions/auctions");
+              return setAuctionLotMaxBidAction(row.id, value);
+            })
+          }
+          onMarkChecked={(row) =>
+            runLotAction(async () => {
+              const { touchAuctionLotCheckedAction } = await import("@/app/actions/auctions");
+              return touchAuctionLotCheckedAction(row.id);
+            })
+          }
+        />
+      )}
+
 
       {dialog.kind === "editSale" && (
         <AuctionSaleFormDialog
@@ -364,6 +406,7 @@ export function AuctionSaleDetailPanel({
             currency: sale.currency,
             endsAt: sale.endsAt,
           }}
+          areas={areas}
           onClose={() => setDialog({ kind: "none" })}
           onSaved={() => {
             setDialog({ kind: "none" });
@@ -417,11 +460,14 @@ function Field({
   value,
   hint,
   strong,
+  tone,
 }: {
   label: string;
   value: string;
   hint?: string;
   strong?: boolean;
+  /** Colours the figure where it carries a verdict rather than a measurement. */
+  tone?: "good" | "bad";
 }) {
   return (
     <Tooltip content={hint}>
@@ -442,7 +488,12 @@ function Field({
             fontSize: strong ? "1rem" : "0.875rem",
             fontWeight: strong ? 700 : 500,
             fontVariantNumeric: "tabular-nums",
-            color: "var(--color-text-primary)",
+            color:
+              tone === "bad"
+                ? "var(--color-error)"
+                : tone === "good"
+                  ? "var(--color-success)"
+                  : "var(--color-text-primary)",
           }}
         >
           {value}

@@ -1405,8 +1405,14 @@ async function isDescendantStamp(
 // Assembles the inputs the pure `valuateCopy` needs (area primary catalog, own +
 // descendant-variant prices, currency rates) and delegates the rule to `valuation.ts`.
 
-/** Minimal copy projection needed to value it. */
-interface ValuationRow {
+/**
+ * Minimal projection needed to value one thing from the catalog.
+ *
+ * Nothing here is copy-specific: it is a **stamp × condition × certificate × format**, of which a
+ * physical copy is one instance and an auction lot's composition line (#353) is another. `id` is
+ * only the key the result map is returned under, so a caller may key by whatever it holds.
+ */
+export interface ValuationRow {
   id: string;
   stampId: string;
   conditionId: string;
@@ -1428,10 +1434,15 @@ const VALUATION_PRICE_SELECT = {
   catalogEdition: { select: { year: true, catalogNameId: true } },
 } as const;
 
-/** Value a set of copies. Loads the stamp prices, area primary catalogs, descendant
- * variant prices, and currency rates once, then applies the pure `valuateCopy` rule.
- * Caller must have already asserted collection ownership. Returns id → valuation. */
-async function valuateItemRows(
+/** Value a set of {@link ValuationRow}s. Loads the stamp prices, area primary catalogs, descendant
+ * variant prices, format factors and currency rates **once** for the whole set, then applies the
+ * pure `valuateCopy` rule — which is why every caller batches rather than valuing row by row.
+ * Caller must have already asserted collection ownership. Returns id → valuation.
+ *
+ * Exported for the auction lot composition (#353), whose lines are the same shape at a null
+ * certificate: re-deriving the unknown-variant rollup and the format factors there would be two
+ * copies of ADR-0020 and #238 to keep in step. */
+export async function valuateItemRows(
   collectionId: string,
   rows: ValuationRow[]
 ): Promise<Map<string, CopyValuation>> {

@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import {
   allIn,
   bidStanding,
+  headroom,
   lotHasSignal,
   maxBidWithin,
   summarizeAuctionSale,
@@ -12,6 +13,14 @@ import {
   type LotSignal,
 } from "./auction-lot";
 import {
+  emptyComposition,
+  valuateAuctionLotLines,
+  type AuctionLotComposition,
+  type AuctionLotLineInput,
+  type AuctionLotLineItem,
+} from "./auction-lines";
+import {
+  deriveAuctionLotLabel,
   deriveAuctionSaleName,
   isAuctionLotStatus,
   isAuctionSaleStatus,
@@ -29,9 +38,10 @@ import {
 // and platform rather than by picking a sale (#352). The pure vocabulary lives in `auction-rules.ts`
 // and the arithmetic in `auction-lot.ts`; neither imports Prisma. All access is owner-scoped.
 //
-// Two things this module deliberately does not do: composition (`AuctionLotLine`, #353) and
-// settlement into a `Purchase` (#28). Both have their own issues, and both read the tables written
-// here without changing them.
+// Composition (`AuctionLotLine`, #353) is written here too, but everything about what it is *worth*
+// lives in `auction-lines.ts`: the catalogue rules it reuses (unknown-variant rollup, format
+// pricing) are the copy valuation's, and this module only hands the figures on. Settlement into a
+// `Purchase` (#28) has its own issue and reads these tables without changing them.
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +50,7 @@ export type AuctionBlockReason =
   | "no-platform"
   | "no-sale"
   | "bad-sale"
+  | "bad-line"
   | "settled"
   | "has-lots";
 
@@ -157,6 +168,16 @@ export interface AuctionLotListItem {
   maxBid: string | null;
   finalPrice: string | null;
   status: AuctionLotStatus;
+  /**
+   * What to call a lot the collector never named, derived from what it holds (#353) — collapsed
+   * catalogue numbers and the issue, e.g. `1-12 · Definitives (1950)`.
+   *
+   * **Derived on every read, never stored.** Unlike an offer's title (#209/#365) this one is never
+   * published anywhere: it is read on our own screens only, and a lot is described line by line, so
+   * a stored value would freeze on the first stamp and then disagree with the rest. Null until
+   * something has been described, which is where every lot starts.
+   */
+  derivedTitle: string | null;
   notes: string | null;
   /**
    * What the costed figure (`finalPrice` when the lot closed, else `currentBid`) actually costs
@@ -187,6 +208,30 @@ export interface AuctionLotListItem {
   myBidOverCeiling: boolean | null;
   /** Composition lines entered so far (#353). Zero is the normal state while bidding. */
   lineCount: number;
+  /**
+   * What the lot's composition is worth at catalogue, in the **sale's currency** (#353).
+   *
+   * Null when nothing has been entered, or when nothing entered carries a price — never `0.00`,
+   * which would make the headroom below read as a catastrophic overbid on a lot nobody has priced.
+   */
+  catalogValue: string | null;
+  /** The value leans on a lowest-variant estimate (#238) — *inferred, not recorded*, and rendered
+   * with the same `~` + italics vocabulary the issue list uses. */
+  catalogUncertain: boolean;
+  /** Lines with no catalogue price at their condition × format. Surfaced rather than hidden: a
+   * total that silently omits half the lot looks complete. */
+  unpricedLineCount: number;
+  /** Lines priced in a currency with no rate into the sale's — they exist and cannot be counted. */
+  unconvertibleLineCount: number;
+  /**
+   * `catalogValue − allIn`: what is left over if the lot is taken at the price it stands at.
+   *
+   * Measured against the all-in cost, never the hammer price — a ceiling set against the hammer
+   * price alone systematically overpays on cheap lots, where the premium is a large share of what
+   * leaves the bank account. Like {@link allIn} it carries **premium only**: shipping belongs to the
+   * parcel and the sale's own total adds it once ({@link AuctionSaleSummary.headroom}).
+   */
+  headroom: string | null;
   /** Whether the lot has been transcribed into a purchase (#28) — it is then read-only here. */
   settled: boolean;
   createdAt: Date;
@@ -227,7 +272,7 @@ const LOT_SELECT = {
 
 type LotRow = Prisma.AuctionLotGetPayload<{ select: typeof LOT_SELECT }>;
 
-function toLotListItem(row: LotRow): AuctionLotListItem {
+function toLotListItem(row: LotRow, composition?: AuctionLotComposition): AuctionLotListItem {
   const sale = row.auctionSale;
   const status = (isAuctionLotStatus(row.status) ? row.status : "watching") as AuctionLotStatus;
   const costed = row.finalPrice ?? row.currentBid;
@@ -261,6 +306,18 @@ function toLotListItem(row: LotRow): AuctionLotListItem {
     maxBid: ceiling,
     finalPrice: money(row.finalPrice),
     status,
+    derivedTitle: deriveAuctionLotLabel(
+      (composition?.lines ?? []).map((line) => ({
+        // Prefix-formatted (`Mi·PL 12`): `1-12` alone does not say which catalogue it is 1–12 of,
+        // and the collapsing works on it unchanged — the prefix is just a longer numbering family.
+        catalogNumbers: line.catalogLabel ? [line.catalogLabel] : [],
+        stampName: line.stampName,
+        issueId: line.issueId,
+        issueName: line.issueName,
+        issueYear: line.issueYear,
+        quantity: line.quantity,
+      }))
+    ),
     notes: row.notes,
     allIn: allInValue,
     standing: bidStanding(money(row.myBid), money(row.currentBid)),
@@ -271,9 +328,32 @@ function toLotListItem(row: LotRow): AuctionLotListItem {
     myAllIn,
     myBidOverCeiling: myAllIn !== null && ceiling !== null ? Number(myAllIn) > Number(ceiling) : null,
     lineCount: row._count.lines,
+    catalogValue: composition?.catalogValue ?? null,
+    catalogUncertain: composition?.uncertain ?? false,
+    unpricedLineCount: composition?.unpricedLines ?? 0,
+    unconvertibleLineCount: composition?.unconvertibleLines ?? 0,
+    // Against the same costed figure `allIn` used — the settled price once the lot closed, else the
+    // last observed bid — so the two figures on the row are always about the same money.
+    headroom: headroom(composition?.catalogValue ?? null, money(costed), fees),
     settled: row.purchaseLotId !== null,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Catalogue values for a whole page of lots in **one** valuation pass (#353).
+ *
+ * Lots with no composition are left out of the query altogether — that is most of them while a
+ * watchlist is being worked — and the rest are valued together, so the format-factor rows and the
+ * area tree are loaded once for the page rather than once per row.
+ */
+async function compositionsFor(
+  collectionId: string,
+  rows: { id: string; _count: { lines: number } }[]
+): Promise<Map<string, AuctionLotComposition>> {
+  const withLines = rows.filter((r) => r._count.lines > 0).map((r) => r.id);
+  if (withLines.length === 0) return new Map();
+  return valuateAuctionLotLines(collectionId, withLines);
 }
 
 /** The closing-time window a list is narrowed to (#351). `ended` is the one that earns its keep: a
@@ -426,8 +506,9 @@ export async function listAuctionLots(
 
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
+  const compositions = await compositionsFor(collectionId, page);
   return {
-    items: page.map(toLotListItem),
+    items: page.map((row) => toLotListItem(row, compositions.get(row.id))),
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
 }
@@ -610,12 +691,25 @@ const SALE_SELECT = {
   platformId: true,
   seller: { select: { name: true } },
   platform: { select: { name: true } },
-  lots: { select: { status: true, currentBid: true, finalPrice: true } },
+  lots: {
+    select: {
+      id: true,
+      status: true,
+      currentBid: true,
+      finalPrice: true,
+      // What the parcel's catalogue total is summed from (#353); the ids of the lots that have one
+      // are what the batched valuation is asked for.
+      _count: { select: { lines: true } },
+    },
+  },
 } satisfies Prisma.AuctionSaleSelect;
 
 type SaleRow = Prisma.AuctionSaleGetPayload<{ select: typeof SALE_SELECT }>;
 
-function toSaleListItem(row: SaleRow): AuctionSaleListItem {
+function toSaleListItem(
+  row: SaleRow,
+  compositions: Map<string, AuctionLotComposition>
+): AuctionSaleListItem {
   const fees = {
     premiumPercent: money(row.premiumPercent),
     premiumFixed: money(row.premiumFixed),
@@ -641,9 +735,9 @@ function toSaleListItem(row: SaleRow): AuctionSaleListItem {
         status: (isAuctionLotStatus(lot.status) ? lot.status : "watching") as AuctionLotStatus,
         currentBid: money(lot.currentBid),
         finalPrice: money(lot.finalPrice),
-        // Catalogue value comes with composition (#353); until then every lot counts as unvalued,
-        // which the summary already reports rather than hiding.
-        catalogValue: null,
+        // Already in this sale's currency (#353) — the conversion happens once per sale currency in
+        // `auction-lines.ts`, precisely so the parcel's totals never mix two.
+        catalogValue: compositions.get(lot.id)?.catalogValue ?? null,
       })),
       fees
     ),
@@ -665,11 +759,31 @@ export async function listAuctionSales(
     orderBy: { createdAt: "desc" },
     select: SALE_SELECT,
   });
-  return rows.map(toSaleListItem);
+  // One valuation pass across every sale on the screen, for the same reason the lot list batches:
+  // this list is unpaginated by design, so per-sale valuation would be a pricing run per parcel.
+  const compositions = await compositionsFor(
+    collectionId,
+    rows.flatMap((row) => row.lots)
+  );
+  return rows.map((row) => toSaleListItem(row, compositions));
+}
+
+/**
+ * A lot on the **sale's own screen**, where it is drawn as a collapsible card over its composition
+ * — the purchase-order and offer detail layout (#121/#165), applied to a parcel.
+ *
+ * The lines ride along with the lot rather than being fetched per card: a sale is one parcel from
+ * one seller, so the whole screen is bounded, and a card-per-request would make expanding the
+ * second lot a round trip. The **flat watchlist** deliberately does not carry them — forty lots
+ * there would mean forty compositions fetched to draw forty collapsed rows, and the row only needs
+ * the total, which `AuctionLotListItem` already has.
+ */
+export interface AuctionLotDetailItem extends AuctionLotListItem {
+  lines: AuctionLotLineItem[];
 }
 
 export interface AuctionSaleDetail extends AuctionSaleListItem {
-  lots: AuctionLotListItem[];
+  lots: AuctionLotDetailItem[];
 }
 
 /** A sale with its own fields and its lots — the settlement / shipping view. */
@@ -677,7 +791,7 @@ export async function getAuctionSaleDetail(
   ownerId: string,
   saleId: string
 ): Promise<AuctionSaleDetail> {
-  await assertSaleOwner(ownerId, saleId);
+  const sale = await assertSaleOwner(ownerId, saleId);
   const [row, lots] = await Promise.all([
     prisma.auctionSale.findUniqueOrThrow({ where: { id: saleId }, select: SALE_SELECT }),
     prisma.auctionLot.findMany({
@@ -688,7 +802,16 @@ export async function getAuctionSaleDetail(
       select: LOT_SELECT,
     }),
   ]);
-  return { ...toSaleListItem(row), lots: lots.map(toLotListItem) };
+  // The sale's own lot rows and the detail's are the same lots, so one pass serves both the parcel
+  // total and each row's catalogue-value cell.
+  const compositions = await compositionsFor(sale.collectionId, lots);
+  return {
+    ...toSaleListItem(row, compositions),
+    lots: lots.map((lot) => ({
+      ...toLotListItem(lot, compositions.get(lot.id)),
+      lines: compositions.get(lot.id)?.lines ?? [],
+    })),
+  };
 }
 
 // ── Open-sale matching (#352) ───────────────────────────────────────────────
@@ -951,6 +1074,15 @@ export interface AuctionLotInput {
   myBid: string | null;
   maxBid: string | null;
   notes: string | null;
+  /**
+   * The lot's composition, written **with** the lot in one operation (#353).
+   *
+   * Capturing a listing and saying what is in it is one act, not two: the collector is reading the
+   * lot description as they type, and making them save an empty lot and then go find it again to
+   * describe it is the shape that leaves compositions unentered. Only on create — growing a lot
+   * afterwards happens on the sale's own screen, where the lines are already on display.
+   */
+  lines?: AuctionLotLineInput[];
 }
 
 /** Verify the sale a lot is being written into belongs to this collection, returning its two
@@ -980,6 +1112,10 @@ export async function createAuctionLot(
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const parties = await assertSaleInCollection(collectionId, input.auctionSaleId);
+  const lines = input.lines ?? [];
+  // Every line is checked before anything is written, so a lot is never created with half of the
+  // composition the collector entered — the nested create below is one statement either way.
+  for (const line of lines) await assertLineTargets(collectionId, line);
   const lot = await prisma.auctionLot.create({
     data: {
       auctionSaleId: input.auctionSaleId,
@@ -993,6 +1129,19 @@ export async function createAuctionLot(
       myBid: input.myBid,
       maxBid: input.maxBid,
       notes: input.notes,
+      ...(lines.length > 0
+        ? {
+            lines: {
+              create: lines.map((line) => ({
+                stampId: line.stampId,
+                conditionId: line.conditionId,
+                certificateStatusId: line.certificateStatusId,
+                formatId: line.formatId,
+                quantity: line.quantity,
+              })),
+            },
+          }
+        : {}),
     },
     select: { id: true },
   });
@@ -1103,6 +1252,197 @@ export async function setAuctionLotMaxBid(
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.update({ where: { id: lotId }, data: { maxBid } });
+}
+
+// ── Composition (#353) ──────────────────────────────────────────────────────
+
+/** The lot's own currency and fees, for costing its composition against what it will cost. */
+async function lotCostingContext(
+  lotId: string
+): Promise<{ currency: string; costed: string | null; fees: { premiumPercent: string | null; premiumFixed: string | null } }> {
+  const lot = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: {
+      currentBid: true,
+      finalPrice: true,
+      auctionSale: { select: { currency: true, premiumPercent: true, premiumFixed: true } },
+    },
+  });
+  return {
+    currency: lot.auctionSale.currency,
+    costed: money(lot.finalPrice ?? lot.currentBid),
+    fees: {
+      premiumPercent: money(lot.auctionSale.premiumPercent),
+      premiumFixed: money(lot.auctionSale.premiumFixed),
+    },
+  };
+}
+
+/** What one lot is made of, valued — the composition editor's read (#353). Empty rather than absent
+ * for a lot nothing has been entered against, which is where every lot starts. */
+export async function getAuctionLotComposition(
+  ownerId: string,
+  lotId: string
+): Promise<AuctionLotComposition & { allIn: string | null; headroom: string | null }> {
+  const lot = await assertLotOwner(ownerId, lotId);
+  const [context, compositions] = await Promise.all([
+    lotCostingContext(lotId),
+    valuateAuctionLotLines(lot.collectionId, [lotId]),
+  ]);
+  const composition = compositions.get(lotId) ?? emptyComposition(lotId, context.currency);
+  return {
+    ...composition,
+    // Premium only, shipping excluded — the row's rule, so the dialog and the row it was opened
+    // from can never disagree about what the lot costs.
+    allIn: allIn(context.costed, context.fees),
+    headroom: headroom(composition.catalogValue, context.costed, context.fees),
+  };
+}
+
+/** Verify the dictionary rows a line points at belong to this collection. Both FKs are `Restrict`,
+ * and a stamp from another collection would otherwise be caught only by the database. */
+async function assertLineTargets(collectionId: string, input: AuctionLotLineInput): Promise<void> {
+  const [stamp, condition, certificate, format] = await Promise.all([
+    prisma.stamp.findFirst({ where: { id: input.stampId, collectionId }, select: { id: true } }),
+    prisma.stampCondition.findFirst({
+      where: { id: input.conditionId, collectionId },
+      select: { id: true },
+    }),
+    input.certificateStatusId
+      ? prisma.certificateStatus.findFirst({
+          where: { id: input.certificateStatusId, collectionId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    input.formatId
+      ? prisma.stampFormat.findFirst({
+          where: { id: input.formatId, collectionId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  if (!stamp) throw new AuctionActionBlockedError("bad-line", "Pick the stamp this line is about.");
+  if (!condition) {
+    throw new AuctionActionBlockedError("bad-line", "Pick the condition this line is described in.");
+  }
+  // Null is "none" and needs no row (ADR-0006 §2 / ADR-0020); a non-null id that resolved to
+  // nothing does.
+  if (input.certificateStatusId && !certificate) {
+    throw new AuctionActionBlockedError("bad-line", "That certificate status no longer exists.");
+  }
+  if (input.formatId && !format) {
+    throw new AuctionActionBlockedError("bad-line", "That format no longer exists.");
+  }
+}
+
+/**
+ * The stamps a line target names: one stamp, or **every required member of a whole issue**.
+ *
+ * Picking a series is how a lot that says "Michel 1–12, complete" is described without twelve trips
+ * through the picker — the same convenience the purchase-order intake offers (#121), resolved the
+ * same way, to the members marked *required for completeness*. A lot's composition stays a list of
+ * per-stamp lines: the issue is an entry shortcut, never a thing a line points at, because the
+ * catalogue value has to be summed per stamp and a lost lot has to be attributable per stamp.
+ */
+export async function resolveAuctionLineStamps(
+  collectionId: string,
+  target: { stampId?: string | null; issueId?: string | null }
+): Promise<string[]> {
+  if (target.issueId) {
+    const issue = await prisma.issue.findFirst({
+      where: { id: target.issueId, collectionId },
+      select: {
+        members: { where: { requiredForCompleteness: true }, select: { stampId: true } },
+      },
+    });
+    if (!issue) {
+      throw new AuctionActionBlockedError("bad-line", "That issue no longer exists.");
+    }
+    if (issue.members.length === 0) {
+      throw new AuctionActionBlockedError(
+        "bad-line",
+        "This issue has no stamps marked required for completeness, so there is nothing to add."
+      );
+    }
+    return issue.members.map((m) => m.stampId);
+  }
+  if (target.stampId) return [target.stampId];
+  throw new AuctionActionBlockedError("bad-line", "Pick the stamp this line is about.");
+}
+
+/** Add a line to a lot's composition. */
+export async function createAuctionLotLine(
+  ownerId: string,
+  lotId: string,
+  input: AuctionLotLineInput
+): Promise<string> {
+  const lot = await assertLotOwner(ownerId, lotId);
+  assertLotEditable(lot);
+  await assertLineTargets(lot.collectionId, input);
+  const line = await prisma.auctionLotLine.create({
+    data: {
+      auctionLotId: lotId,
+      stampId: input.stampId,
+      conditionId: input.conditionId,
+      certificateStatusId: input.certificateStatusId,
+      formatId: input.formatId,
+      quantity: input.quantity,
+    },
+    select: { id: true },
+  });
+  return line.id;
+}
+
+/** Resolve a line the owner may act on, along with the lot it belongs to. */
+async function assertLineOwner(
+  ownerId: string,
+  lineId: string
+): Promise<{ id: string; auctionLotId: string; collectionId: string; purchaseLotId: string | null }> {
+  const line = await prisma.auctionLotLine.findFirst({
+    where: { id: lineId, auctionLot: { auctionSale: { collection: { ownerId } } } },
+    select: {
+      id: true,
+      auctionLotId: true,
+      auctionLot: {
+        select: { purchaseLotId: true, auctionSale: { select: { collectionId: true } } },
+      },
+    },
+  });
+  if (!line) throw new Error("Composition line not found");
+  return {
+    id: line.id,
+    auctionLotId: line.auctionLotId,
+    collectionId: line.auctionLot.auctionSale.collectionId,
+    purchaseLotId: line.auctionLot.purchaseLotId,
+  };
+}
+
+/** Edit a line — its stamp, condition, format or quantity. */
+export async function updateAuctionLotLine(
+  ownerId: string,
+  lineId: string,
+  input: AuctionLotLineInput
+): Promise<void> {
+  const line = await assertLineOwner(ownerId, lineId);
+  assertLotEditable(line);
+  await assertLineTargets(line.collectionId, input);
+  await prisma.auctionLotLine.update({
+    where: { id: lineId },
+    data: {
+      stampId: input.stampId,
+      conditionId: input.conditionId,
+      certificateStatusId: input.certificateStatusId,
+      formatId: input.formatId,
+      quantity: input.quantity,
+    },
+  });
+}
+
+/** Remove a line from a lot's composition. */
+export async function deleteAuctionLotLine(ownerId: string, lineId: string): Promise<void> {
+  const line = await assertLineOwner(ownerId, lineId);
+  assertLotEditable(line);
+  await prisma.auctionLotLine.delete({ where: { id: lineId } });
 }
 
 /** Delete a lot. Composition lines cascade with it; a lot already settled is refused, because the

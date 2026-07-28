@@ -8,7 +8,9 @@ import {
   maxBidWithin,
   LOT_SIGNALS,
   summarizeAuctionSale,
+  summarizeLotComposition,
   type AuctionLotSummaryRow,
+  type LotLineValue,
 } from "../../src/lib/auction-lot";
 
 // allIn ---------------------------------------------------------------------
@@ -282,5 +284,78 @@ describe("lotHasSignal", () => {
         false
       );
     }
+  });
+});
+
+// summarizeLotComposition ---------------------------------------------------
+
+describe("summarizeLotComposition", () => {
+  const line = (over: Partial<LotLineValue> = {}): LotLineValue => ({
+    quantity: 1,
+    unitValue: 10,
+    unpriced: false,
+    unconvertible: false,
+    uncertain: false,
+    ...over,
+  });
+
+  it("multiplies each line by its quantity and sums", () => {
+    const s = summarizeLotComposition([line({ unitValue: 10, quantity: 3 }), line({ unitValue: 2.5 })]);
+    assert.equal(s.catalogValue, "32.50");
+    assert.equal(s.lineCount, 2);
+    assert.equal(s.quantity, 4);
+  });
+
+  it("has no value at all — not zero — when nothing is priced", () => {
+    const s = summarizeLotComposition([
+      line({ unitValue: null, unpriced: true, quantity: 2 }),
+      line({ unitValue: null, unpriced: true }),
+    ]);
+    // A composition entered but unpriced is unanswered, not worthless: `0.00` would make every
+    // headroom against it read as a catastrophic overbid.
+    assert.equal(s.catalogValue, null);
+    assert.equal(s.unpricedLines, 2);
+    assert.equal(s.quantity, 3);
+  });
+
+  it("counts an unpriced line without dropping it from the lot", () => {
+    const s = summarizeLotComposition([line({ unitValue: 10 }), line({ unitValue: null, unpriced: true })]);
+    assert.equal(s.catalogValue, "10.00");
+    assert.equal(s.unpricedLines, 1);
+    assert.equal(s.lineCount, 2);
+  });
+
+  it("keeps 'priced but unconvertible' apart from 'no price'", () => {
+    const s = summarizeLotComposition([line({ unitValue: null, unconvertible: true })]);
+    assert.equal(s.catalogValue, null);
+    assert.equal(s.unconvertibleLines, 1);
+    assert.equal(s.unpricedLines, 0);
+  });
+
+  it("marks the total uncertain only when an uncertain line actually contributed", () => {
+    assert.equal(summarizeLotComposition([line({ uncertain: true })]).uncertain, true);
+    assert.equal(
+      summarizeLotComposition([line(), line({ unitValue: null, unpriced: true, uncertain: true })])
+        .uncertain,
+      false
+    );
+  });
+
+  it("treats a zero-quantity line as contributing nothing", () => {
+    const s = summarizeLotComposition([line({ quantity: 0 }), line({ quantity: 2 })]);
+    assert.equal(s.catalogValue, "20.00");
+    assert.equal(s.quantity, 2);
+  });
+
+  it("returns an empty composition for no lines", () => {
+    const s = summarizeLotComposition([]);
+    assert.deepEqual(s, {
+      lineCount: 0,
+      quantity: 0,
+      catalogValue: null,
+      unpricedLines: 0,
+      unconvertibleLines: 0,
+      uncertain: false,
+    });
   });
 });

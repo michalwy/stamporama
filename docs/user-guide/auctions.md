@@ -49,6 +49,16 @@ and the settlement follows from them:
    auction's own figures — the **starting price** and the **current bid** — and finally yours:
    **my bid** and **my ceiling**.
 
+Leave the **title** blank and the lot is **named after what it holds**: the catalogue numbers with
+their prefix, collapsed into ranges, then the issue when every line shares one — *Mi·PL 1-12 ·
+Definitives (1950)*. The prefix is written once around the span and is what says *which* catalogue
+the numbers are from, so a lot spanning two areas reads *Mi·PL 1-3, Mi·DE 5* rather than a run of
+numbers that could be anything. A lot
+spanning several issues reads as its size instead (*14 stamps · 3 issues*), because a name is meant
+to be read at a glance down the watchlist. Nothing is stored: the name follows the contents as you
+add lines, and typing a title of your own replaces it for good. The title field's placeholder shows
+the name the lists are currently using.
+
 The **starting price** is optional and is a record, nothing more: it is what the lot opened at, not
 what anyone has bid. A lot with no bid recorded costs nothing whatever it opens at, so the starting
 price never counts toward an all-in figure or a parcel total.
@@ -64,12 +74,14 @@ terms on the sale itself.
 
 The right of each row is a small grid — three figures, each shown **twice**:
 
-| | **Auction** | **Mine** | **Ceiling** |
-|---|---|---|---|
-| **bid** | what the lot stands at | what you placed | the most you could bid |
-| **all-in** | what that would cost | what yours would cost | the most it is worth to you |
+| | **Auction** | **Mine** | **Ceiling** | **Catalogue** |
+|---|---|---|---|---|
+| **bid** | what the lot stands at | what you placed | the most you could bid | what the contents are worth |
+| **all-in** | what that would cost | what yours would cost | the most it is worth to you | what is left over |
 
-The **bid** line is hammer prices, the **all-in** line adds the seller's premium. Each pair has one
+The first three columns are what the lot **costs**; the fourth is what it is **worth**, and it only
+fills in once you have said what the lot contains — see [What a lot contains](#what-a-lot-contains)
+below. The **bid** line is hammer prices, the **all-in** line adds the seller's premium. Each pair has one
 figure you type and one derived from it, shown muted: the auction's bid and yours are bids, a
 ceiling is a valuation of the total. The ceiling's muted half is exactly what *Bid my ceiling*
 would place.
@@ -171,7 +183,9 @@ be bookmarked or shared.
 
 **Sales →** on the toolbar lists the settlements. Each row shows the parcel's **all-in total**:
 every bid you would actually pay for — *watching* and *won* lots — plus the premium on each, plus
-shipping once. A lost lot costs nothing and is left out of the total.
+shipping once. A lost lot costs nothing and is left out of the total. Beside it is the parcel's
+**catalogue total** over the same lots, and the headroom between the two — this time with shipping
+included, because that is what the parcel actually costs.
 
 **Add lot** on a sale's own screen puts a lot straight into that parcel — no seller, platform or
 matching to go through, because the settlement is already the screen you are on. Its closing date
@@ -184,7 +198,7 @@ A sale's own screen shows its terms and its lots, and is where you:
 - **close** it when nothing was won — only an *open* sale is offered when you add the next lot for
   that seller.
 
-Its lots carry the same two rows of chips the flat list has — *can still bid*, *outbid*, *over
+Its lot cards carry the same two rows of chips the flat list has — *can still bid*, *outbid*, *over
 ceiling* and the rest, then the recorded outcomes — asked of this one parcel. Only what the parcel
 actually holds is offered, and the choice is not carried between visits: it is a working filter, not
 a view.
@@ -196,11 +210,128 @@ first lot.
 A sale can only be deleted once it holds no lots — deleting a parcel must not quietly take the
 bidding record with it.
 
+## What a lot contains
+
+A lot's contents are a list of lines, and each line is a **stamp, a condition, a certificate, a
+physical format and a quantity** — the same five things a catalogue price is recorded against.
+There are three ways in:
+
+- On the **sale's own screen** each lot is a **card you expand** — the same arrangement a
+  [purchase order](purchases.md) and an [offer](offers.md) use for their contents — with the lines
+  listed underneath and one toolbar over the lot. That is where a parcel gets described, because
+  that is where you are asking what you are actually paying for.
+- On the **lots watchlist**, **Contents** in a lot's ⋮ menu — or the **Catalogue** figure on the
+  row, which is the same door — opens the same list in a dialog, for when you want to describe one
+  lot without leaving the list you are working through.
+- **Add lot** itself has a **Contents** section, so a lot and what it holds are saved in one go.
+  Capturing a listing and saying what is in it is one act — you are reading the description as you
+  type — and it is optional: a lot can always be described later. If a line is refused, nothing is
+  saved, so you never end up with a lot that looks entered but is empty.
+
+Adding a line is **two steps**, the same two the purchase-order intake uses. **+ Add line** opens the
+stamp browser straight away; once you have picked, a second dialog asks for the **condition,
+certificate, format and quantity**, with what you picked restated at the top and **← Back** to
+change it. They are separate because they are two different questions asked of two different
+sources: the first is answered from your catalogue, the second from the listing text in front of
+you.
+
+The condition and certificate start from the ones you last used — the same pair every add-copy
+screen remembers, since it is the same question about the same material.
+
+Either way:
+
+- Pick with the usual browser: area → issue → stamp. You can pick **a single stamp or a whole
+  issue** — the same choice the [purchase order](purchases.md) intake gives you. A house lot that
+  says *Michel 1–12, complete* is one pick: the issue expands into one line per stamp marked
+  **required for completeness**, all described the same way. The series is only a shortcut for
+  entering them; what is stored is still a line per stamp, because that is what a catalogue value
+  sums over and what a lost lot has to be attributable to. Editing an existing line offers stamps
+  only — turning one line into twelve is not an edit.
+- **Condition** is what the lot is described as being in. **Certificate** is *None* unless the lot
+  is sold with one — an Attest is a large part of why a lot is worth what it is, and the value is
+  read at exactly the level you name here. **Format** is *Single* unless the lot is a pair, a block
+  or a strip.
+- **Qty** is how many of *that* the lot holds — three of one stamp at one condition is one line with
+  a quantity of 3, not three lines.
+
+This is deliberately structured rather than a free-text description. It is what makes a catalogue
+value computable at all, and it is what turns a lot you **lose** into a usable record of what the
+material fetched.
+
+### What each line is worth
+
+Every line is valued from the catalog exactly the way a copy in your [inventory](inventory.md) is —
+the same rules, so the two can never disagree:
+
+- **Variant not identified?** Point the line at the **base stamp**. That is how "one of these, and
+  the listing does not say which" is expressed, and its value is then the **cheapest** of that
+  stamp's variants. It is shown as `~20.00` in muted italics, the mark this app uses everywhere for
+  *inferred, not recorded*.
+- **The condition, certificate and format must all match.** Matching is strict, exactly as it is for
+  a copy: a lot described as carrying a Fotoattest stays unpriced until a catalogue value exists at
+  that certificate level. That is not a gap in the data so much as a question the catalogue has not
+  been asked yet — and the **+ catalog value** link fills it in at the right level.
+- **A multiple is priced as that multiple.** An explicit catalogue price recorded for the format wins;
+  failing that, the single's price is multiplied by that format's multiplier. With **neither**, the
+  line is left **unpriced** — never quietly valued at the single's price, which would be a different
+  stamp's figure.
+- A line with no catalogue price at all shows a **+ catalog value** link in place of the figure.
+  Click it and the usual catalogue-value dialog opens on that stamp at that condition and format, so
+  you can fill the gap without leaving the lot.
+
+Unpriced lines are **counted and reported**, never dropped silently: the totals footer says how many
+there are, so a value that is only half the lot never looks like a finished answer. A lot with lines
+but no prices at all shows **no value**, not `0.00` — it is unanswered, not worthless.
+
+Values are converted into the **sale's currency**, which is what the bids and your ceiling are in.
+If a price is in a currency with no available rate into it, the line says so rather than being
+counted as unpriced — it has a value, it just cannot be expressed here.
+
+### Headroom
+
+The footer of the editor, and the second line of the **Catalogue** column on the row, is the
+**headroom**: the catalogue value less what the lot actually costs you.
+
+> headroom = catalogue value − (bid + the seller's premium)
+
+Green while there is room left, red once the price has passed what the contents are worth. It is
+measured against the **all-in** cost, never the hammer price: a ceiling set against the hammer price
+alone systematically overpays on cheap lots, where the fees are a large share of what leaves your
+bank account.
+
+Shipping is not in the row's figure, for the same reason it is in none of the others — it belongs to
+the parcel. The **sale's** own total does include it, once, so the parcel's headroom on the sales
+screen is the whole picture.
+
+### The parcel screen
+
+A sale's own screen draws its lots as cards, each one the watchlist row you already know — the same
+figures, the same in-place bid editing, the same ⋮ — with a caret that opens what the lot holds.
+Underneath every card sits its own footing: how many lines and stamps, what they are worth, and the
+headroom against the current bid.
+
+One toolbar governs all of them, and it is the toolbar the purchase-order and offer screens have:
+
+- **Group by Lot** is the default — a parcel is a set of lots, and each is bid on separately.
+  Turning it off flattens the whole parcel into one list of stamps, which is how "did I already bid
+  on this one somewhere in here?" gets answered. In that flat view lines can still be priced, but
+  editing one happens in its lot's card.
+- **Issue** sub-groups the lines under whichever of the two is showing, with the same collapsible
+  issue header the other screens use.
+- **Only** narrows to the lines that need work: **unpriced**, **no photo**, **unknown variant**.
+- **Sort lines** orders them by the same keys copies are sorted by — order added, year, catalog
+  number, price, name — with a direction toggle.
+- **Collapse all** / **Expand all** for the cards themselves.
+
+The grouping and sorting choices are remembered per collection, exactly as they are on the other two
+screens. The **Only** filters are not: they are a job you do and finish.
+
 ## What is not here yet
 
-- **What a lot contains** (the stamps, conditions and quantities) and its catalogue value.
 - **Settling a won sale** into a purchase, and recording what a lost lot fetched.
+- Any recommendation beyond the raw catalogue value — what a lot is *worth bidding* is a separate
+  question from what its contents catalogue at.
 - Capturing a listing straight from the browser.
 
-Until then, a lot's **notes** field is a good place for anything you would otherwise write down
-about it.
+A lot's **notes** field is a good place for anything the contents list has no room for — condition
+doubts, what to check before bidding.

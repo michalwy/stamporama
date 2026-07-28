@@ -113,6 +113,18 @@ export async function getCollectionAreas(
   collectionId: string
 ): Promise<CollectionAreaData[]> {
   await assertCollectionOwner(ownerId, collectionId);
+  return readCollectionAreas(collectionId);
+}
+
+/**
+ * {@link getCollectionAreas} without the ownership check, for server reads that have **already**
+ * resolved the collection for the owner and only need the area tree to format catalog numbers
+ * (`buildAreaVendorMaps`) — the auction lot's derived name (#353) is one. Split out rather than
+ * threading an `ownerId` through modules that have no other use for one; the caller owns the check.
+ */
+export async function readCollectionAreas(
+  collectionId: string
+): Promise<CollectionAreaData[]> {
   const areas = await prisma.collectionArea.findMany({
     where: { collectionId },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

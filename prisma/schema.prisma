@@ -219,6 +219,7 @@ model CertificateStatus {
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
   items         Item[]
+  auctionLotLines AuctionLotLine[]
   translations  CertificateStatusTranslation[]
 
   @@index([collectionId])
@@ -973,17 +974,24 @@ model AuctionLotLine {
   auctionLotId String
   stampId      String
   conditionId  String
+  // Certificate the lot is described as carrying. Null means **none**, the same unmarked default
+  // `Item.certificateStatusId` uses (ADR-0006 §2) — a house lot sold with a Fotoattest is worth a
+  // different figure from the same stamp without one, and catalogue prices are keyed on
+  // condition × certificate × format, so the line has to be able to say which.
+  certificateStatusId String?
   formatId     String?
   quantity     Int    @default(1)
 
   auctionLot AuctionLot     @relation(fields: [auctionLotId], references: [id], onDelete: Cascade)
   stamp      Stamp          @relation(fields: [stampId], references: [id], onDelete: Restrict)
   condition  StampCondition @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   format     StampFormat?   @relation(fields: [formatId], references: [id], onDelete: Restrict)
 
   @@index([auctionLotId])
   @@index([stampId])
   @@index([conditionId])
+  @@index([certificateStatusId])
   @@index([formatId])
   @@map("auction_lot_line")
 }

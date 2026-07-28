@@ -6,8 +6,11 @@ import { auth } from "@/lib/auth";
 import {
   AuctionActionBlockedError,
   createAuctionLot,
+  createAuctionLotLine,
   createAuctionSale,
   deleteAuctionLot,
+  deleteAuctionLotLine,
+  resolveAuctionLineStamps,
   deleteAuctionSale,
   findOpenAuctionSale,
   setAuctionLotBid,
@@ -16,6 +19,7 @@ import {
   setAuctionSaleStatus,
   touchAuctionLotChecked,
   updateAuctionLot,
+  updateAuctionLotLine,
   updateAuctionSale,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
@@ -24,6 +28,7 @@ import {
   normalizeAuctionUrl,
   parseAuctionAmount,
   parseAuctionInstant,
+  parseLotQuantity,
   parsePremiumPercent,
   type AuctionSaleStatus,
 } from "@/lib/auction-rules";
@@ -200,6 +205,9 @@ export interface AuctionLotRaw {
   myBid: string;
   maxBid: string;
   notes: string;
+  /** The lot's composition, entered while the lot is being captured (#353). Empty is the normal
+   * state — a lot can always be described later from the sale's screen. Create only. */
+  lines?: AuctionLotLineRaw[];
 }
 
 async function resolveLot(collectionId: string, ownerId: string, raw: AuctionLotRaw) {
@@ -243,10 +251,20 @@ async function resolveLot(collectionId: string, ownerId: string, raw: AuctionLot
     }
   }
 
+  // The composition, if any came with the lot. Refused as a whole on the first bad line rather than
+  // silently dropping it: the collector typed it, and a lot created without it looks entered.
+  const lines = [];
+  for (const rawLine of raw.lines ?? []) {
+    const resolved = await resolveLine(collectionId, rawLine);
+    if (!resolved.ok) return { ok: false as const, message: resolved.message };
+    lines.push(...resolved.inputs);
+  }
+
   return {
     ok: true as const,
     input: {
       auctionSaleId,
+      lines,
       lotNo: normalizeAuctionText(raw.lotNo),
       url: normalizeAuctionUrl(raw.url),
       title: normalizeAuctionText(raw.title),
@@ -359,5 +377,114 @@ export async function deleteAuctionLotAction(lotId: string): Promise<AuctionActi
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete this lot.");
+  }
+}
+
+// ── Composition (#353) ──────────────────────────────────────────────────────
+
+/** Raw composition-line fields as the editor submits them: a stamp × condition × certificate ×
+ * format × quantity — the same shape a catalogue price is keyed on. */
+export interface AuctionLotLineRaw {
+  stampId: string;
+  /** A **whole issue** picked instead of a single stamp (#353), as the purchase intake offers: it
+   * expands here into one line per member marked required for completeness. Blank for a plain
+   * stamp pick, and never set when editing — an edit turning one line into twelve is not an edit. */
+  issueId?: string;
+  conditionId: string;
+  /** Blank is **no certificate** — the unmarked default, as on a copy (ADR-0006 §2). */
+  certificateStatusId: string;
+  /** Blank is the single, which is not a dictionary row (ADR-0020). */
+  formatId: string;
+  quantity: string;
+}
+
+/**
+ * One submitted line into the line inputs it actually means — **plural**, because a whole-issue
+ * pick fans out into one line per required member. The expansion lives here rather than in the
+ * domain so a line stays "a stamp at a condition" everywhere below this point.
+ */
+async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
+  const stampId = raw.stampId.trim();
+  const issueId = raw.issueId?.trim() ?? "";
+  if (!stampId && !issueId) {
+    return { ok: false as const, message: "Pick the stamp this line is about." };
+  }
+  if (!raw.conditionId.trim()) {
+    return { ok: false as const, message: "Pick the condition this line is described in." };
+  }
+  const quantity = parseLotQuantity(raw.quantity);
+  if (!quantity.ok) return { ok: false as const, message: quantity.message };
+
+  let stampIds: string[];
+  try {
+    stampIds = await resolveAuctionLineStamps(collectionId, { stampId, issueId });
+  } catch (e) {
+    return {
+      ok: false as const,
+      message: e instanceof Error ? e.message : "Could not resolve what to add.",
+    };
+  }
+
+  // Every stamp of an issue is described the same way — one condition, one certificate, one format,
+  // the same count each. That is what "the lot contains this series" means; a lot that mixes
+  // conditions within a series is entered stamp by stamp.
+  return {
+    ok: true as const,
+    inputs: stampIds.map((id) => ({
+      stampId: id,
+      conditionId: raw.conditionId.trim(),
+      certificateStatusId: raw.certificateStatusId.trim() || null,
+      formatId: raw.formatId.trim() || null,
+      quantity: quantity.value,
+    })),
+  };
+}
+
+/** Add one or more lines: a stamp gives one, a whole issue one per required member. */
+export async function createAuctionLotLineAction(
+  collectionId: string,
+  lotId: string,
+  raw: AuctionLotLineRaw
+): Promise<CreateAuctionActionState> {
+  const session = await getSession();
+  const resolved = await resolveLine(collectionId, raw);
+  if (!resolved.ok) return { status: "error", message: resolved.message };
+  try {
+    let last = "";
+    for (const input of resolved.inputs) {
+      last = await createAuctionLotLine(session.user.id, lotId, input);
+    }
+    return { status: "success", id: last };
+  } catch (e) {
+    return fail(e, "Failed to add this line.");
+  }
+}
+
+export async function updateAuctionLotLineAction(
+  collectionId: string,
+  lineId: string,
+  raw: AuctionLotLineRaw
+): Promise<AuctionActionState> {
+  const session = await getSession();
+  const resolved = await resolveLine(collectionId, { ...raw, issueId: undefined });
+  if (!resolved.ok) return { status: "error", message: resolved.message };
+  // An edit re-points one line at one stamp; the issue shortcut is an *add* affordance, and is
+  // stripped above rather than silently multiplying the line it was applied to.
+  const [input] = resolved.inputs;
+  try {
+    await updateAuctionLotLine(session.user.id, lineId, input);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update this line.");
+  }
+}
+
+export async function deleteAuctionLotLineAction(lineId: string): Promise<AuctionActionState> {
+  const session = await getSession();
+  try {
+    await deleteAuctionLotLine(session.user.id, lineId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to remove this line.");
   }
 }

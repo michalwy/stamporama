@@ -4,8 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
+import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
+import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import type { CollectionAreaData } from "@/lib/areas";
 import { deriveAuctionSaleName } from "@/lib/auction-rules";
-import type { AuctionLotRaw, AuctionSaleRaw } from "@/app/actions/auctions";
+import type { AuctionLotLineRaw, AuctionLotRaw, AuctionSaleRaw } from "@/app/actions/auctions";
+import { AuctionLotLineDialog, type LineSelectionSummary } from "./auction-lot-line-dialog";
 import {
   useAuctionSales,
   useOpenAuctionSale,
@@ -55,8 +62,19 @@ interface AuctionLotFormDialogProps {
    * on screen already. The seller/platform pickers and the matching are then beside the point: the
    * question they answer has been answered by where the collector is standing. */
   fixedSale?: { id: string; name: string; currency: string; endsAt: string | null };
+  /** For the composition section's stamp picker and catalog-number formatting (#353). Absent on
+   * screens that do not load areas — the section is then simply not offered. */
+  areas?: CollectionAreaData[];
   onClose: () => void;
   onSaved: () => void;
+}
+
+/** A line the collector has entered but that does not exist yet — the lot is created with it. */
+interface PendingLine {
+  key: string;
+  raw: AuctionLotLineRaw;
+  /** How to render it before it exists — a whole-issue pick has no stamp to read back from. */
+  summary: LineSelectionSummary;
 }
 
 /**
@@ -77,6 +95,7 @@ export function AuctionLotFormDialog({
   collectionId,
   lot,
   fixedSale,
+  areas,
   onClose,
   onSaved,
 }: AuctionLotFormDialogProps) {
@@ -113,6 +132,23 @@ export function AuctionLotFormDialog({
   const [myBid, setMyBid] = useState(lot?.myBid ?? "");
   const [maxBid, setMaxBid] = useState(lot?.maxBid ?? "");
   const [notes, setNotes] = useState(lot?.notes ?? "");
+
+  // The composition, built in memory and written **with** the lot (#353). Capturing a listing and
+  // saying what is in it is one act — the collector is reading the description as they type — so
+  // making them save an empty lot and go find it again is the shape that leaves lots undescribed.
+  // Only while adding: growing a lot afterwards happens on the sale's screen, where the lines are
+  // already on display.
+  const composing = mode === "add" && !!areas;
+  const [lines, setLines] = useState<PendingLine[]>([]);
+  const [addingLine, setAddingLine] = useState(false);
+  // The three dictionaries are read here only to *name* what the pending lines hold — the entry
+  // dialog loads its own.
+  const { data: conditions = [] } = useCollectionConditions(collectionId);
+  const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
+  const { data: formats = [] } = useCollectionFormats(collectionId);
+  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas ?? []);
+  const nameById = (rows: { id: string; name: string }[], id: string) =>
+    rows.find((r) => r.id === id)?.name ?? null;
 
   // The matching lookup. Only meaningful while adding, and only once both parties resolve to a
   // contact — a name typed but not matched has no id yet, and no sale can be proposed for it.
@@ -199,6 +235,7 @@ export function AuctionLotFormDialog({
       myBid,
       maxBid,
       notes,
+      lines: composing ? lines.map((l) => l.raw) : undefined,
     };
     startTransition(async () => {
       const actions = await import("@/app/actions/auctions");
@@ -455,7 +492,9 @@ export function AuctionLotFormDialog({
                 id="auction-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="What the listing calls it"
+                // Blank is not nameless: the lot is called after what it holds (#353), and the
+                // placeholder shows the very string the lists will use.
+                placeholder={lot?.derivedTitle ?? "What the listing calls it"}
                 style={INPUT_STYLE}
               />
             </div>
@@ -521,6 +560,105 @@ export function AuctionLotFormDialog({
             what the lot is worth to you all-in, premium included.
           </p>
 
+          {composing && (
+            <div style={FIELD_GAP}>
+              <LabelWithError>Contents</LabelWithError>
+              {lines.length > 0 && (
+                <div
+                  style={{
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "0.5rem",
+                    overflow: "clip",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  {lines.map((entry, idx) => (
+                    <div
+                      key={entry.key}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "0.5rem 0.75rem",
+                        borderBottom:
+                          idx === lines.length - 1 ? undefined : "1px solid var(--color-border)",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            gap: "0.3rem",
+                          }}
+                        >
+                          {entry.summary.catalogLabels.map((label) => (
+                            <span key={label} style={STAMP_SECONDARY_CHIP}>
+                              {label}
+                            </span>
+                          ))}
+                          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+                            {entry.summary.label}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                          {[
+                            nameById(conditions, entry.raw.conditionId),
+                            entry.raw.certificateStatusId
+                              ? nameById(certificateStatuses, entry.raw.certificateStatusId)
+                              : null,
+                            entry.raw.formatId ? nameById(formats, entry.raw.formatId) : null,
+                            Number(entry.raw.quantity || "1") > 1 ? `×${entry.raw.quantity}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Remove this line"
+                        onClick={() => setLines(lines.filter((l) => l.key !== entry.key))}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "var(--color-text-muted)",
+                          fontSize: "0.875rem",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setAddingLine(true)}
+                style={{
+                  padding: "0.375rem 0.75rem",
+                  border: "1px dashed var(--color-border-strong)",
+                  borderRadius: "0.375rem",
+                  background: "none",
+                  cursor: "pointer",
+                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                + Add line
+              </button>
+              <p style={NOTE}>
+                What the lot holds, saved together with it. Optional — a lot can always be described
+                later from the sale&apos;s screen. Its catalogue value follows from these lines —
+                and so does its name, when you leave the title blank.
+              </p>
+            </div>
+          )}
+
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="auction-notes">Notes</LabelWithError>
             <textarea
@@ -541,6 +679,28 @@ export function AuctionLotFormDialog({
           onCancel={onClose}
         />
       </form>
+
+      {/* Entering a line is its own two modals — the stamp browser, then condition and the rest.
+          It sits **outside the `<form>` above**, and that placement is load-bearing rather than
+          tidy: a React portal propagates events along the *React* tree, not the DOM one, so a
+          nested dialog's own submit would bubble into this form's `onSubmit` and create the lot —
+          with the line it was submitting not yet in state, i.e. an empty lot, the moment the
+          collector confirmed a condition. Nothing is written here either way: the lot and its lines
+          are saved together by this dialog's own action. */}
+      {addingLine && areas && (
+        <AuctionLotLineDialog
+          collectionId={collectionId}
+          areas={areas}
+          vendorMapByArea={vendorMapByArea}
+          primaryVendorByArea={primaryVendorByArea}
+          isPending={isPending}
+          onClose={() => setAddingLine(false)}
+          onSubmit={(raw, summary) => {
+            setLines((prev) => [...prev, { key: `${Date.now()}-${prev.length}`, raw, summary }]);
+            setAddingLine(false);
+          }}
+        />
+      )}
     </DialogShell>
   );
 }

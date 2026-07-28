@@ -145,6 +145,30 @@ export function AuctionSaleRow({
               <span style={{ color: "var(--color-warning)" }}>{sale.summary.unbidCount} unbid</span>
             </Tooltip>
           )}
+          {/* What the parcel is worth against what it costs (#353), shipping included — the sale is
+              where shipping is charged once. Shown only where something has been described: on a
+              parcel nobody has costed it would be a dash beside a dash. */}
+          {sale.summary.headroom !== null && (
+            <Tooltip content="Catalogue value of the parcel's contents less its all-in cost, shipping included">
+              <span
+                style={{
+                  color:
+                    Number(sale.summary.headroom) < 0
+                      ? "var(--color-error)"
+                      : "var(--color-success)",
+                }}
+              >
+                {sale.summary.headroom} {sale.currency} headroom
+              </span>
+            </Tooltip>
+          )}
+          {sale.summary.unvaluedCount > 0 && sale.summary.catalogTotal !== "0.00" && (
+            <Tooltip content="Payable lots whose contents have not been described — the catalogue total leaves them out">
+              <span style={{ color: "var(--color-text-muted)" }}>
+                {sale.summary.unvaluedCount} undescribed
+              </span>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>

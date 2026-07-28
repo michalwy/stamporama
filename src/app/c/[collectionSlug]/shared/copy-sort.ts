@@ -3,7 +3,9 @@
 export {
   primaryCatalogNumber,
   sortCopies,
+  sortSortableCopies,
   COPY_SORT_KEYS,
   COPY_SORT_LABELS,
   type CopySortKey,
+  type SortableCopy,
 } from "@/lib/copy-sort";
