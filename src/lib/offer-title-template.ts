@@ -20,7 +20,7 @@
 // appends a legend of the abbreviations it just printed — the collector writes the entry's format
 // inside the block.
 
-import { parseCatalogNumberParts } from "./catalog-number";
+import { parseCatalogNumberParts, parseSuffixOrdinal } from "./catalog-number";
 import { formatItemNoDigits, parseItemNoPad } from "./item-number";
 import type { TranslatableEntity } from "./translations";
 
@@ -236,13 +236,20 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
   return "";
 }
 
-/** Compact a group's catalog numbers into a range list (#210, #286). Numbers are bucketed by their
- * **numbering family** — the constant prefix + suffix around the digits, as `parseCatalogNumberParts`
- * splits them — and within each family the base numbers are sorted and consecutive runs collapse to
- * `from-to`. So `1,2,4,6,7,8` reads `1-2,4,6-8`, and `BL31,BL32,BL33` reads `BL31-33`: the shared
- * prefix and suffix are written **once**, around the collapsed span. Families are emitted in
- * first-seen order, and a number without a digit run at all (e.g. `Ark.`) is kept verbatim at the
- * end. All comma-joined; duplicates dropped. */
+/** Compact a group's catalog numbers into a range list (#210, #286, #364). Both axes of #150's
+ * numbering collapse, in that order:
+ *
+ * 1. **Base** — numbers are bucketed by their numbering family (the constant prefix + suffix around
+ *    the digits, as `parseCatalogNumberParts` splits them) and within each family consecutive base
+ *    numbers collapse to `from-to`. So `1,2,4,6,7,8` reads `1-2,4,6-8`, and `BL31,BL32,BL33` reads
+ *    `BL31-33`: the shared prefix and suffix are written **once**, around the collapsed span.
+ * 2. **Suffix** — what is left standing alone after (1) then folds the other way: same prefix and
+ *    same base, consecutive suffixes in one sequence, and only the suffix is written twice —
+ *    `BL92a,BL92b` reads `BL92a-b`. The sequences are the ones an auto-generate range enumerates
+ *    (`parseSuffixOrdinal`: letters `a`–`z`, Roman numerals), so `1294CKB,1296KB` still cannot fold.
+ *
+ * Entries are emitted in first-seen order, and a number without a digit run at all (e.g. `Ark.`) is
+ * kept verbatim at the end. All comma-joined; duplicates dropped. */
 function compactCatalogNumbers(numbers: readonly string[]): string {
   interface Family {
     prefix: string;
@@ -278,19 +285,71 @@ function compactCatalogNumbers(numbers: readonly string[]): string {
     }
   }
 
-  const ranges: string[] = [];
+  // Pass 1 — consecutive base runs within each family, in the order the families were first seen.
+  interface Span {
+    prefix: string;
+    suffix: string;
+    from: number;
+    to: number;
+    /** Emit position, so the suffix pass below can fold entries together without reordering them. */
+    order: number;
+  }
+  const spans: Span[] = [];
   for (const key of order) {
     const f = families.get(key)!;
     f.bases.sort((a, b) => a - b);
     for (let i = 0; i < f.bases.length; ) {
       let j = i;
       while (j + 1 < f.bases.length && f.bases[j + 1] === f.bases[j] + 1) j++;
-      const span = i === j ? String(f.bases[i]) : `${f.bases[i]}-${f.bases[j]}`;
-      ranges.push(`${f.prefix}${span}${f.suffix}`);
+      spans.push({
+        prefix: f.prefix,
+        suffix: f.suffix,
+        from: f.bases[i],
+        to: f.bases[j],
+        order: spans.length,
+      });
       i = j + 1;
     }
   }
-  return [...ranges, ...others].join(",");
+
+  // Pass 2 — fold what stayed single the other way (#364): one base, one prefix, a suffix that is
+  // part of a sequence. A span that already collapsed a base run is left alone: `BL31-33a` and
+  // `BL31-33b` describe two runs, not one, and folding them would claim a span nothing in the offer
+  // covers.
+  const foldable = new Map<string, Span[]>();
+  const emitted: { order: number; text: string }[] = [];
+  for (const s of spans) {
+    const ordinal = s.from === s.to ? parseSuffixOrdinal(s.suffix) : null;
+    if (!ordinal) {
+      const span = s.from === s.to ? String(s.from) : `${s.from}-${s.to}`;
+      emitted.push({ order: s.order, text: `${s.prefix}${span}${s.suffix}` });
+      continue;
+    }
+    const key = `${s.prefix} ${s.from} ${ordinal.kind}`;
+    const group = foldable.get(key);
+    if (group) group.push(s);
+    else foldable.set(key, [s]);
+  }
+  for (const group of foldable.values()) {
+    const byOrdinal = group
+      .map((s) => ({ span: s, ordinal: parseSuffixOrdinal(s.suffix)!.value }))
+      .sort((a, b) => a.ordinal - b.ordinal);
+    for (let i = 0; i < byOrdinal.length; ) {
+      let j = i;
+      while (j + 1 < byOrdinal.length && byOrdinal[j + 1].ordinal === byOrdinal[j].ordinal + 1) j++;
+      const first = byOrdinal[i].span;
+      const last = byOrdinal[j].span;
+      const suffix = i === j ? first.suffix : `${first.suffix}-${last.suffix}`;
+      emitted.push({
+        // Where the run's earliest member stood — the fold never moves a number past another.
+        order: Math.min(...byOrdinal.slice(i, j + 1).map((e) => e.span.order)),
+        text: `${first.prefix}${first.from}${suffix}`,
+      });
+      i = j + 1;
+    }
+  }
+  emitted.sort((a, b) => a.order - b.order);
+  return [...emitted.map((e) => e.text), ...others].join(",");
 }
 
 /** Normalise one prefix flag to its canonical name, accepting short forms: `v` → `vendor`,

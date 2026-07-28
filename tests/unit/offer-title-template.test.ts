@@ -215,6 +215,52 @@ describe("renderTitleTemplate — {catalog} options", () => {
     );
   });
 
+  it("collapses a same-base letter-suffix run, writing the suffix twice (#364)", () => {
+    const nums = ["BL92a", "BL92b"].map((n) =>
+      copy({ catalogNumbers: [cn("Fi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Fi:vendor}", nums), "Fi BL92a-b");
+  });
+
+  it("collapses a Roman-numeral suffix run (#364)", () => {
+    const nums = ["12I", "12II", "12III"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 12I-III");
+  });
+
+  it("keeps a gap in a suffix run apart (#364)", () => {
+    const nums = ["92a", "92c"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 92a,92c");
+  });
+
+  it("does not fold suffixes across different bases (#364)", () => {
+    const nums = ["92a", "93b"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 92a,93b");
+  });
+
+  it("does not fold suffixes over an already collapsed base span (#364)", () => {
+    const nums = ["31a", "32a", "31b", "32b"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 31-32a,31-32b");
+  });
+
+  it("collapses both axes in one group, each vendor its own way (#364)", () => {
+    const rows: [string, string][] = [
+      ["BL92a", "BL57"],
+      ["BL92b", "BL58"],
+    ];
+    const copies = rows.map(([fi, mi]) =>
+      copy({ catalogNumbers: [cn("Fi", fi, { isPrimary: true }), cn("Mi", mi)] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:*:vendor}", copies), "Fi BL92a-b / Mi BL57-58");
+  });
+
   it("keeps a number with no digits verbatim after the ranges", () => {
     const nums = ["1", "2", "Ark."].map((n) =>
       copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })

@@ -305,10 +305,15 @@ export function OfferDetailPanel({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           {/* Listing title (#209): the offer's own editable name, defaulting to the derived label
               when never generated. A pencil edits it in place; the ⋮ menu regenerates it from the
-              platform's template. */}
+              platform's template.
+              Editing starts from what is on screen — the derived label included (#363). An empty
+              box under a visible title reads as "the title is gone", and retyping a label the
+              collector can see is busywork; leaving it untouched still saves nothing, since
+              InlineText only commits a changed draft, so the offer stays on its derived label
+              until the text is actually edited. */}
           <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
             <InlineText
-              value={offer.name ?? ""}
+              value={offer.name ?? offer.label}
               placeholder="Listing title"
               display={<span style={{ cursor: "text" }}>{offer.name ?? offer.label}</span>}
               editable

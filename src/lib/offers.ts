@@ -2187,6 +2187,38 @@ export async function regenerateOfferText(
   return value;
 }
 
+/**
+ * Generate the offer's listing title now that it lists something (#365), but **only** while it has
+ * none — an offer created empty (the quick-start create, or a create-then-compose) rendered its
+ * title over no copies at all, so nothing was written and the field stayed null forever. The
+ * detail screen papers over that with the derived label, but the label is not the title: the copy
+ * control and the bulk listing workspace hand the platform what is *stored*, and that was empty.
+ *
+ * Called after every mutation that adds copies to an offer, so composing one is the moment its
+ * title appears. A title that already exists — generated at creation or typed by the collector —
+ * is never touched: growing a listing does not rewrite its wording, and the ↻ on the detail screen
+ * is how a title is deliberately brought up to date (#209). Likewise a platform with no title
+ * template still writes nothing, leaving the derived label to stand in.
+ */
+async function backfillOfferTitle(ownerId: string, offerId: string): Promise<void> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { name: true, collectionId: true, platformId: true },
+  });
+  if (!offer || offer.name !== null) return;
+  const { titleTemplate, titleLanguage } = await assertPlatform(offer.collectionId, offer.platformId);
+  if (!titleTemplate?.trim()) return;
+  const composition = await offerComposition(offerId);
+  const { name } = await generateListingTexts(
+    ownerId,
+    offer.collectionId,
+    composition,
+    { titleTemplate, descriptionTemplate: null, privateNoteTemplate: null, titleLanguage },
+    titleLanguage
+  );
+  if (name) await prisma.offer.update({ where: { id: offerId }, data: { name } });
+}
+
 /** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
  * reversible; #246). `sold` is owned by the sale flow (#166) and rejected here.
  *
@@ -2350,6 +2382,8 @@ export async function addOfferSet(
     },
     select: { id: true },
   });
+  // The offer now lists something — give it the title it could not be generated with (#365).
+  await backfillOfferTitle(ownerId, offerId);
   return set.id;
 }
 
@@ -2393,6 +2427,7 @@ export async function addOfferSetsPerCopy(
       ids.push(set.id);
     }
   });
+  await backfillOfferTitle(ownerId, offerId); // #365, as in addOfferSet
   return ids;
 }
 
@@ -2420,6 +2455,7 @@ export async function addItemToOfferSet(ownerId: string, setId: string, itemId: 
   await prisma.offerSetItem.create({
     data: { offerSetId: setId, itemId: addable[0], sortOrder: nextItemSortOrder(existing) },
   });
+  await backfillOfferTitle(ownerId, ref.offerId); // #365, as in addOfferSet
 }
 
 /** Reorder an offer's sets (#306). `setIds` must be a **full permutation** of the offer's current

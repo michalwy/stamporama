@@ -156,7 +156,10 @@ Every offer has its own **title** — shown large on the detail header and as th
 list. It starts from the copies you list: with no template configured on the platform it is the plain
 catalog/copy label (the same label the set cards use); when the platform has a **listing title
 template** (see [Contacts](contacts.md#adding-and-editing)) the title is generated from that template
-instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer.
+instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer. Starting an offer empty
+and adding lots afterwards works the same way: the title is generated the moment the offer first
+lists something, so it is there for copying and for the
+[bulk listing workspace](#bulk-listing--posting-a-prepared-batch) too, not only on the detail header.
 
 The title is yours to change:
 
@@ -165,8 +168,10 @@ The title is yours to change:
   title that is actually stored, so on an offer still showing its derived label there is nothing to
   copy and the button stays greyed out — generate or type a title first.
 - **Edit it** — click the **✎** pencil beside the title on the detail header, type a new one, and
-  press Enter (Escape reverts). Clearing it falls back to the derived label. The title stays editable
-  in every state, including sold and withdrawn, so you can keep the record straight.
+  press Enter (Escape reverts). Editing starts from the title you can see, the derived label
+  included, so you amend it rather than retype it; leaving it untouched changes nothing. Clearing it
+  falls back to the derived label. The title stays editable in every state, including sold and
+  withdrawn, so you can keep the record straight.
 - **Regenerate it** — the header's **⋮** menu has **Regenerate title**, which rebuilds it from the
   platform's current template over whatever the offer lists now. Use it after adding or removing
   copies, or after changing the platform's template. Regenerating overwrites a title you edited by

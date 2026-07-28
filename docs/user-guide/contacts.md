@@ -236,6 +236,10 @@ prefix/suffix differ belong to different numbering families and are folded separ
 `1294CKB`, `1295CKB`, `1296KB` reads `1294-1295CKB,1296KB`. Each catalog is evaluated on its own, so
 one catalog's mixed numbering never stops the others from collapsing.
 
+Letter and Roman-numeral **suffixes** on the same number collapse the same way, with only the suffix
+written twice: Fischer `BL92a` + `BL92b` reads `BL92a-b`, and `12I`, `12II`, `12III` reads `12I-III`.
+As with numbers, only consecutive ones fold — `92a` + `92c` stays `92a,92c`.
+
 ### Area names in titles
 
 Your area tree often mixes public territories with **internal grouping** levels — e.g. `Poland ›

@@ -6,6 +6,8 @@ import {
   createOffer,
   duplicateOffer,
   addOfferSet,
+  addOfferSetsPerCopy,
+  addItemToOfferSet,
   regenerateOfferText,
   patchOffer,
   getOfferDetail,
@@ -23,6 +25,8 @@ describe("offer description + private note (#266, #267)", () => {
   let fullPlatformId: string;
   /** Platform with only a title template — no description, no private note. */
   let titleOnlyPlatformId: string;
+  /** Platform with no templates at all — every offer on it stays on its derived label. */
+  let noTemplatePlatformId: string;
   let mercuryId: string;
   let venusId: string;
 
@@ -113,6 +117,11 @@ describe("offer description + private note (#266, #267)", () => {
         },
       })
     ).id;
+    noTemplatePlatformId = (
+      await prisma.contact.create({
+        data: { collectionId, name: "Flea market", platform: true, platformCurrency: "EUR" },
+      })
+    ).id;
   });
 
   after(async () => {
@@ -181,6 +190,52 @@ describe("offer description + private note (#266, #267)", () => {
     assert.equal(detail?.name, null);
     assert.equal(detail?.description, null);
     assert.equal(detail?.privateNote, null);
+  });
+
+  it("titles an offer that was created empty as soon as it lists something (#365)", async () => {
+    // Created with nothing to render over, the title stayed null forever — the detail screen fell
+    // back to the derived label while the copy control and the bulk workspace had nothing to hand
+    // over. Composing the offer is what generates it.
+    const offerId = await offerOn(fullPlatformId);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, null);
+
+    await addOfferSet(userId, offerId, [mercuryId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12 Mercury");
+    // Only the missing title is filled in — the longer texts stay the collector's to generate.
+    assert.equal((await getOfferDetail(userId, offerId))?.description, null);
+
+    // Growing the listing afterwards does not rewrite the title it now has; ↻ Regenerate does.
+    await addOfferSet(userId, offerId, [venusId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12 Mercury");
+    assert.equal(await regenerateOfferText(userId, offerId, "name"), "Mi 12-13 Mercury / Venus");
+  });
+
+  it("does not overwrite a title the collector wrote first (#365)", async () => {
+    const offerId = await offerOn(fullPlatformId);
+    await patchOffer(userId, offerId, { name: "Hand-written title" });
+    await addOfferSet(userId, offerId, [mercuryId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Hand-written title");
+  });
+
+  it("titles an empty offer composed one set per copy too (#365)", async () => {
+    const offerId = await offerOn(fullPlatformId);
+    await addOfferSetsPerCopy(userId, offerId, [mercuryId, venusId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12-13 Mercury / Venus");
+  });
+
+  it("titles an empty offer whose first copies land in an existing set (#365)", async () => {
+    const offerId = await offerOn(fullPlatformId);
+    const setId = await addOfferSet(userId, offerId, [mercuryId]);
+    await patchOffer(userId, offerId, { name: null });
+    await addItemToOfferSet(userId, setId, venusId);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12-13 Mercury / Venus");
+  });
+
+  it("writes no title on a platform that configures no template (#365)", async () => {
+    const offerId = await offerOn(noTemplatePlatformId);
+    await addOfferSet(userId, offerId, [mercuryId]);
+    // Nothing to generate from — the offer keeps falling back to its derived label.
+    assert.equal((await getOfferDetail(userId, offerId))?.name, null);
   });
 
   it("repeats a set block over the offer's real composition when regenerating", async () => {
