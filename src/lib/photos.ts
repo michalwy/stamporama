@@ -15,6 +15,7 @@ import {
   processImage,
   UnsupportedImageError,
 } from "./photos/process";
+import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 
 // Server-side photo domain for inventory copies (#112) and catalog stamps (#137, ADR-0011).
 // Collection-scoped throughout; owner checks live here, never in UI. Bytes are handled via the
@@ -497,7 +498,8 @@ const ROLE_ORDER: Record<string, number> = { main: 0, front: 0, back: 1 };
  * reasonable picture of `3` as long as `3` has none of its own, so each ancestor without any
  * photo gets its own independent duplicate in the **same** role. The walk stops at the first
  * ancestor that already has a photo — that collector's choice, or an earlier propagation, is
- * never overwritten, and neither is anything above it. */
+ * never overwritten, and neither is anything above it — and at the first node that does not
+ * **act as a variant** of its parent (#368). */
 export async function promoteCopyPhotoToStamp(
   ownerId: string,
   photoId: string,
@@ -538,8 +540,13 @@ export async function promoteCopyPhotoToStamp(
 }
 
 /** The stamp's ancestors, nearest first, up to (excluding) the first one that already has a
- * photo (#347). `seen` bounds the walk: the tree is acyclic by intent, but a cycle here would
- * otherwise loop forever writing photo rows. */
+ * photo (#347). A step up is only taken when the node below **acts as a variant** of its parent
+ * (#368, ADR-0010 §3 — the per-stamp override, else the subtype's flag): a colour or perforation
+ * variant is the same stamp pictured, but an error, plate flaw or overprint is a picture of the
+ * flaw, not of the parent. A non-variant node ends the walk rather than being skipped over — its
+ * own ancestors are reached through it, so nothing above it is representative either.
+ * `seen` bounds the walk: the tree is acyclic by intent, but a cycle here would otherwise loop
+ * forever writing photo rows. */
 async function photolessAncestors(
   collectionId: string,
   stampId: string
@@ -548,12 +555,18 @@ async function photolessAncestors(
   const seen = new Set<string>([stampId]);
   let currentId: string | null = stampId;
   while (currentId) {
-    const current: { parentId: string | null } | null = await prisma.stamp.findFirst({
+    const current: {
+      parentId: string | null;
+      actsAsVariantOverride: boolean | null;
+      subtype: { actsAsVariant: boolean } | null;
+    } | null = await prisma.stamp.findFirst({
       where: { id: currentId, collectionId },
-      select: { parentId: true },
+      select: { parentId: true, ...VARIANT_FLAG_SELECT },
     });
-    const parentId: string | null = current?.parentId ?? null;
+    if (!current) break;
+    const parentId: string | null = current.parentId;
     if (!parentId || seen.has(parentId)) break;
+    if (!childIsVariant(current)) break;
     seen.add(parentId);
     const photoCount = await prisma.photo.count({ where: { stampId: parentId } });
     if (photoCount > 0) break;

@@ -315,6 +315,8 @@ Promotion makes an **independent copy** of the photo on the stamp: the image byt
 
 If the stamp is a **variant** with a parent above it, promotion also walks **up the tree**: every ancestor that has no photo at all gets its own independent copy, in the same slot you picked. Photographing a copy of `3a` therefore also gives `3` — and its parent, and so on — a picture, which is usually what you want while the tree is still empty. The walk stops at the first ancestor that already has a photo: an existing picture is never replaced, and nothing above it is touched either.
 
+Only stamps whose **subtype acts as a variant** carry the photo upwards. A colour, perforation, paper or watermark variant is the same stamp pictured, so its photo speaks for the parent; an error, plate flaw or overprint is a picture of *that* peculiarity, so it stays on its own stamp. The walk ends at the first such node — the ancestors above it are reached through it, so they are no better represented. (Whether a subtype counts as a variant is set in **Settings → Subtypes**, and a single stamp can override it in its own form.)
+
 The **first** promotion happens on its own: when a copy gets its **front** photo and its stamp has no photo yet, that front is promoted automatically as the stamp's **Main** image. This only applies to copies with **no physical format** — a pair or a block pictures a multiple, not the single catalog stamp, so it is never picked automatically (you can still promote it by hand). So a stamp usually gets its reference picture from the first copy you photograph, and you only reach for the **⬆** button to add more or override it.
 
 ### Photo storage used
