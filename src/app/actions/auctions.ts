@@ -13,6 +13,7 @@ import {
   resolveAuctionLineStamps,
   deleteAuctionSale,
   findOpenAuctionSale,
+  recordAuctionLotOutcome,
   setAuctionLotBid,
   setAuctionLotMaxBid,
   setAuctionLotMyBid,
@@ -21,6 +22,7 @@ import {
   updateAuctionLot,
   updateAuctionLotLine,
   updateAuctionSale,
+  type AuctionLotOutcome,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
@@ -367,6 +369,47 @@ export async function touchAuctionLotCheckedAction(lotId: string): Promise<Aucti
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to record the check.");
+  }
+}
+
+/**
+ * Record what became of a lot, or take the record back (#354).
+ *
+ * `rawFinalPrice` means something for the two outcomes that carry one. Blank is a valid answer for
+ * `lost` — a lot that vanished from view before the result was seen yields no datapoint, which is
+ * an absent observation rather than a form the collector failed to fill in — and is refused for
+ * `won`, where the figure is what settlement (#28) prices the purchase line from.
+ */
+export async function setAuctionLotOutcomeAction(
+  lotId: string,
+  status: "lost" | "won" | "cancelled" | "watching",
+  rawFinalPrice = ""
+): Promise<AuctionActionState> {
+  const session = await getSession();
+  let outcome: AuctionLotOutcome;
+  if (status === "lost" || status === "won") {
+    const label = status === "won" ? "Price paid" : "Final price";
+    const finalPrice = parseAuctionAmount(rawFinalPrice, label);
+    if (!finalPrice.ok) return { status: "error", message: finalPrice.message };
+    if (status === "won") {
+      if (finalPrice.value === null) {
+        return {
+          status: "error",
+          message: "Enter what you paid for this lot — the purchase it settles into is priced from it.",
+        };
+      }
+      outcome = { status: "won", finalPrice: finalPrice.value };
+    } else {
+      outcome = { status: "lost", finalPrice: finalPrice.value };
+    }
+  } else {
+    outcome = { status };
+  }
+  try {
+    await recordAuctionLotOutcome(session.user.id, lotId, outcome);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to record the outcome.");
   }
 }
 

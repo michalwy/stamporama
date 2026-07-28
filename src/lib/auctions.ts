@@ -19,6 +19,7 @@ import {
   type AuctionLotLineInput,
   type AuctionLotLineItem,
 } from "./auction-lines";
+import { getOrFetchRate } from "./exchange-rates";
 import {
   deriveAuctionLotLabel,
   deriveAuctionSaleName,
@@ -49,6 +50,7 @@ export type AuctionBlockReason =
   | "no-seller"
   | "no-platform"
   | "no-sale"
+  | "no-price"
   | "bad-sale"
   | "bad-line"
   | "settled"
@@ -1252,6 +1254,123 @@ export async function setAuctionLotMaxBid(
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.update({ where: { id: lotId }, data: { maxBid } });
+}
+
+// ── Outcome (#354) ──────────────────────────────────────────────────────────
+
+/**
+ * What became of a lot that stopped running, as the row's ⋮ menu records it.
+ *
+ * Two of the four carry a price. `lost` produces the datapoint #24 consumes — a real price against
+ * a known composition on a known date — and `won` records what the lot actually cost, which is what
+ * settlement (#28) transcribes into a `PurchaseLot` and what makes the parcel's rollup exact rather
+ * than an estimate from the last bid anyone happened to see. `cancelled` is a listing withdrawn or
+ * ended without a sale and carries nothing; `watching` is the undo.
+ *
+ * The two prices differ in one way, and only one: a lost lot's is **optional**, a won lot's is
+ * **required**. Losing sight of a lot before the result is normal; not knowing what you paid for
+ * something you won is not, and #28 cannot price a purchase line without it.
+ */
+export type AuctionLotOutcome =
+  | { status: "lost"; finalPrice: string | null }
+  | { status: "won"; finalPrice: string }
+  | { status: "cancelled" }
+  | { status: "watching" };
+
+/** Whether an outcome carries a price at all — the two that do are the two that cost or earn the
+ * collector something, and they are handled identically from there on. */
+function outcomeHasPrice(
+  outcome: AuctionLotOutcome
+): outcome is Extract<AuctionLotOutcome, { finalPrice: string | null }> {
+  return outcome.status === "lost" || outcome.status === "won";
+}
+
+/**
+ * Freeze the base-currency rate for a lot's result (ADR-0009 §4, the rule `Purchase` follows at
+ * `purchasedAt`). Best-effort: a lookup that fails with nothing cached stores `null` rather than
+ * refusing to record the outcome — the observation is the valuable half, and an unconvertible
+ * figure is still a figure in the sale's own currency.
+ */
+async function freezeLotFxRate(
+  collectionId: string,
+  currency: string,
+  baseCurrency: string
+): Promise<Prisma.Decimal | null> {
+  if (currency === baseCurrency) return null;
+  try {
+    const { rate } = await getOrFetchRate(collectionId, currency, baseCurrency);
+    return new Prisma.Decimal(rate);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record what became of a lot — the fork at the end of ADR-0021 §7 (#354).
+ *
+ * A lost lot's `finalPrice` stays **optional** on purpose. A lot that vanished from view before the
+ * collector saw the result simply yields no datapoint; forcing a number would poison the very data
+ * the feature exists to produce with a guess. The last bid anyone recorded is not it either — it is
+ * a lower bound — so nothing is inferred here.
+ *
+ * Marking a lot **won** is where settlement starts (#28): that action's input is a sale holding
+ * `won` lots, so without this the sale could never reach the state it acts on. It stops at the
+ * status and the price, and writes no `Purchase` — the parcel is settled as a whole, once, when the
+ * seller has invoiced it, and a per-lot purchase would be exactly the acquisition path ADR-0021 §7
+ * refuses to grow.
+ *
+ * `cancelled` and `watching` clear both the price and its rate: a cancelled listing carries no
+ * result, and a lot put back on the watchlist must not keep a figure describing how it ended.
+ */
+export async function recordAuctionLotOutcome(
+  ownerId: string,
+  lotId: string,
+  outcome: AuctionLotOutcome
+): Promise<void> {
+  const lot = await assertLotOwner(ownerId, lotId);
+  assertLotEditable(lot);
+
+  if (!outcomeHasPrice(outcome)) {
+    await prisma.auctionLot.update({
+      where: { id: lotId },
+      data: { status: outcome.status, finalPrice: null, fxRateToBase: null },
+    });
+    return;
+  }
+
+  // A won lot without a price cannot be settled — #28 prices its purchase line from exactly this
+  // figure — and unlike a lost one there is nothing to have missed: you paid it.
+  if (outcome.status === "won" && outcome.finalPrice === null) {
+    throw new AuctionActionBlockedError(
+      "no-price",
+      "Enter what you paid for this lot — the purchase it settles into is priced from it."
+    );
+  }
+
+  const row = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: {
+      auctionSale: {
+        select: { currency: true, collection: { select: { baseCurrency: true } } },
+      },
+    },
+  });
+  // A rate exists to convert a figure. With no price recorded there is nothing to convert, and
+  // storing today's rate against an absent observation would only look like data.
+  const fxRateToBase =
+    outcome.finalPrice === null
+      ? null
+      : await freezeLotFxRate(
+          lot.collectionId,
+          row.auctionSale.currency,
+          row.auctionSale.collection.baseCurrency
+        );
+
+  await prisma.auctionLot.update({
+    where: { id: lotId },
+    // Re-freezing on a corrected price is intended: the rate travels with the figure it converts.
+    data: { status: outcome.status, finalPrice: outcome.finalPrice, fxRateToBase },
+  });
 }
 
 // ── Composition (#353) ──────────────────────────────────────────────────────

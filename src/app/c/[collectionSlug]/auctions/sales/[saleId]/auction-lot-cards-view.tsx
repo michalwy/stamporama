@@ -320,6 +320,8 @@ interface LotCardProps {
   onSetMyBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetMaxBid: (lot: AuctionLotDetailView, value: string) => void;
   onMarkChecked: (lot: AuctionLotDetailView) => void;
+  /** Refresh after the row recorded an outcome (#354). */
+  onChanged: () => void;
 }
 
 /** One lot as a card: the watchlist row itself as the sticky header, its composition underneath. */
@@ -340,6 +342,7 @@ function LotCard({
   onSetMyBid,
   onSetMaxBid,
   onMarkChecked,
+  onChanged,
 }: LotCardProps) {
   const { sentinelRef, stuck } = useStuck();
   // A settled lot's figures and contents live on the purchase now (#28).
@@ -389,6 +392,7 @@ function LotCard({
           onEditComposition={() => {
             if (!expanded) onToggle();
           }}
+          onOutcomeRecorded={onChanged}
         />
       </div>
 
@@ -692,6 +696,7 @@ export function AuctionLotCardsView({
               onSetMyBid={onSetMyBid}
               onSetMaxBid={onSetMaxBid}
               onMarkChecked={onMarkChecked}
+              onChanged={onChanged}
             />
           ))}
         </div>

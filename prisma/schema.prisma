@@ -947,6 +947,14 @@ model AuctionLot {
   // state, just an absent observation.
   maxBid         Decimal? @db.Decimal(10, 2)
   finalPrice     Decimal? @db.Decimal(10, 2)
+  // Base-currency FX rate frozen when the outcome was recorded, at `endsAt` (#354), reusing the
+  // `ExchangeRate` mechanism (#20) exactly as `Purchase` does at `purchasedAt` (ADR-0009 §4). Extra
+  // fractional digits like `ExchangeRate.rate` (DECIMAL(65,30)). A 2023 result has to keep its 2023
+  // rate: the whole point of a lost lot is that it is a *dated* price observation, and revaluing it
+  // at today's rate would make the datapoint say something that was never true. Null when the sale
+  // is already in the base currency, when no rate could be had, and whenever there is no
+  // `finalPrice` — a rate exists to convert a figure, and an absent observation has none.
+  fxRateToBase   Decimal?
   // watching | won | lost | cancelled.
   status         String   @default("watching")
   // Set when the lot is settled into the purchase (#28). `SetNull`/unique for the same reasons as

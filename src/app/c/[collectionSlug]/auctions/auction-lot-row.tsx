@@ -8,6 +8,7 @@ import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { closingUrgency, isTerminalLotStatus, type ClosingUrgency } from "@/lib/auction-rules";
 import type { AuctionLotView } from "./use-auctions-query";
 import { BidFreshnessChip, BidStandingChip, LotStatusChip, OverCeilingChip } from "./auction-badges";
+import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
 
 const CHIP: React.CSSProperties = {
@@ -177,6 +178,10 @@ interface AuctionLotRowProps {
   onMarkChecked: (lot: AuctionLotView) => void;
   /** Open the composition editor (#353) — what the lot contains, and what that is worth. */
   onEditComposition: (lot: AuctionLotView) => void;
+  /** Refresh after an outcome was recorded (#354). The row owns those entries and their dialog
+   * itself — both screens get the same three without knowing about the flow — so all it needs back
+   * is "something changed". */
+  onOutcomeRecorded: () => void;
   /**
    * When set, the row is the **header of a collapsible card** over its composition (#353, the
    * sale's own screen). A caret is drawn ahead of the title and is the *only* thing that toggles:
@@ -210,10 +215,12 @@ export function AuctionLotRow({
   onSetMaxBid,
   onMarkChecked,
   onEditComposition,
+  onOutcomeRecorded,
   expanded,
   onToggleExpanded,
 }: AuctionLotRowProps) {
   const router = useRouter();
+  const outcome = useLotOutcomeActions(lot, onOutcomeRecorded);
   const [hovered, setHovered] = useState(false);
   // What an inline edit just committed, shown until the list comes back carrying it. Two things
   // come out of this: the figure appears **as it will be stored** (`40` → `40.00`) rather than as
@@ -301,10 +308,16 @@ export function AuctionLotRow({
       icon: "☰",
       onSelect: () => onEditComposition(lot),
     },
+    // What became of it (#354), set apart from the bidding entries above: those are what you do
+    // *while* a lot runs, these are what you do once it has stopped.
+    ...outcome.actions.map((action, idx) =>
+      idx === 0 ? { ...action, separatorBefore: true } : action
+    ),
     {
       key: "edit",
       label: "Edit",
       icon: "✎",
+      separatorBefore: true,
       disabled: !editable,
       hint: lot.settled ? "Settled into a purchase — edit the purchase instead" : undefined,
       onSelect: () => onEdit(lot),
@@ -474,8 +487,21 @@ export function AuctionLotRow({
             <span style={GRID_HEAD}>Catalogue</span>
 
             <span style={GRID_LABEL}>bid</span>
-            {/* What the lot stands at — the one field the daily loop writes. */}
-            <Tooltip content={lot.checkedAt ? `Checked ${formatInstant(lot.checkedAt)}` : "What the lot stands at now"}>
+            {/* What the lot stands at — the one field the daily loop writes. Once a result has been
+                recorded (#354) that figure takes the cell instead: it is what the lot actually went
+                for, and it is already what the all-in below is computed from, so showing the last
+                bid anyone happened to see would put two different prices on one row. */}
+            <Tooltip
+              content={
+                lot.finalPrice !== null
+                  ? lot.status === "won"
+                    ? `What you paid for this lot, ${formatInstant(lot.endsAt)}`
+                    : `What this lot went for, ${formatInstant(lot.endsAt)}`
+                  : lot.checkedAt
+                    ? `Checked ${formatInstant(lot.checkedAt)}`
+                    : "What the lot stands at now"
+              }
+            >
               <span>
                 <InlineText
                   value={currentBid ?? ""}
@@ -489,7 +515,12 @@ export function AuctionLotRow({
                     onSetBid(lot, next);
                   }}
                   display={
-                    currentBid === null ? (
+                    lot.finalPrice !== null ? (
+                      // The result, uncoloured: leading and outbid are positions in a race that is
+                      // over, and tinting a settled figure would keep asking a question nobody can
+                      // answer any more.
+                      <span style={AMOUNT}>{lot.finalPrice}</span>
+                    ) : currentBid === null ? (
                       // Nothing bid yet: show what the lot opens at, muted. It is not a bid —
                       // nobody is committed to it — so it never takes the amount's own weight.
                       <span style={MUTED_AMOUNT}>
@@ -679,6 +710,10 @@ export function AuctionLotRow({
           </p>
         )}
       </div>
+      {/* Rendered from the row, not the menu — the menu closes on select and the dialog it opened
+          has to outlive it — but portaled out of it: an ended row is drawn at `opacity: 0.6`, which
+          would otherwise trap a fixed dialog in the row's own stacking context. */}
+      {outcome.dialog}
     </div>
   );
 }

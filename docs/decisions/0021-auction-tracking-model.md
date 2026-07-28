@@ -197,6 +197,27 @@ frozen at `endsAt` through the `Purchase` mechanism from #20. That is what #24 c
 nothing extra to capture — the composition was entered to decide the bid — which is the whole
 argument for getting market data this way instead of importing it.
 
+Three consequences of that, settled with #354. The rate is stored **only where there is a price to
+convert**: null covers "the sale is already in base currency", "no rate could be had" and "no result
+was ever seen", all of which mean the same thing to a reader, and freezing today's rate against an
+absent observation would only look like data. Nothing is ever **inferred** into `finalPrice` — the
+last bid recorded is a lower bound on the result, so a lot whose outcome was missed is filed lost
+with no figure rather than with a guess, and the entry form leaves the field blank instead of
+offering one. And `cancelled` is a **third outcome, not a flavour of lost**: a listing withdrawn or
+ended without a sale produces no datapoint at all, so recording one clears any price and its rate,
+exactly as putting a lot back to `watching` does. Every one of the three is reversible, because
+misfiling a lot is a clerical error and a watchlist that cannot take one back invites leaving it
+wrong.
+
+`won` is recorded on the lot the same way, and has to be: settlement operates on *a sale holding
+`won` lots*, so without it the sale can never reach the state that action reads. It carries the
+price **paid** — required, unlike a lost lot's, because you cannot have missed what you paid and
+because the purchase line is priced from exactly that figure — and it stops there. It writes no
+`Purchase`: the parcel is settled as a whole, once, when the seller has invoiced it, and a per-lot
+purchase would be the parallel acquisition path this section exists to refuse. What it does change
+at once is the parcel's own rollup, which then costs a won lot at what was paid rather than at the
+last bid anybody happened to observe.
+
 ### 8. Data entry is manual, plus one assisted capture path
 
 Manual entry, plus Stamporama Assistant support for `allegro.pl` (#355; ADR-0015/ADR-0017): a click

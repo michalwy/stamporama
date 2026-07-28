@@ -153,6 +153,47 @@ signal reads:
 
 A lot that is current shows no mark at all.
 
+### Recording what happened
+
+Once a lot has closed, the row's ⋮ menu files it:
+
+- **Mark as won** — it is yours. It asks for **what you paid**: the hammer price, before the
+  seller's premium, in the sale's currency. The premium and the shipping belong to the parcel and
+  are added there, once.
+- **Mark as lost** — you were outbid, or it went unsold. It asks for **what it went for**, the same
+  figure on the other side of the result.
+- **Mark as cancelled** — the seller withdrew the listing, or it ended without a sale. No price, no
+  record of a result.
+- **Back to watching** — undoes either, for a lot filed by mistake. If a final price was recorded,
+  it warns before discarding it.
+
+On a **lost** lot the price is **optional, and left blank on purpose**. If the lot vanished before
+you saw the result, leave it empty: that records the loss without inventing a figure. The last bid
+you recorded is not the answer either — it is only what the price had reached the last time you
+looked, which is why it is never filled in for you, on either outcome.
+
+On a **won** lot the price is required. You paid it, so there is nothing to have missed, and it is
+what the parcel's total is worked out from — and, once settling a sale exists, what prices the
+purchase line.
+
+Recording a price is what turns a lot you lost into a **price datapoint**: a real price, for a
+composition you already described, on a known date. The exchange rate of that moment is frozen with
+it, so a result from three years ago keeps saying what it cost three years ago rather than being
+quietly revalued at today's rate.
+
+Once a result is recorded, the row shows it in place of the last bid — that is what the lot actually
+went for, and it is the figure the all-in beside it is worked out from. The **Won?** / **Lost?**
+guess disappears, replaced by the plain status.
+
+Lost lots stay on the list and stay filterable. They are the archive the market data comes out of,
+not clutter to be cleared away.
+
+Won lots stay on the list too, and count into what the parcel will cost — a won lot is priced at
+what you actually paid rather than at the last bid anyone saw, so the sale's total stops being an
+estimate. Marking a lot won does **not** create a purchase: you pay for the parcel as a whole when
+the seller invoices it, and turning a sale into a purchase is a separate step that does not exist
+yet (see *What is not here yet*). Until it does, a won lot is a record of what you owe for it.
+
 ### Filtering and grouping
 
 The toolbar filters on two different questions. The first row is **what to do about a lot**, worked
@@ -328,7 +369,10 @@ screens. The **Only** filters are not: they are a job you do and finish.
 
 ## What is not here yet
 
-- **Settling a won sale** into a purchase, and recording what a lost lot fetched.
+- **Settling a won sale** into a purchase: the *Settle* action that turns a parcel's won lots into
+  a purchase with its lines, shipping distribution and copy intake. Marking lots won and lost is
+  what feeds it, and that part works now — see *Recording what happened*.
+- Anything that reads the prices lost lots have produced back as a valuation.
 - Any recommendation beyond the raw catalogue value — what a lot is *worth bidding* is a separate
   question from what its contents catalogue at.
 - Capturing a listing straight from the browser.

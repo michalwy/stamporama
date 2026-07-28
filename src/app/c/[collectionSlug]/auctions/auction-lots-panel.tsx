@@ -452,6 +452,7 @@ export function AuctionLotsPanel({
                       })
                     }
                     onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
+                    onOutcomeRecorded={() => invalidateAll(collectionId)}
                   />
                 ))}
               </div>
@@ -493,6 +494,7 @@ export function AuctionLotsPanel({
                     })
                   }
                   onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
+                  onOutcomeRecorded={() => invalidateAll(collectionId)}
                 />
               ))}
             </>

@@ -10,6 +10,7 @@ import {
   getAuctionSellerDefaults,
   listAuctionLots,
   auctionLotFilterCounts,
+  recordAuctionLotOutcome,
   setAuctionLotBid,
   setAuctionLotMyBid,
   touchAuctionLotChecked,
@@ -329,5 +330,99 @@ describe("auction tracking (#351/#352)", () => {
     assert.ok(sale);
     await assert.rejects(listAuctionLots("someone-else", collectionId), /not found/i);
     await assert.rejects(getAuctionSaleDetail("someone-else", sale.id), /not found/i);
+  });
+
+  // The losing half of the fork (#354). The sale is deliberately in the **base** currency, so the
+  // rate rule is exercised without the test depending on the ECB being reachable.
+  it("records a lost lot's price, and carries nothing over from an outcome that has none", async () => {
+    const saleId = await createAuctionSale(userId, collectionId, {
+      sellerId: otherSellerId,
+      platformId,
+      name: "Köhler 385",
+      url: null,
+      endsAt: null,
+      currency: "EUR",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    const lotId = await createAuctionLot(userId, collectionId, {
+      auctionSaleId: saleId,
+      lotNo: "77",
+      url: null,
+      title: null,
+      endsAt: hourFromNow(),
+      startingPrice: null,
+      currentBid: "40.00",
+      myBid: "45.00",
+      maxBid: null,
+      notes: null,
+    });
+    const read = () =>
+      prisma.auctionLot.findUniqueOrThrow({
+        where: { id: lotId },
+        select: { status: true, finalPrice: true, fxRateToBase: true, currentBid: true },
+      });
+
+    await recordAuctionLotOutcome(userId, lotId, { status: "lost", finalPrice: "62.00" });
+    const lost = await read();
+    assert.equal(lost.status, "lost");
+    assert.equal(lost.finalPrice?.toFixed(2), "62.00");
+    // Base currency: there is no conversion to freeze, exactly as on a same-currency purchase.
+    assert.equal(lost.fxRateToBase, null);
+    // The last bid anyone saw is left alone — it is what the lot had reached, not what it fetched.
+    assert.equal(lost.currentBid?.toFixed(2), "40.00");
+
+    // Withdrawn or ended without a sale: no datapoint, so a price recorded before is cleared.
+    await recordAuctionLotOutcome(userId, lotId, { status: "cancelled" });
+    const cancelled = await read();
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.finalPrice, null);
+    assert.equal(cancelled.fxRateToBase, null);
+
+    // Lost with no figure at all: the lot went away before the result was seen, which is an
+    // absent observation and not an error to be filled in.
+    await recordAuctionLotOutcome(userId, lotId, { status: "lost", finalPrice: null });
+    const unpriced = await read();
+    assert.equal(unpriced.status, "lost");
+    assert.equal(unpriced.finalPrice, null);
+
+    // Reversible: a lot filed by mistake goes back on the watchlist carrying no result.
+    await recordAuctionLotOutcome(userId, lotId, { status: "watching" });
+    const reopened = await read();
+    assert.equal(reopened.status, "watching");
+    assert.equal(reopened.finalPrice, null);
+
+    // Winning carries the price paid, and refuses to be recorded without one: settlement (#28)
+    // prices its purchase line from exactly this figure.
+    await assert.rejects(
+      recordAuctionLotOutcome(userId, lotId, {
+        status: "won",
+        // The domain guard is what is under test, so the type is deliberately bypassed here — the
+        // server action refuses a blank field before it ever gets this far.
+        finalPrice: null as unknown as string,
+      }),
+      /what you paid/i
+    );
+    await recordAuctionLotOutcome(userId, lotId, { status: "won", finalPrice: "58.00" });
+    const won = await read();
+    assert.equal(won.status, "won");
+    assert.equal(won.finalPrice?.toFixed(2), "58.00");
+
+    // A won lot is payable, and is costed at what was paid rather than at the last bid observed.
+    const sale = await getAuctionSaleDetail(userId, saleId);
+    assert.equal(sale.summary.wonCount, 1);
+    assert.equal(sale.summary.payableCount, 1);
+    assert.equal(sale.summary.bidTotal, "58.00");
+
+    await recordAuctionLotOutcome(userId, lotId, { status: "watching" });
+
+    await assert.rejects(
+      recordAuctionLotOutcome("someone-else", lotId, { status: "cancelled" }),
+      /not found/i
+    );
+
+    await prisma.auctionLot.delete({ where: { id: lotId } });
+    await deleteAuctionSale(userId, saleId);
   });
 });
