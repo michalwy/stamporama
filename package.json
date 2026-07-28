@@ -1,6 +1,6 @@
 {
   "name": "stamporama",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "packageManager": "pnpm@11.15.1",
   "private": true,
   "scripts": {
