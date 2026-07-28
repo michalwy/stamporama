@@ -262,7 +262,7 @@ export function ComposeSetDialog({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <DialogShell title="Add set" onClose={onClose} maxWidth="min(94vw, 80rem)" height="min(90vh, 60rem)">
+    <DialogShell title="Add set" onClose={onClose} maxWidth="min(96vw, 100rem)" height="min(90vh, 60rem)">
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <ListFilterSidebar
           variant="dialog"

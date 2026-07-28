@@ -319,7 +319,7 @@ export function AddSaleLineDialog({
     <DialogShell
       title="Add sold sets"
       onClose={onClose}
-      maxWidth="min(94vw, 62rem)"
+      maxWidth="min(94vw, 78rem)"
       height="min(90vh, 48rem)"
       zIndexBase={120}
     >

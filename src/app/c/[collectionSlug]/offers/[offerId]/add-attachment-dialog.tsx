@@ -206,7 +206,7 @@ export function AddAttachmentDialog({
       onClose={onClose}
       // As roomy as the compose-set dialog, and for the same reason: this is a picking surface, and
       // picking across a whole offer's photos means seeing many of them at once.
-      maxWidth="min(94vw, 80rem)"
+      maxWidth="min(96vw, 100rem)"
       // Fixed so switching tabs never resizes the dialog; the bodies scroll instead.
       height="min(90vh, 60rem)"
       zIndexBase={110}

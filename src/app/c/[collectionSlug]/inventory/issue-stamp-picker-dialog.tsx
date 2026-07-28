@@ -107,7 +107,7 @@ export function IssueStampPickerDialog({
     <DialogShell
       title={`Select a stamp · ${issue.name ?? "(unnamed issue)"}`}
       onClose={onClose}
-      maxWidth="min(94vw, 44rem)"
+      maxWidth="min(94vw, 56rem)"
       height="min(85vh, 40rem)"
     >
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
