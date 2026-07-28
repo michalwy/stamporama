@@ -289,8 +289,13 @@ jobs:
             echo "::warning::No tag matches the store version '${known:-none}' — comparing against ${baseline:-nothing} instead."
           fi
 
-          if [ -n "$baseline" ] && git diff --quiet "$baseline" "$GITHUB_REF_NAME" -- extension/; then
-            echo "::notice::extension/ is unchanged since $baseline — nothing to submit."
+          # Only what the ZIP is built from counts. The package is `dist-release/`, so this
+          # extension's docs and its unit tests never reach a user, and a change to them must not
+          # cost a store review. (The wildcards match across directories — a pathspec without
+          # `:(glob)` magic lets `*` cross a `/`, so `extension/*.md` also excludes `src/**/*.md`.)
+          shipped=(extension/ ':(exclude)extension/*.md' ':(exclude)extension/*.test.ts')
+          if [ -n "$baseline" ] && git diff --quiet "$baseline" "$GITHUB_REF_NAME" -- "${shipped[@]}"; then
+            echo "::notice::Nothing shipped in extension/ changed since $baseline — nothing to submit."
             exit 0
           fi
 
