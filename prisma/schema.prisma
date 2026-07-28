@@ -923,11 +923,24 @@ model AuctionLot {
   // The lot's own closing time. On a marketplace every lot closes at a different moment, so this
   // is per-lot even though a house sale seeds them all from `AuctionSale.endsAt`.
   endsAt         DateTime
+  // What the lot opened at. Optional: a marketplace listing often has one and a house lot always
+  // does, but it is not something worth chasing. Purely a record — it never stands in for a bid,
+  // because "opens at 20" and "someone has bid 20" are different facts and only the second one
+  // costs money.
+  startingPrice  Decimal? @db.Decimal(10, 2)
   // A single overwritten figure with the moment it was read, **not** a history. Refreshing is
   // manual, so every field that must be kept current is real work; `checkedAt` already answers
   // the only question a history would ("what is stale before it closes?").
   currentBid     Decimal? @db.Decimal(10, 2)
   checkedAt      DateTime?
+  // What the collector has actually **placed** at the platform — a proxy/maximum bid, not what the
+  // lot stands at. Distinct from both neighbours on purpose: `currentBid` is an observation of the
+  // world, `maxBid` is a private valuation, and this is a commitment made to a third party. Without
+  // it "40" on screen cannot tell "I am leading at 40" from "someone outbid me at 40".
+  //
+  // Who is leading is **derived** from this against `currentBid`, never stored: a stored flag would
+  // be a third thing to keep current by hand, and it would go stale the moment the bid moves.
+  myBid          Decimal? @db.Decimal(10, 2)
   // The collector's own ceiling, and what the lot actually fetched. `finalPrice` is optional
   // because a lot that simply vanished from view yields no datapoint (#24) — that is not an error
   // state, just an absent observation.
@@ -1500,6 +1513,16 @@ model Contact {
   defaultShippingCost Decimal? @db.Decimal(10, 2)
   buyerPremiumPercent Decimal? @db.Decimal(5, 2)
   buyerPremiumFixed   Decimal? @db.Decimal(10, 2)
+  // The platform this seller was **last tracked on** (#351/#352), pointing at another `Contact`
+  // carrying the `platform` role. Written by the domain layer whenever a lot or a sale is created,
+  // and read back to pre-fill the platform once the seller is named — where you bid follows from
+  // who you buy from: one house always comes through an aggregator, another sells directly.
+  //
+  // Deliberately **not** shared with the platform an offer is listed on: where you bid and where
+  // you list are different marketplaces, so one field could only be right for one of them. It is a
+  // remembered value rather than a setting, so nothing in the contact form edits it, and
+  // `onDelete: SetNull` — deleting the platform must forget the memory, never block the delete.
+  defaultAuctionPlatformId String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -1523,11 +1546,16 @@ model Contact {
   // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
   auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
   auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
+  // Self-relation for the remembered auction platform above: a seller points at a platform, and a
+  // platform knows which sellers were last tracked on it.
+  defaultAuctionPlatform    Contact?  @relation("ContactAuctionPlatform", fields: [defaultAuctionPlatformId], references: [id], onDelete: SetNull)
+  defaultAuctionPlatformFor Contact[] @relation("ContactAuctionPlatform")
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])
   @@index([collectionId])
   @@index([defaultCollageTemplateId])
+  @@index([defaultAuctionPlatformId])
   @@map("contact")
 }
 

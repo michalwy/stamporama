@@ -86,8 +86,131 @@ export function headroom(catalogValue: Amount, bid: Amount, fees: AuctionFees = 
   return money(cv - allInValue(base, fees));
 }
 
+/**
+ * The **highest hammer price whose all-in cost still fits inside a ceiling** — the inverse of
+ * {@link allIn}, and what a bid should actually be placed at.
+ *
+ *     bid = (ceiling − premiumFixed − shipping) / (1 + premiumPercent / 100)
+ *
+ * A ceiling is what the lot is worth **all-in** (ADR-0021 §6), but what gets typed into the
+ * platform's bid box is a hammer price. Bidding the ceiling itself therefore overshoots by exactly
+ * the fees — on a 20% house, a 100 ceiling bid at 100 costs 120.
+ *
+ * Rounded **down** to the cent: rounding up would put the all-in a cent past the very limit this
+ * exists to respect. Null when no ceiling is recorded, and null when the fees alone already eat it
+ * — there is then no bid that fits, which is a real answer rather than a zero.
+ *
+ * Pass `shippingCost` only when costing the lot as if it were the sole thing won from the sale; the
+ * per-lot views leave it out, exactly as {@link allIn} does.
+ */
+export function maxBidWithin(ceiling: Amount, fees: AuctionFees = {}): string | null {
+  const cap = num(ceiling);
+  if (cap === null) return null;
+  const room = cap - fee(fees.premiumFixed) - fee(fees.shippingCost);
+  if (room <= 0) return null;
+  const hammer = room / (1 + fee(fees.premiumPercent) / 100);
+  return (Math.floor(hammer * 100) / 100).toFixed(2);
+}
+
+/**
+ * Where the collector stands on a lot, derived from what they placed against what it now stands at.
+ *
+ * - `leading` — their bid is at or above the current price, so nobody has passed them.
+ * - `outbid` — the price has gone beyond what they committed.
+ * - `null` — one of the two is unrecorded, so the question cannot be answered. Not "leading".
+ *
+ * Deliberately **not stored**: a flag would be a third figure to keep current by hand, and it would
+ * be wrong the moment the price moved without anyone updating it. An exact tie counts as leading —
+ * on the platforms this tracks, the earlier bid wins a tie, and the earlier bid is the one already
+ * placed.
+ */
+export function bidStanding(myBid: Amount, currentBid: Amount): "leading" | "outbid" | null {
+  const mine = num(myBid);
+  const current = num(currentBid);
+  if (mine === null || current === null) return null;
+  return mine >= current ? "leading" : "outbid";
+}
+
 /** A lot's outcome. `watching` is still running; the other three are terminal. */
 export type AuctionLotStatus = "watching" | "won" | "lost" | "cancelled";
+
+/**
+ * The **derived** states a live lot can be in — what the row already shows as tint and chip, made
+ * filterable.
+ *
+ * These are not statuses. A status is recorded by the collector and answers "how did this end"; a
+ * signal is computed from the figures and answers "what should I do about it now". Both exist
+ * because a watchlist of forty lots is worked through by the second question and filed by the first.
+ *
+ * - `bid-possible` — the ceiling still leaves room above the current price: this lot can be taken
+ *   without going past what it is worth. The one that turns a list into a to-do.
+ * - `outbid` — the price has passed the bid you placed.
+ * - `leading` — your bid still covers it.
+ * - `over-ceiling` — the current price, all-in, has passed your ceiling: it has become too
+ *   expensive, whoever is winning.
+ * - `won-pending` — it closed with your bid ahead, and the outcome has not been recorded yet.
+ */
+export type LotSignal = "bid-possible" | "outbid" | "leading" | "over-ceiling" | "won-pending";
+
+export const LOT_SIGNALS: readonly LotSignal[] = [
+  "bid-possible",
+  "outbid",
+  "leading",
+  "over-ceiling",
+  "won-pending",
+];
+
+/** One lot, as the signal rules read it. Fees are the sale's — shipping excluded, as everywhere a
+ * single lot is costed. */
+export interface LotSignalInput {
+  status: AuctionLotStatus;
+  endsAt: Date;
+  currentBid?: Amount;
+  myBid?: Amount;
+  maxBid?: Amount;
+  fees?: AuctionFees;
+}
+
+/**
+ * Whether a lot carries a signal, at the instant `now`.
+ *
+ * Signals only apply while a lot is `watching`: once an outcome is recorded there is nothing to
+ * decide, and the status says it plainly. `won-pending` is the exception in appearance only — it is
+ * about a lot still marked `watching` whose moment has gone by, which is precisely the case the
+ * collector has to come back and close.
+ */
+export function lotHasSignal(signal: LotSignal, lot: LotSignalInput, now: Date): boolean {
+  if (lot.status !== "watching") return false;
+  const ended = lot.endsAt.getTime() <= now.getTime();
+  const standing = bidStanding(lot.myBid, lot.currentBid);
+
+  switch (signal) {
+    case "won-pending":
+      return ended && standing === "leading";
+    case "leading":
+      return !ended && standing === "leading";
+    case "outbid":
+      return !ended && standing === "outbid";
+    case "over-ceiling": {
+      if (ended) return false;
+      const cost = allIn(lot.currentBid, lot.fees);
+      const cap = num(lot.maxBid);
+      return cost !== null && cap !== null && Number(cost) > cap;
+    }
+    case "bid-possible": {
+      if (ended) return false;
+      // Room is measured against the *hammer* price, since that is what a bid box takes: the most
+      // that fits inside the ceiling has to be above both what the lot stands at and what has
+      // already been placed, or there is nothing left to do here.
+      const room = maxBidWithin(lot.maxBid, lot.fees);
+      if (room === null) return false;
+      const roomValue = Number(room);
+      const current = num(lot.currentBid);
+      const mine = num(lot.myBid);
+      return (current === null || roomValue > current) && (mine === null || roomValue > mine);
+    }
+  }
+}
 
 /** One lot as the aggregation reads it. */
 export interface AuctionLotSummaryRow {

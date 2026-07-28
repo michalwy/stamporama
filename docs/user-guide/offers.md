@@ -5,7 +5,7 @@ or Colnect. The offer **owns what it lists**: you compose it from your inventory
 more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
 independent offers — each tracked, edited, and sold on its own.
 
-Open the **Offers** screen from the **Trading** section of the sidebar. When a batch of offers is
+Open the **Offers** screen from the **Selling** section of the sidebar. When a batch of offers is
 prepared and ready to go live, [**Bulk listing**](#bulk-listing--posting-a-prepared-batch) on its
 toolbar is where you post them.
 

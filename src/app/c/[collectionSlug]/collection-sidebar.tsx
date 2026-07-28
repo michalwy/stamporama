@@ -73,6 +73,16 @@ const IconSales = () => (
   </svg>
 );
 
+const IconAuctions = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 3l7 7" />
+    <path d="M17.5 6.5l-4.5 4.5" />
+    <path d="M9.5 9.5l5 5" />
+    <path d="M12 12l-7 7" />
+    <line x1="3" y1="21" x2="11" y2="21" />
+  </svg>
+);
+
 const IconContacts = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
@@ -131,11 +141,16 @@ function NavItem({
   icon,
   label,
   active,
+  spacedAbove = false,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  /** Sets the item apart from the section above it without giving it a heading of its own — for an
+   * entry that belongs to no section (Contacts serves both trading directions). The gap matches the
+   * one a section label leaves. */
+  spacedAbove?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -162,6 +177,7 @@ function NavItem({
             : "transparent",
         fontWeight: active ? 600 : 400,
         transition: "background 0.1s ease",
+        marginTop: spacedAbove ? "1.25rem" : undefined,
       }}
     >
       {icon}
@@ -393,13 +409,26 @@ export function CollectionSidebar({
           active={isActive(`${base}/locations`)}
         />
 
-        <p style={sectionLabelStyle}>Trading</p>
+        {/* Trading is split by *direction* (#351): what comes in and what goes out are two
+            different jobs, done on different days, and one "Trading" heading made a five-item list
+            you had to read to the end to find either. */}
+        <p style={sectionLabelStyle}>Buying</p>
         <NavItem
           href={`${base}/purchases`}
           icon={<IconPurchases />}
           label="Purchases"
           active={isActive(`${base}/purchases`)}
         />
+        {/* The nav entry is the *lots* screen, not a list of sales (ADR-0021 §9): scanning closing
+            times and refreshing bids is the daily job. */}
+        <NavItem
+          href={`${base}/auctions`}
+          icon={<IconAuctions />}
+          label="Auction sales"
+          active={isActive(`${base}/auctions`)}
+        />
+
+        <p style={sectionLabelStyle}>Selling</p>
         <NavItem
           href={`${base}/offers`}
           icon={<IconOffers />}
@@ -412,11 +441,16 @@ export function CollectionSidebar({
           label="Sales"
           active={isActive(`${base}/sales`)}
         />
+
+        {/* Contacts serves both directions — the same address book holds the house you bid with and
+            the marketplace you list on — so it sits under neither heading, set apart by spacing
+            instead of taking a one-item section of its own. */}
         <NavItem
           href={`${base}/contacts`}
           icon={<IconContacts />}
           label="Contacts"
           active={isActive(`${base}/contacts`)}
+          spacedAbove
         />
       </nav>
 

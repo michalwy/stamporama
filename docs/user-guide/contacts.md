@@ -4,7 +4,8 @@
 buyers, exchange partners, auction houses, and the platforms you trade through (Allegro,
 eBay, Delcampe). Contacts are scoped to a collection: each collection keeps its own list.
 
-Open the **Contacts** screen from the **Trading** section of the sidebar.
+Open the **Contacts** screen from the sidebar — it sits below **Buying** and **Selling**, because
+the same address book serves both.
 
 ## Roles
 
@@ -38,6 +39,17 @@ suggested price and the copies' catalog value both win over it. It is read when 
 created and never afterwards, so the price stays yours to edit on the offer, and changing the
 default here leaves offers already created untouched. Leave it empty for platforms you price
 individually.
+
+Ticking **Seller** or **Auction house** reveals **Auction sale defaults** — the **currency**,
+**shipping**, and the two **buyer's premium** parts (a percentage and a per-lot fee) this seller
+normally trades on. They are **copied onto every new [auction sale](auctions.md)** with this seller
+and are edited on the sale afterwards, so raising a premium here never re-prices a parcel you are
+already bidding on. Currency sits on the seller rather than the platform because an aggregator
+carries houses listing in EUR, CHF and GBP alike.
+
+A seller also quietly remembers **which platform you last tracked a lot with them on**, and it
+pre-fills the platform next time you name them. There is no field for it — it is written whenever
+you add a lot or start an auction sale, and deleting the platform contact simply forgets it.
 
 Ticking **Platform** also reveals a **Listing language** — the language this platform's listings are
 written in. Pick the one it uses; platforms that write in your collection's

@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   allIn,
+  bidStanding,
   headroom,
+  lotHasSignal,
+  maxBidWithin,
+  LOT_SIGNALS,
   summarizeAuctionSale,
   type AuctionLotSummaryRow,
 } from "../../src/lib/auction-lot";
@@ -163,5 +167,120 @@ describe("summarizeAuctionSale", () => {
       [s.lotCount, s.payableCount, s.bidTotal, s.allInTotal, s.catalogTotal, s.headroom],
       [0, 0, "0.00", "0.00", "0.00", null]
     );
+  });
+});
+
+// maxBidWithin — the inverse of allIn ----------------------------------------
+
+describe("maxBidWithin", () => {
+  it("takes the fees back off the ceiling", () => {
+    // 20% + 2 fixed: bidding 100 on a 100 ceiling would cost 122. 81.66 costs 99.99.
+    assert.equal(maxBidWithin("100", { premiumPercent: "20", premiumFixed: "2" }), "81.66");
+    assert.equal(allIn("81.66", { premiumPercent: "20", premiumFixed: "2" }), "99.99");
+  });
+
+  it("rounds down, never past the ceiling", () => {
+    const bid = maxBidWithin("50", { premiumPercent: "17.5" })!;
+    assert.ok(Number(allIn(bid, { premiumPercent: "17.5" })) <= 50);
+  });
+
+  it("is the ceiling itself when the seller charges nothing", () => {
+    assert.equal(maxBidWithin("40"), "40.00");
+  });
+
+  it("counts shipping only when asked to", () => {
+    assert.equal(maxBidWithin("100", { shippingCost: "15" }), "85.00");
+    assert.equal(maxBidWithin("100", {}), "100.00");
+  });
+
+  it("has no answer without a ceiling, or when the fees alone eat it", () => {
+    assert.equal(maxBidWithin(null), null);
+    assert.equal(maxBidWithin(""), null);
+    assert.equal(maxBidWithin("10", { premiumFixed: "10" }), null);
+    assert.equal(maxBidWithin("10", { premiumFixed: "12" }), null);
+  });
+});
+
+// bidStanding — derived, never stored ----------------------------------------
+
+describe("bidStanding", () => {
+  it("reports leading while the placed bid still covers the price", () => {
+    assert.equal(bidStanding("50", "40"), "leading");
+    // A tie goes to the bid already placed.
+    assert.equal(bidStanding("50", "50"), "leading");
+  });
+
+  it("reports outbid once the price has passed it", () => {
+    assert.equal(bidStanding("50", "55"), "outbid");
+  });
+
+  it("answers nothing when either figure is missing", () => {
+    assert.equal(bidStanding(null, "40"), null);
+    assert.equal(bidStanding("40", null), null);
+    assert.equal(bidStanding(null, null), null);
+  });
+});
+
+// lotHasSignal — the derived states the toolbar filters by ----------------------
+
+describe("lotHasSignal", () => {
+  const now = new Date("2026-07-28T12:00:00.000Z");
+  const later = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const earlier = new Date(now.getTime() - 60 * 60 * 1000);
+  const fees = { premiumPercent: "10", premiumFixed: "2" };
+
+  const live = (over: Partial<Parameters<typeof lotHasSignal>[1]> = {}) => ({
+    status: "watching" as const,
+    endsAt: later,
+    fees,
+    ...over,
+  });
+
+  it("says a bid is still possible while the ceiling leaves room above the price", () => {
+    // Ceiling 80 all-in → at most 70.90 hammer, which is above the 55 it stands at.
+    assert.equal(lotHasSignal("bid-possible", live({ currentBid: "55", maxBid: "80" }), now), true);
+    // The price has caught up with the room, so there is nothing left to do.
+    assert.equal(lotHasSignal("bid-possible", live({ currentBid: "75", maxBid: "80" }), now), false);
+    // Already placed everything that fits.
+    assert.equal(
+      lotHasSignal("bid-possible", live({ currentBid: "55", myBid: "70.90", maxBid: "80" }), now),
+      false
+    );
+    // No ceiling: the question cannot be answered, so the lot is not offered as actionable.
+    assert.equal(lotHasSignal("bid-possible", live({ currentBid: "55" }), now), false);
+  });
+
+  it("separates leading from outbid, and neither survives the close", () => {
+    assert.equal(lotHasSignal("leading", live({ currentBid: "40", myBid: "50" }), now), true);
+    assert.equal(lotHasSignal("outbid", live({ currentBid: "60", myBid: "50" }), now), true);
+    assert.equal(lotHasSignal("outbid", live({ currentBid: "40", myBid: "50" }), now), false);
+    assert.equal(
+      lotHasSignal("leading", live({ endsAt: earlier, currentBid: "40", myBid: "50" }), now),
+      false
+    );
+  });
+
+  it("flags a price that has passed the ceiling all-in, whoever is winning", () => {
+    // 75 + 10% + 2 = 84.50, past an 80 ceiling.
+    assert.equal(lotHasSignal("over-ceiling", live({ currentBid: "75", maxBid: "80" }), now), true);
+    assert.equal(lotHasSignal("over-ceiling", live({ currentBid: "60", maxBid: "80" }), now), false);
+  });
+
+  it("holds a closed lot that was still ahead as won-pending", () => {
+    const closed = live({ endsAt: earlier, currentBid: "40", myBid: "50" });
+    assert.equal(lotHasSignal("won-pending", closed, now), true);
+    assert.equal(
+      lotHasSignal("won-pending", live({ endsAt: earlier, currentBid: "60", myBid: "50" }), now),
+      false
+    );
+  });
+
+  it("says nothing at all about a lot whose outcome is recorded", () => {
+    for (const signal of LOT_SIGNALS) {
+      assert.equal(
+        lotHasSignal(signal, { status: "won", endsAt: earlier, currentBid: "40", myBid: "50", fees }, now),
+        false
+      );
+    }
   });
 });

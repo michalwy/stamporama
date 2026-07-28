@@ -5,7 +5,7 @@ platform, in a single currency, on one date — the date the exchange rate is fr
 profit/loss is measured against a fixed rate. The **currency comes from the platform**, the same
 one its offers use, so an offer and its sale always agree.
 
-Open the **Sales** screen from the **Trading** section of the sidebar.
+Open the **Sales** screen from the **Selling** section of the sidebar.
 
 ## Recording a sale
 
