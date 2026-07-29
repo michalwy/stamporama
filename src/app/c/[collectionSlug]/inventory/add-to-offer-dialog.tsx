@@ -32,6 +32,7 @@ import {
 import { useInvalidateInventory } from "./use-inventory-query";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 const MUTED = "var(--color-text-muted)";
@@ -121,8 +122,9 @@ function setMatches(s: ComposeTargetSet, raw: string, q: string, ctx: RowCtx): b
 
 export interface AddToOfferDialogProps {
   collectionId: string;
-  /** The copy being added — goes in as a new single-item set, or appended to an existing set. */
-  item: ItemListItem;
+  /** The copies being added (#373) — they go in as one new set, as one set each, or appended to an
+   * existing set. One copy is the original single-copy flow (#188) and skips the packaging choice. */
+  items: ItemListItem[];
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
@@ -136,46 +138,73 @@ export interface AddToOfferDialogProps {
    * "Add to new offer" row action. Cancelling the create form then closes the whole dialog rather
    * than dropping back to the picker the collector never asked for. */
   startInCreate?: boolean;
+  /** How several copies start out packaged. One set each by default — the Copies list's own
+   * multi-select is most often a stock of duplicates, and it is what the duplicate-group flow
+   * (#372) needs, which reaches this dialog through `startInCreate` and so never sees the footer
+   * control that would otherwise let the choice be changed. */
+  initialPackaging?: "per-copy" | "one-set";
   onClose: () => void;
   onDone: () => void;
 }
 
 /**
- * Rich offer picker for listing one inventory copy from the Copies list (#188) — the inverse of the
- * offer-side compose picker. A wide portal with a left **state facet** panel (Preparing / Active /
- * Paused, with live counts) and a right column: a search box (catalog-aware) over the collection's
- * non-terminal offers, each a **collapsible group** over its existing sets. Pick a destination — a
- * brand-new single-item set on an offer, or an existing set (turning it into a series) — then
- * confirm. Offers already listing this copy are shown but disabled (no double-listing). Adding to a
- * `preparing` offer is the common path; the states are orientational, so active/paused work too.
+ * Rich offer picker for listing inventory copies from the Copies list (#188, #373) — the inverse of
+ * the offer-side compose picker. A wide portal with a left **state facet** panel (Preparing /
+ * Active / Paused, with live counts) and a right column: a search box (catalog-aware) over the
+ * collection's non-terminal offers, each a **collapsible group** over its existing sets. Pick a
+ * destination — a brand-new set on an offer, or an existing set (turning it into a series) — then
+ * confirm. Adding to a `preparing` offer is the common path; the states are orientational, so
+ * active/paused work too.
+ *
+ * With **several copies** picked (#373) the footer carries the packaging choice `ComposeSetDialog`
+ * offers: one set holding all (a series sold together) or one set each (a quantity of singles). It
+ * is a single control rather than two submit buttons because it governs the create path below too,
+ * which has a submit button of its own inside the offer form.
+ *
+ * A destination already listing **some** of the copies keeps them out of the add and says so; only
+ * one holding **every** copy is disabled, since there is then nothing left to gain. An offer never
+ * lists the same copy twice.
  *
  * The picker doubles as the quick-start create path (#189): "Create new offer" opens the offer
- * header form, then seeds the fresh offer with this copy as a single-item set — so listing a copy
- * on a brand-new offer lives in the same flow as adding it to an existing one, and leaves the
- * collector on the inventory list either way.
+ * header form, then seeds the fresh offer with the copies — so listing on a brand-new offer lives
+ * in the same flow as adding to an existing one, and leaves the collector on the inventory list
+ * either way.
  */
 export function AddToOfferDialog({
   collectionId,
-  item,
+  items,
   areas,
   locations,
   baseCurrency,
   initialPlatform,
   onPlatformUsed,
   startInCreate = false,
+  initialPackaging = "per-copy",
   onClose,
   onDone,
 }: AddToOfferDialogProps) {
   const [search, setSearch] = useState("");
+  const itemIds = useMemo(() => items.map((i) => i.id), [items]);
+  const multi = items.length > 1;
+  // How several copies are packaged (#373), mirroring `ComposeSetDialog`'s two buttons.
+  const [packaging, setPackaging] = useState<"per-copy" | "one-set">(initialPackaging);
   // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker. Starts open when
   // launched from the "Add to new offer" action (#277), which skips the picker entirely.
   const [creating, setCreating] = useState(startInCreate);
   const [createError, setCreateError] = useState<string | undefined>();
 
-  // Suggested asking price for the quick-start create path (#230): this copy's catalog value in the
-  // collection base currency. Blank when the copy is unpriced or its value can't be expressed in the
-  // base currency (no rate) — then no suggestion is shown and the field starts empty.
-  const catalogBase = item.value.unpriced ? "" : (item.value.baseAmountDisplay ?? "");
+  // Suggested asking price for the quick-start create path (#230): the copies' catalog value in the
+  // collection base currency. Blank when a copy is unpriced, when its value can't be expressed in
+  // the base currency (no rate), or when the copies **disagree** — an offer carries one asking
+  // price, so a suggestion only exists where the copies share one figure (which a duplicate group
+  // does by construction). Then no suggestion is shown and the field starts empty.
+  const catalogBase = useMemo(() => {
+    const first = items[0]?.value;
+    if (!first || first.unpriced || first.baseAmountDisplay == null) return "";
+    return items.every((i) => i.value.baseAmountDisplay === first.baseAmountDisplay)
+      ? first.baseAmountDisplay
+      : "";
+  }, [items]);
   const [suggestedPrice, setSuggestedPrice] = useState(catalogBase);
   // Only apply the latest conversion — quick currency switches can resolve out of order.
   const convertToken = useRef(0);
@@ -217,7 +246,7 @@ export function AddToOfferDialog({
   const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
   // In the direct "create new offer" flow (#277) the picker never shows, so don't fetch its targets.
-  const { data, isLoading } = useComposeTargets(collectionId, item.id, !startInCreate);
+  const { data, isLoading } = useComposeTargets(collectionId, itemIds, !startInCreate);
   const offers = useMemo(() => data?.offers ?? [], [data]);
   const copies = useMemo(() => data?.copies ?? [], [data]);
 
@@ -265,9 +294,23 @@ export function AddToOfferDialog({
     [byText, stateFacet]
   );
 
+  /** The copies still addable to a destination: an offer never lists the same copy twice, so any it
+   * already holds are dropped rather than failing the whole add. */
+  function addableTo(offerId: string): string[] {
+    const already = new Set(
+      offers.find((o) => o.offerId === offerId)?.containsItemIds ?? []
+    );
+    return itemIds.filter((id) => !already.has(id));
+  }
+
   function submit() {
     if (!selected) {
-      setError("Pick where this copy should go.");
+      setError(multi ? "Pick where these copies should go." : "Pick where this copy should go.");
+      return;
+    }
+    const ids = addableTo(selected.offerId);
+    if (ids.length === 0) {
+      setError("That offer already lists every one of these copies.");
       return;
     }
     setError(undefined);
@@ -275,8 +318,10 @@ export function AddToOfferDialog({
       const actions = await import("@/app/actions/offers");
       const result =
         selected.kind === "new"
-          ? await actions.addOfferSetAction(selected.offerId, [item.id], { perCopy: false })
-          : await actions.addItemToOfferSetAction(selected.offerSetId, item.id);
+          ? await actions.addOfferSetAction(selected.offerId, ids, {
+              perCopy: multi && packaging === "per-copy",
+            })
+          : await actions.addItemsToOfferSetAction(selected.offerSetId, ids);
       if (result.status === "success") {
         invalidateAll(collectionId);
         invalidateList(collectionId);
@@ -287,16 +332,22 @@ export function AddToOfferDialog({
     });
   }
 
-  // Create a brand-new offer from its header, seeding it with this copy as its first single-item set
-  // in one atomic step (#189) — so a chosen live status (#257) is honoured (Ready / Active need the
-  // offer to list something). Stays on the inventory list — same as adding to an existing offer —
-  // rather than navigating to the new offer, so the collector keeps their place in the list.
+  // Create a brand-new offer from its header, seeding it with the copies as its first set(s) in one
+  // atomic step (#189) — so a chosen live status (#257) is honoured (Ready / Active need the offer
+  // to list something). The footer's packaging choice governs here too. Stays on the inventory list
+  // — same as adding to an existing offer — rather than navigating to the new offer, so the
+  // collector keeps their place in the list.
   function createOffer(formData: FormData) {
     setCreateError(undefined);
     const usedPlatformId = (formData.get("platformId") as string | null) ?? "";
     startTransition(async () => {
       const actions = await import("@/app/actions/offers");
-      const created = await actions.createOfferAction(collectionId, formData, [item.id]);
+      const created = await actions.createOfferAction(
+        collectionId,
+        formData,
+        itemIds,
+        multi && packaging === "per-copy"
+      );
       if (created.status !== "success") {
         // Nothing was created (the create + seed commit together), so the picker stays open to retry.
         setCreateError(created.message);
@@ -313,7 +364,9 @@ export function AddToOfferDialog({
 
   if (typeof document === "undefined") return null;
 
-  const copyName = item.stampName ?? "this copy";
+  const copyName = multi
+    ? `${items.length} copies`
+    : (items[0]?.stampName ?? "this copy");
   const selectedKey = selected ? targetKey(selected) : null;
 
   return createPortal(
@@ -377,7 +430,8 @@ export function AddToOfferDialog({
             }}
           >
             <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Add <strong>{copyName}</strong> to an offer — as a new set, or into an existing one.
+              Add <strong>{copyName}</strong> to an offer — as {multi ? "new sets" : "a new set"}, or
+              into an existing one.
             </p>
             <input
               type="text"
@@ -404,6 +458,7 @@ export function AddToOfferDialog({
                 <OfferGroup
                   key={offer.offerId}
                   offer={offer}
+                  totalCopies={items.length}
                   visibleSets={sets}
                   open={q ? true : (expanded[offer.offerId] ?? false)}
                   isLast={i === visible.length - 1}
@@ -430,6 +485,40 @@ export function AddToOfferDialog({
       </div>
 
       <DialogFooter>
+        {/* How several copies are packaged (#373). One control rather than two submit buttons: it
+            governs the create path below as well, whose own submit lives inside the offer form.
+            Appending into an existing set has no packaging to choose — the copies go into that
+            one set — so the control is disabled with the reason rather than disappearing. */}
+        {multi && (
+          <div style={{ marginRight: "auto" }}>
+            <Tooltip
+              content={
+                selected?.kind === "set"
+                  ? "Adding into an existing set always puts the copies in that one set."
+                  : ""
+              }
+            >
+              <Segmented
+                label="Add as"
+                value={packaging}
+                onChange={setPackaging}
+                disabled={isPending || selected?.kind === "set"}
+                options={[
+                  {
+                    value: "per-copy",
+                    label: `${items.length} sets`,
+                    title: "One single-copy set each — a quantity of interchangeable singles.",
+                  },
+                  {
+                    value: "one-set",
+                    label: "One set",
+                    title: "One set holding all of them — a series sold together.",
+                  },
+                ]}
+              />
+            </Tooltip>
+          </div>
+        )}
         {/* Standard bottom-right cluster, Cancel first: Cancel, then the branch-off "Create new
             offer", then the completing primary — so both positive actions sit by the primary rather
             than flying up to the top-right. */}
@@ -469,7 +558,9 @@ export function AddToOfferDialog({
         onCurrencyChange={handlePriceCurrencyChange}
         sourceNote={
           catalogBase
-            ? "The asking price is pre-filled from this copy's catalog value — adjust it as needed, then add the listing URL once you have it."
+            ? multi
+              ? "The asking price is pre-filled from the copies' shared catalog value — adjust it as needed, then add the listing URL once you have it."
+              : "The asking price is pre-filled from this copy's catalog value — adjust it as needed, then add the listing URL once you have it."
             : "Set the asking price, and add the listing URL once you have it."
         }
         onClose={() => {
@@ -526,9 +617,11 @@ function FacetRow({
 }
 
 /** One offer as a collapsible group: its header carries a "New set" target; expanding reveals its
- * existing sets, each a selectable destination. Disabled wholesale when it already lists the copy. */
+ * existing sets, each a selectable destination. Disabled wholesale only when it already lists
+ * *every* copy being added — holding some just keeps those out of the add. */
 function OfferGroup({
   offer,
+  totalCopies,
   visibleSets,
   open,
   isLast,
@@ -540,6 +633,7 @@ function OfferGroup({
   ctx,
 }: {
   offer: ComposeTargetOffer;
+  totalCopies: number;
   visibleSets: ComposeTargetSet[];
   open: boolean;
   isLast: boolean;
@@ -550,7 +644,8 @@ function OfferGroup({
   onToggleDetails: (setId: string) => void;
   ctx: RowCtx;
 }) {
-  const disabled = offer.containsItem;
+  const alreadyHere = offer.containsItemIds.length;
+  const disabled = alreadyHere >= totalCopies;
   const hasSets = offer.sets.length > 0;
   const newKey = `new:${offer.offerId}`;
 
@@ -592,9 +687,11 @@ function OfferGroup({
             <span style={{ fontSize: "0.75rem", color: MUTED }}>
               {offer.sets.length} set{offer.sets.length === 1 ? "" : "s"}
             </span>
-            {disabled && (
+            {alreadyHere > 0 && (
               <span style={{ fontSize: "0.75rem", color: MUTED, fontStyle: "italic" }}>
-                — already listed here
+                {disabled
+                  ? "— already listed here"
+                  : `— ${alreadyHere} of ${totalCopies} already listed here, and left out`}
               </span>
             )}
           </div>
@@ -668,7 +765,9 @@ function SetPickRow({
   onSelect: (t: Target) => void;
   ctx: RowCtx;
 }) {
-  const disabled = offerDisabled || set.containsItem;
+  // Only the *offer* disables a set: an offer never lists a copy twice, so a set already holding
+  // one of the picked copies can still take the others.
+  const disabled = offerDisabled;
   const detailCopies = set.itemIds.map((id) => ctx.byId.get(id)).filter((c): c is ItemListItem => !!c);
   return (
     <div style={{ borderBottom: isLast && !detailsShown ? undefined : "1px solid var(--color-border)" }}>
@@ -711,8 +810,12 @@ function SetPickRow({
                 {detailsShown ? "▾ Hide contents" : "▸ Show contents"}
               </button>
             )}
-            {set.containsItem && (
-              <span style={{ fontSize: "0.75rem", color: MUTED, fontStyle: "italic" }}>— copy already here</span>
+            {set.containsItemIds.length > 0 && (
+              <span style={{ fontSize: "0.75rem", color: MUTED, fontStyle: "italic" }}>
+                {set.containsItemIds.length === 1
+                  ? "— copy already here"
+                  : `— ${set.containsItemIds.length} of them already here`}
+              </span>
             )}
           </div>
         </div>

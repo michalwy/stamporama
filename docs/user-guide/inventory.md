@@ -465,8 +465,83 @@ arrived, they stay in the menu but are **greyed out**, with the reason spelled o
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.
 
-To compose an offer from several copies at once, use **Add set** on the offer detail screen
-instead — see [Offers](offers.md).
+## Adding several copies to an offer at once
+
+Every copy you can list carries a **checkbox** on the left of its row. Tick a few and a bar appears
+under the toolbar saying how many are picked, with **Clear** and **🏷 Add selected to offer**.
+
+Only copies you can actually list get a checkbox: **For sale** and **delivered** (in hand). A copy
+that fails either shows none — its disposition and delivery chips on the row already say why.
+
+**Add selected to offer** opens the same picker as the single-copy action, with one extra control in
+the footer — **Add as**:
+
+- **N sets** — one single-copy set each. A quantity of interchangeable singles: this is what a stock
+  of duplicates is, and it is what platforms that only allow one listing per stamp and condition
+  expect. This is the default.
+- **One set** — a single set holding all of them, sold together. A series, or a lot.
+
+The choice applies to **＋ New set** on an existing offer and to **＋ Create new offer** alike.
+Dropping the copies into an **existing set** has no choice to make — they all go into that one set —
+so the control greys out while such a destination is picked.
+
+An offer that already lists **some** of your picked copies still works: those copies are left out and
+the row says so (*"3 of 10 already listed here, and left out"*). Only an offer that already lists
+**every** one of them is disabled.
+
+The selection survives scrolling further down the list. Changing a filter clears it — what was picked
+is no longer on screen.
+
+## Grouping duplicates
+
+When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
+Turn on **▦ Group duplicates** in the toolbar and the list collapses to one row per duplicate, with
+its count up front (`×10`). Expand a row (**▶**) to see the individual copies underneath.
+
+Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
+never optional: Colnect refuses more than one offer for the same stamp in the same condition and
+expects a quantity offer instead, so a group mixing conditions could not be posted.
+
+Two further toggles appear once grouping is on, and each adds an axis to that rule:
+
+- **Split by format** — a pair or a block becomes a different item from a single, rather than
+  joining the same group. Only shown once your collection has [formats](#pairs-blocks-and-other-multiples).
+- **Split by certificate** — a certified copy becomes a different item from an uncertified one. Only
+  shown once your collection has certificate statuses.
+
+Leave both off and you get the plain rule. Turn both on and each group has one unambiguous per-copy
+**catalog value**, because the key is then exactly what a catalog price is recorded against. A group
+whose members value differently shows *varies* instead of a figure.
+
+Where members disagree on an axis you left off, the row says so — **mixed formats**, **mixed
+certificates**. With that axis switched on, the marking cannot appear: the copies are in different
+groups.
+
+Grouping and filtering are **different questions** and both apply. The sidebar and toolbar filters
+decide *which copies you are looking at*; the toggles decide *what counts as the same item*. On top
+of that, grouping only ever covers copies you can still list — **For sale**, **delivered**, and
+unsold — so the *Include sold* and delivery-state controls grey out while it is on, and the sort
+control is replaced: groups are ordered by **how many copies each holds**, largest first.
+
+Each toggle is remembered per collection, so the list opens the way you left it.
+
+### Listing a whole group as one offer
+
+A group row's **⋮** menu has **List all as one offer**. It opens the group's copies with every one
+ticked, then hands them to the offer create form — one offer, **one single-copy set per copy**, so
+the listing carries a quantity.
+
+Copies that **differ from the rest of the group** on an axis you left off are highlighted and start
+**unticked**, with a *differs from the group* mark. The odd one out is worked out from what the
+majority actually is — in a stock of ten certified blocks and one plain single, the single is the
+exception, not the blocks. Untick or re-tick freely; what stays ticked is what goes on the listing.
+
+The offer form is the usual one: platform, currency, asking price (pre-filled from the group's shared
+catalog value when it has one). Which copies are still free to list **on a given platform** is what
+the **Not offered on…** filter answers — set it first and the whole screen becomes that platform's
+worklist, and the platform is pre-filled into the form for you.
+
+The row also reports how many of the group are **already listed** somewhere, on any platform.
 
 ## Seeing which offers something is in
 

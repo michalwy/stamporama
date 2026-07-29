@@ -68,6 +68,14 @@ export interface ListToolbarProps {
   catalogNumber?: string;
   onCatalogSearchChange?: (vendorId: string, number: string) => void;
   children?: React.ReactNode;
+  /** A last row inside the sticky block — a bulk action bar over the current selection (#373).
+   * Rendered here rather than above the rows so it is pinned by the same `position: sticky` and
+   * can never overlap the toolbar it would otherwise have to sit below. */
+  footer?: React.ReactNode;
+  /** Drop the sort control entirely. For a view whose ordering is not the list's — the duplicate
+   * groups order by how many copies each holds (#372) — where leaving the control up would offer
+   * a choice it cannot honour. */
+  hideSort?: boolean;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -84,6 +92,8 @@ export function ListToolbar({
   catalogNumber,
   onCatalogSearchChange,
   children,
+  footer,
+  hideSort = false,
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
   // and push the settled value up, skipping the initial mount so it doesn't refetch.
@@ -150,7 +160,13 @@ export function ListToolbar({
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+        <div
+          style={{
+            display: hideSort ? "none" : "flex",
+            gap: "0.375rem",
+            alignItems: "center",
+          }}
+        >
           <span style={LABEL_STYLE}>Sort</span>
           <select
             value={sortBy}
@@ -228,6 +244,8 @@ export function ListToolbar({
           )}
         </div>
       )}
+
+      {footer}
     </div>
   );
 }

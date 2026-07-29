@@ -256,13 +256,15 @@ export function useComposableCopies(
   });
 }
 
-/** Offers a copy can be added to (#188): non-terminal offers with their sets + the copies each set
- * holds, and flags for sets/offers already holding this copy. Disabled until the picker opens. */
-export function useComposeTargets(collectionId: string, itemId: string, enabled: boolean) {
+/** Offers copies can be added to (#188): non-terminal offers with their sets + the copies each set
+ * holds, and which of the copies being added each already holds (#372/#373). Disabled until the
+ * picker opens. */
+export function useComposeTargets(collectionId: string, itemIds: string[], enabled: boolean) {
   return useQuery<ComposeTargets>({
-    queryKey: ["offers", collectionId, "compose-targets", itemId] as const,
+    queryKey: ["offers", collectionId, "compose-targets", [...itemIds].sort()] as const,
     queryFn: async () => {
-      const params = new URLSearchParams({ itemId });
+      const params = new URLSearchParams();
+      for (const id of itemIds) params.append("itemId", id);
       const res = await fetch(
         `/api/collections/${collectionId}/offers/compose-targets?${params.toString()}`
       );

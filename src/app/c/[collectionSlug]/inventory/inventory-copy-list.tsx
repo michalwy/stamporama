@@ -10,6 +10,26 @@ import { InventoryItemRow } from "./inventory-item-row";
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 const EMPTY_LOCATIONS: LocationData[] = [];
 
+/**
+ * The gutter a copy's selection checkbox lives in — the whole strip is the control, not the box.
+ * Full row height (the parent stretches it) with the box centred in it: a copy row is four lines
+ * tall, so a top-aligned box reads as belonging to the first line rather than to the row, and a
+ * 13-pixel hit area is a poor target for a list one works through by ticking.
+ *
+ * Every surface that puts a checkbox beside an `InventoryItemRow` uses it — this list, the offer
+ * composition picker and the duplicate-group listing picker — since they are the same control over
+ * the same row and had no business behaving differently. (The sale-line picker is not one of them:
+ * there the *whole row* toggles, which is more than a strip, not less.)
+ */
+export const SELECT_STRIP: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "2.5rem",
+  flexShrink: 0,
+  cursor: "pointer",
+};
+
 interface InventoryCopyListProps {
   /** Owning collection, for building each row's collection-scoped photo URLs (#112). */
   collectionId: string;
@@ -41,6 +61,17 @@ interface InventoryCopyListProps {
    * "+ catalog value" link when unpriced, click-to-edit when priced — mirroring the purchase
    * intake view (#121). The dialog itself is owned by the caller. */
   onSetCatalogPrice?: (item: ItemListItem) => void;
+  /** When provided, each row gains a selection checkbox (#373). Only *eligible* copies get one —
+   * a copy that is not for sale or not in hand cannot be listed, and the row already says so
+   * through its disposition and delivery chips, so a permanently disabled checkbox would add a
+   * control that explains nothing. Ineligible rows keep the column's width so nothing jumps. */
+  selection?: CopySelection;
+}
+
+export interface CopySelection {
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  isEligible: (item: ItemListItem) => boolean;
 }
 
 /**
@@ -68,6 +99,7 @@ export function InventoryCopyList({
   onAddToNewOffer,
   onViewOffers,
   onSetCatalogPrice,
+  selection,
 }: InventoryCopyListProps) {
   const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
 
@@ -81,7 +113,8 @@ export function InventoryCopyList({
         const vendorMap = areaId
           ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP)
           : EMPTY_VENDOR_MAP;
-        return (
+        const checked = !!selection?.selected.has(item.id);
+        const row = (
           <InventoryItemRow
             key={item.id}
             collectionId={collectionId}
@@ -104,6 +137,36 @@ export function InventoryCopyList({
             onViewOffers={onViewOffers}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}
           />
+        );
+        if (!selection) return row;
+        return (
+          <div
+            key={item.id}
+            style={{
+              display: "flex",
+              // Stretch, so the checkbox strip runs the full height of the row it belongs to and
+              // can centre the box in it — a row is four lines tall and a top-aligned box reads as
+              // belonging to the first of them.
+              alignItems: "stretch",
+              background: checked ? "var(--color-accent-soft)" : undefined,
+            }}
+          >
+            {selection.isEligible(item) ? (
+              // A `<label>`, so the whole strip is the hit area rather than the 13px box in it.
+              <label style={SELECT_STRIP}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => selection.onToggle(item.id)}
+                  aria-label="Select this copy"
+                  style={{ cursor: "pointer" }}
+                />
+              </label>
+            ) : (
+              <span style={{ ...SELECT_STRIP, cursor: "default" }} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+          </div>
         );
       })}
       <InfiniteScrollSentinel

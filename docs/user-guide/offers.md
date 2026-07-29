@@ -87,11 +87,17 @@ Only copies that are **For sale**, **delivered**, **unsold**, and **not already 
 can be added. To list the same package on another marketplace, just create a second offer and
 compose it the same way.
 
-You can also add a single copy to an existing offer straight from the [Inventory](inventory.md)
-list — the copy's **⋮** menu carries an **Add to offer** action. Its picker lists your offers (with
-state filters and search), and you choose where the copy lands: as a **new set**, or dropped into
-an **existing set** to build a series. That's the quick path for listing one copy; use **Add set**
-here when composing several copies at once.
+You can also add copies to an existing offer straight from the [Inventory](inventory.md) list — the
+copy's **⋮** menu carries an **Add to offer** action, and the row checkboxes send a whole
+[selection](inventory.md#adding-several-copies-to-an-offer-at-once) in one step. Its picker lists
+your offers (with state filters and search), and you choose where the copies land: as a **new set**,
+or dropped into an **existing set** to build a series. With several picked, an **Add as** control
+chooses between one set each and one set holding all — the same choice **Add set** offers here.
+
+For a stock of duplicates there is a faster route still: turn on
+[**Group duplicates**](inventory.md#grouping-duplicates) on the Copies list and use a group's
+**List all as one offer** — one offer with one single-copy set per copy, which is the quantity
+listing platforms like Colnect expect.
 
 Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer
 that already references that copy, across all platforms and states. The **Stamps** and **Issues**

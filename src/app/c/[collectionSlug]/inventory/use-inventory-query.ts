@@ -2,11 +2,13 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CopyGroupRow,
   ItemListItem,
   ItemSortBy,
   ItemVariantHistoryData,
   ItemYearFacet,
 } from "@/lib/items";
+import type { CopyGroupAxes } from "@/lib/copy-groups";
 import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
@@ -21,8 +23,15 @@ interface InventoryItemsPage {
   nextCursor: string | null;
 }
 
+interface CopyGroupsPage {
+  groups: CopyGroupRow[];
+  nextCursor: string | null;
+}
+
 export interface InventoryItemFilters {
   conditionId?: string;
+  /** Restrict to copies with one certificate status. `"none"` matches the copies with no
+   * certificate — needed to address a duplicate group whose members carry none (#372). */
   certificateStatusId?: string;
   /** Restrict to copies of one physical format (#343). `"single"` matches the copies with no
    * format set — null *is* the single (ADR-0020), which an absent filter cannot express. */
@@ -95,41 +104,55 @@ export const inventoryKeys = {
   all: (collectionId: string) => ["inventory", collectionId] as const,
   list: (collectionId: string, filters: InventoryItemFilters) =>
     ["inventory", collectionId, "list", filters] as const,
+  groups: (
+    collectionId: string,
+    filters: InventoryItemFilters,
+    axes: CopyGroupAxes
+  ) => ["inventory", collectionId, "groups", filters, axes] as const,
   years: (collectionId: string, filters: InventoryYearFacetFilters) =>
     ["inventory", collectionId, "years", filters] as const,
 };
 
+/** The copy-set half of the query string — everything that decides *which* copies, and nothing
+ * about ordering or pagination. Shared by the flat list and the duplicate groups (#372), which
+ * narrow the same set and must never disagree about it. */
+function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.conditionId) params.set("conditionId", filters.conditionId);
+  if (filters.certificateStatusId)
+    params.set("certificateStatusId", filters.certificateStatusId);
+  if (filters.formatId) params.set("formatId", filters.formatId);
+  if (filters.areaIds && filters.areaIds.length > 0)
+    params.set("areaIds", filters.areaIds.join(","));
+  if (filters.search) params.set("search", filters.search);
+  if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
+  if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+  if (filters.stampId) params.set("stampId", filters.stampId);
+  if (filters.issueId) params.set("issueId", filters.issueId);
+  if (filters.locationId) params.set("locationId", filters.locationId);
+  if (filters.year) params.set("year", filters.year);
+  if (filters.inCollection) params.set("inCollection", "true");
+  if (filters.forSale) params.set("forSale", "true");
+  if (filters.forTrade) params.set("forTrade", "true");
+  if (filters.noPhotos) params.set("noPhotos", "true");
+  if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
+  if (filters.notOfferedPlatformId)
+    params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+  if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
+  if (filters.includeSold) params.set("includeSold", "true");
+  return params;
+}
+
 export function useInventoryItemsInfinite(
   collectionId: string,
-  filters: InventoryItemFilters
+  filters: InventoryItemFilters,
+  enabled = true
 ) {
   return useInfiniteQuery<InventoryItemsPage>({
     queryKey: inventoryKeys.list(collectionId, filters),
     queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams();
+      const params = itemFilterParams(filters);
       if (pageParam) params.set("offset", pageParam as string);
-      if (filters.conditionId) params.set("conditionId", filters.conditionId);
-      if (filters.certificateStatusId)
-        params.set("certificateStatusId", filters.certificateStatusId);
-      if (filters.formatId) params.set("formatId", filters.formatId);
-      if (filters.areaIds && filters.areaIds.length > 0)
-        params.set("areaIds", filters.areaIds.join(","));
-      if (filters.search) params.set("search", filters.search);
-      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
-      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
-      if (filters.stampId) params.set("stampId", filters.stampId);
-      if (filters.issueId) params.set("issueId", filters.issueId);
-      if (filters.locationId) params.set("locationId", filters.locationId);
-      if (filters.year) params.set("year", filters.year);
-      if (filters.inCollection) params.set("inCollection", "true");
-      if (filters.forSale) params.set("forSale", "true");
-      if (filters.forTrade) params.set("forTrade", "true");
-      if (filters.noPhotos) params.set("noPhotos", "true");
-      if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
-      if (filters.notOfferedPlatformId)
-        params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
-      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
-      if (filters.includeSold) params.set("includeSold", "true");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -140,6 +163,36 @@ export function useInventoryItemsInfinite(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled,
+  });
+}
+
+/** The same copy set collapsed to one row per duplicate key (#372). Grouped server-side because
+ * the list is offset-paginated — a client-side grouping would split a group at a page boundary.
+ * The group's members are read back through {@link useInventoryItemsInfinite} with the key's own
+ * filters, so no second endpoint exists for them. */
+export function useCopyGroupsInfinite(
+  collectionId: string,
+  filters: InventoryItemFilters,
+  axes: CopyGroupAxes,
+  enabled = true
+) {
+  return useInfiniteQuery<CopyGroupsPage>({
+    queryKey: inventoryKeys.groups(collectionId, filters, axes),
+    queryFn: async ({ pageParam }) => {
+      const params = itemFilterParams(filters);
+      if (pageParam) params.set("offset", pageParam as string);
+      if (axes.format) params.set("groupByFormat", "true");
+      if (axes.certificate) params.set("groupByCertificate", "true");
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/groups?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch duplicate groups");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled,
   });
 }
 

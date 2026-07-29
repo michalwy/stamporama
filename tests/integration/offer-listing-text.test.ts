@@ -7,7 +7,7 @@ import {
   duplicateOffer,
   addOfferSet,
   addOfferSetsPerCopy,
-  addItemToOfferSet,
+  addItemsToOfferSet,
   regenerateOfferText,
   patchOffer,
   getOfferDetail,
@@ -227,7 +227,7 @@ describe("offer description + private note (#266, #267)", () => {
     const offerId = await offerOn(fullPlatformId);
     const setId = await addOfferSet(userId, offerId, [mercuryId]);
     await patchOffer(userId, offerId, { name: null });
-    await addItemToOfferSet(userId, setId, venusId);
+    await addItemsToOfferSet(userId, setId, [venusId]);
     assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12-13 Mercury / Venus");
   });
 

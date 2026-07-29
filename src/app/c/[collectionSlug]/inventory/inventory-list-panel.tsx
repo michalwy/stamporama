@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
-import type { ItemListItem, ItemSortBy } from "@/lib/items";
+import type { CopyGroupRow, ItemListItem, ItemSortBy } from "@/lib/items";
+import type { CopyGroupAxes } from "@/lib/copy-groups";
+import { isDelivered } from "@/lib/delivery-state";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -24,6 +26,7 @@ import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-f
 import { formatItemNo } from "@/lib/item-number";
 import {
   useInventoryItemsInfinite,
+  useCopyGroupsInfinite,
   useHoldingsValuation,
   useItemYears,
   useInvalidateInventory,
@@ -31,8 +34,11 @@ import {
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
 } from "./use-inventory-query";
+import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { InventoryCopyList } from "./inventory-copy-list";
+import { DuplicateGroupList } from "./duplicate-group-list";
+import { ListGroupDialog } from "./list-group-dialog";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
@@ -52,10 +58,16 @@ type DialogState =
   | { kind: "identify"; item: ItemListItem }
   | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem }
-  | { kind: "addToOffer"; item: ItemListItem }
-  | { kind: "addToNewOffer"; item: ItemListItem }
+  // One entry point, one or many copies (#373): a row's own action passes `[item]`, the bulk bar
+  // passes the whole selection.
+  | { kind: "addToOffer"; items: ItemListItem[] }
+  | { kind: "addToNewOffer"; items: ItemListItem[] }
   | { kind: "viewOffers"; item: ItemListItem }
-  | { kind: "quickPrice"; item: ItemListItem };
+  | { kind: "quickPrice"; item: ItemListItem }
+  // The duplicate group's pre-step (#372): pick which of its copies go on the listing. Confirming
+  // hands them to `addToNewOffer`, so the create form is reached the same way every other flow
+  // reaches it.
+  | { kind: "listGroup"; group: CopyGroupRow };
 
 const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 
@@ -108,15 +120,9 @@ export function InventoryListPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
 
-  // Last-used platform, to seed the "create new offer" sub-flow of Add to offer (#241). The Copies
-  // list has no platform filter, so the last one used is the only signal here.
   const { data: contacts = [] } = useContacts(collectionId);
   const offerPlatforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
-  const preferredPlatform = useMemo(
-    () => (lastPlatformId ? offerPlatforms.find((p) => p.id === lastPlatformId) : undefined),
-    [offerPlatforms, lastPlatformId]
-  );
 
   // Area + year shared across lists (#143): URL param wins ("all" sentinel marks
   // an explicit "all"); absent param falls back to the per-collection store. The
@@ -165,11 +171,37 @@ export function InventoryListPanel({
     notOfferedPlatformParam && offerPlatforms.some((p) => p.id === notOfferedPlatformParam)
       ? notOfferedPlatformParam
       : "";
+  // Which platform seeds the "create new offer" sub-flow of Add to offer (#241). The list's own
+  // "not offered on X" filter (#259) wins: while it is set, the screen *is* that platform's
+  // worklist, and listing what it shows anywhere else would be a surprise. Without it, the last
+  // platform used is the only signal.
+  const preferredPlatform = useMemo(() => {
+    const id = notOfferedPlatformId || lastPlatformId;
+    return id ? offerPlatforms.find((p) => p.id === id) : undefined;
+  }, [offerPlatforms, notOfferedPlatformId, lastPlatformId]);
+
   // Physical delivery state (#272): a plain single-select like the condition one — a copy is in
   // exactly one state, and the chip on the row is what this filter narrows to.
   const deliveryState = searchParams.get("deliveryState") ?? "";
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
+  // Duplicate grouping (#372). A client preference rather than URL state — it changes *what the
+  // rows are*, not what is being looked at, and it is a way of working the collector keeps.
+  // Which axes join the key is remembered separately, so turning grouping off and on again does not
+  // lose the split. Both off is the plain Colnect rule: one offer per stamp per condition.
+  const [groupDuplicates, setGroupDuplicates] = usePersistedFlag(
+    `stamporama:inventory:groupDuplicates:${collectionId}`
+  );
+  const [groupByFormat, setGroupByFormat] = usePersistedFlag(
+    `stamporama:inventory:groupByFormat:${collectionId}`
+  );
+  const [groupByCertificate, setGroupByCertificate] = usePersistedFlag(
+    `stamporama:inventory:groupByCertificate:${collectionId}`
+  );
+  const axes: CopyGroupAxes = useMemo(
+    () => ({ format: groupByFormat, certificate: groupByCertificate }),
+    [groupByFormat, groupByCertificate]
+  );
   // Names the offers popup for a copy whose stamp is unnamed (#276) — the internal copy number,
   // padded to the collection's chosen width.
   const itemNoPad = useCollectionItemNoPad(collectionId);
@@ -293,12 +325,55 @@ export function InventoryListPanel({
   }
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
-    useInventoryItemsInfinite(collectionId, filters);
-  const { data: holdingsTotal } = useHoldingsValuation(collectionId, filters);
+    useInventoryItemsInfinite(collectionId, filters, !groupDuplicates);
+  const groupsQuery = useCopyGroupsInfinite(collectionId, filters, axes, groupDuplicates);
+  // Grouping narrows the set to for-sale, delivered, unsold copies, so the holdings bar must narrow
+  // with it — a total counting copies the list no longer shows is worse than none (#151).
+  const valuationFilters = useMemo(
+    () =>
+      groupDuplicates
+        ? { ...filters, forSale: true, deliveryState: "delivered", includeSold: undefined }
+        : filters,
+    [filters, groupDuplicates]
+  );
+  const { data: holdingsTotal } = useHoldingsValuation(collectionId, valuationFilters);
 
   const allCopies = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
     [data]
+  );
+  const allGroups = useMemo(
+    () => groupsQuery.data?.pages.flatMap((p) => p.groups) ?? [],
+    [groupsQuery.data]
+  );
+
+  // Multi-select (#373). Restricted to copies that can actually be listed — for sale and in hand,
+  // the offer composition picker's own eligibility. The selection is keyed on the filter set and
+  // reset when it changes (adjusted during render, never a `setState` in an effect): a selection
+  // surviving a filter change would act on copies no longer on screen.
+  const filterSignature = JSON.stringify(filters);
+  const [selection, setSelection] = useState<{ sig: string; ids: Set<string> }>({
+    sig: filterSignature,
+    ids: new Set(),
+  });
+  if (selection.sig !== filterSignature) {
+    setSelection({ sig: filterSignature, ids: new Set() });
+  }
+  const selectedCopies = useMemo(
+    () => allCopies.filter((c) => selection.ids.has(c.id)),
+    [allCopies, selection]
+  );
+  const toggleSelected = useCallback((id: string) => {
+    setSelection((prev) => {
+      const ids = new Set(prev.ids);
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      return { sig: prev.sig, ids };
+    });
+  }, []);
+  const clearSelection = useCallback(
+    () => setSelection((prev) => ({ sig: prev.sig, ids: new Set() })),
+    []
   );
 
   function closeDialog() {
@@ -312,7 +387,24 @@ export function InventoryListPanel({
     setDialog({ kind: "none" });
     setActionError(undefined);
     invalidateList(collectionId);
+    // What was picked has been dealt with; leaving it ticked invites doing it twice.
+    clearSelection();
   }
+
+  const listLoading = groupDuplicates ? groupsQuery.isLoading : isLoading;
+  const listEmpty = groupDuplicates ? allGroups.length === 0 : allCopies.length === 0;
+
+  // Only a for-sale, in-hand copy can be listed — the offer composition picker's own eligibility
+  // (#164/#188). A copy that fails it gets no checkbox rather than a disabled one: its disposition
+  // and delivery chips are on the row, so the row already answers the question.
+  const copySelection = useMemo(
+    () => ({
+      selected: selection.ids,
+      onToggle: toggleSelected,
+      isEligible: (item: ItemListItem) => item.forSale && isDelivered(item.deliveryState),
+    }),
+    [selection.ids, toggleSelected]
+  );
 
   const hasActiveFilters =
     !!search ||
@@ -402,6 +494,63 @@ export function InventoryListPanel({
               updateParams({ sortBy: sb, sortDir: sd });
             }}
             sortOptions={SORT_OPTIONS}
+            hideSort={groupDuplicates}
+            footer={
+              selectedCopies.length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "0.5rem",
+                    border: "1px solid var(--color-accent)",
+                    background: "var(--color-accent-soft)",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: "var(--color-accent)",
+                    }}
+                  >
+                    {selectedCopies.length} cop{selectedCopies.length === 1 ? "y" : "ies"} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ kind: "addToOffer", items: selectedCopies })}
+                    style={{
+                      ...CONTROL_STYLE,
+                      marginLeft: "auto",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      color: "#fff",
+                      background: "var(--color-action-primary)",
+                      border: "none",
+                      padding: "0.375rem 0.875rem",
+                    }}
+                  >
+                    🏷 Add selected to offer
+                  </button>
+                </div>
+              ) : undefined
+            }
           >
             <div
               style={{
@@ -467,13 +616,21 @@ export function InventoryListPanel({
                     Missing catalog value
                   </button>
                 </Tooltip>
-                <Tooltip content="Also show copies that have already sold (hidden by default)">
+                <Tooltip
+                  content={
+                    groupDuplicates
+                      ? "Duplicate groups only cover copies you can still list, so sold ones stay out."
+                      : "Also show copies that have already sold (hidden by default)"
+                  }
+                >
                   <button
                     type="button"
+                    disabled={groupDuplicates}
                     onClick={() => updateParams({ includeSold: includeSold ? "" : "true" })}
                     style={{
                       ...CONTROL_STYLE,
-                      cursor: "pointer",
+                      cursor: groupDuplicates ? "default" : "pointer",
+                      opacity: groupDuplicates ? 0.5 : 1,
                       fontWeight: includeSold ? 600 : 400,
                       color: includeSold ? "var(--color-accent)" : "var(--color-text-secondary)",
                       borderColor: includeSold ? "var(--color-accent)" : "var(--color-border-strong)",
@@ -483,6 +640,66 @@ export function InventoryListPanel({
                     Include sold
                   </button>
                 </Tooltip>
+              </div>
+
+              {/* Duplicate grouping (#372). The toggle collapses the list to one row per
+                  `stamp × condition` — Colnect's own rule, since it refuses a second offer for the
+                  same stamp in the same condition. The two splits join a further axis to that key;
+                  with both on, every group has one unambiguous per-copy catalog value. They only
+                  appear while grouping is on, because off they name nothing. */}
+              <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                <Tooltip content="Collapse the list to one row per duplicate — the same stamp in the same condition, ready to list as one offer with a quantity. Covers for-sale, delivered, unsold copies.">
+                  <button
+                    type="button"
+                    onClick={() => setGroupDuplicates(!groupDuplicates)}
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: "pointer",
+                      fontWeight: groupDuplicates ? 600 : 400,
+                      color: groupDuplicates ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: groupDuplicates ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: groupDuplicates ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    ▦ Group duplicates
+                  </button>
+                </Tooltip>
+                {groupDuplicates && formats.length > 0 && (
+                  <Tooltip content="Treat a pair, block or strip as a different item from a single, instead of grouping them together.">
+                    <button
+                      type="button"
+                      onClick={() => setGroupByFormat(!groupByFormat)}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: groupByFormat ? 600 : 400,
+                        color: groupByFormat ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: groupByFormat ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: groupByFormat ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      Split by format
+                    </button>
+                  </Tooltip>
+                )}
+                {groupDuplicates && certificateStatuses.length > 0 && (
+                  <Tooltip content="Treat a certified copy as a different item from an uncertified one, instead of grouping them together.">
+                    <button
+                      type="button"
+                      onClick={() => setGroupByCertificate(!groupByCertificate)}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: groupByCertificate ? 600 : 400,
+                        color: groupByCertificate ? "var(--color-accent)" : "var(--color-text-secondary)",
+                        borderColor: groupByCertificate ? "var(--color-accent)" : "var(--color-border-strong)",
+                        background: groupByCertificate ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                      }}
+                    >
+                      Split by certificate
+                    </button>
+                  </Tooltip>
+                )}
               </div>
 
               <select
@@ -501,11 +718,20 @@ export function InventoryListPanel({
 
               {/* Delivery state filter (#272), beside the condition one: the axis the row chip
                   shows, so "what is still in transit?" is one click from seeing it flagged. */}
+              <Tooltip
+                content={
+                  groupDuplicates
+                    ? "Duplicate groups only cover copies in hand, so the delivery state is fixed to Delivered."
+                    : ""
+                }
+              >
               <select
                 value={deliveryState}
+                disabled={groupDuplicates}
                 onChange={(e) => updateParams({ deliveryState: e.target.value })}
                 style={{
                   ...CONTROL_STYLE,
+                  ...(groupDuplicates ? { opacity: 0.5 } : null),
                   ...(deliveryState
                     ? {
                         fontWeight: 600,
@@ -524,6 +750,7 @@ export function InventoryListPanel({
                   </option>
                 ))}
               </select>
+              </Tooltip>
 
               {/* Format filter (#343), beside the condition one. Absent entirely when the
                   collection defines no formats — most never do. "Single" is a listed choice
@@ -603,24 +830,44 @@ export function InventoryListPanel({
             </div>
           </ListToolbar>
 
-          {/* List */}
-          {isLoading && (
+          {/* List — flat copies, or one row per duplicate group (#372) */}
+          {listLoading && (
             <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-              Loading copies…
+              {groupDuplicates ? "Grouping duplicates…" : "Loading copies…"}
             </div>
           )}
 
-          {!isLoading && allCopies.length === 0 && (
+          {!listLoading && listEmpty && (
             <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-              {hasActiveFilters
-                ? "No copies match these filters."
-                : filterAreaId
-                  ? "No copies in this area."
-                  : "No copies yet. Add your first physical copy."}
+              {groupDuplicates
+                ? "No duplicate groups here. Grouping covers copies that are For sale, delivered and unsold."
+                : hasActiveFilters
+                  ? "No copies match these filters."
+                  : filterAreaId
+                    ? "No copies in this area."
+                    : "No copies yet. Add your first physical copy."}
             </div>
           )}
 
-          {allCopies.length > 0 && (
+          {groupDuplicates && allGroups.length > 0 && (
+            <div style={{ flex: 1 }}>
+              <DuplicateGroupList
+                collectionId={collectionId}
+                groups={allGroups}
+                axes={axes}
+                baseFilters={filters}
+                areas={areas}
+                locations={locations}
+                baseCurrency={baseCurrency}
+                hasNextPage={!!groupsQuery.hasNextPage}
+                isFetchingNextPage={groupsQuery.isFetchingNextPage}
+                onLoadMore={groupsQuery.fetchNextPage}
+                onListAsOffer={(group) => setDialog({ kind: "listGroup", group })}
+              />
+            </div>
+          )}
+
+          {!groupDuplicates && allCopies.length > 0 && (
             <div style={{ flex: 1 }}>
               <InventoryCopyList
                 collectionId={collectionId}
@@ -631,13 +878,14 @@ export function InventoryListPanel({
                 hasNextPage={!!hasNextPage}
                 isFetchingNextPage={isFetchingNextPage}
                 onLoadMore={fetchNextPage}
+                selection={copySelection}
                 onEdit={(it) => setDialog({ kind: "edit", item: it })}
                 onEditStamp={(it) => setDialog({ kind: "editStamp", item: it })}
                 onIdentify={(it) => setDialog({ kind: "identify", item: it })}
                 onViewHistory={(it) => setDialog({ kind: "history", item: it })}
                 onDelete={(it) => setDialog({ kind: "delete", item: it })}
-                onAddToOffer={(it) => setDialog({ kind: "addToOffer", item: it })}
-                onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", item: it })}
+                onAddToOffer={(it) => setDialog({ kind: "addToOffer", items: [it] })}
+                onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", items: [it] })}
                 onViewOffers={(it) => setDialog({ kind: "viewOffers", item: it })}
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
@@ -738,12 +986,29 @@ export function InventoryListPanel({
         />
       )}
 
-      {/* Add copy to an offer: the full picker (#188), or straight into offer creation when the
+      {/* List a whole duplicate group as one offer (#372): pick which of its copies go on, then
+          hand them to the create path below — one offer, one single-copy set each. */}
+      {dialog.kind === "listGroup" && (
+        <ListGroupDialog
+          collectionId={collectionId}
+          group={dialog.group}
+          axes={axes}
+          baseFilters={filters}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          platformFiltered={!!notOfferedPlatformId}
+          onClose={closeDialog}
+          onConfirm={(copies) => setDialog({ kind: "addToNewOffer", items: copies })}
+        />
+      )}
+
+      {/* Add copies to an offer: the full picker (#188), or straight into offer creation when the
           "Add to new offer" action was used (#277). Same dialog, `startInCreate` skips the picker. */}
       {(dialog.kind === "addToOffer" || dialog.kind === "addToNewOffer") && (
         <AddToOfferDialog
           collectionId={collectionId}
-          item={dialog.item}
+          items={dialog.items}
           areas={areas}
           locations={locations}
           baseCurrency={baseCurrency}

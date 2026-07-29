@@ -30,6 +30,14 @@ import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { sortCopies } from "./copy-sort";
 import { parseItemNoSearch } from "./item-number";
 import { isDeliveryState, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import {
+  copyGroupKey,
+  encodeCopyGroupKey,
+  mixedAxes,
+  DEFAULT_GROUP_AXES,
+  type CopyGroupAxes,
+  type CopyGroupKey,
+} from "./copy-groups";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -514,6 +522,10 @@ export async function updateItem(
 export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
+  /** Restrict to copies with one certificate status. The literal `"none"` matches the copies with
+   *  no certificate — null *is* a value here (ADR-0006 §2), exactly as `"single"` is for format,
+   *  and an absent filter cannot express it. Needed to address a duplicate group whose members
+   *  carry no certificate (#372). */
   certificateStatusId?: string;
   /** Restrict to copies of one physical format (#343). The literal `"single"` matches the copies
    *  with no format — null *is* the single (ADR-0020), and an absent filter cannot express it. */
@@ -676,7 +688,10 @@ function buildItemWhere(
     collectionId,
     ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
     ...(filters.certificateStatusId
-      ? { certificateStatusId: filters.certificateStatusId }
+      ? {
+          certificateStatusId:
+            filters.certificateStatusId === "none" ? null : filters.certificateStatusId,
+        }
       : {}),
     ...(filters.formatId
       ? { formatId: filters.formatId === "single" ? null : filters.formatId }
@@ -993,6 +1008,308 @@ export async function listItemsPaginated(
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+// ── Duplicate groups (#372) ──────────────────────────────────────────────────
+
+/** The eligibility every duplicate group is computed over: **for sale, delivered, unsold** — the
+ * offer composition picker's own eligibility, because listing the group is the only thing a group
+ * is for. Forced rather than merged, so the panel's delivery-state / include-sold controls cannot
+ * silently produce a group nothing in it could be listed from. */
+const GROUP_ELIGIBILITY = {
+  forSale: true,
+  deliveryState: "delivered",
+  excludeSold: true,
+} as const;
+
+/** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for
+ * what "interchangeable" means and why condition is never optional). Carries the stamp identity a
+ * copy row shows, plus what the group adds — how many, how many are already listed, and where its
+ * members disagree. */
+export interface CopyGroupRow {
+  /** Encoded {@link CopyGroupKey} + axes — the React key, and the token the row action expands. */
+  key: string;
+  stampId: string;
+  stampName: string | null;
+  unknownVariant: boolean;
+  subtype: SubtypeLabel | null;
+  issuedDay: number | null;
+  issuedMonth: number | null;
+  issuedYear: number | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  colnectId: string | null;
+  areaId: string | null;
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  /** Set only when the Format axis joins the key; null both for "single" and for "not grouped on". */
+  formatId: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
+  /** Set only when the Certificate axis joins the key. */
+  certificateStatusId: string | null;
+  certificateStatusName: string | null;
+  /** How many eligible copies the group holds. */
+  count: number;
+  /** How many of them already sit in a non-terminal offer (any platform) — `3 of 10 already
+   * listed`. Informational: which are free *for a given platform* is the listing dialog's question,
+   * and it asks the copies query with `notOfferedPlatformId`. */
+  listedCount: number;
+  /** Members disagree on an axis currently set to *any*. Derived, never stored: with the axis
+   * joined to the key this cannot occur by construction. */
+  mixedFormat: boolean;
+  mixedCertificate: boolean;
+  /** The per-copy catalog value, when every member values identically — which is guaranteed with
+   * both axes joined, since the key is then the key `valuateItemRows` is computed on. Null when
+   * the members disagree; {@link CopyGroupRow.valueVaries} tells that apart from "no members". */
+  value: CopyValuation | null;
+  valueVaries: boolean;
+}
+
+export interface PaginatedCopyGroupsResult {
+  groups: CopyGroupRow[];
+  nextCursor: string | null;
+}
+
+/** The stamp identity a group row shows — the stamp half of {@link ITEM_LIST_SELECT}, resolved once
+ * per page of groups rather than per member copy. */
+const GROUP_STAMP_SELECT = {
+  id: true,
+  parentId: true,
+  name: true,
+  issuedDay: true,
+  issuedMonth: true,
+  issuedYear: true,
+  catalogNumbers: { select: { catalogVendorId: true, number: true } },
+  colnectId: true,
+  stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+  variants: { select: VARIANT_FLAG_SELECT },
+  subtype: { select: { name: true, isDefault: true } },
+  issueMemberships: {
+    select: { issue: { select: { id: true, name: true, year: true } } },
+    take: 1,
+  },
+} satisfies Prisma.StampSelect;
+
+/** Two valuations describing the same figure. Compared field by field rather than by identity —
+ * the members are valued independently, so a group agrees when the *results* agree. */
+function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
+  return (
+    a.unpriced === b.unpriced &&
+    a.uncertain === b.uncertain &&
+    a.amount === b.amount &&
+    a.currency === b.currency &&
+    a.baseAmountDisplay === b.baseAmountDisplay
+  );
+}
+
+/**
+ * The Copies list collapsed to **one row per duplicate key** (#372). Grouping is computed here and
+ * not in the client because the list is offset-paginated: a client-side grouping would split a
+ * group across a page boundary and report two half-counts.
+ *
+ * Ordered **count descending**, then `stampId` — deterministic under pagination, and the order the
+ * feature exists for (biggest stack of duplicates first). Which axes join the key comes from
+ * `axes`; the panel's own condition / format / certificate *filters* still narrow which copies are
+ * grouped at all, since grouping and filtering answer different questions.
+ *
+ * The page's member copies are read once (bounded: a page of groups is a page of copies) and carry
+ * three things at once — the counts, the mixed markers, and the valuation agreement — so no
+ * per-group query exists.
+ */
+export async function listItemDuplicateGroups(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated & { axes?: CopyGroupAxes } = {}
+): Promise<PaginatedCopyGroupsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const axes = filters.axes ?? DEFAULT_GROUP_AXES;
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+
+  const eligible: ItemListFiltersPaginated = { ...filters, ...GROUP_ELIGIBILITY };
+  const locationIds = eligible.locationId
+    ? await resolveLocationSubtree(collectionId, eligible.locationId)
+    : null;
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    eligible,
+    buildItemWhere(collectionId, eligible, locationIds)
+  );
+
+  // `by` is chosen at runtime from the axes, which Prisma's generic `groupBy` signature cannot
+  // express — the alternative is four literal call sites of the same query.
+  const by = [
+    "stampId",
+    "conditionId",
+    ...(axes.format ? ["formatId"] : []),
+    ...(axes.certificate ? ["certificateStatusId"] : []),
+  ];
+  const grouped: {
+    stampId: string;
+    conditionId: string;
+    formatId?: string | null;
+    certificateStatusId?: string | null;
+  }[] =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma.item.groupBy as any)({
+      by,
+      where,
+      // Selected because it is what the ordering reads: biggest stack of duplicates first, then
+      // `stampId` so the order is total and pagination cannot repeat or skip a group.
+      _count: { id: true },
+      orderBy: [{ _count: { id: "desc" } }, { stampId: "asc" }],
+      take: pageSize + 1,
+      skip: offset,
+    });
+
+  const hasMore = grouped.length > pageSize;
+  const page = hasMore ? grouped.slice(0, pageSize) : grouped;
+  const nextCursor = hasMore ? String(offset + pageSize) : null;
+  if (page.length === 0) return { groups: [], nextCursor };
+
+  const keys: CopyGroupKey[] = page.map((g) => ({
+    stampId: g.stampId,
+    conditionId: g.conditionId,
+    formatId: axes.format ? (g.formatId ?? null) : null,
+    certificateStatusId: axes.certificate ? (g.certificateStatusId ?? null) : null,
+  }));
+
+  // Every member of this page's groups, in one read narrowed by the same `where` — so a member can
+  // never be one the filters excluded. `offerSetMemberships` is probed (take 1) rather than
+  // counted: the row reports *how many copies* are listed, not how many listings each is in.
+  const members = await prisma.item.findMany({
+    where: { AND: [where, { OR: keys.map((k) => memberWhere(k, axes)) }] },
+    select: {
+      id: true,
+      stampId: true,
+      conditionId: true,
+      formatId: true,
+      certificateStatusId: true,
+      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+      offerSetMemberships: {
+        where: { offerSet: { offer: { state: { notIn: [...CLOSED_OFFER_STATES] } } } },
+        select: { itemId: true },
+        take: 1,
+      },
+    },
+  });
+
+  const valuations = await valuateItemRows(
+    collectionId,
+    members.map((m) => ({
+      id: m.id,
+      stampId: m.stampId,
+      conditionId: m.conditionId,
+      certificateStatusId: m.certificateStatusId,
+      formatId: m.formatId,
+      unknownVariant: isUnknownVariantStamp(m.stamp),
+    }))
+  );
+
+  const membersByKey = new Map<string, typeof members>();
+  for (const m of members) {
+    const encoded = encodeCopyGroupKey(copyGroupKey(m, axes), axes);
+    const bucket = membersByKey.get(encoded);
+    if (bucket) bucket.push(m);
+    else membersByKey.set(encoded, [m]);
+  }
+
+  const [stamps, conditions, formats, certificates] = await Promise.all([
+    prisma.stamp.findMany({
+      where: { id: { in: [...new Set(keys.map((k) => k.stampId))] } },
+      select: GROUP_STAMP_SELECT,
+    }),
+    prisma.stampCondition.findMany({
+      where: { id: { in: [...new Set(keys.map((k) => k.conditionId))] } },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+    axes.format
+      ? prisma.stampFormat.findMany({
+          where: { id: { in: compactIds(keys.map((k) => k.formatId)) } },
+          select: { id: true, name: true, abbreviation: true },
+        })
+      : Promise.resolve([]),
+    axes.certificate
+      ? prisma.certificateStatus.findMany({
+          where: { id: { in: compactIds(keys.map((k) => k.certificateStatusId)) } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const stampById = new Map(stamps.map((s) => [s.id, s]));
+  const conditionById = new Map(conditions.map((c) => [c.id, c]));
+  const formatById = new Map(formats.map((f) => [f.id, f]));
+  const certificateById = new Map(certificates.map((c) => [c.id, c]));
+
+  const groups: CopyGroupRow[] = [];
+  for (const key of keys) {
+    const encoded = encodeCopyGroupKey(key, axes);
+    const bucket = membersByKey.get(encoded) ?? [];
+    const stamp = stampById.get(key.stampId);
+    const condition = conditionById.get(key.conditionId);
+    // A group whose stamp or condition vanished between the two reads has nothing to render.
+    if (!stamp || !condition) continue;
+    const firstIssue = stamp.issueMemberships[0]?.issue ?? null;
+    const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
+    const format = key.formatId ? formatById.get(key.formatId) : undefined;
+    const certificate = key.certificateStatusId
+      ? certificateById.get(key.certificateStatusId)
+      : undefined;
+    const mixed = mixedAxes(bucket, axes);
+    const values = bucket.map((m) => valuations.get(m.id)!).filter(Boolean);
+    const agreed = values.length > 0 && values.every((v) => sameValuation(v, values[0]));
+    groups.push({
+      key: encoded,
+      stampId: key.stampId,
+      stampName: stamp.name,
+      unknownVariant: isUnknownVariantStamp(stamp),
+      subtype: subtypeLabel(stamp),
+      issuedDay: stamp.issuedDay,
+      issuedMonth: stamp.issuedMonth,
+      issuedYear: stamp.issuedYear,
+      catalogNumbers: stamp.catalogNumbers,
+      colnectId: stamp.colnectId,
+      areaId:
+        primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null,
+      issueId: firstIssue?.id ?? null,
+      issueName: firstIssue?.name ?? null,
+      issueYear: firstIssue?.year ?? null,
+      conditionId: condition.id,
+      conditionName: condition.name,
+      conditionAbbreviation: condition.abbreviation,
+      formatId: key.formatId,
+      formatName: format?.name ?? null,
+      formatAbbreviation: format?.abbreviation ?? null,
+      certificateStatusId: key.certificateStatusId,
+      certificateStatusName: certificate?.name ?? null,
+      count: bucket.length,
+      listedCount: bucket.filter((m) => m.offerSetMemberships.length > 0).length,
+      mixedFormat: mixed.format,
+      mixedCertificate: mixed.certificate,
+      value: agreed ? values[0] : null,
+      valueVaries: values.length > 0 && !agreed,
+    });
+  }
+  return { groups, nextCursor };
+}
+
+/** The `where` addressing exactly one group's members. Only the axes that joined the key are
+ * constrained — an axis set to *any* must not narrow, or the group's own members would be split. */
+function memberWhere(key: CopyGroupKey, axes: CopyGroupAxes): Prisma.ItemWhereInput {
+  return {
+    stampId: key.stampId,
+    conditionId: key.conditionId,
+    ...(axes.format ? { formatId: key.formatId } : {}),
+    ...(axes.certificate ? { certificateStatusId: key.certificateStatusId } : {}),
+  };
+}
+
+function compactIds(ids: (string | null)[]): string[] {
+  return [...new Set(ids.filter((id): id is string => !!id))];
 }
 
 // Delivery states that still await the sort pass — surfaced on the lot header and used by the

@@ -17,7 +17,7 @@ import {
   type OfferTextField,
   addOfferSet,
   addOfferSetsPerCopy,
-  addItemToOfferSet,
+  addItemsToOfferSet,
   updateOfferSet,
   removeOfferSet,
   reorderOfferSets,
@@ -139,16 +139,22 @@ async function readOfferInput(
   };
 }
 
+/** Create an offer, optionally seeding it with copies. `seedPerCopy` packages that seed as one
+ * single-copy set each (#372) rather than one set holding everything. */
 export async function createOfferAction(
   collectionId: string,
   formData: FormData,
-  seedItemIds?: string[]
+  seedItemIds?: string[],
+  seedPerCopy?: boolean
 ): Promise<CreateOfferActionState> {
   const session = await getSession();
   const parsed = await readOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
-    const id = await createOffer(session.user.id, collectionId, parsed.input, { seedItemIds });
+    const id = await createOffer(session.user.id, collectionId, parsed.input, {
+      seedItemIds,
+      seedPerCopy,
+    });
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to create the offer. Please try again.");
@@ -230,18 +236,21 @@ export async function offerTranslationGapsAction(
   }
 }
 
-/** Add a single copy to an existing set (turns a single into a series). Used by the inventory
- * "Add to offer" picker when the collector drops a copy into an already-composed set (#188). */
-export async function addItemToOfferSetAction(
+/** Add copies to an existing set (turns a single into a series). Used by the inventory "Add to
+ * offer" picker when the collector drops a copy — or a whole selection (#373) — into an
+ * already-composed set (#188). Copies that have since sold or are already in the offer are dropped
+ * rather than failing the add. */
+export async function addItemsToOfferSetAction(
   setId: string,
-  itemId: string
+  itemIds: string[]
 ): Promise<OfferActionState> {
   const session = await getSession();
+  if (itemIds.length === 0) return { status: "error", message: "Pick at least one copy." };
   try {
-    await addItemToOfferSet(session.user.id, setId, itemId);
+    await addItemsToOfferSet(session.user.id, setId, itemIds);
     return { status: "success" };
   } catch (e) {
-    return fail(e, "Failed to add the copy to the set.");
+    return fail(e, "Failed to add the copies to the set.");
   }
 }
 

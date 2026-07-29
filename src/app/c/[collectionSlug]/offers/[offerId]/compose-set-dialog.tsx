@@ -18,6 +18,7 @@ import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persiste
 import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { TitlePreviewText, TitleFallbackNote } from "@/app/c/[collectionSlug]/shared/title-preview";
 import {
@@ -298,13 +299,19 @@ export function ComposeSetDialog({
                     key={item.id}
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      paddingLeft: "1rem",
+                      alignItems: "stretch",
                       background: checked ? "var(--color-accent-soft)" : undefined,
                     }}
                   >
-                    <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} aria-label="Select this copy" style={{ flexShrink: 0 }} />
+                    <label style={SELECT_STRIP}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(item.id)}
+                        aria-label="Select this copy"
+                        style={{ cursor: "pointer" }}
+                      />
+                    </label>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <InventoryItemRow
                         collectionId={collectionId}

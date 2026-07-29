@@ -106,7 +106,7 @@ export function QuickOfferFlow({
     return (
       <AddToOfferDialog
         collectionId={collectionId}
-        item={step.item}
+        items={[step.item]}
         areas={areas}
         locations={locations}
         baseCurrency={baseCurrency}

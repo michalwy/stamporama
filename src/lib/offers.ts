@@ -1709,8 +1709,10 @@ export interface ComposeTargetSet {
   label: string;
   itemIds: string[];
   itemLabels: string[];
-  /** The copy being added is already in this set — the picker disables it (no double-listing). */
-  containsItem: boolean;
+  /** Which of the copies being added this set already holds. A destination is only *disabled* when
+   * it holds every one of them (nothing left to add); holding some is a note, and those copies are
+   * dropped from the add — a selection is rarely all-or-nothing (#372/#373). */
+  containsItemIds: string[];
 }
 
 export interface ComposeTargetOffer {
@@ -1722,8 +1724,9 @@ export interface ComposeTargetOffer {
   currency: string;
   state: OfferState;
   sets: ComposeTargetSet[];
-  /** The copy is already listed somewhere in this offer (any set) — no new set may hold it either. */
-  containsItem: boolean;
+  /** Which of the copies being added are already listed somewhere in this offer (any set) — an
+   * offer never lists the same copy twice, so a new set may not hold them either. */
+  containsItemIds: string[];
 }
 
 export interface ComposeTargets {
@@ -1735,17 +1738,19 @@ export interface ComposeTargets {
 const COMPOSE_TARGET_STATES = ["preparing", "ready", "active", "paused"] as const;
 const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, active: 2, paused: 3 };
 
-/** Offers a copy can be added to from the inventory list (#188): the collection's non-terminal
+/** Offers copies can be added to from the inventory list (#188): the collection's non-terminal
  * offers (preparing / ready / active / paused, all platforms), each with its sets, ordered
- * preparing → ready → active → paused then newest first. When `itemId` is given, the sets and offers already holding
- * that copy are flagged so the picker can disable them (an offer never lists a copy twice).
+ * preparing → ready → active → paused then newest first. When `itemIds` is given, the sets and
+ * offers already holding any of those copies report which ones, so the picker can disable a
+ * destination that has nothing left to gain and note the rest (an offer never lists a copy twice).
  * Enriched copies for every listed set ride along for the picker's expandable set details. */
 export async function listComposeTargets(
   ownerId: string,
   collectionId: string,
-  itemId?: string
+  itemIds: string[] = []
 ): Promise<ComposeTargets> {
   await assertCollectionOwner(ownerId, collectionId);
+  const adding = new Set(itemIds);
   const rows = await prisma.offer.findMany({
     where: { collectionId, state: { in: [...COMPOSE_TARGET_STATES] } },
     orderBy: { createdAt: "desc" },
@@ -1759,7 +1764,7 @@ export async function listComposeTargets(
         label: setLabel(s),
         itemIds: s.items.map((li) => li.itemId),
         itemLabels: s.items.map((li) => copyLabel(li.item.stamp)),
-        containsItem: !!itemId && s.items.some((li) => li.itemId === itemId),
+        containsItemIds: s.items.map((li) => li.itemId).filter((id) => adding.has(id)),
       }));
       return {
         offerId: r.id,
@@ -1770,7 +1775,7 @@ export async function listComposeTargets(
         currency: r.currency,
         state: (isOfferState(r.state) ? r.state : "active") as OfferState,
         sets,
-        containsItem: sets.some((s) => s.containsItem),
+        containsItemIds: [...new Set(sets.flatMap((s) => s.containsItemIds))],
       };
     })
     .sort(
@@ -1806,7 +1811,9 @@ export interface OfferInput {
  * Create an offer on a platform (ADR-0013, #188). It starts `preparing` unless the collector states
  * a live status up front (#257): `ready` / `active` are honoured only when the offer lists something,
  * so `opts.seedItemIds` (the quick-start / add-to-offer create path, #189/#241) seeds its first set
- * **atomically** — offer + set + live status commit together, or nothing does. Currency is inherited
+ * **atomically** — offer + set + live status commit together, or nothing does. `opts.seedPerCopy`
+ * splits that seed into one single-copy set each (#372), the shape a quantity listing needs.
+ * Currency is inherited
  * from the platform (#196) — locked to the platform's, or set from `input.currency` on the first
  * offer/sale and snapshotted here. Sets beyond the seed are composed on the detail screen.
  */
@@ -1814,7 +1821,7 @@ export async function createOffer(
   ownerId: string,
   collectionId: string,
   input: OfferInput,
-  opts: { seedItemIds?: string[] } = {}
+  opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, input.platformId);
@@ -1861,10 +1868,16 @@ export async function createOffer(
   // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
   // configured, or no seed copies yet, stays null: the name falls back to the derived label and the
   // longer texts stay empty until the collector composes and regenerates.
+  // How the seed is packaged (#372): one set holding everything (a series sold together), or —
+  // `seedPerCopy` — one single-copy set each, the quantity listing a stock of duplicates has to be
+  // on a platform that refuses a second offer for the same stamp in the same condition.
+  const seedComposition = opts.seedPerCopy
+    ? seedIds.map((itemId) => ({ title: null, itemIds: [itemId] }))
+    : [{ title: null, itemIds: seedIds }];
   const { name, description, privateNote } = await generateListingTexts(
     ownerId,
     collectionId,
-    [{ title: null, itemIds: seedIds }],
+    seedComposition,
     platform,
     platform.titleLanguage
   );
@@ -1896,10 +1909,15 @@ export async function createOffer(
       },
       select: { id: true },
     });
-    if (seedIds.length > 0) {
+    // The seed is the new offer's first set(s) (#306); their copies start derived (catalog order).
+    for (const [index, set] of seedComposition.entries()) {
+      if (set.itemIds.length === 0) continue;
       await tx.offerSet.create({
-        // The seed is the new offer's first set (#306); its copies start derived (catalog order).
-        data: { offerId: offer.id, sortOrder: 0, items: { create: seedIds.map((itemId) => ({ itemId })) } },
+        data: {
+          offerId: offer.id,
+          sortOrder: index,
+          items: { create: set.itemIds.map((itemId) => ({ itemId })) },
+        },
       });
     }
     return offer.id;
@@ -2431,31 +2449,46 @@ export async function addOfferSetsPerCopy(
   return ids;
 }
 
-/** Add a single copy to an **existing** set, turning a single into a series / komplet (#188). The
- * owning offer must be non-terminal; the copy must belong to the collection, be unsold, and not
- * already listed anywhere in that offer. */
-export async function addItemToOfferSet(ownerId: string, setId: string, itemId: string): Promise<void> {
+/** Add copies to an **existing** set, turning a single into a series / komplet (#188). The owning
+ * offer must be non-terminal; each copy must belong to the collection, be unsold, and not already
+ * be listed anywhere in that offer. Copies that fail those checks are dropped rather than rejecting
+ * the whole add — the selection may have been made before one of them sold — and the number
+ * actually added is returned so the caller can say so. */
+export async function addItemsToOfferSet(
+  ownerId: string,
+  setId: string,
+  itemIds: string[]
+): Promise<number> {
   const ref = await assertOfferSetOwner(ownerId, setId);
   if (isTerminalState(ref.offerState)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.offerState} offer is read-only.`);
   }
-  const addable = await assertAddableCopies(ref.collectionId, [itemId], ref.offerId);
+  const addable = await assertAddableCopies(ref.collectionId, itemIds, ref.offerId);
   if (addable.length === 0) {
     throw new OfferActionBlockedError(
       "empty",
-      "That copy can't be added — it may have sold or already be in this offer."
+      itemIds.length === 1
+        ? "That copy can't be added — it may have sold or already be in this offer."
+        : "None of those copies can be added — they may have sold or already be in this offer."
     );
   }
-  // Where the copy lands (#306): a derived set stays derived (it slots into its catalog position),
-  // a hand-corrected one appends the copy at the end.
+  // Where the copies land (#306): a derived set stays derived (they slot into their catalog
+  // positions), a hand-corrected one appends them at the end, in the order they were picked.
   const existing = await prisma.offerSetItem.findMany({
     where: { offerSetId: setId },
     select: { sortOrder: true },
   });
-  await prisma.offerSetItem.create({
-    data: { offerSetId: setId, itemId: addable[0], sortOrder: nextItemSortOrder(existing) },
-  });
+  // `null` is a derived set staying derived, so it must be carried, never counted up from.
+  const base = nextItemSortOrder(existing);
+  await prisma.$transaction(
+    addable.map((itemId, i) =>
+      prisma.offerSetItem.create({
+        data: { offerSetId: setId, itemId, sortOrder: base === null ? null : base + i },
+      })
+    )
+  );
   await backfillOfferTitle(ownerId, ref.offerId); // #365, as in addOfferSet
+  return addable.length;
 }
 
 /** Reorder an offer's sets (#306). `setIds` must be a **full permutation** of the offer's current

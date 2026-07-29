@@ -8,6 +8,7 @@ import {
   type MoneyLike,
 } from "@/app/stamp-display";
 import type { ItemListItem } from "@/lib/items";
+import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
 import { formatItemNo } from "@/lib/item-number";
@@ -126,21 +127,21 @@ const META_INLINE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-/** Catalog valuation of a copy (ADR-0007 §7). Uncertain values (unknown variant, valued
- * at the lowest child price) are prefixed `~` and muted; unpriced copies show `—`;
- * a price in a currency with no base rate falls back to its own currency. */
-function CopyValue({
-  item,
+/** Catalog valuation (ADR-0007 §7). Uncertain values (unknown variant, valued at the lowest child
+ * price) are prefixed `~` and muted; unpriced ones show `—`; a price in a currency with no base
+ * rate falls back to its own currency. Takes the valuation rather than the copy, so a duplicate
+ * group's shared per-copy figure renders identically to a row's (#372). */
+export function CopyValue({
+  value: v,
   baseCurrency,
   onSetPrice,
 }: {
-  item: ItemListItem;
+  value: CopyValuation;
   baseCurrency: string;
   /** When provided, the value area becomes an inline catalog-price editor (#121): a
    * "+ price" link when unpriced, and a click-to-edit affordance when priced. */
   onSetPrice?: () => void;
 }) {
-  const v = item.value;
   if (v.unpriced) {
     if (onSetPrice) {
       return (
@@ -537,7 +538,7 @@ export function InventoryItemRow({
           )}
           {unknownVariantChip}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
-            <CopyValue item={item} baseCurrency={baseCurrency} onSetPrice={onSetCatalogPrice} />
+            <CopyValue value={item.value} baseCurrency={baseCurrency} onSetPrice={onSetCatalogPrice} />
           </span>
         </div>
 

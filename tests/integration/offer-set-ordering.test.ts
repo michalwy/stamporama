@@ -6,7 +6,7 @@ import {
   createOffer,
   addOfferSet,
   addOfferSetsPerCopy,
-  addItemToOfferSet,
+  addItemsToOfferSet,
   getOfferDetail,
   reorderOfferSets,
   reorderOfferSetItems,
@@ -139,7 +139,7 @@ describe("offer set + copy ordering (#306)", () => {
     assert.equal(d.sets[0].manualCopyOrder, true);
 
     // `mid` sorts between the two by catalog key, but the set is hand-ordered: it appends.
-    await addItemToOfferSet(userId, setId, mid);
+    await addItemsToOfferSet(userId, setId, [mid]);
     d = await detail(offerId);
     assert.deepEqual(d.sets[0].itemIds, [high, low, mid]);
   });
@@ -147,7 +147,7 @@ describe("offer set + copy ordering (#306)", () => {
   it("slots a copy added to a derived set into its catalog position", async () => {
     const offerId = await newOffer();
     const setId = await addOfferSet(userId, offerId, [low, high]);
-    await addItemToOfferSet(userId, setId, mid);
+    await addItemsToOfferSet(userId, setId, [mid]);
     const d = await detail(offerId);
     assert.deepEqual(d.sets[0].itemIds, [low, mid, high]);
     assert.equal(d.sets[0].manualCopyOrder, false);
