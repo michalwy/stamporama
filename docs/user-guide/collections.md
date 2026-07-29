@@ -270,7 +270,7 @@ A template holds:
 - **Rows** and **Columns** — the collage's capacity.
 - **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.
 - **Label strip (% of image)** — the height of the strip drawn below each stamp for its labels, and with it the size of the label text. Takes tenths (`1.5`, or `1,5`), because the difference between a readable caption and one shouting over the stamps is well under a whole percent; **1–2%** is the usual range. Set it to **0** for no strip.
-- **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on.
+- **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on. A new template starts on **black**: a scan carries its own pale margins, so on a white canvas the stamps' edges dissolve into the background and the collage reads as stamps floating in nothing. Pick any colour you like — the label text flips between white and black on its own so the captions stay readable — and a template you already made keeps the colour it was made with.
 
 Five things are worth knowing:
 

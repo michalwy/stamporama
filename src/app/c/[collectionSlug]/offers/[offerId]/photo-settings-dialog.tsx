@@ -7,6 +7,7 @@ import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
   COLLAGE_LABEL_STEP,
+  DEFAULT_COLLAGE_BACKGROUND,
   MAX_COLLAGE_AXIS,
   MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
@@ -372,7 +373,7 @@ export function PhotoSettingsDialog({
               <input
                 id="offer-collage-background"
                 type="color"
-                value={collage.collageBackground || "#ffffff"}
+                value={collage.collageBackground || DEFAULT_COLLAGE_BACKGROUND}
                 onChange={(e) => set("collageBackground", e.target.value)}
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, width: "5rem", padding: "0.25rem" }}

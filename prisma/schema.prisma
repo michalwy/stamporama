@@ -306,8 +306,11 @@ model CollageTemplate {
   // DPI and how far the platform's limits will shrink the finished image, and neither is known when
   // the template is written.
   gapPercent   Int
-  // Canvas colour behind the tiles, `#rrggbb`. Also what the label strip is drawn on.
-  background   String @default("#ffffff")
+  // Canvas colour behind the tiles, `#rrggbb`. Also what the label strip is drawn on. Defaults to
+  // black (#381): a scan's own pale margins dissolve into a white canvas, so the tiles lose their
+  // outlines, and the label ink follows the background's luminance either way. Existing templates
+  // keep the colour they were written with — only the default moved.
+  background   String @default("#000000")
   // Height of the label strip drawn below each tile (#312) — and so the size of its caption — as a
   // percent of the **finished image's longest edge**, not of the stamp (#337): every image of a
   // listing is scaled to the same platform limit before upload, so only a share of the image renders

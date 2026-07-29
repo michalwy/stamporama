@@ -40,7 +40,17 @@ export const COLLAGE_LABEL_STEP = 0.1;
 export const DEFAULT_COLLAGE_GAP_PERCENT = 5;
 export const DEFAULT_COLLAGE_LABEL_PERCENT = 1.5;
 
-export const DEFAULT_COLLAGE_BACKGROUND = "#ffffff";
+/**
+ * What a new template's canvas starts at (#381). **Black**, not white: a stamp scan carries its own
+ * pale margins, so on a white canvas the tile's edge dissolves into the background and a collage
+ * reads as stamps floating in nothing. Black keeps every tile's outline, and the label ink follows
+ * automatically — `labelInkColor` picks white or black off the background's luminance, so a caption
+ * stays readable whichever colour a collector settles on.
+ *
+ * It is only a *starting* value: the picker sits beside it in the template form, and an existing
+ * template keeps whatever colour it was written with.
+ */
+export const DEFAULT_COLLAGE_BACKGROUND = "#000000";
 
 export interface CollageTemplateInput {
   name: string;
