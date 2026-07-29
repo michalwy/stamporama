@@ -481,6 +481,11 @@ export function useInvalidateInventory() {
       queryClient.invalidateQueries({
         queryKey: ["inventory", collectionId, "issueMembers"],
       });
+      // An issue created from the picker may carry prefix overrides of its own (#377), and its
+      // catalog chips render through them.
+      queryClient.invalidateQueries({
+        queryKey: ["issues", collectionId, "catalog-prefixes"],
+      });
     },
   };
 }

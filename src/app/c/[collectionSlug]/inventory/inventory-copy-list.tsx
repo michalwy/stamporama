@@ -1,13 +1,12 @@
 "use client";
 
 import type { ItemListItem } from "@/lib/items";
-import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "./inventory-item-row";
 
-const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 const EMPTY_LOCATIONS: LocationData[] = [];
 
 /**
@@ -101,7 +100,7 @@ export function InventoryCopyList({
   onSetCatalogPrice,
   selection,
 }: InventoryCopyListProps) {
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   return (
     <>
@@ -110,9 +109,8 @@ export function InventoryCopyList({
         const primaryVendorId = areaId
           ? (primaryVendorByArea.get(areaId) ?? null)
           : null;
-        const vendorMap = areaId
-          ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP)
-          : EMPTY_VENDOR_MAP;
+        // The copy's stamp may sit in an issue that overrides its area's prefix (#377).
+        const vendorMap = vendorMapFor(areaId, item.issueId);
         const checked = !!selection?.selected.has(item.id);
         const row = (
           <InventoryItemRow

@@ -1,6 +1,7 @@
 import "server-only";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps } from "./area-vendor";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { deriveOfferLabel, deriveSetLabel } from "./offer-set-rules";
 import { compareSetItems } from "./offer-set-order";
 import type { CatalogNumberGroupEntry } from "./offer-title-template";
@@ -22,6 +23,8 @@ export const STAMP_LABEL_SELECT = {
       // label names the catalogue it collapsed (#379), and which vendor leads follows from the area.
       catalogNumbers: { select: { number: true, catalogVendorId: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      // …and the issue it belongs to, which may override that area's prefix (#377).
+      issueMemberships: { select: { issueId: true }, take: 1 },
       // The denormalized catalog sort key (ADR-0014) a set's derived copy order falls back to (#306).
       primaryCatalogSortKey: true,
     },
@@ -32,6 +35,7 @@ export type StampLabelRow = {
   name: string | null;
   catalogNumbers: { number: string; catalogVendorId: string }[];
   stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
+  issueMemberships: { issueId: string }[];
   primaryCatalogSortKey: number | null;
 };
 
@@ -79,9 +83,11 @@ export interface OfferLabeller {
  * The caller has already resolved the collection for its owner, hence `readCollectionAreas`.
  */
 export async function makeOfferLabeller(collectionId: string): Promise<OfferLabeller> {
-  const { primaryVendorByArea, vendorMapByArea } = buildAreaVendorMaps(
-    await readCollectionAreas(collectionId)
-  );
+  const [areas, issuePrefixes] = await Promise.all([
+    readCollectionAreas(collectionId),
+    loadIssuePrefixMap(collectionId),
+  ]);
+  const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
 
   function catalogOf(stamp: StampLabelRow): CatalogNumberGroupEntry | null {
     const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
@@ -92,7 +98,9 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
         ? stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId)
         : undefined) ?? stamp.catalogNumbers[0];
     if (!leading) return null;
-    const vendor = areaId ? vendorMapByArea.get(areaId)?.get(leading.catalogVendorId) : undefined;
+    const vendor = vendorMapFor(areaId, stamp.issueMemberships[0]?.issueId ?? null).get(
+      leading.catalogVendorId
+    );
     return {
       vendorId: leading.catalogVendorId,
       // No vendor entry for this area leaves both parts blank, which renders the bare number —

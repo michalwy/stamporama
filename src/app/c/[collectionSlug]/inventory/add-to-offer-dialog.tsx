@@ -14,11 +14,11 @@ import type { ComposeTargetOffer, ComposeTargetSet } from "@/lib/offers";
 import type { OfferState } from "@/lib/offer-rules";
 import { OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { InventoryItemRow } from "./inventory-item-row";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
 import {
@@ -34,7 +34,6 @@ import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-p
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 const MUTED = "var(--color-text-muted)";
 
 /** The composable states, in the order the facet panel lists them. Terminal offers can't be added to. */
@@ -87,7 +86,9 @@ interface RowCtx {
   locations: LocationData[];
   byId: Map<string, ItemListItem>;
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from the copy's area *and* issue, so a per-issue prefix override
+   * (#377) reaches the rows and the search keys alike. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
 }
 
 /** The chosen destination for the copy: a brand-new set on an offer, or an existing set. */
@@ -110,9 +111,9 @@ function setMatches(s: ComposeTargetSet, raw: string, q: string, ctx: RowCtx): b
     if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
     if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
     if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
-    const vm = c.areaId ? ctx.vendorMapByArea.get(c.areaId) : undefined;
+    const vm = ctx.vendorMapFor(c.areaId, c.issueId);
     const keys = c.catalogNumbers.map((cn) => {
-      const v = vm?.get(cn.catalogVendorId);
+      const v = vm.get(cn.catalogVendorId);
       return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
     });
     if (catalogKeyMatches(raw, keys)) return true;
@@ -250,7 +251,7 @@ export function AddToOfferDialog({
   const offers = useMemo(() => data?.offers ?? [], [data]);
   const copies = useMemo(() => data?.copies ?? [], [data]);
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const ctx: RowCtx = useMemo(
     () => ({
       collectionId,
@@ -259,9 +260,9 @@ export function AddToOfferDialog({
       locations,
       byId: new Map(copies.map((c) => [c.id, c])),
       primaryVendorByArea,
-      vendorMapByArea,
+      vendorMapFor,
     }),
-    [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapByArea]
+    [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapFor]
   );
 
   const raw = search.trim();
@@ -826,7 +827,7 @@ function SetPickRow({
         <div style={{ background: "var(--color-bg-page)", paddingLeft: "2.5rem" }}>
           {detailCopies.map((copy, i) => {
             const primaryVendorId = copy.areaId ? (ctx.primaryVendorByArea.get(copy.areaId) ?? null) : null;
-            const vendorMap = (copy.areaId ? ctx.vendorMapByArea.get(copy.areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+            const vendorMap = ctx.vendorMapFor(copy.areaId, copy.issueId);
             return (
               <InventoryItemRow
                 key={copy.id}

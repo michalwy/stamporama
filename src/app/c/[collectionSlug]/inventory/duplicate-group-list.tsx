@@ -1,6 +1,6 @@
 "use client";
 
-import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { CopyGroupRow } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
@@ -9,7 +9,6 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { DuplicateGroupRow } from "./duplicate-group-row";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
-const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 
 /**
  * The grouped Copies list (#372) — one row per duplicate key plus the infinite-scroll sentinel,
@@ -41,7 +40,7 @@ export function DuplicateGroupList({
   onLoadMore: () => void;
   onListAsOffer: (group: CopyGroupRow) => void;
 }) {
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   return (
     <>
@@ -58,9 +57,7 @@ export function DuplicateGroupList({
             locations={locations}
             baseCurrency={baseCurrency}
             primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-            vendorMap={
-              areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
-            }
+            vendorMap={vendorMapFor(areaId, group.issueId)}
             isLast={idx === groups.length - 1 && !hasNextPage}
             onListAsOffer={onListAsOffer}
           />

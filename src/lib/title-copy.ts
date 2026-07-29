@@ -7,6 +7,7 @@ import type {
 import type { TranslatableEntity } from "./translations";
 import { prisma } from "./db";
 import { getCollectionAreas } from "./areas";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { DEFAULT_ITEM_NO_PAD } from "./item-number";
 import {
   buildAreaVendorMaps,
@@ -168,9 +169,11 @@ export function toTitleCopy(
   const areas = row.stamp.stampAreaLinks;
   const primaryLink = areas.find((a) => a.isPrimary) ?? areas[0];
   const areaId = primaryLink?.collectionAreaId ?? null;
-  const vendorMap = areaId ? maps.vendorMapByArea.get(areaId) : undefined;
-  const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
   const issue = row.stamp.issueMemberships[0]?.issue ?? null;
+  // The issue may override its area's catalog prefix (#377), so the vendor lookup is resolved from
+  // the pair, not from the area alone.
+  const vendorMap = maps.vendorMapFor(areaId, issue?.id ?? null);
+  const primaryVendorId = areaId ? (maps.primaryVendorByArea.get(areaId) ?? null) : null;
   const subtype = row.stamp.subtype;
   // The area shown in the title rolls up per its `titleName` config (#210); falls back to the leaf
   // area's own name when nothing is configured up the chain.
@@ -178,7 +181,7 @@ export function toTitleCopy(
   const areaTitle = areaId ? (areaEntry?.title ?? primaryLink?.collectionArea.name ?? null) : null;
 
   const catalogNumbers: TitleCatalogNumber[] = row.stamp.catalogNumbers.map((cn) => {
-    const entry = vendorMap?.get(cn.catalogVendorId);
+    const entry = vendorMap.get(cn.catalogVendorId);
     return {
       vendorId: cn.catalogVendorId,
       // Prefer the area-vendor entry's abbreviation; fall back to the vendor relation.
@@ -345,8 +348,9 @@ export async function makeTitleCopyMapper(
   collectionId: string,
   language: string | null = null
 ): Promise<(row: TitleCopyRow) => TitleTemplateCopy> {
-  const [areas, collection] = await Promise.all([
+  const [areas, issuePrefixes, collection] = await Promise.all([
     getCollectionAreas(ownerId, collectionId),
+    loadIssuePrefixMap(collectionId),
     prisma.collection.findUnique({
       where: { id: collectionId },
       select: { defaultLanguage: true, itemNoPad: true },
@@ -354,7 +358,7 @@ export async function makeTitleCopyMapper(
   ]);
   const code = normalizeLanguage(language);
   const effective = code && code !== normalizeLanguage(collection?.defaultLanguage) ? code : null;
-  const maps = buildAreaVendorMaps(areas);
+  const maps = buildAreaVendorMaps(areas, issuePrefixes);
   const areaTitleById = buildAreaTitleEntries(areas, effective);
   const itemNoPad = collection?.itemNoPad ?? DEFAULT_ITEM_NO_PAD;
   return (row) => toTitleCopy(row, maps, areaTitleById, effective, itemNoPad);

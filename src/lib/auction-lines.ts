@@ -8,6 +8,7 @@ import type { PhotoSummary } from "./photos";
 import { getCollectionBaseCurrency } from "./pricing";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 
 // **What an auction lot contains, and what that is worth** (#353; ADR-0021 §7).
@@ -214,7 +215,7 @@ export async function valuateAuctionLotLines(
   if (rows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [valuations, rates, areas] = await Promise.all([
+  const [valuations, rates, areas, issuePrefixes] = await Promise.all([
     // One batched valuation over every line of every lot — the point of the whole module.
     valuateItemRows(
       collectionId,
@@ -236,8 +237,10 @@ export async function valuateAuctionLotLines(
     // numbers are prefixed in that area. The resolution is the *pure* one the client uses
     // (`buildAreaVendorMaps`), so a number reads identically wherever it is printed.
     readCollectionAreas(collectionId),
+    // …and the per-issue prefix overrides (#377), likewise once for the page.
+    loadIssuePrefixMap(collectionId),
   ]);
-  const { primaryVendorByArea, vendorMapByArea } = buildAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
 
   const byLot = new Map<string, { currency: string; lines: AuctionLotLineItem[]; values: LotLineValue[] }>();
   for (const row of rows) {
@@ -263,11 +266,11 @@ export async function valuateAuctionLotLines(
     // The leading number under its own vendor's prefix for this area — the primary vendor's when
     // the stamp has one, else whichever came first, since naming *some* catalogue beats naming none.
     const leading = catalogNumbers[0] ?? null;
-    const vendorMap = areaId ? vendorMapByArea.get(areaId) : undefined;
-    const catalogLabel = leading
-      ? formatStampCN(leading.number, vendorMap?.get(leading.catalogVendorId))
-      : null;
     const membership = row.stamp.issueMemberships[0] ?? null;
+    const vendorMap = vendorMapFor(areaId, membership?.issueId ?? null);
+    const catalogLabel = leading
+      ? formatStampCN(leading.number, vendorMap.get(leading.catalogVendorId))
+      : null;
 
     const entry = byLot.get(row.auctionLotId) ?? { currency, lines: [], values: [] };
     entry.lines.push({

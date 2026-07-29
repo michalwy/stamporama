@@ -9,6 +9,7 @@ import { getAppVersionLabel } from "@/lib/version";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
+import { loadIssuePrefixMap } from "@/lib/issue-prefix";
 import { buildPackingList } from "@/lib/packing-list";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "./print-button";
@@ -56,13 +57,19 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
   const sale = await getSaleDetail(session.user.id, saleId);
   if (!sale || sale.collectionId !== collection.id) notFound();
 
-  const [areas, locations, copies] = await Promise.all([
+  const [areas, issuePrefixes, locations, copies] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
+    loadIssuePrefixMap(collection.id),
     getLocations(session.user.id, collection.id),
     listSaleCopies(session.user.id, saleId),
   ]);
 
-  const list = buildPackingList(copies, areas, locations, buildAreaVendorMaps(areas));
+  const list = buildPackingList(
+    copies,
+    areas,
+    locations,
+    buildAreaVendorMaps(areas, issuePrefixes)
+  );
   const status = saleStatusMeta(sale.status);
 
   return (

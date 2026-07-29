@@ -27,16 +27,23 @@ export interface CatalogDuplicateCheck {
 }
 
 /**
- * Live duplicate check for the stamp/issue forms (#85). `contextAreaId` is the
- * area whose prefix applies to the candidates (an issue's area on add/auto-create).
- * When `stampId` is given (edit), the stamp's own primary area is used as context
- * and the stamp is excluded from the matches. Returns the collection's policy so
- * the form can both warn and, in block mode, disable the save.
+ * Live duplicate check for the stamp/issue forms (#85). `contextAreaId` is the area whose prefixes
+ * apply to the candidates (an issue's area on add/auto-create), `contextIssueId` the issue whose
+ * stored overrides win over it, and `contextPrefixes` the overrides typed into the form but not
+ * saved yet — which is the only source the issue *create* dialog has (#377). When `stampId` is
+ * given (edit), the stamp's own area and issue are the context and the stamp is excluded from the
+ * matches. Returns the collection's policy so the form can both warn and, in block mode, disable
+ * the save.
  */
 export async function checkCatalogDuplicatesAction(
   collectionId: string,
   candidates: DuplicateCandidate[],
-  opts: { contextAreaId?: string | null; stampId?: string | null } = {}
+  opts: {
+    contextAreaId?: string | null;
+    contextIssueId?: string | null;
+    contextPrefixes?: Record<string, string>;
+    stampId?: string | null;
+  } = {}
 ): Promise<CatalogDuplicateCheck> {
   const session = await getSession();
   const [mode, groups] = await Promise.all([
@@ -46,7 +53,11 @@ export async function checkCatalogDuplicatesAction(
       : findCatalogDuplicatesForCandidates(
           session.user.id,
           collectionId,
-          opts.contextAreaId ?? null,
+          {
+            areaId: opts.contextAreaId ?? null,
+            issueId: opts.contextIssueId ?? null,
+            prefixes: opts.contextPrefixes,
+          },
           candidates,
           null
         ),

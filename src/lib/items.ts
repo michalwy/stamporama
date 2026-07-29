@@ -27,6 +27,7 @@ import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { sortCopies } from "./copy-sort";
 import { parseItemNoSearch } from "./item-number";
 import { isDeliveryState, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
@@ -1509,7 +1510,9 @@ export async function getLotIntakeSummary(
   });
   const all = await enrichItemRows(collectionId, rows);
   const areas = await getCollectionAreas(ownerId, collectionId);
-  const maps = buildAreaVendorMaps(areas);
+  // The derived lot label prints catalog numbers, so it needs the per-issue prefix overrides (#377)
+  // as well as the area tree — one load for the whole lot, not one per copy.
+  const maps = buildAreaVendorMaps(areas, await loadIssuePrefixMap(collectionId));
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
 
   const staying = all.filter((i) => i.deliveryState !== "not_delivered");

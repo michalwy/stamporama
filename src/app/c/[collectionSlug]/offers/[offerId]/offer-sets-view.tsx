@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
 import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -26,7 +26,6 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { useInvalidateOffers } from "../use-offers-query";
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
 // The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
 // canonical copy order (#306), which is the default and the only key copies can be dragged in —
@@ -127,7 +126,9 @@ interface CopyCtx {
   baseCurrency: string;
   issueHeaderById: Record<string, IssueHeader>;
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from area *and* issue, so a per-issue prefix override (#377)
+   * reaches the copy rows and the issue group headers alike. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
   areaNameById: Map<string, string>;
   /** Opens the quick catalog-value editor for a copy (the "+ catalog value" link). */
   onSetPrice?: (item: ItemListItem) => void;
@@ -203,7 +204,7 @@ function CopyRow({
 }) {
   const areaId = item.areaId;
   const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
-  const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+  const vendorMap = ctx.vendorMapFor(areaId, item.issueId);
   const row = (
     <InventoryItemRow
       collectionId={ctx.collectionId}
@@ -281,7 +282,10 @@ function IssueOrFlat({
         const header = group.key === "__none__" ? null : ctx.issueHeaderById[group.key];
         const areaId = header?.collectionAreaId ?? group.items[0]?.areaId ?? null;
         const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
-        const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+        const vendorMap = ctx.vendorMapFor(
+          areaId,
+          group.key === "__none__" ? null : group.key
+        );
         const headerNode = (
           <LotIssueGroupHeader
             header={header}
@@ -865,7 +869,7 @@ export function OfferSetsView({
   const [isPending, startTransition] = useTransition();
   const [copyError, setCopyError] = useState<string | undefined>();
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const byId = useMemo(() => new Map(copies.map((c) => [c.id, c])), [copies]);
 
@@ -876,7 +880,7 @@ export function OfferSetsView({
     baseCurrency,
     issueHeaderById,
     primaryVendorByArea,
-    vendorMapByArea,
+    vendorMapFor,
     areaNameById,
     onSetPrice: setQuickPriceItem,
   };
@@ -1180,7 +1184,7 @@ export function OfferSetsView({
           collectionId={collectionId}
           areaName={quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null}
           primaryVendorId={quickPriceItem.areaId ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null) : null}
-          vendorMap={quickPriceItem.areaId ? (vendorMapByArea.get(quickPriceItem.areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP}
+          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
           isPending={isPending}
           error={copyError}
           onClose={() => {

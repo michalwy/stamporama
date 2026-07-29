@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
@@ -10,7 +10,7 @@ import type { SaleDetailLine } from "@/lib/sales";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { compareLocationRef } from "@/lib/location-ref";
@@ -27,7 +27,6 @@ import {
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
 // The sales packing view adds "Location ref" to the shared copy sort keys — the in-location
 // identifier (e.g. `A234`) is how you find a piece on the shelf. It is sales-local so the PO /
@@ -113,7 +112,9 @@ interface CopyCtx {
   baseCurrency: string;
   issueHeaderById: Record<string, IssueHeader>;
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from area *and* issue, so a per-issue prefix override (#377)
+   * reaches the copy rows and the issue group headers alike. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
   areaNameById: Map<string, string>;
   /** Toggle a single copy's packed flag (#192). */
   onTogglePacked: (itemId: string, packed: boolean) => void;
@@ -201,7 +202,7 @@ function useMeasuredHeight<T extends HTMLElement>() {
 function CopyRow({ item, ctx, isLast }: { item: SaleCopyItem; ctx: CopyCtx; isLast: boolean }) {
   const areaId = item.areaId;
   const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
-  const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+  const vendorMap = ctx.vendorMapFor(areaId, item.issueId);
   const rowBorder = isLast ? undefined : "1px solid var(--color-border)";
   const packed = item.packed;
   return (
@@ -311,7 +312,10 @@ function IssueOrFlat({
         const header = group.key === "__none__" ? null : ctx.issueHeaderById[group.key];
         const areaId = header?.collectionAreaId ?? group.items[0]?.areaId ?? null;
         const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
-        const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+        const vendorMap = ctx.vendorMapFor(
+          areaId,
+          group.key === "__none__" ? null : group.key
+        );
         const headerNode = (
           <LotIssueGroupHeader
             header={header}
@@ -502,7 +506,7 @@ export function SoldUnitsView({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const allCollapsed = collapsed.size === lines.length && lines.length > 0;
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   // Per-copy packed toggle (#192): flip the flag, then refresh the copy caches and the server
@@ -528,7 +532,7 @@ export function SoldUnitsView({
     baseCurrency,
     issueHeaderById,
     primaryVendorByArea,
-    vendorMapByArea,
+    vendorMapFor,
     areaNameById,
     onTogglePacked,
     packedPending,

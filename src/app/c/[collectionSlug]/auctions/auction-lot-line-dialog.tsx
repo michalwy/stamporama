@@ -30,8 +30,9 @@ import {
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
-import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { AuctionLotLineRaw } from "@/app/actions/auctions";
+import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 
 // Entering one composition line (#353), as **two steps in modals** — the purchase-order intake's
 // flow (#121) exactly: pick what it is, then say what state it is in.
@@ -84,7 +85,7 @@ export function AuctionLotLineDialog({
   collectionId,
   areas,
   line,
-  vendorMapByArea,
+  vendorMapFor,
   primaryVendorByArea,
   isPending,
   error,
@@ -95,7 +96,9 @@ export function AuctionLotLineDialog({
   areas: CollectionAreaData[];
   /** The line being edited; absent when adding, which is what opens on the picker. */
   line?: AuctionLotLineItem;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from the line's area *and* issue, so a per-issue prefix
+   * override (#377) reaches the restated pick. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
   primaryVendorByArea: Map<string, string | null>;
   isPending: boolean;
   error?: string;
@@ -112,7 +115,7 @@ export function AuctionLotLineDialog({
    * (#357) — without it the chips would be bare numbers from three different catalogs. */
   const initial: PickedStamp | undefined = useMemo(() => {
     if (!line) return undefined;
-    const vendorMap = line.areaId ? vendorMapByArea.get(line.areaId) : undefined;
+    const vendorMap = vendorMapFor(line.areaId, line.issueId);
     const primaryVendorId = line.areaId ? (primaryVendorByArea.get(line.areaId) ?? null) : null;
     return {
       stampId: line.stampId,
@@ -122,7 +125,7 @@ export function AuctionLotLineDialog({
         line.issueName || line.issueYear ? issueLabel(line.issueName, line.issueYear) : null,
       unknownVariant: line.unknownVariant,
     };
-  }, [line, vendorMapByArea, primaryVendorByArea]);
+  }, [line, vendorMapFor, primaryVendorByArea]);
 
   const [selection, setSelection] = useState<LineSelection | null>(
     initial ? { kind: "stamp", stampId: initial.stampId, picked: initial } : null

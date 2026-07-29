@@ -8,7 +8,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { CopyGroupRow, ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
 import { isDelivered } from "@/lib/delivery-state";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
@@ -45,7 +45,6 @@ import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
 import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -69,7 +68,6 @@ type DialogState =
   // reaches it.
   | { kind: "listGroup"; group: CopyGroupRow };
 
-const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 
 const DISPOSITION_FILTERS = [
   { key: "inCollection", label: "In collection" },
@@ -299,7 +297,7 @@ export function InventoryListPanel({
 
   // Per-area vendor maps + area names for the quick-price dialog (#228), resolved once here so the
   // dialog can format catalog numbers identically to the rows (mirrors the purchase intake view).
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   const updateParams = useCallback(
@@ -939,9 +937,7 @@ export function InventoryListPanel({
             issuedYear: dialog.item.issuedYear,
             catalogNumbers: dialog.item.catalogNumbers,
           }}
-          areaVendors={
-            dialog.item.areaId ? effectiveVendorsForArea(areas, dialog.item.areaId) : []
-          }
+          areaVendors={[...vendorMapFor(dialog.item.areaId, dialog.item.issueId).values()]}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
@@ -1046,11 +1042,7 @@ export function InventoryListPanel({
           primaryVendorId={
             dialog.item.areaId ? (primaryVendorByArea.get(dialog.item.areaId) ?? null) : null
           }
-          vendorMap={
-            dialog.item.areaId
-              ? (vendorMapByArea.get(dialog.item.areaId) ?? EMPTY_VENDOR_MAP)
-              : EMPTY_VENDOR_MAP
-          }
+          vendorMap={vendorMapFor(dialog.item.areaId, dialog.item.issueId)}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}

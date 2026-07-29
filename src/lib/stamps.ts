@@ -26,7 +26,8 @@ import {
   VARIANT_FLAG_SELECT,
   type SubtypeLabel,
 } from "./variant-classification";
-import { buildAreaPrefixNodes, resolveEffectivePrefix } from "./area-prefix";
+import { buildAreaPrefixNodes, effectivePrefixFor } from "./area-prefix";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorResolver } from "./format-pricing";
@@ -832,7 +833,7 @@ export async function searchStampsForPicker(
   const locationRefWhere = { locationRef: { contains: text, mode: "insensitive" as const } };
   or.push({ items: { some: locationRefWhere } });
 
-  const [candidates, vendors, areaRows] = await Promise.all([
+  const [candidates, vendors, areaRows, issuePrefixes] = await Promise.all([
     prisma.stamp.findMany({
       where: { collectionId, OR: or },
       select: {
@@ -869,6 +870,9 @@ export async function searchStampsForPicker(
         collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
       },
     }),
+    // Per-issue prefix overrides (#377) — part of the picker's *match key*, not only its labels, so
+    // a stamp under a sub-catalog is found by the number the collector actually reads on it.
+    loadIssuePrefixMap(collectionId),
   ]);
 
   const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
@@ -885,11 +889,18 @@ export async function searchStampsForPicker(
     const primaryLink = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
     const areaId = primaryLink?.collectionAreaId ?? null;
 
+    const membershipIssueId = s.issueMemberships[0]?.issueId ?? null;
     const labels: string[] = [];
     const keys: string[] = [];
     for (const cn of s.catalogNumbers) {
       const abbr = vendorAbbr.get(cn.catalogVendorId) ?? "";
-      const prefix = areaId ? resolveEffectivePrefix(areaId, cn.catalogVendorId, areaNodes) : null;
+      const prefix = effectivePrefixFor(
+        areaId,
+        cn.catalogVendorId,
+        areaNodes,
+        membershipIssueId,
+        issuePrefixes
+      );
       labels.push(formatCatalogNumber(abbr, prefix, cn.number));
       keys.push(catalogMatchKey(abbr, prefix, cn.number));
     }

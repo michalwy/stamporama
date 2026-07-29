@@ -1,15 +1,27 @@
 import "server-only";
 import { prisma } from "./db";
 import { catalogIdentityKey, formatCatalogNumber } from "./catalog-number";
+import {
+  buildAreaPrefixNodes,
+  effectivePrefixFor,
+  resolveEffectivePrefix,
+  type AreaPrefixNode,
+} from "./area-prefix";
+import { loadIssuePrefixMap, loadIssuePrefixes } from "./issue-prefix";
+import type { IssuePrefixMap } from "./area-vendor";
 
 // Duplicate catalog-number detection (#85).
 //
-// A stamp's catalog *identity* is its vendor + the effective per-vendor prefix of
-// the stamp's primary area + the stored number (e.g. "Mi·PL 200"). Two catalog
-// numbers are duplicates when their identities are exactly equal — the same number
-// under a different vendor or a different area prefix is not a duplicate. This
-// mirrors the human-facing label built by `formatCatalogNumber` and the primary-
-// area prefix resolution used by the stamp picker (`searchStampsForPicker`).
+// A stamp's catalog *identity* is its vendor + its effective per-vendor prefix + the stored number
+// (e.g. "Mi·PL 200"). Two catalog numbers are duplicates when their identities are exactly equal —
+// the same number under a different vendor or a different prefix is not a duplicate. This mirrors
+// the human-facing label built by `formatCatalogNumber` and the prefix resolution used by the stamp
+// picker (`searchStampsForPicker`).
+//
+// The prefix comes from the stamp's primary area, inherited down the area tree (#66), *unless* its
+// issue overrides it (#377) — an issue numbering under a special sub-catalog genuinely holds a
+// different catalog identity, and resolving it here rather than only at display time is what keeps
+// "Mi·SP 1" from colliding with "Mi·PL 1".
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -39,32 +51,23 @@ export async function getCollectionDuplicateMode(
   return col?.duplicateCatalogMode === "block" ? "block" : "warn";
 }
 
-// ── Area-prefix resolution ────────────────────────────────────────────────────
+// ── Prefix resolution ─────────────────────────────────────────────────────────
 
-interface AreaPrefixNode {
-  parentId: string | null;
-  name: string;
-  /** Per-vendor prefix rows set directly on this area (value may be null). */
-  vendorPrefix: Map<string, string | null>;
-}
-
-/** Resolve the effective per-vendor area prefix, inheriting from the nearest
- * ancestor area that sets one (mirrors `resolveEffectivePrefix` in stamps.ts). */
-function resolveEffectivePrefix(
-  areaId: string,
-  vendorId: string,
-  nodes: Map<string, AreaPrefixNode>
-): string | null {
-  let current: string | null = areaId;
-  let depth = 0;
-  while (current && depth < 50) {
-    const node: AreaPrefixNode | undefined = nodes.get(current);
-    if (!node) break;
-    if (node.vendorPrefix.has(vendorId)) return node.vendorPrefix.get(vendorId) ?? null;
-    current = node.parentId;
-    depth++;
-  }
-  return null;
+/**
+ * Where a set of candidate numbers takes its prefix from (#377). Resolution order is
+ * `prefixes` → the issue's stored overrides → the area's inherited prefix:
+ *
+ * - `areaId` — the area whose per-vendor prefixes apply when nothing overrides them (the issue's
+ *   area on add / auto-generate, or the edited stamp's primary area).
+ * - `issueId` — the issue the candidates belong to, whose stored overrides win over the area.
+ * - `prefixes` — overrides that are not stored yet, which is the issue *create* dialog: the issue
+ *   does not exist while its own numbers are being checked, so the fields in the form are the only
+ *   place its prefixes can come from.
+ */
+export interface CatalogPrefixContext {
+  areaId: string | null;
+  issueId?: string | null;
+  prefixes?: Record<string, string>;
 }
 
 async function loadAreaNodes(collectionId: string): Promise<Map<string, AreaPrefixNode>> {
@@ -77,18 +80,21 @@ async function loadAreaNodes(collectionId: string): Promise<Map<string, AreaPref
       collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
     },
   });
-  return new Map(
-    areaRows.map((a) => [
-      a.id,
-      {
-        parentId: a.parentId,
-        name: a.name,
-        vendorPrefix: new Map(
-          a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
-        ),
-      } satisfies AreaPrefixNode,
-    ])
-  );
+  return buildAreaPrefixNodes(areaRows);
+}
+
+/** The prefix a {@link CatalogPrefixContext} gives one vendor's candidate numbers. */
+function contextPrefix(
+  ctx: CatalogPrefixContext,
+  vendorId: string,
+  nodes: Map<string, AreaPrefixNode>,
+  contextIssuePrefixes: Map<string, string>
+): string | null {
+  const unsaved = ctx.prefixes?.[vendorId];
+  if (unsaved) return unsaved;
+  const stored = contextIssuePrefixes.get(vendorId);
+  if (stored !== undefined) return stored;
+  return ctx.areaId ? resolveEffectivePrefix(ctx.areaId, vendorId, nodes) : null;
 }
 
 // ── Shared shapes ─────────────────────────────────────────────────────────────
@@ -124,7 +130,9 @@ const STAMP_SELECT = {
   name: true,
   stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
   issueMemberships: {
-    select: { issue: { select: { name: true, year: true } } },
+    // `issueId` because the issue may override the area's prefix and so decide the stamp's whole
+    // catalog identity (#377), not only what its issue column reads.
+    select: { issueId: true, issue: { select: { name: true, year: true } } },
     take: 1,
   },
 } as const;
@@ -133,7 +141,7 @@ type StampRow = {
   id: string;
   name: string | null;
   stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
-  issueMemberships: { issue: { name: string | null; year: number | null } }[];
+  issueMemberships: { issueId: string; issue: { name: string | null; year: number | null } }[];
 };
 
 function pickPrimaryAreaId(
@@ -145,6 +153,23 @@ function pickPrimaryAreaId(
 
 function primaryAreaId(stamp: StampRow): string | null {
   return pickPrimaryAreaId(stamp.stampAreaLinks);
+}
+
+/** The stamp's own catalog identity prefix for one vendor: its issue's override, else its primary
+ * area's inherited prefix (#377). */
+function stampPrefix(
+  stamp: StampRow,
+  vendorId: string,
+  nodes: Map<string, AreaPrefixNode>,
+  issuePrefixes: IssuePrefixMap
+): string | null {
+  return effectivePrefixFor(
+    primaryAreaId(stamp),
+    vendorId,
+    nodes,
+    stamp.issueMemberships[0]?.issueId ?? null,
+    issuePrefixes
+  );
 }
 
 function stampRef(stamp: StampRow, nodes: Map<string, AreaPrefixNode>): DuplicateStampRef {
@@ -172,15 +197,14 @@ export function formatDuplicateBlockMessage(groups: CatalogDuplicateGroup[]): st
 
 /**
  * Find existing stamps whose catalog identity collides with any of `candidates`.
- * `contextAreaId` is the area whose prefix applies to the candidates (the issue's
- * area on add/auto-generate, or the edited stamp's primary area). `excludeStampId`
- * drops the stamp being edited from the results. Returns one group per colliding
+ * `context` says where the candidates' prefixes come from — see {@link CatalogPrefixContext}.
+ * `excludeStampId` drops the stamp being edited from the results. Returns one group per colliding
  * candidate identity, each listing the conflicting existing stamps.
  */
 export async function findCatalogDuplicatesForCandidates(
   ownerId: string,
   collectionId: string,
-  contextAreaId: string | null,
+  context: CatalogPrefixContext,
   candidates: DuplicateCandidate[],
   excludeStampId: string | null
 ): Promise<CatalogDuplicateGroup[]> {
@@ -199,21 +223,21 @@ export async function findCatalogDuplicatesForCandidates(
   }
   if (clean.length === 0) return [];
 
-  const [vendors, nodes] = await Promise.all([
+  const [vendors, nodes, issuePrefixes, contextIssuePrefixes] = await Promise.all([
     prisma.catalogVendor.findMany({
       where: { collectionId },
       select: { id: true, abbreviation: true },
     }),
     loadAreaNodes(collectionId),
+    loadIssuePrefixMap(collectionId),
+    context.issueId ? loadIssuePrefixes(context.issueId) : Promise.resolve(new Map<string, string>()),
   ]);
   const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
   // Build one target group per candidate identity, keyed by its exact identity key.
   const groups = new Map<string, CatalogDuplicateGroup>();
   for (const c of clean) {
-    const prefix = contextAreaId
-      ? resolveEffectivePrefix(contextAreaId, c.catalogVendorId, nodes)
-      : null;
+    const prefix = contextPrefix(context, c.catalogVendorId, nodes, contextIssuePrefixes);
     const key = catalogIdentityKey(c.catalogVendorId, prefix, c.number);
     if (groups.has(key)) continue;
     const abbr = vendorAbbr.get(c.catalogVendorId) ?? "";
@@ -241,8 +265,7 @@ export async function findCatalogDuplicatesForCandidates(
   });
 
   for (const row of rows) {
-    const areaId = primaryAreaId(row.stamp);
-    const prefix = areaId ? resolveEffectivePrefix(areaId, row.catalogVendorId, nodes) : null;
+    const prefix = stampPrefix(row.stamp, row.catalogVendorId, nodes, issuePrefixes);
     const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
     const group = groups.get(key);
     if (group) group.stamps.push(stampRef(row.stamp, nodes));
@@ -254,8 +277,8 @@ export async function findCatalogDuplicatesForCandidates(
 }
 
 /**
- * Candidate check for an existing stamp being edited: resolves the stamp's own
- * primary area as the prefix context and excludes it from the results.
+ * Candidate check for an existing stamp being edited: resolves the stamp's own primary area *and*
+ * its issue as the prefix context (#377) and excludes it from the results.
  */
 export async function findCatalogDuplicatesForStamp(
   ownerId: string,
@@ -266,11 +289,22 @@ export async function findCatalogDuplicatesForStamp(
   await assertCollectionOwner(ownerId, collectionId);
   const stamp = await prisma.stamp.findFirst({
     where: { id: stampId, collectionId },
-    select: { stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } } },
+    select: {
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      issueMemberships: { select: { issueId: true }, take: 1 },
+    },
   });
   if (!stamp) return [];
-  const areaId = pickPrimaryAreaId(stamp.stampAreaLinks);
-  return findCatalogDuplicatesForCandidates(ownerId, collectionId, areaId, candidates, stampId);
+  return findCatalogDuplicatesForCandidates(
+    ownerId,
+    collectionId,
+    {
+      areaId: pickPrimaryAreaId(stamp.stampAreaLinks),
+      issueId: stamp.issueMemberships[0]?.issueId ?? null,
+    },
+    candidates,
+    stampId
+  );
 }
 
 // ── Block-mode enforcement ────────────────────────────────────────────────────
@@ -278,12 +312,12 @@ export async function findCatalogDuplicatesForStamp(
 // Each returns a user-facing error message when the collection is in block mode
 // and the candidates collide with an existing catalog identity, or null to proceed.
 
-/** Enforce block mode for a candidate set with a known collection + context area
+/** Enforce block mode for a candidate set with a known collection + prefix context
  * (add-stamp-to-issue, auto-generate). */
 export async function enforceCandidateCatalogDuplicates(
   ownerId: string,
   collectionId: string,
-  contextAreaId: string | null,
+  context: CatalogPrefixContext,
   candidates: DuplicateCandidate[]
 ): Promise<string | null> {
   if (candidates.length === 0) return null;
@@ -291,7 +325,7 @@ export async function enforceCandidateCatalogDuplicates(
   const groups = await findCatalogDuplicatesForCandidates(
     ownerId,
     collectionId,
-    contextAreaId,
+    context,
     candidates,
     null
   );
@@ -321,7 +355,7 @@ export async function enforceStampCatalogDuplicates(
 /**
  * Every catalog identity in the collection shared by two or more stamps, grouped
  * for the duplicate report. Computes each stamp catalog number's identity (vendor
- * + primary-area prefix + number) in JS and keeps groups with ≥2 members.
+ * + effective prefix + number) in JS and keeps groups with ≥2 members.
  */
 export async function listCatalogDuplicates(
   ownerId: string,
@@ -329,12 +363,13 @@ export async function listCatalogDuplicates(
 ): Promise<CatalogDuplicateGroup[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const [vendors, nodes, rows] = await Promise.all([
+  const [vendors, nodes, issuePrefixes, rows] = await Promise.all([
     prisma.catalogVendor.findMany({
       where: { collectionId },
       select: { id: true, abbreviation: true },
     }),
     loadAreaNodes(collectionId),
+    loadIssuePrefixMap(collectionId),
     prisma.stampCatalogNumber.findMany({
       where: { stamp: { collectionId } },
       select: { catalogVendorId: true, number: true, stamp: { select: STAMP_SELECT } },
@@ -344,8 +379,7 @@ export async function listCatalogDuplicates(
 
   const groups = new Map<string, CatalogDuplicateGroup>();
   for (const row of rows) {
-    const areaId = primaryAreaId(row.stamp);
-    const prefix = areaId ? resolveEffectivePrefix(areaId, row.catalogVendorId, nodes) : null;
+    const prefix = stampPrefix(row.stamp, row.catalogVendorId, nodes, issuePrefixes);
     const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
     let group = groups.get(key);
     if (!group) {

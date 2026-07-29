@@ -12,16 +12,15 @@ import {
 import type { SellableOffer } from "@/lib/sales";
 import type { SaleLineRaw } from "@/app/actions/sales";
 import type { ItemListItem } from "@/lib/items";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
 /** Maps + lookups the expandable copy rows need, bundled so they pass through one prop. */
 interface RowCtx {
@@ -31,7 +30,9 @@ interface RowCtx {
   locations: LocationData[];
   byId: Map<string, ItemListItem>;
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from the copy's area *and* issue, so a per-issue prefix
+   * override (#377) reaches the rows and the search keys alike. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
 }
 
 const SEARCH_STYLE: React.CSSProperties = {
@@ -157,9 +158,9 @@ function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
     if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
     if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
     if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
-    const vm = c.areaId ? ctx.vendorMapByArea.get(c.areaId) : undefined;
+    const vm = ctx.vendorMapFor(c.areaId, c.issueId);
     const keys = c.catalogNumbers.map((cn) => {
-      const v = vm?.get(cn.catalogVendorId);
+      const v = vm.get(cn.catalogVendorId);
       return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
     });
     if (catalogKeyMatches(raw, keys)) return true;
@@ -217,7 +218,7 @@ export function AddSaleLineDialog({
   const { data: offers = [], isLoading } = useSellableOffers(collectionId, platformId, true);
   const { data: copies = [] } = useSellableCopies(collectionId, platformId, true);
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const ctx: RowCtx = useMemo(
     () => ({
       collectionId,
@@ -226,9 +227,9 @@ export function AddSaleLineDialog({
       locations,
       byId: new Map(copies.map((c) => [c.id, c])),
       primaryVendorByArea,
-      vendorMapByArea,
+      vendorMapFor,
     }),
-    [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapByArea]
+    [collectionId, baseCurrency, areas, locations, copies, primaryVendorByArea, vendorMapFor]
   );
 
   function toggleDetails(offerSetId: string) {
@@ -672,7 +673,7 @@ function SetPickRow({
         <div style={{ background: "var(--color-bg-page)", paddingLeft: indent ? "2.5rem" : "1rem" }}>
           {detailCopies.map((item, i) => {
             const primaryVendorId = item.areaId ? (ctx.primaryVendorByArea.get(item.areaId) ?? null) : null;
-            const vendorMap = (item.areaId ? ctx.vendorMapByArea.get(item.areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+            const vendorMap = ctx.vendorMapFor(item.areaId, item.issueId);
             return (
               <InventoryItemRow
                 key={item.id}

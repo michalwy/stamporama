@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { StampListItem, StampSortBy } from "@/lib/stamps";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
@@ -14,7 +14,7 @@ import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/conditio
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { FormatPriceSwitcher } from "@/app/c/[collectionSlug]/shared/format-price-switcher";
 import { useDisplayFormat } from "@/app/c/[collectionSlug]/shared/use-display-format";
-import { effectiveVendorsForArea, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
@@ -192,7 +192,7 @@ export function StampsListPanel({
     [data]
   );
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   function handleNavigateFilter(areaId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -322,9 +322,8 @@ export function StampsListPanel({
               const primaryVendorId = areaId
                 ? (primaryVendorByArea.get(areaId) ?? null)
                 : null;
-              const vendorMap = areaId
-                ? (vendorMapByArea.get(areaId) ?? new Map<string, AreaCatalogEntry>())
-                : new Map<string, AreaCatalogEntry>();
+              // The stamp's issue may override its area's prefix (#377).
+              const vendorMap = vendorMapFor(areaId, stamp.issues[0]?.issueId ?? null);
 
               return (
                 <StampRow
@@ -357,11 +356,12 @@ export function StampsListPanel({
           stampId={dialog.stamp.id}
           collectionId={collectionId}
           stamp={dialog.stamp}
-          areaVendors={
-            dialog.stamp.areaId
-              ? effectiveVendorsForArea(areas, dialog.stamp.areaId)
-              : []
-          }
+          areaVendors={[
+            ...vendorMapFor(
+              dialog.stamp.areaId,
+              dialog.stamp.issues[0]?.issueId ?? null
+            ).values(),
+          ]}
           isPending={isPending}
           onClose={closeDialog}
           onSubmit={(fd) => {

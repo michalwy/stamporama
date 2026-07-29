@@ -61,11 +61,48 @@ export function formatStampCN(number: string, v?: AreaCatalogEntry): string {
     : `${v.vendorAbbreviation} ${number}`;
 }
 
+/**
+ * Per-issue overrides of the area-resolved catalog prefix (#377): issue id → (catalog vendor id →
+ * the prefix that issue's stamps carry for that vendor). Sparse — only issues that set one appear,
+ * and a missing entry means "inherit the area's prefix", which is the ordinary case.
+ */
+export type IssuePrefixMap = Map<string, Map<string, string>>;
+
+/** One stored override row, as it crosses the wire to the client. */
+export interface IssuePrefixRow {
+  issueId: string;
+  catalogVendorId: string;
+  areaPrefix: string;
+}
+
+/** Shape override rows into the nested {@link IssuePrefixMap}. Pure, so the server reads and the
+ * client's own fetch share one derivation. */
+export function groupIssuePrefixRows(rows: readonly IssuePrefixRow[]): IssuePrefixMap {
+  const out: IssuePrefixMap = new Map();
+  for (const r of rows) {
+    let byVendor = out.get(r.issueId);
+    if (!byVendor) {
+      byVendor = new Map();
+      out.set(r.issueId, byVendor);
+    }
+    byVendor.set(r.catalogVendorId, r.areaPrefix);
+  }
+  return out;
+}
+
 export interface AreaVendorMaps {
   /** area id → the area's effective primary catalog vendor id (or null). */
   primaryVendorByArea: Map<string, string | null>;
   /** area id → (catalog vendor id → catalog entry) for that area's effective vendors. */
   vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /**
+   * The vendor lookup to render a stamp's catalog numbers with (#377): the area's own map, or a
+   * copy of it with the issue's prefix overrides substituted in. **Prefer this to reaching into
+   * {@link vendorMapByArea}** — a stamp's prefix is a question about its issue as much as its
+   * area, and the two disagree exactly where this feature exists. Results are memoized per
+   * (area, issue) pair, and an issue with no overrides gets the area's own map back unchanged.
+   */
+  vendorMapFor: (areaId: string | null, issueId: string | null) => Map<string, AreaCatalogEntry>;
 }
 
 /**
@@ -140,8 +177,14 @@ export function buildAreaTitleEntries(
 
 /** Build the per-area primary-vendor and vendor-lookup maps used to render catalog numbers on
  * stamp/issue/copy rows. Pure so the client hook ({@link ../app/.../use-area-vendor-maps}) and
- * the server lot-intake reads share one derivation. */
-export function buildAreaVendorMaps(areas: CollectionAreaData[]): AreaVendorMaps {
+ * the server lot-intake reads share one derivation.
+ *
+ * `prefixByIssue` (#377) carries the collection's per-issue prefix overrides; omitting it is the
+ * same as passing an empty map, so a caller with no issue context keeps the area-only behaviour. */
+export function buildAreaVendorMaps(
+  areas: CollectionAreaData[],
+  prefixByIssue: IssuePrefixMap = new Map()
+): AreaVendorMaps {
   const primaryVendorByArea = new Map<string, string | null>();
   const vendorMapByArea = new Map<string, Map<string, AreaCatalogEntry>>();
   for (const a of areas) {
@@ -149,7 +192,33 @@ export function buildAreaVendorMaps(areas: CollectionAreaData[]): AreaVendorMaps
     const vendors = effectiveVendorsForArea(areas, a.id);
     vendorMapByArea.set(a.id, new Map(vendors.map((v) => [v.catalogVendorId, v])));
   }
-  return { primaryVendorByArea, vendorMapByArea };
+
+  // One override-applied map per (area, issue) pair actually asked for. Rows are rendered in long
+  // lists that repeat the same handful of pairs, so this is built lazily and kept.
+  const overridden = new Map<string, Map<string, AreaCatalogEntry>>();
+  const vendorMapFor = (
+    areaId: string | null,
+    issueId: string | null
+  ): Map<string, AreaCatalogEntry> => {
+    const base = (areaId ? vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+    const overrides = issueId ? prefixByIssue.get(issueId) : undefined;
+    if (!overrides || overrides.size === 0) return base;
+    const cacheKey = `${areaId ?? ""} ${issueId}`;
+    const cached = overridden.get(cacheKey);
+    if (cached) return cached;
+    const next = new Map(base);
+    for (const [catalogVendorId, prefix] of overrides) {
+      const entry = base.get(catalogVendorId);
+      // Only vendors the area actually carries are overridable: the prefix decorates an existing
+      // catalog entry (its abbreviation and name), and an issue cannot introduce a catalog its
+      // area does not use.
+      if (entry) next.set(catalogVendorId, { ...entry, prefix });
+    }
+    overridden.set(cacheKey, next);
+    return next;
+  };
+
+  return { primaryVendorByArea, vendorMapByArea, vendorMapFor };
 }
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
@@ -161,7 +230,7 @@ export function copyCatalogLabel(item: ItemListItem, maps: AreaVendorMaps): stri
   const primaryVendorId = item.areaId
     ? (maps.primaryVendorByArea.get(item.areaId) ?? null)
     : null;
-  const vendorMap = (item.areaId ? maps.vendorMapByArea.get(item.areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+  const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
   const cn =
     item.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
     item.catalogNumbers[0] ??

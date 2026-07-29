@@ -11,10 +11,9 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotLineDialog } from "./auction-lot-line-dialog";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
-import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import { useAuctionLotComposition, type AuctionLotView } from "./use-auctions-query";
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
 const NOTE: React.CSSProperties = {
   margin: "0.375rem 0 0",
@@ -123,7 +122,7 @@ export function AuctionLotLinesDialog({
   const [priceError, setPriceError] = useState<string | undefined>();
 
   const { data, isLoading, refetch } = useAuctionLotComposition(collectionId, lot.id);
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   const lines = data?.lines ?? [];
@@ -205,9 +204,7 @@ export function AuctionLotLinesDialog({
             </div>
 
             {lines.map((line, idx) => {
-              const vendorMap = line.areaId
-                ? (vendorMapByArea.get(line.areaId) ?? EMPTY_VENDOR_MAP)
-                : EMPTY_VENDOR_MAP;
+              const vendorMap = vendorMapFor(line.areaId, line.issueId);
               const primaryVendorId = line.areaId
                 ? (primaryVendorByArea.get(line.areaId) ?? null)
                 : null;
@@ -382,7 +379,7 @@ export function AuctionLotLinesDialog({
           collectionId={collectionId}
           areas={areas}
           line={draft.kind === "edit" ? draft.line : undefined}
-          vendorMapByArea={vendorMapByArea}
+          vendorMapFor={vendorMapFor}
           primaryVendorByArea={primaryVendorByArea}
           isPending={isPending}
           error={error}
@@ -430,9 +427,7 @@ export function AuctionLotLinesDialog({
           collectionId={collectionId}
           areaName={pricing.areaId ? (areaNameById.get(pricing.areaId) ?? null) : null}
           primaryVendorId={pricing.areaId ? (primaryVendorByArea.get(pricing.areaId) ?? null) : null}
-          vendorMap={
-            pricing.areaId ? (vendorMapByArea.get(pricing.areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
-          }
+          vendorMap={vendorMapFor(pricing.areaId, pricing.issueId)}
           isPending={isPending}
           error={priceError}
           onClose={() => {

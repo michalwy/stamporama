@@ -51,6 +51,7 @@ type VendorRow = { first: string; last: string; selected: boolean };
 
 interface AddStampRangeDialogProps {
   collectionId: string;
+  issueId: string;
   issueName: string;
   areaId: string;
   vendors: AreaCatalogEntry[];
@@ -63,6 +64,7 @@ interface AddStampRangeDialogProps {
 
 export function AddStampRangeDialog({
   collectionId,
+  issueId,
   issueName,
   areaId,
   vendors,
@@ -142,6 +144,8 @@ export function AddStampRangeDialog({
       const { checkCatalogDuplicatesAction } = await import("@/app/actions/duplicate-catalog");
       const res = await checkCatalogDuplicatesAction(collectionId, candidates, {
         contextAreaId: areaId,
+        // The issue may override its area's prefix (#377), which is part of the identity checked.
+        contextIssueId: issueId,
       });
       if (!cancelled) setDup(res);
     }, 400);
@@ -149,7 +153,7 @@ export function AddStampRangeDialog({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [collectionId, areaId, count, mismatch, overLimit, selectedVendors, rows]);
+  }, [collectionId, issueId, areaId, count, mismatch, overLimit, selectedVendors, rows]);
 
   const dupBlocking = dup.mode === "block" && dup.groups.length > 0;
 

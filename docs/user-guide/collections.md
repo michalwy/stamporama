@@ -99,6 +99,16 @@ An issue can be moved to a different collecting area after it is created. Open t
 
 Catalog numbers are never lost in a move: catalogs belong to the collection, not to a single area. If the area you pick does not list one of the catalogs the issue uses, the dialog shows a short warning naming those catalogs — the move is still allowed, and the numbers stay attached. To have the new area display them, add the missing catalog(s) to that area in **Settings → Areas**.
 
+## Overriding an issue's catalog prefix
+
+Catalog numbers are stored bare (`200`) and shown with the prefix your **area** sets for that catalog (`Mi·PL 200`), inherited down the area tree from **Settings → Areas**. Some issues legitimately number under a different prefix than the area they sit in — a special or commemorative sub-catalog that does not follow the country's ordinary numbering.
+
+The **Add issue** and **Edit issue** dialogs therefore give every catalog a small **prefix** box, in front of its **First** / **Last** range — which is exactly where the prefix appears when the number is printed. Its placeholder shows the prefix the area supplies, so leaving it **blank means "use the area's"**, which is what every ordinary issue does. Type something into it and that issue's stamps carry it instead, for that one catalog: enter `SP` on the Michel row and its stamps read `Mi·SP 200` while the rest of the area keeps `Mi·PL`. Each catalog is overridden separately; the ones you leave blank are unaffected.
+
+The override is the number's real identity, not a display trick, so it follows everywhere the number goes: the catalog chips on the **Issues**, **Stamps** and **Copies** lists, the stamp picker (including its search — `Mi SP 200`, `SP200` and `200` all find the stamp), generated listing titles and descriptions, derived offer-set and auction-lot names, the packing list, [duplicate detection](duplicate-catalog-numbers.md), and Colnect matching. Two stamps numbered `200` under different prefixes are two different catalog numbers, so they no longer collide.
+
+Clearing the box hands the issue back to its area's prefix. Moving an issue to another area **keeps** its override — an explicit choice is not undone by a move.
+
 ## Auto-filling a secondary catalog's range when creating an issue
 
 When you create an issue and let Stamporama **generate its stamps** from a catalog number range, you enter a **First** and **Last** for the primary catalog (for example Fischer `100`–`103`). Once that primary range is complete, entering just the **First** for another catalog fills in its **Last** automatically so it spans the same number of stamps — enter Michel `200` and the **Last** becomes `203` (four stamps, matching Fischer). The value is only filled when you left **Last** empty, and you can always overwrite it if a catalog's numbering doesn't line up one-to-one. To move on quickly, type `-` in a **First** field and the cursor jumps to that catalog's **Last** — so a range can be entered in one flow (`100`, `-`, `103`) without reaching for the mouse.

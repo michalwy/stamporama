@@ -8,9 +8,11 @@ import {
 } from "./catalog-number";
 import {
   buildAreaPrefixNodes,
-  resolveEffectivePrefix,
+  effectivePrefixFor,
   type AreaPrefixNode,
 } from "./area-prefix";
+import { loadIssuePrefixMap } from "./issue-prefix";
+import type { IssuePrefixMap } from "./area-vendor";
 import { sortPhotos } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import type { DuplicateCatalogMode } from "./duplicate-catalog";
@@ -228,12 +230,16 @@ interface ColnectContext {
   resolveVendorId: (colnectAbbrev: string) => string | null;
   areaNodes: Map<string, AreaPrefixNode>;
   areaNames: Map<string, string>;
+  /** Per-issue overrides of the area-resolved prefix (#377). Part of the *match key*, not only of
+   * the label: an issue numbering under its own sub-catalog holds a different catalog identity, and
+   * Colnect matching is strict full-key. */
+  issuePrefixes: IssuePrefixMap;
   /** The collection's duplicate-catalog policy (#85), which the backfill has to respect. */
   duplicateMode: DuplicateCatalogMode;
 }
 
 async function loadColnectContext(collectionId: string): Promise<ColnectContext> {
-  const [vendors, mappings, areaRows, collection] = await Promise.all([
+  const [vendors, mappings, areaRows, issuePrefixes, collection] = await Promise.all([
     prisma.catalogVendor.findMany({
       where: { collectionId },
       select: { id: true, abbreviation: true },
@@ -251,6 +257,7 @@ async function loadColnectContext(collectionId: string): Promise<ColnectContext>
         collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
       },
     }),
+    loadIssuePrefixMap(collectionId),
     prisma.collection.findUnique({
       where: { id: collectionId },
       select: { duplicateCatalogMode: true },
@@ -271,6 +278,7 @@ async function loadColnectContext(collectionId: string): Promise<ColnectContext>
     },
     areaNodes: buildAreaPrefixNodes(areaRows),
     areaNames: new Map(areaRows.map((a) => [a.id, a.name])),
+    issuePrefixes,
     duplicateMode: collection?.duplicateCatalogMode === "block" ? "block" : "warn",
   };
 }
@@ -282,10 +290,12 @@ async function loadColnectContext(collectionId: string): Promise<ColnectContext>
 // context around it: resolving Colnect abbreviations, the stamp's effective area prefixes, the
 // duplicate policy (#85), and the write itself.
 
-/** The stamp a backfill is computed against: its area (for prefixes) and current numbers. */
+/** The stamp a backfill is computed against: its area *and* issue (which together resolve its
+ * prefixes, #377) and its current numbers. */
 interface BackfillStamp {
   stampId: string;
   areaId: string | null;
+  issueId: string | null;
   numbersByVendor: Map<string, string>;
 }
 
@@ -307,7 +317,7 @@ function backfillFor(
   const prefixByVendor = new Map(
     [...new Set(usable.map((r) => r.catalogVendorId))].map((vendorId) => [
       vendorId,
-      stamp.areaId ? resolveEffectivePrefix(stamp.areaId, vendorId, ctx.areaNodes) : null,
+      effectivePrefixFor(stamp.areaId, vendorId, ctx.areaNodes, stamp.issueId, ctx.issuePrefixes),
     ])
   );
   return proposeBackfill(usable, { numbersByVendor: stamp.numbersByVendor, prefixByVendor });
@@ -347,6 +357,9 @@ async function markBackfillDuplicates(
           id: true,
           name: true,
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          // An issue may override the area's prefix, and so decide whether this row really holds
+          // the identity a fill would land on (#377).
+          issueMemberships: { select: { issueId: true }, take: 1 },
         },
       },
     },
@@ -355,10 +368,13 @@ async function markBackfillDuplicates(
   const holdersByIdentity = new Map<string, { id: string; name: string | null }[]>();
   for (const row of rows) {
     const link = row.stamp.stampAreaLinks.find((l) => l.isPrimary) ?? row.stamp.stampAreaLinks[0];
-    const areaId = link?.collectionAreaId ?? null;
-    const prefix = areaId
-      ? resolveEffectivePrefix(areaId, row.catalogVendorId, ctx.areaNodes)
-      : null;
+    const prefix = effectivePrefixFor(
+      link?.collectionAreaId ?? null,
+      row.catalogVendorId,
+      ctx.areaNodes,
+      row.stamp.issueMemberships[0]?.issueId ?? null,
+      ctx.issuePrefixes
+    );
     const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
     const list = holdersByIdentity.get(key);
     if (list) list.push({ id: row.stamp.id, name: row.stamp.name });
@@ -366,9 +382,13 @@ async function markBackfillDuplicates(
   }
 
   for (const { stamp, proposal } of fills) {
-    const prefix = stamp.areaId
-      ? resolveEffectivePrefix(stamp.areaId, proposal.catalogVendorId, ctx.areaNodes)
-      : null;
+    const prefix = effectivePrefixFor(
+      stamp.areaId,
+      proposal.catalogVendorId,
+      ctx.areaNodes,
+      stamp.issueId,
+      ctx.issuePrefixes
+    );
     const key = catalogIdentityKey(proposal.catalogVendorId, prefix, proposal.number!);
     const holders = (holdersByIdentity.get(key) ?? []).filter((h) => h.id !== stamp.stampId);
     if (holders.length === 0) continue;
@@ -611,7 +631,7 @@ export async function matchColnectItems(
 
   // ── Load the collection's catalog + area context once, build in-memory resolvers. ──
   const ctx = await loadColnectContext(collectionId);
-  const { vendorAbbrById, resolveVendorId, areaNodes, areaNames } = ctx;
+  const { vendorAbbrById, resolveVendorId, areaNodes, areaNames, issuePrefixes } = ctx;
 
   /** One printed reference plus what it resolved to (null vendor = a catalog we don't keep). */
   interface ResolvedAnnotation {
@@ -711,7 +731,12 @@ export async function matchColnectItems(
           colnectId: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-          issueMemberships: { select: { issue: { select: { name: true } } }, take: 1 },
+          issueMemberships: {
+            // `issueId` because the issue may override the area's prefix and so the stamp's whole
+            // match key (#377), not only the issue name the result row shows.
+            select: { issueId: true, issue: { select: { name: true } } },
+            take: 1,
+          },
           photos: { select: { id: true, role: true, title: true, sortOrder: true } },
         },
       })
@@ -721,11 +746,12 @@ export async function matchColnectItems(
   for (const s of candidateStamps) {
     const primaryLink = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
     const areaId = primaryLink?.collectionAreaId ?? null;
+    const issueId = s.issueMemberships[0]?.issueId ?? null;
     const refs: ResolvedRef[] = [];
     const numbers: CandidateEntry["numbers"] = [];
     for (const cn of s.catalogNumbers) {
       const abbr = vendorAbbrById.get(cn.catalogVendorId) ?? "";
-      const prefix = areaId ? resolveEffectivePrefix(areaId, cn.catalogVendorId, areaNodes) : null;
+      const prefix = effectivePrefixFor(areaId, cn.catalogVendorId, areaNodes, issueId, issuePrefixes);
       const key = catalogMatchKey(abbr, prefix, cn.number);
       refs.push({ catalogVendorId: cn.catalogVendorId, key });
       numbers.push({
@@ -742,6 +768,7 @@ export async function matchColnectItems(
       backfillStamp: {
         stampId: s.id,
         areaId,
+        issueId,
         numbersByVendor: new Map(s.catalogNumbers.map((cn) => [cn.catalogVendorId, cn.number])),
       },
       base: {
@@ -875,6 +902,8 @@ export async function confirmColnectMatch(
       colnectId: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      // The issue may override the area's prefix, which the backfill resolves numbers against (#377).
+      issueMemberships: { select: { issueId: true }, take: 1 },
     },
   });
   if (!stamp) throw new Error("Stamp not found in this collection.");
@@ -897,6 +926,7 @@ export async function confirmColnectMatch(
   const target: BackfillStamp = {
     stampId: stamp.id,
     areaId: link?.collectionAreaId ?? null,
+    issueId: stamp.issueMemberships[0]?.issueId ?? null,
     numbersByVendor: new Map(stamp.catalogNumbers.map((cn) => [cn.catalogVendorId, cn.number])),
   };
   const proposals = backfillFor(

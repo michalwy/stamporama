@@ -86,7 +86,7 @@ export function ListGroupDialog({
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useInventoryItemsInfinite(collectionId, memberFilters);
   const members = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const outliers = useMemo(() => outlierCopyIds(members, axes), [members, axes]);
 
@@ -197,9 +197,7 @@ export function ListGroupDialog({
                     primaryVendorId={
                       item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null
                     }
-                    vendorMap={
-                      (item.areaId ? vendorMapByArea.get(item.areaId) : undefined) ?? new Map()
-                    }
+                    vendorMap={vendorMapFor(item.areaId, item.issueId)}
                     isLast={i === members.length - 1 && !hasNextPage}
                     readOnly
                     showCostBasis

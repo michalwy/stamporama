@@ -374,6 +374,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
     addProps && !autoCreateIssue
       ? (addProps.issues.find((i) => i.id === selectedIssueId)?.collectionAreaId ?? null)
       : null;
+  // That issue may also override its area's prefix (#377), which changes the identity being checked.
+  const addIssueId = addAreaId ? (selectedIssueId ?? null) : null;
   const canCheckDuplicates = !!checkStampId || !!addAreaId;
 
   useEffect(() => {
@@ -396,7 +398,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
       const res = await checkCatalogDuplicatesAction(
         collectionId,
         candidates,
-        checkStampId ? { stampId: checkStampId } : { contextAreaId: addAreaId }
+        checkStampId
+          ? { stampId: checkStampId }
+          : { contextAreaId: addAreaId, contextIssueId: addIssueId }
       );
       if (!cancelled) setDupCheck(res);
     }, 350);
@@ -404,7 +408,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [catalogInputs, canCheckDuplicates, checkStampId, addAreaId, collectionId]);
+  }, [catalogInputs, canCheckDuplicates, checkStampId, addAreaId, addIssueId, collectionId]);
 
   const blockDuplicates = dupCheck.mode === "block" && dupCheck.groups.length > 0;
 

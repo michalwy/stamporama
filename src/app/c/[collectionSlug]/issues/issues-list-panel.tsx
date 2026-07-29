@@ -27,7 +27,7 @@ import { AddStampRangeDialog } from "./add-stamp-range-dialog";
 import { MergeIssueDialog } from "./merge-issue-dialog";
 import { RangeExtendedDialog } from "./range-extended-dialog";
 import type { IssueListItem, IssueSortBy, StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
@@ -55,7 +55,7 @@ import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/conditio
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { FormatPriceSwitcher } from "@/app/c/[collectionSlug]/shared/format-price-switcher";
 import { useDisplayFormat } from "@/app/c/[collectionSlug]/shared/use-display-format";
-import { effectiveVendorsForArea, effectivePrimaryVendorId, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectivePrimaryVendorId, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 
@@ -292,7 +292,7 @@ export function IssuesListPanel({
     [areas]
   );
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
@@ -529,9 +529,8 @@ export function IssuesListPanel({
               const area = areaById.get(issue.collectionAreaId);
               const primaryVendorId =
                 primaryVendorByArea.get(issue.collectionAreaId) ?? null;
-              const vendorMap =
-                vendorMapByArea.get(issue.collectionAreaId) ??
-                new Map<string, AreaCatalogEntry>();
+              // The issue's own prefix overrides win over its area's (#377).
+              const vendorMap = vendorMapFor(issue.collectionAreaId, issue.id);
 
               return (
                 <IssueRow
@@ -643,10 +642,9 @@ export function IssuesListPanel({
           const { issueId, stamp } = dialog;
           const issue = allIssues.find((i) => i.id === issueId);
           if (!issue) return null;
-          const areaVendors = effectiveVendorsForArea(
-            areas,
-            issue.collectionAreaId
-          );
+          // Resolved through the issue, so a per-issue prefix override (#377) labels the
+          // catalog-number inputs with the prefix the numbers will actually carry.
+          const areaVendors = [...vendorMapFor(issue.collectionAreaId, issue.id).values()];
           return (
             <StampFormDialog
               mode="edit"
@@ -684,15 +682,8 @@ export function IssuesListPanel({
         (() => {
           const issue = allIssues.find((i) => i.id === dialog.issueId);
           if (!issue) return null;
-          const areaVendors = effectiveVendorsForArea(
-            areas,
-            issue.collectionAreaId
-          );
-          const uniqueAreaVendors = Array.from(
-            new Map(
-              areaVendors.map((v) => [v.catalogVendorId, v])
-            ).values()
-          );
+          // Already deduplicated by vendor, and carrying the issue's own prefix override (#377).
+          const uniqueAreaVendors = [...vendorMapFor(issue.collectionAreaId, issue.id).values()];
           return (
             <StampFormDialog
               mode="add"
@@ -757,9 +748,10 @@ export function IssuesListPanel({
           return (
             <AddStampRangeDialog
               collectionId={collectionId}
+              issueId={dialog.issue.id}
               issueName={issueLabel}
               areaId={areaId}
-              vendors={effectiveVendorsForArea(areas, areaId)}
+              vendors={[...vendorMapFor(areaId, dialog.issue.id).values()]}
               primaryVendorId={effectivePrimaryVendorId(areas, areaId)}
               isPending={isPending}
               error={error}

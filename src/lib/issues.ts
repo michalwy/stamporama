@@ -141,6 +141,12 @@ export interface IssueCatalogNumberData {
   lastNumber: string | null;
 }
 
+/** One vendor's per-issue override of the area-resolved catalog prefix (#377). */
+export interface IssueCatalogPrefixData {
+  catalogVendorId: string;
+  areaPrefix: string;
+}
+
 export interface IssueData {
   id: string;
   collectionId: string;
@@ -521,6 +527,10 @@ export interface IssueListItem {
   isAutoCreated: boolean;
   createdAt: string;
   catalogNumbers: IssueCatalogNumberData[];
+  /** Per-vendor overrides of the area-resolved catalog prefix (#377). Sparse — only vendors this
+   * issue overrides appear, and an absent vendor inherits the area's prefix. Carried on the row so
+   * the edit dialog prefills its Prefix inputs without a second read. */
+  catalogPrefixes: IssueCatalogPrefixData[];
   memberCount: number;
   requiredCount: number;
   requiredPriceTotal: IssuePriceTotal | null;
@@ -548,6 +558,9 @@ const ISSUE_LIST_SELECT = {
   isAutoCreated: true,
   createdAt: true,
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+  // Per-vendor prefix overrides (#377) — at most one row per vendor the issue overrides, and none
+  // at all for the ordinary issue that follows its area's prefix.
+  catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true } },
   // Per-language names (#295), so the edit dialog can seed its translation fields from the row it
   // already has. At most one row per translation language — a handful, not a payload concern.
   translations: { select: { language: true, name: true } },
@@ -668,6 +681,30 @@ function computeRequiredPriceTotal(
   return null;
 }
 
+/**
+ * Replace an issue's per-vendor prefix overrides (#377). `undefined` leaves them untouched (a
+ * caller that did not render the fields cannot mean "clear them"); an array replaces the whole set,
+ * so a vendor left out of it goes back to inheriting the area's prefix — which is what a field the
+ * collector blanked out submits. Runs on the caller's transaction client.
+ */
+async function writeIssueCatalogPrefixes(
+  tx: Prisma.TransactionClient,
+  issueId: string,
+  prefixes: { catalogVendorId: string; areaPrefix: string }[] | undefined
+): Promise<void> {
+  if (prefixes === undefined) return;
+  const clean = prefixes
+    .map((p) => ({ catalogVendorId: p.catalogVendorId, areaPrefix: p.areaPrefix.trim() }))
+    .filter((p) => p.catalogVendorId && p.areaPrefix);
+  await tx.issueCatalogPrefix.deleteMany({ where: { issueId } });
+  if (clean.length > 0) {
+    await tx.issueCatalogPrefix.createMany({
+      data: clean.map((p) => ({ issueId, ...p })),
+      skipDuplicates: true,
+    });
+  }
+}
+
 /** Per-language `name` rows for an issue (#295). Runs on the caller's transaction client, since
  * both create and update already wrap their writes in one. Shared blank / delete / untouched rules
  * live in {@link syncEntityTranslations}. */
@@ -702,6 +739,7 @@ function toIssueListItem(
     createdAt: Date;
     translations: { language: string; name: string | null }[];
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
+    catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[];
     members: {
       stampId: string;
       requiredForCompleteness: boolean;
@@ -763,6 +801,7 @@ function toIssueListItem(
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt.toISOString(),
     catalogNumbers: issue.catalogNumbers,
+    catalogPrefixes: issue.catalogPrefixes,
     memberCount: issue.members.length,
     requiredCount: requiredMembers.length,
     requiredPriceTotal,
@@ -1485,6 +1524,9 @@ export async function createIssue(
     name?: string | null;
     year?: number | null;
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+    /** Per-vendor overrides of the area-resolved catalog prefix (#377). Blank values are dropped —
+     * a blank field means "inherit the area's prefix", which is the absence of a row. */
+    catalogPrefixes?: { catalogVendorId: string; areaPrefix: string }[];
     /** Per-language `name` overrides (#295), keyed by ISO 639-1 code then field key. A blank / null
      * value removes that language's row; languages absent from the record are left untouched. */
     translations?: TranslationValueMap;
@@ -1529,6 +1571,7 @@ export async function createIssue(
         skipDuplicates: true,
       });
     }
+    await writeIssueCatalogPrefixes(tx, issue.id, data.catalogPrefixes);
 
     let stampIds: string[] = [];
     if (data.autoCreateStamps) {
@@ -1592,6 +1635,9 @@ export async function updateIssue(
     name?: string | null;
     year?: number | null;
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
+    /** Per-vendor prefix overrides (#377); see {@link createIssue}. Passing an array replaces the
+     * issue's whole set, so a vendor left out of it goes back to inheriting the area's prefix. */
+    catalogPrefixes?: { catalogVendorId: string; areaPrefix: string }[];
     /** Per-language `name` overrides (#295); see {@link createIssue}. */
     translations?: TranslationValueMap;
   }
@@ -1619,6 +1665,7 @@ export async function updateIssue(
         });
       }
     }
+    await writeIssueCatalogPrefixes(tx, issueId, data.catalogPrefixes);
   });
   if (data.catalogNumbers !== undefined) {
     await recomputeIssueSortKeys(collectionId, [issueId]);

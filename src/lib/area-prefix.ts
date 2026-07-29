@@ -39,8 +39,31 @@ export function buildAreaPrefixNodes(
   );
 }
 
+/**
+ * The prefix a stamp's catalog number actually carries: its issue's override when it sets one for
+ * this vendor (#377), else the area-resolved prefix. This is the *catalog identity* prefix, so it
+ * is what duplicate detection (#85) and the Colnect strict full-key match (#155) key on, not only
+ * what the label prints — the two must never disagree, or a stamp reads as `Mi·SP 1` while the
+ * duplicate checker still treats it as `Mi·PL 1`.
+ *
+ * `issuePrefixes` is the collection's whole override map (see `issue-prefix.ts`); an absent issue
+ * or an absent vendor within it means "inherit", which is the ordinary case.
+ */
+export function effectivePrefixFor(
+  areaId: string | null,
+  vendorId: string,
+  nodes: Map<string, AreaPrefixNode>,
+  issueId: string | null,
+  issuePrefixes: Map<string, Map<string, string>>
+): string | null {
+  const override = issueId ? issuePrefixes.get(issueId)?.get(vendorId) : undefined;
+  if (override !== undefined) return override;
+  return areaId ? resolveEffectivePrefix(areaId, vendorId, nodes) : null;
+}
+
 /** Resolve the effective per-vendor area prefix, inheriting from the nearest ancestor area that
- * sets one (mirrors `effectiveVendorsForArea` on the client). */
+ * sets one (mirrors `effectiveVendorsForArea` on the client). Prefer {@link effectivePrefixFor}
+ * where an issue is known — an issue may override what this returns (#377). */
 export function resolveEffectivePrefix(
   areaId: string,
   vendorId: string,

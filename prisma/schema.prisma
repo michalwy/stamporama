@@ -337,6 +337,7 @@ model CatalogVendor {
   catalogNames          CatalogName[]
   stampCatalogNumbers   StampCatalogNumber[]
   issueCatalogNumbers   IssueCatalogNumber[]
+  issueCatalogPrefixes  IssueCatalogPrefix[]
   collectionAreaVendors CollectionAreaVendor[]
   colnectCatalogMappings ColnectCatalogMapping[]
 
@@ -1635,6 +1636,25 @@ model CollectionAreaVendor {
   @@map("collection_area_vendor")
 }
 
+// Per-issue override of the area-resolved catalog prefix (#377). The prefix an issue's stamps show
+// in front of their bare numbers normally comes from `CollectionAreaVendor.areaPrefix`, inherited
+// down the area tree (#66); a row here replaces it for one issue and one vendor, for the *whole*
+// catalog identity — the displayed label, duplicate detection (#85) and the Colnect strict full-key
+// match (#155) alike. There is no stored "no prefix at all": the dialog's blank field means inherit,
+// and inheriting is the absence of a row, so `areaPrefix` is non-null here (unlike the area's own,
+// where a null row is what stops inheritance).
+model IssueCatalogPrefix {
+  issueId         String
+  catalogVendorId String
+  areaPrefix      String
+
+  issue         Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, catalogVendorId])
+  @@map("issue_catalog_prefix")
+}
+
 model Issue {
   id               String   @id @default(cuid())
   collectionId     String
@@ -1653,6 +1673,7 @@ model Issue {
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   members        IssueMember[]
   catalogNumbers IssueCatalogNumber[]
+  catalogPrefixes IssueCatalogPrefix[]
   translations   IssueTranslation[]
   formatFactors  StampFormatFactor[]
 

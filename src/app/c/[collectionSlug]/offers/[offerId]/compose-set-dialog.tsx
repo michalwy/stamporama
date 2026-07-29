@@ -109,7 +109,7 @@ export function ComposeSetDialog({
   }, [areas, areaId]);
 
   const { data: copies = [], isLoading } = useComposableCopies(collectionId, offerId, areaIds, true);
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const yearFacets = useMemo(() => {
     const counts = new Map<number | null, number>();
@@ -131,14 +131,14 @@ export function ComposeSetDialog({
       if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
       // Where the copy is filed (#303) — pull a piece off the shelf, type its ref, add it.
       if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
-      const vm = c.areaId ? vendorMapByArea.get(c.areaId) : undefined;
+      const vm = vendorMapFor(c.areaId, c.issueId);
       const keys = c.catalogNumbers.map((cn) => {
-        const v = vm?.get(cn.catalogVendorId);
+        const v = vm.get(cn.catalogVendorId);
         return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
       });
       return catalogKeyMatches(raw, keys);
     });
-  }, [copies, year, search, vendorMapByArea]);
+  }, [copies, year, search, vendorMapFor]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -293,7 +293,7 @@ export function ComposeSetDialog({
               visibleCopies.map((item, i) => {
                 const checked = selected.has(item.id);
                 const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
-                const vendorMap = (item.areaId ? vendorMapByArea.get(item.areaId) : undefined) ?? new Map();
+                const vendorMap = vendorMapFor(item.areaId, item.issueId);
                 return (
                   <div
                     key={item.id}

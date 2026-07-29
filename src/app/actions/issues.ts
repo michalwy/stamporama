@@ -106,6 +106,30 @@ function parseCatalogNumbers(formData: FormData): { catalogVendorId: string; fir
   return result;
 }
 
+/**
+ * Per-vendor prefix overrides typed into the issue dialog (#377), as `issueCatalogPrefix_<vendorId>`.
+ * A blank field means "inherit the area's prefix" and is simply left out, so the returned array
+ * *is* the issue's whole override set — {@link updateIssue} replaces on it.
+ */
+function parseCatalogPrefixes(formData: FormData): { catalogVendorId: string; areaPrefix: string }[] {
+  const result: { catalogVendorId: string; areaPrefix: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("issueCatalogPrefix_")) continue;
+    const catalogVendorId = key.slice("issueCatalogPrefix_".length);
+    const areaPrefix = ((value as string) ?? "").trim();
+    if (catalogVendorId && areaPrefix) result.push({ catalogVendorId, areaPrefix });
+  }
+  return result;
+}
+
+/** The same overrides as a plain record, for the duplicate check's prefix context (#85/#377): on
+ * create the issue does not exist yet, so its prefixes can only come from the form. */
+function prefixContext(
+  prefixes: { catalogVendorId: string; areaPrefix: string }[]
+): Record<string, string> {
+  return Object.fromEntries(prefixes.map((p) => [p.catalogVendorId, p.areaPrefix]));
+}
+
 /** Resolve the `autoCreateVendor_*` selection plus each vendor's First/Last range into a
  *  generated {@link AutoCreateStampsInput}, or an error message. Shared by issue creation
  *  (#70) and post-creation add-range (#219): each selected vendor generates catalog numbers
@@ -178,6 +202,7 @@ export async function createIssueAction(
     return { status: "error", message: "Year must be a valid year (1840–2100)." };
   }
   const catalogNumbers = parseCatalogNumbers(formData);
+  const catalogPrefixes = parseCatalogPrefixes(formData);
 
   let autoCreateStamps: AutoCreateStampsInput | undefined;
   if (formData.get("autoCreateStamps") === "true") {
@@ -186,11 +211,13 @@ export async function createIssueAction(
     autoCreateStamps = built.input;
 
     // Block-mode duplicate guard (#85): the generated numbers become real stamps,
-    // so reject up front when any collides and the collection blocks duplicates.
+    // so reject up front when any collides and the collection blocks duplicates. The prefixes
+    // typed into this very form decide the candidates' identity (#377) — the issue they belong to
+    // does not exist yet, so there is nothing stored to read them from.
     const blockMessage = await enforceCandidateCatalogDuplicates(
       session.user.id,
       collectionId,
-      areaId,
+      { areaId, prefixes: prefixContext(catalogPrefixes) },
       autoCreateCandidates(autoCreateStamps)
     );
     if (blockMessage) return { status: "error", message: blockMessage };
@@ -201,6 +228,7 @@ export async function createIssueAction(
       name,
       year,
       catalogNumbers,
+      catalogPrefixes,
       translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
       autoCreateStamps,
     });
@@ -228,6 +256,7 @@ export async function updateIssueAction(
       name,
       year,
       catalogNumbers,
+      catalogPrefixes: parseCatalogPrefixes(formData),
       translations: parseTranslationValues(formData, ISSUE_TRANSLATION_FIELDS),
     });
     return { status: "success" };
@@ -334,11 +363,12 @@ export async function addStampToIssueAction(
     });
   }
 
-  // Block-mode duplicate guard (#85): use the issue's area as the prefix context.
+  // Block-mode duplicate guard (#85): the issue supplies the prefix context — its own overrides
+  // when it sets any (#377), else its area's inherited prefixes.
   const blockMessage = await enforceCandidateCatalogDuplicates(
     session.user.id,
     collectionId,
-    await getIssueAreaId(issueId),
+    { areaId: await getIssueAreaId(issueId), issueId },
     catalogNumbers
   );
   if (blockMessage) return { status: "error", message: blockMessage };
@@ -476,13 +506,13 @@ export async function addStampRangeToIssueAction(
   if ("error" in built) return { status: "error", message: built.error };
 
   // Block-mode duplicate guard (#85): the generated numbers become real stamps, so reject
-  // up front when any collides and the collection blocks duplicates. The issue's own area
-  // supplies the prefix context.
+  // up front when any collides and the collection blocks duplicates. The issue supplies the prefix
+  // context — its own overrides when it sets any (#377), else its area's inherited prefixes.
   const areaId = await getIssueAreaId(issueId);
   const blockMessage = await enforceCandidateCatalogDuplicates(
     session.user.id,
     collectionId,
-    areaId,
+    { areaId, issueId },
     autoCreateCandidates(built.input)
   );
   if (blockMessage) return { status: "error", message: blockMessage };

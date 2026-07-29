@@ -5,12 +5,15 @@ with another stamp in the same collection, so you don't create accidental duplic
 
 ## What counts as a duplicate
 
-A duplicate is the **same catalog vendor, the same area prefix, and the same number**
-on more than one stamp. The area prefix comes from the stamp's primary area, so:
+A duplicate is the **same catalog vendor, the same prefix, and the same number** on more
+than one stamp. The prefix comes from the stamp's primary area — unless its issue
+[overrides it](collections.md#overriding-an-issues-catalog-prefix), which wins. So:
 
 - `Mi·DE 200` and `Mi·DE 200` **are** duplicates.
 - `Mi·DE 200` and `Mi·PL 200` are **not** duplicates — the same Michel number under a
   different country/area is a different catalog identity.
+- `Mi·PL 200` and `Mi·SP 200` are **not** duplicates either, where `SP` is one issue's
+  own prefix override — for the same reason.
 - `Mi 200` and `Sc 200` are **not** duplicates — different vendors.
 - `200` and `200a` are **not** duplicates — numbers are matched exactly.
 

@@ -12,12 +12,9 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import {
-  effectiveVendorsForArea,
-  effectivePrimaryVendorId,
-  getDescendantIds,
-} from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
   buildStampTree,
   IssueTitle,
@@ -52,6 +49,7 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     isAutoCreated: issue.isAutoCreated,
     createdAt: String(issue.createdAt),
     catalogNumbers: issue.catalogNumbers,
+    catalogPrefixes: [],
     memberCount: issue.members.length,
     requiredCount: issue.completeness.required,
     requiredPriceTotal: null,
@@ -142,6 +140,10 @@ export function StampPickerBrowser({
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { invalidatePickerData } = useInvalidateInventory();
+  // Only for the inline create dialogs' catalog-number labels: an issue may override its area's
+  // prefix (#377), and the input a number is typed into should be labelled with the prefix that
+  // number will carry. The list below resolves its own for the rows it renders.
+  const { vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   // Selecting a parent area includes its descendants, so their issues surface too.
   const areaIds = useMemo(() => {
@@ -310,10 +312,8 @@ export function StampPickerBrowser({
           {create.kind === "stamp" &&
             (() => {
               const { issue, parentStampId } = create;
-              const vendors = effectiveVendorsForArea(areas, issue.collectionAreaId);
-              const uniqueVendors = Array.from(
-                new Map(vendors.map((v) => [v.catalogVendorId, v])).values()
-              );
+              // Already deduplicated by vendor, and carrying the issue's own prefix override (#377).
+              const uniqueVendors = [...vendorMapFor(issue.collectionAreaId, issue.id).values()];
               return (
                 <StampFormDialog
                   mode="add"
@@ -369,22 +369,10 @@ function IssueBrowser({
 
   const areaById = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
 
-  // Effective vendor entries + primary vendor per area (ancestor-inherited), matching
-  // how the main issues list builds them — a parent/"All areas" mixes many areas.
-  const vendorMapByArea = useMemo(() => {
-    const m = new Map<string, VendorMap>();
-    for (const a of areas) {
-      const vendors = effectiveVendorsForArea(areas, a.id);
-      m.set(a.id, new Map(vendors.map((v) => [v.catalogVendorId, v])));
-    }
-    return m;
-  }, [areas]);
-
-  const primaryVendorByArea = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const a of areas) m.set(a.id, effectivePrimaryVendorId(areas, a.id));
-    return m;
-  }, [areas]);
+  // Effective vendor entries + primary vendor per area (ancestor-inherited), matching how the main
+  // issues list builds them — a parent/"All areas" mixes many areas — and applying each issue's own
+  // prefix override (#377), so the picker's chips and its search keys read like the list's.
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   // Filter issues by the search term, matching issue name/year AND the stamps nested within each
   // issue — by stamp name or catalog number (#186). `innerMatchByIssue` records, for issues that
@@ -402,12 +390,12 @@ function IssueBrowser({
       // Match catalog numbers on their normalized key (vendor abbreviation + area prefix +
       // number) so a prefixed query resolves in any spacing — "Mi PL 200", "MiPL200", "PL200",
       // or bare "200" all hit the same stamp (#146).
-      const vm = vendorMapByArea.get(issue.collectionAreaId);
+      const vm = vendorMapFor(issue.collectionAreaId, issue.id);
       const matchedStampIds = new Set<string>();
       for (const m of issue.members) {
         const nameHit = (m.name ?? "").toLowerCase().includes(q);
         const keys = m.catalogNumbers.map((cn) => {
-          const v = vm?.get(cn.catalogVendorId);
+          const v = vm.get(cn.catalogVendorId);
           return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
         });
         if (nameHit || catalogKeyMatches(filter, keys)) matchedStampIds.add(m.stampId);
@@ -420,10 +408,10 @@ function IssueBrowser({
       }
     }
     return { filtered: out, innerMatchByIssue: innerMatch };
-  }, [issues, filter, vendorMapByArea]);
+  }, [issues, filter, vendorMapFor]);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueData) {
-    const vm = vendorMapByArea.get(issue.collectionAreaId);
+    const vm = vendorMapFor(issue.collectionAreaId, issue.id);
     const catalogLabels = orderedCatalogLabels(
       node.catalogNumbers,
       vm,
@@ -487,7 +475,7 @@ function IssueBrowser({
               issue={issue}
               areaName={areaById.get(issue.collectionAreaId)?.name ?? null}
               showArea={selectedAreaId !== issue.collectionAreaId}
-              vendorMap={vendorMapByArea.get(issue.collectionAreaId) ?? new Map()}
+              vendorMap={vendorMapFor(issue.collectionAreaId, issue.id)}
               primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
               isLast={i === filtered.length - 1}
               defaultExpanded={issue.id === justCreatedIssueId}

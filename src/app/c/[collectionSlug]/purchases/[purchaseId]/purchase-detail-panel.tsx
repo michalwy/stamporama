@@ -48,8 +48,7 @@ import {
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
@@ -859,7 +858,7 @@ function useCopyEditing(ctx: {
   const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
   // Catalog-number rendering context for the quick-price dialog (#147): reuse the same
   // per-area vendor maps the copy rows use so numbers format identically.
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
@@ -941,11 +940,7 @@ function useCopyEditing(ctx: {
               ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null)
               : null
           }
-          vendorMap={
-            quickPriceItem.areaId
-              ? (vendorMapByArea.get(quickPriceItem.areaId) ?? EMPTY_VENDOR_MAP)
-              : EMPTY_VENDOR_MAP
-          }
+          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
           isPending={isPending}
           error={copyError}
           onClose={() => {
@@ -1020,9 +1015,7 @@ function useCopyEditing(ctx: {
             issuedYear: editStampItem.issuedYear,
             catalogNumbers: editStampItem.catalogNumbers,
           }}
-          areaVendors={
-            editStampItem.areaId ? effectiveVendorsForArea(areas, editStampItem.areaId) : []
-          }
+          areaVendors={[...vendorMapFor(editStampItem.areaId, editStampItem.issueId).values()]}
           isPending={isPending}
           error={copyError}
           onClose={() => {
@@ -1158,7 +1151,7 @@ function CopyRow({
   areas,
   locations,
   primaryVendorByArea,
-  vendorMapByArea,
+  vendorMapFor,
   copy,
 }: {
   collectionId: string;
@@ -1170,13 +1163,13 @@ function CopyRow({
   areas: CollectionAreaData[];
   locations: LocationData[];
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from the copy's area *and* issue, so a per-issue prefix
+   * override (#377) reaches the row. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
   copy: CopyEditing;
 }) {
   const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
-  const vendorMap = item.areaId
-    ? (vendorMapByArea.get(item.areaId) ?? EMPTY_VENDOR_MAP)
-    : EMPTY_VENDOR_MAP;
+  const vendorMap = vendorMapFor(item.areaId, item.issueId);
   return (
     <InventoryItemRow
       collectionId={collectionId}
@@ -1509,7 +1502,7 @@ function LotCard({
   });
   const { copyError, setCopyError, setBulkMove, setBulkSort } = copy;
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
 
   const open = lot.status === "open";
@@ -1570,7 +1563,7 @@ function LotCard({
         areas={areas}
         locations={locations}
         primaryVendorByArea={primaryVendorByArea}
-        vendorMapByArea={vendorMapByArea}
+        vendorMapFor={vendorMapFor}
         copy={copy}
       />
     );
@@ -1902,7 +1895,7 @@ function LotCard({
                       areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
                       primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
                       vendorMap={
-                        areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
+                        vendorMapFor(areaId, group.key === "__none__" ? null : group.key)
                       }
                       collapsed={collapsed}
                       stickyTop={headerHeight}
@@ -2209,7 +2202,7 @@ function OrderCopiesView({
     isPending,
     run,
   });
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const hydrated = useHydrated();
   const [collapsedGroups, setCollapsedGroups] = usePersistentStringSet(
@@ -2251,7 +2244,7 @@ function OrderCopiesView({
         areas={areas}
         locations={locations}
         primaryVendorByArea={primaryVendorByArea}
-        vendorMapByArea={vendorMapByArea}
+        vendorMapFor={vendorMapFor}
         copy={copy}
       />
     );
@@ -2289,9 +2282,7 @@ function OrderCopiesView({
               header={header ?? null}
               areaName={areaId ? (areaNameById.get(areaId) ?? null) : null}
               primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
-              vendorMap={
-                areaId ? (vendorMapByArea.get(areaId) ?? EMPTY_VENDOR_MAP) : EMPTY_VENDOR_MAP
-              }
+              vendorMap={vendorMapFor(areaId, group.key === "__none__" ? null : group.key)}
               collapsed={collapsed}
               stickyTop={0}
               onToggle={() =>
@@ -2391,7 +2382,6 @@ function LotDialog({
   );
 }
 
-const EMPTY_VENDOR_MAP = new Map<string, AreaCatalogEntry>();
 
 /** A small dialog that picks one storage location (tree-select) and confirms — reused by the
  * arrival flow (optional "incoming box") and the bulk "move copies to location" actions

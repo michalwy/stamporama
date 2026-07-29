@@ -146,7 +146,7 @@ export function AuctionLotFormDialog({
   const { data: conditions = [] } = useCollectionConditions(collectionId);
   const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const { data: formats = [] } = useCollectionFormats(collectionId);
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas ?? []);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas ?? [], collectionId);
   const nameById = (rows: { id: string; name: string }[], id: string) =>
     rows.find((r) => r.id === id)?.name ?? null;
 
@@ -691,7 +691,7 @@ export function AuctionLotFormDialog({
         <AuctionLotLineDialog
           collectionId={collectionId}
           areas={areas}
-          vendorMapByArea={vendorMapByArea}
+          vendorMapFor={vendorMapFor}
           primaryVendorByArea={primaryVendorByArea}
           isPending={isPending}
           onClose={() => setAddingLine(false)}

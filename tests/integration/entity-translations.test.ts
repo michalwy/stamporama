@@ -311,6 +311,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
   const EMPTY_MAPS: AreaVendorMaps = {
     vendorMapByArea: new Map(),
     primaryVendorByArea: new Map(),
+    vendorMapFor: () => new Map(),
   };
 
   function row(): TitleCopyRow {

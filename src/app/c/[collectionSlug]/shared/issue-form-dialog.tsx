@@ -11,6 +11,7 @@ import {
 import type {
   IssueListItem,
   IssueCatalogNumberData,
+  IssueCatalogPrefixData,
   DuplicateIssueMatch,
   IssueRangeSuggestion,
 } from "@/lib/issues";
@@ -129,6 +130,21 @@ function autoFillSecondaryLast(
   if (filled) lastEl.value = filled;
 }
 
+// ── Per-issue prefix overrides (#377) ─────────────────────────────────────────
+
+// The prefix overrides currently typed into the (uncontrolled) form, as the duplicate check's
+// `contextPrefixes`. On create the issue does not exist yet, so its own form is the only place its
+// prefixes can be read from — and they decide the catalog identity being checked for a collision.
+function prefixesFromForm(form: HTMLFormElement, vendorIds: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const catalogVendorId of vendorIds) {
+    const el = form.elements.namedItem(`issueCatalogPrefix_${catalogVendorId}`);
+    const value = el instanceof HTMLInputElement ? el.value.trim() : "";
+    if (value) out[catalogVendorId] = value;
+  }
+  return out;
+}
+
 // ── Auto-create duplicate-catalog candidates (#85) ────────────────────────────
 
 // Generate the catalog numbers auto-create would produce for the given vendors,
@@ -203,6 +219,8 @@ interface IssueFormProps {
   defaultName?: string;
   defaultYear?: number;
   defaultCatalogNumbers?: IssueCatalogNumberData[];
+  /** Stored per-vendor prefix overrides (#377); absent when creating. */
+  defaultCatalogPrefixes?: IssueCatalogPrefixData[];
   isPending: boolean;
   autoFocusName?: boolean;
   showAutoCreate?: boolean;
@@ -235,6 +253,7 @@ function IssueForm({
   defaultName,
   defaultYear,
   defaultCatalogNumbers = [],
+  defaultCatalogPrefixes = [],
   isPending,
   autoFocusName,
   showAutoCreate,
@@ -356,6 +375,9 @@ function IssueForm({
               const existing = defaultCatalogNumbers.find(
                 (cn) => cn.catalogVendorId === v.catalogVendorId
               );
+              const prefixOverride = defaultCatalogPrefixes.find(
+                (p) => p.catalogVendorId === v.catalogVendorId
+              );
               return (
                 <div key={v.catalogVendorId}>
                   <span
@@ -393,6 +415,33 @@ function IssueForm({
                     )}
                   </span>
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    {/* Per-issue prefix override (#377). It sits *in front of* the numbers because
+                        that is exactly where it renders — `Mi·SP 200`. Blank inherits the area's
+                        prefix, which is what the placeholder shows. */}
+                    <Tooltip
+                      content={
+                        v.prefix
+                          ? `Catalog prefix for this issue's stamps. Leave blank to use the area's prefix (${v.prefix}).`
+                          : "Catalog prefix for this issue's stamps. Leave blank to use the area's prefix, which is unset here."
+                      }
+                      placement="top"
+                      align="start"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <input
+                        name={`issueCatalogPrefix_${v.catalogVendorId}`}
+                        type="text"
+                        defaultValue={prefixOverride?.areaPrefix ?? ""}
+                        disabled={isPending}
+                        placeholder={v.prefix ?? "Prefix"}
+                        aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-bwignore
+                        style={{ ...INPUT_STYLE, width: "5.5rem" }}
+                      />
+                    </Tooltip>
                     {(() => {
                       const warning = catalogWarningFor?.(v.catalogVendorId);
                       return (
@@ -698,6 +747,12 @@ export function IssueDialog(props: IssueDialogProps) {
       const { checkCatalogDuplicatesAction } = await import("@/app/actions/duplicate-catalog");
       const res = await checkCatalogDuplicatesAction(collectionId, candidates, {
         contextAreaId: selectedAreaId,
+        // The issue being created has no row to read its prefixes from yet, so the fields in this
+        // very form are the identity the generated numbers would carry (#377).
+        contextPrefixes: prefixesFromForm(
+          formRef.current,
+          vendors.map((v) => v.catalogVendorId)
+        ),
       });
       if (!cancelled) setAutoDup(res);
     }, 400);
@@ -787,6 +842,7 @@ export function IssueDialog(props: IssueDialogProps) {
             defaultName={isCreate ? undefined : (props.issue.name ?? "")}
             defaultYear={isCreate ? props.defaultYear : (props.issue.year ?? undefined)}
             defaultCatalogNumbers={isCreate ? undefined : props.issue.catalogNumbers}
+            defaultCatalogPrefixes={isCreate ? undefined : props.issue.catalogPrefixes}
             isPending={isPending}
             autoFocusName={isCreate}
             showAutoCreate={isCreate && vendors.length > 0}

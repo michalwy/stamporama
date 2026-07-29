@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
   COPY_SORT_KEYS,
   COPY_SORT_LABELS,
@@ -33,7 +33,6 @@ import { AuctionLotLineRow } from "./auction-lot-line-row";
 // question is "what am I actually paying for", asked of one parcel, which is exactly what the cards
 // answer. That split is the same one the offers list has with an offer's own screen.
 
-const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
 const LS_PRIMARY = "stamporama:auctionSale:primaryGroup";
 const LS_BY_ISSUE = "stamporama:auctionSale:byIssue";
@@ -73,7 +72,9 @@ interface LineCtx {
   areas: CollectionAreaData[];
   issueHeaderById: Record<string, IssueHeader>;
   primaryVendorByArea: Map<string, string | null>;
-  vendorMapByArea: Map<string, Map<string, AreaCatalogEntry>>;
+  /** Catalog-entry lookup resolved from area *and* issue, so a per-issue prefix override (#377)
+   * reaches the line rows and the issue group headers alike. */
+  vendorMapFor: AreaVendorMaps["vendorMapFor"];
   areaNameById: Map<string, string>;
   onSetPrice: (line: AuctionLotLineItem) => void;
   onEditLine: (line: AuctionLotLineItem) => void;
@@ -144,8 +145,7 @@ function LineRows({
         const primaryVendorId = line.areaId
           ? (ctx.primaryVendorByArea.get(line.areaId) ?? null)
           : null;
-        const vendorMap =
-          (line.areaId ? ctx.vendorMapByArea.get(line.areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+        const vendorMap = ctx.vendorMapFor(line.areaId, line.issueId);
         return (
           <AuctionLotLineRow
             key={line.id}
@@ -197,7 +197,10 @@ function IssueOrFlat({
         const header = group.key === "__none__" ? null : ctx.issueHeaderById[group.key];
         const areaId = header?.collectionAreaId ?? group.lines[0]?.areaId ?? null;
         const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
-        const vendorMap = (areaId ? ctx.vendorMapByArea.get(areaId) : undefined) ?? EMPTY_VENDOR_MAP;
+        const vendorMap = ctx.vendorMapFor(
+          areaId,
+          group.key === "__none__" ? null : group.key
+        );
         return (
           <div key={group.key} style={{ borderBottom: "1px solid var(--color-border)" }}>
             <LotIssueGroupHeader
@@ -593,7 +596,7 @@ export function AuctionLotCardsView({
   const [priceError, setPriceError] = useState<string | undefined>();
   const [linePending, startLineTransition] = useTransition();
 
-  const { primaryVendorByArea, vendorMapByArea } = useAreaVendorMaps(areas);
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   function runLine(
@@ -615,7 +618,7 @@ export function AuctionLotCardsView({
     areas,
     issueHeaderById,
     primaryVendorByArea,
-    vendorMapByArea,
+    vendorMapFor,
     areaNameById,
     onSetPrice: (line) => {
       setPriceError(undefined);
@@ -803,7 +806,7 @@ export function AuctionLotCardsView({
           collectionId={collectionId}
           areas={areas}
           line={draft.value === "add" ? undefined : draft.value.line}
-          vendorMapByArea={vendorMapByArea}
+          vendorMapFor={vendorMapFor}
           primaryVendorByArea={primaryVendorByArea}
           isPending={linePending}
           error={formError}
@@ -847,11 +850,7 @@ export function AuctionLotCardsView({
           collectionId={collectionId}
           areaName={pricing.areaId ? (areaNameById.get(pricing.areaId) ?? null) : null}
           primaryVendorId={pricing.areaId ? (primaryVendorByArea.get(pricing.areaId) ?? null) : null}
-          vendorMap={
-            pricing.areaId
-              ? (vendorMapByArea.get(pricing.areaId) ?? EMPTY_VENDOR_MAP)
-              : EMPTY_VENDOR_MAP
-          }
+          vendorMap={vendorMapFor(pricing.areaId, pricing.issueId)}
           isPending={linePending}
           error={priceError}
           onClose={() => {

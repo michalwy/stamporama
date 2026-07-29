@@ -12,9 +12,12 @@ const MICHEL_PL = {
   prefix: "PL",
 } as AreaCatalogEntry;
 
+const VENDOR_MAP_BY_AREA = new Map([["pl", new Map([["mi", MICHEL_PL]])]]);
 const MAPS: AreaVendorMaps = {
   primaryVendorByArea: new Map([["pl", "mi"]]),
-  vendorMapByArea: new Map([["pl", new Map([["mi", MICHEL_PL]])]]),
+  vendorMapByArea: VENDOR_MAP_BY_AREA,
+  // No issue overrides in this fixture (#377), so every lookup is the area's own map.
+  vendorMapFor: (areaId) => (areaId ? (VENDOR_MAP_BY_AREA.get(areaId) ?? new Map()) : new Map()),
 };
 
 const AREAS: CollectionAreaData[] = [
