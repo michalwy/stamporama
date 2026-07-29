@@ -1312,9 +1312,15 @@ function compactIds(ids: (string | null)[]): string[] {
   return [...new Set(ids.filter((id): id is string => !!id))];
 }
 
-// Delivery states that still await the sort pass — surfaced on the lot header and used by the
-// "to-sort" intake filter (mirrors the client `UNSORTED_STATES`, #121).
+// Delivery states that still await the sort pass — the close-confirmation warning's count
+// (#121). Deliberately wider than the "to sort" chip: a lot whose copies are still `ordered`
+// has not been through the sort pass either, and closing it should still warn.
 const UNSORTED_DELIVERY_STATES = new Set(["ordered", "to_sort", "in_transit"]);
+
+// The one state the "to sort" chip and its filter address (#375). A copy still `ordered` or
+// `in_transit` has not arrived, so it is not waiting on the collector's sort pass — counting it
+// under "to sort" sent them looking for a copy that is not on the table yet.
+const TO_SORT_DELIVERY_STATE = "to_sort";
 
 /** A staying copy that blocks a lot close: it is not excluded from the allocation
  * (delivery ≠ not_delivered) yet carries no base-currency catalog weight (#121). */
@@ -1374,9 +1380,7 @@ async function getIntakePage(
         collectionId,
         ...scopeWhere,
         ...issueWhere,
-        ...(filter === "to-sort"
-          ? { deliveryState: { in: [...UNSORTED_DELIVERY_STATES] } }
-          : {}),
+        ...(filter === "to-sort" ? { deliveryState: TO_SORT_DELIVERY_STATE } : {}),
         ...(filter === "no-photos" ? { photos: { none: {} } } : {}),
       },
       // `id` breaks ties on the non-unique `createdAt` so offset pagination is stable — bulk
@@ -1405,7 +1409,7 @@ async function getIntakePage(
     filter === "unpriced"
       ? all.filter(isBlockingCopy)
       : filter === "to-sort"
-        ? all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState))
+        ? all.filter((i) => i.deliveryState === TO_SORT_DELIVERY_STATE)
         : filter === "no-photos"
           ? all.filter((i) => i.photos.length === 0)
           : all;
@@ -1470,7 +1474,10 @@ function summarizeHoldings(items: ItemListItem[], baseCurrency: string): Holding
  * derived lot label, and the issue-group headers. Computed by enriching the whole lot once. */
 export interface LotIntakeSummary {
   totalCount: number;
-  /** Copies still awaiting the sort pass (ordered / to sort / in transit). */
+  /** Copies actually in the `to_sort` state — the "N to sort" chip and its filter (#375). */
+  toSortCount: number;
+  /** Copies still awaiting the sort pass (ordered / to sort / in transit) — the wider count
+   * the close confirmation warns on. */
   unsortedCount: number;
   /** Staying copies with no base-currency catalog weight — these block a close. */
   blockingCount: number;
@@ -1534,6 +1541,7 @@ export async function getLotIntakeSummary(
 
   return {
     totalCount: all.length,
+    toSortCount: all.filter((i) => i.deliveryState === TO_SORT_DELIVERY_STATE).length,
     unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,

@@ -692,6 +692,11 @@ export interface LotBulkChanges {
   forSale?: boolean;
   forTrade?: boolean;
   markSorted?: boolean;
+  /** Mark-sorted only (#274): leave every copy's disposition exactly as it is, instead of
+   * writing the given flags or falling back to `inCollection`. The location and the
+   * `delivered` transition still apply — this is the disposition's "leave as is", mirroring
+   * the one the location picker already offers. Ignored when any flag is given. */
+  keepDisposition?: boolean;
 }
 
 /** True when `changes` would touch nothing (used to short-circuit a no-op bulk update). */
@@ -745,14 +750,17 @@ async function applyLotBulkChanges(
     };
     if (changes.markSorted) {
       // Mark-sorted transitions only the not-yet-sorted copies to `delivered`, and files them
-      // with the chosen disposition — or `inCollection` by default when none was given. The
-      // disposition rides along here (same filtered set) rather than in the block below.
+      // with the chosen disposition — or `inCollection` by default when none was given, unless
+      // `keepDisposition` asks for each copy's own to be left standing (#274). The disposition
+      // rides along here (same filtered set) rather than in the block below.
+      const sortedDisposition = hasDisposition
+        ? dispositionData
+        : changes.keepDisposition
+          ? {}
+          : { inCollection: true };
       await tx.item.updateMany({
         where: { AND: [baseWhere, { deliveryState: { in: ["ordered", "to_sort", "in_transit"] } }] },
-        data: {
-          deliveryState: "delivered",
-          ...(hasDisposition ? dispositionData : { inCollection: true }),
-        },
+        data: { deliveryState: "delivered", ...sortedDisposition },
       });
     } else if (hasDisposition) {
       await tx.item.updateMany({ where: baseWhere, data: dispositionData });
@@ -767,8 +775,9 @@ async function applyLotBulkChanges(
  *  - `deliveryState` → set that exact state (and couple `inCollection`, see above);
  *  - `inCollection` / `forSale` / `forTrade` defined → set that disposition flag (applied
  *    after `deliveryState`, so an explicit flag always wins);
- *  - `markSorted` → move to `delivered` + `inCollection`, but only from a not-yet-sorted
- *    state (already-sorted / damaged / not-delivered copies are left untouched).
+ *  - `markSorted` → move to `delivered` + `inCollection` (or the given flags, or nothing at
+ *    all with `keepDisposition`), but only from a not-yet-sorted state (already-sorted /
+ *    damaged / not-delivered copies are left untouched).
  * Returns the number of targeted copies. One transaction. For whole-lot/issue bulk actions
  * over a set too large to enumerate client-side, use {@link bulkUpdateLotItemsScoped}. */
 export async function bulkUpdateLotItems(

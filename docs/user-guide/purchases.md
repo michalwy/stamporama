@@ -260,8 +260,11 @@ whatever granularity suits the parcel:
   there.
 
 To focus on what's left, click the lot header's **N to sort** chip to filter the list down to
-just the unsorted copies; click it again (or the **To sort only ✕** button) to show all. As
-you sort each copy it drops out of the filtered list.
+just the copies waiting to be sorted; click it again (or the **To sort only ✕** button) to show
+all. As you sort each copy it drops out of the filtered list. The chip counts copies in the
+**to sort** state only — copies still *ordered* or *in transit* haven't arrived yet, so there
+is nothing to sort about them (the close confirmation still counts those; see
+[Closing a lot](#closing-a-lot)).
 
 The lot header also carries a **N no photos** chip whenever some of the lot's copies have no
 [photo](inventory.md#photos) attached — click it to filter the list down to just those copies
@@ -272,9 +275,12 @@ closed, since photographing usually happens once the stamps are in hand.
 **Mark sorted** (whole lot or whole issue) moves *not-yet-sorted* copies (ordered / to sort /
 in transit) to **Delivered** and asks which **disposition** to file them under — In collection
 (the default), For sale, and/or For trade — so a batch headed for sale doesn't have to be
-un-filed afterwards. The same dialog also lets you file the copies into a **location** in one
-step (pre-filled with the last one you used; leave it *as-is* to skip). Copies already sorted,
-damaged, or not delivered keep their delivery status, but a chosen location still applies.
+un-filed afterwards. Pick **Leave as is** instead when you have already set dispositions copy
+by copy: the batch is still marked delivered, but each copy keeps the disposition it carries.
+(That is different from turning all three chips off, which *clears* the dispositions.) The
+same dialog also lets you file the copies into a **location** in one step (pre-filled with the
+last one you used; leave it *as-is* to skip). Copies already sorted, damaged, or not delivered
+keep their delivery status, but a chosen location still applies.
 
 When you file copies into a **location** (moving a lot/issue, or a single copy), the picker
 remembers the last location you used and pre-selects it, so filing copy after copy into the
@@ -293,8 +299,9 @@ condition (and certificate), and each copy's share is **frozen** as its cost-bas
 works even if the shipment has not physically arrived yet.
 
 If any copies are still unsorted (ordered / to sort / in transit), the confirm dialog **warns
-you** and the lot header shows a **N to sort** chip — but you can still close (sorting first is
-just recommended, not required).
+you** — but you can still close (sorting first is just recommended, not required). This warning
+is deliberately wider than the header's **N to sort** chip: a lot whose copies are all still
+*ordered* has not been through the sort pass either.
 
 Closing is **blocked** if any copy lacks a primary-catalog price for its condition — there is
 no weight to split the pool by. The screen highlights the copies that need a price and shows

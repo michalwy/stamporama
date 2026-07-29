@@ -397,6 +397,9 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
   if (formData.has("forSale")) changes.forSale = str(formData, "forSale") === "true";
   if (formData.has("forTrade")) changes.forTrade = str(formData, "forTrade") === "true";
   if (str(formData, "markSorted") === "true") changes.markSorted = true;
+  // The disposition's own "leave as is" (#274): no flag fields are sent, and the mark-sorted
+  // default of `inCollection` is suppressed.
+  if (str(formData, "keepDisposition") === "true") changes.keepDisposition = true;
   return changes;
 }
 

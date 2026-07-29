@@ -784,6 +784,8 @@ interface BulkChanges {
   forSale?: boolean;
   forTrade?: boolean;
   markSorted?: boolean;
+  /** Mark-sorted only (#274): leave each copy's disposition untouched instead of writing one. */
+  keepDisposition?: boolean;
 }
 
 /** A server-resolved bulk scope (#172): a whole lot, an issue group within a lot, or an issue
@@ -815,6 +817,7 @@ function appendBulkChanges(fd: FormData, changes: BulkChanges): void {
   if (changes.forSale !== undefined) fd.set("forSale", String(changes.forSale));
   if (changes.forTrade !== undefined) fd.set("forTrade", String(changes.forTrade));
   if (changes.markSorted) fd.set("markSorted", "true");
+  if (changes.keepDisposition) fd.set("keepDisposition", "true");
 }
 
 /** Shared copy-editing machinery (#121) used by both the by-lot cards and the order-level
@@ -1088,10 +1091,12 @@ function useCopyEditing(ctx: {
               setCopyError(undefined);
             }
           }}
-          onConfirm={({ locationId, ...flags }) =>
+          onConfirm={({ disposition, locationId }) =>
             applyBulk(bulkSort, {
               markSorted: true,
-              ...flags,
+              // A null disposition is the dialog's "leave as is" (#274): send no flags and
+              // suppress the server's `inCollection` default.
+              ...(disposition ?? { keepDisposition: true }),
               ...(locationId ? { locationId } : {}),
             })
           }
@@ -1491,8 +1496,11 @@ function LotCard({
   const summaryQuery = useLotSummary(collectionId, lot.id);
   const summary = summaryQuery.data;
   const totalCount = summary?.totalCount ?? lot.itemCount;
-  // Copies still awaiting the sort pass (ordered / to sort / in transit) — surfaced on the lot
-  // header and used to warn before closing (#121).
+  // Copies actually in the `to sort` state — the header chip and its filter (#375). Copies still
+  // `ordered` or `in transit` have not arrived, so nothing about them is waiting on the collector.
+  const toSortCount = summary?.toSortCount ?? 0;
+  // The wider "not yet through the sort pass" count (ordered / to sort / in transit), used only
+  // to warn before closing (#121) — closing a lot whose copies are still ordered is worth a word.
   const unsortedCount = summary?.unsortedCount ?? 0;
   // A copy blocks a close when it stays in the allocation but has no usable catalog weight.
   const blockingCount = summary?.blockingCount ?? 0;
@@ -1665,12 +1673,12 @@ function LotCard({
         <span style={CHIP}>
           {totalCount} cop{totalCount === 1 ? "y" : "ies"}
         </span>
-        {unsortedCount > 0 && open && (
+        {toSortCount > 0 && open && (
           <Tooltip
             content={
               filterMode === "to-sort"
                 ? "Showing only copies still to sort — click to show all"
-                : "Copies still awaiting sorting — click to show only them"
+                : "Copies that have arrived and still await sorting — click to show only them"
             }
           >
             <button
@@ -1685,7 +1693,7 @@ function LotCard({
                 boxShadow: filterMode === "to-sort" ? "0 0 0 1px var(--color-warning)" : undefined,
               }}
             >
-              {unsortedCount} to sort
+              {toSortCount} to sort
             </button>
           </Tooltip>
         )}
@@ -2451,7 +2459,13 @@ function LocationPickerDialog({
  * applied to the sorted copies (rather than defaulting to in-collection) and, optionally, a
  * location to file them into in the same step — pre-filled with the last location used, like
  * the standalone move picker (#121). Only not-yet-sorted copies are transitioned to
- * `delivered`; the location applies to every selected copy. */
+ * `delivered`; the location applies to every selected copy.
+ *
+ * The disposition has its own **Leave as is** (#274), mirroring the location's: some copies
+ * were already filed one by one during the sort pass, and a blanket value would overwrite
+ * exactly the decisions that took the longest to make. It is deliberately distinct from
+ * turning all three chips off, which *clears* the dispositions — that is why it is a chip of
+ * its own and not an empty selection, which the collector cannot tell apart from "none". */
 function MarkSortedDialog({
   count,
   locations,
@@ -2468,13 +2482,15 @@ function MarkSortedDialog({
   error?: string;
   onClose: () => void;
   onConfirm: (result: {
-    inCollection: boolean;
-    forSale: boolean;
-    forTrade: boolean;
+    /** The disposition to write, or null for "leave each copy's own untouched" (#274). */
+    disposition: { inCollection: boolean; forSale: boolean; forTrade: boolean } | null;
     locationId: string;
   }) => void;
 }) {
   const [flags, setFlags] = useState({ inCollection: true, forSale: false, forTrade: false });
+  // "Leave as is" is a mode over the three chips, not a fourth flag: the chips keep whatever
+  // they were set to, so stepping in and back out of it does not lose the choice made first.
+  const [keepDisposition, setKeepDisposition] = useState(false);
   const [locationId, setLocationId] = useState(() => {
     const last = readLast(LS_LAST_LOCATION, collectionId);
     return locations.some((l) => l.id === last && l.assignable) ? last : "";
@@ -2487,26 +2503,64 @@ function MarkSortedDialog({
         onSubmit={(e) => {
           e.preventDefault();
           if (locationId) writeLast(LS_LAST_LOCATION, collectionId, locationId);
-          onConfirm({ ...flags, locationId });
+          onConfirm({ disposition: keepDisposition ? null : flags, locationId });
         }}
       >
         <DialogBody>
           <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-            Marks {count} cop{count === 1 ? "y" : "ies"} as <strong>delivered</strong> and files
-            {count === 1 ? " it" : " them"} with the disposition below. Copies already sorted,
-            damaged, or not delivered keep their delivery status (the location still applies).
+            Marks {count} cop{count === 1 ? "y" : "ies"} as <strong>delivered</strong>
+            {keepDisposition ? (
+              <>
+                , leaving {count === 1 ? "its" : "each copy’s"} own disposition untouched.
+              </>
+            ) : (
+              <>
+                {" "}
+                and files{count === 1 ? " it" : " them"} with the disposition below.
+              </>
+            )}{" "}
+            Copies already sorted, damaged, or not delivered keep their delivery status (the
+            location still applies).
           </p>
           <LabelWithError htmlFor="mark-sorted-disposition">Disposition</LabelWithError>
           <div id="mark-sorted-disposition" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <Tooltip content="Keep whatever disposition each copy already carries — only the delivery status (and location) change">
+              <button
+                type="button"
+                aria-pressed={keepDisposition}
+                disabled={isPending}
+                onClick={() => setKeepDisposition(true)}
+                style={{
+                  ...CHIP,
+                  cursor: isPending ? "not-allowed" : "pointer",
+                  fontWeight: keepDisposition ? 600 : 500,
+                  color: keepDisposition ? "var(--color-accent)" : "var(--color-text-secondary)",
+                  borderColor: keepDisposition ? "var(--color-accent)" : "var(--color-border)",
+                  background: keepDisposition ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                }}
+              >
+                {keepDisposition ? "✓ " : ""}
+                Leave as is
+              </button>
+            </Tooltip>
+            {/* The three flags are one selection against "Leave as is": picking any of them
+                leaves that mode, and turning them all off *clears* the dispositions. */}
             {DISPOSITION_FLAGS.map((d) => {
-              const on = flags[d.key];
+              const on = !keepDisposition && flags[d.key];
               return (
                 <button
                   key={d.key}
                   type="button"
                   aria-pressed={on}
                   disabled={isPending}
-                  onClick={() => setFlags((f) => ({ ...f, [d.key]: !f[d.key] }))}
+                  onClick={() => {
+                    if (keepDisposition) {
+                      setKeepDisposition(false);
+                      setFlags((f) => (f[d.key] ? f : { ...f, [d.key]: true }));
+                      return;
+                    }
+                    setFlags((f) => ({ ...f, [d.key]: !f[d.key] }));
+                  }}
                   style={{
                     ...CHIP,
                     cursor: isPending ? "not-allowed" : "pointer",
@@ -2514,6 +2568,7 @@ function MarkSortedDialog({
                     color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
                     borderColor: on ? "var(--color-accent)" : "var(--color-border)",
                     background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                    opacity: keepDisposition ? 0.6 : 1,
                   }}
                 >
                   {on ? "✓ " : "+ "}
