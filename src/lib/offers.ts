@@ -6,7 +6,6 @@ import {
   getHoldingsValuationByGroup,
   getHoldingsValuationForItems,
   listItemsPaginated,
-  valuateItemsByIds,
   type ItemListItem,
 } from "./items";
 import type { HoldingsSummary } from "./valuation";
@@ -28,7 +27,12 @@ import {
   hasPrice,
   CLOSED_OFFER_STATES,
 } from "./offer-rules";
-import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
+import {
+  makeOfferLabeller,
+  STAMP_LABEL_SELECT,
+  type LabelSetItemRow,
+  type OfferLabeller,
+} from "./offer-labels";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import {
   compareSetItems,
@@ -291,22 +295,6 @@ async function resolvePlatformCurrency(
 
 // ── Labels ────────────────────────────────────────────────────────────────
 
-/** Short copy label from a stamp select — primary catalog number, else name. */
-function copyLabel(stamp: { name: string | null; catalogNumbers: { number: string }[] }): string {
-  return stamp.catalogNumbers[0]?.number ?? stamp.name ?? "Copy";
-}
-
-const STAMP_LABEL_SELECT = {
-  stamp: {
-    select: {
-      name: true,
-      catalogNumbers: { select: { number: true }, take: 1 },
-      // The denormalized catalog sort key (ADR-0014) a set's derived copy order falls back to (#306).
-      primaryCatalogSortKey: true,
-    },
-  },
-} as const;
-
 /** Sets in their explicit order (#306); `id` keeps the result stable across equal positions. */
 const OFFER_SETS_ORDER_BY: Prisma.OfferSetOrderByWithRelationInput[] = [
   { sortOrder: "asc" },
@@ -320,11 +308,7 @@ const OFFER_SETS_SELECT = {
   saleLines: { select: { id: true }, take: 1 },
 } as const;
 
-type OfferSetItemRow = {
-  itemId: string;
-  sortOrder: number | null;
-  item: { stamp: { name: string | null; catalogNumbers: { number: string }[]; primaryCatalogSortKey: number | null } };
-};
+type OfferSetItemRow = LabelSetItemRow;
 
 type OfferSetRow = {
   id: string;
@@ -364,14 +348,6 @@ function orderedItems<T extends { itemId: string; sortOrder: number | null; item
       { itemId: b.itemId, sortOrder: b.sortOrder, catalogSortKey: b.item.stamp.primaryCatalogSortKey }
     )
   );
-}
-
-function setLabel(set: OfferSetRow): string {
-  return deriveSetLabel(set.title, orderedItems(set.items).map((li) => copyLabel(li.item.stamp)));
-}
-
-function offerLabel(sets: OfferSetRow[]): string {
-  return deriveOfferLabel(sets.map(setLabel));
 }
 
 // ── Title generation (#210) ──────────────────────────────────────────────────
@@ -710,6 +686,7 @@ export async function findOfferCollisions(
     },
   });
 
+  const labeller = await makeOfferLabeller(collectionId);
   const collisions: OfferCollision[] = [];
   for (const offer of offers) {
     const items = new Set(offer.sets.flatMap((s) => s.items.map((li) => li.itemId)));
@@ -717,7 +694,7 @@ export async function findOfferCollisions(
     if (shared > 0) {
       collisions.push({
         offerId: offer.id,
-        offerLabel: offerLabel(offer.sets),
+        offerLabel: labeller.offer(offer.sets),
         platformName: offer.platform.name,
         sharedCount: shared,
       });
@@ -791,11 +768,16 @@ type OfferRow = {
   sets: OfferSetRow[];
 };
 
-function toListItem(row: OfferRow, baseCurrency: string, soldCopyCount = 0): OfferListItem {
+function toListItem(
+  row: OfferRow,
+  baseCurrency: string,
+  labeller: OfferLabeller,
+  soldCopyCount = 0
+): OfferListItem {
   return {
     id: row.id,
     name: row.name,
-    label: offerLabel(row.sets),
+    label: labeller.offer(row.sets),
     platformId: row.platformId,
     platformName: row.platform.name,
     url: row.url,
@@ -849,11 +831,14 @@ async function withNeedsAction(
   collectionId: string,
   baseCurrency: string
 ): Promise<OfferListItem[]> {
-  const counts = await needsActionCounts(
-    collectionId,
-    rows.filter((r) => r.state === "active").map((r) => r.id)
-  );
-  const items = rows.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
+  const [counts, labeller] = await Promise.all([
+    needsActionCounts(
+      collectionId,
+      rows.filter((r) => r.state === "active").map((r) => r.id)
+    ),
+    makeOfferLabeller(collectionId),
+  ]);
+  const items = rows.map((r) => toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0));
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
 }
@@ -923,7 +908,8 @@ export async function listOffersPaginated(
     });
     const hasMore = rows.length > pageSize;
     const page = hasMore ? rows.slice(0, pageSize) : rows;
-    const items = page.map((r) => toListItem(r, baseCurrency, counts.get(r.id) ?? 0));
+    const labeller = await makeOfferLabeller(collectionId);
+    const items = page.map((r) => toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0));
     await attachBasePrices(collectionId, baseCurrency, items);
     return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
   }
@@ -1236,9 +1222,9 @@ const LISTING_SETS_SELECT = {
         select: {
           stamp: {
             select: {
+              // The label select already carries the area links the grouping needs (#379).
               ...STAMP_LABEL_SELECT.stamp.select,
               issuedYear: true,
-              stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
             },
           },
         },
@@ -1307,10 +1293,11 @@ export async function listReadyOffersForListing(
     },
   });
 
+  const labeller = await makeOfferLabeller(collectionId);
   const items: ListingWorkspaceOffer[] = rows.map((row) => ({
     id: row.id,
     name: row.name,
-    label: offerLabel(row.sets),
+    label: labeller.offer(row.sets),
     price: row.price.toFixed(2),
     currency: row.currency,
     baseCurrency,
@@ -1383,10 +1370,57 @@ export interface OfferDetailSet {
   /** The copy order was hand-corrected rather than derived from catalog order (#306). Drives the
    * "Reset to catalog order" action. */
   manualCopyOrder: boolean;
+  /** What this set is worth and what it cost (#378): the catalogue value of its copies and their
+   * frozen purchase cost, the same holdings pair the summary bars carry (#134/#179) — so the asking
+   * price can be judged per set, which is what a buyer actually takes. Both are base-currency
+   * figures: a catalog value is valued in base, and a cost basis is frozen there. */
+  holdings: HoldingsSummary;
+  /** The same two figures **in the offer's own currency**, converted at the current rate — the
+   * currency the asking price is stated in, so the comparison needs no arithmetic in the reader's
+   * head. Null when the offer already prices in the base currency (there is nothing to add) or no
+   * rate is known; each amount is null when its own figure has nothing to convert. */
+  holdingsInOfferCurrency: {
+    currency: string;
+    catalogAmount: string | null;
+    costAmount: string | null;
+  } | null;
   /** This set has left on a sale (sold through this offer). */
   sold: boolean;
   /** A copy of this set has sold **elsewhere** — the set is stale and should be removed. */
   needsAction: boolean;
+}
+
+/**
+ * The offer's sets **taken together** (#378): what the whole listing is worth and what it cost, and
+ * the same two figures per set. Both questions are asked at once because they answer different
+ * things — the total is what leaves the shelf if everything sells, the average is what one buyer
+ * takes, which is the figure an asking price is set against (and is exactly how `suggestedPrice`
+ * is derived, #190).
+ *
+ * An average divides by the sets that **had** a figure, not by every set: an unpriced set is a gap
+ * in the data, and letting it drag the average down would report a listing as cheaper than anything
+ * in it actually is. The divisors are carried so the screen can say what was counted.
+ *
+ * Every amount is a base-currency 2-dp string, null when nothing under it is priced / costed;
+ * `inOfferCurrency` repeats them in the offer's own currency exactly as a set's own figures do.
+ */
+export interface OfferSetsTotals {
+  setCount: number;
+  catalogTotal: string | null;
+  catalogAverage: string | null;
+  /** Sets carrying a catalogue value — the catalogue average's divisor. */
+  catalogValuedSets: number;
+  costTotal: string | null;
+  costAverage: string | null;
+  /** Sets carrying a cost basis — the cost average's divisor. */
+  costKnownSets: number;
+  inOfferCurrency: {
+    currency: string;
+    catalogTotal: string | null;
+    catalogAverage: string | null;
+    costTotal: string | null;
+    costAverage: string | null;
+  } | null;
 }
 
 export interface OfferDetail {
@@ -1407,6 +1441,10 @@ export interface OfferDetail {
   /** Which generated texts the platform actually has a template for (#266/#267) — each field's
    * ↻ Regenerate control enables itself on this. */
   regeneratable: Record<OfferTextField, boolean>;
+  /** Which of them the collector has written by hand (#380). Such a field no longer follows the
+   * offer's composition, which the screen says beside it — otherwise "why didn't my title update?"
+   * has no visible answer. */
+  edited: Record<OfferTextField, boolean>;
   platformId: string;
   platformName: string;
   /** The platform's listing language (#293), or null when it lists in the collection's default
@@ -1432,6 +1470,8 @@ export interface OfferDetail {
   /** Sets with no computable catalog value (excluded from the average). */
   suggestedUnpricedSets: number;
   sets: OfferDetailSet[];
+  /** The sets summed and averaged (#378) — see {@link OfferSetsTotals}. */
+  setsTotals: OfferSetsTotals;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
   /** This listing's own photo configuration (#308) — sides, tile label template and the collage
@@ -1453,6 +1493,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       name: true,
       description: true,
       privateNote: true,
+      nameEdited: true,
+      descriptionEdited: true,
+      privateNoteEdited: true,
       descriptionFormat: true,
       collectionId: true,
       platformId: true,
@@ -1524,8 +1567,34 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       : [];
   const biddingElsewhere = new Set(biddingRows.map((r) => r.itemId));
 
+  // Per-set catalogue value + purchase cost (#378), and the labels (#379), both resolved once for
+  // the whole offer. The holdings pair is the same one the summary bars show (#134/#179), read
+  // through `getHoldingsValuationByGroup` so every copy is fetched and valued **once** even though
+  // the sets are asked about one by one.
+  const [labeller, holdingsBySet] = await Promise.all([
+    makeOfferLabeller(offer.collectionId),
+    getHoldingsValuationByGroup(
+      offer.collectionId,
+      offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
+    ),
+  ]);
+
+  // The base → offer-currency rate, fetched **once** for the whole screen: every set's two figures
+  // and the suggested asking price are all converted with it. Null when the offer already prices in
+  // the base currency, or when no rate is available (the figures then stay base-only rather than
+  // being quietly wrong).
+  let baseToOffer: number | null = null;
+  if (offer.currency !== baseCurrency) {
+    try {
+      baseToOffer = (await getOrFetchRate(offer.collectionId, baseCurrency, offer.currency)).rate;
+    } catch {
+      baseToOffer = null;
+    }
+  }
+
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
     const items = orderedItems(s.items);
+    const holdings = holdingsBySet.get(s.id)!;
     const sold = s.saleLines.length > 0;
     const needs =
       state === "active" &&
@@ -1538,45 +1607,86 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     return {
       id: s.id,
       title: s.title,
-      label: setLabel(s),
+      label: labeller.set(s),
       itemIds: items.map((li) => li.itemId),
-      copyLabels: items.map((li) => copyLabel(li.item.stamp)),
+      copyLabels: items.map((li) => labeller.copy(li.item.stamp)),
       manualCopyOrder: hasManualItemOrder(s.items),
+      holdings,
+      holdingsInOfferCurrency:
+        baseToOffer === null
+          ? null
+          : {
+              currency: offer.currency,
+              catalogAmount:
+                holdings.pricedCount === 0
+                  ? null
+                  : (Number(holdings.totalBaseAmount) * baseToOffer).toFixed(2),
+              costAmount:
+                holdings.cost.knownCount === 0
+                  ? null
+                  : (Number(holdings.cost.totalCostBasis) * baseToOffer).toFixed(2),
+            },
       sold,
       needsAction: needs,
     };
   });
 
   // Suggested asking price: average base-currency catalog value per set (a buyer takes one set),
-  // converted to the offer's currency at the current rate.
-  const valuations = await valuateItemsByIds(offer.collectionId, allIds);
+  // converted to the offer's currency at the current rate. Summed from the per-set figures above
+  // rather than from a second valuation pass — a set counts as valued when *some* copy of it priced,
+  // which is exactly what `pricedCount` says.
   let sumSetCV = 0;
   let valuedSets = 0;
-  for (const s of offer.sets) {
-    let setTotal = 0;
-    let anyValued = false;
-    for (const li of s.items) {
-      const base = valuations.get(li.itemId)?.baseAmount;
-      if (base != null) {
-        setTotal += base;
-        anyValued = true;
-      }
-    }
-    if (anyValued) {
-      sumSetCV += setTotal;
-      valuedSets++;
-    }
+  for (const s of sets) {
+    if (s.holdings.pricedCount === 0) continue;
+    sumSetCV += Number(s.holdings.totalBaseAmount);
+    valuedSets++;
   }
   let suggestedPrice: string | null = null;
   if (valuedSets > 0) {
     const avgBase = sumSetCV / valuedSets;
-    try {
-      const { rate } = await getOrFetchRate(offer.collectionId, baseCurrency, offer.currency);
-      suggestedPrice = (avgBase * rate).toFixed(2);
-    } catch {
-      suggestedPrice = null; // no rate to the offer currency → no suggestion
-    }
+    // Same rate the per-set figures used — an offer already in base converts 1:1, and a missing rate
+    // leaves no suggestion rather than one in the wrong currency.
+    const rate = offer.currency === baseCurrency ? 1 : baseToOffer;
+    suggestedPrice = rate === null ? null : (avgBase * rate).toFixed(2);
   }
+
+  // The same two figures over the whole listing (#378): summed, and averaged over the sets that
+  // carried one. Summed from the per-set figures rather than re-aggregated, because an offer never
+  // lists a copy twice — the sets partition its copies, so the parts add up to the whole exactly.
+  let sumCost = 0;
+  let costedSets = 0;
+  for (const s of sets) {
+    if (s.holdings.cost.knownCount === 0) continue;
+    sumCost += Number(s.holdings.cost.totalCostBasis);
+    costedSets++;
+  }
+  const money = (n: number | null) => (n === null ? null : n.toFixed(2));
+  const inOffer = (n: number | null) =>
+    n === null || baseToOffer === null ? null : (n * baseToOffer).toFixed(2);
+  const catalogTotalNum = valuedSets > 0 ? sumSetCV : null;
+  const catalogAverageNum = valuedSets > 0 ? sumSetCV / valuedSets : null;
+  const costTotalNum = costedSets > 0 ? sumCost : null;
+  const costAverageNum = costedSets > 0 ? sumCost / costedSets : null;
+  const setsTotals: OfferSetsTotals = {
+    setCount: sets.length,
+    catalogTotal: money(catalogTotalNum),
+    catalogAverage: money(catalogAverageNum),
+    catalogValuedSets: valuedSets,
+    costTotal: money(costTotalNum),
+    costAverage: money(costAverageNum),
+    costKnownSets: costedSets,
+    inOfferCurrency:
+      baseToOffer === null
+        ? null
+        : {
+            currency: offer.currency,
+            catalogTotal: inOffer(catalogTotalNum),
+            catalogAverage: inOffer(catalogAverageNum),
+            costTotal: inOffer(costTotalNum),
+            costAverage: inOffer(costAverageNum),
+          },
+  };
 
   // Asking price converted to base at the current rate (#208). Skipped when already in base or
   // unpriced; a missing rate leaves it null.
@@ -1595,7 +1705,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     id: offer.id,
     collectionId: offer.collectionId,
     name: offer.name,
-    label: offerLabel(offer.sets),
+    label: labeller.offer(offer.sets),
     description: offer.description,
     privateNote: offer.privateNote,
     descriptionFormat: normalizeDescriptionFormat(offer.descriptionFormat),
@@ -1603,6 +1713,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       name: !!offer.platform.titleTemplate?.trim(),
       description: !!offer.platform.descriptionTemplate?.trim(),
       privateNote: !!offer.platform.privateNoteTemplate?.trim(),
+    },
+    edited: {
+      name: offer.nameEdited,
+      description: offer.descriptionEdited,
+      privateNote: offer.privateNoteEdited,
     },
     platformId: offer.platformId,
     platformName: offer.platform.name,
@@ -1618,6 +1733,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,
+    setsTotals,
     listingDate: offer.listingDate,
     photoConfig: {
       photoSides: normalizePhotoSides(offer.photoSides),
@@ -1756,21 +1872,22 @@ export async function listComposeTargets(
     orderBy: { createdAt: "desc" },
     select: OFFER_SELECT,
   });
+  const labeller = await makeOfferLabeller(collectionId);
 
   const offers: ComposeTargetOffer[] = rows
     .map((r) => {
       const sets: ComposeTargetSet[] = r.sets.map((s) => ({
         offerSetId: s.id,
-        label: setLabel(s),
+        label: labeller.set(s),
         itemIds: s.items.map((li) => li.itemId),
-        itemLabels: s.items.map((li) => copyLabel(li.item.stamp)),
+        itemLabels: s.items.map((li) => labeller.copy(li.item.stamp)),
         containsItemIds: s.items.map((li) => li.itemId).filter((id) => adding.has(id)),
       }));
       return {
         offerId: r.id,
         platformId: r.platformId,
         platformName: r.platform.name,
-        label: offerLabel(r.sets),
+        label: labeller.offer(r.sets),
         price: r.price.toFixed(2),
         currency: r.currency,
         state: (isOfferState(r.state) ? r.state : "active") as OfferState,
@@ -2123,9 +2240,18 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.platformId !== undefined ? { platformId: patch.platformId } : {}),
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.description !== undefined ? { description: patch.description } : {}),
-      ...(patch.privateNote !== undefined ? { privateNote: patch.privateNote } : {}),
+      // Writing a generated text by hand takes it off the template (#380): from here on the field is
+      // the collector's, and a composition change re-renders the others around it. **Clearing** it
+      // hands it back — the flag protects written wording, and an emptied field holds none; blanking
+      // the title is how one asks for the derived label again (#209), which follows the composition
+      // by definition. It is the same rule the migration read existing offers by.
+      ...(patch.name !== undefined ? { name: patch.name, nameEdited: patch.name !== null } : {}),
+      ...(patch.description !== undefined
+        ? { description: patch.description, descriptionEdited: patch.description !== null }
+        : {}),
+      ...(patch.privateNote !== undefined
+        ? { privateNote: patch.privateNote, privateNoteEdited: patch.privateNote !== null }
+        : {}),
       ...(patch.descriptionFormat !== undefined
         ? { descriptionFormat: normalizeDescriptionFormat(patch.descriptionFormat) }
         : {}),
@@ -2164,7 +2290,9 @@ export async function updateOfferPhotoConfig(
 
 /** Regenerate **one** of an offer's generated listing texts (#209/#210, #266, #267) — its title,
  * description or private note — from the platform's current template over the offer's present
- * composition, overwriting any manual edit. Returns the new value (null when the platform has no
+ * composition, overwriting any manual edit. That is also how a hand-written field is handed **back**
+ * to the template (#380): the ↻ clears the field's edited flag, so it follows the composition again.
+ * Returns the new value (null when the platform has no
  * template for that field, or the offer lists nothing yet: the title then falls back to the derived
  * label and the longer texts stay empty). Allowed in every state — these are record-keeping, never a
  * live claim.
@@ -2201,40 +2329,88 @@ export async function regenerateOfferText(
     language === undefined ? platform.titleLanguage : language
   );
   const value = texts[field];
-  await prisma.offer.update({ where: { id: offerId }, data: { [field]: value } });
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { [field]: value, [EDITED_FLAG[field]]: false },
+  });
   return value;
 }
 
+/** The `Offer` column recording that a generated text was written by hand (#380). */
+const EDITED_FLAG: Record<OfferTextField, "nameEdited" | "descriptionEdited" | "privateNoteEdited"> = {
+  name: "nameEdited",
+  description: "descriptionEdited",
+  privateNote: "privateNoteEdited",
+};
+
 /**
- * Generate the offer's listing title now that it lists something (#365), but **only** while it has
- * none — an offer created empty (the quick-start create, or a create-then-compose) rendered its
- * title over no copies at all, so nothing was written and the field stayed null forever. The
- * detail screen papers over that with the derived label, but the label is not the title: the copy
- * control and the bulk listing workspace hand the platform what is *stored*, and that was empty.
+ * Bring the offer's generated listing texts back in step with what it actually lists (#380).
  *
- * Called after every mutation that adds copies to an offer, so composing one is the moment its
- * title appears. A title that already exists — generated at creation or typed by the collector —
- * is never touched: growing a listing does not rewrite its wording, and the ↻ on the detail screen
- * is how a title is deliberately brought up to date (#209). Likewise a platform with no title
- * template still writes nothing, leaving the derived label to stand in.
+ * Called after **every** mutation that changes what {@link offerComposition} returns — a set added or
+ * removed, copies added to one, a set renamed, either order rearranged. Each field is re-rendered
+ * from the platform's template, and written only when:
+ *
+ * - the collector has **not** written that field themselves (`*Edited`, set by {@link patchOffer} and
+ *   cleared by {@link regenerateOfferText}). A hand-written listing is the author's, and a listing
+ *   growing by one copy is no reason to throw their wording away; and
+ * - the platform actually configures a template for it. A template since cleared leaves the last
+ *   generated text standing rather than emptying a live listing's description as a side effect of a
+ *   settings change elsewhere.
+ *
+ * Terminal offers are left alone entirely: what a sold listing said is history.
+ *
+ * This subsumes the old title backfill (#365): an offer created empty rendered its title over no
+ * copies at all, so nothing was written — composing it now writes the title, for the same reason it
+ * refreshes it later.
  */
-async function backfillOfferTitle(ownerId: string, offerId: string): Promise<void> {
+async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
-    select: { name: true, collectionId: true, platformId: true },
+    select: {
+      collectionId: true,
+      platformId: true,
+      state: true,
+      nameEdited: true,
+      descriptionEdited: true,
+      privateNoteEdited: true,
+    },
   });
-  if (!offer || offer.name !== null) return;
-  const { titleTemplate, titleLanguage } = await assertPlatform(offer.collectionId, offer.platformId);
-  if (!titleTemplate?.trim()) return;
+  if (!offer) return;
+  // A sold or withdrawn listing is a *record* of what was listed, so nothing rewrites its wording
+  // behind the collector's back — ↻ Regenerate still works there, deliberately, because that is an
+  // explicit act. (The only composition change a terminal offer allows is removing a set.)
+  if (isOfferState(offer.state) && isTerminalState(offer.state)) return;
+  const platform = await assertPlatform(offer.collectionId, offer.platformId);
+  // Only the fields still following the template are rendered at all — the generator is handed
+  // nothing for the others, so an edited field costs neither a render nor a write.
+  const templates: PlatformTemplates = {
+    titleTemplate: offer.nameEdited ? null : platform.titleTemplate,
+    descriptionTemplate: offer.descriptionEdited ? null : platform.descriptionTemplate,
+    privateNoteTemplate: offer.privateNoteEdited ? null : platform.privateNoteTemplate,
+    titleLanguage: platform.titleLanguage,
+  };
+  if (!templates.titleTemplate?.trim() && !templates.descriptionTemplate?.trim() && !templates.privateNoteTemplate?.trim()) {
+    return;
+  }
   const composition = await offerComposition(offerId);
-  const { name } = await generateListingTexts(
+  const texts = await generateListingTexts(
     ownerId,
     offer.collectionId,
     composition,
-    { titleTemplate, descriptionTemplate: null, privateNoteTemplate: null, titleLanguage },
-    titleLanguage
+    templates,
+    platform.titleLanguage
   );
-  if (name) await prisma.offer.update({ where: { id: offerId }, data: { name } });
+  // A field whose template rendered nothing at all (an empty offer, every token blank) keeps what it
+  // has: the derived label already stands in for a missing title, and blanking a description because
+  // one render came out empty would lose more than it fixed.
+  const data = Object.fromEntries(
+    (Object.keys(texts) as OfferTextField[])
+      .filter((field) => texts[field] !== null)
+      .map((field) => [field, texts[field]])
+  );
+  if (Object.keys(data).length > 0) {
+    await prisma.offer.update({ where: { id: offerId }, data });
+  }
 }
 
 /** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
@@ -2400,8 +2576,9 @@ export async function addOfferSet(
     },
     select: { id: true },
   });
-  // The offer now lists something — give it the title it could not be generated with (#365).
-  await backfillOfferTitle(ownerId, offerId);
+  // The composition changed — re-render the texts still following the platform's templates (#380),
+  // which is also what gives an offer created empty the title it could not be generated with (#365).
+  await syncGeneratedTexts(ownerId, offerId);
   return set.id;
 }
 
@@ -2445,7 +2622,7 @@ export async function addOfferSetsPerCopy(
       ids.push(set.id);
     }
   });
-  await backfillOfferTitle(ownerId, offerId); // #365, as in addOfferSet
+  await syncGeneratedTexts(ownerId, offerId); // #380/#365, as in addOfferSet
   return ids;
 }
 
@@ -2487,7 +2664,7 @@ export async function addItemsToOfferSet(
       })
     )
   );
-  await backfillOfferTitle(ownerId, ref.offerId); // #365, as in addOfferSet
+  await syncGeneratedTexts(ownerId, ref.offerId); // #380/#365, as in addOfferSet
   return addable.length;
 }
 
@@ -2514,6 +2691,9 @@ export async function reorderOfferSets(
       prisma.offerSet.update({ where: { id }, data: { sortOrder: index } })
     )
   );
+  // Order is part of the composition the texts are rendered over (#380) — a description enumerating
+  // the listing lists it in this order.
+  await syncGeneratedTexts(ownerId, offerId);
 }
 
 /** Reorder the copies inside one set (#306), hand-correcting it away from derived catalog order.
@@ -2545,6 +2725,7 @@ export async function reorderOfferSetItems(
       })
     )
   );
+  await syncGeneratedTexts(ownerId, ref.offerId); // #380, as in reorderOfferSets
 }
 
 /** Drop a set's hand-corrected copy order (#306): every position back to null, so the set derives
@@ -2555,6 +2736,7 @@ export async function resetOfferSetItemOrder(ownerId: string, setId: string): Pr
     throw new OfferActionBlockedError("terminal", `A ${ref.offerState} offer is read-only.`);
   }
   await prisma.offerSetItem.updateMany({ where: { offerSetId: setId }, data: { sortOrder: null } });
+  await syncGeneratedTexts(ownerId, ref.offerId); // #380, as in reorderOfferSets
 }
 
 /** Guard for the reorder mutations: `next` must contain exactly the ids in `current`, once each. */
@@ -2570,15 +2752,18 @@ function assertPermutation(current: string[], next: string[], message: string): 
 
 /** Rename a set (its label falls back to its copies when blank). */
 export async function updateOfferSet(ownerId: string, setId: string, title: string | null): Promise<void> {
-  await assertOfferSetOwner(ownerId, setId);
+  const ref = await assertOfferSetOwner(ownerId, setId);
   await prisma.offerSet.update({ where: { id: setId }, data: { title: title?.trim() || null } });
+  // A set's title is what `{setTitle}` renders (#266), so it is composition as far as the texts are
+  // concerned (#380).
+  await syncGeneratedTexts(ownerId, ref.offerId);
 }
 
 /** Remove a set from its offer (its copies stay in inventory). This is the coordination action —
  * removing a set whose copy sold elsewhere decrements the listing. Blocked once the set itself has
  * sold (`sale_line.offerSetId` is `Restrict`). */
 export async function removeOfferSet(ownerId: string, setId: string): Promise<void> {
-  await assertOfferSetOwner(ownerId, setId);
+  const ref = await assertOfferSetOwner(ownerId, setId);
   const soldLines = await prisma.saleLine.count({ where: { offerSetId: setId } });
   if (soldLines > 0) {
     throw new OfferActionBlockedError(
@@ -2587,4 +2772,6 @@ export async function removeOfferSet(ownerId: string, setId: string): Promise<vo
     );
   }
   await prisma.offerSet.delete({ where: { id: setId } });
+  // The listing lists one set fewer — the texts still following the template say so (#380).
+  await syncGeneratedTexts(ownerId, ref.offerId);
 }

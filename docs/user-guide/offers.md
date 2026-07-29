@@ -21,6 +21,35 @@ together and never split apart**:
 There is no "unit vs quantity" choice to make — every offer is simply "a listing with one or more
 sets". A plain single-stamp offer is just the one-set case.
 
+### How a set is named
+
+A set you have not titled yourself is named after what it holds: the catalog numbers of its copies,
+under the catalogue that leads in their area and **collapsed into ranges** — `Mi·RU-NW 15-19` rather
+than `15 + 16 + 17 + 18 + 19`. Two catalogues in one set are kept apart (`Mi·RU-NW 15-16 / Fi·PL 3`),
+so the name always says *which* catalogue it is quoting. A set of stamps no catalogue numbered reads
+as their names instead. Rename any set from its card whenever the derived name is not what you want —
+and clearing that name gives the derived one back.
+
+### What a set is worth
+
+Each set's card shows, at the **right edge of its header**, the **catalog value** of its copies and
+what they **cost** you — the same pair as the [summary bar](#the-summary-bar), per set, because a set
+is what a buyer actually takes and therefore what the asking price is judged against. Where the offer
+prices in another currency, each figure is given twice, exactly as the asking price above it is: the
+**offer's own currency first**, since that is what you are working in, with your base currency behind
+`≈` beside it.
+
+A figure reads `—` when nothing under it is priced or costed, and a `~` marks a total that leans on
+an unknown-variant guess. Hover either one for the breakdown: how many copies are priced, unpriced,
+not convertible to your base currency, or still waiting on an open purchase lot to close.
+
+In the Sets header band — the strip holding the heading, the grouping and sorting controls, and the
+**Add set** / **Collapse all** buttons — the same two figures are given for the **whole listing**:
+the **total** across every set, and the **per set** average beside it. The total is what leaves the shelf if everything
+sells; the average is what one buyer takes, and is the same figure the suggested asking price is
+built from. An average divides only by the sets that actually carry a figure — an unpriced set is a
+gap in your data, not a set worth nothing — and the hover says how many of your sets were counted.
+
 ## Creating and composing an offer
 
 1. Click **New offer** and choose the **platform** — it comes pre-filled with the platform the list
@@ -179,9 +208,10 @@ The title is yours to change:
   falls back to the derived label. The title stays editable in every state, including sold and
   withdrawn, so you can keep the record straight.
 - **Regenerate it** — the header's **⋮** menu has **Regenerate title**, which rebuilds it from the
-  platform's current template over whatever the offer lists now. Use it after adding or removing
-  copies, or after changing the platform's template. Regenerating overwrites a title you edited by
-  hand.
+  platform's current template over whatever the offer lists now. Use it after changing the platform's
+  template, or to bring a title you edited by hand back under the template (see
+  [Generated texts follow the composition](#generated-texts-follow-the-composition)). Regenerating
+  overwrites a title you edited by hand.
 - **Regenerate it in another language** — once your platforms list in more than one
   [language](contacts.md#adding-and-editing), the same menu also offers **Regenerate title in …** for
   each of the others, and the same for the description and private note where the platform has a
@@ -215,8 +245,25 @@ Each field carries its own three controls:
   offer lists now, overwriting what is there — a hand-written title is never touched by regenerating
   the description. It is greyed out when the platform has no template for that field.
 
-Because the templates can repeat a block per set, regenerating after you add or remove a set is what
-keeps an item-by-item description in step with the listing.
+### Generated texts follow the composition
+
+The title, description and private note are **kept in step with what the offer lists**. Add a set,
+remove one, add copies to one, rename a set or reorder any of it, and every one of those texts is
+re-generated from the platform's template — so a title that says one stamp can never sit above a
+listing holding two.
+
+That stops the moment you write a field yourself. A field you edit is marked **edited** beside its
+label, and from then on it is yours: composition changes leave it exactly as written, while the
+fields beside it carry on updating. Two things hand a field back to the template:
+
+- **↻ Regenerate** on that field (or **Regenerate title** in the header's ⋮ menu) — it rewrites the
+  field *and* re-subscribes it, so it follows the composition again;
+- **clearing** the field — an empty field has no wording to protect, so it starts filling itself in
+  again from the next change onwards.
+
+A field the platform has no template for is never touched either way, and a text that was already
+written when this behaviour arrived is treated as hand-written: press ↻ once on any field you would
+rather have kept up to date automatically.
 
 ### Description format
 

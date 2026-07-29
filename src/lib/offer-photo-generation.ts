@@ -9,8 +9,7 @@ import {
   variantKey,
   type PhotoVariant,
 } from "./storage";
-import { deriveSetLabel } from "./offer-set-rules";
-import { sortSetItems } from "./offer-set-order";
+import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { isOfferState, isTerminalState } from "./offer-rules";
 import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
@@ -463,12 +462,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
               item: {
                 select: {
                   stamp: {
-                    select: {
-                      primaryCatalogSortKey: true,
-                      // Labels are for the panel only; they never reach the plan or the fingerprint.
-                      name: true,
-                      catalogNumbers: { select: { number: true }, take: 1 },
-                    },
+                    // Labels are for the panel only; they never reach the plan or the fingerprint.
+                    select: STAMP_LABEL_SELECT.stamp.select,
                   },
                   photos: {
                     where: { role: { in: SIDE_ROLES } },
@@ -510,16 +505,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   if (!offer) return null;
 
   const sourceById = new Map<string, SourcePhoto>();
+  // The offer's own label vocabulary (#379), so the photo card names a set exactly as the sets card
+  // above it does. Labels are display-only here — no stored image goes out of date over one.
+  const labeller = await makeOfferLabeller(offer.collectionId);
   const labels: PlanLabels = { copies: new Map(), sets: new Map() };
   const allSets: PlanSet[] = offer.sets.map((set) => ({
     id: set.id,
     sortOrder: set.sortOrder,
     items: set.items.map((li): PlanCopy => {
       const bySide = new Map(li.item.photos.map((p) => [p.role, p]));
-      labels.copies.set(
-        li.itemId,
-        li.item.stamp.catalogNumbers[0]?.number ?? li.item.stamp.name ?? "Copy"
-      );
+      labels.copies.set(li.itemId, labeller.copy(li.item.stamp));
       for (const photo of li.item.photos) {
         sourceById.set(photo.id, photo);
       }
@@ -535,14 +530,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
 
   // Labels cover **every** set, excluded ones included: a stored image rendered from a set that has
   // since sold still has to be able to name it (#315), exactly as it names a set since removed.
-  for (const [index, set] of offer.sets.entries()) {
-    labels.sets.set(
-      set.id,
-      deriveSetLabel(
-        set.title,
-        sortSetItems(allSets[index].items).map((c) => labels.copies.get(c.itemId) ?? "Copy")
-      )
-    );
+  for (const set of offer.sets) {
+    labels.sets.set(set.id, labeller.set(set));
   }
 
   // Sets that have gone leave the plan's inputs here (#315) — the engine, the fingerprint and the

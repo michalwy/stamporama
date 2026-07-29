@@ -19,7 +19,7 @@ import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
-import { OfferListingText } from "./offer-listing-text";
+import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
@@ -327,6 +327,7 @@ export function OfferDetailPanel({
           {/* Copy the title as it will be pasted into the platform's form (#327). It copies what is
               actually stored, so an offer still on its derived label has nothing to hand over and
               the button says so rather than copying a label the platform never sees. */}
+          {offer.edited.name && <EditedChip what="title" />}
           <CopyButton value={offer.name} label="listing title" />
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -528,33 +529,37 @@ export function OfferDetailPanel({
         platformName={offer.platformName}
       />
 
-      {/* Sets */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Sets{offer.sets.length > 0 ? ` (${offer.sets.length})` : ""}
-        </h3>
-        {editable && (
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => setComposing(true)}
-            style={{
-              ...BTN,
-              color: "#fff",
-              fontWeight: 600,
-              background: "var(--color-action-primary)",
-              border: "none",
-            }}
-          >
-            Add set
-          </button>
-        )}
-      </div>
-
+      {/* Sets. The heading and Add set are handed to the view, which lays them out in one band with
+          its own controls and the listing's figures (#378) — two separately-rendered rows aligned to
+          nothing in particular and left the section's vertical rhythm broken. */}
       <OfferSetsView
         collectionId={collectionId}
         offerId={offerId}
         sets={offer.sets}
+        setsTotals={offer.setsTotals}
+        heading={
+          <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Sets{offer.sets.length > 0 ? ` (${offer.sets.length})` : ""}
+          </h3>
+        }
+        primaryAction={
+          editable ? (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setComposing(true)}
+              style={{
+                ...BTN,
+                color: "#fff",
+                fontWeight: 600,
+                background: "var(--color-action-primary)",
+                border: "none",
+              }}
+            >
+              Add set
+            </button>
+          ) : undefined
+        }
         copies={copies}
         isLoading={copiesLoading}
         editable={editable}

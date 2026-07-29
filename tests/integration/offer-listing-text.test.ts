@@ -201,12 +201,13 @@ describe("offer description + private note (#266, #267)", () => {
 
     await addOfferSet(userId, offerId, [mercuryId]);
     assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12 Mercury");
-    // Only the missing title is filled in — the longer texts stay the collector's to generate.
-    assert.equal((await getOfferDetail(userId, offerId))?.description, null);
+    // Every text the platform has a template for is written, not just the title (#380).
+    assert.match((await getOfferDetail(userId, offerId))?.description ?? "", /Mi 12 Mercury/);
 
-    // Growing the listing afterwards does not rewrite the title it now has; ↻ Regenerate does.
+    // Growing the listing rewrites what it lists, because nothing here was written by hand (#380):
+    // a title that still says one stamp under an offer holding two is simply wrong.
     await addOfferSet(userId, offerId, [venusId]);
-    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12 Mercury");
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12-13 Mercury / Venus");
     assert.equal(await regenerateOfferText(userId, offerId, "name"), "Mi 12-13 Mercury / Venus");
   });
 
@@ -215,6 +216,29 @@ describe("offer description + private note (#266, #267)", () => {
     await patchOffer(userId, offerId, { name: "Hand-written title" });
     await addOfferSet(userId, offerId, [mercuryId]);
     assert.equal((await getOfferDetail(userId, offerId))?.name, "Hand-written title");
+    // …and the detail screen can say why it stayed put (#380).
+    assert.equal((await getOfferDetail(userId, offerId))?.edited.name, true);
+    // The description beside it was never touched, so it still follows the composition.
+    assert.match((await getOfferDetail(userId, offerId))?.description ?? "", /Mi 12 Mercury/);
+    assert.equal((await getOfferDetail(userId, offerId))?.edited.description, false);
+  });
+
+  it("hands an edited text back to the template when it is cleared, and on ↻ (#380)", async () => {
+    const offerId = await offerOn(fullPlatformId);
+    await addOfferSet(userId, offerId, [mercuryId]);
+    await patchOffer(userId, offerId, { name: "Hand-written title" });
+
+    // Blanking the field asks for the derived wording back — there is no wording left to protect.
+    await patchOffer(userId, offerId, { name: null });
+    assert.equal((await getOfferDetail(userId, offerId))?.edited.name, false);
+    await addOfferSet(userId, offerId, [venusId]);
+    assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi 12-13 Mercury / Venus");
+
+    // ↻ Regenerate is the other way back: it rewrites the field *and* re-subscribes it.
+    await patchOffer(userId, offerId, { name: "Hand-written title" });
+    assert.equal((await getOfferDetail(userId, offerId))?.edited.name, true);
+    await regenerateOfferText(userId, offerId, "name");
+    assert.equal((await getOfferDetail(userId, offerId))?.edited.name, false);
   });
 
   it("titles an empty offer composed one set per copy too (#365)", async () => {

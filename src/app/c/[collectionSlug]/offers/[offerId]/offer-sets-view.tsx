@@ -5,7 +5,7 @@ import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
-import type { OfferDetailSet } from "@/lib/offers";
+import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -342,7 +342,279 @@ function CopiesBody({
   return <IssueOrFlat items={sorted} byIssue={byIssue} issueStickyTop={stickyTop} ctx={ctx} drag={drag} />;
 }
 
-/** One set as a collapsible card: sticky header (caret · label · count · state) over its copies. */
+/**
+ * A set's catalogue value and purchase cost (#378) — the holdings pair every other summary shows
+ * (#134/#179), here per **set**, because a set is what a buyer takes and therefore what the asking
+ * price is judged against.
+ *
+ * It sits at the **right edge of the card header**, as an amount column: money lives on the right of
+ * a row everywhere in the app. A three-column grid, like the totals bar it hangs under, so the two
+ * labels start in one column and the two amounts end in one whatever they happen to contain — a row
+ * of self-measuring cells drifts the moment one line has an equivalent and the other has nothing.
+ *
+ * Each figure is stated **twice** where the offer prices in another currency, in the header's own
+ * grammar (the asking price right above it): the **offer's currency leads**, in the row's strong
+ * type, and the base-currency amount follows muted behind `≈`. The offer's currency is the one the
+ * collector actually works in — it is what the price, the platform and the buyer are all stated in —
+ * even though the base figure is the stored one here; `≈` marks the *secondary* reading throughout
+ * this screen, not the derived one.
+ *
+ * A figure reads `—` when nothing under it is priced / costed rather than `0.00`, which would claim
+ * a worthless set; an uncertain (unknown-variant) share is marked with the same `~` the price columns
+ * use (#238), and the exact breakdown — unpriced, unconvertible, cost still pending — lives on the
+ * row's label, since it is the answer to "why is this lower than I expected", not a headline.
+ */
+function SetFigures({ set }: { set: OfferDetailSet }) {
+  const { holdings } = set;
+  const { cost } = holdings;
+  const converted = set.holdingsInOfferCurrency;
+  const valueNotes = [
+    `${holdings.pricedCount} priced`,
+    ...(holdings.uncertainCount > 0
+      ? [`~${holdings.uncertainBaseAmount} ${holdings.baseCurrency} uncertain (${holdings.uncertainCount} unknown-variant)`]
+      : []),
+    ...(holdings.unpricedCount > 0 ? [`${holdings.unpricedCount} unpriced`] : []),
+    ...(holdings.unconvertibleCount > 0
+      ? [`${holdings.unconvertibleCount} not convertible to ${holdings.baseCurrency}`]
+      : []),
+  ];
+  const costNotes = [
+    `${cost.knownCount} costed`,
+    ...(cost.pendingCount > 0 ? [`${cost.pendingCount} pending`] : []),
+    ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
+  ];
+  return (
+    <div
+      style={{
+        display: "grid",
+        // label · amount (· base equivalent, only when the offer prices in its own currency)
+        gridTemplateColumns: converted ? "auto auto auto" : "auto auto",
+        columnGap: "0.5rem",
+        rowGap: "0.1875rem",
+        alignItems: "baseline",
+        fontSize: "0.75rem",
+        flexShrink: 0,
+        // The figures label the set, not the caret they sit beside — clicking one must not collapse
+        // the card out from under the hover that explains it.
+        cursor: "default",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Tooltip content={`Catalog value of this set — ${valueNotes.join(" · ")}`}>
+        <span style={FIGURE_LABEL}>cat</span>
+      </Tooltip>
+      <MoneyPair
+        baseAmount={holdings.pricedCount === 0 ? null : holdings.totalBaseAmount}
+        baseCurrency={holdings.baseCurrency}
+        offerAmount={converted?.catalogAmount ?? null}
+        offerCurrency={converted?.currency ?? null}
+        uncertain={holdings.uncertainCount > 0}
+      />
+      <Tooltip content={`What this set's copies cost — ${costNotes.join(" · ")}`}>
+        <span style={FIGURE_LABEL}>cost</span>
+      </Tooltip>
+      <MoneyPair
+        baseAmount={cost.knownCount === 0 ? null : cost.totalCostBasis}
+        baseCurrency={cost.baseCurrency}
+        offerAmount={converted?.costAmount ?? null}
+        offerCurrency={converted?.currency ?? null}
+      />
+    </div>
+  );
+}
+
+const FIGURE_LABEL: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  whiteSpace: "nowrap",
+};
+
+/**
+ * The offer's sets **taken together** (#378): what the whole listing is worth and what it cost,
+ * beside the same figures per set. Two questions, deliberately side by side — the total is what
+ * leaves the shelf if everything sells, the per-set average is what one buyer takes and therefore
+ * what the asking price is set against.
+ *
+ * It sits in the section's **header band**, between the heading + controls on the left and the
+ * Add set / Collapse all pair on the right — everything addressing the whole listing on one line of
+ * sight, above the cards the figures are summed from.
+ *
+ * Laid out as a **grid**, not as rows of fixed-width cells: the two headings have to sit over the
+ * pairs they name, and a column that measures itself per row cannot promise that — the moment one
+ * amount ran wider than its neighbour, heading and figure drifted apart. Each figure is therefore a
+ * cell of a shared column, and the hover moved onto the row's **label**, since a tooltip wrapper
+ * around a row would be one grid item holding four.
+ *
+ * An average counts only the sets that carried a figure; the hover says how many, because "50.00
+ * over 2 of 3 sets" and "50.00 over 3" are different claims.
+ */
+function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; baseCurrency: string }) {
+  if (totals.setCount === 0) return null;
+  const converted = totals.inOfferCurrency;
+  const sets = `${totals.setCount} set${totals.setCount === 1 ? "" : "s"}`;
+  const rows = [
+    {
+      key: "cat",
+      label: "cat",
+      total: totals.catalogTotal,
+      average: totals.catalogAverage,
+      counted: totals.catalogValuedSets,
+      hint: "Catalog value of every set in this listing",
+      convertedTotal: converted?.catalogTotal ?? null,
+      convertedAverage: converted?.catalogAverage ?? null,
+    },
+    {
+      key: "cost",
+      label: "cost",
+      total: totals.costTotal,
+      average: totals.costAverage,
+      counted: totals.costKnownSets,
+      hint: "What every set in this listing cost you",
+      convertedTotal: converted?.costTotal ?? null,
+      convertedAverage: converted?.costAverage ?? null,
+    },
+  ];
+  return (
+    <div
+      style={{
+        display: "grid",
+        // label · total · per set, each figure one cell wider where a base equivalent follows it.
+        gridTemplateColumns: converted ? "auto auto auto auto auto" : "auto auto auto",
+        columnGap: "0.5rem",
+        rowGap: "0.1875rem",
+        alignItems: "baseline",
+        padding: "0.5rem 0.875rem",
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+        background: "var(--color-bg-elevated)",
+        fontSize: "0.75rem",
+      }}
+    >
+      <span />
+      <span style={{ ...TOTALS_HEAD, gridColumn: converted ? "span 2" : "span 1" }}>total · {sets}</span>
+      <span
+        style={{
+          ...TOTALS_HEAD,
+          gridColumn: converted ? "span 2" : "span 1",
+          paddingLeft: TOTALS_PAIR_GAP,
+        }}
+      >
+        per set
+      </span>
+      {rows.map((r) => (
+        <Fragment key={r.key}>
+          <Tooltip
+            content={
+              r.total === null
+                ? `${r.hint} — nothing recorded yet`
+                : `${r.hint} · averaged over the ${r.counted} of ${sets} that carry one`
+            }
+          >
+            <span style={FIGURE_LABEL}>{r.label}</span>
+          </Tooltip>
+          <MoneyPair
+            baseAmount={r.total}
+            baseCurrency={baseCurrency}
+            offerAmount={r.convertedTotal}
+            offerCurrency={converted?.currency ?? null}
+          />
+          <MoneyPair
+            baseAmount={r.average}
+            baseCurrency={baseCurrency}
+            offerAmount={r.convertedAverage}
+            offerCurrency={converted?.currency ?? null}
+            leadingStyle={{ paddingLeft: TOTALS_PAIR_GAP }}
+          />
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** What separates the *total* pair from the *per set* pair — wider than the gap inside a pair, so
+ * the eye groups each amount with its own equivalent rather than with its neighbour. */
+const TOTALS_PAIR_GAP = "1.25rem";
+
+const TOTALS_HEAD: React.CSSProperties = {
+  textAlign: "right",
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  whiteSpace: "nowrap",
+};
+
+/**
+ * One money figure the way the offer header states its price: the amount the collector operates in —
+ * **the offer's currency** wherever the offer prices in one of its own — in strong type, with the
+ * base-currency reading muted behind `≈` beside it. With no conversion available there is one
+ * figure, the base one, and it takes the strong type: it is then the only thing there is to read.
+ *
+ * Renders **cells** and no wrapper, so the caller's grid owns the columns and every figure on the
+ * screen lines up with the one above it: two where there is a currency to convert to (the empty
+ * string still emitted for a row with no figure, so the grid keeps its shape), one where there is
+ * not.
+ */
+function MoneyPair({
+  baseAmount,
+  baseCurrency,
+  offerAmount,
+  offerCurrency,
+  uncertain = false,
+  leadingStyle,
+}: {
+  baseAmount: string | null;
+  baseCurrency: string;
+  offerAmount: string | null;
+  /** The offer's currency, or null when it prices in the base one — there is then no second cell at
+   * all, and the caller's grid is one column narrower. */
+  offerCurrency: string | null;
+  /** Prefix the leading figure with `~`: it leans on an unknown-variant guess (#238). */
+  uncertain?: boolean;
+  /** Extra styling for the leading cell — the totals bar spaces its second pair with it. */
+  leadingStyle?: React.CSSProperties;
+}) {
+  const mark = uncertain ? "~" : "";
+  const leads = offerAmount !== null && offerCurrency !== null;
+  return (
+    <>
+      <span style={{ ...MONEY_LEAD, ...leadingStyle }}>
+        {baseAmount === null
+          ? "—"
+          : leads
+            ? `${mark}${offerAmount} ${offerCurrency}`
+            : `${mark}${baseAmount} ${baseCurrency}`}
+      </span>
+      {offerCurrency !== null && (
+        <span style={MONEY_EQUIVALENT}>
+          {baseAmount === null ? "" : `≈ ${baseAmount} ${baseCurrency}`}
+        </span>
+      )}
+    </>
+  );
+}
+
+const MONEY_LEAD: React.CSSProperties = {
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
+  fontVariantNumeric: "tabular-nums",
+  textAlign: "right",
+  whiteSpace: "nowrap",
+};
+
+/** The secondary reading — the same muted `≈ … EUR` the header puts under the asking price. */
+const MONEY_EQUIVALENT: React.CSSProperties = {
+  color: "var(--color-text-muted)",
+  fontVariantNumeric: "tabular-nums",
+  textAlign: "right",
+  whiteSpace: "nowrap",
+};
+
+/** One set as a collapsible card: sticky header/** One set as a collapsible card: sticky header (caret · label · count · state) over its copies. */
 function SetCard({
   set,
   copies,
@@ -444,6 +716,9 @@ function SetCard({
             </span>
           </Tooltip>
         )}
+        {/* Money at the right edge, as everywhere else in the app (#378) — after the status chips,
+            so the amount column sits in the same place whether or not a card carries one. */}
+        <SetFigures set={set} />
         {editable && !set.sold && (
           <span onClick={(e) => e.stopPropagation()}>
             <RowActionsMenu actions={actions} ariaLabel="Set actions" />
@@ -508,6 +783,14 @@ interface OfferSetsViewProps {
   collectionId: string;
   offerId: string;
   sets: OfferDetailSet[];
+  /** The sets summed and averaged (#378) — the figures in the header band. */
+  setsTotals: OfferSetsTotals;
+  /** The section's own heading, rendered as the band's first line. Passed in rather than built here
+   * so the panel keeps saying what the section is called, while this view owns the whole band. */
+  heading: React.ReactNode;
+  /** The section's primary action (Add set), stacked over this view's own Collapse all so both
+   * buttons share one right edge. */
+  primaryAction?: React.ReactNode;
   copies: ItemListItem[];
   isLoading: boolean;
   editable: boolean;
@@ -525,6 +808,9 @@ export function OfferSetsView({
   collectionId,
   offerId,
   sets,
+  setsTotals,
+  heading,
+  primaryAction,
   copies,
   isLoading,
   editable,
@@ -712,91 +998,129 @@ export function OfferSetsView({
     });
   }
 
+  /**
+   * The section's whole header, as **one band**: the heading over the view's own controls on the
+   * left, the listing's figures (#378), and the two buttons stacked on the right — Add set over
+   * Collapse all, sharing an edge.
+   *
+   * One band rather than a heading row in the panel and a toolbar row here: rendered as two
+   * independent rows they aligned to nothing in particular, and the tall figures box stretched the
+   * row it happened to land in, which is what made the vertical rhythm look broken. Everything that
+   * addresses the whole section now shares one grid of rows and one right edge.
+   */
+  const band = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "1.25rem",
+        marginBottom: "0.75rem",
+        flexWrap: "wrap",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: "16rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+        {heading}
+        {sets.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={TOOLBAR_LABEL}>Group by</span>
+              <ToggleChip label="Set" on={primary === "set"} onClick={() => setPrimary(primary === "set" ? "none" : "set")} />
+              <ToggleChip label="Location" on={primary === "location"} onClick={() => setPrimary(primary === "location" ? "none" : "location")} />
+              <span style={{ width: "1px", height: "1rem", background: "var(--color-border)" }} />
+              <ToggleChip label="Issue" on={byIssue} onClick={() => setByIssue(!byIssue)} />
+            </div>
+
+            {(unpricedCount > 0 || noPhotoCount > 0 || unknownVariantCount > 0 || filterActive) && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={TOOLBAR_LABEL}>Only</span>
+                {(unpricedCount > 0 || onlyUnpriced) && (
+                  <CountFilterChip
+                    token="error"
+                    label={`⚠ ${unpricedCount} unpriced`}
+                    active={onlyUnpriced}
+                    onClick={() => setOnlyUnpriced(!onlyUnpriced)}
+                  />
+                )}
+                {(noPhotoCount > 0 || onlyNoPhoto) && (
+                  <CountFilterChip
+                    token="accent"
+                    label={`${noPhotoCount} no photo`}
+                    active={onlyNoPhoto}
+                    onClick={() => setOnlyNoPhoto(!onlyNoPhoto)}
+                  />
+                )}
+                {(unknownVariantCount > 0 || onlyUnknownVariant) && (
+                  <CountFilterChip
+                    token="warning"
+                    label={`~ ${unknownVariantCount} unknown variant`}
+                    active={onlyUnknownVariant}
+                    onClick={() => setOnlyUnknownVariant(!onlyUnknownVariant)}
+                  />
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={TOOLBAR_LABEL}>Sort copies</span>
+              <select
+                aria-label="Sort copies by"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                style={{ ...TOOLBAR_CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
+              >
+                {SET_SORT_KEYS.map((k) => (
+                  <option key={k} value={k}>{SET_SORT_LABELS[k]}</option>
+                ))}
+              </select>
+              <Tooltip content={sortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}>
+                <button
+                  type="button"
+                  onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                  aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+                  style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600 }}
+                >
+                  {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <SetsTotalsBar totals={setsTotals} baseCurrency={baseCurrency} />
+
+      {(primaryAction || (sets.length > 0 && primary === "set")) && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.625rem" }}>
+          {primaryAction}
+          {sets.length > 0 && primary === "set" && (
+            <button
+              type="button"
+              onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(sets.map((s) => s.id)))}
+              style={{ ...TOOLBAR_CHIP, cursor: "pointer" }}
+            >
+              {allCollapsed ? "Expand all" : "Collapse all"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   if (sets.length === 0) {
     return (
-      <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", background: "var(--color-bg-elevated)", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
-        No sets yet. Add one or more sets — each is a whole sellable unit (a single stamp, a series,
-        or one of a quantity).
+      <div>
+        {band}
+        <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", background: "var(--color-bg-elevated)", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
+          No sets yet. Add one or more sets — each is a whole sellable unit (a single stamp, a series,
+          or one of a quantity).
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      {/* Controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={TOOLBAR_LABEL}>Group by</span>
-          <ToggleChip label="Set" on={primary === "set"} onClick={() => setPrimary(primary === "set" ? "none" : "set")} />
-          <ToggleChip label="Location" on={primary === "location"} onClick={() => setPrimary(primary === "location" ? "none" : "location")} />
-          <span style={{ width: "1px", height: "1rem", background: "var(--color-border)" }} />
-          <ToggleChip label="Issue" on={byIssue} onClick={() => setByIssue(!byIssue)} />
-        </div>
-
-        {(unpricedCount > 0 || noPhotoCount > 0 || unknownVariantCount > 0 || filterActive) && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={TOOLBAR_LABEL}>Only</span>
-            {(unpricedCount > 0 || onlyUnpriced) && (
-              <CountFilterChip
-                token="error"
-                label={`⚠ ${unpricedCount} unpriced`}
-                active={onlyUnpriced}
-                onClick={() => setOnlyUnpriced(!onlyUnpriced)}
-              />
-            )}
-            {(noPhotoCount > 0 || onlyNoPhoto) && (
-              <CountFilterChip
-                token="accent"
-                label={`${noPhotoCount} no photo`}
-                active={onlyNoPhoto}
-                onClick={() => setOnlyNoPhoto(!onlyNoPhoto)}
-              />
-            )}
-            {(unknownVariantCount > 0 || onlyUnknownVariant) && (
-              <CountFilterChip
-                token="warning"
-                label={`~ ${unknownVariantCount} unknown variant`}
-                active={onlyUnknownVariant}
-                onClick={() => setOnlyUnknownVariant(!onlyUnknownVariant)}
-              />
-            )}
-          </div>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={TOOLBAR_LABEL}>Sort copies</span>
-          <select
-            aria-label="Sort copies by"
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            style={{ ...TOOLBAR_CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
-          >
-            {SET_SORT_KEYS.map((k) => (
-              <option key={k} value={k}>{SET_SORT_LABELS[k]}</option>
-            ))}
-          </select>
-          <Tooltip content={sortDir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}>
-            <button
-              type="button"
-              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
-              aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
-              style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600 }}
-            >
-              {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
-            </button>
-          </Tooltip>
-        </div>
-
-        {primary === "set" && (
-          <button
-            type="button"
-            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(sets.map((s) => s.id)))}
-            style={{ ...TOOLBAR_CHIP, cursor: "pointer", marginLeft: "auto" }}
-          >
-            {allCollapsed ? "Expand all" : "Collapse all"}
-          </button>
-        )}
-      </div>
+      {band}
 
       {orderError && (
         <div style={{ marginBottom: "0.75rem", fontSize: "0.8125rem", color: "var(--color-error)" }}>{orderError}</div>

@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
-import { deriveSetLabel, deriveOfferLabel } from "./offer-set-rules";
+import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
@@ -124,25 +124,6 @@ async function assertBuyer(collectionId: string, buyerId: string | null): Promis
 
 // ── Labels ────────────────────────────────────────────────────────────────
 
-/** Short copy label from a stamp select — primary catalog number, else name. */
-function copyLabel(stamp: {
-  name: string | null;
-  catalogNumbers: { number: string }[];
-}): string {
-  return stamp.catalogNumbers[0]?.number ?? stamp.name ?? "Copy";
-}
-
-const STAMP_LABEL_SELECT = {
-  stamp: {
-    select: {
-      name: true,
-      catalogNumbers: { select: { number: true }, take: 1 },
-      // The catalog sort key a set's derived copy order falls back to (#306, ADR-0014).
-      primaryCatalogSortKey: true,
-    },
-  },
-} as const;
-
 /** An offer set's copies in effective order (#306): hand-corrected positions first, then catalog
  * order. Shared by the sellable-offer expansion and the sale detail's set labels, so a set reads
  * the same here as it does on the offer screen. */
@@ -246,6 +227,7 @@ export async function listSellableOffers(
   const allItemIds = rows.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId)));
   const sold = await soldItemIds([...new Set(allItemIds)]);
 
+  const labeller = await makeOfferLabeller(collectionId);
   const offers: SellableOffer[] = [];
   for (const r of rows) {
     const sets: SaleSetOption[] = [];
@@ -254,10 +236,10 @@ export async function listSellableOffers(
       // atomic, so a single already-sold copy retires the whole set.
       if (s.items.length === 0 || s.items.some((li) => sold.has(li.itemId))) continue;
       const items = orderedSetItems(s.items);
-      const itemLabels = items.map((li) => copyLabel(li.item.stamp));
+      const itemLabels = items.map((li) => labeller.copy(li.item.stamp));
       sets.push({
         offerSetId: s.id,
-        label: deriveSetLabel(s.title, itemLabels),
+        label: labeller.set(s),
         itemIds: items.map((li) => li.itemId),
         itemLabels,
       });
@@ -268,9 +250,7 @@ export async function listSellableOffers(
       offerId: r.id,
       platformId: r.platformId,
       platformName: r.platform.name,
-      offerLabel: deriveOfferLabel(
-        r.sets.map((s) => deriveSetLabel(s.title, orderedSetItems(s.items).map((li) => copyLabel(li.item.stamp))))
-      ),
+      offerLabel: labeller.offer(r.sets),
       price: Number(r.price).toFixed(2),
       currency: r.currency,
       state: (isOfferState(r.state) ? r.state : "active") as OfferState,
@@ -1104,11 +1084,9 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const nets = canDistribute ? distributeSaleShared(shared, lineInputs) : [];
   const netById = new Map(nets.map((n) => [n.id, n]));
 
+  const labeller = await makeOfferLabeller(sale.collectionId);
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
-    const setLbl = deriveSetLabel(
-      l.offerSet.title,
-      orderedSetItems(l.offerSet.items).map((li) => copyLabel(li.item.stamp))
-    );
+    const setLbl = labeller.set(l.offerSet);
     const net = netById.get(l.id);
     return {
       id: l.id,
@@ -1121,7 +1099,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           ? null
           : (Number(l.price) * Number(sale.fxRateToBase)).toFixed(2),
       copyCount: l.items.length,
-      itemLabels: l.items.map((li) => copyLabel(li.item.stamp)),
+      itemLabels: l.items.map((li) => labeller.copy(li.item.stamp)),
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
       netBase: (net?.netBase ?? Number(l.price)).toFixed(2),
     };

@@ -355,6 +355,52 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   return [...emitted.map((e) => e.text), ...others].join(",");
 }
 
+/** One catalog number as {@link compactCatalogNumberGroups} groups it: which vendor recorded it,
+ * how that vendor's numbers are prefixed in the stamp's area, and the number itself. */
+export interface CatalogNumberGroupEntry {
+  vendorId: string;
+  vendorAbbr: string;
+  areaPrefix: string | null;
+  number: string;
+}
+
+/**
+ * Group catalog numbers by vendor (+ area prefix), compact each group into ranges and write the
+ * prefix once around it — `Mi·DR 1-2,4,6-10 / Fi 3-5`. Groups keep first-seen order.
+ *
+ * Exported for the derived **offer set** label (#379), which is the same question `{catalog}` asks:
+ * a set of bare numbers joined by `+` names no catalogue at all, and two implementations of the
+ * prefix-and-collapse rule would drift the way #353's did. `flags` picks which prefixes show, as
+ * {@link catalogHead} defines them; omitted means both.
+ */
+export function compactCatalogNumberGroups(
+  entries: readonly CatalogNumberGroupEntry[],
+  flags: ReadonlySet<string> = new Set(["vendor", "area"])
+): string {
+  const groups = new Map<string, { vendorAbbr: string; areaPrefix: string | null; numbers: string[] }>();
+  const order: string[] = [];
+  for (const cn of entries) {
+    const key = `${cn.vendorId} ${cn.areaPrefix ?? ""}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { vendorAbbr: cn.vendorAbbr, areaPrefix: cn.areaPrefix, numbers: [] };
+      groups.set(key, g);
+      order.push(key);
+    }
+    g.numbers.push(cn.number);
+  }
+
+  const parts: string[] = [];
+  for (const key of order) {
+    const g = groups.get(key)!;
+    const nums = compactCatalogNumbers(g.numbers);
+    if (!nums) continue;
+    const head = catalogHead(g.vendorAbbr, g.areaPrefix, flags);
+    parts.push(head ? `${head} ${nums}` : nums);
+  }
+  return parts.join(" / ");
+}
+
 /** Normalise one prefix flag to its canonical name, accepting short forms: `v` → `vendor`,
  * `a` → `area`. Anything else is passed through (an unknown flag simply matches nothing). */
 function canonicalFlag(flag: string): string {
@@ -375,31 +421,10 @@ function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]):
       ? new Set(params[1].split(",").map((s) => canonicalFlag(s.trim().toLowerCase())).filter(Boolean))
       : new Set(["vendor", "area"]); // FLAGS omitted → both prefixes (the default)
 
-  // Group every selected number by its vendor (+ area prefix), preserving first-seen group order.
-  const groups = new Map<string, { vendorAbbr: string; areaPrefix: string | null; numbers: string[] }>();
-  const order: string[] = [];
-  for (const copy of copies) {
-    for (const cn of selectCatalogNumbers(copy, vendorsArg)) {
-      const key = `${cn.vendorId}\u0000${cn.areaPrefix ?? ""}`;
-      let g = groups.get(key);
-      if (!g) {
-        g = { vendorAbbr: cn.vendorAbbr, areaPrefix: cn.areaPrefix, numbers: [] };
-        groups.set(key, g);
-        order.push(key);
-      }
-      g.numbers.push(cn.number);
-    }
-  }
-
-  const parts: string[] = [];
-  for (const key of order) {
-    const g = groups.get(key)!;
-    const nums = compactCatalogNumbers(g.numbers);
-    if (!nums) continue;
-    const head = catalogHead(g.vendorAbbr, g.areaPrefix, flags);
-    parts.push(head ? `${head} ${nums}` : nums);
-  }
-  return parts.join(" / ");
+  return compactCatalogNumberGroups(
+    copies.flatMap((copy) => selectCatalogNumbers(copy, vendorsArg)),
+    flags
+  );
 }
 
 /** Resolve `{itemNo[:WIDTH]}` across the copies: each copy's own number, zero-padded to WIDTH when

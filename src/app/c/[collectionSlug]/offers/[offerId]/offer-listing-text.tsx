@@ -55,6 +55,31 @@ const TEXTAREA: React.CSSProperties = {
   resize: "vertical",
 };
 
+/** Marks a text the collector wrote themselves (#380) — it no longer follows the composition. */
+export function EditedChip({ what }: { what: string }) {
+  return (
+    <Tooltip
+      content={`This ${what} was written by hand, so it stays as written when the offer's composition changes. ↻ Regenerate hands it back to the platform's template.`}
+    >
+      <span
+        style={{
+          fontSize: "0.625rem",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          padding: "0.0625rem 0.3125rem",
+          borderRadius: "0.25rem",
+          border: "1px solid var(--color-border)",
+          color: "var(--color-text-muted)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        edited
+      </span>
+    </Tooltip>
+  );
+}
+
 const BODY: React.CSSProperties = {
   fontSize: "0.8125rem",
   lineHeight: 1.5,
@@ -171,6 +196,7 @@ export function OfferListingText({
               {f.note && (
                 <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>· {f.note}</span>
               )}
+              {offer.edited[f.key] && <EditedChip what={f.label.toLowerCase()} />}
               <span style={{ flex: 1 }} />
               {!isEditing && (
                 <>

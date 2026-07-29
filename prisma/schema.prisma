@@ -1035,6 +1035,17 @@ model Offer {
   // because a setting changed elsewhere is never what was meant. Drives how the description renders on
   // screen and what the copy action puts on the clipboard (ADR-0019). `privateNote` has no format.
   descriptionFormat String @default("plain")
+  // Which of the three generated texts the collector has **written themselves** (#380). A generated
+  // text follows the offer's composition: adding or removing a set re-renders it from the platform's
+  // template, so a listing's wording never falls behind what it lists. That is only safe while the
+  // text is still the template's — hence one flag per field, set the moment the field is edited in
+  // place and cleared by its ↻ Regenerate, which is how a field is handed back to the template.
+  //
+  // Deliberately three flags rather than one: the fields are edited, regenerated and copied one at a
+  // time, and a hand-written description is no reason to freeze the title beside it.
+  nameEdited        Boolean @default(false)
+  descriptionEdited Boolean @default(false)
+  privateNoteEdited Boolean @default(false)
   // Listing URL on the platform.
   url          String?
   // Asking price in `currency` (the offer's own transaction currency).
