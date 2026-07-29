@@ -147,6 +147,31 @@ describe("resolveCatalogRange + generateCatalogNumbers", () => {
     assert.deepEqual(expand("BL7", ""), ["BL7"]);
   });
 
+  it("expands a bare Roman-numeral range (#383)", () => {
+    assert.deepEqual(expand("I", "VIII"), [
+      "I", "II", "III", "IV", "V", "VI", "VII", "VIII",
+    ]);
+    assert.deepEqual(expand("IX", "XI"), ["IX", "X", "XI"]);
+    assert.deepEqual(expand("V", "V"), ["V"]);
+  });
+
+  it("treats a lone bare Roman First as a single stamp (#383)", () => {
+    assert.deepEqual(expand("III", null), ["III"]);
+    assert.deepEqual(expand("III", ""), ["III"]);
+  });
+
+  it("rejects a descending or non-Roman bare Roman range (#383)", () => {
+    assert.match(expand("VIII", "I") as string, /≤/);
+    assert.match(expand("I", "8") as string, /Roman numeral/);
+    // Non-canonical spellings aren't Roman numerals at all.
+    assert.match(expand("IIII", "VIII") as string, /must contain a number/);
+  });
+
+  it("still reads a digit-bearing number as base + suffix, never as a bare numeral (#383)", () => {
+    assert.deepEqual(expand("12I", "12III"), ["12I", "12II", "12III"]);
+    assert.deepEqual(expand("100", "102"), ["100", "101", "102"]);
+  });
+
   it("rejects mismatched prefixes", () => {
     assert.match(expand("BL120", "SS123") as string, /prefix/);
   });
@@ -179,6 +204,7 @@ describe("formatSchemeValue", () => {
     assert.equal(formatSchemeValue(scheme("40A", "50A"), 43), "43A");
     assert.equal(formatSchemeValue(scheme("423a", "423c"), 4), "423d");
     assert.equal(formatSchemeValue(scheme("12I", "12III"), 4), "12IV");
+    assert.equal(formatSchemeValue(scheme("I", "VIII"), 9), "IX");
   });
 
   it("agrees with generateCatalogNumbers position by position", () => {
@@ -244,6 +270,18 @@ describe("computeIssueRangeExtension", () => {
       proposedLast: "12IV",
       outsideNumbers: ["12IV"],
     });
+  });
+
+  it("extends a bare Roman-numeral range (#383)", () => {
+    assert.deepEqual(computeIssueRangeExtension("I", "VIII", ["IX"]), {
+      kind: "extend",
+      proposedFirst: "I",
+      proposedLast: "IX",
+      outsideNumbers: ["IX"],
+    });
+    // A digit-bearing member is a different family — a bare-Roman range is not
+    // basic numbering, so it neither extends nor is taken over by one.
+    assert.equal(computeIssueRangeExtension("I", "VIII", ["9", "12I"]), null);
   });
 
   it("widens a lone-First single value when a same-family member sits beyond it", () => {
