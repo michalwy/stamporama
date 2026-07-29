@@ -72,19 +72,35 @@ terms on the sale itself.
 
 ## The lots screen
 
-The right of each row is a small grid — three figures, each shown **twice**:
+The right of each row is a small grid in **two halves, divided by a rule**: what the lot **costs**,
+and what it is **worth**. Each half has its own two row labels, because the two lines mean something
+different on each side.
 
-| | **Auction** | **Mine** | **Ceiling** | **Catalogue** |
-|---|---|---|---|---|
-| **bid** | what the lot stands at | what you placed | the most you could bid | what the contents are worth |
-| **all-in** | what that would cost | what yours would cost | the most it is worth to you | what is left over |
+What it costs:
 
-The first three columns are what the lot **costs**; the fourth is what it is **worth**, and it only
-fills in once you have said what the lot contains — see [What a lot contains](#what-a-lot-contains)
-below. The **bid** line is hammer prices, the **all-in** line adds the seller's premium. Each pair has one
-figure you type and one derived from it, shown muted: the auction's bid and yours are bids, a
-ceiling is a valuation of the total. The ceiling's muted half is exactly what *Bid my ceiling*
-would place.
+| | **Auction** | **Mine** | **Ceiling** |
+|---|---|---|---|
+| **bid** | what the lot stands at | what you placed | the most you could bid |
+| **all-in** | what that would cost | what yours would cost | the most it is worth to you |
+
+What it is worth:
+
+| | **Catalogue** |
+|---|---|
+| **value** | what the contents are worth |
+| **headroom** | what is left over |
+
+On the **cost** side each figure exists twice: the **bid** line is hammer prices, the **all-in**
+line is the same figure with the seller's premium added. Each pair has one figure you type and one
+derived from it, shown muted — the auction's bid and yours are bids, a ceiling is a valuation of the
+total. The ceiling's muted half is exactly what *Bid my ceiling* would place.
+
+The **worth** side is not a third and fourth of those. Its top line, **value**, is the catalogue
+value of what you said the lot holds — see [What a lot contains](#what-a-lot-contains) below — so it
+stays empty until you have described the lot. Its bottom line, **headroom**, is a *subtraction*, not a
+recomputation: catalogue value **less** the auction's all-in cost, i.e. the cell above it less the
+cell in the **Auction / all-in** corner. That is why the labels differ. Nothing on this side is a
+bid, and nothing on it is a cost.
 
 Shipping is deliberately in none of them. It belongs to the parcel, so it is added once on the
 sale, not once per lot.
@@ -336,10 +352,14 @@ a percent; it is replaced the first time a rate is looked up.)
 
 ### Headroom
 
-The footer of the editor, and the second line of the **Catalogue** column on the row, is the
-**headroom**: the catalogue value less what the lot actually costs you.
+The footer of the editor, and the row labelled **headroom** in the worth half of the grid, is the
+catalogue value less what the lot actually costs you.
 
 > headroom = catalogue value − (bid + the seller's premium)
+
+The bid it subtracts is the **auction's** — what the lot stands at now, or what it went for once a
+result is recorded — not the one you placed and not your ceiling. So it answers: *if this lot went
+at what it stands at, how much catalogue value would I be getting above what I pay?*
 
 Green while there is room left, red once the price has passed what the contents are worth. It is
 measured against the **all-in** cost, never the hammer price: a ceiling set against the hammer price

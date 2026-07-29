@@ -50,6 +50,29 @@ const GRID_LABEL: React.CSSProperties = {
   fontSize: "0.6875rem",
   color: "var(--color-text-muted)",
   justifySelf: "start",
+  // `headroom` is the longest of them and must not wrap onto a second line: the grid's rows are
+  // what line one lot's figures up with the next lot's.
+  whiteSpace: "nowrap",
+};
+
+/**
+ * The rule between what the lot **costs** and what it is **worth**.
+ *
+ * The two halves of the grid do not share a vocabulary: on the cost side a row is one figure
+ * expressed two ways (a hammer price and what it comes to all-in), while on the worth side the
+ * second row is a *difference* between the two halves. Reading `all-in` across the whole grid
+ * therefore promised an operation the last column does not perform. The rule plus the second set of
+ * row labels beside it say where one reading stops and the other starts.
+ *
+ * Spans every row explicitly, so the cells around it keep auto-placing in order.
+ */
+const GRID_RULE: React.CSSProperties = {
+  gridColumn: 5,
+  gridRow: "1 / 4",
+  justifySelf: "center",
+  alignSelf: "stretch",
+  width: "1px",
+  background: "var(--color-border)",
 };
 
 /** How the closing time reads. Colour here means **"act now"**, so only a deadline you can still do
@@ -458,32 +481,47 @@ export function AuctionLotRow({
             </div>
             </div>
 
-          {/* The three figures, as a small grid: each exists **twice**, as the hammer price and as
-              what it costs all-in, and reading them in columns is what makes them comparable. The
-              stored figure of each pair is the editable one — the auction's bid and yours are
-              hammer prices, a ceiling is an all-in valuation — and the other is derived, shown
-              muted. The ceiling's derived half is exactly what *Bid my ceiling* would place. */}
+          {/* The figures, as a small grid in **two sections divided by a rule**: what the lot costs
+              on the left, what it is worth on the right.
+
+              In the cost section each figure exists **twice**, as the hammer price and as what it
+              costs all-in, and reading them in columns is what makes them comparable. The stored
+              figure of each pair is the editable one — the auction's bid and yours are hammer
+              prices, a ceiling is an all-in valuation — and the other is derived, shown muted. The
+              ceiling's derived half is exactly what *Bid my ceiling* would place.
+
+              The worth section keeps the same two lines but **carries its own row labels**, because
+              its second line is a different operation: on the left it is a figure recomputed with
+              fees, here it is catalogue value *less* that cost. Labelling both `all-in` said the
+              last column did what the first three do, which it does not. Anything further that
+              answers "what is this worth" (a recommended price) belongs in this section, as another
+              column against the same two labels — not as a fifth cost column. */}
           <div
             style={{
               marginLeft: "auto",
               display: "grid",
               // Fixed tracks, not `auto`: every row must line its columns up with the rows above
-              // and below it, and content-sized ones make each row its own private table.
-              gridTemplateColumns: "3rem 5.5rem 5.5rem 5.5rem 6rem",
+              // and below it, and content-sized ones make each row its own private table. Track 5
+              // is the rule; the label track after it belongs to the worth section, exactly as
+              // track 1 belongs to the cost section.
+              gridTemplateColumns: "3rem 5.5rem 5.5rem 5.5rem 1px 3.5rem 6rem",
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
               alignItems: "center",
             }}
           >
+            <span style={GRID_RULE} aria-hidden />
+
             <span style={GRID_LABEL}>{lot.currency}</span>
             <span style={GRID_HEAD}>Auction</span>
             <span style={GRID_HEAD}>Mine</span>
             <span style={GRID_HEAD}>Ceiling</span>
-            {/* The fourth column is what the lot is *worth*, against the three columns of what it
-                costs — the whole reason composition is structured (#353). It sits on the same two
-                lines: the catalogue value beside the bids, and the headroom beside the all-ins,
-                because headroom is exactly catalogue value less the all-in cost. */}
+            {/* The worth section's label column has no heading of its own — the currency in the
+                cost section's is the grid's, and repeating it would read as a second unit. */}
+            <span />
+            {/* What the lot is *worth*, against the three columns of what it costs — the whole
+                reason composition is structured (#353). */}
             <span style={GRID_HEAD}>Catalogue</span>
 
             <span style={GRID_LABEL}>bid</span>
@@ -575,6 +613,10 @@ export function AuctionLotRow({
             <Tooltip content="The most you can bid with the all-in still inside your ceiling">
               <span style={MUTED_AMOUNT}>{lot.bidRoom ?? "—"}</span>
             </Tooltip>
+            {/* The worth section's own labels: what the contents are worth, and what is left of it
+                once the lot is paid for. Deliberately not `bid` / `all-in` — neither figure here is
+                a bid, and neither is a cost. */}
+            <span style={GRID_LABEL}>value</span>
             {/* Catalogue value of what the lot is described as holding. The cell is the way in to
                 the composition editor, so describing a lot is one click from the row that made you
                 want to — and an empty one says so rather than showing a bare dash. */}
@@ -657,6 +699,9 @@ export function AuctionLotRow({
                 />
               </span>
             </Tooltip>
+            {/* The domain's own word for it, the one the user guide's *Headroom* section uses —
+                the row should name the figure the same way the documentation does. */}
+            <span style={GRID_LABEL}>headroom</span>
             {/* Headroom: catalogue value less what the lot costs all-in. Green while there is room
                 left, red once the price has passed what the contents are worth. */}
             <Tooltip content="Catalogue value less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
