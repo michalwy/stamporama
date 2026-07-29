@@ -203,7 +203,10 @@ sort last. Catalog numbers sort naturally (1, 2, 10 — not 1, 10, 2).
 Your choice is remembered per collection, and which issue groups you've collapsed is
 remembered too, so the view stays the way you left it. In a grouped-by-issue view each issue
 appears as a header that reads like a row on the Issues screen (area, title, catalog numbers,
-required/total stamp count) and can be collapsed or expanded. **Lot management** (add stamps,
+required/total stamp count) and can be collapsed or expanded. **Lot cards themselves start
+collapsed** — an order is read as the lots in it, and a lot's copies are a second question. Open
+one with its **▸**, or the toolbar's **Expand all** (which becomes **Collapse all** once they
+all are). A lot you add while the screen is open opens by itself. **Lot management** (add stamps,
 edit price, close/reopen, delete, whole-lot move/mark-sorted) lives only in a **by-lot** view —
 the issue-only and flat views are for sweeping through copies and sorting them.
 

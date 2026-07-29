@@ -6,6 +6,7 @@ import type { IssueHeader } from "@/lib/issues";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import { LotIssueGroupHeader } from "@/app/c/[collectionSlug]/shared/lot-issue-group-header";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
@@ -559,8 +560,13 @@ export function AuctionLotCardsView({
   const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
   const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const allCollapsed = collapsed.size === lots.length && lots.length > 0;
+  // Lots are collapsed by default (#382): a sale is read as "what is in this parcel", and a
+  // lot's own composition is a second question. The two exceptions the hook covers are the lot
+  // this screen was navigated to (#374's `?lot=`) and a lot added while it is open.
+  const expansion = useCardExpansion(
+    lots.map((l) => l.id),
+    highlightLotId
+  );
 
   const [onlyUnpriced, setOnlyUnpriced] = useState(false);
   const [onlyNoPhoto, setOnlyNoPhoto] = useState(false);
@@ -628,15 +634,6 @@ export function AuctionLotCardsView({
 
   function sortLines(lines: AuctionLotLineItem[]): AuctionLotLineItem[] {
     return sortSortableCopies(lines, sortKey, sortDir, primaryVendorByArea, lineAmount);
-  }
-
-  function toggle(lotId: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(lotId)) next.delete(lotId);
-      else next.add(lotId);
-      return next;
-    });
   }
 
   const flatLines = useMemo(
@@ -731,10 +728,10 @@ export function AuctionLotCardsView({
         {primary === "lot" && lots.length > 0 && (
           <button
             type="button"
-            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(lots.map((l) => l.id)))}
+            onClick={expansion.toggleAll}
             style={{ ...TOOLBAR_CHIP, cursor: "pointer", marginLeft: "auto" }}
           >
-            {allCollapsed ? "Expand all" : "Collapse all"}
+            {expansion.allExpanded ? "Collapse all" : "Expand all"}
           </button>
         )}
       </div>
@@ -750,15 +747,15 @@ export function AuctionLotCardsView({
               // flag fires, and running it against a not-yet-laid-out list would land nowhere.
               highlighted={hydrated && lot.id === highlightLotId}
               onClearHighlight={onClearHighlight}
-              // Collapsed until the view preferences have been read, so a returning collector's
-              // choice does not flash open first.
-              expanded={hydrated && !collapsed.has(lot.id)}
+              // Held closed until the view preferences have been read, so the deep-linked lot
+              // does not flash open before the list around it has settled.
+              expanded={hydrated && expansion.isExpanded(lot.id)}
               byIssue={byIssue}
               collectionSlug={collectionSlug}
               now={now}
               isPending={isPending || linePending}
               ctx={ctx}
-              onToggle={() => toggle(lot.id)}
+              onToggle={() => expansion.toggle(lot.id)}
               onStartAdd={() => {
                 setFormError(undefined);
                 setDraft({ lotId: lot.id, value: "add" });

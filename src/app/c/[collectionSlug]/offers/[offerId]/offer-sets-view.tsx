@@ -15,6 +15,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { sortCopies, COPY_SORT_KEYS, COPY_SORT_LABELS } from "@/app/c/[collectionSlug]/shared/copy-sort";
 import { useHydrated, usePersistentToggle, usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
+import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import {
   useReorderList,
   showLineAt,
@@ -827,8 +828,9 @@ export function OfferSetsView({
   const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
   const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const allCollapsed = collapsed.size === sets.length && sets.length > 0;
+  // Sets are collapsed by default (#382) — a listing is scanned by its sets, and what is inside
+  // one is a second question. A set added while the screen is open opens itself.
+  const expansion = useCardExpansion(sets.map((s) => s.id));
 
   // Optimistic overrides while a reorder (#306) is in flight; cleared as soon as the server's own
   // order arrives. `setOrder` is a list of set ids, `copyOrder` a per-set list of copy ids.
@@ -989,15 +991,6 @@ export function OfferSetsView({
     });
   }
 
-  function toggle(setId: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(setId)) next.delete(setId);
-      else next.add(setId);
-      return next;
-    });
-  }
-
   /**
    * The section's whole header, as **one band**: the heading over the view's own controls on the
    * left, the listing's figures (#378), and the two buttons stacked on the right — Add set over
@@ -1095,10 +1088,10 @@ export function OfferSetsView({
           {sets.length > 0 && primary === "set" && (
             <button
               type="button"
-              onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(sets.map((s) => s.id)))}
+              onClick={expansion.toggleAll}
               style={{ ...TOOLBAR_CHIP, cursor: "pointer" }}
             >
-              {allCollapsed ? "Expand all" : "Collapse all"}
+              {expansion.allExpanded ? "Collapse all" : "Expand all"}
             </button>
           )}
         </div>
@@ -1139,7 +1132,7 @@ export function OfferSetsView({
               <SetCard
                 set={set}
                 copies={copies}
-                expanded={hydrated && !collapsed.has(set.id)}
+                expanded={hydrated && expansion.isExpanded(set.id)}
                 byIssue={byIssue}
                 sortKey={sortKey}
                 sortDir={sortDir}
@@ -1149,7 +1142,7 @@ export function OfferSetsView({
                 setDrag={setDrag}
                 copyDragEnabled={canDragCopies && !set.sold}
                 onReorderCopies={(from, to) => reorderCopies(set, from, to)}
-                onToggle={() => toggle(set.id)}
+                onToggle={() => expansion.toggle(set.id)}
                 onRemove={() => onRemoveSet(set)}
                 onResetCopyOrder={() => resetCopyOrder(set)}
               />

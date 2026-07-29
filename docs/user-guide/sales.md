@@ -143,7 +143,9 @@ and it can move backward (pick an earlier step) if you need to correct a mistake
 ## Packing view
 
 The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
-by default) whose header shows the set, its copy count, price, and net. Expanding it shows the
+by default — deliberately unlike the lot and set cards on the [purchase](purchases.md), [offer](offers.md)
+and [auction sale](auctions.md) screens, because a packing list is there to be read, not scanned)
+whose header shows the set, its copy count, price, and net. Expanding it shows the
 exact physical copies that left — as full inventory rows with catalog number, condition, and
 **location**, so you can pull each piece to pack it. It works like a purchase order:
 

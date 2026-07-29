@@ -443,7 +443,10 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
 - **Only** narrows to the lines that need work: **unpriced**, **no photo**, **unknown variant**.
 - **Sort lines** orders them by the same keys copies are sorted by — order added, year, catalog
   number, price, name — with a direction toggle.
-- **Collapse all** / **Expand all** for the cards themselves.
+- **Collapse all** / **Expand all** for the cards themselves. Lot cards start **collapsed**: a
+  parcel is read as the lots in it, and a lot's composition is a second question. Two lots open
+  by themselves — the one you arrived at by clicking a lot on the watchlist (the highlighted
+  card), and one added while the screen is open.
 
 The grouping and sorting choices are remembered per collection, exactly as they are on the other two
 screens. The **Only** filters are not: they are a job you do and finish.

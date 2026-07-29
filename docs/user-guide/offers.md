@@ -152,7 +152,10 @@ so and offers to list it now or later. Steps you don't need are effortless: if t
 exists, pick it in the first step and move straight on.
 
 The offer's sets render like a [purchase order](purchases.md): each set is a **collapsible card**
-showing its copies as full inventory rows. Group by **Set** or **Location**, optionally sub-group
+showing its copies as full inventory rows. Cards start **collapsed** — a listing is read by its
+sets first, and what is inside one is a second question — so use a card's **▶** or the header
+band's **Expand all** to open them. A set you add while the screen is open opens by itself.
+Group by **Set** or **Location**, optionally sub-group
 by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
 Each copy row has a quick **+ catalog value** link (click the value to edit it) so you can fill in
 missing catalog prices without leaving the offer — which also feeds the suggested price. The

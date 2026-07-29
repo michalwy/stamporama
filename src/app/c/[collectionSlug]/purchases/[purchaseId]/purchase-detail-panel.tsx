@@ -78,6 +78,7 @@ import {
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
+import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -176,6 +177,9 @@ export function PurchaseDetailPanel({
   // Briefly highlight a lot right after it is created, so the new card is easy to spot once
   // the panel refreshes with it (#158).
   const [justAddedLotId, markLotAdded] = useJustAdded();
+  // Lot cards are collapsed by default (#382): an order is read as its lots, and a lot's copies
+  // are a second question. A lot added while the screen is open opens itself.
+  const lotExpansion = useCardExpansion(purchase.lots.map((l) => l.id));
 
   // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
   // a flat list of every copy in the order. Persisted per collection; default groups by both.
@@ -529,6 +533,18 @@ export function PurchaseDetailPanel({
               {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
             </button>
           </Tooltip>
+          {/* Lot cards start collapsed (#382), so the order screen needs the same way out of that
+              baseline the offers and auction-sale screens have — hence here, at the right edge of
+              the toolbar that already governs how the lots read. */}
+          {byLot && (
+            <button
+              type="button"
+              onClick={lotExpansion.toggleAll}
+              style={{ ...CHIP, cursor: "pointer", marginLeft: "auto" }}
+            >
+              {lotExpansion.allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+          )}
         </div>
       )}
 
@@ -548,6 +564,8 @@ export function PurchaseDetailPanel({
               index={idx}
               lot={lot}
               justAdded={lot.id === justAddedLotId}
+              expanded={lotExpansion.isExpanded(lot.id)}
+              onToggleExpanded={() => lotExpansion.toggle(lot.id)}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
               currency={purchase.currency}
@@ -748,6 +766,10 @@ interface LotCardProps {
   lot: LotSummary;
   /** Flash the card once right after this lot is created (#158). */
   justAdded: boolean;
+  /** Whether this lot's copies are shown. Owned by the panel (#382) so the whole order shares
+   * one collapsed-by-default rule and a lot added here opens by itself. */
+  expanded: boolean;
+  onToggleExpanded: () => void;
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
   currency: string;
@@ -1434,6 +1456,8 @@ function LotCard({
   index,
   lot,
   justAdded,
+  expanded,
+  onToggleExpanded,
   issueHeaderById,
   collectionId,
   currency,
@@ -1448,7 +1472,6 @@ function LotCard({
   sortDir,
   onRun,
 }: LotCardProps) {
-  const [expanded, setExpanded] = useState(true);
   const [dialog, setDialog] = useState<
     "none" | "picker" | "intake-condition" | "edit-price" | "delete" | "close" | "reopen"
   >("none");
@@ -1639,7 +1662,7 @@ function LotCard({
       <div style={{ padding: "0.875rem 1.25rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
         <button
           type="button"
-          onClick={() => setExpanded((e) => !e)}
+          onClick={onToggleExpanded}
           aria-label={expanded ? "Collapse" : "Expand"}
           style={{
             background: "none",
