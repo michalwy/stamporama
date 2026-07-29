@@ -252,6 +252,10 @@ Letter and Roman-numeral **suffixes** on the same number collapse the same way, 
 written twice: Fischer `BL92a` + `BL92b` reads `BL92a-b`, and `12I`, `12II`, `12III` reads `12I-III`.
 As with numbers, only consecutive ones fold — `92a` + `92c` stays `92a,92c`.
 
+A catalog number that **is** a Roman numeral, with no number in front of it, collapses too: `I`, `II`,
+`III` reads `I-III`. A numeral never folds into an ordinary number, so `1`, `2`, `I`, `II` reads
+`1-2,I-II`.
+
 ### Area names in titles
 
 Your area tree often mixes public territories with **internal grouping** levels — e.g. `Poland ›

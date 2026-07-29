@@ -259,6 +259,18 @@ describe("deriveAuctionLotLabel", () => {
     assert.equal(deriveAuctionLotLabel(lines), "Mi BL31-33,Mi 40-41,Mi 42A · Definitives (1950)");
   });
 
+  it("collapses bare Roman numerals under their prefix, and only within it (#384)", () => {
+    assert.equal(
+      deriveAuctionLotLabel([
+        line({ catalogNumbers: ["Mi·PL I"] }),
+        line({ catalogNumbers: ["Mi·PL II"] }),
+        line({ catalogNumbers: ["Mi·PL III"] }),
+        line({ catalogNumbers: ["Mi·DE I"] }),
+      ]),
+      "Mi·PL I-III,Mi·DE I · Definitives (1950)"
+    );
+  });
+
   it("names only the primary catalogue, never three numbering systems at once", () => {
     // Second and third numbers are other vendors' — printing them side by side names none of them.
     assert.equal(

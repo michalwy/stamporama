@@ -248,11 +248,33 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
  *    `BL92a,BL92b` reads `BL92a-b`. The sequences are the ones an auto-generate range enumerates
  *    (`parseSuffixOrdinal`: letters `a`–`z`, Roman numerals), so `1294CKB,1296KB` still cannot fold.
  *
+ * 3. **Bare Roman numerals** (#384) — a number that *is* a numeral (`I`, `II`, `III`; #383) carries
+ *    no digit run, so it never reaches (1) and would list one by one. It is a sequence in its own
+ *    right, so consecutive numerals fold the way (2) folds a suffix — `I,II,III` reads `I-III` — keyed
+ *    on the constant text in front of them (`Mi·PL I`–`Mi·PL III` → `Mi·PL I-III`), which is what
+ *    keeps two catalogues from merging where the caller passes prefixed numbers (#353).
+ *
  * Entries are emitted in first-seen order, and a number without a digit run at all (e.g. `Ark.`) is
- * kept verbatim at the end. All comma-joined; duplicates dropped.
+ * kept verbatim at the end, after the numeric families. All comma-joined; duplicates dropped.
  *
  * Exported for the derived **auction lot** name (#353): a house lot is "Mi 1-12" whether it is being
  * listed or bid on, and two implementations of #150's collapsing would drift. */
+/** Split a digit-less catalog number into the constant text in front of it and a trailing canonical
+ * Roman numeral — `"I"` → `("", "I")`, `"Mi·PL VIII"` → `("Mi·PL ", "VIII")` — or null when it ends
+ * in no numeral (`"Ark."`). A number that *is* a numeral (#383) has no base for the suffix fold to
+ * hold constant, so the numeral itself is the sequence and the prefix is what keeps two catalogues
+ * apart. The lazy prefix takes the **longest** trailing numeral, and `parseSuffixOrdinal` rejects a
+ * non-canonical spelling, so `"Mi·DM"` reads as no numeral rather than as `D`. */
+function parseBareRomanNumber(
+  text: string
+): { prefix: string; numeral: string; value: number } | null {
+  const match = text.match(/^(.*?)([MDCLXVI]+)$/);
+  if (!match) return null;
+  const ordinal = parseSuffixOrdinal(match[2]);
+  if (!ordinal || ordinal.kind !== "roman") return null;
+  return { prefix: match[1], numeral: match[2], value: ordinal.value };
+}
+
 export function compactCatalogNumbers(numbers: readonly string[]): string {
   interface Family {
     prefix: string;
@@ -262,7 +284,8 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   }
   const families = new Map<string, Family>();
   const order: string[] = [];
-  const others: string[] = [];
+  /** Digit-less numbers, in first-seen order — a bare Roman numeral carries what pass 3 folds on. */
+  const others: { text: string; roman: ReturnType<typeof parseBareRomanNumber> }[] = [];
   const seenOther = new Set<string>();
   for (const n of numbers) {
     const parts = parseCatalogNumberParts(n);
@@ -270,7 +293,7 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
       const t = n.trim();
       if (t && !seenOther.has(t)) {
         seenOther.add(t);
-        others.push(t);
+        others.push({ text: t, roman: parseBareRomanNumber(t) });
       }
       continue;
     }
@@ -352,7 +375,37 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
     }
   }
   emitted.sort((a, b) => a.order - b.order);
-  return [...emitted.map((e) => e.text), ...others].join(",");
+
+  // Pass 3 — fold consecutive bare Roman numerals (#384), per constant prefix. A run is written from
+  // the numerals as recorded and emitted where its earliest member stood, so the digit-less tail
+  // keeps its order and anything that isn't a numeral passes through untouched.
+  const runs = new Map<number, string>();
+  const folded = new Set<number>();
+  const byPrefix = new Map<string, { index: number; numeral: string; value: number }[]>();
+  others.forEach((o, index) => {
+    if (!o.roman) return;
+    const entry = { index, numeral: o.roman.numeral, value: o.roman.value };
+    const group = byPrefix.get(o.roman.prefix);
+    if (group) group.push(entry);
+    else byPrefix.set(o.roman.prefix, [entry]);
+  });
+  for (const [prefix, group] of byPrefix) {
+    group.sort((a, b) => a.value - b.value);
+    for (let i = 0; i < group.length; ) {
+      let j = i;
+      while (j + 1 < group.length && group[j + 1].value === group[j].value + 1) j++;
+      const members = group.slice(i, j + 1);
+      const at = Math.min(...members.map((m) => m.index));
+      runs.set(at, `${prefix}${group[i].numeral}${i === j ? "" : `-${group[j].numeral}`}`);
+      for (const m of members) if (m.index !== at) folded.add(m.index);
+      i = j + 1;
+    }
+  }
+  const tail = others.flatMap((o, index) =>
+    folded.has(index) ? [] : [runs.get(index) ?? o.text]
+  );
+
+  return [...emitted.map((e) => e.text), ...tail].join(",");
 }
 
 /** One catalog number as {@link compactCatalogNumberGroups} groups it: which vendor recorded it,

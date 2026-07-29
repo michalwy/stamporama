@@ -261,6 +261,33 @@ describe("renderTitleTemplate — {catalog} options", () => {
     assert.equal(renderTitleTemplate("{catalog:*:vendor}", copies), "Fi BL92a-b / Mi BL57-58");
   });
 
+  it("collapses a bare Roman-numeral run (#384)", () => {
+    const nums = ["I", "II", "III"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi I-III");
+  });
+
+  it("keeps a gap in a bare Roman run apart (#384)", () => {
+    const nums = ["I", "II", "V"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi I-II,V");
+  });
+
+  it("never folds a bare numeral into a digit-bearing number (#384)", () => {
+    const nums = ["1", "2", "I", "II"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 1-2,I-II");
+  });
+
+  it("keeps each vendor's bare numerals to itself (#384)", () => {
+    const a = copy({ catalogNumbers: [cn("Mi", "I", { isPrimary: true }), cn("Sc", "III")] });
+    const b = copy({ catalogNumbers: [cn("Mi", "II", { isPrimary: true }), cn("Sc", "IV")] });
+    assert.equal(renderTitleTemplate("{catalog:*:vendor}", [a, b]), "Mi I-II / Sc III-IV");
+  });
+
   it("keeps a number with no digits verbatim after the ranges", () => {
     const nums = ["1", "2", "Ark."].map((n) =>
       copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
