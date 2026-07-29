@@ -68,17 +68,27 @@ async function seed(suffix: string): Promise<Seed> {
     data: { collectionAreaId: area.id, catalogVendorId: mi.id, areaPrefix: "PL" },
   });
 
-  // Each scenario stamp: create, link to the area as primary, attach its catalog numbers.
+  // A second area whose Michel numbering is digit-free (local issues numbered with Roman numerals),
+  // so the matcher's recall net is exercised on a number carrying no digits at all.
+  const localArea = await prisma.collectionArea.create({
+    data: { collectionId, name: `Russia BW-${suffix}` },
+  });
+  await prisma.collectionAreaVendor.create({
+    data: { collectionAreaId: localArea.id, catalogVendorId: mi.id, areaPrefix: "RU-BW" },
+  });
+
+  // Each scenario stamp: create, link to its area as primary, attach its catalog numbers.
   async function makeStamp(
     name: string,
     numbers: { vendorId: string; number: string }[],
-    colnectId?: string
+    colnectId?: string,
+    areaId: string = area.id
   ): Promise<string> {
     const stamp = await prisma.stamp.create({
       data: { collectionId, name, issuedYear: 1960, colnectId: colnectId ?? null },
     });
     await prisma.stampCollectionArea.create({
-      data: { stampId: stamp.id, collectionAreaId: area.id, isPrimary: true },
+      data: { stampId: stamp.id, collectionAreaId: areaId, isPrimary: true },
     });
     await prisma.stampCatalogNumber.createMany({
       data: numbers.map((n) => ({ stampId: stamp.id, catalogVendorId: n.vendorId, number: n.number })),
@@ -101,6 +111,8 @@ async function seed(suffix: string): Promise<Seed> {
       { vendorId: sc.id, number: "55" },
     ]),
     existing: await makeStamp("Existing", [{ vendorId: mi.id, number: "600" }], "old-600"),
+    // Filed as "IIIa" while Colnect prints "IIIA": recall on a digit-free number must ignore case.
+    roman: await makeStamp("Local Roman", [{ vendorId: mi.id, number: "IIIa" }], undefined, localArea.id),
   };
 
   await prisma.issueMember.create({ data: { issueId: issue.id, stampId: stamps.auto } });
@@ -277,6 +289,23 @@ describe("matchColnectItems", () => {
     if (auto?.status === "auto") {
       assert.equal(auto.alreadySet, true);
       assert.equal(auto.written, false);
+    }
+  });
+
+  it("matches a digit-free catalog number (Michel Roman local issues)", async () => {
+    const results = byColnect(
+      await matchColnectItems(
+        s.userId,
+        s.collectionId,
+        [{ colnectId: "800", catalogRefs: [{ catalog: "Mi", number: "RU-BW IIIA" }] }],
+        { dryRun: true }
+      )
+    );
+    const roman = results.get("800");
+    assert.equal(roman?.status, "auto", "a number with no digits must still recall its stamp");
+    if (roman?.status === "auto") {
+      assert.equal(roman.stampId, s.stamps.roman);
+      assert.deepEqual(roman.stamp?.catalogNumbers, [{ label: "Mi·RU-BW IIIa", status: "matched" }]);
     }
   });
 

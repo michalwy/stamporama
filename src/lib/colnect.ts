@@ -16,6 +16,7 @@ import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import type { DuplicateCatalogMode } from "./duplicate-catalog";
 import {
   proposeBackfill,
+  splitColnectNumber,
   type BackfillRefInput,
   type ColnectBackfillProposal,
 } from "./colnect-backfill";
@@ -567,6 +568,33 @@ function pickPhotoId(
   return ordered[0]?.id ?? null;
 }
 
+/** One `contains` condition of the candidate recall net: what to look for inside a stored number,
+ *  and whether the comparison must ignore case. */
+interface ColnectRecallCondition {
+  catalogVendorId: string;
+  value: string;
+  insensitive: boolean;
+}
+
+/**
+ * The substring to recall candidate stamps by, for one printed Colnect number.
+ *
+ * Digits are the sharpest handle and the common case: `"PL 3690"` → `"3690"`, `"BL132"` → `"132"`,
+ * matched case-sensitively (digits have no case). A number with **no digits at all** — Michel's
+ * Roman local-issue numbers, e.g. `"RU-BW IIIA"` — would otherwise recall nothing and be
+ * reported `no-candidates` even with the very stamp in the collection. For those the handle is the
+ * bare number the backfill would store, i.e. the value minus its leading area-prefix token
+ * (`"RU-BW IIIA"` → `"IIIA"`, `"IIIA"` → `"IIIA"`), compared case-insensitively so a stamp filed as
+ * `IIIa` is still recalled. Null when nothing usable is left. Recall may over-match freely — the
+ * strict full-key check that follows is what decides.
+ */
+function colnectRecallToken(printed: string): { value: string; insensitive: boolean } | null {
+  const digits = catalogDigits(printed);
+  if (digits) return { value: digits, insensitive: false };
+  const bare = splitColnectNumber(printed).number.trim();
+  return bare ? { value: bare, insensitive: true } : null;
+}
+
 /**
  * Match a batch of Colnect items against the collection's stamps and, unless `dryRun`, write the
  * Colnect ID onto every unambiguously-matched stamp. Owner-authorized, collection-scoped. Returns
@@ -648,16 +676,16 @@ export async function matchColnectItems(
     });
   };
 
-  // Recall net: for every distinct (vendor, number-digits) pair, pull stamps holding that vendor's
-  // number containing those digits. Precision (the strict full-key check) happens in memory below.
-  const recall = new Map<string, { catalogVendorId: string; digits: string }>();
+  // Recall net: for every distinct (vendor, token) pair, pull stamps holding that vendor's number
+  // containing the token. Precision (the strict full-key check) happens in memory below.
+  const recall = new Map<string, ColnectRecallCondition>();
   for (const { item } of resolvedItems) {
     for (const ref of item.catalogRefs) {
       const vendorId = resolveVendorId(ref.catalog);
       if (!vendorId) continue;
-      const digits = catalogDigits(ref.number);
-      if (!digits) continue;
-      recall.set(`${vendorId}~${digits}`, { catalogVendorId: vendorId, digits });
+      const token = colnectRecallToken(ref.number);
+      if (!token) continue;
+      recall.set(`${vendorId}~${token.value}`, { catalogVendorId: vendorId, ...token });
     }
   }
 
@@ -667,7 +695,12 @@ export async function matchColnectItems(
           collectionId,
           OR: [...recall.values()].map((r) => ({
             catalogNumbers: {
-              some: { catalogVendorId: r.catalogVendorId, number: { contains: r.digits } },
+              some: {
+                catalogVendorId: r.catalogVendorId,
+                number: r.insensitive
+                  ? { contains: r.value, mode: "insensitive" as const }
+                  : { contains: r.value },
+              },
             },
           })),
         },

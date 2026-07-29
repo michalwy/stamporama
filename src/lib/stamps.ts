@@ -766,15 +766,40 @@ export interface StampSearchItem {
 const PICKER_LIMIT = 20;
 
 /**
+ * The substring to recall stamps by from a picker query, matched against the stored catalog
+ * `number`.
+ *
+ * Digits are the sharpest handle and the common case: `"Mi PL 200"` → `"200"`, matched
+ * case-sensitively. A query with **no digits at all** would otherwise never reach the catalog
+ * branch, which loses digit-free numbering — Michel's Roman local issues, e.g. `Mi·RU-BW IIIA`.
+ * For those the handle is the query's last whitespace-separated token (`"Mi RU-BW IIIA"` →
+ * `"IIIA"`, `"IIIA"` → `"IIIA"`), matched case-insensitively so a stamp filed as `IIIa` is still
+ * recalled. An ordinary word query ("eagle") simply lands on this branch and matches no number —
+ * recall may over-match freely, since the precision pass below is what decides.
+ *
+ * The whitespace split is what the vendor/prefix are shed by, so — unlike the numeric case — a
+ * *fully concatenated* digit-free query ("MiRU-BWIIIA") is not recalled: there is no digit run to
+ * cut on, and stripping a vendor abbreviation here would need the collection's vendors before the
+ * query is built. Typing the parts apart, or the bare number, finds the stamp.
+ */
+function catalogRecallToken(text: string): { value: string; insensitive: boolean } | null {
+  const digits = catalogDigits(text);
+  if (digits) return { value: digits, insensitive: false };
+  const last = text.trim().split(/\s+/).at(-1) ?? "";
+  return last ? { value: last, insensitive: true } : null;
+}
+
+/**
  * Search a collection's stamps for the inventory picker autocomplete (#104).
  *
  * The database query is a broad *recall* net — name / issue-name substring, a
- * catalog-number-digits `contains`, and a copy `locationRef` substring (#303) — and the
- * JS pass is *precision*: a candidate survives only if the query matches its name/issue
- * text, one of its copies' location refs, or, via {@link catalogKeyMatches}, its
- * normalized catalog keys (vendor abbreviation + effective area prefix + number). That
- * normalization is what lets `Mi PL200`, `MiPL200`, and `200` all resolve to the same
- * stamp. Returns ≤20 rows, catalog matches first, then by newest issue year.
+ * catalog-number `contains` (see {@link catalogRecallToken}), and a copy `locationRef`
+ * substring (#303) — and the JS pass is *precision*: a candidate survives only if the
+ * query matches its name/issue text, one of its copies' location refs, or, via
+ * {@link catalogKeyMatches}, its normalized catalog keys (vendor abbreviation + effective
+ * area prefix + number). That normalization is what lets `Mi PL200`, `MiPL200`, and `200`
+ * all resolve to the same stamp. Returns ≤20 rows, catalog matches first, then by newest
+ * issue year.
  */
 export async function searchStampsForPicker(
   ownerId: string,
@@ -784,15 +809,23 @@ export async function searchStampsForPicker(
   await assertCollectionOwner(ownerId, collectionId);
   const text = query.trim();
   if (!text) return [];
-  const digits = catalogDigits(text);
+  const catalogToken = catalogRecallToken(text);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const or: any[] = [
     { name: { contains: text, mode: "insensitive" } },
     { issueMemberships: { some: { issue: { name: { contains: text, mode: "insensitive" } } } } },
   ];
-  if (digits) {
-    or.push({ catalogNumbers: { some: { number: { contains: digits } } } });
+  if (catalogToken) {
+    or.push({
+      catalogNumbers: {
+        some: {
+          number: catalogToken.insensitive
+            ? { contains: catalogToken.value, mode: "insensitive" }
+            : { contains: catalogToken.value },
+        },
+      },
+    });
   }
   // A stamp is also reachable by where one of its copies is filed (#303), so the shelf
   // reference on a piece in hand finds the stamp it belongs to.
