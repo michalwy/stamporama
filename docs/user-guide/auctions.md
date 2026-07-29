@@ -1,12 +1,14 @@
-# Auction sales
+# Auction tracking
 
 Auction tracking is a **bidding watchlist with a fork at the end**. You record what you are bidding
 on, keep the bids current while the lots run, and each lot ends either won — settled into a
 [purchase](purchases.md) — or lost, which leaves behind what the material actually fetched.
 
-Open **Auction sales** from the **Buying** section of the sidebar. It opens on the **lots**, not on
-a list of sales: what you do daily is scan closing times and refresh bids, and that is a list of
-lots. The sales themselves are one click away, for paying for a parcel.
+**Auctions** in the **Buying** section of the sidebar opens onto two entries. **Lots** is the
+watchlist — every lot across every seller, which is where the daily job is done: scanning closing
+times and refreshing bids. **Sales** is the settlement side, one row per parcel, which is where you
+go when an invoice arrives. They are separate destinations because they are separate jobs, done on
+different days; the cross-links between them are described below.
 
 ## Two levels: the sale is a parcel, the lot is a thing
 
@@ -91,9 +93,21 @@ What it is worth:
 | **headroom** | what is left over |
 
 On the **cost** side each figure exists twice: the **bid** line is hammer prices, the **all-in**
-line is the same figure with the seller's premium added. Each pair has one figure you type and one
-derived from it, shown muted — the auction's bid and yours are bids, a ceiling is a valuation of the
-total. The ceiling's muted half is exactly what *Bid my ceiling* would place.
+line is the same figure with the seller's premium added. Exactly one of each pair is what gets
+stored — the auction's bid and yours are bids, a ceiling is a valuation of the total — and the other
+is worked out from it and shown muted. The ceiling's muted half is exactly what *Bid my ceiling*
+would place.
+
+In your own two columns, **Mine** and **Ceiling**, you can type into **either half**. The two cells
+are one fact said two ways, so say it whichever way you have it to hand: put `50` in your **all-in**
+cell and the bid that costs that much is stored; put `40` in the ceiling's **bid** cell and the
+ceiling becomes what bidding 40 would cost you. Which of the two is the one actually kept is not
+something you need to think about.
+
+Both directions round to the cent that keeps the figure you typed intact: an **all-in** target
+reads back as the total you asked for, and a bid typed into the ceiling's bid cell stays placeable
+under the ceiling it produces. The **Auction** column is one-way on purpose: that bid is an
+observation of what someone else did, and there is nothing to state twice about it.
 
 The **worth** side is not a third and fourth of those. Its top line, **value**, is the catalogue
 value of what you said the lot holds — see [What a lot contains](#what-a-lot-contains) below — so it
@@ -123,6 +137,14 @@ Your figures turn **amber** when the bid you placed would, all-in, cost more tha
 is a different kind of news from the price running away from you — it is your own commitment, and
 the only one of the two you can still take back.
 
+**Clicking a row opens the parcel it belongs to**, with that lot scrolled to and marked so you do
+not have to find it again among the sale's other lots. The mark is not a flash you can miss: the
+card is outlined and carries an *Opened from the watchlist* strip, and it **stays** until you clear
+it with the ✕ on that strip. Clicking any of the row's own controls does what that control does
+instead — the figures stay editable in place, the chips and the ⋮ menu
+keep their own behaviour — and selecting text on the row does not navigate. Hold ⌘ or Ctrl to open
+the sale in a new tab.
+
 ### Bidding to your ceiling
 
 **Bid my ceiling** in the row's ⋮ menu records the largest bid that still fits inside your ceiling —
@@ -133,6 +155,39 @@ costs 99.99 all-in; bidding 100 would cost 122.
 It rounds down, so the all-in never creeps past the limit, and it is unavailable when there is no
 ceiling yet or when the fees alone already exceed it — the menu says which. Placing the bid at the
 platform is still yours to do; this records what you placed.
+
+### Filling a figure in from one you already have
+
+Three of these figures are worth copying rather than retyping, and each is offered twice: as an
+entry in the row's ⋮ menu, and as a small button that appears when you hover the row, just right of
+the column it fills. The button is labelled with the **column the figure comes from**, shortened —
+`CEIL` for your ceiling, `CAT` for catalogue value — so it says what it does without needing to be
+learned.
+
+| Action | Button | Writes | From |
+|---|---|---|---|
+| **Bid my ceiling** | `CEIL` | Mine / bid | your ceiling |
+| **Bid catalogue value** | `CAT` | Mine / bid | the lot's catalogue value |
+| **Ceiling = catalogue value** | `CAT` | Ceiling | the lot's catalogue value |
+
+The buttons sit **between the two lines** of their column, not on either one, because a quick fill
+sets the column as a whole: fill in a bid and the all-in under it follows, set the ceiling and the
+bid it allows follows. Where a column offers two, they are stacked one under the other. They sit
+just **after** the figures rather than before them — amounts are right-aligned, so that is the side
+their own number is on.
+
+The two that place a **bid** go through the same arithmetic *Bid my ceiling* does, because both
+sources are all-in figures and a bid box is not: on a house charging 20%, a catalogue value of 100
+means bidding **83.33**. The one that sets the **ceiling** copies across unchanged — a ceiling is
+itself an all-in valuation, so there is nothing to convert.
+
+Every one of them is a starting point, never a link: the field stays yours to edit afterwards, and
+nothing recomputes it if the catalogue value later changes.
+
+An action whose source is missing is shown greyed out with the reason underneath, rather than
+hidden — most often *describe what the lot holds first*, since catalogue value follows from
+[what you say a lot contains](#what-a-lot-contains). The ceiling can be filled in on a lot that has
+already closed; the two that place a bid cannot, because there is nothing left to bid on.
 
 ### Closing times
 
@@ -238,7 +293,7 @@ be bookmarked or shared.
 
 ## Sales — paying for a parcel
 
-**Sales →** on the toolbar lists the settlements. Each row shows the parcel's **all-in total**:
+**Auctions → Sales** in the sidebar lists the settlements. Each row shows the parcel's **all-in total**:
 every bid you would actually pay for — *watching* and *won* lots — plus the premium on each, plus
 shipping once. A lost lot costs nothing and is left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping

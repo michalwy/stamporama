@@ -136,6 +136,60 @@ const sectionLabelStyle: React.CSSProperties = {
   margin: 0,
 };
 
+/** The group row's own label — a heading, so it reads like the section labels above it rather than
+ * like the entries under it. */
+const groupLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  padding: "0.5rem 0.75rem",
+  fontSize: "0.875rem",
+  color: "var(--color-text-muted)",
+  cursor: "default",
+};
+
+/**
+ * Two nav entries that are **one subject** (#376): Auction lots and Auction sales.
+ *
+ * They are separate destinations because they are separate jobs, but they are not separate parts of
+ * the collection the way Purchases and Offers are, and two flat siblings under `Buying` said
+ * otherwise. The group is a **heading, not a destination** — a parent linking to one of its own
+ * children would make that child's entry a duplicate, and would light two rows at once.
+ *
+ * Children carry no icon of their own: the group's icon marks the subject, and the indent and its
+ * guide line say which rows belong to it.
+ */
+function NavGroup({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div style={groupLabelStyle}>
+        {icon}
+        {label}
+      </div>
+      <div
+        style={{
+          marginLeft: "1.375rem",
+          paddingLeft: "0.375rem",
+          borderLeft: "1px solid var(--color-border)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.125rem",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function NavItem({
   href,
   icon,
@@ -144,7 +198,8 @@ function NavItem({
   spacedAbove = false,
 }: {
   href: string;
-  icon: React.ReactNode;
+  /** Omitted for an entry inside a {@link NavGroup}, where the group's icon names the subject. */
+  icon?: React.ReactNode;
   label: string;
   active: boolean;
   /** Sets the item apart from the section above it without giving it a heading of its own — for an
@@ -217,8 +272,15 @@ export function CollectionSidebar({
 
   const base = `/c/${collectionSlug}`;
 
-  function isActive(href: string) {
-    if (href === base) return pathname === base;
+  /**
+   * Whether a nav entry owns the current screen.
+   *
+   * `startsWith` is right for a section whose sub-routes all belong to it, but wrong where two
+   * entries sit on one branch — Auction lots (`/auctions`) and Auction sales (`/auctions/sales`)
+   * would otherwise both light up on a sale (#376). The shorter of such a pair asks for `exact`.
+   */
+  function isActive(href: string, exact = false) {
+    if (exact || href === base) return pathname === href;
     return pathname.startsWith(href);
   }
 
@@ -419,14 +481,25 @@ export function CollectionSidebar({
           label="Purchases"
           active={isActive(`${base}/purchases`)}
         />
-        {/* The nav entry is the *lots* screen, not a list of sales (ADR-0021 §9): scanning closing
-            times and refreshing bids is the daily job. */}
-        <NavItem
-          href={`${base}/auctions`}
-          icon={<IconAuctions />}
-          label="Auction sales"
-          active={isActive(`${base}/auctions`)}
-        />
+        {/* Two entries, not one (#376). The lots screen and the settlement screen answer different
+            questions on different days — "what do I bid on next", across every seller, versus "what
+            do I owe for this parcel" — and reaching the second through the first made the daily
+            screen double as a doorway. Nested rather than flat, because they are two views of one
+            subject; Lots leads, being the daily job (ADR-0021 §9). */}
+        <NavGroup icon={<IconAuctions />} label="Auctions">
+          <NavItem
+            href={`${base}/auctions`}
+            label="Lots"
+            // Exact: every sale route lives under `/auctions`, and `startsWith` would light this
+            // entry on the sales screens too.
+            active={isActive(`${base}/auctions`, true)}
+          />
+          <NavItem
+            href={`${base}/auctions/sales`}
+            label="Sales"
+            active={isActive(`${base}/auctions/sales`)}
+          />
+        </NavGroup>
 
         <p style={sectionLabelStyle}>Selling</p>
         <NavItem

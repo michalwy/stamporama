@@ -226,6 +226,17 @@ export interface AuctionLotListItem {
   /** The value leans on a lowest-variant estimate (#238) — *inferred, not recorded*, and rendered
    * with the same `~` + italics vocabulary the issue list uses. */
   catalogUncertain: boolean;
+  /**
+   * The highest hammer price whose all-in cost still fits inside {@link catalogValue} — what
+   * *Bid catalogue value* (#371) actually places.
+   *
+   * The same inverse {@link bidRoom} applies to a ceiling, and for the same reason: catalogue value
+   * is an **all-in** figure (it is exactly what {@link headroom} subtracts the all-in cost from),
+   * while a platform's bid box takes a hammer price. Bidding the catalogue figure itself would
+   * overshoot it by the premium on every lot. Null without a composition value, and null when the
+   * fees alone already exceed it.
+   */
+  catalogBidRoom: string | null;
   /** Lines with no catalogue price at their condition × format. Surfaced rather than hidden: a
    * total that silently omits half the lot looks complete. */
   unpricedLineCount: number;
@@ -240,6 +251,16 @@ export interface AuctionLotListItem {
    * parcel and the sale's own total adds it once ({@link AuctionSaleSummary.headroom}).
    */
   headroom: string | null;
+  /**
+   * The seller's premium as the sale carries it (ADR-0021 §1) — percentage and flat fee.
+   *
+   * Shipped on the row because the *Mine* and *Ceiling* columns are edited **from either side**: a
+   * figure typed as an all-in cost is converted back into the hammer price that is stored, and one
+   * typed as a bid into the all-in valuation that is. That is the same `allIn` / `maxBidWithin`
+   * arithmetic this module applies, run over what is on screen — not a second implementation.
+   */
+  premiumPercent: string | null;
+  premiumFixed: string | null;
   /** Whether the lot has been transcribed into a purchase (#28) — it is then read-only here. */
   settled: boolean;
   createdAt: Date;
@@ -338,11 +359,16 @@ function toLotListItem(row: LotRow, composition?: AuctionLotComposition): Auctio
     lineCount: row._count.lines,
     catalogValue: composition?.catalogValue ?? null,
     catalogUncertain: composition?.uncertain ?? false,
+    // Same inverse, same fees, same omission of shipping as `bidRoom` above — catalogue value is an
+    // all-in figure and a bid box is not.
+    catalogBidRoom: maxBidWithin(composition?.catalogValue ?? null, fees),
     unpricedLineCount: composition?.unpricedLines ?? 0,
     unconvertibleLineCount: composition?.unconvertibleLines ?? 0,
     // Against the same costed figure `allIn` used — the settled price once the lot closed, else the
     // last observed bid — so the two figures on the row are always about the same money.
     headroom: headroom(composition?.catalogValue ?? null, money(costed), fees),
+    premiumPercent: fees.premiumPercent,
+    premiumFixed: fees.premiumFixed,
     settled: row.purchaseLotId !== null,
     createdAt: row.createdAt,
   };

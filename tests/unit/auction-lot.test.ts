@@ -6,6 +6,8 @@ import {
   headroom,
   lotHasSignal,
   maxBidWithin,
+  bidCosting,
+  ceilingAllowing,
   settlementLinePrice,
   LOT_SIGNALS,
   summarizeAuctionSale,
@@ -224,6 +226,61 @@ describe("maxBidWithin", () => {
     assert.equal(maxBidWithin(""), null);
     assert.equal(maxBidWithin("10", { premiumFixed: "10" }), null);
     assert.equal(maxBidWithin("10", { premiumFixed: "12" }), null);
+  });
+});
+
+// bidCosting / ceilingAllowing — the two-sided columns' conversions -----------
+
+describe("bidCosting", () => {
+  const HOUSE = { premiumPercent: "20", premiumFixed: "1.50" };
+
+  it("round-trips the total that was typed", () => {
+    // The case that made this exist: `maxBidWithin` floors to 165.41, which costs 199.99 and shows
+    // the collector a cent less than the figure they just stated.
+    assert.equal(maxBidWithin("200", HOUSE), "165.41");
+    assert.equal(allIn("165.41", HOUSE), "199.99");
+
+    const bid = bidCosting("200", HOUSE)!;
+    assert.equal(bid, "165.42");
+    assert.equal(allIn(bid, HOUSE), "200.00");
+  });
+
+  it("is the total itself when the seller charges nothing", () => {
+    assert.equal(bidCosting("40"), "40.00");
+  });
+
+  it("counts shipping only when asked to", () => {
+    assert.equal(bidCosting("100", { shippingCost: "15" }), "85.00");
+  });
+
+  it("has no answer without a total, or when the fees alone exceed it", () => {
+    assert.equal(bidCosting(null), null);
+    assert.equal(bidCosting(""), null);
+    assert.equal(bidCosting("10", { premiumFixed: "10" }), null);
+    assert.equal(bidCosting("10", { premiumFixed: "12" }), null);
+  });
+});
+
+describe("ceilingAllowing", () => {
+  const HOUSE = { premiumPercent: "20", premiumFixed: "1.50" };
+
+  it("leaves the typed bid still placeable", () => {
+    // Rounding to nearest would store 199.99, and `maxBidWithin` would then hand back 165.40 — one
+    // cent under the bid the collector asked to be able to place.
+    const ceiling = ceilingAllowing("165.41", HOUSE)!;
+    assert.equal(ceiling, "200.00");
+    assert.ok(Number(maxBidWithin(ceiling, HOUSE)) >= 165.41);
+  });
+
+  it("does not push a whole-cent cost up to the next cent", () => {
+    assert.equal(ceilingAllowing("40", HOUSE), "49.50");
+    assert.equal(maxBidWithin("49.50", HOUSE), "40.00");
+    assert.equal(ceilingAllowing("40"), "40.00");
+  });
+
+  it("has no answer without a bid", () => {
+    assert.equal(ceilingAllowing(null), null);
+    assert.equal(ceilingAllowing(""), null);
   });
 });
 

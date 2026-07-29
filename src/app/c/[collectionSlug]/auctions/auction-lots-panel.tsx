@@ -333,18 +333,6 @@ export function AuctionLotsPanel({
           {actionError && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
           )}
-          <Link
-            href={`/c/${collectionSlug}/auctions/sales`}
-            style={{
-              ...CONTROL_STYLE,
-              display: "inline-flex",
-              alignItems: "center",
-              fontWeight: 600,
-              textDecoration: "none",
-            }}
-          >
-            Sales →
-          </Link>
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}
@@ -421,6 +409,7 @@ export function AuctionLotsPanel({
                     collectionSlug={collectionSlug}
                     now={now}
                     showSale={false}
+                    linkToSale
                     isLast={idx === group.lots.length - 1}
                     isPending={isPending}
                     onEdit={(row) => setDialog({ kind: "edit", lot: row })}
@@ -465,6 +454,7 @@ export function AuctionLotsPanel({
                   lot={lot}
                   collectionSlug={collectionSlug}
                   now={now}
+                  linkToSale
                   isLast={idx === rows.length - 1 && !hasNextPage}
                   isPending={isPending}
                   onEdit={(row) => setDialog({ kind: "edit", lot: row })}

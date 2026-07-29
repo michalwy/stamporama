@@ -129,6 +129,50 @@ export function maxBidWithin(ceiling: Amount, fees: AuctionFees = {}): string | 
 }
 
 /**
+ * The hammer price that **costs** a given all-in figure — {@link allIn} inverted and rounded to the
+ * **nearest** cent.
+ *
+ * Deliberately not {@link maxBidWithin}, which asks a different question. That one respects a
+ * *cap*, so it rounds down and a cent of slack is the correct answer. This one converts a figure
+ * the collector **stated**: they typed a total into the all-in cell of their own column, and the
+ * bid stored has to be the one that reads back as the number they typed. Rounding down there loses
+ * a cent on the way out and shows it straight back to them — a 20% + 1.50 house turns a stated 200
+ * into 199.99, which reads as arithmetic going wrong rather than as a bid being chosen.
+ *
+ * Nothing here is a limit, so nearest is safe: a placed bid is a *record* of a commitment, and
+ * whether it sits above what the lot is worth to the collector is what the ceiling and
+ * `myBidOverCeiling` are for.
+ *
+ * Null when the target is unrecorded, and null when the fees alone already exceed it — no bid
+ * produces that total, which is a real answer rather than a zero.
+ */
+export function bidCosting(total: Amount, fees: AuctionFees = {}): string | null {
+  const target = num(total);
+  if (target === null) return null;
+  const room = target - fee(fees.premiumFixed) - fee(fees.shippingCost);
+  if (room <= 0) return null;
+  return money(room / (1 + fee(fees.premiumPercent) / 100));
+}
+
+/**
+ * The smallest ceiling that still **allows** a given bid: {@link allIn} rounded **up** to the cent.
+ *
+ * The mirror of {@link bidCosting}, for the other two-sided column. A ceiling is an all-in
+ * valuation, so typing a bid into its bid cell means "I want to be able to bid this much" — and the
+ * ceiling stored has to be enough for that bid to still fit inside it. Rounding to nearest would
+ * round *down* whenever the true cost lands mid-cent, and {@link maxBidWithin} would then hand back
+ * a bid one cent under the one that was typed.
+ *
+ * The epsilon absorbs binary-float noise, so a cost that is exactly a whole cent is not pushed up
+ * to the next one.
+ */
+export function ceilingAllowing(bid: Amount, fees: AuctionFees = {}): string | null {
+  const base = num(bid);
+  if (base === null) return null;
+  return (Math.ceil(allInValue(base, fees) * 100 - 1e-6) / 100).toFixed(2);
+}
+
+/**
  * Where the collector stands on a lot, derived from what they placed against what it now stands at.
  *
  * - `leading` — their bid is at or above the current price, so nobody has passed them.

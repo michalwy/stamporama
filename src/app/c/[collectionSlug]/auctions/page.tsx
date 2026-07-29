@@ -5,15 +5,14 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { AuctionLotsPanel } from "./auction-lots-panel";
 
-export const metadata = { title: "Auction sales" };
+export const metadata = { title: "Auction lots" };
 
 interface AuctionsPageProps {
   params: Promise<{ collectionSlug: string }>;
 }
 
-/** The auction nav page leads with the **flat list of lots**, not a list of sales (ADR-0021 §9):
- * scanning closing times and refreshing bids is the daily job, and the settlement bucket only
- * matters when a lot is added and when the parcel is paid for. */
+/** The watchlist: every lot across every sale, which is where the daily job is done (ADR-0021 §9).
+ * Its own nav entry since #376, beside — not above — the settlement screen at `sales/`. */
 export default async function AuctionsPage({ params }: AuctionsPageProps) {
   const { collectionSlug } = await params;
 

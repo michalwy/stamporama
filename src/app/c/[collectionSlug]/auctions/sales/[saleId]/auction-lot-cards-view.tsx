@@ -306,6 +306,13 @@ function LotCompositionFooter({ lot }: { lot: AuctionLotDetailView }) {
 interface LotCardProps {
   lot: AuctionLotDetailView;
   lines: AuctionLotLineItem[];
+  /** This is the lot the collector arrived here to see (#374) — scrolled into view, flashed once on
+   * arrival, and then **kept marked** until they say otherwise, so a parcel of thirty lots does not
+   * have to be scanned again for the row that was clicked. */
+  highlighted: boolean;
+  /** Drop the mark. It is the URL that carries it, so this is how the collector puts the screen
+   * back to an ordinary sale rather than a sale with one lot singled out. */
+  onClearHighlight: () => void;
   expanded: boolean;
   byIssue: boolean;
   collectionSlug: string;
@@ -328,6 +335,8 @@ interface LotCardProps {
 function LotCard({
   lot,
   lines,
+  highlighted,
+  onClearHighlight,
   expanded,
   byIssue,
   collectionSlug,
@@ -348,16 +357,69 @@ function LotCard({
   // A settled lot's figures and contents live on the purchase now (#28).
   const editable = !lot.settled;
 
+  // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
+  // default: the card's own header is sticky, so a card scrolled to the top edge would sit under
+  // the toolbar it just scrolled past.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlighted]);
+
   return (
     <div
+      ref={cardRef}
+      // The one-shot tint every other "here it is" moment in the app uses (#158) — it ends on the
+      // card's own surface colour, so the fade finishes seamlessly. It is the *arrival*, not the
+      // mark: the ring and the strip below outlive it.
+      className={highlighted ? "just-added-flash" : undefined}
       style={{
         border: "1px solid var(--color-border)",
         borderRadius: "0.75rem",
         overflow: "clip",
         background: "var(--color-bg-elevated)",
+        // The mark itself, and it **stays** — a flash is gone by the time the eye has finished
+        // reading the parcel's other lots, and the collector then has to find the row again. Drawn
+        // as a ring rather than a border so the card does not change size when it appears.
+        boxShadow: highlighted ? "0 0 0 2px var(--color-accent)" : undefined,
       }}
     >
       <div ref={sentinelRef} style={{ height: 0 }} />
+      {/* Why this one card is ringed, and the way to stop it being. Deliberately not sticky: the
+          ring is what carries the mark once the strip has scrolled off, and a second sticky band
+          above the row would push the figures down the screen on the one card being read. */}
+      {highlighted && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.375rem 1.25rem",
+            borderBottom: "1px solid var(--color-border)",
+            background: "var(--color-accent-soft)",
+            fontSize: "0.75rem",
+            color: "var(--color-accent)",
+          }}
+        >
+          <span>Opened from the watchlist</span>
+          <button
+            type="button"
+            onClick={onClearHighlight}
+            aria-label="Clear the highlight"
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "inherit",
+              fontSize: "0.75rem",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* The header **is** the watchlist row — the same figures, the same inline bid editing, the
           same ⋮ — so a bid is refreshed from the parcel screen exactly as it is from the list. */}
       <div
@@ -449,6 +511,11 @@ interface AuctionLotCardsViewProps {
   issueHeaderById: Record<string, IssueHeader>;
   now: Date;
   isPending: boolean;
+  /** The lot named by `?lot=` in the URL — what a click on the flat watchlist arrived to see
+   * (#374). Null when the sale was opened on its own. */
+  highlightLotId: string | null;
+  /** Drop that mark — the panel owns the URL it lives in. */
+  onClearHighlight: () => void;
   /** Refresh the sale after a composition change. */
   onChanged: () => void;
   onEditLot: (lot: AuctionLotDetailView) => void;
@@ -475,6 +542,8 @@ export function AuctionLotCardsView({
   issueHeaderById,
   now,
   isPending,
+  highlightLotId,
+  onClearHighlight,
   onChanged,
   onEditLot,
   onDeleteLot,
@@ -677,6 +746,10 @@ export function AuctionLotCardsView({
               key={lot.id}
               lot={lot}
               lines={sortLines(lot.lines.filter(matches))}
+              // Only once the preferences have been read: the scroll happens on the effect this
+              // flag fires, and running it against a not-yet-laid-out list would land nowhere.
+              highlighted={hydrated && lot.id === highlightLotId}
+              onClearHighlight={onClearHighlight}
               // Collapsed until the view preferences have been read, so a returning collector's
               // choice does not flash open first.
               expanded={hydrated && !collapsed.has(lot.id)}

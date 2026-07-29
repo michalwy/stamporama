@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -77,18 +76,6 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
           {actionError && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
           )}
-          <Link
-            href={`/c/${collectionSlug}/auctions`}
-            style={{
-              ...CONTROL_STYLE,
-              display: "inline-flex",
-              alignItems: "center",
-              fontWeight: 600,
-              textDecoration: "none",
-            }}
-          >
-            ← Lots
-          </Link>
           <button
             type="button"
             onClick={() => setDialog({ kind: "add" })}

@@ -6,6 +6,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { closingUrgency, isTerminalLotStatus, type ClosingUrgency } from "@/lib/auction-rules";
+import { allIn, bidCosting, ceilingAllowing, maxBidWithin, type AuctionFees } from "@/lib/auction-lot";
 import type { AuctionLotView } from "./use-auctions-query";
 import { BidFreshnessChip, BidStandingChip, LotStatusChip, OverCeilingChip } from "./auction-badges";
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
@@ -67,13 +68,50 @@ const GRID_LABEL: React.CSSProperties = {
  * Spans every row explicitly, so the cells around it keep auto-placing in order.
  */
 const GRID_RULE: React.CSSProperties = {
-  gridColumn: 5,
+  gridColumn: 7,
   gridRow: "1 / 4",
   justifySelf: "center",
   alignSelf: "stretch",
   width: "1px",
   background: "var(--color-border)",
 };
+
+/**
+ * Where a column's quick-fill controls sit: a narrow track of their own, immediately **right** of
+ * the column they write, **spanning both figure rows and centred between them**.
+ *
+ * A quick fill sets the whole column — the stored figure and the derived one under it move
+ * together — so putting each control in the cell it happens to write scattered them across two
+ * different rows for no reason a reader could see: the ceiling's editable figure is its *all-in*
+ * line, while yours is the *bid* line. Centred against the pair, one control plainly belongs to one
+ * column. Explicitly placed, so the cells around them keep auto-placing in order — the same trick
+ * {@link GRID_RULE} uses.
+ *
+ * Where a column offers two, they **stack**. Side by side they read as one two-word label on the
+ * figure beside them (`CEIL CAT 33.00`); one under the other they are plainly two controls, and
+ * every gutter then wants the width of a single word — which is also what keeps both of them the
+ * same width as each other.
+ *
+ * **After** the column, not before it, and hugging the near edge of the track. The figures are
+ * right-aligned, so the empty part of an amount track is on its *left*: a gutter placed ahead of a
+ * column ends up one gap away from the **previous** column's figure and several away from the one
+ * it actually fills, and reads as belonging to the wrong column. Placed after, it sits one gap from
+ * its own figure and nothing else is near it.
+ */
+function quickFillSlot(column: number): React.CSSProperties {
+  return {
+    gridColumn: column,
+    gridRow: "2 / 4",
+    alignSelf: "center",
+    justifySelf: "start",
+    display: "inline-flex",
+    flexDirection: "column",
+    // Against the near edge, so a two-control stack and a one-control one sit the same distance
+    // from the figures they fill.
+    alignItems: "flex-start",
+    gap: "0.25rem",
+  };
+}
 
 /** How the closing time reads. Colour here means **"act now"**, so only a deadline you can still do
  * something about gets any: red inside two hours, amber inside a day, plain text further out.
@@ -176,6 +214,164 @@ function lotLabel(lot: AuctionLotView): string {
   return "Untitled lot";
 }
 
+/**
+ * A figure the row already knows, offered as a one-click fill for a field beside it (#370, #371).
+ *
+ * The row offers each of these **twice** — as a `⋮` entry and as a hover control in the very cell
+ * it writes — and both are built from this one descriptor, so the two surfaces can never disagree
+ * about whether the action is available or about what it will do. `value === null` is the single
+ * definition of unavailable; the hint then says why, which is #273's rule for the menu (a disabled
+ * entry never receives a hover event, so the reason has to be printed under the label).
+ */
+interface QuickFill {
+  /** The figure to write, as the target field would store it. Null when the action is unavailable. */
+  value: string | null;
+  /** What it will do, or — when `value` is null — why it cannot. */
+  hint: string;
+}
+
+/** Why catalogue value cannot be a source: nothing described, or nothing described carries a price.
+ * Named apart from a bare "no catalogue value", because the two are fixed in different places. */
+function noCatalogValueHint(lot: AuctionLotView): string {
+  return lot.lineCount === 0
+    ? "Describe what the lot holds first — its catalogue value follows from that"
+    : "Nothing described in this lot carries a catalogue price yet";
+}
+
+/**
+ * Catalogue value → the ceiling (#370).
+ *
+ * The only one of the three that copies its figure across **unchanged**: a ceiling is what the lot
+ * is worth *all-in* (ADR-0021 §6) and catalogue value is an all-in figure too — it is exactly what
+ * `headroom` subtracts the all-in cost from. The two that place a *bid* have to go through the
+ * inverse instead, because a platform's bid box takes a hammer price.
+ *
+ * Not blocked on a closed lot, deliberately: the ceiling cell stays editable there for the same
+ * reason a listing URL does (#213) — recording what a lot was worth to you is most often done
+ * after the fact.
+ */
+function ceilingFromCatalog(lot: AuctionLotView, editable: boolean): QuickFill {
+  if (!editable) {
+    return { value: null, hint: "Settled into a purchase — edit the purchase instead" };
+  }
+  if (lot.catalogValue === null) return { value: null, hint: noCatalogValueHint(lot) };
+  return {
+    value: lot.catalogValue,
+    hint: `Sets your ceiling to ${lot.catalogValue} ${lot.currency} — what this lot is worth at catalogue, all-in`,
+  };
+}
+
+/** Your ceiling → the bid you place, at the most that fits inside it once the fees are counted.
+ * Reads the ceiling **as displayed**, so a quick fill offered right after another edit is about the
+ * figure on screen rather than the one the last fetch carried. */
+function bidFromCeiling(
+  lot: AuctionLotView,
+  ceiling: string | null,
+  room: string | null,
+  editable: boolean,
+  terminal: boolean
+): QuickFill {
+  if (!editable) return { value: null, hint: "Settled into a purchase — edit the purchase instead" };
+  if (terminal) return { value: null, hint: "This lot has closed" };
+  if (ceiling === null) {
+    return { value: null, hint: "Set a ceiling first — this bids the most that fits inside it" };
+  }
+  if (room === null) {
+    return { value: null, hint: "The seller's fees alone exceed your ceiling" };
+  }
+  return {
+    value: room,
+    hint: `Records a bid of ${room} ${lot.currency} — all-in, that is your ceiling`,
+  };
+}
+
+/** Catalogue value → the bid you place (#371), through the same inverse, for the same reason. */
+function bidFromCatalog(lot: AuctionLotView, editable: boolean, terminal: boolean): QuickFill {
+  if (!editable) return { value: null, hint: "Settled into a purchase — edit the purchase instead" };
+  if (terminal) return { value: null, hint: "This lot has closed" };
+  if (lot.catalogValue === null) return { value: null, hint: noCatalogValueHint(lot) };
+  if (lot.catalogBidRoom === null) {
+    return { value: null, hint: "The seller's fees alone exceed the catalogue value" };
+  }
+  return {
+    value: lot.catalogBidRoom,
+    hint: `Records a bid of ${lot.catalogBidRoom} ${lot.currency} — all-in, that is catalogue value`,
+  };
+}
+
+/**
+ * How a quick-fill control is written: the **abbreviated name of the column the figure comes from**,
+ * set like the grid's own headings so it reads as part of the same table.
+ *
+ * A word, not a glyph. Arrows were tried and could not say what they meant — an arrow can only show
+ * *direction*, and every one of these moves a figure leftward into a neighbouring column, so up and
+ * down were doing the work of naming a source they could not name. `CEIL` and `CAT` say it outright,
+ * and they are the headings already printed above those columns.
+ */
+const QUICK_FILL_LABEL: React.CSSProperties = {
+  fontSize: "0.625rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  lineHeight: 1,
+  whiteSpace: "nowrap",
+};
+
+/**
+ * The in-row half of a quick fill: the source column's short name, beside the column it fills.
+ *
+ * It names the **source**, not the target, and means the same thing everywhere it appears — `CAT`
+ * is always "from catalogue value", `CEIL` always "from your ceiling" — so the Mine column can
+ * offer both without further explanation. Space is reserved whether or not the control is shown:
+ * revealing it on hover must not shunt a figure sideways, since lining one up with the rows above
+ * and below it is the whole reason the grid has fixed tracks.
+ */
+function QuickFillControl({
+  fill,
+  label,
+  ariaLabel,
+  visible,
+  onApply,
+}: {
+  fill: QuickFill;
+  /** The source column's short name — `CEIL` or `CAT`. */
+  label: string;
+  ariaLabel: string;
+  visible: boolean;
+  onApply: (value: string) => void;
+}) {
+  // Nothing to offer and nothing to explain in place: the menu entry carries the reason, which is
+  // where #273 wants it. The word is still laid out, invisibly, so it reserves its own width and
+  // the control beside it does not move.
+  if (fill.value === null) {
+    return (
+      <span aria-hidden style={{ ...QUICK_FILL_LABEL, visibility: "hidden" }}>
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Tooltip content={fill.hint}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={() => onApply(fill.value!)}
+        style={{
+          ...QUICK_FILL_LABEL,
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          color: "var(--color-accent)",
+          visibility: visible ? "visible" : "hidden",
+        }}
+      >
+        {label}
+      </button>
+    </Tooltip>
+  );
+}
+
 interface AuctionLotRowProps {
   lot: AuctionLotView;
   collectionSlug: string;
@@ -192,6 +388,14 @@ interface AuctionLotRowProps {
    * parcel a lot is in but not who it is with.
    */
   showParties?: boolean;
+  /**
+   * Whether clicking the row opens the lot's sale, with the lot itself highlighted there (#374).
+   *
+   * On for the flat watchlist, off on the sale's own screen — there the click would land on the
+   * page you are already reading, and the row is that card's header, whose caret is the only thing
+   * meant to react to a click.
+   */
+  linkToSale?: boolean;
   isPending: boolean;
   onEdit: (lot: AuctionLotView) => void;
   onDelete: (lot: AuctionLotView) => void;
@@ -230,6 +434,7 @@ export function AuctionLotRow({
   isLast,
   showSale = true,
   showParties = true,
+  linkToSale = false,
   isPending,
   onEdit,
   onDelete,
@@ -265,6 +470,82 @@ export function AuctionLotRow({
   // A settled lot is read-only here: its figures now live on the purchase (#28).
   const editable = !lot.settled;
 
+  /**
+   * The seller's terms, as the sale carries them — shipping excluded, exactly as everywhere a
+   * single lot is costed (ADR-0021 §6).
+   *
+   * The *Mine* and *Ceiling* columns are edited **from either side**: each stores one figure and
+   * shows the other, and typing into either one is a way of stating the same thing. So the derived
+   * half is computed here from the figure **as displayed** rather than read off the fetched row —
+   * that way one pending override covers both cells of a column, and neither can show the old
+   * number beside the new one while the refetch is in flight.
+   */
+  const fees: AuctionFees = {
+    premiumPercent: lot.premiumPercent,
+    premiumFixed: lot.premiumFixed,
+  };
+  /** What the bid you placed would cost. */
+  const myAllIn = allIn(myBid, fees);
+  /** The most that can be bid with the all-in still inside the ceiling. */
+  const bidRoom = maxBidWithin(maxBid, fees);
+
+  // The three quick fills (#370, #371), resolved once and used by both the ⋮ entries and the
+  // controls in the gutter beside the column each writes.
+  const bidCeiling = bidFromCeiling(lot, maxBid, bidRoom, editable, terminal);
+  const bidCatalog = bidFromCatalog(lot, editable, terminal);
+  const ceilingCatalog = ceilingFromCatalog(lot, editable);
+
+  // Every write to one of the two-sided columns goes through these: they carry the same pending
+  // override an inline edit does, so the figure appears at once — in **both** cells, since the
+  // derived half above follows the displayed one — and neither flashes its old value.
+  function applyMyBid(value: string) {
+    setPendingMine({ value: formatAmountInput(value) || null, was: lot.myBid });
+    onSetMyBid(lot, value);
+  }
+  function applyMaxBid(value: string) {
+    setPendingMax({ value: formatAmountInput(value) || null, was: lot.maxBid });
+    onSetMaxBid(lot, value);
+  }
+  /**
+   * The *Mine* column typed from its **all-in** side: what is stored is still the hammer price, so
+   * the figure is run back through `bidCosting` — the inverse rounded to the *nearest* cent, so the
+   * total reads back as the one that was typed. A target the fees alone already swallow has no bid
+   * behind it at all, and clears the column rather than inventing one.
+   */
+  function applyMyAllIn(value: string) {
+    applyMyBid(bidCosting(value, fees) ?? "");
+  }
+  /** The *Ceiling* column typed from its **bid** side: a ceiling is an all-in valuation, so what is
+   * stored is the smallest one that still lets that bid be placed. */
+  function applyCeilingBid(value: string) {
+    applyMaxBid(ceilingAllowing(value, fees) ?? "");
+  }
+
+  /** Where the row's own click goes (#374): the parcel this lot settles in, with the lot named so
+   * the sale screen can scroll to it and flash it. */
+  const highlightHref = `${saleHref}?lot=${lot.id}`;
+
+  /**
+   * The row is a click target **and** a dense set of inline-editable figures, so navigation only
+   * happens on a click that nothing else on the row wanted.
+   *
+   * Everything interactive here is an `a`, a `button`, an `input`, or — for the click-to-edit cells,
+   * which is the case that matters — a `[role="button"]`, so one `closest` covers them all and
+   * keeps covering them as the row grows. A drag that selected text is a read, not a navigation;
+   * a modified click means "somewhere else", so it opens a tab instead of replacing this screen.
+   */
+  function handleRowClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!linkToSale) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('a, button, input, select, textarea, [role="button"]')) return;
+    if (window.getSelection()?.toString()) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey) {
+      window.open(highlightHref, "_blank", "noopener,noreferrer");
+      return;
+    }
+    router.push(highlightHref);
+  }
+
   const actions: RowAction[] = [
     ...(lot.url
       ? [
@@ -285,7 +566,7 @@ export function AuctionLotRow({
             key: "sale",
             label: "Open sale",
             icon: "↗",
-            onSelect: () => router.push(saleHref),
+            onSelect: () => router.push(highlightHref),
           } as RowAction,
         ]
       : []),
@@ -306,22 +587,32 @@ export function AuctionLotRow({
               : undefined,
       onSelect: () => onMarkChecked(lot),
     },
+    // The three one-click fills. Each places a figure the row already knows into a field beside it;
+    // the two that place a *bid* go through the inverse of `allIn`, because the ceiling and the
+    // catalogue value are both all-in figures while a platform's bid box takes a hammer price.
     {
       key: "bid-ceiling",
       label: "Bid my ceiling",
       icon: "⤒",
-      // The ceiling is an all-in figure and a bid box is not, so this places the *hammer* price
-      // whose all-in still fits: bidding the ceiling itself would overshoot by the fees.
-      disabled: !editable || terminal || lot.bidRoom === null,
-      hint:
-        lot.maxBid === null
-          ? "Set a ceiling first — this bids the most that fits inside it"
-          : lot.bidRoom === null
-            ? "The seller's fees alone exceed your ceiling"
-            : terminal
-              ? "This lot has closed"
-              : `Records a bid of ${lot.bidRoom} ${lot.currency} — all-in, that is your ceiling`,
-      onSelect: () => onSetMyBid(lot, lot.bidRoom ?? ""),
+      disabled: bidCeiling.value === null,
+      hint: bidCeiling.hint,
+      onSelect: () => applyMyBid(bidCeiling.value!),
+    },
+    {
+      key: "bid-catalog",
+      label: "Bid catalogue value",
+      icon: "⤓",
+      disabled: bidCatalog.value === null,
+      hint: bidCatalog.hint,
+      onSelect: () => applyMyBid(bidCatalog.value!),
+    },
+    {
+      key: "ceiling-catalog",
+      label: "Ceiling = catalogue value",
+      icon: "⤓",
+      disabled: ceilingCatalog.value === null,
+      hint: ceilingCatalog.hint,
+      onSelect: () => applyMaxBid(ceilingCatalog.value!),
     },
     {
       key: "contents",
@@ -362,10 +653,14 @@ export function AuctionLotRow({
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onClick={handleRowClick}
         style={{
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
+          // Only where the click goes somewhere. The pointer is the whole affordance — the row is
+          // not a link element, so the keyboard route stays the ⋮ menu's *Open sale* entry.
+          cursor: linkToSale ? "pointer" : undefined,
           // Anything finished recedes: a settled outcome, and a lot whose moment has gone by. The
           // list is a watchlist, and what is over should not compete with what is running.
           opacity: terminal || urgency === "past" ? 0.6 : 1,
@@ -447,7 +742,7 @@ export function AuctionLotRow({
               {showSale && (
                 <Tooltip content="Settlement this lot belongs to">
                   <a
-                    href={saleHref}
+                    href={highlightHref}
                     style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                   >
                     {lot.saleName}
@@ -485,10 +780,18 @@ export function AuctionLotRow({
               on the left, what it is worth on the right.
 
               In the cost section each figure exists **twice**, as the hammer price and as what it
-              costs all-in, and reading them in columns is what makes them comparable. The stored
-              figure of each pair is the editable one — the auction's bid and yours are hammer
-              prices, a ceiling is an all-in valuation — and the other is derived, shown muted. The
-              ceiling's derived half is exactly what *Bid my ceiling* would place.
+              costs all-in, and reading them in columns is what makes them comparable. Exactly one
+              of each pair is **stored** — the auction's bid and yours are hammer prices, a ceiling
+              is an all-in valuation — and the other is computed from it and shown muted.
+
+              For the collector's own two columns, *Mine* and *Ceiling*, **either half can be
+              typed into**: the two cells are one fact stated two ways, and which of them is the
+              stored one is an implementation detail the collector should not have to hold in mind.
+              A figure typed into a muted cell is converted back through the same arithmetic and the
+              stored half is what is written. The **Auction** column stays one-way, because its bid
+              is an *observation* — there is nothing to state twice about a price someone else set.
+
+              The ceiling's computed half is exactly what *Bid my ceiling* would place.
 
               The worth section keeps the same two lines but **carries its own row labels**, because
               its second line is a different operation: on the left it is a figure recomputed with
@@ -501,10 +804,16 @@ export function AuctionLotRow({
               marginLeft: "auto",
               display: "grid",
               // Fixed tracks, not `auto`: every row must line its columns up with the rows above
-              // and below it, and content-sized ones make each row its own private table. Track 5
+              // and below it, and content-sized ones make each row its own private table. Track 7
               // is the rule; the label track after it belongs to the worth section, exactly as
               // track 1 belongs to the cost section.
-              gridTemplateColumns: "3rem 5.5rem 5.5rem 5.5rem 1px 3.5rem 6rem",
+              //
+              // Tracks 4 and 6 are the quick-fill gutters (#370, #371), each sitting immediately
+              // *after* the column it writes — the figures are right-aligned, so that is the side
+              // its own number is on. One word wide, since a column offering two stacks them, and
+              // fixed whether or not the row is hovered, so revealing a control never shunts a
+              // figure out of its column.
+              gridTemplateColumns: "3rem 5.5rem 5.5rem 1.75rem 5.5rem 1.75rem 1px 3.5rem 6rem",
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
@@ -513,10 +822,42 @@ export function AuctionLotRow({
           >
             <span style={GRID_RULE} aria-hidden />
 
+            {/* The quick fills, each centred against the two figure rows of the column it writes.
+                Placed explicitly, ahead of everything auto-flowing below. */}
+            <span style={quickFillSlot(4)}>
+              <QuickFillControl
+                fill={bidCeiling}
+                label="ceil"
+                ariaLabel="Bid my ceiling"
+                visible={hovered}
+                onApply={applyMyBid}
+              />
+              <QuickFillControl
+                fill={bidCatalog}
+                label="cat"
+                ariaLabel="Bid catalogue value"
+                visible={hovered}
+                onApply={applyMyBid}
+              />
+            </span>
+            <span style={quickFillSlot(6)}>
+              <QuickFillControl
+                fill={ceilingCatalog}
+                label="cat"
+                ariaLabel="Set the ceiling to catalogue value"
+                visible={hovered}
+                onApply={applyMaxBid}
+              />
+            </span>
+
             <span style={GRID_LABEL}>{lot.currency}</span>
             <span style={GRID_HEAD}>Auction</span>
             <span style={GRID_HEAD}>Mine</span>
+            {/* The gutters take no heading: a control is not a figure, and a word over it would
+                read as a fourth cost column. */}
+            <span />
             <span style={GRID_HEAD}>Ceiling</span>
+            <span />
             {/* The worth section's label column has no heading of its own — the currency in the
                 cost section's is the grid's, and repeating it would read as a second unit. */}
             <span />
@@ -573,7 +914,8 @@ export function AuctionLotRow({
                 />
               </span>
             </Tooltip>
-            {/* What you have placed at the platform. */}
+            {/* What you have placed at the platform. Its quick fills live in the gutter to its
+                left, centred against this figure and the all-in below it (#371). */}
             <Tooltip
               content={
                 lot.myBidOverCeiling
@@ -609,9 +951,23 @@ export function AuctionLotRow({
                 />
               </span>
             </Tooltip>
-            {/* Derived: the most that can be bid without the all-in passing the ceiling. */}
-            <Tooltip content="The most you can bid with the all-in still inside your ceiling">
-              <span style={MUTED_AMOUNT}>{lot.bidRoom ?? "—"}</span>
+            {/* The ceiling's **bid** side: the most that can be bid without the all-in passing it.
+                Editable too — typing a bid here is another way of saying what the lot is worth
+                to you, and the ceiling stored is what bidding that much would cost. Muted, because
+                the ceiling is what is stored and this is the figure computed from it. */}
+            <Tooltip content="The most you can bid with the all-in still inside your ceiling. Type a bid here to set the ceiling from it instead.">
+              <span>
+                <InlineText
+                  value={bidRoom ?? ""}
+                  placeholder="0.00"
+                  inputType="number"
+                  selectOnEdit
+                  editable={editable}
+                  isPending={isPending}
+                  onSave={applyCeilingBid}
+                  display={<span style={MUTED_AMOUNT}>{bidRoom ?? "—"}</span>}
+                />
+              </span>
             </Tooltip>
             {/* The worth section's own labels: what the contents are worth, and what is left of it
                 once the lot is paid for. Deliberately not `bid` / `all-in` — neither figure here is
@@ -665,17 +1021,36 @@ export function AuctionLotRow({
                 {lot.allIn ?? "—"}
               </span>
             </Tooltip>
-            <Tooltip content="What the bid you placed would cost you">
-              <span
-                style={{
-                  ...MUTED_AMOUNT,
-                  color: lot.myBidOverCeiling ? "var(--color-warning)" : "var(--color-text-muted)",
-                }}
-              >
-                {lot.myAllIn ?? "—"}
+            {/* Your column's **all-in** side, editable for the same reason: naming what you are
+                willing to have the lot cost is another way of naming the bid. What is stored is
+                still the hammer price. */}
+            <Tooltip content="What the bid you placed would cost you. Type a total here to set the bid from it instead.">
+              <span>
+                <InlineText
+                  value={myAllIn ?? ""}
+                  placeholder="0.00"
+                  inputType="number"
+                  selectOnEdit
+                  editable={editable && !terminal}
+                  isPending={isPending}
+                  onSave={applyMyAllIn}
+                  display={
+                    <span
+                      style={{
+                        ...MUTED_AMOUNT,
+                        color: lot.myBidOverCeiling
+                          ? "var(--color-warning)"
+                          : "var(--color-text-muted)",
+                      }}
+                    >
+                      {myAllIn ?? "—"}
+                    </span>
+                  }
+                />
               </span>
             </Tooltip>
-            {/* The ceiling itself: an all-in valuation, which is why it is stored on this row. */}
+            {/* The ceiling itself: an all-in valuation, which is why it is stored on this row — and
+                why catalogue value copies into it unchanged (#370), with no fee arithmetic. */}
             <Tooltip content="The most this lot is worth to you, all-in">
               <span>
                 <InlineText

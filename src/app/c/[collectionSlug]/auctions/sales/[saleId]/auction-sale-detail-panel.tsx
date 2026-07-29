@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
@@ -78,6 +79,21 @@ export function AuctionSaleDetailPanel({
   issueHeaderById,
 }: AuctionSaleDetailPanelProps) {
   const now = useMinuteClock();
+  // Which lot the collector arrived to see (#374). A click on the flat watchlist lands here with
+  // `?lot=<id>`, and the card for it scrolls into view and flashes once.
+  const searchParams = useSearchParams();
+  const highlightLotId = searchParams.get("lot");
+  // Clearing the mark is dropping the param that carries it — that one only, so anything else in
+  // the address bar survives — and `replace` rather than `push`, since undoing a highlight is not a
+  // step anyone wants to walk back through.
+  const pathname = usePathname();
+  const router = useRouter();
+  function clearHighlight() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lot");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   // Which outcome the lot list below is narrowed to. Local state rather than a URL param, unlike
   // the flat list: this is one parcel being worked through — "what is still running", then "what
@@ -426,6 +442,8 @@ export function AuctionSaleDetailPanel({
           issueHeaderById={issueHeaderById}
           now={now}
           isPending={isPending}
+          highlightLotId={highlightLotId}
+          onClearHighlight={clearHighlight}
           onChanged={() => invalidateAll(collectionId)}
           onEditLot={(row) => setDialog({ kind: "editLot", lot: row })}
           onDeleteLot={(row) => setDialog({ kind: "deleteLot", lot: row })}
