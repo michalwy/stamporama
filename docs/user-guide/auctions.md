@@ -328,6 +328,12 @@ Values are converted into the **sale's currency**, which is what the bids and yo
 If a price is in a currency with no available rate into it, the line says so rather than being
 counted as unpriced — it has a value, it just cannot be expressed here.
 
+Conversion goes through your collection's base currency, so a price already recorded in the sale's
+currency is converted out and back. All the rates behind that come from **one dated snapshot** of
+the ECB table, which is what makes the two directions exact opposites: a price of 1500 EUR on a sale
+in EUR reads as 1500, not 1498.44. (Older data, cached before this, could drift by around a tenth of
+a percent; it is replaced the first time a rate is looked up.)
+
 ### Headroom
 
 The footer of the editor, and the second line of the **Catalogue** column on the row, is the

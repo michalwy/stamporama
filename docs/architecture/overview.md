@@ -119,6 +119,16 @@ model Collection {
 
 **Dialog primitive:** All modal dialogs use the shared shell at `src/app/dialog-shell.tsx`. It provides: backdrop, header with close button, scrollable body, optional fixed footer.
 
+### Currency conversion (`ExchangeRate`, #20)
+
+Every figure that has to be comparable across currencies — catalogue values, holdings valuation, purchase and sale totals, auction headroom — pivots through the collection's `baseCurrency`. The rates behind that live in `src/lib/exchange-rates.ts`, fed by the ECB daily reference feed.
+
+- The cache is **one dated EUR-anchored snapshot per collection**, not a bag of per-pair rates: rows are `fromCurrency = 'EUR'`, one per currency, all sharing a single `fetchedAt`. Any pair is derived as `X_to / X_from` (`convertViaEur`), the same arithmetic applied to a freshly fetched table.
+- That shape exists for **consistency, not storage**. Pair-wise rows were fetched and expired independently, so `EUR → PLN` and `PLN → EUR` could come from different ECB publications and their product was not 1 — anything converted into the base currency and back drifted ~0.1%, by a different amount each day. An auction lot's catalogue value does exactly that round trip (`auction-lines.ts` pivots base → sale currency), so a 1500 EUR price on a EUR sale read as `1498.44`. With one snapshot behind both directions the rates are exact reciprocals and the round trip is lossless.
+- Staleness is a property of the **snapshot**, dated by its oldest row: past 24 h the whole table is refetched and rewritten (delete-then-insert in one transaction), never patched pair by pair. An unreachable feed falls back to the existing snapshot flagged `isStale`; only a snapshot that cannot answer the pair at all throws.
+- Migration `20260729120000_exchange_rate_eur_snapshot` drops the legacy non-EUR-anchored rows — no schema change, only the meaning of the rows. `src/lib/demo/seed-inventory.ts` seeds the same shape from static reference rates so the demo converts offline.
+- Rates frozen onto a record (`Purchase.fxRateToBase`, `Sale.fxRateToBase`, `AuctionLot.fxRateToBase`) are unaffected: they are dated observations copied out of this mechanism at the moment the transaction happened, and are never recomputed.
+
 ### Physical holdings (`Item`)
 
 `Item` represents a collector's physical copies. Per ADR-0007, there is **one row per physical copy** — no quantity field — because copies of the same stamp and condition can differ (e.g. postmark type) in ways that affect value and intent.

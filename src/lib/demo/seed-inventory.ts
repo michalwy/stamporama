@@ -37,8 +37,6 @@ const EUR_REFERENCE_RATES: Record<string, number> = {
   NOK: 11.6,
 };
 
-// Currencies the demo catalog prices are recorded in (Fischer=PLN, Michel=EUR).
-const DEMO_PRICE_CURRENCIES = ["EUR", "PLN"] as const;
 
 const DEMO_CERT_STATUSES: ReadonlyArray<{ name: string; abbreviation: string }> = [
   { name: "Photo Certificate", abbreviation: "Cert" },
@@ -101,31 +99,20 @@ export async function seedInventory(
 ): Promise<void> {
   const rng = mulberry32(0x5741_4d50);
 
-  // Exchange rates: seed each demo price currency → the collection base currency
-  // so holdings valuation converts offline (no live ECB fetch needed). A single
-  // row per pair; runtime treats it as cached (see safeRateMap / getOrFetchRate).
-  const collection = await tx.collection.findUniqueOrThrow({
-    where: { id: collectionId },
-    select: { baseCurrency: true },
+  // Exchange rates: seed the EUR-anchored snapshot the runtime cache is shaped as
+  // (`exchange-rates.ts`) so holdings valuation converts offline, in whichever
+  // direction a screen asks for — no live ECB fetch needed. One row per currency,
+  // one shared `fetchedAt`; every pair is derived from it as `X_to / X_from`.
+  const fetchedAt = new Date();
+  await tx.exchangeRate.createMany({
+    data: Object.entries(EUR_REFERENCE_RATES).map(([currency, rate]) => ({
+      collectionId,
+      fromCurrency: "EUR",
+      toCurrency: currency,
+      rate,
+      fetchedAt,
+    })),
   });
-  const base = collection.baseCurrency;
-  const baseRef = EUR_REFERENCE_RATES[base];
-  if (baseRef !== undefined) {
-    const fetchedAt = new Date();
-    for (const from of DEMO_PRICE_CURRENCIES) {
-      const fromRef = EUR_REFERENCE_RATES[from];
-      if (from === base || fromRef === undefined) continue;
-      await tx.exchangeRate.create({
-        data: {
-          collectionId,
-          fromCurrency: from,
-          toCurrency: base,
-          rate: Math.round((baseRef / fromRef) * 1e6) / 1e6,
-          fetchedAt,
-        },
-      });
-    }
-  }
 
   // Certificate statuses (normally empty per #94; seeded here so demo copies can
   // showcase the certificate filter).

@@ -62,6 +62,15 @@ describe("convertViaEur", () => {
     assertApprox(result, 0.84528 / 1.0891);
   });
 
+  it("round-trips a value through another currency without loss", () => {
+    // Both directions come from one table, so they are exact reciprocals — the property the cache
+    // is snapshot-shaped to preserve (#20). Pair-wise caching broke it: a 1500 EUR catalogue value
+    // pivoted through the base currency came back as 1498.44.
+    const there = convertViaEur(rates, "EUR", "PLN");
+    const back = convertViaEur(rates, "PLN", "EUR");
+    assertApprox(1500 * there * back, 1500, 1e-9);
+  });
+
   it("throws for unsupported currency", () => {
     assert.throws(
       () => convertViaEur(rates, "USD", "JPY"),

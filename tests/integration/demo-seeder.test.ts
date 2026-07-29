@@ -285,15 +285,15 @@ describe("seedDemoData", () => {
   });
 
   it("seeds exchange rates for offline valuation", async () => {
-    // Test collection base is EUR; demo prices are in PLN and EUR, so a PLN→EUR
-    // rate is seeded (EUR→EUR is identity and not stored).
+    // The seeded cache has the runtime's shape: one EUR-anchored snapshot, every row sharing an
+    // instant, so any pair the demo screens ask for is derived consistently from it.
     const rates = await prisma.exchangeRate.findMany({ where: { collectionId } });
     assert.ok(rates.length >= 1, `Expected >=1 exchange rate, got ${rates.length}`);
-    const plnToEur = rates.find(
-      (r) => r.fromCurrency === "PLN" && r.toCurrency === "EUR"
-    );
-    assert.ok(plnToEur, "Expected a PLN→EUR rate");
-    assert.ok(Number(plnToEur.rate) > 0, "Expected a positive PLN→EUR rate");
+    assert.ok(rates.every((r) => r.fromCurrency === "EUR"));
+    assert.equal(new Set(rates.map((r) => r.fetchedAt.getTime())).size, 1);
+    const eurToPln = rates.find((r) => r.toCurrency === "PLN");
+    assert.ok(eurToPln, "Expected an EUR→PLN rate");
+    assert.ok(Number(eurToPln.rate) > 0, "Expected a positive EUR→PLN rate");
   });
 
   it("records refinement history for variant copies", async () => {

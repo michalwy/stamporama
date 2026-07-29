@@ -1,0 +1,12 @@
+-- FX cache becomes one dated EUR-anchored snapshot per collection instead of a bag of per-pair rates.
+--
+-- Pair-wise rows were fetched and expired independently, so `EUR → PLN` and `PLN → EUR` could come
+-- from different ECB publications and their product was not 1. Anything valued into the base
+-- currency and converted back — an auction lot's catalogue value, which pivots base → sale currency
+-- (#353) — drifted by ~0.1% on the round trip, and by a different amount each day.
+--
+-- No schema change: the same table now holds rows with `fromCurrency = 'EUR'` only, all sharing one
+-- `fetchedAt`, and `src/lib/exchange-rates.ts` derives every pair as `X_to / X_from`. The legacy
+-- rows are unreadable under those semantics, so they are dropped; the next lookup refetches the
+-- whole table.
+DELETE FROM "exchange_rate" WHERE "fromCurrency" <> 'EUR';
