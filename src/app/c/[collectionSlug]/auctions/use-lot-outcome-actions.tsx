@@ -20,9 +20,10 @@ import { formatInstant } from "./auction-format";
 // `AuctionLotRow` calls this once, which is what gives the flat watchlist and the sale's own cards
 // the same three entries without either screen knowing about the outcome flow.
 //
-// Only **lost** and **cancelled** are recorded here. Winning settles the sale into a purchase
-// (#28), where the price actually paid lives on a `PurchaseLot`; a bare "won" status would look
-// finished while the acquisition side had heard nothing.
+// All four outcomes are recorded here, winning included (#354) — settlement (#28) operates on *a
+// sale holding won lots*, so without it the sale could never reach the state that action reads. It
+// stops at the status and the price paid: the parcel becomes a purchase as a whole, once, from the
+// sale's own screen.
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",

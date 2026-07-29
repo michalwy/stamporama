@@ -14,6 +14,7 @@ import {
 import { AuctionLotFormDialog } from "../../auction-lot-form-dialog";
 import { AuctionLotCardsView } from "./auction-lot-cards-view";
 import { AuctionSaleFormDialog } from "../../auction-sale-form-dialog";
+import { AuctionSettleDialog } from "./auction-settle-dialog";
 import {
   AUCTION_LOT_STATUSES,
   AUCTION_LOT_STATUS_LABEL,
@@ -29,7 +30,9 @@ type DialogState =
   | { kind: "addLot" }
   | { kind: "editSale" }
   | { kind: "editLot"; lot: AuctionLotDetailView }
-  | { kind: "deleteLot"; lot: AuctionLotDetailView };
+  | { kind: "deleteLot"; lot: AuctionLotDetailView }
+  | { kind: "settle" }
+  | { kind: "close" };
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -139,6 +142,29 @@ export function AuctionSaleDetailPanel({
     (lot) => (!status || lot.status === status) && (!signal || carries(lot, signal))
   );
 
+  // Settlement (#28). A parcel is paid for as a whole, so the action only appears once every lot's
+  // outcome is recorded: while something is still being watched the parcel's contents — and its
+  // total — are not yet known. With nothing won there is no purchase to make and the parcel is
+  // simply closed, which is the same end of the same road.
+  const wonCount = sale.lots.filter((lot) => lot.status === "won" && !lot.settled).length;
+  const watchingCount = statusCounts.watching ?? 0;
+  const settleBlocked =
+    watchingCount > 0
+      ? `Record the outcome of ${watchingCount} lot${watchingCount === 1 ? "" : "s"} still being watched first.`
+      : undefined;
+  const canSettle = sale.status === "open" && wonCount > 0;
+  const canClose = sale.status === "open" && wonCount === 0 && sale.lots.length > 0;
+  // The finishing action takes the emphasis once it is the thing to do; until then adding lots is.
+  const settlementIsPrimary = (canSettle || canClose) && !settleBlocked;
+  const PRIMARY_BUTTON: React.CSSProperties = {
+    ...CONTROL_STYLE,
+    fontWeight: 600,
+    color: "#fff",
+    background: "var(--color-action-primary)",
+    border: "none",
+    padding: "0.375rem 0.875rem",
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -187,17 +213,65 @@ export function AuctionSaleDetailPanel({
           onClick={() => setDialog({ kind: "addLot" })}
           disabled={sale.purchaseId !== null}
           style={{
-            ...CONTROL_STYLE,
+            ...(settlementIsPrimary ? CONTROL_STYLE : PRIMARY_BUTTON),
             cursor: sale.purchaseId ? "not-allowed" : "pointer",
             fontWeight: 600,
-            color: "#fff",
-            background: "var(--color-action-primary)",
-            border: "none",
-            padding: "0.375rem 0.875rem",
           }}
         >
           Add lot
         </button>
+        {sale.purchaseId ? (
+          <Link
+            href={`/c/${collectionSlug}/purchases/${sale.purchaseId}`}
+            style={{ ...PRIMARY_BUTTON, textDecoration: "none", display: "inline-block" }}
+          >
+            View purchase →
+          </Link>
+        ) : canSettle ? (
+          <Tooltip
+            // Anchored to its right edge: these buttons sit at the end of the header row, so a
+            // centred bubble runs off the window and gets cut.
+            align="end"
+            content={
+              settleBlocked ??
+              `Turn the ${wonCount} won lot${wonCount === 1 ? "" : "s"} into a purchase, with their contents as copies to sort.`
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setDialog({ kind: "settle" })}
+              disabled={!!settleBlocked}
+              style={{
+                ...(settlementIsPrimary ? PRIMARY_BUTTON : CONTROL_STYLE),
+                cursor: settleBlocked ? "not-allowed" : "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Settle…
+            </button>
+          </Tooltip>
+        ) : canClose ? (
+          <Tooltip
+            align="end"
+            content={
+              settleBlocked ??
+              "Nothing was won from this parcel, so there is nothing to buy. Closing files it — the lots stay as the price record they are."
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setDialog({ kind: "close" })}
+              disabled={!!settleBlocked}
+              style={{
+                ...(settlementIsPrimary ? PRIMARY_BUTTON : CONTROL_STYLE),
+                cursor: settleBlocked ? "not-allowed" : "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Close sale
+            </button>
+          </Tooltip>
+        ) : null}
       </div>
 
       {/* Terms + totals. The two halves are one question — what this parcel costs — so they share
@@ -425,6 +499,39 @@ export function AuctionSaleDetailPanel({
             setDialog({ kind: "none" });
             invalidateAll(collectionId);
           }}
+        />
+      )}
+
+      {dialog.kind === "settle" && (
+        <AuctionSettleDialog
+          collectionSlug={collectionSlug}
+          sale={sale}
+          onClose={() => setDialog({ kind: "none" })}
+          onSettled={() => {
+            setDialog({ kind: "none" });
+            invalidateAll(collectionId);
+          }}
+        />
+      )}
+
+      {dialog.kind === "close" && (
+        <ConfirmDialog
+          title="Close sale"
+          message="Nothing was won here, so no purchase is created. The lots stay exactly as they are — a lost lot is a dated price observation, which is what this parcel produced."
+          actionLabel="Close sale"
+          pendingLabel="Closing…"
+          variant="primary"
+          isPending={isPending}
+          error={actionError}
+          onClose={() => !isPending && setDialog({ kind: "none" })}
+          onConfirm={() =>
+            runLotAction(async () => {
+              const { setAuctionSaleStatusAction } = await import("@/app/actions/auctions");
+              const result = await setAuctionSaleStatusAction(sale.id, "closed");
+              if (result.status === "success") setDialog({ kind: "none" });
+              return result;
+            })
+          }
         />
       )}
 

@@ -118,6 +118,10 @@ export interface PurchaseDetail {
   expenseCount: number;
   /** lots + expenses + shipping, transaction currency (2 dp). */
   total: string;
+  /** The auction sale this purchase was settled from (#28), or null for a hand-entered one. The
+   * link is worth carrying because the bidding record is where the lots' figures came from, and it
+   * survives this purchase being deleted. */
+  auctionSale: { id: string; name: string } | null;
 }
 
 function dateToIso(d: Date): string {
@@ -155,6 +159,8 @@ export async function getPurchaseDetail(
       collection: { select: { ownerId: true, baseCurrency: true } },
       contact: { select: { name: true } },
       platform: { select: { name: true } },
+      // The auction settlement this purchase was transcribed from (#28), when it came from one.
+      auctionSale: { select: { id: true, name: true } },
       lots: {
         select: {
           id: true,
@@ -217,6 +223,7 @@ export async function getPurchaseDetail(
     lots,
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
+    auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
   };
 }
 

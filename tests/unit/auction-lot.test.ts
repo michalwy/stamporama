@@ -6,6 +6,7 @@ import {
   headroom,
   lotHasSignal,
   maxBidWithin,
+  settlementLinePrice,
   LOT_SIGNALS,
   summarizeAuctionSale,
   summarizeLotComposition,
@@ -169,6 +170,29 @@ describe("summarizeAuctionSale", () => {
       [s.lotCount, s.payableCount, s.bidTotal, s.allInTotal, s.catalogTotal, s.headroom],
       [0, 0, "0.00", "0.00", "0.00", null]
     );
+  });
+});
+
+// settlementLinePrice — what a won lot costs as a purchase line ---------------
+
+describe("settlementLinePrice", () => {
+  it("is the hammer price plus the seller's premium", () => {
+    assert.equal(
+      settlementLinePrice("100", { premiumPercent: "20", premiumFixed: "2.50" }),
+      "122.50"
+    );
+  });
+
+  it("never carries shipping, however the fees are passed", () => {
+    // Shipping becomes `Purchase.shippingCost` and is distributed across the lines by
+    // ADR-0009 §3; charging it here too would count it twice.
+    assert.equal(settlementLinePrice("100", { premiumPercent: "20", shippingCost: "15" }), "120.00");
+    assert.equal(settlementLinePrice("40", { shippingCost: "15" }), "40.00");
+  });
+
+  it("is null without a price", () => {
+    assert.equal(settlementLinePrice(null, { premiumPercent: "20" }), null);
+    assert.equal(settlementLinePrice("", {}), null);
   });
 });
 

@@ -87,6 +87,22 @@ export function headroom(catalogValue: Amount, bid: Amount, fees: AuctionFees = 
 }
 
 /**
+ * What one won lot costs as a **purchase line** when the parcel is settled (#28): hammer price plus
+ * the seller's premium, and **no shipping**.
+ *
+ * Shipping is deliberately left out here even though the lot is being costed for real money. It
+ * becomes `Purchase.shippingCost` and is then distributed across every line by price through
+ * ADR-0009 §3 — the same mechanism a hand-entered purchase uses. Adding it per line here would
+ * charge it once per lot and then a second time through the distribution.
+ *
+ * Null when the lot has no price, which settlement refuses before it gets this far: a `won` lot's
+ * `finalPrice` is required precisely because this figure is built from it (ADR-0021 §7).
+ */
+export function settlementLinePrice(finalPrice: Amount, fees: AuctionFees = {}): string | null {
+  return allIn(finalPrice, { premiumPercent: fees.premiumPercent, premiumFixed: fees.premiumFixed });
+}
+
+/**
  * The **highest hammer price whose all-in cost still fits inside a ceiling** — the inverse of
  * {@link allIn}, and what a bid should actually be placed at.
  *

@@ -79,6 +79,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
       </Link>
       <PurchaseDetailPanel
         collectionId={collection.id}
+        collectionSlug={collectionSlug}
         purchase={purchase}
         issueHeaderById={issueHeaderById}
         areas={areas}

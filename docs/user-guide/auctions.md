@@ -190,9 +190,9 @@ not clutter to be cleared away.
 
 Won lots stay on the list too, and count into what the parcel will cost — a won lot is priced at
 what you actually paid rather than at the last bid anyone saw, so the sale's total stops being an
-estimate. Marking a lot won does **not** create a purchase: you pay for the parcel as a whole when
-the seller invoices it, and turning a sale into a purchase is a separate step that does not exist
-yet (see *What is not here yet*). Until it does, a won lot is a record of what you owe for it.
+estimate. Marking a lot won does **not** create a purchase on its own: you pay for the parcel as a
+whole when the seller invoices it, and that is [**Settling**](#settling-a-parcel-into-a-purchase),
+one step for the whole sale.
 
 ### Filtering and grouping
 
@@ -373,11 +373,51 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
 The grouping and sorting choices are remembered per collection, exactly as they are on the other two
 screens. The **Only** filters are not: they are a job you do and finish.
 
+## Settling a parcel into a purchase
+
+Once every lot in a sale has an outcome recorded, the sale's own screen offers **Settle…** — the
+step that turns what you won into a [purchase](purchases.md). It is the end of the auction side and
+the beginning of the ordinary one: from there the parcel is an order like any other.
+
+There is nothing to decide here, which is the point. A sale is already one settlement with one
+seller, so no question is left about which purchase a lot belongs in; settling is transcription. The
+dialog exists only because **the seller's invoice is the authority**, not our arithmetic — so
+everything in it is filled in and everything can be corrected:
+
+- the **purchase date**, defaulting to the sale's closing date. The exchange rate of that day is
+  frozen onto the purchase, exactly as for a hand-entered one.
+- the **shipping**, from the sale's own figure.
+- each won lot's **line price**, filled in at the **hammer price plus the seller's premium**.
+  Shipping is deliberately *not* in these figures: it is charged once for the parcel and then spread
+  across the lines by price, so several auctions won from one seller in one parcel share it
+  correctly and without a special case.
+- **which won lots are in this parcel at all**. Unticking one leaves it recorded here as won and
+  unsettled — nothing about it is lost, it is simply not part of this purchase. That is for the lot
+  the seller is shipping separately.
+
+What you get is a purchase with one line per won lot, and — this is the part that saves the
+typing — **the lots' contents already identified as copies on those lines**. You described them to
+decide the bid, so there is nothing to enter again: each line's stamp, condition, certificate and
+format come across as they were, and a quantity of three becomes three copies. They arrive in the
+normal intake state: bought, not yet in hand, not in the collection until you have sorted them. From
+there the [purchase](purchases.md) screen runs exactly as it does for any other order — sorting,
+closing each lot, freezing the cost basis.
+
+A lot with nothing described becomes a priced line with no copies, which you can identify on the
+purchase in the usual way.
+
+Lost and cancelled lots are skipped and stay exactly where they are: a lost lot is a price
+observation, and that is the other half of what this feature is for. A sale where **nothing** was
+won has no purchase to make, so the button reads **Close sale** instead.
+
+Afterwards the two records point at each other — the sale links to its purchase, the purchase back
+to the sale — and the bidding record is frozen: to change a settled lot's figures, edit the
+purchase. Deleting the purchase is how a settlement is undone; the sale, its lots and their results
+stay standing, only the link goes.
+
 ## What is not here yet
 
-- **Settling a won sale** into a purchase: the *Settle* action that turns a parcel's won lots into
-  a purchase with its lines, shipping distribution and copy intake. Marking lots won and lost is
-  what feeds it, and that part works now — see *Recording what happened*.
+- Winning **part** of a lot, when a multi-stamp lot is split.
 - Anything that reads the prices lost lots have produced back as a valuation.
 - Any recommendation beyond the raw catalogue value — what a lot is *worth bidding* is a separate
   question from what its contents catalogue at.

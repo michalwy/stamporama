@@ -187,10 +187,22 @@ forty collapsed rows.
 Winning settles the sale into the acquisition model rather than creating a parallel one:
 `AuctionSale` → `Purchase` (seller, platform, currency, `shippingCost`), each `won` lot →
 `PurchaseLot` priced at hammer + premium, lost lots skipped. Shipping is then distributed across
-lines by ADR-0009 §3, and the lot composition carries over as a proposal for copy identification.
-`AuctionSale.purchaseId` and `AuctionLot.purchaseLotId` are unique and `onDelete: SetNull` — the
-link is 1:1, and deleting the purchase must leave the bidding record standing, because that record
-is a datapoint in its own right.
+lines by ADR-0009 §3 — which is the whole reason §1 defines the parent as a parcel, since the
+grouping was already made at bidding time. `AuctionSale.purchaseId` and `AuctionLot.purchaseLotId`
+are unique and `onDelete: SetNull` — the link is 1:1, and deleting the purchase must leave the
+bidding record standing, because that record is a datapoint in its own right. Deleting it is
+therefore also the undo: `assertLotEditable` freezes a settled lot, since the purchase now carries
+the figures that were actually paid.
+
+The composition is **written as copies**, not proposed (#28). An `AuctionLotLine` already says
+`stamp × condition × certificate × format × quantity`, which is precisely what a copy is, so a
+confirmation step would only ask the collector to re-approve what they typed to decide the bid.
+A line of quantity N becomes N `Item`s in the purchase's ordinary intake state — `ordered`, not in
+the collection, cost pending — and the existing intake runs unchanged from there. What is confirmed
+instead is the **money**, in a review step before anything is written: the seller's invoice is the
+authority, not our arithmetic, so the date, the shipping, every line price and *which* won lots are
+in this parcel are all pre-filled and all editable. A won lot left out stays `won` and unsettled —
+a seller shipping one lot separately is a fact about the parcel, not an error to refuse.
 
 Losing produces the other output: `finalPrice` + `endsAt` + the composition, with `fxRateToBase`
 frozen at `endsAt` through the `Purchase` mechanism from #20. That is what #24 consumes. It costs

@@ -18,11 +18,13 @@ import {
   setAuctionLotMaxBid,
   setAuctionLotMyBid,
   setAuctionSaleStatus,
+  settleAuctionSale,
   touchAuctionLotChecked,
   updateAuctionLot,
   updateAuctionLotLine,
   updateAuctionSale,
   type AuctionLotOutcome,
+  type AuctionSettlementInput,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
@@ -169,6 +171,21 @@ export async function setAuctionSaleStatusAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to change the sale's status.");
+  }
+}
+
+/** Settle a parcel into a purchase (#28). Returns the purchase's id so the dialog can send the
+ * collector straight to the intake screen — that is where the work continues. */
+export async function settleAuctionSaleAction(
+  saleId: string,
+  input: AuctionSettlementInput
+): Promise<CreateAuctionActionState> {
+  const session = await getSession();
+  try {
+    const { purchaseId } = await settleAuctionSale(session.user.id, saleId, input);
+    return { status: "success", id: purchaseId };
+  } catch (e) {
+    return fail(e, "Failed to settle this sale into a purchase.");
   }
 }
 

@@ -9,6 +9,7 @@ import {
   useTransition,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   DialogShell,
@@ -147,6 +148,7 @@ function tintChip(token: string, label: string): { style: React.CSSProperties; l
 
 interface PurchaseDetailPanelProps {
   collectionId: string;
+  collectionSlug: string;
   purchase: PurchaseDetail;
   issueHeaderById: Record<string, IssueHeader>;
   areas: CollectionAreaData[];
@@ -157,6 +159,7 @@ interface PurchaseDetailPanelProps {
 
 export function PurchaseDetailPanel({
   collectionId,
+  collectionSlug,
   purchase,
   issueHeaderById,
   areas,
@@ -280,6 +283,19 @@ export function PurchaseDetailPanel({
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               via {purchase.platformName}
             </span>
+          )}
+          {/* Where this order came from, when it was settled from a parcel of won lots (#28). The
+              bidding record outlives this purchase — deleting it only clears the link — so it is
+              worth a way back to. */}
+          {purchase.auctionSale && (
+            <Tooltip content="Settled from this auction sale — the bids, the lots that were lost, and what each one went for.">
+              <Link
+                href={`/c/${collectionSlug}/auctions/sales/${purchase.auctionSale.id}`}
+                style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                ⚖ {purchase.auctionSale.name}
+              </Link>
+            </Tooltip>
           )}
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {(() => {

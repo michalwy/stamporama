@@ -20,6 +20,7 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { getOrFetchRate } from "./exchange-rates";
+import { allocateItemNumbers } from "./items";
 import {
   deriveAuctionLotLabel,
   deriveAuctionSaleName,
@@ -41,8 +42,9 @@ import {
 //
 // Composition (`AuctionLotLine`, #353) is written here too, but everything about what it is *worth*
 // lives in `auction-lines.ts`: the catalogue rules it reuses (unknown-variant rollup, format
-// pricing) are the copy valuation's, and this module only hands the figures on. Settlement into a
-// `Purchase` (#28) has its own issue and reads these tables without changing them.
+// pricing) are the copy valuation's, and this module only hands the figures on. **Settlement** (#28)
+// is here too, at the bottom: it is a transcription of these tables into `Purchase`/`PurchaseLot`
+// and nothing more, so it borrows the same ownership guards rather than growing a module.
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +56,11 @@ export type AuctionBlockReason =
   | "bad-sale"
   | "bad-line"
   | "settled"
-  | "has-lots";
+  | "has-lots"
+  // Settlement (#28): the parcel's outcome is not fully recorded yet, and nothing was picked to go
+  // into it. Distinct because the first is answered on the lots and the second in the dialog.
+  | "unresolved"
+  | "no-lots";
 
 /** Raised when an auction action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1570,4 +1576,243 @@ export async function deleteAuctionLot(ownerId: string, lotId: string): Promise<
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.delete({ where: { id: lotId } });
+}
+
+// ── Settlement (#28) ────────────────────────────────────────────────────────
+
+/** What the review step submits: the parcel's own figures, and which won lots are in it.
+ *
+ * Prices arrive from the dialog rather than being recomputed here, because the whole point of the
+ * review is that the seller's invoice is the authority — a house that rounds its premium, waives a
+ * lot fee, or bills a different postage than it quoted is the normal case, not an error. What is
+ * pre-filled is `settlementLinePrice`; what is stored is what the collector confirmed. */
+export interface AuctionSettlementInput {
+  /** `yyyy-mm-dd`. The moment money was spent, and what the purchase's FX rate is frozen at. */
+  purchasedAt: string;
+  /** Shipping for the whole parcel, distributed across the lines by ADR-0009 §3. */
+  shippingCost: number | null;
+  /** The won lots going into this parcel, each at its confirmed line price. */
+  lots: { lotId: string; price: number }[];
+}
+
+const SETTLEMENT_LOT_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  purchaseLotId: true,
+  _count: { select: { lines: true } },
+  lines: {
+    select: {
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      formatId: true,
+      quantity: true,
+    },
+  },
+} satisfies Prisma.AuctionLotSelect;
+
+/**
+ * Settle a sale into a `Purchase` — the 1:1 transcription of ADR-0021 §7.
+ *
+ * By the time a parcel is settled the grouping work is already done: a sale *is* one settlement with
+ * one seller (§1), so there is no "which purchase does this lot go into?" left to ask, and this is
+ * transcription rather than a decision. Seller, platform, currency and shipping come off the sale;
+ * each `won` lot becomes one `PurchaseLot` priced at hammer + premium; shipping is then distributed
+ * across those lines by the existing ADR-0009 §3 mechanism, which is why several auctions won from
+ * one seller in one parcel need no special case.
+ *
+ * The lots' composition is **written as copies**, not proposed: the lines already say
+ * `stamp × condition × certificate × format × quantity`, which is exactly what a copy is, and they
+ * were entered to decide the bid rather than to be retyped afterwards. The copies land in the
+ * purchase's normal intake state — not in the collection, `ordered`, cost pending — so identification
+ * is already done and the existing intake runs unchanged from there: sorting, close, cost-basis
+ * freeze. A lot with no composition entered yields a priced line and no copies, which is what an
+ * un-described lot honestly is.
+ *
+ * Won lots the collector leaves out stay `won` and unsettled. That is deliberate: the review exists
+ * because the invoice is the authority, and a house that ships a lot separately is a fact about the
+ * parcel, not an error to refuse.
+ *
+ * Refused while any lot is still `watching` — the parcel's outcome is not known yet, and the rollup
+ * this is transcribed from is still costing those lots as payable.
+ */
+export async function settleAuctionSale(
+  ownerId: string,
+  saleId: string,
+  input: AuctionSettlementInput
+): Promise<{ purchaseId: string }> {
+  const owned = await assertSaleOwner(ownerId, saleId);
+  if (owned.purchaseId) {
+    throw new AuctionActionBlockedError(
+      "settled",
+      "This sale has already been settled into a purchase."
+    );
+  }
+
+  const sale = await prisma.auctionSale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: {
+      collectionId: true,
+      sellerId: true,
+      platformId: true,
+      currency: true,
+      collection: { select: { baseCurrency: true } },
+      lots: { select: SETTLEMENT_LOT_SELECT },
+    },
+  });
+
+  const watching = sale.lots.filter((lot) => lot.status === "watching").length;
+  if (watching > 0) {
+    throw new AuctionActionBlockedError(
+      "unresolved",
+      `${watching} lot${watching === 1 ? " is" : "s are"} still being watched. Record ${watching === 1 ? "its outcome" : "their outcomes"} before settling the parcel.`
+    );
+  }
+
+  if (input.lots.length === 0) {
+    throw new AuctionActionBlockedError(
+      "no-lots",
+      "Pick at least one won lot to settle. A sale where nothing was won is closed instead."
+    );
+  }
+
+  const byId = new Map(sale.lots.map((lot) => [lot.id, lot]));
+  const selected = input.lots.map((line) => {
+    const lot = byId.get(line.lotId);
+    if (!lot) throw new AuctionActionBlockedError("bad-sale", "That lot is not in this sale.");
+    if (lot.status !== "won" || lot.purchaseLotId) {
+      throw new AuctionActionBlockedError(
+        "bad-sale",
+        "Only won lots that have not been settled yet can go into a purchase."
+      );
+    }
+    if (!Number.isFinite(line.price) || line.price < 0) {
+      throw new AuctionActionBlockedError("no-price", "Each lot needs a price of zero or more.");
+    }
+    return { lot, price: line.price };
+  });
+
+  const purchasedAt = new Date(`${input.purchasedAt}T00:00:00.000Z`);
+  if (Number.isNaN(purchasedAt.getTime())) throw new Error("Invalid purchase date.");
+
+  // Frozen exactly as a hand-entered purchase freezes it (ADR-0009 §4). The lots' own rates (#354)
+  // are dated observations of how each result converted and are not a substitute: a parcel is paid
+  // for on one day, whatever days its lots closed on.
+  const fxRateToBase = await freezeLotFxRate(
+    sale.collectionId,
+    sale.currency,
+    sale.collection.baseCurrency
+  );
+
+  // A lot the collector never named is titled after what it holds — the same derived label the
+  // watchlist shows, resolved once here so the purchase line reads the same as the lot did. Stored
+  // rather than derived on the purchase side, because from here on the line is a purchase's, and a
+  // purchase lot's title is a plain stored string (#121).
+  const labels = await lotTitlesFor(
+    sale.collectionId,
+    selected.map(({ lot }) => lot)
+  );
+
+  const copyCount = selected.reduce(
+    (n, { lot }) => n + lot.lines.reduce((q, line) => q + Math.max(0, line.quantity), 0),
+    0
+  );
+
+  return prisma.$transaction(async (tx) => {
+    const purchase = await tx.purchase.create({
+      data: {
+        collectionId: sale.collectionId,
+        // A sale's seller and platform are already the two contacts a purchase carries (§1), so
+        // this is a rename rather than a mapping.
+        contactId: sale.sellerId,
+        platformId: sale.platformId,
+        purchasedAt,
+        currency: sale.currency,
+        fxRateToBase,
+        shippingCost:
+          input.shippingCost != null ? new Prisma.Decimal(input.shippingCost.toFixed(2)) : null,
+        // The parcel has been paid for, not received — the collector marks it arrived when it lands,
+        // exactly as with any other order.
+        status: "preparing",
+      },
+      select: { id: true },
+    });
+
+    // One consecutive range for the whole settlement, so a parcel's copies are numbered in the
+    // order its lots are listed (#268).
+    const itemNos = await allocateItemNumbers(tx, sale.collectionId, copyCount);
+    let nextNo = 0;
+
+    for (const { lot, price } of selected) {
+      const purchaseLot = await tx.purchaseLot.create({
+        data: {
+          purchaseId: purchase.id,
+          title: lot.title ?? labels.get(lot.id) ?? null,
+          price: new Prisma.Decimal(price.toFixed(2)),
+          status: "open",
+        },
+        select: { id: true },
+      });
+
+      // A line of quantity N is N copies: a copy is one physical piece, and a multiple is one copy
+      // in a format (ADR-0020), which `formatId` carries over unchanged.
+      const copies = lot.lines.flatMap((line) =>
+        Array.from({ length: Math.max(0, line.quantity) }, () => ({
+          collectionId: sale.collectionId,
+          itemNo: itemNos[nextNo++],
+          stampId: line.stampId,
+          conditionId: line.conditionId,
+          certificateStatusId: line.certificateStatusId,
+          formatId: line.formatId,
+          lotId: purchaseLot.id,
+          // The intake state a purchased copy starts in: bought, not yet in hand, not a holding
+          // until it has been sorted (ADR-0009 §5).
+          deliveryState: "ordered",
+          inCollection: false,
+          forSale: false,
+          forTrade: false,
+        }))
+      );
+      if (copies.length > 0) await tx.item.createMany({ data: copies });
+
+      await tx.auctionLot.update({
+        where: { id: lot.id },
+        data: { purchaseLotId: purchaseLot.id },
+      });
+    }
+
+    await tx.auctionSale.update({
+      where: { id: saleId },
+      data: { purchaseId: purchase.id, status: "settled" },
+    });
+
+    return { purchaseId: purchase.id };
+  });
+}
+
+/** Derived names for the lots being settled, for the ones the collector never titled. One valuation
+ * pass for the whole parcel, mirroring how the lists build `derivedTitle`. */
+async function lotTitlesFor(
+  collectionId: string,
+  lots: { id: string; title: string | null; _count: { lines: number } }[]
+): Promise<Map<string, string>> {
+  const needed = lots.filter((lot) => !lot.title && lot._count.lines > 0).map((lot) => lot.id);
+  if (needed.length === 0) return new Map();
+  const compositions = await valuateAuctionLotLines(collectionId, needed);
+  const labels = new Map<string, string>();
+  for (const id of needed) {
+    const label = deriveAuctionLotLabel(
+      (compositions.get(id)?.lines ?? []).map((line) => ({
+        catalogNumbers: line.catalogLabel ? [line.catalogLabel] : [],
+        stampName: line.stampName,
+        issueId: line.issueId,
+        issueName: line.issueName,
+        issueYear: line.issueYear,
+        quantity: line.quantity,
+      }))
+    );
+    if (label) labels.set(id, label);
+  }
+  return labels;
 }

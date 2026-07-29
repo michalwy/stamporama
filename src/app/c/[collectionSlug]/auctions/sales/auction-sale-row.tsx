@@ -42,6 +42,18 @@ export function AuctionSaleRow({
           } as RowAction,
         ]
       : []),
+    // Where a settled parcel continues (#28). Listed rather than hidden behind the detail screen:
+    // once a sale is settled, the purchase is what the collector is actually working on.
+    ...(sale.purchaseId
+      ? [
+          {
+            key: "purchase",
+            label: "Open purchase",
+            icon: "🧾",
+            onSelect: () => router.push(`/c/${collectionSlug}/purchases/${sale.purchaseId}`),
+          } as RowAction,
+        ]
+      : []),
     {
       key: "edit",
       label: "Edit",

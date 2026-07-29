@@ -34,6 +34,14 @@ The order's line items are managed separately, during **lot intake**:
 So a freshly recorded purchase has no lines at all — you add them during intake, and its
 list total grows as you do.
 
+The one exception is a purchase that came from **settling an auction sale**
+([Auction sales](auctions.md#settling-a-parcel-into-a-purchase)). That one arrives with a line per
+won lot, priced at hammer plus the seller's premium, and with the lots' contents already identified
+as copies — you described them to decide the bid, so nothing is entered twice. It carries a link
+back to the sale it came from, beside the supplier in the header. From that point it is an ordinary
+purchase: the same sorting, the same lot closing, the same cost basis. Deleting it is also how a
+settlement is undone — the bidding record stays, only the link goes.
+
 All amounts on a purchase — the shipping cost and, once added, the lots and expenses — are
 in the one transaction currency you pick. If that currency differs from your collection's
 base currency, the exchange rate as of the purchase date is captured and stored with the
