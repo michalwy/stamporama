@@ -214,6 +214,69 @@ Registering a target the extension **already has updates that profile in place**
 if you renamed it, fresh token. That is deliberate — two profiles with one target are rejected
 anyway, and re-registering is how a revoked or lost token is meant to be replaced.
 
+## Scripting your own instance (#409)
+
+Registering a profile also **registers a content script for that instance's origin**
+(`chrome.scripting.registerContentScripts`, `src/background/instance-scripts.ts`). A self-hosted
+instance has no origin the manifest could declare — it is whatever you run — so the set is
+reconciled against the stored profiles instead: connecting an instance is what says "script this
+origin", deleting the profile is what takes it back. `host_permissions` is already `http://*/*` +
+`https://*/*`, so this costs no new permission prompt, and the pattern carries the **port**, so a dev
+server on `:3002` is not the same target as one on `:3000`.
+
+The reconcile hangs off `chrome.storage.local` changing rather than off each call site, so a
+registration, a corrected URL and a deletion are one code path; it also runs at install and at
+startup, since registered scripts survive a browser restart and the store may have been edited while
+the extension was off. Newly registered origins are additionally injected into their **already-open
+tabs**, because a freshly registered script only reaches documents loaded after it — being told to
+reload the page you just connected from is the sort of step nobody remembers.
+
+The script (`src/content/instance.ts`) does exactly one thing: carry a listing handoff. It reads no
+instance data and holds no token.
+
+### The handoff
+
+It is the **registration contract again**, on a second element (`#stamporama-assistant-listing`): the
+bulk listing workspace (#322/#407) writes the listing kit (#405) into it as JSON, the extension
+answers by setting `data-*` attributes on the same node. Text in, attributes out — the page owns the
+node and React re-renders it, so nothing else survives the round trip.
+
+The toolbar click that grants `activeTab` for registration is unavailable here, and that is the whole
+reason the origin is scripted: the click that starts a listing is on an offer card, not on the icon.
+
+| | |
+|---|---|
+| In | `{ v: 1, requestId, task }` as the element's text |
+| Out | `data-listing-state` = `running` \| `filled` \| `error`, `data-listing-message`, `data-listing-request`, and on success `data-listing-report` |
+
+`requestId` is minted by the page and echoed back, so an answer says which handoff it answers rather
+than leaving a leftover one to be read as the current one; a request already answered is ignored, so
+the page re-rendering that node is not read as the collector asking again. `data-listing-report`
+carries the module, the form URL and the `filled` / `skipped` lists field by field — the message
+alone only counts them.
+
+`<html>` additionally carries **`data-stamporama-assistant`** (the extension's version) on every
+instance page the script runs on. Without it the page has no way to know the Assistant is installed
+*and* scripting this origin, and **List via Assistant** would be a button that silently does nothing.
+
+### What happens in between
+
+The background worker (`src/background/listing.ts`) is the wiring `listing-run.ts` deliberately does
+not contain — the part with a browser to drive, and the part a second marketplace reuses unchanged:
+
+1. `resolveListingTarget(task)` → the module and the sale form's URL, or a refusal naming its reason.
+2. Open the form in a tab **beside the workspace** (`openerTabId`, next index) and wait for it to
+   load — with a 90 s cap, and a closed tab reported as such, since a promise that never settles
+   leaves the offer card spinning for ever.
+3. Ask the content script there to `fill` — DOM work, so it happens in the page — which runs
+   `fillListing`, checks `isFormUrl` first, and **stops before submit**.
+4. Report back onto the workspace's node.
+
+The task is self-contained, so this needs no profile and makes no instance call: the origin that
+wrote it is one the collector registered, and the form is filled from the payload alone. Storing the
+listing URL and moving the offer Ready → Active is the page's own job (#407) — the extension reports,
+the instance decides.
+
 ## The flow
 
 On a Colnect stamp **list** page (a country/year list — cards are `div.pl-it`) the toolbar icon
@@ -295,7 +358,8 @@ between them:
 2. `fillListing(task, doc, url)` on the page that lands there → a `ListingFillOutcome`.
 
 Both are pure — no `chrome.*`, no fetch — so opening the tab and reporting back to the instance stay
-in the wiring (#407/#409), which is the part a second marketplace reuses unchanged. Three things are
+in the wiring (`src/background/listing.ts` and the handoff above, #409), which is the part a second
+marketplace reuses unchanged. Three things are
 deliberate:
 
 - **Nothing is submitted.** Filling stops before submit; the collector clicks the platform's own
@@ -343,11 +407,14 @@ names none, the id is unknown here, the module only reads — are three differen
   `colnect/listing.ts` the Colnect sale form's URL shape and field names (#410) — the only file that
   knows either.
 - `src/core/` — profile store + colour derivation (#251), the registration payload contract (#252),
-  decision types, message contracts.
+  the listing handoff contract (#409), decision types, message contracts.
 - `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background
-  fetch) + the registration exchange (#252).
-- `src/content/` — extractor bootstrap: runs declaratively on `colnect.com` (for the badge) and is
-  also injected on demand by the popup (covers tabs already open before an extension reload).
+  fetch) + the registration exchange (#252) + the instance-origin script registration and the
+  listing run (#409).
+- `src/content/` — two scripts. `index.ts` is the extractor bootstrap: it runs declaratively on
+  `colnect.com` (for the badge), is injected on demand by the popup (covering tabs already open
+  before an extension reload), and fills a sale form when the worker asks (#409). `instance.ts` runs
+  on a registered instance's own origin and carries listing handoffs, nothing else.
 - `src/popup/`, `src/options/` — the generic flow UI (with the target badge + profile selector) and
   the profile manager.
 

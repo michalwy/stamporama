@@ -1,4 +1,5 @@
 import type { ExtractedItem } from "../platform/types";
+import type { ListingFillOutcome, ListingTask } from "../platform/listing";
 import type { BackfillProposal, MatchResult } from "./decisions";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
@@ -11,6 +12,17 @@ export interface ExtractRequest {
 }
 export type ExtractResponse =
   | { ok: true; items: ExtractedItem[] }
+  | { ok: false; error: string };
+
+// background → content script (in the tab it opened on the sale form, #409). The fill runs in the
+// page rather than in the worker because it is DOM work, and the module that performs it is the
+// same one on both sides — only the document differs.
+export interface FillRequest {
+  type: "fill";
+  task: ListingTask;
+}
+export type FillResponse =
+  | { ok: true; moduleId: string; moduleName: string; outcome: ListingFillOutcome }
   | { ok: false; error: string };
 
 // popup → background service worker
@@ -38,6 +50,25 @@ export type ConfirmResponse =
 
 export type BackgroundRequest = MatchRequest | ConfirmRequest;
 
+// instance content script → background: "the collector handed this offer over" (#409). The worker
+// resolves the module, opens the sale form in a tab of its own and has it filled; the answer is what
+// the page renders. It carries no profile: a task is self-contained, and the instance that wrote it
+// is the one whose page is asking.
+export interface ListRequest {
+  type: "list";
+  task: ListingTask;
+}
+export type ListResponse =
+  | {
+      ok: true;
+      moduleId: string;
+      moduleName: string;
+      /** The sale form the task was filled into. */
+      formUrl: string;
+      outcome: ListingFillOutcome;
+    }
+  | { ok: false; error: string };
+
 /** The minimum an item needs for matching: no name, no image bytes. Keeps the load-time message
  *  small, since it is sent on every supported page view. */
 export interface SlimItem {
@@ -64,4 +95,8 @@ export interface CachedResultsResponse {
   results: MatchResult[] | null;
 }
 
-export type BackgroundMessage = BackgroundRequest | DetectedNotice | CachedResultsRequest;
+export type BackgroundMessage =
+  | BackgroundRequest
+  | ListRequest
+  | DetectedNotice
+  | CachedResultsRequest;

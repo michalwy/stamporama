@@ -1,5 +1,12 @@
 import { findModuleForUrl } from "../platform/modules";
-import type { DetectedNotice, ExtractRequest, ExtractResponse } from "../core/messages";
+import { fillListing } from "../platform/listing-run";
+import type {
+  DetectedNotice,
+  ExtractRequest,
+  ExtractResponse,
+  FillRequest,
+  FillResponse,
+} from "../core/messages";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
 //   • declaratively on Colnect pages (manifest `content_scripts`) — so the toolbar badge can show
@@ -76,6 +83,26 @@ function extractHere(withImages: boolean) {
 
 if (!window.__stamporamaAssistantLoaded) {
   window.__stamporamaAssistantLoaded = true;
+
+  // The listing form's own half (#409): the background worker opened this tab at the sale form and
+  // asks the page to fill it in. The fill is DOM work through the task's own module, so it happens
+  // here; the module stops before submit, so nothing is posted.
+  chrome.runtime.onMessage.addListener(
+    (msg: FillRequest, _sender, sendResponse: (r: FillResponse) => void) => {
+      if (msg?.type !== "fill") return;
+      const result = fillListing(msg.task, document, location.href);
+      sendResponse(
+        result.ok
+          ? {
+              ok: true,
+              moduleId: result.moduleId,
+              moduleName: result.moduleName,
+              outcome: result.outcome,
+            }
+          : { ok: false, error: result.error }
+      );
+    }
+  );
 
   chrome.runtime.onMessage.addListener(
     (msg: ExtractRequest, _sender, sendResponse: (r: ExtractResponse) => void) => {

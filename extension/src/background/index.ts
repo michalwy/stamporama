@@ -10,6 +10,8 @@ import type {
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
+import { syncInstanceContentScripts } from "./instance-scripts";
+import { runListingTask } from "./listing";
 import { handleRegistrationClick } from "./registration";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
@@ -103,6 +105,16 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
     return false;
   }
 
+  // A listing handed over by an instance's own page (#409). It needs no profile — a task is
+  // self-contained, and the origin that wrote it is one the collector registered — so it is answered
+  // ahead of the profile check every matcher call goes through.
+  if (msg?.type === "list") {
+    runListingTask(msg.task, sender.tab)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    return true;
+  }
+
   // The window asking for the load-time match of its source tab.
   if (msg?.type === "cached-results") {
     sendResponse({ results: resultCache.get(msg.tabId) ?? null } satisfies CachedResultsResponse);
@@ -135,6 +147,10 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // results were computed with the other setting and would show the wrong proposals.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
+  // Which origins the Assistant scripts follows the profile list and nothing else (#409): a profile
+  // added by registration, one whose URL was corrected, one deleted after its token was revoked.
+  // Hanging it off the store rather than off each call site is what keeps the two from drifting.
+  if ("profiles" in changes) void syncInstanceContentScripts();
   if (!("activeProfileId" in changes) && !("profiles" in changes) && !(CATALOG_BACKFILL in changes)) {
     return;
   }
@@ -211,3 +227,9 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === assistantWindowId) assistantWindowId = null;
 });
+
+// Registered scripts persist across sessions, so these two are a reconcile and not a setup: they
+// catch a store edited while the extension was disabled, and an update that changed what the script
+// is called. Both are idempotent.
+chrome.runtime.onInstalled.addListener(() => void syncInstanceContentScripts());
+chrome.runtime.onStartup.addListener(() => void syncInstanceContentScripts());

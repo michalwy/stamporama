@@ -23,6 +23,9 @@ const outdir = resolve(root, release ? "dist-release" : "dist");
 const entryPoints = {
   background: resolve(root, "src/background/index.ts"),
   content: resolve(root, "src/content/index.ts"),
+  // The instance-origin script (#409). Registered at runtime rather than declared in the manifest —
+  // a self-hosted instance has no origin to declare — but bundled like any other entrypoint.
+  instance: resolve(root, "src/content/instance.ts"),
   popup: resolve(root, "src/popup/index.ts"),
   options: resolve(root, "src/options/index.ts"),
 };
