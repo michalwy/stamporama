@@ -195,8 +195,23 @@ export function ListingWorkspacePanel({
   // element is one node the page owns (#409's contract, the registration one again), and only one
   // offer can be in flight, since the extension puts the marketplace's tab in front.
   const assistantPresent = useAssistantPresence();
+  // An offer the collector submitted on the platform activates itself (#412), so it leaves this batch
+  // exactly as its own Publish would have taken it out — the list is re-read and the next card opens,
+  // the collector's hands staying on the run rather than going back to find where they were. The
+  // report strip goes with the card, which is the same language publishing has always spoken here —
+  // and the handoff is left standing rather than dismissed, since there is no longer a card to show
+  // it on and the next offer's handoff replaces it anyway.
+  const onListingActivated = useCallback(
+    (offerId: string) => {
+      const at = ordered.findIndex((o) => o.id === offerId);
+      const next = at >= 0 ? (ordered[at + 1]?.id ?? undefined) : undefined;
+      invalidateAll(collectionId);
+      setExpandedId(next);
+    },
+    [collectionId, invalidateAll, ordered]
+  );
   const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } =
-    useAssistantHandoff(collectionId);
+    useAssistantHandoff(collectionId, { onActivated: onListingActivated });
   const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
 
   function groupHeading(key: GroupKey): { label: string; hint?: string } {

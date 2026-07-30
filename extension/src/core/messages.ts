@@ -57,6 +57,9 @@ export type BackgroundRequest = MatchRequest | ConfirmRequest;
 export interface ListRequest {
   type: "list";
   task: ListingTask;
+  /** The handoff this is (#409). Remembered with the filled form, so the answer that comes back after
+   *  Save (#412) names the request it answers exactly as the fill's own answer does. */
+  requestId: string;
 }
 export type ListResponse =
   | {
@@ -68,6 +71,33 @@ export type ListResponse =
       outcome: ListingFillOutcome;
     }
   | { ok: false; error: string };
+
+// content script (on the sale form) → background: "the form the Assistant filled has been
+// submitted" (#412). It is what separates a listing the collector *posted* from one they abandoned:
+// a submission that then lands somewhere the module does not recognise is worth reporting, while an
+// abandoned form is worth nothing at all. Fire-and-forget, no response.
+export interface ListingSubmittedNotice {
+  type: "listing-submitted";
+}
+
+// background → instance content script: "the sale was posted" (#412), carried back to the page that
+// handed the offer over. The reply says whether the page **took** it: the answer arrives minutes
+// after the fill, by which time the collector may have dismissed the strip or handed the next offer
+// over, and an answer nobody is following is what the POST fallback exists for.
+export interface ListedNotice {
+  type: "listed";
+  requestId: string;
+  offerId: string;
+  moduleId: string;
+  moduleName: string;
+  formUrl: string;
+  /** The entry's own URL, or null when the sale was posted and it could not be read. */
+  listedUrl: string | null;
+}
+export interface ListedResponse {
+  /** True when the page is still following this handoff, so it is the one activating the offer. */
+  taken: boolean;
+}
 
 /** The minimum an item needs for matching: no name, no image bytes. Keeps the load-time message
  *  small, since it is sent on every supported page view. */
@@ -98,5 +128,6 @@ export interface CachedResultsResponse {
 export type BackgroundMessage =
   | BackgroundRequest
   | ListRequest
+  | ListingSubmittedNotice
   | DetectedNotice
   | CachedResultsRequest;

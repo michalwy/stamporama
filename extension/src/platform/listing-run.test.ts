@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerPlatformModule, findListingModule, moduleReports } from "./registry";
-import { fillListing, resolveListingTarget } from "./listing-run";
+import { fillListing, resolveListedUrl, resolveListingTarget } from "./listing-run";
 import type { PlatformModule } from "./module";
 import type { ListingTask } from "./listing";
 
@@ -21,6 +21,7 @@ const listingModule: PlatformModule = {
       filled: [{ field: "Price", value: `${task.price} ${task.currency}` }],
       skipped: [{ field: "Title", reason: "FakeMarket has no title field." }],
     }),
+    listedUrl: (url) => (url.startsWith("https://fake.test/listing/") ? url : null),
   },
 };
 
@@ -125,8 +126,32 @@ test("a module throwing on unexpected DOM comes back as a refusal", () => {
       fill: () => {
         throw new Error("Price field not found.");
       },
+      listedUrl: () => {
+        throw new Error("BrokenMarket cannot read a URL.");
+      },
     },
   });
   const result = fillListing(task("broken-market"), noDoc, "https://broken.test/sell");
   assert.deepEqual(result, { ok: false, error: "Price field not found." });
+});
+
+// ── Reading the listing back (#412) ──────────────────────────────────────────
+
+test("a listed entry's URL is read through the module that filled the form", () => {
+  assert.equal(
+    resolveListedUrl("fake-market", "https://fake.test/listing/abc"),
+    "https://fake.test/listing/abc"
+  );
+  // The form itself is not its own outcome, and neither is any other page the collector wanders to.
+  assert.equal(resolveListedUrl("fake-market", "https://fake.test/sell?offer=o1"), null);
+});
+
+test("a module that cannot list, or does not exist, reads no listing", () => {
+  assert.equal(resolveListedUrl("read-only-market", "https://read-only.test/listing/1"), null);
+  assert.equal(resolveListedUrl("no-such-module", "https://fake.test/listing/abc"), null);
+});
+
+test("a module throwing while reading a URL is silence, not a report", () => {
+  // The collector is simply on a page; nothing has been claimed about a listing either way.
+  assert.equal(resolveListedUrl("broken-market", "https://broken.test/whatever"), null);
 });

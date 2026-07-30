@@ -52,6 +52,9 @@ export interface AssistantReport {
   formUrl: string;
   filled: AssistantFilledField[];
   skipped: AssistantSkippedField[];
+  /** The listing's own URL on the platform (#412), once the sale has been submitted — what the offer
+   *  goes live carrying. Absent before that: there is no entry yet to have one. */
+  listedUrl?: string;
 }
 
 /**
@@ -60,8 +63,25 @@ export interface AssistantReport {
  * `loading` is ours — fetching the kit — and everything after it is the extension's. They are one
  * sequence rather than two states because the collector asked one question, and "which side of the
  * wire is it on" is not an answer to it.
+ *
+ * The last three are #412's, and they arrive **after** the collector has submitted the form the
+ * Assistant filled — which may be minutes later, and is the step that finally makes the listing exist:
+ *
+ *   • `listed` — the sale was posted and the entry's URL was read. Ours again: the offer is being
+ *     published with it.
+ *   • `activated` — that publication succeeded. The offer is live, carrying the platform's own URL,
+ *     with nothing typed by hand.
+ *   • `unread` — the sale was posted and the URL could not be read. Nothing failed; the offer is
+ *     simply activated here, where a blank URL has always been an accepted answer.
  */
-export type AssistantHandoffState = "loading" | "running" | "filled" | "error";
+export type AssistantHandoffState =
+  | "loading"
+  | "running"
+  | "filled"
+  | "listed"
+  | "activated"
+  | "unread"
+  | "error";
 
 export interface AssistantHandoff {
   offerId: string;
@@ -71,6 +91,35 @@ export interface AssistantHandoff {
   state: AssistantHandoffState;
   message: string | null;
   report: AssistantReport | null;
+}
+
+/** The states the **extension** writes onto the node. `loading`, `activated` and the publication's
+ *  own error are ours and never arrive from there. */
+function isExtensionState(
+  state: string | null
+): state is "running" | "filled" | "listed" | "unread" | "error" {
+  return (
+    state === "running" ||
+    state === "filled" ||
+    state === "listed" ||
+    state === "unread" ||
+    state === "error"
+  );
+}
+
+/** The report as it now stands: whatever the latest answer carries, over what the fill already said.
+ *  The fill reports the fields, the post-Save answer reports the URL, and the strip shows both. */
+function mergeReport(
+  current: AssistantReport | null,
+  incoming: AssistantReport | null
+): AssistantReport | null {
+  if (!incoming) return current;
+  if (!current) return incoming;
+  return {
+    ...incoming,
+    filled: incoming.filled.length > 0 ? incoming.filled : current.filled,
+    skipped: incoming.skipped.length > 0 ? incoming.skipped : current.skipped,
+  };
 }
 
 /**
@@ -104,10 +153,18 @@ export function useAssistantPresence(): string | null {
  * `nodeRef` belongs on the element the caller renders; the observer is installed on it per request,
  * so a new handoff is watched on the node it actually wrote.
  */
-export function useAssistantHandoff(collectionId: string) {
+export function useAssistantHandoff(
+  collectionId: string,
+  options: {
+    /** The offer went live off the back of its own listing (#412) — the caller's cue to refresh what
+     *  it shows, exactly as it does after its own Publish. */
+    onActivated?: (offerId: string) => void;
+  } = {}
+) {
   const [handoff, setHandoff] = useState<AssistantHandoff | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const requestId = handoff?.payload ? handoff.requestId : null;
+  const onActivated = options.onActivated;
 
   useEffect(() => {
     const el = nodeRef.current;
@@ -117,21 +174,28 @@ export function useAssistantHandoff(collectionId: string) {
       // never read as this request's outcome.
       if (el.getAttribute(REQUEST_ATTRIBUTE) !== requestId) return;
       const state = el.getAttribute(STATE_ATTRIBUTE);
-      if (state !== "running" && state !== "filled" && state !== "error") return;
+      if (!isExtensionState(state)) return;
       const raw = el.getAttribute(REPORT_ATTRIBUTE);
       let report: AssistantReport | null = null;
-      if (state === "filled" && raw) {
+      if (raw) {
         try {
           report = JSON.parse(raw) as AssistantReport;
         } catch {
           report = null; // the message still says how it went
         }
       }
-      setHandoff((current) =>
-        current && current.requestId === requestId
-          ? { ...current, state, message: el.getAttribute(MESSAGE_ATTRIBUTE), report }
-          : current
-      );
+      setHandoff((current) => {
+        if (!current || current.requestId !== requestId) return current;
+        return {
+          ...current,
+          state,
+          message: el.getAttribute(MESSAGE_ATTRIBUTE),
+          // What was filled and skipped is reported once, at fill time; the answer that comes back
+          // after Save (#412) carries only the listing's URL, so the fill's own detail is kept rather
+          // than replaced with the empty lists that answer necessarily has.
+          report: mergeReport(current.report, report),
+        };
+      });
     };
     const observer = new MutationObserver(read);
     observer.observe(el, {
@@ -141,6 +205,51 @@ export function useAssistantHandoff(collectionId: string) {
     read(); // the extension may have been faster than this effect
     return () => observer.disconnect();
   }, [requestId]);
+
+  /**
+   * Go live off the listing the Assistant just captured (#412).
+   *
+   * This is the same `publishOfferAction` the card's own Publish calls, with the URL filled in for
+   * the collector instead of pasted by them — which is the whole point of the capture: it is the field
+   * that goes stale first when it is left to be typed. Publishing here rather than in the extension
+   * keeps the rule the handoff has had from the start (#407): the extension reports, the instance
+   * decides.
+   *
+   * Guarded by the request id, so the answer being written twice — a re-render of the node, a second
+   * navigation on the platform's side — publishes once. When no page is following the answer at all,
+   * the extension posts it to the instance instead, and that endpoint is idempotent for this very
+   * reason.
+   */
+  const published = useRef<string | null>(null);
+  useEffect(() => {
+    if (!handoff || handoff.state !== "listed") return;
+    const url = handoff.report?.listedUrl;
+    if (!url || published.current === handoff.requestId) return;
+    published.current = handoff.requestId;
+
+    const { offerId, requestId } = handoff;
+    void (async () => {
+      const { publishOfferAction } = await import("@/app/actions/offers");
+      const result = await publishOfferAction(offerId, url);
+      setHandoff((current) => {
+        if (current?.requestId !== requestId) return current;
+        return result.status === "success"
+          ? {
+              ...current,
+              state: "activated",
+              message: `Posted on ${current.report?.moduleName ?? "the platform"} and activated here, with the listing's URL.`,
+            }
+          : {
+              ...current,
+              state: "error",
+              // The listing exists; only the record does not. Saying which is which is the whole
+              // message, since the collector's next act is on this screen and not on the platform.
+              message: `The listing was posted, but this offer could not be activated: ${result.message ?? "unknown error"}`,
+            };
+      });
+      if (result.status === "success") onActivated?.(offerId);
+    })();
+  }, [handoff, onActivated]);
 
   const dismiss = useCallback(() => setHandoff(null), []);
 

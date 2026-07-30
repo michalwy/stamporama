@@ -722,8 +722,15 @@ When it is done the card says how it went, under the offer's line:
   platform's limit is skipped rather than cut short, for instance, because cutting it would mangle
   wording you chose.
 
-Then **Publish** on the card as usual, once the platform has taken the listing — the offer is still
-Ready until you do, because the form was filled but not submitted.
+Then press the platform's own Save. That is what takes the offer live: the Assistant reads the new
+listing's own address off the page the platform lands on, and the offer moves **Ready → Active** with
+its listing date stamped and that URL recorded — no Publish, and nothing pasted in by hand. The card
+says so, links to the live listing, and leaves the batch, opening the next offer as publishing always
+does.
+
+Until you post it, the offer is still **Ready** — the form was filled and not submitted. Abandon the
+form and nothing changes here. And if the Assistant can't make out the listing's address after you
+post it, it says so: **Publish** the offer here as usual, pasting the URL in or leaving it blank.
 
 One offer goes at a time — the Assistant puts the marketplace's tab in front, so a second would be two
 forms fighting over the same window. While one is running, the other cards say so.
@@ -737,7 +744,8 @@ to fill.
 
 The same button sits in the **offer's own header**, beside Activate, for a Ready offer — a single
 listing is often posted from there rather than from a batch, and it behaves identically, report strip
-included. Activating is still the separate step, from that header's own **▲ Activate**.
+and self-activation included. That header's own **▲ Activate** stays there for everything posted by
+hand.
 
 ### Publishing
 

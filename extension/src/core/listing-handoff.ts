@@ -39,9 +39,24 @@ export interface ListingHandoff {
   task: ListingTask;
 }
 
-/** How far a handoff has got. `filled` means the form was reached and filled as far as the task
- *  allowed — skipped fields included, since a skip is a report and not a failure (#408). */
-export type ListingHandoffState = "running" | "filled" | "error";
+/**
+ * How far a handoff has got.
+ *
+ * `filled` means the form was reached and filled as far as the task allowed — skipped fields
+ * included, since a skip is a report and not a failure (#408). The two after it are #412's, and
+ * arrive **later**: filling stops before Save, so what happens next happens in the collector's own
+ * time, on the marketplace's page.
+ *
+ *   • `listed` — the sale was submitted and the entry's URL was read. The page publishes the offer
+ *     with it (and the extension posts it to the instance when no page is following, #412).
+ *   • `unread` — the sale was submitted and the URL could **not** be read. Nothing is wrong with the
+ *     listing; it just has to be activated in Stamporama by hand, where a blank URL is already an
+ *     accepted answer. Distinct from `error` because nothing failed, and distinct from `filled`
+ *     because the listing now exists.
+ *
+ * A submission the collector abandons produces none of them: an untouched Ready offer is not news.
+ */
+export type ListingHandoffState = "running" | "filled" | "listed" | "unread" | "error";
 
 export const LISTING_STATE_ATTRIBUTE = "data-listing-state";
 export const LISTING_REQUEST_ATTRIBUTE = "data-listing-request";
@@ -57,6 +72,9 @@ export interface ListingHandoffReport {
   formUrl: string;
   filled: ListingFilledField[];
   skipped: ListingSkippedField[];
+  /** The listed entry's own URL, on a `listed` answer only (#412) — what the offer records and goes
+   *  live with. Absent everywhere else: before Save there is no entry to have a URL. */
+  listedUrl?: string;
 }
 
 /**
@@ -109,4 +127,17 @@ export function describeListingReport(report: ListingHandoffReport): string {
   }
   const skipped = `${report.skipped.length} field${report.skipped.length === 1 ? "" : "s"}`;
   return `Filled ${filled} in ${report.moduleName}'s listing form; ${skipped} could not be filled. Check it over and post it there.`;
+}
+
+/** One sentence for a `listed` answer (#412): the sale is posted and its URL was read, so the page's
+ *  next act is to go live with it. The page says what it then did — this only says what happened on
+ *  the marketplace, which is the part only the extension saw. */
+export function describeListedReport(report: ListingHandoffReport): string {
+  return `Posted on ${report.moduleName}. Activating this offer with the listing's URL…`;
+}
+
+/** One sentence for an `unread` answer (#412). It names the listing as posted first, because that is
+ *  the fact that changed, and then the one thing left to do here. */
+export function describeUnreadReport(report: ListingHandoffReport): string {
+  return `The listing was submitted on ${report.moduleName}, but the Assistant could not read its URL. Activate this offer here — the URL can be pasted in, or left blank.`;
 }

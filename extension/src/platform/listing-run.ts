@@ -67,6 +67,27 @@ export function fillListing(task: ListingTask, doc: Document, url: string): List
   }
 }
 
+/**
+ * The listed entry's URL, when `url` is where a submitted sale form landed — asked of the module the
+ * listing was filled by, and null for anything else (#412).
+ *
+ * Keyed on a **module id** rather than on a task, because the question is asked long after the fill:
+ * the collector may submit minutes later, and what is remembered in the meantime is the listing's
+ * tab and the module that owns it, never the whole payload. An unknown or read-only module is null
+ * too — a page nobody claims is not a listing that went live.
+ */
+export function resolveListedUrl(moduleId: string, url: string): string | null {
+  const module = findModuleById(moduleId);
+  if (!module || !canList(module)) return null;
+  try {
+    return module.listing.listedUrl(url);
+  } catch {
+    // A module refusing to read a URL is not an outcome worth reporting: the collector is on a page,
+    // and the listing simply has not been recognised yet.
+    return null;
+  }
+}
+
 type ResolvedModule =
   | { ok: true; module: ListingCapableModule }
   | { ok: false; error: string };

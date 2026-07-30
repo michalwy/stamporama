@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { describeListingReport, parseListingHandoff } from "./listing-handoff";
+import {
+  describeListedReport,
+  describeListingReport,
+  describeUnreadReport,
+  parseListingHandoff,
+} from "./listing-handoff";
 
 // The handoff element is written by a client-rendered screen, so the parser's real job is telling a
 // task apart from a node that exists but holds nothing yet — half a handoff must read as none.
@@ -82,5 +87,28 @@ describe("describeListingReport", () => {
     });
     assert.match(msg, /Filled 2 fields/);
     assert.match(msg, /1 field could not be filled/);
+  });
+});
+
+// #412: what comes back after Save, which the page renders as it stands.
+describe("describing what happened after Save", () => {
+  const base = {
+    moduleId: "colnect",
+    moduleName: "Colnect",
+    formUrl: "https://colnect.com/en/sell/new/category/stamps/item/111",
+    filled: [],
+    skipped: [],
+  };
+
+  it("says the listing was posted and that the offer is going live", () => {
+    const msg = describeListedReport({ ...base, listedUrl: "https://colnect.com/en/market/sale/h5UXNh" });
+    assert.match(msg, /Posted on Colnect/);
+    assert.match(msg, /Activating this offer/);
+  });
+
+  it("names the listing as posted first when its URL could not be read", () => {
+    const msg = describeUnreadReport(base);
+    assert.match(msg, /submitted on Colnect/);
+    assert.match(msg, /Activate this offer here/);
   });
 });

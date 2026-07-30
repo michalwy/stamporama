@@ -63,6 +63,24 @@ photos are uploaded. When it is done, the offer's card in Stamporama lists what 
 was skipped, so a field it couldn't answer — a condition with no grade on that platform, a text over
 the platform's limit — is something you learn there rather than after posting.
 
+### When you post it, the offer goes live by itself
+
+Press the platform's own Save and the Assistant reads the listing's own address off the page it lands
+on, and hands it back. The offer then moves **Ready → Active** in Stamporama, with its listing date
+stamped and that URL recorded — the field that goes stale first if it is left to be pasted in later.
+The report strip says so and links to the live listing.
+
+It closes the loop even if you have moved on: the offer is activated whether or not the Stamporama tab
+that started the listing is still open, or still showing that offer.
+
+Two things it deliberately doesn't do:
+
+- **A form you abandon changes nothing.** Close the tab, or walk away from it, and the offer stays
+  Ready exactly as it was. Nothing is posted, so nothing is recorded.
+- **A listing whose URL can't be read is reported, not guessed at.** If you post one and the Assistant
+  can't make out the entry's address, it says so — activate the offer here as usual, pasting the URL in
+  or leaving it blank, which has always been an accepted answer.
+
 For this to be offered, the connection has to be the one this instance is scripting: the Assistant
 registers your instance's address when you connect it, which is what lets a page of yours hand an
 offer over without any click on the toolbar. Connect it again from **Settings → Assistant** if the

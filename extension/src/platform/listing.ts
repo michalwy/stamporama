@@ -129,4 +129,18 @@ export interface PlatformListing {
   /** Fill the form in `doc` from `task`, and stop. Never submits, and never touches a field the
    *  task has nothing to say about (#410). Throws only on unexpected DOM. */
   fill(doc: Document, task: ListingTask): ListingFillOutcome;
+  /**
+   * The **listed entry's own URL**, when `url` is the page a submitted sale form landed on — and
+   * null for every other page (#412).
+   *
+   * This is what closes the loop: the entry exists only after the collector submits, so its URL
+   * cannot be known when the form is opened, and the one place it is ever stated is the address bar
+   * the platform navigates to. A module recognising its own entry page is the same knowledge
+   * {@link isFormUrl} already carries, on the other side of Save.
+   *
+   * Returning the URL rather than a boolean is deliberate: it is **stored** on the offer, so the
+   * module is what decides which part of what the browser shows is the listing's address — a
+   * tracking parameter is not part of the record.
+   */
+  listedUrl(url: string): string | null;
 }

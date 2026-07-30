@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -171,8 +171,14 @@ export function OfferDetailPanel({
   // The Assistant handoff (#414), exactly as the bulk workspace drives it (#407): the hidden node
   // is this page's own, and the extension answers on it.
   const assistantPresent = useAssistantPresence();
-  const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } =
-    useAssistantHandoff(collectionId);
+  // Submitting the filled form is what takes this offer live (#412) — the header then shows a
+  // different state, a listing date and a URL, so the screen is re-read exactly as it is after its
+  // own Activate. The report strip stays: it is the record of what just happened.
+  const onListingActivated = useCallback(() => invalidateAll(collectionId), [collectionId, invalidateAll]);
+  const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } = useAssistantHandoff(
+    collectionId,
+    { onActivated: onListingActivated }
+  );
   const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
 
   // The languages this collection lists in (#293), for regenerating the title in one of them (#297).

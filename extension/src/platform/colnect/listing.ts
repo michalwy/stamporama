@@ -272,9 +272,37 @@ function warnOnSeparateListings(doc: Document, report: FillReport): void {
   }
 }
 
-/** The Colnect module's listing half (#410). */
+/**
+ * The listed entry's own URL, once the sale has been submitted (#412) — or null for any other page.
+ *
+ * Colnect answers a successful Save by navigating **straight to the new entry**,
+ * `https://colnect.com/en/market/sale/h5UXNh` (confirmed by posting one for real, which is what the
+ * open question on #412 asked for). So recognising a listing is recognising that path: a short
+ * opaque code under `/<locale>/market/sale/`, the locale being whatever Colnect served.
+ *
+ * Query and fragment are **dropped**. This URL is stored on the offer as the listing's address, and
+ * a campaign parameter or an anchor Colnect happened to add is not part of that record — while the
+ * entry's own path is stable and is what the collector would have copied by hand.
+ */
+export function colnectListedSaleUrl(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return null;
+  // The sale form lives under `/sell/`, the posted entry under `/market/sale/` — a different branch
+  // of the site, so there is no chance of reading the form we just filled as its own outcome.
+  if (!/^\/[a-z]{2}\/market\/sale\/[^/]+\/?$/.test(u.pathname)) return null;
+  return `${u.origin}${u.pathname}`;
+}
+
+/** The Colnect module's listing half (#410, closed off by #412). */
 export const colnectListing: PlatformListing = {
   formUrl: colnectSaleFormUrl,
   isFormUrl: isColnectSaleFormUrl,
   fill: fillColnectSaleForm,
+  listedUrl: colnectListedSaleUrl,
 };

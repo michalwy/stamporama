@@ -96,7 +96,9 @@ export type OfferBlockReason =
   /** Going live (#336) without an asking price set. */
   | "unpriced"
   /** A reorder (#306) did not carry the current composition — the client is stale. */
-  | "bad-order";
+  | "bad-order"
+  /** Recording a listing (#412) without the URL that *is* the record. */
+  | "no-url";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -1553,6 +1555,53 @@ export async function publishOffer(
 ): Promise<void> {
   await setOfferState(ownerId, offerId, "active");
   await patchOffer(ownerId, offerId, { url });
+}
+
+/** What recording a listing did, so the caller can say so rather than guess (#412). */
+export type OfferListedOutcome = "activated" | "url-recorded" | "unchanged";
+
+/**
+ * Record that this offer has been listed at `url` (#412) — the write-back behind the Assistant's
+ * capture of the sale URL, and the one place the platform's own answer reaches the record.
+ *
+ * It is `publishOffer` with **one** difference: it is idempotent. The URL comes back once but may be
+ * delivered twice — the page that handed the offer over publishes it when it is still on screen, and
+ * the extension posts it when no page took the answer, both by design — so arriving second must be a
+ * no-op and not a refusal.
+ *
+ *   • `ready` → publish exactly as the workspace does: transition first (which stamps the listing
+ *     date, #320), then the URL, so a refused publication leaves no listing URL behind.
+ *   • already `active` → the listing is already live. A **blank** URL is filled in, because that is
+ *     the field this exists to save from being pasted by hand; one that is already recorded is left
+ *     alone, since a URL on the record was either put there by the collector or by this same capture.
+ *   • anything else → refused. A paused, sold or preparing offer is not something a marketplace
+ *     submission may quietly take live.
+ */
+export async function recordOfferListed(
+  ownerId: string,
+  offerId: string,
+  url: string
+): Promise<OfferListedOutcome> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    throw new OfferActionBlockedError("no-url", "A listing URL is required.");
+  }
+  const ref = await assertOfferOwner(ownerId, offerId);
+
+  if (ref.state === "ready") {
+    await publishOffer(ownerId, offerId, trimmed);
+    return "activated";
+  }
+  if (ref.state === "active") {
+    const row = await prisma.offer.findUnique({ where: { id: offerId }, select: { url: true } });
+    if (row?.url) return "unchanged";
+    await patchOffer(ownerId, offerId, { url: trimmed });
+    return "url-recorded";
+  }
+  throw new OfferActionBlockedError(
+    "bad-transition",
+    `This offer is ${ref.state}, so a listing cannot be recorded against it.`
+  );
 }
 
 export interface OfferDetailSet {

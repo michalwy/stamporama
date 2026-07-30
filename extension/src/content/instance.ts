@@ -1,6 +1,8 @@
 import {
   ASSISTANT_PRESENT_ATTRIBUTE,
+  describeListedReport,
   describeListingReport,
+  describeUnreadReport,
   LISTING_ELEMENT_ID,
   LISTING_MESSAGE_ATTRIBUTE,
   LISTING_REPORT_ATTRIBUTE,
@@ -10,7 +12,7 @@ import {
   type ListingHandoffReport,
   type ListingHandoffState,
 } from "../core/listing-handoff";
-import type { ListRequest, ListResponse } from "../core/messages";
+import type { ListedNotice, ListedResponse, ListRequest, ListResponse } from "../core/messages";
 
 // The content script that runs on a **registered instance's own origin** (#409) — registered
 // dynamically as profiles are (`background/instance-scripts.ts`), because a self-hosted instance has
@@ -68,6 +70,7 @@ async function pump(): Promise<void> {
     res = (await chrome.runtime.sendMessage({
       type: "list",
       task: handoff.task,
+      requestId: handoff.requestId,
     } satisfies ListRequest)) as ListResponse;
   } catch (e) {
     // The worker is gone or the extension was reloaded mid-handoff. Forget the request, so pressing
@@ -93,8 +96,48 @@ async function pump(): Promise<void> {
   report(handoff.requestId, "filled", describeListingReport(detail), detail);
 }
 
+/**
+ * Whether this page is still following `requestId` — which is what decides who activates the offer
+ * (#412).
+ *
+ * The handoff element's **text** is the page's own half of the contract, so a task still written there
+ * under this id means the screen that started the listing is on the other end of the answer and will
+ * publish it. Anything else — dismissed, replaced by the next offer's handoff, or a screen that is no
+ * longer this one — is the case the background worker posts the URL for instead.
+ */
+function stillFollowing(requestId: string): boolean {
+  return parseListingHandoff(handoffElement()?.textContent)?.requestId === requestId;
+}
+
 if (!window.__stamporamaAssistantInstanceLoaded) {
   window.__stamporamaAssistantInstanceLoaded = true;
+
+  // The listing was posted on the marketplace (#412) — minutes after the fill, in the collector's own
+  // time. It comes back onto the same node the fill's report did, and the reply says whether this page
+  // took it: an answer nobody is following is the one the worker posts to the instance itself.
+  chrome.runtime.onMessage.addListener(
+    (msg: ListedNotice, _sender, sendResponse: (r: ListedResponse) => void) => {
+      if (msg?.type !== "listed") return;
+      const taken = stillFollowing(msg.requestId);
+      if (taken) {
+        const detail: ListingHandoffReport = {
+          moduleId: msg.moduleId,
+          moduleName: msg.moduleName,
+          formUrl: msg.formUrl,
+          filled: [],
+          skipped: [],
+          ...(msg.listedUrl ? { listedUrl: msg.listedUrl } : {}),
+        };
+        report(
+          msg.requestId,
+          msg.listedUrl ? "listed" : "unread",
+          msg.listedUrl ? describeListedReport(detail) : describeUnreadReport(detail),
+          detail
+        );
+      }
+      sendResponse({ taken });
+    }
+  );
 
   // Tell the page the Assistant is here and scripting this origin, so **List via Assistant** can be
   // offered by a page that has no other way to find out — and stays honest on a browser without the

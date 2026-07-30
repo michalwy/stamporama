@@ -95,9 +95,11 @@ export function ListViaAssistantButton({
  * somewhere different; the filled fields are named in one muted line, because "what went in" is
  * checked in the form itself, which is now in front of the collector anyway.
  *
- * It carries **no Publish of its own**. The form is filled but not submitted, so the offer is still
- * Ready and the listing does not exist yet — and every surface that shows this strip has its own
- * publish control in view at the same time, so a second one here is the same button twice.
+ * It carries **no Publish of its own**. Up to `filled` the form is filled but not submitted, so the
+ * offer is still Ready and the listing does not exist yet — and every surface that shows this strip
+ * has its own publish control in view at the same time, so a second one here is the same button twice.
+ * From `listed` on (#412) the collector has submitted it and the publication is this strip's own doing,
+ * so there is nothing left to press either: the strip reports what happened and links to the listing.
  */
 export function AssistantOutcome({
   handoff,
@@ -106,14 +108,20 @@ export function AssistantOutcome({
   handoff: AssistantHandoff;
   onDismiss: () => void;
 }) {
-  const running = handoff.state === "loading" || handoff.state === "running";
+  // `listed` is *our* work in progress — the offer is being published — so it reads as busy, exactly
+  // as fetching the kit does.
+  const running =
+    handoff.state === "loading" || handoff.state === "running" || handoff.state === "listed";
   const tone =
     handoff.state === "error"
       ? "var(--color-error)"
-      : handoff.state === "filled"
-        ? "var(--color-accent)"
-        : "var(--color-border)";
+      : handoff.state === "unread"
+        ? "var(--color-warning)"
+        : handoff.state === "filled" || handoff.state === "activated"
+          ? "var(--color-accent)"
+          : "var(--color-border)";
   const report = handoff.report;
+  const listedUrl = report?.listedUrl;
 
   return (
     <div
@@ -128,14 +136,25 @@ export function AssistantOutcome({
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <span aria-hidden style={{ fontSize: "0.75rem" }}>
-          {handoff.state === "error" ? "⚠" : handoff.state === "filled" ? "✓" : "⚡"}
+          {handoff.state === "error"
+            ? "⚠"
+            : handoff.state === "unread"
+              ? "⚠"
+              : handoff.state === "filled" || handoff.state === "activated"
+                ? "✓"
+                : "⚡"}
         </span>
         <span
           style={{
             flex: 1,
             fontSize: "0.8125rem",
             lineHeight: 1.5,
-            color: handoff.state === "error" ? "var(--color-error)" : "var(--color-text-primary)",
+            color:
+              handoff.state === "error"
+                ? "var(--color-error)"
+                : handoff.state === "unread"
+                  ? "var(--color-warning)"
+                  : "var(--color-text-primary)",
           }}
         >
           {handoff.message ?? (running ? "Working…" : "")}
@@ -161,6 +180,28 @@ export function AssistantOutcome({
           </Tooltip>
         )}
       </div>
+
+      {/* The listing itself (#412). Shown once its URL has been read, and shown as a **link**: it is
+          now the offer's own record, and the one thing worth looking at from here is the live entry. */}
+      {listedUrl && (
+        <p
+          style={{
+            margin: "0 0 0 1.25rem",
+            fontSize: "0.75rem",
+            lineHeight: 1.5,
+            overflowWrap: "anywhere",
+          }}
+        >
+          <a
+            href={listedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--color-accent)" }}
+          >
+            {listedUrl}
+          </a>
+        </p>
+      )}
 
       {report && report.skipped.length > 0 && (
         <ul

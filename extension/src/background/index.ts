@@ -11,7 +11,7 @@ import type {
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
 import { syncInstanceContentScripts } from "./instance-scripts";
-import { runListingTask } from "./listing";
+import { captureListedUrl, listingSubmitted, listingTabClosed, runListingTask } from "./listing";
 import { handleRegistrationClick } from "./registration";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
@@ -108,8 +108,15 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // A listing handed over by an instance's own page (#409). It needs no profile — a task is
   // self-contained, and the origin that wrote it is one the collector registered — so it is answered
   // ahead of the profile check every matcher call goes through.
+  // The sale form the Assistant filled has been submitted (#412) — noted, so that the tab being
+  // closed without a recognised entry page can be told apart from a listing simply abandoned.
+  if (msg?.type === "listing-submitted") {
+    void listingSubmitted(sender.tab?.id);
+    return false;
+  }
+
   if (msg?.type === "list") {
-    runListingTask(msg.task, sender.tab)
+    runListingTask(msg.task, msg.requestId, sender.tab)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     return true;
@@ -134,10 +141,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     resultCache.delete(tabId);
     void setBadge(tabId, 0, BADGE_DETECTED);
   }
+  // Where a submitted listing is read back (#412). The URL is taken from the change itself so a page
+  // that only ever commits — a redirect chain, a document that never reports `complete` — is still
+  // seen; the pending record makes this a no-op on every tab but the one holding a filled form.
+  const url = changeInfo.url;
+  if (url) void captureListedUrl(tabId, url);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   resultCache.delete(tabId);
+  void listingTabClosed(tabId);
 });
 
 // Switching profile (#251) re-points everything: every cached result and every badge was computed

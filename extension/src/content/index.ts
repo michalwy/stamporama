@@ -6,6 +6,7 @@ import type {
   ExtractResponse,
   FillRequest,
   FillResponse,
+  ListingSubmittedNotice,
 } from "../core/messages";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
@@ -81,6 +82,30 @@ function extractHere(withImages: boolean) {
   return items;
 }
 
+/**
+ * Note the moment the collector submits the form the Assistant filled (#412).
+ *
+ * Filling stops before Save, so what happens afterwards is the collector's own doing — and the two
+ * outcomes need telling apart. A submitted listing whose entry page is never recognised is worth
+ * reporting, because the listing exists and the offer does not know; a form simply abandoned is worth
+ * nothing at all, and reporting it would raise an alarm about an offer nothing happened to.
+ *
+ * The page is the sale form (the fill refused otherwise), so any submit on it is that listing. A form
+ * a site posts through script raises no `submit` event and is therefore missed — which costs only the
+ * distinction, never the capture: the entry page is read from the navigation either way.
+ */
+function watchForSubmit(): void {
+  document.addEventListener(
+    "submit",
+    () => {
+      void chrome.runtime
+        .sendMessage({ type: "listing-submitted" } satisfies ListingSubmittedNotice)
+        .catch(() => {});
+    },
+    { capture: true, once: true }
+  );
+}
+
 if (!window.__stamporamaAssistantLoaded) {
   window.__stamporamaAssistantLoaded = true;
 
@@ -91,6 +116,7 @@ if (!window.__stamporamaAssistantLoaded) {
     (msg: FillRequest, _sender, sendResponse: (r: FillResponse) => void) => {
       if (msg?.type !== "fill") return;
       const result = fillListing(msg.task, document, location.href);
+      if (result.ok) watchForSubmit();
       sendResponse(
         result.ok
           ? {

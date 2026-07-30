@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import {
+  colnectListedSaleUrl,
   colnectSaleFormUrl,
   fillColnectSaleForm,
   isColnectSaleFormUrl,
@@ -122,6 +123,30 @@ describe("the sale form URL", () => {
     assert.equal(isColnectSaleFormUrl("https://colnect.com/en/sell"), false);
     assert.equal(isColnectSaleFormUrl("https://colnect.com/en/stamps/list"), false);
     assert.equal(isColnectSaleFormUrl("https://not-colnect.test/en/sell/new/x"), false);
+  });
+
+  // #412: Save navigates straight to the new entry, which is where the offer's URL comes from.
+  it("reads the entry Colnect lands on after Save, and nothing else", () => {
+    assert.equal(
+      colnectListedSaleUrl("https://colnect.com/en/market/sale/h5UXNh"),
+      "https://colnect.com/en/market/sale/h5UXNh"
+    );
+    // Whatever locale Colnect answered in — the entry is the same listing.
+    assert.equal(
+      colnectListedSaleUrl("https://colnect.com/pl/market/sale/h5UXNh"),
+      "https://colnect.com/pl/market/sale/h5UXNh"
+    );
+    // A parameter or an anchor Colnect added is not part of the record the offer stores.
+    assert.equal(
+      colnectListedSaleUrl("https://www.colnect.com/en/market/sale/h5UXNh?ref=mail#pics"),
+      "https://www.colnect.com/en/market/sale/h5UXNh"
+    );
+    // The form itself, the market index, and a page on somebody else's site.
+    assert.equal(colnectListedSaleUrl("https://colnect.com/en/sell/new/category/stamps/item/111"), null);
+    assert.equal(colnectListedSaleUrl("https://colnect.com/en/market/sale"), null);
+    assert.equal(colnectListedSaleUrl("https://colnect.com/en/stamps/list"), null);
+    assert.equal(colnectListedSaleUrl("https://not-colnect.test/en/market/sale/h5UXNh"), null);
+    assert.equal(colnectListedSaleUrl("not a url"), null);
   });
 });
 
