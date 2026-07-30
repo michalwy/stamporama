@@ -11,12 +11,13 @@ import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
+import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogNameFlat, CatalogVendorData } from "@/lib/catalog";
-import type { ColnectMappingData } from "@/lib/colnect";
+import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/colnect";
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { StampConditionData } from "@/lib/conditions";
 import type { StampFormatData } from "@/lib/stamp-formats";
@@ -45,6 +46,8 @@ interface SettingsTabsProps {
   initialSubtypes: StampSubtypeData[];
   initialCollageTemplates: CollageTemplateData[];
   initialColnectMappings: ColnectMappingData[];
+  /** Every condition with the Colnect grade it maps to (#404) — one row each, mapped or not. */
+  initialColnectConditionMappings: ColnectConditionMappingData[];
   initialAssistantTokens: AssistantTokenData[];
   /** Internal copy-number display width (#268), edited on the General tab. */
   itemNoPad: number;
@@ -91,6 +94,7 @@ export function SettingsTabs({
   initialSubtypes,
   initialCollageTemplates,
   initialColnectMappings,
+  initialColnectConditionMappings,
   initialAssistantTokens,
   itemNoPad,
   duplicateCatalogMode,
@@ -271,6 +275,12 @@ export function SettingsTabs({
               abbreviation: v.abbreviation,
             }))}
           />
+
+          {/* The condition side of the same translation (#404): our grades → Colnect's fixed five.
+              Same tab as the catalog mapping because they answer one question — what our vocabulary
+              is called on Colnect — and are set up in one sitting. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect condition mapping</h2>
+          <ColnectConditionsPanel mappings={initialColnectConditionMappings} />
         </section>
       )}
       {activeTab === "assistant" && (

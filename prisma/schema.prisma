@@ -67,6 +67,7 @@ model Collection {
   sales           Sale[]
   auctionSales    AuctionSale[]
   colnectCatalogMappings ColnectCatalogMapping[]
+  colnectConditionMappings ColnectConditionMapping[]
   assistantTokens AssistantToken[]
   assistantRegistrationCodes AssistantRegistrationCode[]
 
@@ -87,6 +88,7 @@ model StampCondition {
   translations  StampConditionTranslation[]
   formatFactors StampFormatFactor[]
   auctionLotLines AuctionLotLine[]
+  colnectMapping ColnectConditionMapping?
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -365,6 +367,34 @@ model ColnectCatalogMapping {
   @@index([collectionId])
   @@index([catalogVendorId])
   @@map("colnect_catalog_mapping")
+}
+
+// Per-collection translation from one of our `StampCondition`s to Colnect's own grade (#404, part
+// of #155). The condition-side counterpart of {@link ColnectCatalogMapping} above, and configured
+// in the same Settings tab: `StampCondition` is the collector's own list, while Colnect ships a
+// closed one, and listing a copy means translating between them — once, not per catalog number.
+//
+// Colnect's vocabulary is **fixed and global** (#402): the identical five options render under
+// every item of a multi-item sale form, so only Colnect's option value is stored and the label it
+// renders as lives in code (`src/lib/colnect-conditions.ts`). Unlike the catalog mapping there is
+// no exact-abbreviation fallback and no ignoring — a condition with no row is unmapped, which is a
+// listing **precondition failure** (#406) rather than a silent default: never guess a grade on a
+// listing about to be published.
+model ColnectConditionMapping {
+  id               String @id @default(cuid())
+  collectionId     String
+  stampConditionId String
+  // Colnect's own option value (`1`–`5`), validated against the built-in vocabulary on write.
+  colnectValue     String
+
+  collection     Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stampCondition StampCondition @relation(fields: [stampConditionId], references: [id], onDelete: Cascade)
+
+  // One mapping per condition: a copy has one condition and a listing takes one grade. Unique on
+  // the condition alone, which already belongs to exactly one collection.
+  @@unique([stampConditionId])
+  @@index([collectionId])
+  @@map("colnect_condition_mapping")
 }
 
 // Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a

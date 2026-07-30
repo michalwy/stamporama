@@ -22,6 +22,7 @@ import {
   type BackfillRefInput,
   type ColnectBackfillProposal,
 } from "./colnect-backfill";
+import { colnectGradeFor, isColnectConditionValue } from "./colnect-conditions";
 import {
   colnectRefKey,
   decideColnectItem,
@@ -211,6 +212,116 @@ export async function resolveColnectAbbreviation(
   if (exact) return { catalogVendorId: exact.id, source: "exact" };
 
   return null;
+}
+
+// ── Condition mapping (#404, part of #155) ───────────────────────────────────
+//
+// The condition-side counterpart of the catalog mapping above, and configured in the same Settings
+// tab. `StampCondition` is the collector's own grade list; Colnect's is fixed and global (#402), so
+// a mapping row stores only Colnect's option value and the label comes from the built-in
+// vocabulary. Unlike the catalog mapping there is no fallback and nothing is ignored: a condition
+// with no row is unmapped, which listing preconditions (#406) report rather than guess around.
+
+/** One of our conditions with the Colnect grade it maps to (null = not mapped). The panel lists
+ *  **every** condition, so the row exists whether or not a mapping does. */
+export interface ColnectConditionMappingData {
+  stampConditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  /** Colnect's option value, or null when the condition is unmapped. */
+  colnectValue: string | null;
+  /** What that value renders as on Colnect's form, resolved from the built-in list. Null with the
+   *  value, and also when a stored value is no longer one Colnect offers. */
+  colnectLabel: string | null;
+}
+
+/** Raised when a mapping would store a value Colnect does not offer — a grade that cannot be
+ *  rendered or posted is worse than no mapping at all. */
+export class ColnectConditionValueError extends Error {
+  constructor(value: string) {
+    super(`"${value}" is not one of Colnect's condition values.`);
+    this.name = "ColnectConditionValueError";
+  }
+}
+
+/**
+ * Every condition of the collection, in the collector's own order, each with the Colnect grade it
+ * maps to. Owner-authorized. This is what the Settings panel renders: an unmapped condition is a
+ * row with a blank select, not a missing row.
+ */
+export async function getColnectConditionMappings(
+  ownerId: string,
+  collectionId: string
+): Promise<ColnectConditionMappingData[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.stampCondition.findMany({
+    where: { collectionId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      colnectMapping: { select: { colnectValue: true } },
+    },
+  });
+  return rows.map((r) => {
+    const value = r.colnectMapping?.colnectValue ?? null;
+    return {
+      stampConditionId: r.id,
+      conditionName: r.name,
+      conditionAbbreviation: r.abbreviation,
+      colnectValue: value,
+      colnectLabel: value ? (colnectGradeFor(value)?.label ?? null) : null,
+    };
+  });
+}
+
+/**
+ * Map one of our conditions to a Colnect grade, or **unmap** it by passing null — clearing is a
+ * delete rather than a stored blank, so "unmapped" has one representation everywhere. Owner-
+ * authorized through the condition's own collection. Throws {@link ColnectConditionValueError} for
+ * a value outside {@link COLNECT_CONDITIONS}.
+ */
+export async function setColnectConditionMapping(
+  ownerId: string,
+  stampConditionId: string,
+  colnectValue: string | null
+): Promise<void> {
+  const condition = await prisma.stampCondition.findUnique({
+    where: { id: stampConditionId },
+    select: { collectionId: true },
+  });
+  if (!condition) throw new Error("Stamp condition not found.");
+  await assertCollectionOwner(ownerId, condition.collectionId);
+
+  const value = colnectValue?.trim() || null;
+  if (value === null) {
+    await prisma.colnectConditionMapping.deleteMany({ where: { stampConditionId } });
+    return;
+  }
+  if (!isColnectConditionValue(value)) throw new ColnectConditionValueError(value);
+  await prisma.colnectConditionMapping.upsert({
+    where: { stampConditionId },
+    create: { collectionId: condition.collectionId, stampConditionId, colnectValue: value },
+    update: { colnectValue: value },
+  });
+}
+
+/**
+ * The collection's condition mapping as a lookup: our `StampCondition` id → Colnect's option value.
+ * This is the read primitive the listing kit (#405) and the listing preconditions (#406) build on —
+ * loaded **once per offer**, never per copy, since a komplet is dozens of copies over a handful of
+ * conditions. A condition missing from the map is unmapped, and that is deliberately all this says:
+ * what to do about it belongs to the caller. The caller must already have authorized the collection.
+ */
+export async function loadColnectConditionMap(
+  collectionId: string
+): Promise<Map<string, string>> {
+  const rows = await prisma.colnectConditionMapping.findMany({
+    where: { collectionId },
+    select: { stampConditionId: true, colnectValue: true },
+  });
+  return new Map(rows.map((r) => [r.stampConditionId, r.colnectValue]));
 }
 
 // ── Catalog-number matcher (#250, part of #155) ──────────────────────────────

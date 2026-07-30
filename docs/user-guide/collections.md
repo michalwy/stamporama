@@ -145,6 +145,22 @@ Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`M
 
 You only need a row where the abbreviations **differ**. Any Colnect abbreviation without a row automatically maps to a local catalog whose abbreviation is spelled the **same** (case-insensitive) — so `Mi` → your Michel needs no row. Anything still unmatched is simply **ignored**, never an error. Each row is a Colnect abbreviation plus the local catalog it points to; an abbreviation can be mapped only once per collection. (This mapping is preparation for future Colnect number-matching; on its own it changes nothing about your stamps.)
 
+## Colnect condition mapping
+
+Your [conditions](#stamp-conditions) are your own — the names, abbreviations and order you chose. Colnect's sale form instead offers a **fixed list of five grades**, the same under every item. Listing a copy there means translating between the two, so the same **Settings → Colnect** tab records it once, below the catalog mapping.
+
+Every one of your conditions gets a row, with a picker holding Colnect's five grades:
+
+| Colnect grade |
+| --- |
+| MNH - Mint Never Hinged |
+| MH - Mint Hinged |
+| MNG - Mint No Gum |
+| U - Used |
+| CTO - Cancelled To Order |
+
+Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the listing flow says so.
+
 ## Connecting the browser extension
 
 The **Stamporama Assistant** browser extension matches marketplace catalog pages against your stamps. **Settings → Assistant** connects it, and there is nothing to type: click **Connect Stamporama Assistant**, then — with that page still in front — click the Assistant icon in your browser toolbar. The page hands the extension this instance's address, this collection, and a one-time code; the extension trades the code for its own access token and reports back on the page. Because the page is served *by* the instance, the address is always right, which is also how your test server and your everyday one stay apart without you having to remember which is which.

@@ -8,8 +8,12 @@ import {
   updateColnectMapping,
   deleteColnectMapping,
   getColnectMappings,
+  getColnectConditionMappings,
+  setColnectConditionMapping,
   ColnectAbbrevTakenError,
+  ColnectConditionValueError,
   type ColnectMappingData,
+  type ColnectConditionMappingData,
 } from "@/lib/colnect";
 
 export type ColnectActionState =
@@ -28,6 +32,34 @@ export async function getColnectMappingsAction(
 ): Promise<ColnectMappingData[]> {
   const session = await getSession();
   return getColnectMappings(session.user.id, collectionId);
+}
+
+/** Every condition with the Colnect grade it maps to (#404), for the Settings panel. */
+export async function getColnectConditionMappingsAction(
+  collectionId: string
+): Promise<ColnectConditionMappingData[]> {
+  const session = await getSession();
+  return getColnectConditionMappings(session.user.id, collectionId);
+}
+
+/**
+ * Map one condition to a Colnect grade, or unmap it with an empty value (#404). One condition at a
+ * time, because the panel's control *is* one select per row — there is no draft to save.
+ */
+export async function setColnectConditionMappingAction(
+  stampConditionId: string,
+  colnectValue: string
+): Promise<ColnectActionState> {
+  const session = await getSession();
+  try {
+    await setColnectConditionMapping(session.user.id, stampConditionId, colnectValue || null);
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ColnectConditionValueError) {
+      return { status: "error", message: err.message };
+    }
+    return { status: "error", message: "Failed to save the condition mapping. Please try again." };
+  }
 }
 
 function parseFields(formData: FormData): { colnectAbbrev: string; catalogVendorId: string } {

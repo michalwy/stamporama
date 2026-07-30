@@ -10,7 +10,7 @@ import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
-import { getColnectMappings } from "@/lib/colnect";
+import { getColnectMappings, getColnectConditionMappings } from "@/lib/colnect";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
@@ -44,6 +44,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     subtypes,
     collageTemplates,
     colnectMappings,
+    colnectConditionMappings,
     assistantTokens,
     photoStorageBytes,
     titleLanguages,
@@ -58,6 +59,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getStampSubtypes(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
+    getColnectConditionMappings(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
@@ -84,6 +86,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialSubtypes={subtypes}
           initialCollageTemplates={collageTemplates}
           initialColnectMappings={colnectMappings}
+          initialColnectConditionMappings={colnectConditionMappings}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
