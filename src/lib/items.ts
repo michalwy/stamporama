@@ -204,6 +204,31 @@ export async function allocateItemNumber(
   return itemNo;
 }
 
+/** Hand out the next short listing number for a collection (#416) — `Offer.offerNo`.
+ *
+ * Deliberately the same statement as {@link allocateItemNumbers}, off its own counter
+ * (`Collection.nextOfferNo`): a number that has been published in a marketplace private note must
+ * never come to mean a different listing, so it is not `max(offerNo) + 1` and a deleted offer
+ * retires its number. Offers are created one at a time — even a duplicate run creates one — so
+ * there is no range variant to mirror.
+ *
+ * Must be called with the transaction that creates the offer, so a rolled-back creation also rolls
+ * back the number it reserved. */
+export async function allocateOfferNumber(
+  client: Prisma.TransactionClient,
+  collectionId: string
+): Promise<number> {
+  const rows = await client.$queryRaw<{ nextOfferNo: number }[]>`
+    UPDATE "collection"
+    SET "nextOfferNo" = "nextOfferNo" + 1
+    WHERE "id" = ${collectionId}
+    RETURNING "nextOfferNo"
+  `;
+  if (rows.length === 0) throw new Error("Collection not found.");
+  // The statement returns the value *after* the bump, so the reserved number is the one below it.
+  return rows[0].nextOfferNo - 1;
+}
+
 export interface ItemData {
   id: string;
   collectionId: string;

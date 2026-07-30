@@ -9,6 +9,27 @@ Open the **Offers** screen from the **Selling** section of the sidebar. When a b
 prepared and ready to go live, [**Bulk listing**](#bulk-listing--posting-a-prepared-batch) on its
 toolbar is where you post them.
 
+## Offer number and short link
+
+Every offer gets a **number** when it is created — 1, 2, 3… within its collection, the same idea as
+a copy's [internal number](inventory.md#internal-copy-number). It is never edited and never reused:
+deleting offer 12 retires that number rather than handing it to the next listing, because the number
+may already be written somewhere you cannot take it back from.
+
+It gives an offer a **short address**:
+
+```
+https://your-instance/o/<collection>/42
+```
+
+which opens the offer's screen. It exists because addresses sometimes have to fit somewhere very
+small — Colnect's private note allows a hundred characters and refuses anything longer outright,
+where the full address is nearly seventy on its own. This is the shape the
+[`{offerUrl}` template token](contacts.md) writes.
+
+The full address of the offer's screen keeps working exactly as before; the short one is another way
+in, not a replacement.
+
 ## Sets — what an offer is made of
 
 A **set** is one whole sellable unit inside an offer. It holds one or more copies that **sell

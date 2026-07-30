@@ -15,10 +15,15 @@ export function appBaseUrl(): string | null {
   return raw.replace(/\/+$/, "");
 }
 
-/** The absolute URL of one offer's own screen, or null when {@link appBaseUrl} is unset. Mirrors the
- * route `/c/[collectionSlug]/offers/[offerId]`. */
-export function offerScreenUrl(collectionSlug: string, offerId: string): string | null {
+/** The absolute short URL of one offer, or null when {@link appBaseUrl} is unset. Mirrors the route
+ * `/o/[collectionSlug]/[offerNo]`, which redirects to the offer's canonical screen.
+ *
+ * The **short** form, built from `Offer.offerNo` (#416), because this URL's whole job is to fit
+ * inside a marketplace field: Colnect's private note allows 100 characters (#402), and the
+ * canonical `/c/<slug>/offers/<cuid>` address is 69 of them before the collector writes a word —
+ * with an over-long text posted not truncated but not at all (#405). This one is about forty. */
+export function offerScreenUrl(collectionSlug: string, offerNo: number): string | null {
   const base = appBaseUrl();
   if (!base) return null;
-  return `${base}/c/${encodeURIComponent(collectionSlug)}/offers/${encodeURIComponent(offerId)}`;
+  return `${base}/o/${encodeURIComponent(collectionSlug)}/${offerNo}`;
 }

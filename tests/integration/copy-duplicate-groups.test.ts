@@ -122,7 +122,9 @@ describe("duplicate groups", () => {
       await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
     ).id;
     const offer = await prisma.offer.create({
-      data: { collectionId, platformId, currency: "EUR", price: "5.00", state: "active" },
+      // Written straight to the table, so it bypasses `allocateOfferNumber` (#416) — a number well
+      // past the collection's counter keeps it from colliding with one `createOffer` hands out.
+      data: { collectionId, offerNo: 9001, platformId, currency: "EUR", price: "5.00", state: "active" },
     });
     const offerSet = await prisma.offerSet.create({ data: { offerId: offer.id } });
     // One live listing over the certified copy — that is the `listedCount` the group reports.

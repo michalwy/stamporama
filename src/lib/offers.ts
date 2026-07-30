@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import {
+  allocateOfferNumber,
   getHoldingsValuationByGroup,
   getHoldingsValuationForItems,
   listItemsPaginated,
@@ -454,11 +455,16 @@ async function listingContext(
   templates: readonly (string | null)[]
 ): Promise<ListingTemplateContext> {
   if (!offerId || !templates.some((t) => templateUsesOfferContext(t))) return {};
-  const collection = await prisma.collection.findUnique({
-    where: { id: collectionId },
-    select: { slug: true },
-  });
-  return { offerUrl: collection ? offerScreenUrl(collection.slug, offerId) : null };
+  // The short address (#416) needs both halves of its route: the collection's slug and the offer's
+  // own number. Either missing — a collection deleted under us, an id that is not an offer — leaves
+  // the token empty rather than producing an address that resolves to nothing.
+  const [collection, offer] = await Promise.all([
+    prisma.collection.findUnique({ where: { id: collectionId }, select: { slug: true } }),
+    prisma.offer.findUnique({ where: { id: offerId }, select: { offerNo: true } }),
+  ]);
+  return {
+    offerUrl: collection && offer ? offerScreenUrl(collection.slug, offer.offerNo) : null,
+  };
 }
 
 /** Whether a platform's listing templates hold anything that only exists once the offer's row does
@@ -2334,6 +2340,8 @@ export async function createOffer(
     const offer = await tx.offer.create({
       data: {
         collectionId,
+        // Inside the transaction, so a rolled-back creation returns the number too (#416).
+        offerNo: await allocateOfferNumber(tx, collectionId),
         platformId: input.platformId,
         name,
         description,
@@ -2475,6 +2483,7 @@ export async function duplicateOffer(
     const offer = await tx.offer.create({
       data: {
         collectionId: ref.collectionId,
+        offerNo: await allocateOfferNumber(tx, ref.collectionId), // #416, as in `createOffer`
         platformId: input.platformId,
         name,
         description,

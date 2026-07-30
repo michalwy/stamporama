@@ -44,6 +44,11 @@ model Collection {
   // How many digits an internal copy number is padded to for display (#268). Purely a display
   // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
   itemNoPad    Int      @default(5)
+  // The same allocation counter for `Offer.offerNo` (#416), bumped the same atomic way and for the
+  // same reason: an offer number that has been published in a marketplace note must never be handed
+  // to a different offer. Separate from `nextItemNo` because copies and listings are counted
+  // separately — sharing one sequence would make both numbers jump for no reason a collector can see.
+  nextOfferNo  Int      @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -1062,6 +1067,12 @@ model AuctionLotLine {
 model Offer {
   id           String   @id @default(cuid())
   collectionId String
+  // Short per-collection listing number (#416), the offer-side counterpart of `Item.itemNo` (#268):
+  // assigned on creation from `Collection.nextOfferNo`, never editable and never reused. It exists
+  // because an offer's address has to fit somewhere tiny — Colnect's private note allows 100
+  // characters (#402), which a cuid-based URL nearly fills on its own — and because a short number
+  // is what one quotes about a listing at all.
+  offerNo      Int
   platformId   String
   // The listing's own title (#209), independent of the derived set/copy label. Generated at
   // creation from the platform's title template (#210) over the seeded copies, then freely edited
@@ -1160,6 +1171,9 @@ model Offer {
   photoAttachments OfferPhotoAttachment[]
   photoGeneration OfferPhotoGeneration?
 
+  // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
+  // uniqueness is the guarantee that it names one listing.
+  @@unique([collectionId, offerNo])
   @@index([collectionId])
   @@index([platformId])
   @@map("offer")

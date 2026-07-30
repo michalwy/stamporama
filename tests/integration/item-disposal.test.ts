@@ -96,6 +96,8 @@ describe("item disposal (#394)", () => {
     const offer = await prisma.offer.create({
       data: {
         collectionId: f.collectionId,
+        // Past the collection's counter: this row bypasses `allocateOfferNumber` (#416).
+        offerNo: 9001,
         platformId: platform.id,
         name: "Lot 7",
         price: "10.00",

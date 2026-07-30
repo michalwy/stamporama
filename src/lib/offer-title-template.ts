@@ -160,7 +160,7 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
  * URL depends on the instance's own base address and on an offer that does not exist while a
  * template is being written, so the example stands in for both. Shaped exactly like the real thing,
  * so the preview shows how much room a link takes in a description. */
-export const EXAMPLE_OFFER_URL = "https://stamporama.example/c/my-collection/offers/o-42";
+export const EXAMPLE_OFFER_URL = "https://stamporama.example/o/my-collection/42";
 
 /** What a listing text can resolve that is a fact about the **offer** rather than about its copies
  * (#415). Absent — a template preview, or an offer whose row does not exist yet — makes every token

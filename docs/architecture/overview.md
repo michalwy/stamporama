@@ -396,7 +396,7 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL connection string |
 | `BETTER_AUTH_SECRET` | yes | Random secret for auth session signing (generate with `openssl rand -base64 32`) |
-| `BETTER_AUTH_URL` | yes | Public base URL of the app (e.g. `http://localhost:3000`). Also the base of the `{offerUrl}` listing-template token (#415) — the only place the app writes an absolute link to itself |
+| `BETTER_AUTH_URL` | yes | Public base URL of the app (e.g. `http://localhost:3000`). Also the base of the `{offerUrl}` listing-template token (#415/#416) — the only place the app writes an absolute link to itself |
 | `POSTGRES_PASSWORD` | yes (db) | Password for the `stamporama` database user |
 | `TAG` | prod only | Image tag to pull (default: `latest`) |
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |

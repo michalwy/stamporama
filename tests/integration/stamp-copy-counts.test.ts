@@ -97,7 +97,8 @@ describe("stamp copy counts", () => {
       await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
     ).id;
     const offer = await prisma.offer.create({
-      data: { collectionId, platformId, currency: "EUR", price: "5.00" },
+      // Past the collection's counter: this row bypasses `allocateOfferNumber` (#416).
+      data: { collectionId, offerNo: 9001, platformId, currency: "EUR", price: "5.00" },
     });
     const offerSet = await prisma.offerSet.create({ data: { offerId: offer.id } });
     const sale = await prisma.sale.create({
