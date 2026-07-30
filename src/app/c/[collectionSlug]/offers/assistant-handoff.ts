@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ListingBlocker } from "@/lib/listing-preconditions";
 
-// The page half of the **listing handoff** (#407, part of #155): how an offer crosses from the bulk
-// listing workspace into the Assistant, and how the outcome comes back.
+// The page half of the **listing handoff** (#407, part of #155): how an offer crosses from
+// Stamporama into the Assistant, and how the outcome comes back.
+//
+// It lives beside `activate-offer-dialog.tsx` rather than under `listing/` for the same reason that
+// one did (#399/#414): the bulk workspace and an offer's own screen both hand a listing over, and a
+// step offered on one surface only is the step that gets silently skipped on the other.
 //
 // It is the registration contract again (#252), on a second element: the page writes the listing kit
 // (#405) into a hidden node as JSON, the extension reads it and answers by setting `data-*`

@@ -17,6 +17,8 @@ import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translatio
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
+import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
@@ -74,6 +76,23 @@ const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
   active: { label: "Resume", icon: "▶" },
   paused: { label: "Pause", icon: "⏸" },
   withdrawn: { label: "Withdraw", icon: "⇤" },
+};
+
+/** Beside the quick-advance button, and deliberately quieter than it: the Assistant fills the
+ *  platform's form, while Activate is the step that changes what this collection records. */
+const ASSISTANT_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const QUICK_ADVANCE_BTN: React.CSSProperties = {
@@ -149,6 +168,13 @@ export function OfferDetailPanel({
   const [skippedNote, setSkippedNote] = useState(skippedParam);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
+  // The Assistant handoff (#414), exactly as the bulk workspace drives it (#407): the hidden node
+  // is this page's own, and the extension answers on it.
+  const assistantPresent = useAssistantPresence();
+  const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } =
+    useAssistantHandoff(collectionId);
+  const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
+
   // The languages this collection lists in (#293), for regenerating the title in one of them (#297).
   const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
   // Every language *other* than the platform's own — the plain "Regenerate title" covers that one.
@@ -254,6 +280,8 @@ export function OfferDetailPanel({
       const result = await publishOfferAction(offerId, url);
       if (result.status === "success") {
         setActivating(false);
+        // Whatever the Assistant reported described the form, and the form has now been posted.
+        dismissHandoff();
         invalidateAll(collectionId);
       } else setActionError(result.message);
     });
@@ -390,6 +418,26 @@ export function OfferDetailPanel({
                 </Tooltip>
               );
             })()}
+            {/* The same handoff the bulk workspace offers (#407/#414). A single listing is routinely
+                posted from here rather than from a batch, and a step offered on one screen only is
+                the step that gets skipped on the other — the same reasoning that made activation ask
+                for the URL in both places (#399). Only on a Ready offer: anything else has nothing
+                to post, and the preconditions say so themselves. */}
+            {offer.state === "ready" && (
+              <ListViaAssistantButton
+                platformModule={offer.platformModule}
+                present={assistantPresent}
+                blockerCount={offer.listingBlockers.length}
+                busy={false}
+                running={handoffRunning}
+                disabled={isPending}
+                style={ASSISTANT_BTN}
+                onStart={() => {
+                  setActionError(undefined);
+                  void startHandoff(offerId);
+                }}
+              />
+            )}
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
@@ -528,6 +576,22 @@ export function OfferDetailPanel({
             affected set(s) here (or withdraw the offer).
           </p>
         )}
+
+        {/* How the Assistant's handoff went (#414), in the header the button that started it lives
+            in. It publishes nothing: the form is filled but not submitted, and Activate is one line
+            above. */}
+        {handoff && (
+          <div
+            style={{
+              marginTop: "0.75rem",
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.5rem",
+              overflow: "clip",
+            }}
+          >
+            <AssistantOutcome handoff={handoff} onDismiss={dismissHandoff} />
+          </div>
+        )}
       </div>
 
       {/* Listing text (#266/#267): the offer's description and its seller-only private note, both
@@ -658,6 +722,15 @@ export function OfferDetailPanel({
           }}
           onClose={() => setSelling(false)}
         />
+      )}
+
+      {/* The handoff itself: machine-readable, never shown. A hidden element holding JSON text
+          rather than a <script> tag, so React owns it like any other node — the registration
+          payload's shape (#252), read and answered by the Assistant (#409). */}
+      {handoff?.payload && (
+        <div ref={nodeRef} id={LISTING_ELEMENT_ID} hidden>
+          {handoff.payload}
+        </div>
       )}
 
       {/* Activation asks for the listing URL (#399), the same step the bulk listing workspace runs

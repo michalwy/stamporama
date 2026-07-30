@@ -15,7 +15,8 @@ import type { ListingWorkspaceOffer } from "@/lib/offers";
 import type { ListingBlocker } from "@/lib/listing-preconditions";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
 import { useOfferDetail, useOfferPhotoPlan } from "../use-offers-query";
-import type { AssistantHandoff } from "./assistant-handoff";
+import type { AssistantHandoff } from "../assistant-handoff";
+import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
 
 // One prepared offer as a posting kit (#322). Collapsed it is a single line — enough to pick the next
 // listing to post and to publish it without opening anything. Expanded it is everything that has to
@@ -193,19 +194,6 @@ export function ListingOfferCard({
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
   const running = handoff?.state === "loading" || handoff?.state === "running";
 
-  // Why the Assistant cannot be asked right now, or null when it can. A blocked action is **disabled
-  // with its reason** rather than hidden (#273): a control that quietly vanishes is unguessable, and
-  // each of these is fixed somewhere else. The button itself is absent only where the platform has no
-  // module at all — there is no Assistant answer to give about a marketplace listed by hand.
-  const assistantHint =
-    offer.blockers.length > 0
-      ? "Fix what this card lists before the Assistant can post it"
-      : !assistantPresent
-        ? "The Stamporama Assistant is not installed in this browser, or it has not been connected to this instance"
-        : handoffBusy
-          ? "The Assistant is busy with another offer"
-          : null;
-
   // Publish is the quick action, everything else lives in the ⋮ — the same division the Offers row
   // makes between its quick-advance button and its menu.
   const menuActions: RowAction[] = [
@@ -337,28 +325,16 @@ export function ListingOfferCard({
           </span>
         </Tooltip>
 
-        {assistantModule && (
-          <Tooltip
-            content={
-              assistantHint ??
-              "Open this platform's sale form in a new tab, filled in from this offer. Nothing is posted — you check it and submit it yourself."
-            }
-          >
-            <button
-              type="button"
-              onClick={onListViaAssistant}
-              disabled={assistantHint !== null || running || isPending}
-              style={{
-                ...ASSISTANT_BTN,
-                opacity: assistantHint !== null || running || isPending ? 0.55 : 1,
-                cursor: assistantHint !== null || running ? "default" : "pointer",
-              }}
-            >
-              <span aria-hidden>⚡</span>
-              {running ? "Listing…" : "List via Assistant"}
-            </button>
-          </Tooltip>
-        )}
+        <ListViaAssistantButton
+          platformModule={assistantModule}
+          present={assistantPresent}
+          blockerCount={offer.blockers.length}
+          busy={handoffBusy}
+          running={running}
+          disabled={isPending}
+          style={ASSISTANT_BTN}
+          onStart={onListViaAssistant}
+        />
 
         <Tooltip content="Mark this offer live and record its listing URL" align="end">
           <button
@@ -375,7 +351,11 @@ export function ListingOfferCard({
         <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
       </div>
 
-      {handoff && <AssistantOutcome handoff={handoff} onDismiss={onDismissHandoff} />}
+      {handoff && (
+        <div style={{ borderTop: "1px solid var(--color-border)" }}>
+          <AssistantOutcome handoff={handoff} onDismiss={onDismissHandoff} />
+        </div>
+      )}
 
       {expanded && (
         <PostingKit
@@ -384,123 +364,6 @@ export function ListingOfferCard({
           offerId={offer.id}
           blockers={offer.blockers}
         />
-      )}
-    </div>
-  );
-}
-
-/**
- * How the handoff went (#407) — a strip under the card's own line, so it is read where the offer is,
- * and shown whether or not the kit below is expanded.
- *
- * The extension's outcome is a **report, not a verdict** (#408): `filled` and `skipped` both come
- * back, each named for the collector. The skips are spelled out one per line, since each is fixed
- * somewhere different; the filled fields are named in one muted line, because "what went in" is
- * checked in the form itself, which is now in front of the collector anyway.
- *
- * It carries **no Publish of its own**. The form is filled but not submitted, so the offer is still
- * Ready and the listing does not exist yet — and the card's own Publish is one line above, in view at
- * the same time, so a second one here is the same button twice.
- */
-function AssistantOutcome({
-  handoff,
-  onDismiss,
-}: {
-  handoff: AssistantHandoff;
-  onDismiss: () => void;
-}) {
-  const running = handoff.state === "loading" || handoff.state === "running";
-  const tone =
-    handoff.state === "error"
-      ? "var(--color-error)"
-      : handoff.state === "filled"
-        ? "var(--color-accent)"
-        : "var(--color-border)";
-  const report = handoff.report;
-
-  return (
-    <div
-      style={{
-        borderTop: "1px solid var(--color-border)",
-        padding: "0.5rem 0.75rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.375rem",
-        background: handoff.state === "error" ? "var(--color-error-soft)" : "var(--color-bg-page)",
-        borderLeft: `3px solid ${tone}`,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <span aria-hidden style={{ fontSize: "0.75rem" }}>
-          {handoff.state === "error" ? "⚠" : handoff.state === "filled" ? "✓" : "⚡"}
-        </span>
-        <span
-          style={{
-            flex: 1,
-            fontSize: "0.8125rem",
-            lineHeight: 1.5,
-            color:
-              handoff.state === "error" ? "var(--color-error)" : "var(--color-text-primary)",
-          }}
-        >
-          {handoff.message ?? (running ? "Working…" : "")}
-        </span>
-        {!running && (
-          <Tooltip content="Dismiss" align="end">
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label="Dismiss the Assistant's report"
-              style={{
-                ...SMALL_BTN,
-                border: "none",
-                background: "none",
-                padding: "0.125rem 0.25rem",
-              }}
-            >
-              ✕
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      {report && report.skipped.length > 0 && (
-        <ul
-          style={{
-            listStyle: "disc",
-            margin: 0,
-            paddingLeft: "1.75rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.125rem",
-          }}
-        >
-          {report.skipped.map((skip) => (
-            <li
-              key={`${skip.field}:${skip.reason}`}
-              style={{
-                fontSize: "0.75rem",
-                lineHeight: 1.5,
-                color: "var(--color-warning)",
-              }}
-            >
-              <strong style={{ fontWeight: 600 }}>{skip.field}</strong> — {skip.reason}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {report && report.filled.length > 0 && (
-        <p
-          style={{
-            margin: "0 0 0 1.25rem",
-            fontSize: "0.6875rem",
-            lineHeight: 1.5,
-            color: "var(--color-text-muted)",
-          }}
-        >
-          Filled: {report.filled.map((f) => f.field).join(", ")}
-        </p>
       )}
     </div>
   );

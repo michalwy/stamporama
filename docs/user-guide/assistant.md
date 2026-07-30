@@ -53,8 +53,8 @@ screen (nothing is re-matched), and the extension remembers the setting.
 
 ## Filling a sale form for you
 
-The Assistant also works the other way round: from the [bulk listing
-workspace](offers.md#list-via-assistant), **⚡ List via Assistant** on a ready offer opens the
+The Assistant also works the other way round: **⚡ List via Assistant** on a ready offer — in the
+[bulk listing workspace](offers.md#list-via-assistant) or in the offer's own header — opens the
 platform's sale form in a new tab and fills it in — the items being sold, each copy's condition in the
 platform's own grades, the price, the number of sets and the two texts.
 

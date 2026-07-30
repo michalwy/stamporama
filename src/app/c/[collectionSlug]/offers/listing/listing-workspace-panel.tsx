@@ -25,7 +25,7 @@ import {
   LISTING_ELEMENT_ID,
   useAssistantHandoff,
   useAssistantPresence,
-} from "./assistant-handoff";
+} from "../assistant-handoff";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 
 // The bulk listing workspace (#322): one posting session on one marketplace. Most platforms have no

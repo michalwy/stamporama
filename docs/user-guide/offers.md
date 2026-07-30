@@ -735,6 +735,10 @@ mid-listing.
 It doesn't appear at all for a platform with no Assistant module, since there is no form it knows how
 to fill.
 
+The same button sits in the **offer's own header**, beside Activate, for a Ready offer — a single
+listing is often posted from there rather than from a batch, and it behaves identically, report strip
+included. Activating is still the separate step, from that header's own **▲ Activate**.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

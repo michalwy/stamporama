@@ -1459,7 +1459,7 @@ export async function listReadyOffersForListing(
     photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
     url: row.url,
     areaYears: distinctAreaYears(row.sets),
-    blockers: listingBlockersFor(row.sets, platformModule, labeller, conditionMap),
+    blockers: listingBlockersFor(row.sets, platformModule, labeller, conditionMap, "ready"),
   }));
 
   await attachBasePrices(collectionId, baseCurrency, items);
@@ -1479,18 +1479,21 @@ type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SEL
  * still refuses such a platform (#405) — a caller that asked for a posting payload asked for
  * something impossible, which is a different question from what the collector should go and fix.
  *
- * Every offer reaching here is `ready` by the caller's own query, so the state check can never fire.
+ * The state is the caller's, not a constant: the workspace only ever reads `ready` offers, while an
+ * offer's own screen (#414) evaluates whatever it is looking at — where `not-ready` returning alone
+ * is the honest answer, and the surface simply does not offer the button.
  */
 function listingBlockersFor(
   sets: readonly ListingSetRow[],
   platformModule: string | null,
   labeller: OfferLabeller,
-  conditionMap: Map<string, string>
+  conditionMap: Map<string, string>,
+  state: OfferState
 ): ListingBlocker[] {
   if (!platformModule) return [];
   return evaluateListingPreconditions({
     platformModule,
-    state: "ready",
+    state,
     sets: sets.map((set) => ({
       setId: set.id,
       label: labeller.set(set),
@@ -1676,6 +1679,14 @@ export interface OfferDetail {
   /** The platform's listing-text caps (#403), read live for exactly the same reason — every surface
    * that writes or copies the description / private note counts against the current values. */
   platformTextLimits: PlatformTextLimits;
+  /** The Assistant module that knows this platform's sale form (#406), or null where it is listed by
+   * hand — which is what decides whether this screen offers **List via Assistant** at all (#414). */
+  platformModule: string | null;
+  /** Why the Assistant cannot post this offer (#406), empty when it can and always empty for a
+   * platform with no module — the same evaluation the workspace row and the listing-kit endpoint
+   * (#405) use. Note it is evaluated at the offer's **own** state, so anything not Ready reports
+   * `not-ready` alone. */
+  listingBlockers: ListingBlocker[];
   createdAt: Date;
 }
 
@@ -1723,14 +1734,34 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxPhotoFileSizeMib: true,
           maxDescriptionLength: true,
           maxPrivateNoteLength: true,
+          platformModule: true,
         },
       },
+      // The set select is a superset of `LISTING_SETS_SELECT`, so this screen's own rows are what
+      // the listing preconditions (#406) are evaluated over — one shape, so the offer's screen, the
+      // workspace row and the listing-kit endpoint cannot disagree about whether it is postable.
       sets: {
         orderBy: OFFER_SETS_ORDER_BY,
         select: {
           id: true,
           title: true,
-          items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
+          items: {
+            select: {
+              itemId: true,
+              sortOrder: true,
+              item: {
+                select: {
+                  ...STAMP_LABEL_SELECT,
+                  stampId: true,
+                  conditionId: true,
+                  condition: { select: { name: true } },
+                  stamp: {
+                    select: { ...STAMP_LABEL_SELECT.stamp.select, issuedYear: true, colnectId: true },
+                  },
+                },
+              },
+            },
+          },
           saleLines: { select: { id: true }, take: 1 },
         },
       },
@@ -1769,12 +1800,16 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // the whole offer. The holdings pair is the same one the summary bars show (#134/#179), read
   // through `getHoldingsValuationByGroup` so every copy is fetched and valued **once** even though
   // the sets are asked about one by one.
-  const [labeller, holdingsBySet] = await Promise.all([
+  // The condition map is read only where a module asks for it (#404/#406) — a platform listed by
+  // hand pays for none of the precondition machinery, exactly as in the batch read.
+  const platformModule = offer.platform.platformModule;
+  const [labeller, holdingsBySet, conditionMap] = await Promise.all([
     makeOfferLabeller(offer.collectionId),
     getHoldingsValuationByGroup(
       offer.collectionId,
       offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
     ),
+    platformModule ? loadColnectConditionMap(offer.collectionId) : new Map<string, string>(),
   ]);
 
   // The base → offer-currency rate, fetched **once** for the whole screen: every set's two figures
@@ -1963,6 +1998,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       maxDescriptionLength: offer.platform.maxDescriptionLength,
       maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
     },
+    platformModule,
+    listingBlockers: listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, state),
     createdAt: offer.createdAt,
   };
 }
