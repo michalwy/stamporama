@@ -52,11 +52,14 @@ import {
   titleFallbackTokens,
   titleFallbacks,
   listingFallbacks,
+  templateUsesOfferContext,
   type TitleSegment,
   type TitleFallback,
   type TemplateSet,
   type TitleTemplateCopy,
+  type ListingTemplateContext,
 } from "./offer-title-template";
+import { offerScreenUrl } from "./app-url";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 import {
   normalizePhotoSides,
@@ -409,13 +412,18 @@ export type OfferTextField = "name" | "description" | "privateNote";
  * the real listing. A field whose template is blank stays null — the offer name then falls back to the
  * derived label and the longer texts stay empty. Token values resolve in the platform's listing
  * `language` where a translation exists (#293), falling back to the default text.
+ *
+ * `offerId` is the offer these texts belong to, for the tokens that describe the *offer* rather than
+ * its copies (#415). Null while an offer is being created — its row does not exist yet — which makes
+ * `{offerUrl}` render empty; {@link syncOfferContextTexts} renders it again once the id is real.
  */
 async function generateListingTexts(
   ownerId: string,
   collectionId: string,
   composition: readonly OfferComposition[],
   templates: PlatformTemplates,
-  language: string | null
+  language: string | null,
+  offerId: string | null
 ): Promise<GeneratedListingTexts> {
   const configured = (t: string | null) => (t?.trim() ? t : null);
   const title = configured(templates.titleTemplate);
@@ -425,13 +433,41 @@ async function generateListingTexts(
   if (copyCount === 0 || (!title && !description && !privateNote)) {
     return { name: null, description: null, privateNote: null };
   }
-  const sets = await templateSets(ownerId, collectionId, composition, language);
+  const [sets, context] = await Promise.all([
+    templateSets(ownerId, collectionId, composition, language),
+    listingContext(collectionId, offerId, [description, privateNote]),
+  ]);
   const copies = sets.flatMap((s) => [...s.copies]);
   return {
     name: title ? renderTitleTemplate(title, copies) || null : null,
-    description: description ? renderListingTemplate(description, sets) || null : null,
-    privateNote: privateNote ? renderListingTemplate(privateNote, sets) || null : null,
+    description: description ? renderListingTemplate(description, sets, context) || null : null,
+    privateNote: privateNote ? renderListingTemplate(privateNote, sets, context) || null : null,
   };
+}
+
+/** The offer-level facts a listing text can resolve (#415) — today just the offer's own link, which
+ * needs the collection's slug. Resolved only when a template actually asks for it, so the ordinary
+ * generation every composition change triggers pays for no extra query. */
+async function listingContext(
+  collectionId: string,
+  offerId: string | null,
+  templates: readonly (string | null)[]
+): Promise<ListingTemplateContext> {
+  if (!offerId || !templates.some((t) => templateUsesOfferContext(t))) return {};
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { slug: true },
+  });
+  return { offerUrl: collection ? offerScreenUrl(collection.slug, offerId) : null };
+}
+
+/** Whether a platform's listing templates hold anything that only exists once the offer's row does
+ * (#415) — the one reason a freshly created offer has to render its texts a second time. */
+function platformTemplatesUseOfferContext(templates: PlatformTemplates): boolean {
+  return (
+    templateUsesOfferContext(templates.descriptionTemplate) ||
+    templateUsesOfferContext(templates.privateNoteTemplate)
+  );
 }
 
 /** A composition normalised into the engine's `TemplateSet`s — one query for every copy involved,
@@ -2284,7 +2320,9 @@ export async function createOffer(
     collectionId,
     seedComposition,
     platform,
-    platform.titleLanguage
+    platform.titleLanguage,
+    // No id yet — a template using `{offerUrl}` is rendered again below, once the row exists (#415).
+    null
   );
 
   // The offer's own photo configuration (#308), copied from the platform's defaults and its default
@@ -2292,7 +2330,7 @@ export async function createOffer(
   // alters this listing's photos.
   const photoConfig = await seedPhotoConfig(platform);
 
-  return prisma.$transaction(async (tx) => {
+  const offerId = await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.create({
       data: {
         collectionId,
@@ -2327,6 +2365,23 @@ export async function createOffer(
     }
     return offer.id;
   });
+  await syncOfferContextTexts(ownerId, offerId, platform);
+  return offerId;
+}
+
+/** Render the listing texts once more, now that the offer has an id (#415). A no-op for every
+ * platform whose templates do not name an offer-level token, which is why it can sit on the creation
+ * path at all: the texts were already generated over the same composition a moment ago, and the only
+ * thing that changed is that `{offerUrl}` now has an answer. It goes through
+ * {@link syncGeneratedTexts} rather than repeating the write, so the edited-flag and terminal-state
+ * rules stay in one place. */
+async function syncOfferContextTexts(
+  ownerId: string,
+  offerId: string,
+  platform: PlatformTemplates
+): Promise<void> {
+  if (!platformTemplatesUseOfferContext(platform)) return;
+  await syncGeneratedTexts(ownerId, offerId);
 }
 
 export interface DuplicateOfferResult {
@@ -2408,7 +2463,8 @@ export async function duplicateOffer(
     ref.collectionId,
     cloneSets,
     platform,
-    platform.titleLanguage
+    platform.titleLanguage,
+    null // as in `createOffer` (#415): the clone's own id exists only after the transaction.
   );
 
   // Photo configuration follows the same rule as the texts (#308): the clone is a listing on another
@@ -2455,6 +2511,7 @@ export async function duplicateOffer(
     return offer.id;
   });
 
+  await syncOfferContextTexts(ownerId, id, platform); // #415, as in `createOffer`
   return { id, skippedCopies };
 }
 
@@ -2614,7 +2671,8 @@ export async function regenerateOfferText(
     ref.collectionId,
     composition,
     only,
-    language === undefined ? platform.titleLanguage : language
+    language === undefined ? platform.titleLanguage : language,
+    offerId
   );
   const value = texts[field];
   await prisma.offer.update({
@@ -2686,7 +2744,8 @@ async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<voi
     offer.collectionId,
     composition,
     templates,
-    platform.titleLanguage
+    platform.titleLanguage,
+    offerId
   );
   // A field whose template rendered nothing at all (an empty offer, every token blank) keeps what it
   // has: the derived label already stands in for a missing title, and blanking a description because

@@ -19,6 +19,12 @@
 // same mechanism over the *distinct dictionary entries* the copies use, which is how a description
 // appends a legend of the abbreviations it just printed — the collector writes the entry's format
 // inside the block.
+//
+// Those texts also carry the one token that is **not** about the copies at all: `{offerUrl}` (#415),
+// the offer's own screen on this instance, which reaches the engine through a
+// `ListingTemplateContext` rather than through `TitleTemplateCopy`. Everything here stays pure — the
+// URL itself is built by the caller (`src/lib/app-url.ts`), so the engine still knows nothing about
+// routes or environment.
 
 import { parseCatalogNumberParts, parseSuffixOrdinal } from "./catalog-number";
 import {
@@ -150,12 +156,40 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{formatAbbr}", label: "Format (abbr.)", example: "Blk4" },
 ];
 
+/** What a `{offerUrl}` renders as in a template *preview* (#415) and in the token legend: the real
+ * URL depends on the instance's own base address and on an offer that does not exist while a
+ * template is being written, so the example stands in for both. Shaped exactly like the real thing,
+ * so the preview shows how much room a link takes in a description. */
+export const EXAMPLE_OFFER_URL = "https://stamporama.example/c/my-collection/offers/o-42";
+
+/** What a listing text can resolve that is a fact about the **offer** rather than about its copies
+ * (#415). Absent — a template preview, or an offer whose row does not exist yet — makes every token
+ * in it render empty, which the tidy passes already handle: the glue separator goes with it and a
+ * line that said nothing else is dropped whole. */
+export interface ListingTemplateContext {
+  /** Absolute URL of the offer's own screen on this instance, for `{offerUrl}`. */
+  offerUrl?: string | null;
+}
+
+/** No offer in hand — the default for every render that is not an offer's own listing text. */
+const NO_CONTEXT: ListingTemplateContext = {};
+
+/** Whether `template` actually asks for something only an offer can answer (#415). Lets a caller
+ * skip the work of resolving that context — a slug lookup — for the templates that never use it. */
+export function templateUsesOfferContext(template: string | null | undefined): boolean {
+  return /\{[^{}]*\bofferUrl\b[^{}]*\}/i.test(template ?? "");
+}
+
 /** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
  * `{setTitle}`, which only names something inside a `{#set}` block (or when the template renders one
- * set's own title). */
+ * set's own title), and `{offerUrl}` (#415), which is a fact about the offer rather than its copies:
+ * a link on a marketplace page back to the listing's own screen here. It is deliberately **not** a
+ * title token — a URL in a listing title is nothing a buyer wants to read — so it resolves empty
+ * there, exactly as it does in a preview. */
 export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
   ...AVAILABLE_TITLE_TOKENS,
   { token: "{setTitle}", label: "Set title", example: "Complete series" },
+  { token: "{offerUrl}", label: "Offer link", example: EXAMPLE_OFFER_URL },
 ];
 
 /** The repeating blocks a listing text may use (#266), for the builder's chips: each renders its
@@ -496,17 +530,23 @@ function resolveItemNo(copies: readonly TitleTemplateCopy[], widthArg: string | 
 
 /** Resolve one token spec (without braces), e.g. `name` or `catalog:Mi,Sc:vendor`. Returns the
  * rendered value (possibly `""` when absent), or `null` when the token name is not known.
- * `setTitle` is the enclosing set's title, which only `{setTitle}` reads (null outside a set). */
+ * `setTitle` is the enclosing set's title, which only `{setTitle}` reads (null outside a set);
+ * `context` carries the offer-level facts (#415), which no copy can answer. */
 function resolveTokenValue(
   spec: string,
   copies: readonly TitleTemplateCopy[],
-  setTitle: string | null
+  setTitle: string | null,
+  context: ListingTemplateContext
 ): string | null {
   const segments = spec.split(":");
   const name = segments[0].trim().toLowerCase();
   switch (name) {
     case "settitle":
       return setTitle?.trim() ?? "";
+    // Known everywhere so a `{offerUrl}` never shows up as literal braces in a title or a preview —
+    // it simply has nothing to render there, like a certificate token on a copy without one.
+    case "offerurl":
+      return context.offerUrl?.trim() ?? "";
     case "name":
       return distinct(copies.map((c) => c.name)).join(" / ");
     case "catalog":
@@ -585,7 +625,8 @@ interface ResolvedPlaceholder {
 function resolvePlaceholder(
   inner: string,
   copies: readonly TitleTemplateCopy[],
-  setTitle: string | null = null
+  setTitle: string | null = null,
+  context: ListingTemplateContext = NO_CONTEXT
 ): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
   const resolved = (value: string, spec: string): ResolvedPlaceholder => {
@@ -593,13 +634,13 @@ function resolvePlaceholder(
     return { value, spec, fellBack: fallbacks.length > 0, fallbacks };
   };
   if (parts.length === 1) {
-    const v = resolveTokenValue(parts[0], copies, setTitle);
+    const v = resolveTokenValue(parts[0], copies, setTitle, context);
     // unknown → literal (no token produced it); known → value (maybe "")
     if (v === null) return { value: `{${parts[0]}}`, spec: null, fellBack: false, fallbacks: [] };
     return resolved(v, parts[0]);
   }
   for (const p of parts) {
-    const v = resolveTokenValue(p, copies, setTitle);
+    const v = resolveTokenValue(p, copies, setTitle, context);
     // first non-empty (skips unknown → null and empty → "")
     if (v) return resolved(v, p);
   }
@@ -667,11 +708,13 @@ export interface TemplateSet {
 
 /** What tokens resolve against at one point in the template: the sets a `{#set}` block would
  * iterate, every copy currently in scope (what a plain token aggregates over), and the enclosing
- * set's title (read only by `{setTitle}`). */
+ * set's title (read only by `{setTitle}`). The offer-level `context` (#415) is the one part that
+ * never narrows — a block iterates copies, and which offer this is does not change inside one. */
 interface TemplateScope {
   sets: readonly TemplateSet[];
   copies: readonly TitleTemplateCopy[];
   setTitle: string | null;
+  context: ListingTemplateContext;
 }
 
 /** What a repeating block iterates: the offer's sets, the copies in scope, or — for a legend of
@@ -736,7 +779,12 @@ function parseTemplateNodes(template: string): TemplateNode[] | null {
  * stays unmarked — it is authoring feedback, not a value. */
 function renderTextRun(text: string, scope: TemplateScope): string {
   return text.replace(/\{([^{}]+)\}/g, (_m, inner: string) => {
-    const { value, spec, fellBack } = resolvePlaceholder(inner, scope.copies, scope.setTitle);
+    const { value, spec, fellBack } = resolvePlaceholder(
+      inner,
+      scope.copies,
+      scope.setTitle,
+      scope.context
+    );
     if (value === "") return EMPTY_MARK;
     if (spec === null) return value; // unknown token → literal
     // A fallen-back value carries the copy field that produced it, so the preview can offer to fix
@@ -793,7 +841,12 @@ function legendScopes(scope: TemplateScope, over: LegendOver): TemplateScope[] {
     const sets = scope.sets
       .map((s) => ({ title: s.title, copies: s.copies.filter((c) => legendKey(c, over) === key) }))
       .filter((s) => s.copies.length > 0);
-    return { sets, copies: sets.flatMap((s) => [...s.copies]), setTitle: scope.setTitle };
+    return {
+      sets,
+      copies: sets.flatMap((s) => [...s.copies]),
+      setTitle: scope.setTitle,
+      context: scope.context,
+    };
   });
 }
 
@@ -811,13 +864,19 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
     }
     const iterations: TemplateScope[] =
       node.over === "set"
-        ? scope.sets.map((s) => ({ sets: [s], copies: s.copies, setTitle: s.title }))
+        ? scope.sets.map((s) => ({
+            sets: [s],
+            copies: s.copies,
+            setTitle: s.title,
+            context: scope.context,
+          }))
         : node.over in LEGEND_FIELDS
           ? legendScopes(scope, node.over as LegendOver)
           : scope.copies.map((c) => ({
               sets: [{ title: scope.setTitle, copies: [c] }],
               copies: [c],
               setTitle: scope.setTitle,
+              context: scope.context,
             }));
     for (const iteration of iterations) {
       const body = renderNodes(node.body, iteration);
@@ -828,10 +887,14 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
 }
 
 /** The top-level scope for a render: plain tokens aggregate over every copy of every set. */
-function rootScope(sets: readonly TemplateSet[]): TemplateScope {
+function rootScope(
+  sets: readonly TemplateSet[],
+  context: ListingTemplateContext = NO_CONTEXT
+): TemplateScope {
   return {
     sets,
     copies: sets.flatMap((s) => [...s.copies]),
+    context,
     // `{setTitle}` outside a block only names something when the render *is* one set (generating a
     // set's own title); across several sets there is no single title to use.
     setTitle: sets.length === 1 ? sets[0].title : null,
@@ -866,12 +929,16 @@ const FB_FIELD = "\u0004";
 function renderSegments(
   template: string | null | undefined,
   sets: readonly TemplateSet[],
-  opts: { multiline?: boolean; fallbackTemplate?: string | null } = {}
+  opts: {
+    multiline?: boolean;
+    fallbackTemplate?: string | null;
+    context?: ListingTemplateContext;
+  } = {}
 ): TitleSegment[] {
   const tpl = template?.trim() || opts.fallbackTemplate?.trim() || "";
   if (!tpl) return [];
   const nodes: TemplateNode[] = parseTemplateNodes(tpl) ?? [{ kind: "text", text: tpl }];
-  const rendered = renderNodes(nodes, rootScope(sets));
+  const rendered = renderNodes(nodes, rootScope(sets, opts.context));
   const tidied = opts.multiline ? tidyMultiline(rendered) : tidyLine(rendered);
   if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
   return tidied
@@ -930,12 +997,16 @@ export function renderTitleTemplateSegments(
  * `{#copy}…{/copy}` render their body once per set / copy so a description can enumerate a listing.
  * A blank template renders "" — unlike the title there is no built-in default, because "no
  * description template" means the offer simply gets none.
+ *
+ * `context` carries what the copies cannot answer (#415) — the offer's own link. Omitted, its tokens
+ * render empty rather than literal, which is what a preview and a not-yet-created offer both want.
  */
 export function renderListingTemplate(
   template: string | null | undefined,
-  sets: readonly TemplateSet[]
+  sets: readonly TemplateSet[],
+  context?: ListingTemplateContext
 ): string {
-  return renderListingTemplateSegments(template, sets)
+  return renderListingTemplateSegments(template, sets, context)
     .map((s) => s.text)
     .join("");
 }
@@ -943,9 +1014,10 @@ export function renderListingTemplate(
 /** {@link renderListingTemplate}, split into fallback-flagged segments for the preview (#298). */
 export function renderListingTemplateSegments(
   template: string | null | undefined,
-  sets: readonly TemplateSet[]
+  sets: readonly TemplateSet[],
+  context?: ListingTemplateContext
 ): TitleSegment[] {
-  return renderSegments(template, sets, { multiline: true });
+  return renderSegments(template, sets, { multiline: true, context });
 }
 
 /**

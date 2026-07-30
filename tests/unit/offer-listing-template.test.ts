@@ -6,6 +6,7 @@ import {
   renderTitleTemplate,
   listingFallbackTokens,
   listingFallbacks,
+  templateUsesOfferContext,
   AVAILABLE_LISTING_TOKENS,
   AVAILABLE_LISTING_BLOCKS,
   type TemplateSet,
@@ -260,9 +261,66 @@ describe("renderListingTemplateSegments / listingFallbackTokens", () => {
   });
 });
 
+// `{offerUrl}` (#415) is the one token that describes the offer rather than its copies, so it comes
+// from the render context instead of a `TitleTemplateCopy`.
+describe("{offerUrl} (#415)", () => {
+  const url = "https://stamps.example/c/mine/offers/o-42";
+  const sets: TemplateSet[] = [{ title: null, copies: [mercury] }];
+
+  it("renders the offer's link from the context", () => {
+    assert.equal(
+      renderListingTemplate("See: {offerUrl}", sets, { offerUrl: url }),
+      `See: ${url}`
+    );
+  });
+
+  it("keeps the URL intact next to a token that came out empty", () => {
+    assert.equal(
+      renderListingTemplate("{offerUrl} / {certificate}", sets, { offerUrl: url }),
+      url
+    );
+  });
+
+  it("renders empty without a context, dropping the line it was the only token on", () => {
+    assert.equal(renderListingTemplate("{name}\nSee: {offerUrl}", sets), "Mercury");
+    assert.equal(renderListingTemplate("{name}\nSee: {offerUrl}", sets, {}), "Mercury");
+    assert.equal(renderListingTemplate("{name}\nSee: {offerUrl}", sets, { offerUrl: null }), "Mercury");
+  });
+
+  it("resolves the same inside a repeating block, where the offer does not change", () => {
+    assert.equal(
+      renderListingTemplate("{#copy}{name}: {offerUrl}\n{/copy}", twoSets, { offerUrl: url }),
+      `Mercury: ${url}\nVenus: ${url}`
+    );
+  });
+
+  it("falls back to it in a group when the earlier alternative is empty", () => {
+    assert.equal(
+      renderListingTemplate("{certificate|offerUrl}", sets, { offerUrl: url }),
+      url
+    );
+  });
+
+  it("is not a title token — a title has no offer context and renders it empty", () => {
+    assert.equal(renderTitleTemplate("{name} {offerUrl}", [mercury]), "Mercury");
+  });
+});
+
+describe("templateUsesOfferContext (#415)", () => {
+  it("spots the token, in a fallback group too, and ignores everything else", () => {
+    assert.equal(templateUsesOfferContext("Link: {offerUrl}"), true);
+    assert.equal(templateUsesOfferContext("{certificate|offerUrl}"), true);
+    assert.equal(templateUsesOfferContext("{OFFERURL}"), true);
+    assert.equal(templateUsesOfferContext("{name} {year}"), false);
+    assert.equal(templateUsesOfferContext("offerUrl without braces"), false);
+    assert.equal(templateUsesOfferContext(null), false);
+  });
+});
+
 describe("listing token legend", () => {
-  it("offers the title tokens plus {setTitle}, and the repeating blocks", () => {
+  it("offers the title tokens plus {setTitle} and {offerUrl}, and the repeating blocks", () => {
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{setTitle}"));
+    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{offerUrl}"));
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{catalog}"));
     assert.deepEqual(
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),

@@ -7,6 +7,7 @@ import {
   renderListingTemplateSegments,
   titleFallbackTokens,
   listingFallbackTokens,
+  EXAMPLE_OFFER_URL,
   type TitleToken,
 } from "@/lib/offer-title-template";
 import { TitlePreviewText, TitleFallbackNote } from "./title-preview";
@@ -344,8 +345,10 @@ export function TemplateBuilder({
   // template previews the copies as separate sets, so a `{#set}` block visibly repeats.
   const previewSets = samples.copies.map((s) => ({ title: null, copies: [s.copy] }));
   const previewCopies = samples.copies.map((s) => s.copy);
+  // `{offerUrl}` (#415) names an offer, and a template is written before any of them — the preview
+  // shows the example link so the collector sees how much room a URL takes in the text.
   const segments = multiline
-    ? renderListingTemplateSegments(value, previewSets)
+    ? renderListingTemplateSegments(value, previewSets, { offerUrl: EXAMPLE_OFFER_URL })
     : renderTitleTemplateSegments(value, previewCopies.slice(0, 1));
   const fallbackTokens = multiline
     ? listingFallbackTokens(value, previewSets)
