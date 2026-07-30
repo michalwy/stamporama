@@ -5,9 +5,22 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { InventoryItemRow } from "./inventory-item-row";
 
 const EMPTY_LOCATIONS: LocationData[] = [];
+
+/** The marking on a copy that differs from the rest of its duplicate group (#372/#398). */
+const DIFFERS_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  padding: "0.05rem 0.375rem",
+  borderRadius: "0.25rem",
+  color: "var(--color-warning)",
+  border: "1px solid var(--color-warning-border, var(--color-border))",
+  background: "var(--color-warning-soft, var(--color-bg-page))",
+  whiteSpace: "nowrap",
+};
 
 /**
  * The gutter a copy's selection checkbox lives in — the whole strip is the control, not the box.
@@ -72,11 +85,19 @@ interface InventoryCopyListProps {
    * through its disposition and delivery chips, so a permanently disabled checkbox would add a
    * control that explains nothing. Ineligible rows keep the column's width so nothing jumps. */
   selection?: CopySelection;
+  /** Copies that **differ from the rest of the duplicate group** they are listed under (#372/#398):
+   * warning-tinted and marked, so the odd one out is visible in the group's own member list rather
+   * than only inside a dialog of its own. Empty/absent everywhere else. */
+  differingIds?: ReadonlySet<string>;
 }
 
 export interface CopySelection {
   selected: Set<string>;
-  onToggle: (id: string) => void;
+  /** The **item**, not its id: a grouped list (#398) selects copies its own member query loaded, and
+   * the panel has no flat page to resolve an id against. */
+  onToggle: (item: ItemListItem) => void;
+  /** Tick or untick a whole batch at once — a duplicate group's quick select-all (#398). */
+  onSetMany: (items: ItemListItem[], selected: boolean) => void;
   isEligible: (item: ItemListItem) => boolean;
 }
 
@@ -109,6 +130,7 @@ export function InventoryCopyList({
   onRestore,
   onSetCatalogPrice,
   selection,
+  differingIds,
 }: InventoryCopyListProps) {
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -122,6 +144,7 @@ export function InventoryCopyList({
         // The copy's stamp may sit in an issue that overrides its area's prefix (#377).
         const vendorMap = vendorMapFor(areaId, item.issueId);
         const checked = !!selection?.selected.has(item.id);
+        const differs = !!differingIds?.has(item.id);
         const row = (
           <InventoryItemRow
             key={item.id}
@@ -147,6 +170,13 @@ export function InventoryCopyList({
             onDispose={onDispose}
             onRestore={onRestore}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}
+            trailingChips={
+              differs ? (
+                <Tooltip content="This copy differs from the rest of its group — listing it with them would make the quantity misleading.">
+                  <span style={DIFFERS_CHIP}>differs from the group</span>
+                </Tooltip>
+              ) : undefined
+            }
           />
         );
         if (!selection) return row;
@@ -159,7 +189,13 @@ export function InventoryCopyList({
               // can centre the box in it — a row is four lines tall and a top-aligned box reads as
               // belonging to the first of them.
               alignItems: "stretch",
-              background: checked ? "var(--color-accent-soft)" : undefined,
+              // A ticked copy leads: what is selected is what the bulk action is about to act on,
+              // while differing from the group is a caution about one of them.
+              background: checked
+                ? "var(--color-accent-soft)"
+                : differs
+                  ? "var(--color-warning-soft, var(--color-bg-page))"
+                  : undefined,
             }}
           >
             {selection.isEligible(item) ? (
@@ -168,7 +204,7 @@ export function InventoryCopyList({
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={() => selection.onToggle(item.id)}
+                  onChange={() => selection.onToggle(item)}
                   aria-label="Select this copy"
                   style={{ cursor: "pointer" }}
                 />

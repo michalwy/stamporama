@@ -7,6 +7,7 @@ import type { CopyGroupAxes } from "@/lib/copy-groups";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { DuplicateGroupRow } from "./duplicate-group-row";
+import type { CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
 
@@ -26,7 +27,7 @@ export function DuplicateGroupList({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
-  onListAsOffer,
+  selection,
 }: {
   collectionId: string;
   groups: CopyGroupRow[];
@@ -38,7 +39,8 @@ export function DuplicateGroupList({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
-  onListAsOffer: (group: CopyGroupRow) => void;
+  /** The panel's multi-select (#373), threaded down to every group's member rows (#398). */
+  selection: CopySelection;
 }) {
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -59,7 +61,7 @@ export function DuplicateGroupList({
             primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
             vendorMap={vendorMapFor(areaId, group.issueId)}
             isLast={idx === groups.length - 1 && !hasNextPage}
-            onListAsOffer={onListAsOffer}
+            selection={selection}
           />
         );
       })}

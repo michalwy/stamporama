@@ -211,8 +211,16 @@ describe("renderTitleTemplate — {catalog} options", () => {
     );
     assert.equal(
       renderTitleTemplate("{catalog:*:vendor}", copies),
-      "Fi BL31-33 / Mi 1294-1295CKB,1296KB / Yt BF28-30"
+      // The Michel span's end drops the digits it shares with its start (#400).
+      "Fi BL31-33 / Mi 1294-95CKB,1296KB / Yt BF28-30"
     );
+  });
+
+  it("shortens a collapsed span's end to the digits that differ (#400)", () => {
+    const nums = ["1298", "1299", "1300", "1301", "1302"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi 1298-302");
   });
 
   it("collapses a same-base letter-suffix run, writing the suffix twice (#364)", () => {

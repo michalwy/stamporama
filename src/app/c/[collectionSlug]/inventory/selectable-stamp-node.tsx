@@ -19,7 +19,7 @@ function subtreeHasMatch(treeNode: StampTreeNodeData, matched: Set<string>): boo
 }
 
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
- * the "— unknown variant" marker on a base stamp that still has variants). Shared by the
+ * the "— unknown variant" marker on a node that still has variant children). Shared by the
  * area→issue→stamp Browse popup (#104) and the issue-scoped stamp picker for adding a copy
  * from the issue list (#111). Clicking the row selects it; the caret toggles children.
  *
@@ -60,10 +60,11 @@ export function SelectableStampNode({
   const [hovered, setHovered] = useState(false);
   // Dim a node when a filter is active and neither it nor any descendant matches.
   const dimmed = !!matchedStampIds && !subtreeHasMatch(treeNode, matchedStampIds);
-  // A base stamp (top level) is selectable as the "unknown variant" only when it has
-  // at least one child that acts as a variant (ADR-0010 §3) — not for a stamp whose
-  // children are all distinct entries (errors, overprints…).
-  const isUnknownVariant = depth === 0 && children.some((c) => c.node.actsAsVariant);
+  // A node is selectable as the "unknown variant" when at least one of its children acts as a
+  // variant (ADR-0010 §3) — not when its children are all distinct entries (errors, overprints…).
+  // At **any** depth (#239/#401): `3 → 3A → 3Aa` puts the same question on `3A` as on `3`, and the
+  // tree is arbitrarily deep by design (#54).
+  const isUnknownVariant = children.some((c) => c.node.actsAsVariant);
   const indent = `${depth * 1.25}rem`;
 
   return (
@@ -145,8 +146,11 @@ export function SelectableStampNode({
                   )}
                 </span>
 
-                {/* Only base stamps take variants (ADR-0007 §2). */}
-                {depth === 0 && onNewVariant && (
+                {/* A child hangs under a node at **any** depth (#401): the tree is `Issue → X → Xa →
+                    Xay → XayI` by design (#54), so `3a` takes `3a1` exactly as `3` takes `3a`. The
+                    issue list's own "Add child stamp" has always allowed this — only the picker
+                    stopped at the first level. */}
+                {onNewVariant && (
                   <Tooltip content="Add a variant under this stamp" style={{ flexShrink: 0 }}>
                     <button
                       type="button"

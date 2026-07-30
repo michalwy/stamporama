@@ -97,7 +97,13 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    list row and the detail header — does this in one click: it shows **✓ Mark ready** on a Preparing
    offer and **▲ Activate** on a Ready one, so you can walk an offer forward without opening the menu.
    It appears only for that unambiguous next step; once an offer is **Active** (where the next move —
-   pause, withdraw, or sell — is a choice) the button steps aside and you use the **⋮** menu. An offer
+   pause, withdraw, or sell — is a choice) the button steps aside and you use the **⋮** menu.
+   Activating an offer that has **no listing URL yet** asks for one first — the platform hands the
+   link back at exactly that moment, and it is the record that goes stale first if it is skipped. The
+   prompt is the same one the [bulk listing workspace](#publishing) uses, and it stays **optional**:
+   some platforms only mint the URL once the listing is approved, so leaving it blank is a normal
+   answer and the header's own field takes it later. An offer that already carries a URL activates
+   straight away. An offer
    needs at least one set **and an asking price** before it can be marked ready or activated — an
    unpriced offer shows *Set a price to…* beside its price, and the quick-advance button waits until
    you set one. For the same reason you cannot clear the price of an offer that is already **Ready**
@@ -125,8 +131,8 @@ chooses between one set each and one set holding all — the same choice **Add s
 
 For a stock of duplicates there is a faster route still: turn on
 [**Group duplicates**](inventory.md#grouping-duplicates) on the Copies list and use a group's
-**List all as one offer** — one offer with one single-copy set per copy, which is the quantity
-listing platforms like Colnect expect.
+**Select all copies** — one click ticks the whole stack, and **Add as → N sets** makes it one offer
+with one single-copy set per copy, which is the quantity listing platforms like Colnect expect.
 
 Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer
 that already references that copy, across all platforms and states. The **Stamps** and **Issues**

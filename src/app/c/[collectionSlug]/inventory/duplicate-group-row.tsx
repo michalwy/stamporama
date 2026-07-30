@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { CopyGroupRow } from "@/lib/items";
-import type { CopyGroupAxes } from "@/lib/copy-groups";
+import { outlierCopyIds, type CopyGroupAxes } from "@/lib/copy-groups";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import {
@@ -16,7 +16,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { InventoryCopyList } from "./inventory-copy-list";
+import { InventoryCopyList, type CopySelection } from "./inventory-copy-list";
 import { CopyValue } from "./inventory-item-row";
 import {
   useInventoryItemsInfinite,
@@ -82,8 +82,12 @@ const MIXED_CHIP: React.CSSProperties = {
  * One duplicate group on the Copies list (#372): a bag of interchangeable copies, collapsed to a
  * single row. Mirrors `InventoryItemRow`'s four-line layout — it describes the same stamp — and
  * adds what only a group has: how many, how many are already listed, and where its members
- * disagree. Expanding renders the members as ordinary read-only copy rows, fetched then and not
- * before: a page of forty groups must not fetch four hundred copies to draw forty collapsed lines.
+ * disagree. Expanding renders the members as ordinary copy rows, fetched then and not before: a page
+ * of forty groups must not fetch four hundred copies to draw forty collapsed lines.
+ *
+ * The members carry the list's own selection checkboxes (#373), and the row's ⋮ ticks them all in one
+ * go (#398) — grouping is a way of *reading* the stock, so what one does with a set of copies stays
+ * the one bulk flow the flat list already has rather than a second listing dialog of its own.
  */
 export function DuplicateGroupRow({
   collectionId,
@@ -96,7 +100,7 @@ export function DuplicateGroupRow({
   primaryVendorId,
   vendorMap,
   isLast,
-  onListAsOffer,
+  selection,
 }: {
   collectionId: string;
   group: CopyGroupRow;
@@ -110,20 +114,66 @@ export function DuplicateGroupRow({
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
-  onListAsOffer: (group: CopyGroupRow) => void;
+  /** The panel's multi-select (#373), shared with the flat list: the group's members carry the very
+   * same checkboxes, and the group row's quick select-all feeds this state rather than a flow of its
+   * own (#398). */
+  selection: CopySelection;
 }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
+  // A quick select-all asked for while the group was collapsed: the members have to arrive before
+  // anything can be ticked, so the request is held until the query lands. Bumped rather than set, so
+  // asking twice re-ticks a group the collector has since unticked by hand. Which nonce has already
+  // been served is a **ref** — it is bookkeeping about a request, not something the row renders, and
+  // a second piece of state here would be a `setState` inside the effect that discharges it.
+  const [selectAllNonce, setSelectAllNonce] = useState(0);
+  const servedNonce = useRef(0);
 
   const memberFilters = groupMemberFilters(group, axes, baseFilters);
+  // Fetch as soon as *either* the group is open or a select-all is pending — the copies are what gets
+  // ticked, and the collector asked without waiting to look at them.
+  const wantMembers = open || selectAllNonce > 0;
   const {
     data,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
     isLoading: membersLoading,
-  } = useInventoryItemsInfinite(collectionId, memberFilters, open);
-  const members = data?.pages.flatMap((p) => p.items) ?? [];
+  } = useInventoryItemsInfinite(collectionId, memberFilters, wantMembers);
+  const members = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+  // Copies differing from the group's *most common* value on an axis left at *any* (#372). They keep
+  // their marking on the member rows and stay out of quick select-all — a group's odd one out would
+  // make a quantity listing misleading — but they are ticked individually like any other copy.
+  const outliers = useMemo(() => outlierCopyIds(members, axes), [members, axes]);
+  // What a quick select-all covers: every member that is not an outlier and that the list would give
+  // a checkbox to at all (`isEligible` — for sale, in hand, still held), so the shortcut can never
+  // tick a copy a hand could not.
+  const quickSelectable = members.filter(
+    (m) => !outliers.has(m.id) && selection.isEligible(m)
+  );
+  const allSelected =
+    quickSelectable.length > 0 && quickSelectable.every((m) => selection.selected.has(m.id));
+
+  // Discharge a pending select-all once every member has arrived. A group is a bag of copies, so a
+  // partially loaded one would tick a subset and report itself as "all" — hence the page walk first.
+  useEffect(() => {
+    if (selectAllNonce === 0 || servedNonce.current === selectAllNonce) return;
+    if (membersLoading || isFetchingNextPage) return;
+    if (hasNextPage) {
+      fetchNextPage();
+      return;
+    }
+    servedNonce.current = selectAllNonce;
+    selection.onSetMany(quickSelectable, true);
+  }, [
+    selectAllNonce,
+    membersLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    quickSelectable,
+    selection,
+  ]);
 
   const primaryCN = primaryVendorId
     ? (group.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
@@ -134,19 +184,24 @@ export function DuplicateGroupRow({
   const areaPath = buildAreaPath(areas, group.areaId);
   const dateStr = formatIssuedDate(group.issuedDay, group.issuedMonth, group.issuedYear);
   const hasIssue = !!(group.issueName || group.issueYear);
-  const free = group.count - group.listedCount;
 
+  // The group's own action is a **selection** shortcut, not a listing flow (#398): what happens to a
+  // set of copies is settled once, by the bulk bar the flat list already has, so the group row's job
+  // is only to tick its members in one click. Ticking opens the group too — the copies about to be
+  // acted on should be on screen.
   const actions: RowAction[] = [
     {
-      key: "list-group",
-      label: "List all as one offer",
-      icon: "🏷",
-      disabled: free === 0,
-      hint:
-        free === 0
-          ? "Every copy in this group is already on a listing."
-          : undefined,
-      onSelect: () => onListAsOffer(group),
+      key: "select-group",
+      label: allSelected ? "Deselect these copies" : "Select all copies",
+      icon: "☑",
+      onSelect: () => {
+        if (allSelected) {
+          selection.onSetMany(quickSelectable, false);
+          return;
+        }
+        setOpen(true);
+        setSelectAllNonce((n) => n + 1);
+      },
     },
   ];
 
@@ -353,6 +408,8 @@ export function DuplicateGroupRow({
               isFetchingNextPage={isFetchingNextPage}
               onLoadMore={fetchNextPage}
               readOnly
+              selection={selection}
+              differingIds={outliers}
             />
           )}
         </div>

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
-import type { CopyGroupRow, ItemListItem, ItemSortBy } from "@/lib/items";
+import type { ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
 import { isDelivered } from "@/lib/delivery-state";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -39,7 +39,6 @@ import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { InventoryCopyList } from "./inventory-copy-list";
 import { DuplicateGroupList } from "./duplicate-group-list";
-import { ListGroupDialog } from "./list-group-dialog";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
@@ -68,11 +67,7 @@ type DialogState =
   // it is one fact with nothing to fill in, so it is a confirmation.
   | { kind: "dispose"; item: ItemListItem }
   | { kind: "restore"; item: ItemListItem }
-  | { kind: "quickPrice"; item: ItemListItem }
-  // The duplicate group's pre-step (#372): pick which of its copies go on the listing. Confirming
-  // hands them to `addToNewOffer`, so the create form is reached the same way every other flow
-  // reaches it.
-  | { kind: "listGroup"; group: CopyGroupRow };
+  | { kind: "quickPrice"; item: ItemListItem };
 
 
 const DISPOSITION_FILTERS = [
@@ -375,28 +370,39 @@ export function InventoryListPanel({
   // the offer composition picker's own eligibility. The selection is keyed on the filter set and
   // reset when it changes (adjusted during render, never a `setState` in an effect): a selection
   // surviving a filter change would act on copies no longer on screen.
+  //
+  // It holds the **copies themselves**, not their ids: grouping (#398) ticks copies loaded by a
+  // group's own member query, and there is no flat page here to resolve those ids against.
   const filterSignature = JSON.stringify(filters);
-  const [selection, setSelection] = useState<{ sig: string; ids: Set<string> }>({
+  const [selection, setSelection] = useState<{ sig: string; items: Map<string, ItemListItem> }>({
     sig: filterSignature,
-    ids: new Set(),
+    items: new Map(),
   });
   if (selection.sig !== filterSignature) {
-    setSelection({ sig: filterSignature, ids: new Set() });
+    setSelection({ sig: filterSignature, items: new Map() });
   }
-  const selectedCopies = useMemo(
-    () => allCopies.filter((c) => selection.ids.has(c.id)),
-    [allCopies, selection]
-  );
-  const toggleSelected = useCallback((id: string) => {
+  const selectedIds = useMemo(() => new Set(selection.items.keys()), [selection]);
+  const selectedCopies = useMemo(() => [...selection.items.values()], [selection]);
+  const toggleSelected = useCallback((item: ItemListItem) => {
     setSelection((prev) => {
-      const ids = new Set(prev.ids);
-      if (ids.has(id)) ids.delete(id);
-      else ids.add(id);
-      return { sig: prev.sig, ids };
+      const items = new Map(prev.items);
+      if (items.has(item.id)) items.delete(item.id);
+      else items.set(item.id, item);
+      return { sig: prev.sig, items };
+    });
+  }, []);
+  const setManySelected = useCallback((batch: ItemListItem[], selected: boolean) => {
+    setSelection((prev) => {
+      const items = new Map(prev.items);
+      for (const item of batch) {
+        if (selected) items.set(item.id, item);
+        else items.delete(item.id);
+      }
+      return { sig: prev.sig, items };
     });
   }, []);
   const clearSelection = useCallback(
-    () => setSelection((prev) => ({ sig: prev.sig, ids: new Set() })),
+    () => setSelection((prev) => ({ sig: prev.sig, items: new Map() })),
     []
   );
 
@@ -423,13 +429,14 @@ export function InventoryListPanel({
   // and delivery chips are on the row, so the row already answers the question.
   const copySelection = useMemo(
     () => ({
-      selected: selection.ids,
+      selected: selectedIds,
       onToggle: toggleSelected,
+      onSetMany: setManySelected,
       // A copy no longer held cannot be listed either (#394) — same eligibility, second axis.
       isEligible: (item: ItemListItem) =>
         item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null,
     }),
-    [selection.ids, toggleSelected]
+    [selectedIds, toggleSelected, setManySelected]
   );
 
   const hasActiveFilters =
@@ -928,7 +935,7 @@ export function InventoryListPanel({
                 hasNextPage={!!groupsQuery.hasNextPage}
                 isFetchingNextPage={groupsQuery.isFetchingNextPage}
                 onLoadMore={groupsQuery.fetchNextPage}
-                onListAsOffer={(group) => setDialog({ kind: "listGroup", group })}
+                selection={copySelection}
               />
             </div>
           )}
@@ -1055,23 +1062,6 @@ export function InventoryListPanel({
           collectionId={collectionId}
           item={dialog.item}
           onClose={closeDialog}
-        />
-      )}
-
-      {/* List a whole duplicate group as one offer (#372): pick which of its copies go on, then
-          hand them to the create path below — one offer, one single-copy set each. */}
-      {dialog.kind === "listGroup" && (
-        <ListGroupDialog
-          collectionId={collectionId}
-          group={dialog.group}
-          axes={axes}
-          baseFilters={filters}
-          areas={areas}
-          locations={locations}
-          baseCurrency={baseCurrency}
-          platformFiltered={!!notOfferedPlatformId}
-          onClose={closeDialog}
-          onConfirm={(copies) => setDialog({ kind: "addToNewOffer", items: copies })}
         />
       )}
 

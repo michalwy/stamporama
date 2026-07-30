@@ -21,6 +21,11 @@
 // inside the block.
 
 import { parseCatalogNumberParts, parseSuffixOrdinal } from "./catalog-number";
+import {
+  formatNumericCatalogRange,
+  parseBareRomanNumber,
+  CATALOG_RANGE_SEPARATOR,
+} from "./catalog-range";
 import { formatItemNoDigits, parseItemNoPad } from "./item-number";
 import type { TranslatableEntity } from "./translations";
 
@@ -242,7 +247,9 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
  * 1. **Base** — numbers are bucketed by their numbering family (the constant prefix + suffix around
  *    the digits, as `parseCatalogNumberParts` splits them) and within each family consecutive base
  *    numbers collapse to `from-to`. So `1,2,4,6,7,8` reads `1-2,4,6-8`, and `BL31,BL32,BL33` reads
- *    `BL31-33`: the shared prefix and suffix are written **once**, around the collapsed span.
+ *    `BL31-33`: the shared prefix and suffix are written **once**, around the collapsed span. The
+ *    span itself is written by the shared range formatter (`formatNumericCatalogRange`, #400), so the
+ *    end drops the digits it shares with the start — `1298,…,1302` reads `1298-302`.
  * 2. **Suffix** — what is left standing alone after (1) then folds the other way: same prefix and
  *    same base, consecutive suffixes in one sequence, and only the suffix is written twice —
  *    `BL92a,BL92b` reads `BL92a-b`. The sequences are the ones an auto-generate range enumerates
@@ -259,22 +266,6 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
  *
  * Exported for the derived **auction lot** name (#353): a house lot is "Mi 1-12" whether it is being
  * listed or bid on, and two implementations of #150's collapsing would drift. */
-/** Split a digit-less catalog number into the constant text in front of it and a trailing canonical
- * Roman numeral — `"I"` → `("", "I")`, `"Mi·PL VIII"` → `("Mi·PL ", "VIII")` — or null when it ends
- * in no numeral (`"Ark."`). A number that *is* a numeral (#383) has no base for the suffix fold to
- * hold constant, so the numeral itself is the sequence and the prefix is what keeps two catalogues
- * apart. The lazy prefix takes the **longest** trailing numeral, and `parseSuffixOrdinal` rejects a
- * non-canonical spelling, so `"Mi·DM"` reads as no numeral rather than as `D`. */
-function parseBareRomanNumber(
-  text: string
-): { prefix: string; numeral: string; value: number } | null {
-  const match = text.match(/^(.*?)([MDCLXVI]+)$/);
-  if (!match) return null;
-  const ordinal = parseSuffixOrdinal(match[2]);
-  if (!ordinal || ordinal.kind !== "roman") return null;
-  return { prefix: match[1], numeral: match[2], value: ordinal.value };
-}
-
 export function compactCatalogNumbers(numbers: readonly string[]): string {
   interface Family {
     prefix: string;
@@ -347,8 +338,12 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   for (const s of spans) {
     const ordinal = s.from === s.to ? parseSuffixOrdinal(s.suffix) : null;
     if (!ordinal) {
-      const span = s.from === s.to ? String(s.from) : `${s.from}-${s.to}`;
-      emitted.push({ order: s.order, text: `${s.prefix}${span}${s.suffix}` });
+      // The span's own notation is the shared range formatter's (#400), so a collapsed run reads
+      // `1298-302` here exactly as it does on an issue's catalog chip.
+      emitted.push({
+        order: s.order,
+        text: formatNumericCatalogRange(s.prefix, String(s.from), String(s.to), s.suffix),
+      });
       continue;
     }
     const key = `${s.prefix} ${s.from} ${ordinal.kind}`;
@@ -365,7 +360,8 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
       while (j + 1 < byOrdinal.length && byOrdinal[j + 1].ordinal === byOrdinal[j].ordinal + 1) j++;
       const first = byOrdinal[i].span;
       const last = byOrdinal[j].span;
-      const suffix = i === j ? first.suffix : `${first.suffix}-${last.suffix}`;
+      const suffix =
+        i === j ? first.suffix : `${first.suffix}${CATALOG_RANGE_SEPARATOR}${last.suffix}`;
       emitted.push({
         // Where the run's earliest member stood — the fold never moves a number past another.
         order: Math.min(...byOrdinal.slice(i, j + 1).map((e) => e.span.order)),
@@ -396,7 +392,12 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
       while (j + 1 < group.length && group[j + 1].value === group[j].value + 1) j++;
       const members = group.slice(i, j + 1);
       const at = Math.min(...members.map((m) => m.index));
-      runs.set(at, `${prefix}${group[i].numeral}${i === j ? "" : `-${group[j].numeral}`}`);
+      runs.set(
+        at,
+        `${prefix}${group[i].numeral}${
+          i === j ? "" : `${CATALOG_RANGE_SEPARATOR}${group[j].numeral}`
+        }`
+      );
       for (const m of members) if (m.index !== at) folded.add(m.index);
       i = j + 1;
     }

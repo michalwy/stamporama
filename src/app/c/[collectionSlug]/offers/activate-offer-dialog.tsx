@@ -10,6 +10,12 @@ import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/di
 //
 // It stays optional: some platforms only mint the URL once the listing is approved. Publishing
 // without one is a normal outcome, and the offer's header form takes it later.
+//
+// Activating from an **offer's own screen** (#399) asks the same question through the same dialog —
+// `ready → active` is one transition however it is reached, and having only the bulk workspace prompt
+// meant the URL was silently skipped on the surface a single listing is posted from. It is asked
+// **only when the offer has no URL yet**: with one already recorded there is nothing to hand over,
+// and the header's own field is right there for a correction.
 
 const INPUT: React.CSSProperties = {
   width: "100%",

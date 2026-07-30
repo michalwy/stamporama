@@ -245,8 +245,17 @@ collapse into ranges** — `Mi·DR 1` + `Mi·DR 2` becomes `Mi·DR 1-2`, and a g
 Numbers that share a prefix or suffix collapse too, with the shared part written **once** around the
 span: `BL31`, `BL32`, `BL33` reads `BL31-33`, and `40A`, `41A`, `42A` reads `40-42A`. Numbers whose
 prefix/suffix differ belong to different numbering families and are folded separately — Michel
-`1294CKB`, `1295CKB`, `1296KB` reads `1294-1295CKB,1296KB`. Each catalog is evaluated on its own, so
+`1294CKB`, `1295CKB`, `1296KB` reads `1294-95CKB,1296KB`. Each catalog is evaluated on its own, so
 one catalog's mixed numbering never stops the others from collapsing.
+
+A range's **end drops the digits it shares with its start**, the usual catalog shorthand:
+`1298`…`1302` reads `1298-302`, `1298`…`1299` reads `1298-99`, `240`…`256` reads `240-56`. At least
+two digits always survive, and a range whose endpoints have different digit counts (`98`–`102`) is
+written out in full, where a shortened end would read as a smaller number. The same shorthand is used
+wherever a range is *shown* — an issue's declared catalog range on the Issues list, a derived
+[offer set](offers.md) or [auction lot](auctions.md) name — but never where you are **entering or
+confirming** one: the issue form's First/Last fields and the range-extension prompts always spell out
+both endpoints, because those are the values being stored.
 
 Letter and Roman-numeral **suffixes** on the same number collapse the same way, with only the suffix
 written twice: Fischer `BL92a` + `BL92b` reads `BL92a-b`, and `12I`, `12II`, `12III` reads `12I-III`.

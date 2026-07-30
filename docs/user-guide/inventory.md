@@ -334,8 +334,9 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    - **+ New stamp** (at the bottom of an expanded issue's stamp tree) adds a stamp to that
      issue. It then appears in the issue's tree, ready for you to pick like any other stamp —
      it is not selected automatically, and the picker stays open.
-   - **+ variant** (next to a base stamp) adds a variant under that stamp, which likewise
-     appears in the tree ready to pick.
+   - **+ variant** (next to any stamp in the tree) adds a child under that stamp, which likewise
+     appears in the tree ready to pick. It sits at **any depth** — `3` takes `3a`, and `3a` takes
+     `3a1` — the same as **Add child stamp** on the Issues list.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
@@ -566,6 +567,10 @@ the row says so (*"3 of 10 already listed here, and left out"*). Only an offer t
 The selection survives scrolling further down the list. Changing a filter clears it — what was picked
 is no longer on screen.
 
+The same checkboxes are on the copies inside an expanded [duplicate group](#grouping-duplicates), and
+a group row can tick all of its copies at once — see [Listing a group's
+copies](#listing-a-groups-copies).
+
 ## Grouping duplicates
 
 When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
@@ -599,23 +604,32 @@ control is replaced: groups are ordered by **how many copies each holds**, large
 
 Each toggle is remembered per collection, so the list opens the way you left it.
 
-### Listing a whole group as one offer
+### Listing a group's copies
 
-A group row's **⋮** menu has **List all as one offer**. It opens the group's copies with every one
-ticked, then hands them to the offer create form — one offer, **one single-copy set per copy**, so
-the listing carries a quantity.
+A group is a way of *reading* your stock, so listing its copies uses the one flow every other
+selection uses — the [checkboxes and the **🏷 Add selected to offer**
+bar](#adding-several-copies-to-an-offer-at-once). Expand a group and its copies carry exactly those
+checkboxes.
 
-Copies that **differ from the rest of the group** on an axis you left off are highlighted and start
-**unticked**, with a *differs from the group* mark. The odd one out is worked out from what the
-majority actually is — in a stock of ten certified blocks and one plain single, the single is the
-exception, not the blocks. Untick or re-tick freely; what stays ticked is what goes on the listing.
+For the common case there is a shortcut: the group row's **⋮** has **Select all copies**, which opens
+the group and ticks its copies in one click. Ask again once they are all ticked and it reads
+**Deselect these copies**. Selections from several groups add up, so you can tick two stacks and deal
+with them together.
 
-The offer form is the usual one: platform, currency, asking price (pre-filled from the group's shared
-catalog value when it has one). Which copies are still free to list **on a given platform** is what
-the **Not offered on…** filter answers — set it first and the whole screen becomes that platform's
-worklist, and the platform is pre-filled into the form for you.
+Copies that **differ from the rest of the group** on an axis you left off are highlighted with a
+*differs from the group* mark and are **left out of Select all** — tick them by hand if you do want
+them. The odd one out is worked out from what the majority actually is: in a stock of ten certified
+blocks and one plain single, the single is the exception, not the blocks.
 
-The row also reports how many of the group are **already listed** somewhere, on any platform.
+From there it is the ordinary bar: **🏷 Add selected to offer**, whose **Add as** control decides
+between **one single-copy set each** (a quantity of duplicates — what platforms that allow one
+listing per stamp and condition expect) and **one set holding all** of them.
+
+Which copies are still free to list **on a given platform** is what the **Not offered on…** filter
+answers — set it first and the whole screen becomes that platform's worklist, and the platform is
+pre-filled into the offer form for you.
+
+The group row also reports how many of its copies are **already listed** somewhere, on any platform.
 
 ## Seeing which offers something is in
 

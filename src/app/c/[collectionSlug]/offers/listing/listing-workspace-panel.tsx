@@ -21,7 +21,7 @@ import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
 import { useListingOffers, useOfferPlatforms, useInvalidateOffers } from "../use-offers-query";
 import { ListingOfferCard } from "./listing-offer-card";
-import { ActivateOfferDialog } from "./activate-offer-dialog";
+import { ActivateOfferDialog } from "../activate-offer-dialog";
 
 // The bulk listing workspace (#322): one posting session on one marketplace. Most platforms have no
 // listing API (#154), so publishing a prepared batch means opening the platform's own form once per

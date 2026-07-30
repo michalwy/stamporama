@@ -16,6 +16,7 @@ import {
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
+import { ActivateOfferDialog } from "../activate-offer-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
@@ -138,6 +139,9 @@ export function OfferDetailPanel({
   // Quick-sell (#390): the Offer list's own flow (#225), opened from here so recording a sale does
   // not mean navigating back to the list first.
   const [selling, setSelling] = useState(false);
+  // Activation asks for the listing URL when the offer has none (#399) — the bulk workspace's own
+  // publish step (#322), reached from here.
+  const [activating, setActivating] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
@@ -181,6 +185,11 @@ export function OfferDetailPanel({
   // instead of silently withholding the advance button.
   const blockedOnPrice =
     advanceTo !== null && requiresPrice(advanceTo) && !hasPrice(offer.price) && offer.sets.length > 0;
+  // Going live is a publication (#399): the platform hands back a listing URL and this is the moment
+  // it is in the clipboard, so activating asks for it exactly as the bulk listing workspace does
+  // (#322) — but only while the offer carries none. One that already has a URL has nothing to hand
+  // over, and the header's own field takes a correction.
+  const needsUrlToActivate = offer.state === "ready" && !offer.url;
 
   /** Patch a single header field in place, then refresh. */
   function patch(field: "price" | "url" | "descriptionFormat" | OfferTextField, value: string) {
@@ -222,12 +231,31 @@ export function OfferDetailPanel({
       setConfirm("withdraw");
       return;
     }
+    if (next === "active" && needsUrlToActivate) {
+      setActivating(true);
+      return;
+    }
     setActionError(undefined);
     startTransition(async () => {
       const { setOfferStateAction } = await import("@/app/actions/offers");
       const result = await setOfferStateAction(offerId, next);
       if (result.status === "success") invalidateAll(collectionId);
       else setActionError(result.message);
+    });
+  }
+
+  /** Go live with the URL the platform gave back (#399): `publishOffer` transitions first and writes
+   * the URL after, so a refused activation — a lost set, a missing price — leaves no listing link
+   * behind on an offer that never went live. A blank URL is a normal answer. */
+  function publish(url: string) {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { publishOfferAction } = await import("@/app/actions/offers");
+      const result = await publishOfferAction(offerId, url);
+      if (result.status === "success") {
+        setActivating(false);
+        invalidateAll(collectionId);
+      } else setActionError(result.message);
     });
   }
 
@@ -629,6 +657,24 @@ export function OfferDetailPanel({
             currency: offer.currency,
           }}
           onClose={() => setSelling(false)}
+        />
+      )}
+
+      {/* Activation asks for the listing URL (#399), the same step the bulk listing workspace runs
+          (#322) — reached from the quick-advance button and the ⋮ *Activate* entry alike. */}
+      {activating && (
+        <ActivateOfferDialog
+          offerLabel={offer.name ?? offer.label}
+          platformName={offer.platformName}
+          initialUrl={offer.url}
+          isPending={isPending}
+          error={actionError}
+          onClose={() => {
+            if (isPending) return;
+            setActivating(false);
+            setActionError(undefined);
+          }}
+          onConfirm={publish}
         />
       )}
 

@@ -1,3 +1,5 @@
+import { formatCatalogRange } from "@/lib/catalog-range";
+
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function formatIssuedDate(
@@ -35,6 +37,11 @@ export function moneySecondaryText(m: MoneyLike): string | null {
   return `${m.amount} ${m.currency}`;
 }
 
+/** An issue's declared per-vendor range as its catalog identity — `Mi·PL 1298–302`. The span goes
+ * through the shared range formatter (#400), so a declared range reads the way the same span reads in
+ * a generated listing title or an offer set's name; only the separator differs, an on-screen chip
+ * taking the en dash. The issue form's own First/Last inputs stay written out in full — those are the
+ * values being stored. */
 export function formatIssueCatalogNumber(
   firstNumber: string,
   lastNumber: string | null | undefined,
@@ -42,6 +49,5 @@ export function formatIssueCatalogNumber(
   areaPrefix: string | null | undefined
 ): string {
   const prefix = areaPrefix ? `${vendorAbbr}·${areaPrefix}` : vendorAbbr;
-  const range = lastNumber ? `${firstNumber}–${lastNumber}` : firstNumber;
-  return `${prefix} ${range}`;
+  return `${prefix} ${formatCatalogRange(firstNumber, lastNumber, "–")}`;
 }
