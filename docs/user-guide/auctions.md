@@ -204,6 +204,11 @@ of the same question. Unlike the status and party filters, the closing window is
 between visits — coming back tomorrow to a list silently narrowed to old lots would hide everything
 that is actually running.
 
+Both ends of that question are also reported by [Action items](action-items.md), the bell at the top
+of the sidebar: lots closing within the day, and ended lots still waiting for their outcome to be
+recorded. It is the same two filters, counted for you, so a lot that quietly closed while you were
+elsewhere does not have to be gone looking for.
+
 ### Keeping bids current
 
 There is no scraping and no automatic refreshing — you check a listing and record what you see. Two

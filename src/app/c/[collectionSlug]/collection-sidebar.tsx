@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ActionItemsBell } from "./action-items-bell";
 
 interface CollectionSidebarProps {
   collectionSlug: string;
+  /** The notification centre reads through the id-keyed route handlers, like every other query. */
+  collectionId: string;
   collectionName: string;
-  collections: Array<{ slug: string; name: string }>;
   appVersion: string;
 }
 
@@ -107,22 +109,11 @@ const IconSignOut = () => (
   </svg>
 );
 
-const IconChevron = ({ open }: { open: boolean }) => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{
-      transition: "transform 0.15s ease",
-      transform: open ? "rotate(180deg)" : "rotate(0deg)",
-    }}
-  >
-    <path d="M6 9l6 6 6-6" />
+const IconCollections = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2l9 5-9 5-9-5 9-5z" />
+    <path d="M3 12l9 5 9-5" />
+    <path d="M3 17l9 5 9-5" />
   </svg>
 );
 
@@ -243,32 +234,12 @@ function NavItem({
 
 export function CollectionSidebar({
   collectionSlug,
+  collectionId,
   collectionName,
-  collections,
   appVersion,
 }: CollectionSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const switcherRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!switcherOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
-        setSwitcherOpen(false);
-      }
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSwitcherOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [switcherOpen]);
 
   const base = `/c/${collectionSlug}`;
 
@@ -283,8 +254,6 @@ export function CollectionSidebar({
     if (exact || href === base) return pathname === href;
     return pathname.startsWith(href);
   }
-
-  const otherCollections = collections.filter((c) => c.slug !== collectionSlug);
 
   return (
     <aside
@@ -303,127 +272,55 @@ export function CollectionSidebar({
         overflowY: "auto",
       }}
     >
-      {/* Collection switcher */}
-      <div ref={switcherRef} style={{ position: "relative" }}>
-        <button
-          onClick={() => setSwitcherOpen(!switcherOpen)}
+      {/* The collection this sidebar is scoped to, and the notification bell (#367) beside it.
+          Identity, not a control: switching collections is a rare act, so it is a plain link in the
+          footer rather than a dropdown permanently occupying the chrome's most prominent row. The
+          bell is an icon here rather than a nav entry, because it is not a destination either. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          borderBottom: "1px solid var(--color-border)",
+          padding: "1rem",
+          paddingRight: "0.5rem",
+          gap: "0.5rem",
+        }}
+      >
+        <div
           style={{
-            width: "100%",
+            width: "1.75rem",
+            height: "1.75rem",
+            borderRadius: "0.375rem",
+            background: "var(--color-bg-muted)",
             display: "flex",
             alignItems: "center",
-            gap: "0.5rem",
-            padding: "1rem",
-            border: "none",
-            borderBottom: "1px solid var(--color-border)",
-            background: "transparent",
-            cursor: "pointer",
-            textAlign: "left",
+            justifyContent: "center",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "var(--color-accent)",
+            flexShrink: 0,
           }}
         >
-          <div
-            style={{
-              width: "1.75rem",
-              height: "1.75rem",
-              borderRadius: "0.375rem",
-              background: "var(--color-bg-muted)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "0.75rem",
-              fontWeight: 600,
-              color: "var(--color-accent)",
-              flexShrink: 0,
-            }}
-          >
-            {collectionName.charAt(0).toUpperCase()}
-          </div>
-          <span
-            style={{
-              flex: 1,
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {collectionName}
-          </span>
-          <span style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>
-            <IconChevron open={switcherOpen} />
-          </span>
-        </button>
-
-        {switcherOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: "0.5rem",
-              right: "0.5rem",
-              background: "var(--color-bg-elevated)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.5rem",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              zIndex: 10,
-              padding: "0.25rem",
-            }}
-          >
-            {otherCollections.length > 0 ? (
-              otherCollections.map((c) => (
-                <Link
-                  key={c.slug}
-                  href={`/c/${c.slug}`}
-                  onClick={() => setSwitcherOpen(false)}
-                  style={{
-                    display: "block",
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: "0.375rem",
-                    fontSize: "0.8125rem",
-                    color: "var(--color-text-secondary)",
-                    textDecoration: "none",
-                  }}
-                >
-                  {c.name}
-                </Link>
-              ))
-            ) : (
-              <p
-                style={{
-                  padding: "0.5rem 0.75rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-muted)",
-                  margin: 0,
-                }}
-              >
-                No other collections
-              </p>
-            )}
-            <div
-              style={{
-                borderTop: "1px solid var(--color-border)",
-                marginTop: "0.25rem",
-                paddingTop: "0.25rem",
-              }}
-            >
-              <Link
-                href="/collections"
-                onClick={() => setSwitcherOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-muted)",
-                  textDecoration: "none",
-                }}
-              >
-                All collections
-              </Link>
-            </div>
-          </div>
-        )}
+          {collectionName.charAt(0).toUpperCase()}
+        </div>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          // Repeats a string that is already on screen but ellipsized — the browser's own overflow
+          // affordance, which is the one case `title` survives (#291).
+          title={collectionName}
+        >
+          {collectionName}
+        </span>
+        <ActionItemsBell collectionId={collectionId} collectionSlug={collectionSlug} />
       </div>
 
       {/* Main navigation */}
@@ -537,6 +434,16 @@ export function CollectionSidebar({
           gap: "0.125rem",
         }}
       >
+        {/* The way out of this collection. A link, not a switcher: changing collection happens
+            rarely enough that a dropdown in the header was a permanent control for an occasional
+            act, and the collections page already lists them all. Never `active` — it is not one of
+            this collection's screens. */}
+        <NavItem
+          href="/collections"
+          icon={<IconCollections />}
+          label="All collections"
+          active={false}
+        />
         <NavItem
           href={`${base}/settings`}
           icon={<IconSettings />}

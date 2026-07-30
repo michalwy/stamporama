@@ -739,6 +739,10 @@ has sold through it (a partial sale keeps it **Active** for its remaining sets).
 other platforms automatically — you stay in control of each marketplace. The flag is derived live
 from what has sold, so it clears the moment the offer no longer holds a sold copy.
 
+You do not have to come to this screen to find out that something is flagged: the same offers are
+listed in [Action items](action-items.md), the bell at the top of the sidebar, split into the two
+reasons a listing gets flagged — a copy sold elsewhere, and a copy under a live auction.
+
 ## Offer lifecycle
 
 - **Preparing** — being put together (photos, description, price not finalised). A new offer starts

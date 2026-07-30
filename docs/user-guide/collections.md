@@ -22,9 +22,11 @@ The **Your Collections** page lists all collections you own, sorted by creation 
 
 Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
-- The collection name
+- The collection name, at the top, with the [Action items](action-items.md) bell beside it
 - Navigation links for each section (Overview, Catalog, Items — more sections will be added as features are built)
-- A **← All collections** link to return to the collection picker
+- An **All collections** link in the footer, to return to the collection picker. There is no
+  quick-switch dropdown: changing collection is a rare enough act that it does not need a permanent
+  control in the sidebar's most prominent row
 - The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**)
 
 ## Filtering the Issues, Stamps, and Copies lists

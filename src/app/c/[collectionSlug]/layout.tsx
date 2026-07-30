@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
+import { getCollectionBySlug } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
 import { getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
@@ -44,29 +44,31 @@ export default async function CollectionLayout({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const [collection, collections] = await Promise.all([
-    getCollectionBySlug(session.user.id, collectionSlug),
-    getCollectionsByOwner(session.user.id),
-  ]);
+  // The sidebar names one collection and links to the collections page for the rest, so this layout
+  // no longer loads the owner's other collections on every screen.
+  const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        background: "var(--color-bg-page)",
-      }}
-    >
-      <CollectionSidebar
-        collectionSlug={collectionSlug}
-        collectionName={collection.name}
-        collections={collections.map((c) => ({ slug: c.slug, name: c.name }))}
-        appVersion={getAppVersionLabel()}
-      />
-      <main style={{ flex: 1, minWidth: 0 }}>
-        <QueryProvider>{children}</QueryProvider>
-      </main>
-    </div>
+    // The provider wraps the **whole** shell rather than only the page: the sidebar's notification
+    // centre (#367) is a query too, and one client is also one cache — a screen and the badge above
+    // it read the same collection.
+    <QueryProvider>
+      <div
+        style={{
+          display: "flex",
+          minHeight: "100vh",
+          background: "var(--color-bg-page)",
+        }}
+      >
+        <CollectionSidebar
+          collectionSlug={collectionSlug}
+          collectionId={collection.id}
+          collectionName={collection.name}
+          appVersion={getAppVersionLabel()}
+        />
+        <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+      </div>
+    </QueryProvider>
   );
 }

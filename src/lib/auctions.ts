@@ -547,6 +547,24 @@ export async function listAuctionLots(
   };
 }
 
+/**
+ * How many lots a filter combination admits, without paginating them (#367).
+ *
+ * Over the same `lotListWhere` the list itself uses, so the notification centre's badge and the
+ * screen it links to can never disagree about what "closing today" means — the window's boundary is
+ * read from the server's clock in one place ({@link closingWhere}) and this is a second caller of
+ * it, not a second copy. Deliberately not {@link auctionLotFilterCounts}, which resolves every
+ * facet and every derived signal to answer a question about one of them.
+ */
+export async function countAuctionLots(
+  ownerId: string,
+  collectionId: string,
+  filters: Omit<AuctionLotFilters, "offset" | "pageSize" | "signal"> = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.auctionLot.count({ where: lotListWhere(collectionId, filters) });
+}
+
 export interface AuctionLotFilterCounts {
   /** Lots per status, under the selected seller / platform. Statuses with none are absent. */
   statuses: Partial<Record<AuctionLotStatus, number>>;

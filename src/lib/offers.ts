@@ -562,11 +562,22 @@ export async function offerTranslationGaps(
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
 
 /** One flagged offer: how many of its copies are dead, and the platform it is listed on (so the
- *  filter facets can group without a second pass). */
+ *  filter facets can group without a second pass).
+ *
+ *  `deadCount` is the figure the list's badge has always shown — copies, counted once each,
+ *  whatever killed them. The two beside it count the *reasons* (#367): a copy that is both sold
+ *  elsewhere and held by a live auction is one dead copy and two problems, so they may sum to more
+ *  than `deadCount` and deliberately are not derived from it. The notification centre needs them
+ *  apart because the two ask for different things — a sold copy has to come out of the listing,
+ *  a copy under the hammer has to wait for the auction to end (ADR-0013 §4, #167/#215). */
 interface NeedsActionRow {
   offerId: string;
   platformId: string;
   deadCount: number;
+  /** Copies already sold through another set (#167). */
+  soldCount: number;
+  /** Copies another active offer currently has in active bidding (#215). */
+  biddingCount: number;
 }
 
 /**
@@ -618,7 +629,13 @@ async function needsActionRows(
         AND o2."inActiveBidding" = TRUE
       GROUP BY li2."itemId"
     )
-    SELECT o."id" AS "offerId", o."platformId" AS "platformId", COUNT(*)::int AS "deadCount"
+    SELECT o."id" AS "offerId", o."platformId" AS "platformId", COUNT(*)::int AS "deadCount",
+           COUNT(*) FILTER (
+             WHERE sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id"
+           )::int AS "soldCount",
+           COUNT(*) FILTER (
+             WHERE b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id")
+           )::int AS "biddingCount"
     FROM "offer" o
     JOIN "offer_set" s ON s."offerId" = o."id"
     JOIN "offer_set_item" li ON li."offerSetId" = s."id"
@@ -643,6 +660,94 @@ async function needsActionCounts(
 ): Promise<Map<string, number>> {
   const rows = await needsActionRows(collectionId, offerIds);
   return new Map(rows.map((r) => [r.offerId, r.deadCount]));
+}
+
+/** Which of the two collisions flagged an offer (#367) — see {@link NeedsActionRow}. */
+export type OfferActionReason = "sold-elsewhere" | "bidding-conflict";
+
+/** One flagged offer as the notification centre lists it: what to call it, where it is listed, and
+ * how many of its copies this reason accounts for. */
+export interface OfferNeedingAction {
+  offerId: string;
+  /** The stored listing title (#209), or the derived label while it has none — the same fallback
+   * every offer surface makes. */
+  label: string;
+  platformName: string;
+  /** Copies affected **by this reason**, not the row's whole dead count. */
+  count: number;
+}
+
+/** The flagged offers per reason: the full count, and the worst few of them. */
+export type OffersNeedingAction = Record<
+  OfferActionReason,
+  { total: number; offers: OfferNeedingAction[] }
+>;
+
+/**
+ * The needs-action flag split into the two things it actually reports (#367), for the notification
+ * centre.
+ *
+ * One pass over {@link needsActionRows} feeds both buckets, and the offers named by either are
+ * fetched and labelled together: the derived label needs the collection's area tree (#379), and
+ * reading it twice for what is one panel would be two reads for one screen.
+ *
+ * Ordered **worst first** — most affected copies, then offer id so a tie cannot reorder between two
+ * refreshes — because the panel shows the head of the list and the head should be the one to deal
+ * with first.
+ */
+export async function offersNeedingAction(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<OffersNeedingAction> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await needsActionRows(collectionId);
+
+  function bucket(countOf: (row: NeedsActionRow) => number) {
+    const flagged = rows
+      .filter((r) => countOf(r) > 0)
+      .sort((a, b) => countOf(b) - countOf(a) || a.offerId.localeCompare(b.offerId));
+    return { total: flagged.length, head: flagged.slice(0, limit), countOf };
+  }
+
+  const sold = bucket((r) => r.soldCount);
+  const bidding = bucket((r) => r.biddingCount);
+
+  const ids = [...new Set([...sold.head, ...bidding.head].map((r) => r.offerId))];
+  const offers = ids.length
+    ? await prisma.offer.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          name: true,
+          platform: { select: { name: true } },
+          sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+        },
+      })
+    : [];
+  // Only where something is actually unnamed: since #365/#380 a listing is titled on its first
+  // composition change, so the tree read is usually not needed at all.
+  const labeller = offers.some((o) => !o.name) ? await makeOfferLabeller(collectionId) : null;
+  const byId = new Map(
+    offers.map((o) => [
+      o.id,
+      { label: o.name ?? labeller?.offer(o.sets) ?? "Untitled listing", platformName: o.platform.name },
+    ])
+  );
+
+  function resolve(b: ReturnType<typeof bucket>) {
+    return {
+      total: b.total,
+      offers: b.head.flatMap((row) => {
+        const offer = byId.get(row.offerId);
+        return offer
+          ? [{ offerId: row.offerId, ...offer, count: b.countOf(row) }]
+          : [];
+      }),
+    };
+  }
+
+  return { "sold-elsewhere": resolve(sold), "bidding-conflict": resolve(bidding) };
 }
 
 // ── Collision lookup (non-blocking warning) ─────────────────────────────────
