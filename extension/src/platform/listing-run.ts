@@ -23,12 +23,18 @@ export type ListingTarget =
 export function resolveListingTarget(task: ListingTask): ListingTarget {
   const module = resolveListingModule(task);
   if (!module.ok) return module;
-  return {
-    ok: true,
-    moduleId: module.module.id,
-    moduleName: module.module.name,
-    url: module.module.listing.formUrl(task),
-  };
+  try {
+    return {
+      ok: true,
+      moduleId: module.module.id,
+      moduleName: module.module.name,
+      url: module.module.listing.formUrl(task),
+    };
+  } catch (e) {
+    // A task the module cannot express as a form at all — nothing the preconditions (#406) let
+    // through, and a refusal rather than a thrown error because the caller has a person to tell.
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export type ListingFillResult =

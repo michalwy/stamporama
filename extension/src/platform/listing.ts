@@ -119,7 +119,8 @@ export interface ListingFillOutcome {
  *  it. Filling **stops before submit** — the collector clicks the platform's own button, so nothing
  *  is posted to a marketplace without a human look (#408). */
 export interface PlatformListing {
-  /** The URL of the sale form for this task, built from what the task already carries. */
+  /** The URL of the sale form for this task, built from what the task already carries. Throws only
+   *  when the task cannot be expressed as a form at all, which the shell reports as a refusal. */
   formUrl(task: ListingTask): string;
   /** True when `url` is that sale form — how the shell knows the page it is on is the one to fill.
    *  Broader than an equality test against {@link formUrl}: the platform may redirect, add its own

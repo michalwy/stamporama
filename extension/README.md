@@ -309,6 +309,29 @@ deliberate:
 Refusals name their own reason, and the three ways a task can fail to find a module — the platform
 names none, the id is unknown here, the module only reads — are three different answers.
 
+### Colnect's half (#410)
+
+`src/platform/colnect/listing.ts`, against the form mapped in #402:
+
+- **The komplet is declared in the URL**, not assembled in the form:
+  `…/sell/new/category/stamps/item/<id>%2C<id>%2C…` over the copies' Colnect item-IDs (#247) in
+  listing order. Ids are deduplicated — the form keys one fieldset per item, so two copies of one
+  stamp cannot be declared twice; the copies that fall away are **named in the report**.
+- **Filled**: each copy's condition (`new_sale[cond_20_<id>]`, translated through the collection's
+  Colnect mapping, #404), the price, the number of sets, the short description and the private note.
+- **Left exactly as served**: `expiry_date`, `auto_renewal_times`, `auto_renewal_days` — required,
+  pre-filled, and matching nothing in Stamporama, so writing our own values would clobber the
+  collector's defaults for no gain. `options[] = separate_listings` is likewise never touched, but a
+  *ticked* one is reported: it splits the entry into one listing per item, moves pricing to the
+  per-item fields and turns pictures off entirely.
+- **An over-long text is neither written nor truncated.** Truncating mangles wording the collector
+  chose, and assigning past `maxlength` in script is not refused the way a paste is — so the form
+  would carry a value Colnect goes on to reject. The report gives both numbers and points at the
+  counter in Stamporama (#403), which is where it is fixed.
+- **Currency is a seller-level Colnect setting**, not a form field, so the offer's currency has
+  nowhere to go here. That is what a platform locking its currency (#196) is for: the two are agreed
+  once, in settings, rather than checked on every listing.
+
 ## Layout
 
 - `src/platform/` — the `PlatformModule` interface + registry; `colnect/` is the first module (#249),
@@ -316,7 +339,9 @@ names none, the id is unknown here, the module only reads — are three differen
   cards) and a **single stamp's** page, where the minor-variant rows carry catalog codes in the same
   abbreviated form. The main stamp on that page is skipped — its codes are printed with full catalog
   names, which the abbreviation mapping (#248) can't key off. `listing.ts` is the listing half's
-  contract + the mirrored task shape, `listing-run.ts` the neutral driver (#408).
+  contract + the mirrored task shape, `listing-run.ts` the neutral driver (#408), and
+  `colnect/listing.ts` the Colnect sale form's URL shape and field names (#410) — the only file that
+  knows either.
 - `src/core/` — profile store + colour derivation (#251), the registration payload contract (#252),
   decision types, message contracts.
 - `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background
