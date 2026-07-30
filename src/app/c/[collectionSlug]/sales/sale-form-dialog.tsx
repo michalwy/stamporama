@@ -5,6 +5,7 @@ import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/di
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -288,6 +289,7 @@ export function SaleFormDialog({
               onChange={(e) => setExternalRef(e.target.value)}
               placeholder="Transaction / order no. in the marketplace"
               disabled={isPending}
+              {...NO_AUTOFILL}
               style={INPUT_STYLE}
             />
           </div>

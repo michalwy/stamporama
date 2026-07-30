@@ -10,7 +10,6 @@ import {
   DialogSecondaryButton,
   ErrorBubble,
 } from "@/app/dialog-shell";
-import type { OfferListItem } from "@/lib/offers";
 import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useInvalidateOffers } from "./use-offers-query";
@@ -34,19 +33,35 @@ const ROW_STYLE: React.CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
+/**
+ * What the flow needs to know about the offer it is selling — deliberately a structural subset
+ * rather than `OfferListItem`, so the offer's own detail screen can open the same dialog off its
+ * `OfferDetail` (#390) instead of a second implementation drifting away from this one.
+ */
+export interface SellableOfferSubject {
+  id: string;
+  /** The stored listing title, or null — the derived `label` is what the dialog falls back to. */
+  name: string | null;
+  label: string;
+  platformId: string;
+  platformName: string;
+  price: string;
+  currency: string;
+}
+
 export interface SellOfferFlowDialogProps {
   collectionId: string;
   collectionSlug: string;
   baseCurrency: string;
   /** Server-computed "today" for the new-sale step's date field. */
   today: string;
-  offer: OfferListItem;
+  offer: SellableOfferSubject;
   onClose: () => void;
 }
 
 /**
- * Quick-sell (#225): row action that records a sale directly from the Offer list, without going
- * through the offer's compose screen. Picks a destination — an existing sale already on this
+ * Quick-sell (#225): action that records a sale directly from the Offer list — and from the offer's
+ * own detail screen (#390) — without going through the offer's compose screen. Picks a destination — an existing sale already on this
  * offer's platform (in the same currency), or a brand-new one — then adds the offer's still-
  * sellable sets to it at their asking price. Reuses {@link SaleFormDialog} for the new-sale header
  * and `addSaleLinesAction` for the line-add, same as the detail screen's "Add sold sets" flow

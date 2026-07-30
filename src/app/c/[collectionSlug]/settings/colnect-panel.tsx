@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/colnect";
 import type { ColnectMappingData } from "@/lib/colnect";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -79,10 +80,7 @@ function MappingForm({
           defaultValue={defaultAbbrev}
           disabled={isPending}
           placeholder="e.g. Pol"
-          autoComplete="off"
-          data-lpignore="true"
-          data-1p-ignore
-          data-bwignore
+          {...NO_AUTOFILL}
           style={{ ...INPUT_STYLE, maxWidth: "10rem" }}
         />
       </div>

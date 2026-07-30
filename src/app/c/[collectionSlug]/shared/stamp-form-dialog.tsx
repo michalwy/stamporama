@@ -34,6 +34,7 @@ import {
 } from "./translations-dialog";
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
+import { NO_AUTOFILL } from "./no-autofill";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
  * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
@@ -726,10 +727,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
                           type="text"
                           disabled={isPending}
                           placeholder="e.g. 1"
-                          autoComplete="off"
-                          data-lpignore="true"
-                          data-1p-ignore
-                          data-bwignore
+                          {...NO_AUTOFILL}
                           value={catalogInputs[v.catalogVendorId] ?? ""}
                           onChange={(e) =>
                             setCatalogInputs((prev) => ({
@@ -779,10 +777,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
                           disabled={isPending}
                           defaultValue={editProps?.stamp.colnectId ?? ""}
                           placeholder="item-ID"
-                          autoComplete="off"
-                          data-lpignore="true"
-                          data-1p-ignore
-                          data-bwignore
+                          {...NO_AUTOFILL}
                           style={{ ...INPUT_STYLE, flex: 1 }}
                         />
                       </div>

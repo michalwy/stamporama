@@ -30,6 +30,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 
 // Persisted collapse state for the area management tree, consistent with the area
 // filter tree (#81). Distinct key so the two trees collapse independently (#237).
@@ -523,10 +524,7 @@ function CollectionAreaForm({
                         onChange={(e) => updatePrefix(entry.catalogNameId, e.target.value)}
                         disabled={isPending}
                         placeholder="prefix"
-                        autoComplete="off"
-                        data-lpignore="true"
-                        data-1p-ignore
-                        data-bwignore
+                        {...NO_AUTOFILL}
                         style={{ ...INPUT_STYLE, width: "6rem", flex: "none", padding: "0.375rem 0.5rem", minHeight: "2rem", fontFamily: "monospace" }}
                       />
                       <button

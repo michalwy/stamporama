@@ -15,6 +15,7 @@ import {
 } from "../use-offers-query";
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
+import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferSetsView } from "./offer-sets-view";
@@ -100,6 +101,9 @@ interface OfferDetailPanelProps {
   collectionSlug: string;
   baseCurrency: string;
   offerId: string;
+  /** Server-computed "today", for the quick-sell flow's new-sale step (#390) — the same value the
+   * Offers list passes, so a sale started from either place defaults to the same date. */
+  today: string;
   areas: CollectionAreaData[];
   locations: LocationData[];
   issueHeaderById: Record<string, IssueHeader>;
@@ -118,6 +122,7 @@ export function OfferDetailPanel({
   collectionSlug,
   baseCurrency,
   offerId,
+  today,
   areas,
   locations,
   issueHeaderById,
@@ -130,6 +135,9 @@ export function OfferDetailPanel({
   const { invalidateAll } = useInvalidateOffers();
   const [composing, setComposing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  // Quick-sell (#390): the Offer list's own flow (#225), opened from here so recording a sale does
+  // not mean navigating back to the list first.
+  const [selling, setSelling] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
@@ -256,6 +264,11 @@ export function OfferDetailPanel({
       : offer.state === "active"
         ? [{ key: "mark-bidding", label: "Mark in active bidding", icon: "🔨", onSelect: () => setBidding(true) } as RowAction]
         : []),
+    // Same precondition as the list's entry: a terminal offer has nothing left to sell, and an
+    // offer holding no set has nothing to put on a sale line.
+    ...(editable && offer.sets.length > 0
+      ? [{ key: "sell", label: "Sell", icon: "💰", onSelect: () => setSelling(true) } as RowAction]
+      : []),
     { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
@@ -596,6 +609,26 @@ export function OfferDetailPanel({
           baseCurrency={baseCurrency}
           source={{ id: offerId, label: offer.label, setCount: offer.sets.length, price: offer.price, currency: offer.currency }}
           onClose={() => setDuplicating(false)}
+        />
+      )}
+
+      {/* Quick-sell (#390) — the Offer list's flow (#225), reached from the offer itself. */}
+      {selling && (
+        <SellOfferFlowDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          today={today}
+          offer={{
+            id: offerId,
+            name: offer.name,
+            label: offer.label,
+            platformId: offer.platformId,
+            platformName: offer.platformName,
+            price: offer.price,
+            currency: offer.currency,
+          }}
+          onClose={() => setSelling(false)}
         />
       )}
 

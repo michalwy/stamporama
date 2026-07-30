@@ -79,6 +79,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -3132,6 +3133,7 @@ function IntakeConditionDialog({
                     type="text"
                     placeholder="Ref, e.g. A234"
                     disabled={isPending || !locationId}
+                    {...NO_AUTOFILL}
                     style={INPUT_STYLE}
                   />
                 </div>

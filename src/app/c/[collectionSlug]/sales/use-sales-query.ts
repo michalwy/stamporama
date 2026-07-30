@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SaleListItem, SellableOffer, SaleCopyItem } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
+import type { SaleStatus } from "@/lib/sale-status";
 
 interface SalesPage {
   items: SaleListItem[];
@@ -11,6 +12,8 @@ interface SalesPage {
 
 export interface SaleFilters {
   platformId?: string;
+  /** Fulfillment status (#191) the list is narrowed to (#392), or undefined for all of them. */
+  status?: SaleStatus;
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
 }
@@ -28,6 +31,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.status) params.set("status", filters.status);
       if (filters.search) params.set("search", filters.search);
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch sales");

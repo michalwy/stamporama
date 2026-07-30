@@ -13,6 +13,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { deriveAuctionSaleName } from "@/lib/auction-rules";
 import type { AuctionLotLineRaw, AuctionLotRaw, AuctionSaleRaw } from "@/app/actions/auctions";
 import { AuctionLotLineDialog, type LineSelectionSummary } from "./auction-lot-line-dialog";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import {
   useAuctionSales,
   useOpenAuctionSale,
@@ -483,6 +484,7 @@ export function AuctionLotFormDialog({
                 value={lotNo}
                 onChange={(e) => setLotNo(e.target.value)}
                 placeholder="385"
+                {...NO_AUTOFILL}
                 style={INPUT_STYLE}
               />
             </div>

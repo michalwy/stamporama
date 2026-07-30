@@ -687,7 +687,8 @@ flags the twin on the other.
 ## Selling directly from the list
 
 The row's **⋮** menu carries a **Sell** action on any non-terminal offer that lists at least one
-set — a shortcut into recording a [sale](sales.md) without opening the offer's compose screen
+set — and the **same action sits in the ⋮ menu on the offer's own detail screen**, so a sale can be
+recorded from wherever you happen to be looking at the offer — a shortcut into recording a [sale](sales.md) without opening the offer's compose screen
 first. Choose where the sold sets go:
 
 - **an existing sale** already recorded on this offer's platform (in the same currency), or

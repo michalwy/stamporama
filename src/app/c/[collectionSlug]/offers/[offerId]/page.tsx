@@ -42,6 +42,9 @@ export default async function OfferDetailPage({ params }: OfferDetailPageProps) 
     getLocations(session.user.id, collection.id),
     getOfferIssueIds(offerId),
   ]);
+  // "Today" at request time, for the quick-sell flow's new-sale step (#390) — mirrors the list page.
+  const today = new Date().toISOString().slice(0, 10);
+
   const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
@@ -64,6 +67,7 @@ export default async function OfferDetailPage({ params }: OfferDetailPageProps) 
         collectionSlug={collectionSlug}
         baseCurrency={collection.baseCurrency}
         offerId={offerId}
+        today={today}
         areas={areas}
         locations={locations}
         issueHeaderById={issueHeaderById}

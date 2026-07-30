@@ -979,6 +979,10 @@ export interface ItemListItem {
   subtype: SubtypeLabel | null;
   /** True when the copy has at least one `ItemVariantHistory` entry (has been refined). */
   hasHistory: boolean;
+  /** True when the copy has left on a sale line (#166). Sold copies are hidden by default and only
+   * appear when *Include sold* is on (#207), which is exactly when the row needs to say so (#393).
+   * Soldness stays outside `isHeld` (#394) — it has its own mechanism at every reader. */
+  sold: boolean;
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
@@ -1071,7 +1075,9 @@ const ITEM_LIST_SELECT = {
   locationId: true,
   locationRef: true,
   createdAt: true,
-  _count: { select: { variantHistory: true } },
+  // `variantHistory` drives the "refined" marker; `saleLineItems` is the copy's soldness (#393) —
+  // the very relation `excludeSold` filters on (#207), so the chip and the filter cannot disagree.
+  _count: { select: { variantHistory: true, saleLineItems: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
@@ -1128,6 +1134,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
       isUnknownVariantStamp(row.stamp),
     subtype: subtypeLabel(row.stamp),
     hasHistory: row._count.variantHistory > 0,
+    sold: row._count.saleLineItems > 0,
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,
     issuedYear: row.stamp.issuedYear,

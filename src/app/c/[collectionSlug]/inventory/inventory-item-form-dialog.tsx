@@ -26,6 +26,7 @@ import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import {
   readAddCopyDefaults,
   writeAddCopyDefaults,
@@ -432,6 +433,7 @@ export function InventoryItemFormDialog({
                       placeholder="e.g. A234"
                       defaultValue={item?.locationRef ?? ""}
                       disabled={isPending || !locationId}
+                      {...NO_AUTOFILL}
                       style={INPUT_STYLE}
                     />
                   </div>

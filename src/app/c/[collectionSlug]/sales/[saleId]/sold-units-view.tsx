@@ -689,6 +689,15 @@ function EditableLinePrice({
   const [hovered, setHovered] = useState(false);
   const [draft, setDraft] = useState("");
   const cancelRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Select the figure when edit mode opens (#391), so the first keystroke replaces it instead of
+  // landing beside it — a line price is short and typically retyped whole. On *entering* edit mode
+  // only, the rule `InlineText`'s `selectOnEdit` follows (#329): clicking back into the field to
+  // fix one digit still puts the caret where it was clicked.
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
 
   function open() {
     setDraft(value);
@@ -710,6 +719,7 @@ function EditableLinePrice({
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
         <NumericInput
+          ref={inputRef}
           placeholder="0.00"
           autoFocus
           value={draft}

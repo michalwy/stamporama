@@ -64,7 +64,8 @@ price is never changed. **Add** records them all at once. You can come back and 
 or **Remove** one from its row menu.
 
 Already added a unit at the wrong price? On the **Sold units** list, click a unit's price to **edit
-it in place** (Enter or click away saves, Escape reverts) — again, only the sale record changes, and
+it in place** — the existing figure is selected as the editor opens, so typing replaces it outright
+(Enter or click away saves, Escape reverts) — again, only the sale record changes, and
 the gross, net, and any total-based buyer handling recompute automatically.
 
 A sale is **single-currency**, so only offers in the sale's currency can be added. If you changed
@@ -225,10 +226,16 @@ available again, and returns any offers it marked sold to **Active**.
 
 ## Finding a sale
 
-The Sales toolbar has a **search** box and a **platform** filter. Search matches the buyer name,
-the platform name, the order number, and the **name or catalog number of any copy** sold on the
-sale — so you can find a sale by what was in it, not just who bought it. The platform dropdown
-narrows the list to a single marketplace; the two combine.
+The Sales toolbar has a **search** box, a **platform** filter and a row of **status** chips.
+Search matches the buyer name, the platform name, the order number, and the **name or catalog
+number of any copy** sold on the sale — so you can find a sale by what was in it, not just who
+bought it. The platform dropdown narrows the list to a single marketplace, and a status chip to one
+[fulfillment step](#fulfillment-status) — "everything Paid but not yet Sent" is the packing queue.
+All three combine.
+
+Clicking the active status chip again clears it. The chip you picked is **remembered** for this
+collection and re-applied the next time you open the screen; a status named in the URL wins over it,
+so a link you share always shows what you meant it to.
 
 ## Related
 

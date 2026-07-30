@@ -19,6 +19,7 @@ import {
   useInvalidateOffers,
   type OfferFilters,
 } from "./use-offers-query";
+import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { OffersSummaryBar } from "./offers-summary-bar";
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
@@ -46,16 +47,6 @@ type DialogState =
 /** The stored value standing for the derived "needs action" overlay, which is not an `OfferState`
  *  and shares its slot with one (#325). No offer state can collide with it. */
 const NEEDS_ACTION = "needsAction";
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 interface OffersListPanelProps {
   collectionId: string;
@@ -242,7 +233,7 @@ export function OffersListPanel({
               rememberPlatformFilter(e.target.value);
               updateParams({ platform: e.target.value });
             }}
-            style={{ ...CONTROL_STYLE, cursor: "pointer" }}
+            style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
           >
             <option value="">
               {counts ? `All platforms (${counts.total})` : "All platforms"}
@@ -299,7 +290,7 @@ export function OffersListPanel({
             href={`/c/${collectionSlug}/offers/listing${platformId ? `?platform=${platformId}` : ""}`}
             title="Post the offers you have marked ready to their platform, one after another"
             style={{
-              ...CONTROL_STYLE,
+              ...FILTER_CONTROL_STYLE,
               display: "inline-flex",
               alignItems: "center",
               fontWeight: 600,
@@ -314,7 +305,7 @@ export function OffersListPanel({
               type="button"
               onClick={() => setDialog({ kind: "quickOffer" })}
               style={{
-                ...CONTROL_STYLE,
+                ...FILTER_CONTROL_STYLE,
                 cursor: "pointer",
                 fontWeight: 600,
               }}
@@ -326,7 +317,7 @@ export function OffersListPanel({
             type="button"
             onClick={() => setDialog({ kind: "add" })}
             style={{
-              ...CONTROL_STYLE,
+              ...FILTER_CONTROL_STYLE,
               cursor: "pointer",
               fontWeight: 600,
               color: "#fff",
@@ -510,57 +501,5 @@ export function OffersListPanel({
         />
       )}
     </div>
-  );
-}
-
-function FilterChip({
-  label,
-  count,
-  alarm,
-  active,
-  onClick,
-}: {
-  label: string;
-  /** Matching offers (#332), or undefined for a chip that carries no count (and while the first
-   *  count fetch is still in flight). */
-  count?: number;
-  /** Render in the error tint — an alarm the user should not have to click to notice. */
-  alarm?: boolean;
-  active: boolean;
-  onClick: () => void;
-}) {
-  // The active selection keeps the accent treatment; an alarming chip takes the error tint only
-  // while it is not the current selection, so "which filter am I on" stays readable.
-  const tint = active ? "accent" : alarm ? "error" : null;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...CONTROL_STYLE,
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        fontWeight: active || alarm ? 600 : 400,
-        color: tint ? `var(--color-${tint})` : "var(--color-text-secondary)",
-        borderColor: tint ? `var(--color-${tint})` : "var(--color-border-strong)",
-        background: tint ? `var(--color-${tint}-soft)` : "var(--color-bg-elevated)",
-      }}
-    >
-      {label}
-      {count !== undefined && (
-        <span
-          style={{
-            fontSize: "0.75rem",
-            fontVariantNumeric: "tabular-nums",
-            fontWeight: 600,
-            opacity: count === 0 ? 0.5 : 0.8,
-          }}
-        >
-          {count}
-        </span>
-      )}
-    </button>
   );
 }

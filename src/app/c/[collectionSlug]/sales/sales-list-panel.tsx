@@ -13,6 +13,10 @@ import {
   useInvalidateSales,
   type SaleFilters,
 } from "./use-sales-query";
+import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { SALE_STATUS_ORDER, SALE_STATUS_META } from "./sale-status";
+import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
 
@@ -20,16 +24,6 @@ type DialogState =
   | { kind: "none" }
   | { kind: "record" }
   | { kind: "delete"; sale: SaleListItem };
-
-const CONTROL_STYLE: React.CSSProperties = {
-  padding: "0.375rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  minHeight: "2rem",
-};
 
 interface SalesListPanelProps {
   collectionId: string;
@@ -49,7 +43,23 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
 
   const platformId = searchParams.get("platform") || undefined;
   const search = searchParams.get("search") || undefined;
-  const filters: SaleFilters = useMemo(() => ({ platformId, search }), [platformId, search]);
+
+  // Fulfillment-status filter (#392), remembered per collection (#325): the URL stays authoritative
+  // when it names one, so a link is still shareable, and a fresh navigation falls back to the last
+  // chip picked here. Every change writes both, so clearing the filter clears the memory of it too.
+  const [storedStatus, rememberStatusFilter] = usePersistedCollectionValue(
+    "sales-status",
+    collectionId
+  );
+  const statusParam = searchParams.has("status")
+    ? (searchParams.get("status") ?? "")
+    : (storedStatus ?? "");
+  const status = isSaleStatus(statusParam) ? statusParam : undefined;
+
+  const filters: SaleFilters = useMemo(
+    () => ({ platformId, status, search }),
+    [platformId, status, search]
+  );
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -139,7 +149,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           aria-label="Filter by platform"
           value={platformId ?? ""}
           onChange={(e) => updateParams({ platform: e.target.value })}
-          style={{ ...CONTROL_STYLE, cursor: "pointer" }}
+          style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
         >
           <option value="">All platforms</option>
           {platforms.map((p) => (
@@ -149,11 +159,31 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           ))}
         </select>
 
+        {/* Fulfillment status (#191/#392) — chips rather than a second select, so where a sale has
+            got to is readable without opening anything. */}
+        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+          {SALE_STATUS_ORDER.map((value) => {
+            const active = status === value;
+            return (
+              <FilterChip
+                key={value}
+                label={SALE_STATUS_META[value].label}
+                active={active}
+                onClick={() => {
+                  const next = active ? "" : value;
+                  rememberStatusFilter(next);
+                  updateParams({ status: next });
+                }}
+              />
+            );
+          })}
+        </div>
+
         <button
           type="button"
           onClick={() => setDialog({ kind: "record" })}
           style={{
-            ...CONTROL_STYLE,
+            ...FILTER_CONTROL_STYLE,
             marginLeft: "auto",
             cursor: "pointer",
             fontWeight: 600,
@@ -188,9 +218,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {search
               ? "No sales match your search."
-              : platformId
-                ? "No sales on this platform yet."
-                : "No sales yet. Record a sale when a listed lot sells on a marketplace."}
+              : status
+                ? `No ${SALE_STATUS_META[status].label.toLowerCase()} sales${platformId ? " on this platform" : ""}.`
+                : platformId
+                  ? "No sales on this platform yet."
+                  : "No sales yet. Record a sale when a listed lot sells on a marketplace."}
           </div>
         )}
 

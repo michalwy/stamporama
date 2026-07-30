@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/assistant";
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 
 // Settings → Assistant (#252, part of #155). Two ways to connect the browser extension to this
 // instance + collection:
@@ -404,10 +405,7 @@ export function AssistantPanel({
                   type="text"
                   disabled={isPending}
                   placeholder="e.g. Raspberry Pi, dev laptop"
-                  autoComplete="off"
-                  data-lpignore="true"
-                  data-1p-ignore
-                  data-bwignore
+                  {...NO_AUTOFILL}
                   style={INPUT_STYLE}
                 />
                 <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>

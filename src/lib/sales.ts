@@ -861,6 +861,8 @@ function toSaleListItem(
 
 export interface SaleListFilters {
   platformId?: string;
+  /** Fulfillment status (#191) to narrow to, for the list's status chips (#392). */
+  status?: SaleStatus;
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
   search?: string;
@@ -908,6 +910,7 @@ export async function listSalesPaginated(
     where: {
       collectionId,
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
       ...(filters.search ? saleSearchWhere(filters.search) : {}),
     },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],

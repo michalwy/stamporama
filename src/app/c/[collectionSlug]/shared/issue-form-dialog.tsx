@@ -39,6 +39,7 @@ import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -435,10 +436,7 @@ function IssueForm({
                         disabled={isPending}
                         placeholder={v.prefix ?? "Prefix"}
                         aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
-                        autoComplete="off"
-                        data-lpignore="true"
-                        data-1p-ignore
-                        data-bwignore
+                        {...NO_AUTOFILL}
                         style={{ ...INPUT_STYLE, width: "5.5rem" }}
                       />
                     </Tooltip>
@@ -452,10 +450,7 @@ function IssueForm({
                             defaultValue={existing?.firstNumber ?? ""}
                             disabled={isPending}
                             placeholder="First"
-                            autoComplete="off"
-                            data-lpignore="true"
-                            data-1p-ignore
-                            data-bwignore
+                            {...NO_AUTOFILL}
                             onKeyDown={(e) =>
                               advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
                             }
@@ -509,10 +504,7 @@ function IssueForm({
                       defaultValue={existing?.lastNumber ?? ""}
                       disabled={isPending}
                       placeholder="Last (optional)"
-                      autoComplete="off"
-                      data-lpignore="true"
-                      data-1p-ignore
-                      data-bwignore
+                      {...NO_AUTOFILL}
                       style={{ ...INPUT_STYLE, flex: 1 }}
                     />
                   </div>

@@ -102,7 +102,9 @@ Stamps, Copies, Offers, Sales and Purchases.
   for this collection, so the filter comes back the way you left it next time.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
-  to look up what a piece went for). The holdings totals and year panel follow this filter too.
+  to look up what a piece went for); each one then carries a **💰 Sold** chip, so a copy that has
+  left the collection is never mistaken for one still in it. The holdings totals and year panel
+  follow this filter too.
 - **Include no longer held** — copies you have marked as [no longer held](#copies-you-no-longer-hold)
   are **hidden by default**, for the same reason sold ones are: the list answers *what do I have*.
   Toggle this on to bring them back into view. The year panel follows this filter too; the holdings

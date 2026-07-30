@@ -79,6 +79,18 @@ function disposalChipStyle(reason: string | null): React.CSSProperties {
   };
 }
 
+/** Sold chip (#393), tinted like its sibling axes. `success` rather than the disposal chip's error
+ * tint: a copy that sold left the collection the way it was meant to — the chip states an outcome,
+ * it does not raise an alarm. */
+function soldChipStyle(): React.CSSProperties {
+  return {
+    ...CHIP,
+    color: "var(--color-success)",
+    borderColor: "var(--color-success-border)",
+    background: "var(--color-success-soft)",
+  };
+}
+
 const DISPOSITIONS = [
   { key: "inCollection", label: "In collection", token: "collection" },
   { key: "forSale", label: "For sale", token: "sale" },
@@ -686,6 +698,16 @@ export function InventoryItemRow({
               <span style={deliveryChipStyle(item.deliveryState)}>
                 {deliveryStateLabel(item.deliveryState)}
               </span>
+            </Tooltip>
+          )}
+          {/* Sold (#393). A sold copy is hidden until *Include sold* is on (#207), so the chip only
+              ever appears in the mixed view it exists for — where a row that has left the
+              collection is otherwise indistinguishable from one still in it. Chipped whenever it
+              applies, for the same reason the disposal chip below is: it is never the default, and
+              it changes how every other chip on the row should be read. */}
+          {item.sold && (
+            <Tooltip content="This copy has been sold and left the collection. It is only listed here because sold copies are being shown.">
+              <span style={soldChipStyle()}>💰 Sold</span>
             </Tooltip>
           )}
           {/* Disposal (#394/#395). Chipped whenever it applies — unlike delivery, where the
