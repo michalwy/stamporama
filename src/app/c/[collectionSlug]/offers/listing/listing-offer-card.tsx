@@ -375,9 +375,7 @@ export function ListingOfferCard({
         <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
       </div>
 
-      {handoff && (
-        <AssistantOutcome handoff={handoff} onDismiss={onDismissHandoff} onPublish={onPublish} />
-      )}
+      {handoff && <AssistantOutcome handoff={handoff} onDismiss={onDismissHandoff} />}
 
       {expanded && (
         <PostingKit
@@ -400,18 +398,16 @@ export function ListingOfferCard({
  * somewhere different; the filled fields are named in one muted line, because "what went in" is
  * checked in the form itself, which is now in front of the collector anyway.
  *
- * It does **not** publish anything. The form is filled but not submitted, so the offer is still Ready
- * and the listing does not exist yet — Publish is offered here as the next step, for once the platform
- * has taken it.
+ * It carries **no Publish of its own**. The form is filled but not submitted, so the offer is still
+ * Ready and the listing does not exist yet — and the card's own Publish is one line above, in view at
+ * the same time, so a second one here is the same button twice.
  */
 function AssistantOutcome({
   handoff,
   onDismiss,
-  onPublish,
 }: {
   handoff: AssistantHandoff;
   onDismiss: () => void;
-  onPublish: () => void;
 }) {
   const running = handoff.state === "loading" || handoff.state === "running";
   const tone =
@@ -449,14 +445,6 @@ function AssistantOutcome({
         >
           {handoff.message ?? (running ? "Working…" : "")}
         </span>
-        {handoff.state === "filled" && (
-          <Tooltip content="Posted it on the platform? Mark the offer live and record its URL">
-            <button type="button" onClick={onPublish} style={{ ...PUBLISH_BTN }}>
-              <span aria-hidden>▲</span>
-              Publish
-            </button>
-          </Tooltip>
-        )}
         {!running && (
           <Tooltip content="Dismiss" align="end">
             <button

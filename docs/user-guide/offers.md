@@ -722,7 +722,8 @@ When it is done the card says how it went, under the offer's line:
   platform's limit is skipped rather than cut short, for instance, because cutting it would mangle
   wording you chose.
 
-Then **Publish** from the same strip, once the platform has taken the listing.
+Then **Publish** on the card as usual, once the platform has taken the listing — the offer is still
+Ready until you do, because the form was filled but not submitted.
 
 One offer goes at a time — the Assistant puts the marketplace's tab in front, so a second would be two
 forms fighting over the same window. While one is running, the other cards say so.
