@@ -730,10 +730,16 @@ Where the platform is the one named as Colnect and nothing on the list above is 
 carries **⚡ List via Assistant** beside Publish. It is the same posting step with the typing done for
 you: the [Assistant](assistant.md) opens the platform's sale form in a new tab and fills it in from
 this offer — the items being sold, each copy's condition in the platform's own grades, the price, the
-number of sets and the two texts.
+number of sets and the two texts, and finally the offer's own pictures.
 
 **Nothing is submitted.** The form is filled and handed to you; you look it over and press the
-platform's own button. Photos are not uploaded either — download them from the card as usual.
+platform's own button.
+
+The pictures are attached **last**, once everything else is in — the same upload set, in the same
+order and under the same names as the offer's ZIP. Colnect posts each one as it is handed over, so
+going last is what keeps anything from reaching the marketplace before the form is complete in front
+of you. Whatever can't be attached is named in the report below, and the ZIP is still there to drag
+the rest in from.
 
 When it is done the card says how it went, under the offer's line:
 

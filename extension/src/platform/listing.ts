@@ -115,6 +115,14 @@ export interface ListingFillOutcome {
   skipped: ListingSkippedField[];
 }
 
+/** One image, fetched from the instance and ready to hand to a platform's own uploader (#411). The
+ *  `File` carries the upload name and mime the plan gave it (#314/#326), so a picture posted through
+ *  the Assistant is named exactly as one dragged in from the offer's ZIP. */
+export interface ListingPhotoFile {
+  photoId: string;
+  file: File;
+}
+
 /** The listing half of a module: how to reach the sale form, how to recognise it, and how to fill
  *  it. Filling **stops before submit** — the collector clicks the platform's own button, so nothing
  *  is posted to a marketplace without a human look (#408). */
@@ -143,4 +151,20 @@ export interface PlatformListing {
    * tracking parameter is not part of the record.
    */
   listedUrl(url: string): string | null;
+  /**
+   * Put the offer's rendered images into the form's own uploader, in upload order, and stop (#411).
+   *
+   * **Optional**, like the listing half itself: a sale form with no pictures is a form this module
+   * fills completely, and the shell then fetches no bytes and says nothing about photos. The absence
+   * is a fact about the platform, not a gap.
+   *
+   * Called **after** {@link fill} and never instead of it. On Colnect the uploader posts each
+   * picture the moment it is handed over — before the sale is saved (#402) — so this is the last
+   * thing that happens in a run, with the filled form already in front of the collector: everything
+   * that can still be decided has been decided by the time anything is written to the marketplace.
+   *
+   * Reports rather than throws, exactly as {@link fill} does: a picture the uploader will not take is
+   * one the collector drags in from the offer's ZIP, and the rest of the filled form must survive it.
+   */
+  attachPhotos?(doc: Document, photos: readonly ListingPhotoFile[]): ListingFillOutcome;
 }

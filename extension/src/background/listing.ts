@@ -1,13 +1,16 @@
 import "../platform/modules"; // registers the shipped platform modules into this bundle's registry
-import { resolveListedUrl, resolveListingTarget } from "../platform/listing-run";
+import { resolveListedUrl, resolveListingTarget, selectListingPhotos } from "../platform/listing-run";
 import type {
+  AttachPhotosRequest,
+  AttachPhotosResponse,
   FillRequest,
   FillResponse,
   ListedNotice,
   ListedResponse,
   ListResponse,
 } from "../core/messages";
-import type { ListingTask } from "../platform/listing";
+import type { ListingFillOutcome, ListingSkippedField, ListingTask } from "../platform/listing";
+import { fetchListingPhotos } from "./photo-client";
 import {
   forgetPendingListing,
   getPendingListing,
@@ -46,6 +49,11 @@ export async function runListingTask(
   const target = resolveListingTarget(task);
   if (!target.ok) return { ok: false, error: target.error };
 
+  // The pictures are fetched **while the sale form loads** (#411) — from Stamporama, which is not the
+  // marketplace, so nothing about this reaches the platform. What they are handed to, and when, is
+  // decided further down, after the form is filled.
+  const photos = loadListingPhotos(task, originOf(sender?.url));
+
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.create({
@@ -76,7 +84,9 @@ export async function runListingTask(
 
     // The form is filled and the collector takes over. What they do next — Save, or nothing at all —
     // happens in their own time, long after this worker has been unloaded, so the wait is written
-    // down rather than held (#412).
+    // down rather than held (#412). Written **before** the pictures go in: uploading them takes
+    // seconds during which the collector can already press Save, and this record is what turns that
+    // into a listed URL.
     await rememberPendingListing({
       tabId: tab.id,
       moduleId: res.moduleId,
@@ -91,16 +101,107 @@ export async function runListingTask(
       filledAt: Date.now(),
     });
 
+    // Pictures last, and only now: Colnect posts each one the moment it is handed over, before the
+    // sale is saved (#402), so this is the first thing in the run that writes to the marketplace at
+    // all — and it happens with a filled form already in front of the collector.
+    const outcome = mergeOutcomes(
+      res.outcome,
+      await attachPhotos(tab.id, res.moduleId, await photos)
+    );
+
     return {
       ok: true,
       moduleId: res.moduleId,
       moduleName: res.moduleName,
       formUrl: target.url,
-      outcome: res.outcome,
+      outcome,
     };
   } catch (e) {
     return { ok: false, error: message(e) };
   }
+}
+
+/** What one listing hands over: the images that were fetched, and the report for every one that was
+ *  not — the plan's own reasons and the fetch's failures together, since the collector fixes each of
+ *  them somewhere different. */
+interface LoadedListingPhotos {
+  photos: AttachPhotosRequest["photos"];
+  skipped: ListingSkippedField[];
+}
+
+/**
+ * Fetch this task's pictures from the instance the handoff came from (#411).
+ *
+ * The connection is named exactly as the write-back names it (#412): the page's **origin** plus the
+ * task's **collection**, the only pair that identifies one connection — so the token used is the one
+ * the collector issued from the very collection this offer belongs to.
+ *
+ * Every failure is a report and never a refusal: the form is filled either way, and the fallback the
+ * scope asks for is dragging the offer's ZIP in, not redoing the listing.
+ */
+async function loadListingPhotos(
+  task: ListingTask,
+  origin: string | null
+): Promise<LoadedListingPhotos> {
+  const selection = selectListingPhotos(task);
+  if (selection.images.length === 0) return { photos: [], skipped: selection.skipped };
+
+  const refused = (reason: string): LoadedListingPhotos => ({
+    photos: [],
+    skipped: [...selection.skipped, { field: "Pictures", reason }],
+  });
+  try {
+    const profile = await profileForListing(origin, task.collectionId);
+    if (!profile) {
+      return refused("This Assistant holds no connection to the Stamporama the offer came from.");
+    }
+    const fetched = await fetchListingPhotos(profile, selection.images);
+    return { photos: fetched.photos, skipped: [...selection.skipped, ...fetched.skipped] };
+  } catch (e) {
+    return refused(`Stamporama would not hand the pictures over: ${message(e)}`);
+  }
+}
+
+/**
+ * Hand the fetched pictures to the page that now holds the filled form, and report what it did with
+ * them (#411).
+ *
+ * Nothing fetched is not silence in itself — the plan may have had reasons — so the loader's own
+ * report always comes back, whether or not there was anything to attach.
+ */
+async function attachPhotos(
+  tabId: number,
+  moduleId: string,
+  loaded: LoadedListingPhotos
+): Promise<ListingFillOutcome> {
+  const reported: ListingFillOutcome = { filled: [], skipped: loaded.skipped };
+  if (loaded.photos.length === 0) return reported;
+  try {
+    const res = (await chrome.tabs.sendMessage(tabId, {
+      type: "attach-photos",
+      moduleId,
+      photos: loaded.photos,
+    } satisfies AttachPhotosRequest)) as AttachPhotosResponse;
+    if (!res.ok) {
+      reported.skipped.push({ field: "Pictures", reason: res.error });
+      return reported;
+    }
+    return mergeOutcomes(reported, res.outcome);
+  } catch (e) {
+    // The tab may have been closed while the bytes were on their way — the collector's own answer to
+    // a listing they changed their mind about, and one that has posted nothing.
+    reported.skipped.push({ field: "Pictures", reason: message(e) });
+    return reported;
+  }
+}
+
+/** The fill's report and the pictures' report, in that order: the fields the collector reads first
+ *  are the ones the form is filled with. */
+function mergeOutcomes(first: ListingFillOutcome, second: ListingFillOutcome): ListingFillOutcome {
+  return {
+    filled: [...first.filled, ...second.filled],
+    skipped: [...first.skipped, ...second.skipped],
+  };
 }
 
 /**

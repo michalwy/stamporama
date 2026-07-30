@@ -1,9 +1,12 @@
 import { findModuleForUrl } from "../platform/modules";
-import { fillListing } from "../platform/listing-run";
+import { attachListingPhotos, fillListing } from "../platform/listing-run";
 import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
 import { getProfileStore } from "../core/profile";
 import iconUrl from "../../icons/icon-16.png";
 import type {
+  AttachPhotoPayload,
+  AttachPhotosRequest,
+  AttachPhotosResponse,
   DetectedNotice,
   ExtractRequest,
   ExtractResponse,
@@ -11,6 +14,7 @@ import type {
   FillResponse,
   ListingSubmittedNotice,
 } from "../core/messages";
+import type { ListingPhotoFile } from "../platform/listing";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
 //   • declaratively on Colnect pages (manifest `content_scripts`) — so the toolbar badge can show
@@ -110,6 +114,23 @@ function watchForSubmit(): void {
 }
 
 /**
+ * Turn one messaged image back into a `File` (#411).
+ *
+ * Built here rather than in the worker because a `File` does not survive extension messaging, and
+ * because this is the realm the form lives in: the object a page's uploader receives should have been
+ * made by the same window as the page it is handed to.
+ */
+function toFile(photo: AttachPhotoPayload): ListingPhotoFile {
+  const binary = atob(photo.data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return {
+    photoId: photo.photoId,
+    file: new File([bytes], photo.fileName, { type: photo.mime }),
+  };
+}
+
+/**
  * Make the Stamporama link in a Colnect **private note** clickable (#417).
  *
  * Colnect prints the note as text in one dedicated element on a sale page, so the `{offerUrl}` a
@@ -149,6 +170,26 @@ if (!window.__stamporamaAssistantLoaded) {
             }
           : { ok: false, error: result.error }
       );
+    }
+  );
+
+  // The pictures, once the form is filled (#411). Deliberately a second message and deliberately
+  // last: Colnect's uploader posts each picture the moment it is handed over, before the sale is
+  // saved, so the form in front of the collector is complete before anything is written there.
+  chrome.runtime.onMessage.addListener(
+    (msg: AttachPhotosRequest, _sender, sendResponse: (r: AttachPhotosResponse) => void) => {
+      if (msg?.type !== "attach-photos") return;
+      try {
+        const result = attachListingPhotos(
+          msg.moduleId,
+          document,
+          location.href,
+          msg.photos.map(toFile)
+        );
+        sendResponse(result);
+      } catch (e) {
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
     }
   );
 

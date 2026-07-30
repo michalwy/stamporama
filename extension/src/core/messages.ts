@@ -25,6 +25,31 @@ export type FillResponse =
   | { ok: true; moduleId: string; moduleName: string; outcome: ListingFillOutcome }
   | { ok: false; error: string };
 
+// background → content script, **after** the fill and on the same page (#411): the offer's rendered
+// images, for the module to hand to the form's own uploader. A second message rather than part of
+// `FillRequest`, because the two steps must be ordered — Colnect uploads a picture the moment it is
+// handed over, before the sale is saved, so nothing goes to the marketplace until the form the
+// collector is looking at is otherwise complete.
+//
+// The bytes are base64: extension messaging is JSON, and a `File` does not survive it. The page turns
+// them back into `File`s, which is also where they belong — the form is there.
+export interface AttachPhotosRequest {
+  type: "attach-photos";
+  /** The module that filled this page, as its own answer named it. */
+  moduleId: string;
+  photos: AttachPhotoPayload[];
+}
+export interface AttachPhotoPayload {
+  photoId: string;
+  fileName: string;
+  mime: string;
+  /** The image's bytes, base64. */
+  data: string;
+}
+export type AttachPhotosResponse =
+  | { ok: true; outcome: ListingFillOutcome }
+  | { ok: false; error: string };
+
 // popup → background service worker
 export interface MatchRequest {
   type: "match";

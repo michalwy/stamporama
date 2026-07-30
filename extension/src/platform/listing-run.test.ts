@@ -1,9 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerPlatformModule, findListingModule, moduleReports } from "./registry";
-import { fillListing, resolveListedUrl, resolveListingTarget } from "./listing-run";
+import {
+  attachListingPhotos,
+  fillListing,
+  resolveListedUrl,
+  resolveListingTarget,
+  selectListingPhotos,
+} from "./listing-run";
 import type { PlatformModule } from "./module";
-import type { ListingTask } from "./listing";
+import type { ListingPhotoFile, ListingTask, ListingTaskPhoto } from "./listing";
 
 // The shell driving a listing task through a module it knows nothing about (#408). The fake modules
 // below are the whole point: the driver is exercised against a marketplace that does not exist, so
@@ -22,6 +28,25 @@ const listingModule: PlatformModule = {
       skipped: [{ field: "Title", reason: "FakeMarket has no title field." }],
     }),
     listedUrl: (url) => (url.startsWith("https://fake.test/listing/") ? url : null),
+    attachPhotos: (_doc, photos) => ({
+      filled: [{ field: "Pictures", value: photos.map((p) => p.file.name).join(", ") }],
+      skipped: [],
+    }),
+  },
+};
+
+/** A marketplace whose sale form takes no pictures — a complete module, and the case the shell must
+ *  answer with silence rather than with a gap (#411). */
+const noPicturesModule: PlatformModule = {
+  id: "no-pictures-market",
+  name: "NoPicturesMarket",
+  matches: (url) => url.startsWith("https://no-pictures.test/"),
+  extract: () => [],
+  listing: {
+    formUrl: () => "https://no-pictures.test/sell",
+    isFormUrl: (url) => url.startsWith("https://no-pictures.test/sell"),
+    fill: () => ({ filled: [], skipped: [] }),
+    listedUrl: () => null,
   },
 };
 
@@ -34,6 +59,25 @@ const readOnlyModule: PlatformModule = {
 
 registerPlatformModule(listingModule);
 registerPlatformModule(readOnlyModule);
+registerPlatformModule(noPicturesModule);
+
+/** One image of a plan, at a size the caller can reason about. */
+function image(fileName: string, sizeBytes: number): ListingTaskPhoto {
+  return {
+    photoId: fileName,
+    url: `/api/collections/c1/photos/${fileName}/full`,
+    fileName,
+    mime: "image/jpeg",
+    width: 800,
+    height: 600,
+    sizeBytes,
+  };
+}
+
+/** A fetched image, as the page hands it to a module. `File` is enough of one for the fakes here. */
+function photoFile(name: string): ListingPhotoFile {
+  return { photoId: name, file: { name, type: "image/jpeg" } as File };
+}
 
 function task(module: string | null, overrides: Partial<ListingTask> = {}): ListingTask {
   return {
@@ -133,6 +177,154 @@ test("a module throwing on unexpected DOM comes back as a refusal", () => {
   });
   const result = fillListing(task("broken-market"), noDoc, "https://broken.test/sell");
   assert.deepEqual(result, { ok: false, error: "Price field not found." });
+});
+
+// ── Pictures (#411) ──────────────────────────────────────────────────────────
+
+test("a ready plan hands its images over in upload order", () => {
+  const selection = selectListingPhotos(
+    task("fake-market", {
+      photos: {
+        status: "ready",
+        outOfDate: false,
+        images: [image("o-01.jpg", 1000), image("o-02.jpg", 1000)],
+      },
+    })
+  );
+  assert.deepEqual(
+    selection.images.map((i) => i.fileName),
+    ["o-01.jpg", "o-02.jpg"]
+  );
+  assert.deepEqual(selection.skipped, []);
+});
+
+test("a platform whose form takes no pictures is silence, not a gap", () => {
+  const selection = selectListingPhotos(
+    task("no-pictures-market", {
+      photos: { status: "ready", outOfDate: false, images: [image("o-01.jpg", 1000)] },
+    })
+  );
+  assert.deepEqual(selection, { images: [], skipped: [] });
+});
+
+test("a plan still rendering is reported, and costs no fetch", () => {
+  for (const status of ["queued", "running"] as const) {
+    const selection = selectListingPhotos(
+      task("fake-market", { photos: { status, outOfDate: false, images: [] } })
+    );
+    assert.deepEqual(selection.images, []);
+    assert.match(selection.skipped[0]?.reason ?? "", /still rendering/);
+  }
+});
+
+test("an offer with no pictures at all is not a gap either", () => {
+  const selection = selectListingPhotos(
+    task("fake-market", { photos: { status: "ready", outOfDate: false, images: [] } })
+  );
+  assert.deepEqual(selection, { images: [], skipped: [] });
+});
+
+test("an out-of-date render is attached, not withheld", () => {
+  const selection = selectListingPhotos(
+    task("fake-market", {
+      photos: { status: "ready", outOfDate: true, images: [image("o-01.jpg", 1000)] },
+    })
+  );
+  assert.deepEqual(
+    selection.images.map((i) => i.fileName),
+    ["o-01.jpg"]
+  );
+  assert.deepEqual(selection.skipped, []);
+});
+
+test("a set past the run's budget fills from the front and names the rest", () => {
+  const selection = selectListingPhotos(
+    task("fake-market", {
+      photos: {
+        status: "ready",
+        outOfDate: false,
+        images: [image("o-01.jpg", 600), image("o-02.jpg", 600), image("o-03.jpg", 600)],
+      },
+    }),
+    1000
+  );
+  // The plan's order is the priority order (#313), so the budget protects nothing at the back.
+  assert.deepEqual(
+    selection.images.map((i) => i.fileName),
+    ["o-01.jpg"]
+  );
+  assert.equal(selection.skipped.length, 1);
+  assert.match(selection.skipped[0].field, /o-02\.jpg, o-03\.jpg/);
+});
+
+test("one image larger than the whole budget still goes, rather than nothing going", () => {
+  const selection = selectListingPhotos(
+    task("fake-market", {
+      photos: { status: "ready", outOfDate: false, images: [image("o-01.jpg", 5000)] },
+    }),
+    1000
+  );
+  assert.deepEqual(
+    selection.images.map((i) => i.fileName),
+    ["o-01.jpg"]
+  );
+});
+
+test("pictures are attached through the module that filled the form", () => {
+  const result = attachListingPhotos("fake-market", noDoc, "https://fake.test/sell?offer=o1", [
+    photoFile("o-01.jpg"),
+    photoFile("o-02.jpg"),
+  ]);
+  assert.deepEqual(result, {
+    ok: true,
+    outcome: { filled: [{ field: "Pictures", value: "o-01.jpg, o-02.jpg" }], skipped: [] },
+  });
+});
+
+test("pictures never go to a page that is not the sale form", () => {
+  const result = attachListingPhotos("fake-market", noDoc, "https://fake.test/account/login", [
+    photoFile("o-01.jpg"),
+  ]);
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.error, /not FakeMarket's listing form/);
+});
+
+test("a module with no uploader answers with an empty report, not a refusal", () => {
+  const result = attachListingPhotos("no-pictures-market", noDoc, "https://no-pictures.test/sell", [
+    photoFile("o-01.jpg"),
+  ]);
+  assert.deepEqual(result, { ok: true, outcome: { filled: [], skipped: [] } });
+});
+
+test("a module throwing while attaching leaves the filled form standing", () => {
+  registerPlatformModule({
+    id: "broken-pictures-market",
+    name: "BrokenPicturesMarket",
+    matches: () => false,
+    extract: () => [],
+    listing: {
+      formUrl: () => "https://broken-pictures.test/sell",
+      isFormUrl: () => true,
+      fill: () => ({ filled: [], skipped: [] }),
+      listedUrl: () => null,
+      attachPhotos: () => {
+        throw new Error("The uploader is not on this page.");
+      },
+    },
+  });
+  const result = attachListingPhotos(
+    "broken-pictures-market",
+    noDoc,
+    "https://broken-pictures.test/sell",
+    [photoFile("o-01.jpg")]
+  );
+  assert.deepEqual(result, {
+    ok: true,
+    outcome: {
+      filled: [],
+      skipped: [{ field: "Pictures", reason: "The uploader is not on this page." }],
+    },
+  });
 });
 
 // ── Reading the listing back (#412) ──────────────────────────────────────────

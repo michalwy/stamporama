@@ -58,10 +58,24 @@ The Assistant also works the other way round: **⚡ List via Assistant** on a re
 platform's sale form in a new tab and fills it in — the items being sold, each copy's condition in the
 platform's own grades, the price, the number of sets and the two texts.
 
-It **never submits**. The form is filled and left in front of you to check and post yourself, and no
-photos are uploaded. When it is done, the offer's card in Stamporama lists what was filled and what
-was skipped, so a field it couldn't answer — a condition with no grade on that platform, a text over
-the platform's limit — is something you learn there rather than after posting.
+It **never submits**. The form is filled and left in front of you to check and post yourself. When it
+is done, the offer's card in Stamporama lists what was filled and what was skipped, so a field it
+couldn't answer — a condition with no grade on that platform, a text over the platform's limit — is
+something you learn there rather than after posting.
+
+### The pictures go in too
+
+Your offer's rendered images are attached as the **last** step, once every other field is in: the same
+set, in the same order, under the same file names as the offer's ZIP — what you marked do-not-publish
+and anything past the platform's photo limit are left out here exactly as they are left out there.
+
+They go in last on purpose. Colnect uploads a picture the moment it is handed over, before the sale is
+saved, so nothing reaches the marketplace until the filled form is in front of you. You will see the
+thumbnails appear in Colnect's own uploader — that, rather than the report, is what says they arrived.
+
+If some of them can't be attached, the report says which and why, and the rest of the filled form is
+left alone: download the offer's ZIP and drag the missing ones in. The common reasons are that the
+offer's pictures haven't been generated in Stamporama yet, or are still rendering.
 
 ### When you post it, the offer goes live by itself
 

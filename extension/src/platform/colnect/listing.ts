@@ -2,6 +2,7 @@ import type {
   ListingFilledField,
   ListingSkippedField,
   ListingFillOutcome,
+  ListingPhotoFile,
   ListingTask,
   ListingTaskItem,
   PlatformListing,
@@ -299,10 +300,141 @@ export function colnectListedSaleUrl(url: string): string | null {
   return `${u.origin}${u.pathname}`;
 }
 
-/** The Colnect module's listing half (#410, closed off by #412). */
+// ---------------------------------------------------------------------------------------------
+// Pictures (#411)
+// ---------------------------------------------------------------------------------------------
+//
+// The uploader is a Dropzone, but there is a real `<input type="file" multiple>` behind it (#402),
+// so the offer's rendered images go in the way a drop would put them there: a `DataTransfer`, then
+// `change`, and Colnect's own script does the uploading.
+//
+// It uploads **immediately**, over AJAX, before the sale is saved — the first picture mints the
+// draft `sale_id` the rest are posted against. That is the whole reason this runs last, after every
+// other field is in: by the time anything is written to Colnect, the collector is looking at a form
+// with nothing left to decide.
+
+/** How the report names the picture step, matching the neutral shell's own label. */
+const PICTURES_FIELD = "Pictures";
+
+/**
+ * The sale form's real file input, behind the Dropzone.
+ *
+ * Found **structurally** rather than by name: #402 mapped the form field by field and this control
+ * is the one thing in it Colnect does not address by a `new_sale[...]` name, so there is no stable
+ * name to match on. An `accept` naming picture types is what identifies it; the first file input on
+ * the page is the fallback, since the sale form has exactly one.
+ */
+export function colnectPictureInput(doc: Document): HTMLInputElement | null {
+  const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+  return inputs.find((el) => /jpe?g|png|gif|image/i.test(el.getAttribute("accept") ?? "")) ?? inputs[0] ?? null;
+}
+
+/**
+ * True when the input's own `accept` covers this file — by extension or by mime, both being legal in
+ * one `accept` list.
+ *
+ * The check is the platform's answer to "would a drop of this file be taken", asked before anything
+ * is uploaded: Colnect accepts `.jpg/.jpeg/.png/.gif` (#402) and a plan may hold something else, and
+ * a picture silently dropped by the page is a listing that quietly went up without it. An input that
+ * states no `accept` accepts everything, which is what the attribute's absence means in HTML.
+ */
+export function colnectAcceptsPicture(accept: string | null, fileName: string, mime: string): boolean {
+  const rules = (accept ?? "")
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  if (rules.length === 0) return true;
+  const name = fileName.toLowerCase();
+  const type = mime.toLowerCase();
+  return rules.some((rule) => {
+    if (rule.startsWith(".")) return name.endsWith(rule);
+    if (rule.endsWith("/*")) return type.startsWith(rule.slice(0, -1));
+    return type === rule;
+  });
+}
+
+/**
+ * Hand `photos` to the Dropzone's own input, in upload order, and stop (#411).
+ *
+ * Reports rather than throws, like every other step: a picture the form will not take is one the
+ * collector drags in from the offer's ZIP, and the filled form has to survive that. The report says
+ * the pictures were **handed over**, not that they arrived — the upload is Colnect's own AJAX and the
+ * thumbnails appearing in the Dropzone are what confirms it, right where the collector is looking.
+ */
+export function attachColnectPictures(
+  doc: Document,
+  photos: readonly ListingPhotoFile[]
+): ListingFillOutcome {
+  const report = new FillReport();
+  if (photos.length === 0) return report.outcome();
+
+  const input = colnectPictureInput(doc);
+  if (!input) {
+    report.skip(PICTURES_FIELD, `Colnect's picture uploader is not on this page.`);
+    return report.outcome();
+  }
+  if (input.disabled) {
+    report.skip(
+      PICTURES_FIELD,
+      `Colnect has picture upload switched off — "Open a separate sale listing for each item" does that.`
+    );
+    return report.outcome();
+  }
+
+  const accept = input.getAttribute("accept");
+  const taken: ListingPhotoFile[] = [];
+  for (const photo of photos) {
+    if (colnectAcceptsPicture(accept, photo.file.name, photo.file.type)) {
+      taken.push(photo);
+      continue;
+    }
+    report.skip(
+      `${PICTURES_FIELD} — ${photo.file.name}`,
+      `Colnect's uploader does not take ${photo.file.type || "this file type"}.`
+    );
+  }
+  if (taken.length === 0) return report.outcome();
+
+  // One `multiple` input takes the whole run; without it the form is a one-picture form and saying so
+  // beats uploading the first image and losing the rest without a word. Property first and attribute
+  // second, as the separate-listings check reads its own tickbox: a DOM without the property is not a
+  // form that refuses several pictures.
+  const multiple = typeof input.multiple === "boolean" ? input.multiple : input.hasAttribute("multiple");
+  if (!multiple && taken.length > 1) {
+    report.skip(
+      `${PICTURES_FIELD} — ${taken.slice(1).map((p) => p.file.name).join(", ")}`,
+      `Colnect's uploader takes one picture at a time on this page.`
+    );
+    taken.length = 1;
+  }
+
+  putFiles(input, taken.map((p) => p.file));
+  dispatch(input, "change");
+  report.fill(PICTURES_FIELD, `${taken.length} handed to Colnect's uploader`);
+  return report.outcome();
+}
+
+/**
+ * Put `files` into a file input the way a drop does — through a `DataTransfer`, which is the only
+ * assignable source of a `FileList`.
+ *
+ * Built from the document's own window where there is one, exactly as {@link dispatch} builds its
+ * `Event`: the input belongs to the page, and a value handed to it should come from the page's realm.
+ */
+function putFiles(input: HTMLInputElement, files: File[]): void {
+  const view = input.ownerDocument?.defaultView as { DataTransfer?: typeof DataTransfer } | null;
+  const Ctor = view?.DataTransfer ?? (globalThis as { DataTransfer?: typeof DataTransfer }).DataTransfer;
+  if (!Ctor) throw new Error("This browser will not let the Assistant attach files to a form.");
+  const dt = new Ctor();
+  for (const file of files) dt.items.add(file);
+  input.files = dt.files;
+}
+
+/** The Colnect module's listing half (#410, closed off by #412, pictures in #411). */
 export const colnectListing: PlatformListing = {
   formUrl: colnectSaleFormUrl,
   isFormUrl: isColnectSaleFormUrl,
   fill: fillColnectSaleForm,
   listedUrl: colnectListedSaleUrl,
+  attachPhotos: attachColnectPictures,
 };
