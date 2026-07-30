@@ -1,0 +1,260 @@
+import "server-only";
+import { prisma } from "./db";
+import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
+import { loadColnectConditionMap } from "./colnect";
+import { colnectGradeFor } from "./colnect-conditions";
+import {
+  getOfferPhotoPlanState,
+  type OfferPhotoGenerationStatus,
+} from "./offer-photo-generation";
+import { evaluateListingPreconditions, type ListingBlocker } from "./listing-preconditions";
+import type { OfferState } from "./offer-rules";
+import type { DescriptionFormat } from "./description-format";
+
+// The **listing kit** (#405, part of #155): everything one offer wants filled into a marketplace
+// sale form, in one read. The Assistant already talks to the matching endpoints (#250); posting
+// needs the offer side, and it needs it as a single call because the extension has no way to
+// assemble a listing out of five round-trips while a form sits open.
+//
+// **Platform-neutral in shape**: this says what the listing *holds* — catalog item-IDs, graded
+// conditions, a quantity, a price, the two texts, the photos in upload order — never how any one
+// platform's form is laid out. Which field each value goes in belongs to the platform module in the
+// extension (#408/#410).
+//
+// One Colnect-shaped assumption is unavoidable today and is deliberately confined here: the grade
+// vocabulary comes from the collection's Colnect condition mapping (#404), which is per collection
+// rather than per platform because Colnect's list is fixed and global (#402). A second marketplace
+// bringing its own vocabulary is what would turn `platformCondition` into a per-platform lookup —
+// nothing else in this shape would move.
+
+/** One copy of the listing, with the two platform-side values a form needs for it. Both are
+ *  nullable, and both being non-null on every copy is exactly what the preconditions check. */
+export interface ListingKitItem {
+  itemId: string;
+  /** The collection's own copy number (#268), so a filled form can be traced back to the piece. */
+  itemNo: number;
+  stampId: string;
+  /** The copy's label — its leading catalog number (#379). */
+  label: string;
+  /** The platform's catalog item-ID (Colnect's item-ID, #247), or null when the stamp has none. */
+  catalogItemId: string | null;
+  condition: ListingKitCondition;
+}
+
+/** A copy's condition, ours and the platform's side by side: the local pair is what a message names
+ *  it by, the platform pair is what the form submits. */
+export interface ListingKitCondition {
+  id: string;
+  name: string;
+  abbreviation: string;
+  /** The option value the platform's form submits (#404), or null when the condition is unmapped. */
+  platformValue: string | null;
+  /** What that value renders as on the platform's form. Null with the value. */
+  platformLabel: string | null;
+}
+
+/** One image of the upload run, as something the caller can fetch. */
+export interface ListingKitPhoto {
+  photoId: string;
+  /** Instance-relative path to the bytes. The photo route takes the Assistant token (#253), so the
+   *  extension fetches it with the same bearer it read this kit with; it is a path rather than an
+   *  absolute URL because the caller already knows the instance origin it asked. */
+  url: string;
+  /** The name the file takes on upload — `<offer>-01.jpg`… in upload order (#314/#326). */
+  fileName: string;
+  mime: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+}
+
+/** The offer's photos as a listing needs them: the upload set only, in upload order, plus the two
+ *  signals that say whether it is worth uploading yet. */
+export interface ListingKitPhotos {
+  /** The generation job's state (#311). `ready` with an empty `images` is an offer whose plan
+   *  produced nothing; anything else means the run has not finished. */
+  status: OfferPhotoGenerationStatus;
+  /** The stored images were rendered from inputs that have since changed (#311). A signal, never a
+   *  refusal: what is stored is still a truthful set of pictures of these stamps, and a collector who
+   *  wants the newer ones regenerates first. */
+  outOfDate: boolean;
+  /** The upload set in upload order (#313): what the collector marked do-not-publish and what falls
+   *  past the platform's photo limit are both left out, exactly as the plan's ZIP leaves them out. */
+  images: ListingKitPhoto[];
+}
+
+export interface OfferListingKit {
+  offerId: string;
+  collectionId: string;
+  state: OfferState;
+  platform: { id: string; name: string };
+  /** The listing title (#209) — the stored one, falling back to the derived label as every surface
+   *  does. Carried because a listing has a title on most platforms; Colnect's own sale form has no
+   *  title field (#402) and its module simply ignores this. */
+  title: string;
+  /** The generated description and seller-only private note (#266/#267) as they stand — a text the
+   *  collector wrote by hand is what they wrote, and this is a read. Null when the platform has no
+   *  template for the field and nothing was written. */
+  description: string | null;
+  privateNote: string | null;
+  /** How the description is written (#319), so the module knows whether the field takes markup. */
+  descriptionFormat: DescriptionFormat;
+  price: string;
+  /** The offer's currency, which on a platform that locks one (#196) is the platform's. */
+  currency: string;
+  /** How many of this listing there are — the number of sets. Truthful only over interchangeable
+   *  sets, which is what the `mixed-sets` precondition guarantees; `items` describes one of them. */
+  quantity: number;
+  /** One set's copies in listing order — what a single buyer takes. */
+  items: ListingKitItem[];
+  photos: ListingKitPhotos;
+  /** Empty on a servable kit. Populated, this is why the offer cannot be listed (#406) — the same
+   *  list the workspace card shows, so the two can never disagree. */
+  blockers: ListingBlocker[];
+}
+
+const KIT_ITEM_SELECT = {
+  itemId: true,
+  sortOrder: true,
+  item: {
+    select: {
+      itemNo: true,
+      stampId: true,
+      conditionId: true,
+      condition: { select: { name: true, abbreviation: true } },
+      // The label fields (#379) plus the one external identifier the form points at (#247).
+      stamp: { select: { ...STAMP_LABEL_SELECT.stamp.select, colnectId: true } },
+    },
+  },
+} as const;
+
+/**
+ * The listing kit for one offer, or null when it does not exist in this collection or the caller
+ * does not own it — the endpoint's 404, kept indistinguishable from "no such offer" on purpose.
+ *
+ * **Always returns the kit**, blockers and all: a caller serving the payload refuses on a non-empty
+ * `blockers` (#406), and the workspace card reads the very same evaluation to say why before the
+ * handoff is offered. Where a precondition fails the affected fields are simply null — nothing is
+ * guessed, and a wrong grade or an unmatched stamp is never papered over.
+ */
+export async function getOfferListingKit(
+  ownerId: string,
+  collectionId: string,
+  offerId: string
+): Promise<OfferListingKit | null> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      id: true,
+      collectionId: true,
+      state: true,
+      name: true,
+      description: true,
+      privateNote: true,
+      descriptionFormat: true,
+      price: true,
+      currency: true,
+      collection: { select: { ownerId: true } },
+      platform: { select: { id: true, name: true } },
+      sets: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: { id: true, title: true, items: { select: KIT_ITEM_SELECT } },
+      },
+    },
+  });
+  if (!offer || offer.collectionId !== collectionId || offer.collection.ownerId !== ownerId) {
+    return null;
+  }
+
+  // Both lookups are per collection and loaded **once per offer** (#404): a komplet is dozens of
+  // copies over a handful of conditions, and the labeller's area tree is one read for the whole kit.
+  const [labeller, conditionMap] = await Promise.all([
+    makeOfferLabeller(collectionId),
+    loadColnectConditionMap(collectionId),
+  ]);
+
+  const sets = offer.sets.map((set) => {
+    const items = orderedLabelItems(set.items);
+    return {
+      setId: set.id,
+      label: labeller.set({ title: set.title, items }),
+      copies: items.map(({ itemId, item }): ListingKitItem => {
+        const platformValue = conditionMap.get(item.conditionId) ?? null;
+        return {
+          itemId,
+          itemNo: item.itemNo,
+          stampId: item.stampId,
+          label: labeller.copy(item.stamp),
+          catalogItemId: item.stamp.colnectId?.trim() || null,
+          condition: {
+            id: item.conditionId,
+            name: item.condition.name,
+            abbreviation: item.condition.abbreviation,
+            platformValue,
+            platformLabel: platformValue ? (colnectGradeFor(platformValue)?.label ?? null) : null,
+          },
+        };
+      }),
+    };
+  });
+
+  const blockers = evaluateListingPreconditions({
+    state: offer.state as OfferState,
+    sets: sets.map((s) => ({
+      setId: s.setId,
+      label: s.label,
+      copies: s.copies.map((c) => ({
+        itemId: c.itemId,
+        label: c.label,
+        stampId: c.stampId,
+        catalogItemId: c.catalogItemId,
+        conditionId: c.condition.id,
+        conditionName: c.condition.name,
+        platformCondition: c.condition.platformValue,
+      })),
+    })),
+  });
+
+  return {
+    offerId: offer.id,
+    collectionId: offer.collectionId,
+    state: offer.state as OfferState,
+    platform: { id: offer.platform.id, name: offer.platform.name },
+    title: offer.name ?? labeller.offer(offer.sets.map((s) => ({ title: s.title, items: s.items }))),
+    description: offer.description,
+    privateNote: offer.privateNote,
+    descriptionFormat: offer.descriptionFormat as DescriptionFormat,
+    price: offer.price.toFixed(2),
+    currency: offer.currency,
+    quantity: sets.filter((s) => s.copies.length > 0).length,
+    items: sets.find((s) => s.copies.length > 0)?.copies ?? [],
+    photos: await uploadPhotos(ownerId, collectionId, offerId),
+    blockers,
+  };
+}
+
+/** The offer's upload set as fetchable references. Read through the panel's own plan state so the
+ *  kit, the Photos card and the plan's ZIP can never disagree about which images are uploaded or
+ *  what they are called. */
+async function uploadPhotos(
+  ownerId: string,
+  collectionId: string,
+  offerId: string
+): Promise<ListingKitPhotos> {
+  const state = await getOfferPhotoPlanState(ownerId, offerId);
+  return {
+    status: state.status,
+    outOfDate: state.outOfDate,
+    images: state.images
+      .filter((image) => image.publish && !image.overLimit)
+      .map((image) => ({
+        photoId: image.photoId,
+        url: `/api/collections/${collectionId}/photos/${image.photoId}/full`,
+        fileName: image.fileName,
+        mime: image.mime,
+        width: image.width,
+        height: image.height,
+        sizeBytes: image.sizeBytes,
+      })),
+  };
+}
