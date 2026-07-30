@@ -15,6 +15,7 @@ import {
   type CollectionTranslationContext,
 } from "@/lib/contacts";
 import { parsePlatformPhotoLimits } from "@/lib/offer-photo-config";
+import { NO_TEXT_LIMITS, parsePlatformTextLimits } from "@/lib/listing-text-limits";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type ContactActionState =
@@ -50,8 +51,8 @@ function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
 }
 
-/** Raised when the platform's photo limits (#308) don't parse, so the caller can surface the rule's
- * own message instead of a generic failure. */
+/** Raised when one of the platform's hard limits — photos (#308) or listing-text lengths (#403) —
+ * doesn't parse, so the caller can surface the rule's own message instead of a generic failure. */
 class PhotoLimitsError extends Error {}
 
 /** Read the contact fields from a form. `name` is validated by the caller so a friendly
@@ -71,6 +72,15 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
       })
     : ({ ok: true, value: { maxPhotos: null, maxPhotoEdge: null, maxPhotoFileSizeMib: null } } as const);
   if (!limits.ok) throw new PhotoLimitsError(limits.message);
+  // The platform's listing-text caps (#403), read the same way and for the same reason: blank means
+  // no limit stated, and a non-platform contact carries none at all.
+  const textLimits = isPlatform
+    ? parsePlatformTextLimits({
+        maxDescriptionLength: str(formData, "maxDescriptionLength"),
+        maxPrivateNoteLength: str(formData, "maxPrivateNoteLength"),
+      })
+    : ({ ok: true, value: NO_TEXT_LIMITS } as const);
+  if (!textLimits.ok) throw new PhotoLimitsError(textLimits.message);
 
   return {
     name,
@@ -119,6 +129,8 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // (#308). `photoSides` normalises to the default side; the collage template is verified against
     // the collection server-side.
     ...limits.value,
+    // The platform's listing-text caps (#403), read live wherever those texts are written.
+    ...textLimits.value,
     photoSides: isPlatform ? str(formData, "photoSides") : null,
     tileLabelLeftTemplate: isPlatform ? str(formData, "tileLabelLeftTemplate") || null : null,
     tileLabelRightTemplate: isPlatform ? str(formData, "tileLabelRightTemplate") || null : null,

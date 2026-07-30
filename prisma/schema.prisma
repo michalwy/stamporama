@@ -1562,6 +1562,17 @@ model Contact {
   maxPhotoEdge     Int?
   // Maximum file size per image, in mebibytes — the unit platforms actually quote, never bytes.
   maxPhotoFileSizeMib Int?
+  // ── Listing text limits (#403) ─────────────────────────────────────────────────────────────
+  // The same kind of fact as the photo limits above: what this platform's own form physically
+  // accepts. Colnect caps both of its listing texts at 100 characters (#402), and a cap discovered
+  // in that form — after the text was written and the offer marked Ready — is discovered too late.
+  // Counted in UTF-16 code units, the unit an HTML `maxlength` enforces. Both optional (null = no
+  // limit, the normal case) and, like the photo limits, **not** seeded onto offers: they describe
+  // the platform, so every surface reads them live. Two columns rather than one because platforms
+  // cap the two texts independently — Colnect using one number for both is not a reason to fuse
+  // them. Nothing is ever truncated against them; the app reports, it does not cut.
+  maxDescriptionLength Int?
+  maxPrivateNoteLength Int?
   // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
   // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both`) and
   // the two per-tile label templates (#312). Changing any of them here never touches an offer

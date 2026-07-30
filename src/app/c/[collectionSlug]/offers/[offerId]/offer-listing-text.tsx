@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TextLengthCounter } from "@/app/c/[collectionSlug]/shared/text-length-counter";
 import {
   DESCRIPTION_FORMATS,
   DESCRIPTION_FORMAT_LABELS,
@@ -97,10 +98,14 @@ const FIELDS: readonly {
   placeholder: string;
   regenerateTitle: string;
   noTemplateTitle: string;
+  /** Which of the platform's text caps (#403) applies to this field — they are capped
+   * independently, so the pairing is stated here rather than derived from the field's name. */
+  limitKey: "maxDescriptionLength" | "maxPrivateNoteLength";
 }[] = [
   {
     key: "description",
     label: "Description",
+    limitKey: "maxDescriptionLength",
     placeholder: "No description yet — write one, or generate it from the platform's template.",
     regenerateTitle: "Regenerate from the platform's description template",
     noTemplateTitle: "This platform has no description template — set one on its contact",
@@ -108,6 +113,7 @@ const FIELDS: readonly {
   {
     key: "privateNote",
     label: "Private note",
+    limitKey: "maxPrivateNoteLength",
     note: "only you see this",
     placeholder: "No private note yet — write one, or generate it from the platform's template.",
     regenerateTitle: "Regenerate from the platform's private-note template",
@@ -197,6 +203,14 @@ export function OfferListingText({
                 <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>· {f.note}</span>
               )}
               {offer.edited[f.key] && <EditedChip what={f.label.toLowerCase()} />}
+              {/* Counted against the platform's cap (#403). While the field is open the **draft**
+                  is what counts — seeing the number move as you cut is the point — and otherwise
+                  the stored source, which is what the copy control hands to the platform's form. */}
+              <TextLengthCounter
+                text={isEditing ? draft : value}
+                limit={offer.platformTextLimits[f.limitKey]}
+                what={f.label.toLowerCase()}
+              />
               <span style={{ flex: 1 }} />
               {!isEditing && (
                 <>

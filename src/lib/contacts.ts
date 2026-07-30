@@ -113,6 +113,11 @@ export interface ContactData extends ContactRoles {
   maxPhotos: number | null;
   maxPhotoEdge: number | null;
   maxPhotoFileSizeMib: number | null;
+  /** The platform's listing-text caps (#403), each null when it states none — the same kind of hard
+   * technical limit as the photo ones above, and read live for the same reason. Only meaningful for
+   * the `platform` role. */
+  maxDescriptionLength: number | null;
+  maxPrivateNoteLength: number | null;
   /** Photo defaults seeded onto every offer created on this platform (#308): which scan sides to
    * include, the per-tile label template (#312), and which collage template (#307) supplies the
    * render numbers. Changing them never touches an offer already prepared. */
@@ -155,6 +160,8 @@ const CONTACT_SELECT = {
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
+  maxDescriptionLength: true,
+  maxPrivateNoteLength: true,
   photoSides: true,
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
@@ -243,6 +250,9 @@ export interface ContactCreateInput {
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
   maxPhotoFileSizeMib?: number | null;
+  /** The platform's listing-text caps (#403) — null each means "no limit stated". */
+  maxDescriptionLength?: number | null;
+  maxPrivateNoteLength?: number | null;
   /** The photo defaults new offers on this platform are seeded from (#308). `photoSides` is
    * normalised; an unknown value falls back to the default side. */
   photoSides?: string | null;
@@ -432,6 +442,10 @@ export async function createContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         defaultOfferPrice: amount(data.defaultOfferPrice),
+        // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
+        // columns: nothing has to be verified against the collection, so they need no helper.
+        maxDescriptionLength: data.maxDescriptionLength ?? null,
+        maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },
       select: CONTACT_SELECT,
     }));
@@ -479,6 +493,10 @@ export async function updateContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         defaultOfferPrice: amount(data.defaultOfferPrice),
+        // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
+        // columns: nothing has to be verified against the collection, so they need no helper.
+        maxDescriptionLength: data.maxDescriptionLength ?? null,
+        maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },
       select: CONTACT_SELECT,
     }));

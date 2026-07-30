@@ -58,6 +58,7 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
+import type { PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
   type OfferPhotoGenerationStatus,
@@ -1585,6 +1586,9 @@ export interface OfferDetail {
   /** The platform's hard photo limits (#308), read **live** rather than from the offer: they say
    * what the platform accepts today, and the renderer (#310) obeys the current values. */
   platformPhotoLimits: PlatformPhotoLimits;
+  /** The platform's listing-text caps (#403), read live for exactly the same reason — every surface
+   * that writes or copies the description / private note counts against the current values. */
+  platformTextLimits: PlatformTextLimits;
   createdAt: Date;
 }
 
@@ -1630,6 +1634,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxPhotos: true,
           maxPhotoEdge: true,
           maxPhotoFileSizeMib: true,
+          maxDescriptionLength: true,
+          maxPrivateNoteLength: true,
         },
       },
       sets: {
@@ -1865,6 +1871,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       maxPhotos: offer.platform.maxPhotos,
       maxPhotoEdge: offer.platform.maxPhotoEdge,
       maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
+    },
+    platformTextLimits: {
+      maxDescriptionLength: offer.platform.maxDescriptionLength,
+      maxPrivateNoteLength: offer.platform.maxPrivateNoteLength,
     },
     createdAt: offer.createdAt,
   };

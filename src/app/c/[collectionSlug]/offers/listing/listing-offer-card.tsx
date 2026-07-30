@@ -7,6 +7,7 @@ import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TextLengthCounter } from "@/app/c/[collectionSlug]/shared/text-length-counter";
 import { PhotoLightbox } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatBytes } from "@/lib/format-bytes";
 import { normalizeDescriptionFormat } from "@/lib/description-format";
@@ -332,7 +333,15 @@ function PostingKit({
         </p>
       </Field>
 
-      <Field label="Description" copyValue={offer.description} copyFormat={format}>
+      {/* The platform's cap on this text (#403), read live off the offer's platform. This is the
+          last screen before the wording is pasted into the platform's own form, so an over-long
+          text has to be visible here rather than in the form that refuses it. */}
+      <Field
+        label="Description"
+        copyValue={offer.description}
+        copyFormat={format}
+        limit={offer.platformTextLimits.maxDescriptionLength}
+      >
         {format === "plain" ? (
           <p
             style={{
@@ -352,7 +361,11 @@ function PostingKit({
       </Field>
 
       {offer.privateNote && (
-        <Field label="Private note" copyValue={offer.privateNote}>
+        <Field
+          label="Private note"
+          copyValue={offer.privateNote}
+          limit={offer.platformTextLimits.maxPrivateNoteLength}
+        >
           <p style={BODY}>{offer.privateNote}</p>
         </Field>
       )}
@@ -495,16 +508,20 @@ function PostingKit({
   );
 }
 
-/** One copyable field of the kit: its label, its copy control, and the value as the platform sees it. */
+/** One copyable field of the kit: its label, its copy control, and the value as the platform sees it.
+ * `limit` is the platform's cap on this text (#403), or null/undefined where it states none — the
+ * counter renders itself away in that case, so a field passes it unconditionally. */
 function Field({
   label,
   copyValue,
   copyFormat,
+  limit,
   children,
 }: {
   label: string;
   copyValue: string | null;
   copyFormat?: Parameters<typeof CopyButton>[0]["format"];
+  limit?: number | null;
   children: React.ReactNode;
 }) {
   return (
@@ -512,6 +529,7 @@ function Field({
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
         <span style={FIELD_LABEL}>{label}</span>
         <CopyButton value={copyValue} label={label.toLowerCase()} format={copyFormat} />
+        <TextLengthCounter text={copyValue} limit={limit} what={label.toLowerCase()} />
       </div>
       {children}
     </div>

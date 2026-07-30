@@ -254,6 +254,24 @@ Each field carries its own three controls:
   offer lists now, overwriting what is there — a hand-written title is never touched by regenerating
   the description. It is greyed out when the platform has no template for that field.
 
+### How long the text may be
+
+Some platforms cap these texts hard — Colnect, for instance, takes 100 characters for the description
+and 100 for the private note. Record the cap once on the platform
+([Listing text limits](contacts.md#listing-text-limits)) and a **character counter** appears beside
+that field's label: `72 / 100`, counting up as you type. Past the limit it turns amber and says by how
+much — `104 / 100 · over by 4`.
+
+The counter is a **report, never a cut**: nothing is truncated, shortened or refused for you, and an
+over-long offer can still be marked Ready and published. The text is yours; the app only makes sure
+you find out about the limit here rather than in the platform's own form, with the listing half
+posted.
+
+It counts the **stored** text — the source, which is what **⧉** puts on your clipboard — so an HTML or
+Markdown description is counted with its tags, exactly as the platform's field will hold it. While the
+field is open for editing it counts what is in the box, so you can watch the number come down as you
+cut. A platform that states no limit shows no counter at all.
+
 ### Generated texts follow the composition
 
 The title, description and private note are **kept in step with what the offer lists**. Add a set,
@@ -604,6 +622,10 @@ button:
 - **Description** — shown the way the platform will read it, in [its
   format](#description-format); the copy control offers formatted or source, as on the offer screen.
 - **Private note** — only when the offer has one.
+
+Both texts carry the same [character counter](#how-long-the-text-may-be) as on the offer screen, where
+the platform states a limit — this is the last screen before the wording goes into the platform's own
+form, so an over-long text is worth seeing here.
 - **Photos** — the generated images in upload order, numbered as their files are named. Click a
   thumbnail for a full-size look, **↓** under it to save that one file, or **↓ ZIP** for the whole
   upload set at once. Images [held back](#holding-a-photo-back) or past the platform's limit are shown

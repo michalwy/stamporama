@@ -26,6 +26,23 @@ and tick the ones that apply.
 Click **Add contact** and fill in the **name** (required), optional **email**, **phone**,
 **notes**, and the **roles**. Names must be unique within the collection.
 
+### Tabs follow the roles
+
+A plain address-book contact is one short form. Tick **Platform**, or **Seller** / **Auction house**,
+and the dialog grows **tabs** for what that role brings with it:
+
+- **Contact** — name, email, phone, roles and notes. Always there, and where you land.
+- **Platform** — currency, listing language, default offer price, listing templates, listing text
+  limits and offer photos. Appears with the **Platform** role.
+- **Auction defaults** — the currency and fee terms a seller trades on. Appears with **Seller** or
+  **Auction house**.
+
+The tabs are **grouping only**: it is still one record with one **Save changes**, and what you typed
+on a tab you are not looking at is saved with everything else. Untick a role and its tab goes, along
+with the settings it held — which is how you clear them.
+
+Everything below describes the **Platform** and **Auction defaults** tabs.
+
 Ticking **Platform** reveals a **Platform currency** field. This is the one currency every
 [offer](offers.md) and [sale](sales.md) on that platform uses — it is inherited and locked there,
 so an offer and its sale can never disagree. You can set it here, or leave it unset and pick it
@@ -306,6 +323,24 @@ platforms have different title conventions and length limits, so each keeps its 
 it blank** to fall back to Stamporama's plain catalog/copy label. Generated titles are only a
 starting point — you can always edit an offer's title by hand afterwards (see
 [Offers → Listing title](offers.md#listing-title)).
+
+### Listing text limits
+
+Under the templates sits **Listing text limits** — **Max description (characters)** and **Max private
+note (characters)**. These are the platform's own hard caps: how much text its listing form will
+physically accept. Colnect, for example, takes 100 characters for each. Leave a field blank when the
+platform states no limit, which is the usual case.
+
+They are recorded per platform, and separately per field, because platforms cap the two texts
+independently. Once one is set, a **character counter** appears wherever that text is written or
+copied — on the offer's own [Listing text](offers.md#listing-text-description-and-private-note) card
+and in the [bulk listing kit](offers.md#the-posting-kit) — turning amber and saying by how much once a
+text runs over.
+
+Nothing is ever truncated against these limits. The text is yours; the counter only makes sure you
+learn about the cap while writing rather than in the platform's form. They are read **live**, like the
+photo limits below: correct a limit here and every offer's counter follows at once, including
+listings you prepared earlier.
 
 ### Offer photos
 
