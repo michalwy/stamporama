@@ -30,7 +30,13 @@ import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { sortCopies } from "./copy-sort";
 import { parseItemNoSearch } from "./item-number";
-import { isDeliveryState, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import {
+  disposalNoteRequired,
+  isDisposalReason,
+  isHeld,
+  type DisposalReason,
+} from "./disposal";
 import {
   copyGroupKey,
   encodeCopyGroupKey,
@@ -203,6 +209,13 @@ export interface ItemData {
   lotId: string | null;
   /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
   deliveryState: string;
+  /** Disposal axis (#394): when the copy left the collector's hands after arriving, or null
+   * while it is still held. */
+  disposedAt: Date | null;
+  /** Why it left: lost | damaged | other, or null while the copy is held. */
+  disposalReason: string | null;
+  /** Free-text detail; required when the reason is `other`. */
+  disposalNote: string | null;
   /** Base-currency cost-basis snapshot (ADR-0009). Null = pending. */
   costBasis: string | null;
   notes: string | null;
@@ -250,6 +263,9 @@ const ITEM_SELECT = {
   forTrade: true,
   lotId: true,
   deliveryState: true,
+  disposedAt: true,
+  disposalReason: true,
+  disposalNote: true,
   costBasis: true,
   notes: true,
   locationId: true,
@@ -272,6 +288,9 @@ function toItemData(row: {
   forTrade: boolean;
   lotId: string | null;
   deliveryState: string;
+  disposedAt: Date | null;
+  disposalReason: string | null;
+  disposalNote: string | null;
   costBasis: { toString(): string } | null;
   notes: string | null;
   locationId: string | null;
@@ -520,6 +539,119 @@ export async function updateItem(
   return toItemData(item);
 }
 
+/** What a disposal records (#394): why the copy stopped being held, plus free-text detail that is
+ * **required** for `other` — `lost` and `damaged` say what happened on their own, while `other`
+ * says only that something did. */
+export interface ItemDisposalInput {
+  reason: DisposalReason;
+  note?: string | null;
+}
+
+/** Names the offers a copy sits in that would have to be withdrawn first, most-recent first.
+ * Non-terminal only: a sold or withdrawn listing holds nothing back. */
+async function blockingOfferLabels(itemId: string): Promise<string[]> {
+  const rows = await prisma.offerSetItem.findMany({
+    where: {
+      itemId,
+      offerSet: { offer: { state: { notIn: [...CLOSED_OFFER_STATES] } } },
+    },
+    select: {
+      offerSet: {
+        select: {
+          offer: {
+            select: { name: true, createdAt: true, platform: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  return rows
+    .map((r) => r.offerSet.offer)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((o) => o.name ?? `the ${o.platform.name} listing`);
+}
+
+/**
+ * Record that a copy is no longer held (#394) — lost, damaged in storage, discarded.
+ *
+ * Two preconditions, both of which explain themselves to the collector (#395):
+ *
+ *  - **Only a delivered copy can be disposed of.** Something that never arrived is the delivery
+ *    axis's business (`not_delivered` / `damaged`), and #122 already gives it a different
+ *    treatment — it leaves the lot and its share redistributes.
+ *  - **A copy in a live offer must have that offer withdrawn first**, or the listing would be
+ *    advertising something the collector cannot ship.
+ *
+ * The acquisition is deliberately untouched: `costBasis`, `lotId`, `itemNo`, photos and the
+ * variant history all stay, because the cost really was incurred. That retained basis is what the
+ * holdings bar reports as a write-off (#396), and `itemNo` is retired rather than reused for the
+ * same reason a deleted copy's is.
+ */
+export async function disposeItem(
+  ownerId: string,
+  itemId: string,
+  input: ItemDisposalInput
+): Promise<ItemData> {
+  const current = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { collectionId: true, deliveryState: true, disposedAt: true },
+  });
+  if (!current) throw new Error("Item not found.");
+  await assertCollectionOwner(ownerId, current.collectionId);
+
+  if (!isDisposalReason(input.reason)) {
+    throw new Error("Pick why this copy is no longer held.");
+  }
+  const note = input.note?.trim() || null;
+  if (disposalNoteRequired(input.reason) && !note) {
+    throw new Error("Describe what happened to this copy.");
+  }
+  if (current.disposedAt != null) {
+    throw new Error("This copy is already marked as no longer held.");
+  }
+  if (!isDelivered(current.deliveryState)) {
+    throw new Error(
+      "Only a delivered copy can be marked as no longer held — this one has not arrived yet."
+    );
+  }
+  const offers = await blockingOfferLabels(itemId);
+  if (offers.length > 0) {
+    throw new Error(
+      `This copy is listed on ${offers.join(", ")}. Withdraw ${
+        offers.length > 1 ? "those offers" : "that offer"
+      } first.`
+    );
+  }
+
+  const item = await prisma.item.update({
+    where: { id: itemId },
+    data: { disposedAt: new Date(), disposalReason: input.reason, disposalNote: note },
+    select: ITEM_SELECT,
+  });
+  return toItemData(item);
+}
+
+/** Reverse a disposal — the copy turned up again (#394). Clears all three columns, so a restored
+ * copy is indistinguishable from one that was never disposed of: the axis records possession, not
+ * a history of it. */
+export async function restoreItem(ownerId: string, itemId: string): Promise<ItemData> {
+  const current = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { collectionId: true, disposedAt: true },
+  });
+  if (!current) throw new Error("Item not found.");
+  await assertCollectionOwner(ownerId, current.collectionId);
+  if (current.disposedAt == null) {
+    throw new Error("This copy is not marked as no longer held.");
+  }
+  const item = await prisma.item.update({
+    where: { id: itemId },
+    data: { disposedAt: null, disposalReason: null, disposalNote: null },
+    select: ITEM_SELECT,
+  });
+  return toItemData(item);
+}
+
 export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends ItemListFilters {
@@ -564,6 +696,11 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   /** Exclude copies that have already left on a sale line (the no-double-sale guard,
    * ADR-0013). Used by the offer composition picker. */
   excludeSold?: boolean;
+  /** Include copies disposed of after delivery (#394/#395). The list answers "what do I have",
+   * so they are **hidden by default** — exactly as sold copies are (#207) — and this brings them
+   * back. Mirrored on the years and valuation reads so the panel, its facets and its total never
+   * disagree about which copies are in scope. */
+  includeDisposed?: boolean;
   /** Exclude copies already packaged into any set of this offer (ADR-0013), so the composition
    * picker only offers copies not yet in the offer being built. */
   notInOfferId?: string;
@@ -707,6 +844,9 @@ function buildItemWhere(
     ...(filters.lotId ? { lotId: filters.lotId } : {}),
     ...(filters.deliveryState ? { deliveryState: filters.deliveryState } : {}),
     ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
+    // Disposed copies are hidden unless asked for (#395) — `disposedAt` doubles as the flag, so
+    // this stays a plain `where` rather than a derived narrowing.
+    ...(filters.includeDisposed ? {} : { disposedAt: null }),
     ...(filters.notInOfferId
       ? { offerSetMemberships: { none: { offerSet: { offerId: filters.notInOfferId } } } }
       : {}),
@@ -823,6 +963,12 @@ export interface ItemListItem {
   lotStatus: string | null;
   /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
   deliveryState: string;
+  /** Disposal axis (#394): when this copy stopped being held, or null while it still is. */
+  disposedAt: Date | null;
+  /** Why it stopped being held: lost | damaged | other, or null. */
+  disposalReason: string | null;
+  /** Free-text detail on the disposal; required when the reason is `other`. */
+  disposalNote: string | null;
   /** Base-currency cost-basis snapshot (ADR-0009), or null when pending. */
   costBasis: string | null;
   notes: string | null;
@@ -857,6 +1003,9 @@ const ITEM_LIST_SELECT = {
   lotId: true,
   lot: { select: { status: true } },
   deliveryState: true,
+  disposedAt: true,
+  disposalReason: true,
+  disposalNote: true,
   costBasis: true,
   notes: true,
   locationId: true,
@@ -942,6 +1091,9 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     lotId: row.lotId,
     lotStatus: row.lot?.status ?? null,
     deliveryState: row.deliveryState,
+    disposedAt: row.disposedAt,
+    disposalReason: row.disposalReason,
+    disposalNote: row.disposalNote,
     costBasis: row.costBasis == null ? null : row.costBasis.toString(),
     notes: row.notes,
     locationId: row.locationId,
@@ -1458,15 +1610,25 @@ export interface LotIssueGroupSummary {
  * lot/PO summaries compare paid-vs-catalog exactly the way the Copies screen does. No extra
  * query — every enriched copy already carries its `value`, `costBasis`, and `lotStatus`. */
 function summarizeHoldings(items: ItemListItem[], baseCurrency: string): HoldingsSummary {
+  // Same held/gone partition as `makeHoldingsSummarizer` (#396) — a purchase's own screens value
+  // what arrived, and report what did not as a write-off rather than as a hole in the total.
+  const held = items.filter(isHeld);
+  const gone = items.filter((i) => !isHeld(i));
+  const costOf = (i: ItemListItem): CostBasisInput => ({
+    costBasis: i.costBasis,
+    lotId: i.lotId,
+    lotStatus: i.lotStatus,
+  });
   return {
     ...aggregateHoldings(
-      items.map((i) => i.value),
+      held.map((i) => i.value),
       baseCurrency
     ),
-    cost: aggregateCostBasis(
-      items.map((i) => ({ costBasis: i.costBasis, lotId: i.lotId, lotStatus: i.lotStatus })),
-      baseCurrency
-    ),
+    cost: aggregateCostBasis(held.map(costOf), baseCurrency),
+    writeOff: {
+      cost: aggregateCostBasis(gone.map(costOf), baseCurrency),
+      count: gone.length,
+    },
   };
 }
 
@@ -1917,24 +2079,19 @@ export async function getHoldingsValuation(
     ? await resolveLocationSubtree(collectionId, filters.locationId)
     : null;
 
+  // The disposal exclusion is deliberately lifted here (#396). Disposed copies are hidden from the
+  // list by default, so a write-off summed over the *visible* set would read 0.00 in exactly the
+  // case it exists for. The bar still sums one scope — it just partitions it into held and gone,
+  // which is what the write-off line makes legible. Everything else, `excludeSold` included, is
+  // taken as the list left it: a realised sale is not a write-off (#168 is where it belongs).
   const where = await withMissingCatalogFilter(
     collectionId,
-    filters,
-    buildItemWhere(collectionId, filters, locationIds)
+    { ...filters, includeDisposed: true },
+    buildItemWhere(collectionId, { ...filters, includeDisposed: true }, locationIds)
   );
   const rows = await prisma.item.findMany({
     where,
-    select: {
-      id: true,
-      stampId: true,
-      conditionId: true,
-      certificateStatusId: true,
-      formatId: true,
-      costBasis: true,
-      lotId: true,
-      lot: { select: { status: true } },
-      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
-    },
+    select: HOLDINGS_ROW_SELECT,
   });
 
   return (await makeHoldingsSummarizer(collectionId, rows))();
@@ -1951,6 +2108,9 @@ const HOLDINGS_ROW_SELECT = {
   costBasis: true,
   lotId: true,
   lot: { select: { status: true } },
+  // The two axes `isHeld` reads (#396) — which side of the summary a copy lands on.
+  disposedAt: true,
+  deliveryState: true,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
@@ -1970,6 +2130,10 @@ async function makeHoldingsSummarizer(
   collectionId: string,
   rows: HoldingsRow[]
 ): Promise<(itemIds?: string[]) => HoldingsSummary> {
+  // Which copies the collector still has (#396). Everything the predicate rejects is moved to the
+  // write-off side rather than dropped: a copy that is gone is worth nothing to its owner whatever
+  // the catalog says, but it did cost what it cost.
+  const heldIds = new Set(rows.filter(isHeld).map((r) => r.id));
   const valuationRows: ValuationRow[] = rows.map((row) => ({
     id: row.id,
     stampId: row.stampId,
@@ -1997,15 +2161,22 @@ async function makeHoldingsSummarizer(
 
   return (itemIds) => {
     const ids = itemIds ?? rows.map((r) => r.id);
+    const held = ids.filter((id) => heldIds.has(id));
+    const gone = ids.filter((id) => !heldIds.has(id) && costById.has(id));
+    const writeOffCost = aggregateCostBasis(
+      gone.map((id) => costById.get(id)!),
+      baseCurrency
+    );
     return {
       ...aggregateHoldings(
-        ids.map((id) => valuations.get(id)).filter((v) => v !== undefined),
+        held.map((id) => valuations.get(id)).filter((v) => v !== undefined),
         baseCurrency
       ),
       cost: aggregateCostBasis(
-        ids.map((id) => costById.get(id)).filter((c) => c !== undefined),
+        held.map((id) => costById.get(id)).filter((c) => c !== undefined),
         baseCurrency
       ),
+      writeOff: { cost: writeOffCost, count: gone.length },
     };
   };
 }

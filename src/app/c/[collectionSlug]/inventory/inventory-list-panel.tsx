@@ -40,6 +40,7 @@ import { InventoryCopyList } from "./inventory-copy-list";
 import { DuplicateGroupList } from "./duplicate-group-list";
 import { ListGroupDialog } from "./list-group-dialog";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
+import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
@@ -62,6 +63,10 @@ type DialogState =
   | { kind: "addToOffer"; items: ItemListItem[] }
   | { kind: "addToNewOffer"; items: ItemListItem[] }
   | { kind: "viewOffers"; item: ItemListItem }
+  // The disposal axis (#394/#395). Marking needs a reason and a note, so it is a form; reversing
+  // it is one fact with nothing to fill in, so it is a confirmation.
+  | { kind: "dispose"; item: ItemListItem }
+  | { kind: "restore"; item: ItemListItem }
   | { kind: "quickPrice"; item: ItemListItem }
   // The duplicate group's pre-step (#372): pick which of its copies go on the listing. Confirming
   // hands them to `addToNewOffer`, so the create form is reached the same way every other flow
@@ -183,6 +188,8 @@ export function InventoryListPanel({
   const deliveryState = searchParams.get("deliveryState") ?? "";
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
+  // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
+  const includeDisposed = searchParams.get("includeDisposed") === "true";
   // Duplicate grouping (#372). A client preference rather than URL state — it changes *what the
   // rows are*, not what is being looked at, and it is a way of working the collector keeps.
   // Which axes join the key is remembered separately, so turning grouping off and on again does not
@@ -260,10 +267,11 @@ export function InventoryListPanel({
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       deliveryState: deliveryState || undefined,
       includeSold: includeSold || undefined,
+      includeDisposed: includeDisposed || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -284,8 +292,9 @@ export function InventoryListPanel({
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       deliveryState: deliveryState || undefined,
       includeSold: includeSold || undefined,
+      includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -330,7 +339,13 @@ export function InventoryListPanel({
   const valuationFilters = useMemo(
     () =>
       groupDuplicates
-        ? { ...filters, forSale: true, deliveryState: "delivered", includeSold: undefined }
+        ? {
+            ...filters,
+            forSale: true,
+            deliveryState: "delivered",
+            includeSold: undefined,
+            includeDisposed: undefined,
+          }
         : filters,
     [filters, groupDuplicates]
   );
@@ -399,7 +414,9 @@ export function InventoryListPanel({
     () => ({
       selected: selection.ids,
       onToggle: toggleSelected,
-      isEligible: (item: ItemListItem) => item.forSale && isDelivered(item.deliveryState),
+      // A copy no longer held cannot be listed either (#394) — same eligibility, second axis.
+      isEligible: (item: ItemListItem) =>
+        item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null,
     }),
     [selection.ids, toggleSelected]
   );
@@ -416,6 +433,7 @@ export function InventoryListPanel({
     !!notOfferedPlatformId ||
     !!deliveryState ||
     includeSold ||
+    includeDisposed ||
     activeDispositions.size > 0;
 
   return (
@@ -636,6 +654,35 @@ export function InventoryListPanel({
                     }}
                   >
                     Include sold
+                  </button>
+                </Tooltip>
+                {/* Copies no longer held (#394/#395), beside the sold toggle: the two are the
+                    ways a copy leaves the shelf, one with proceeds and one without. Hidden by
+                    default for the same reason — the list answers "what do I have". */}
+                <Tooltip
+                  content={
+                    groupDuplicates
+                      ? "Duplicate groups only cover copies you can still list, so ones you no longer hold stay out."
+                      : "Also show copies you no longer hold — lost, damaged in storage, discarded (hidden by default)"
+                  }
+                >
+                  <button
+                    type="button"
+                    disabled={groupDuplicates}
+                    onClick={() =>
+                      updateParams({ includeDisposed: includeDisposed ? "" : "true" })
+                    }
+                    style={{
+                      ...CONTROL_STYLE,
+                      cursor: groupDuplicates ? "default" : "pointer",
+                      opacity: groupDuplicates ? 0.5 : 1,
+                      fontWeight: includeDisposed ? 600 : 400,
+                      color: includeDisposed ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: includeDisposed ? "var(--color-accent)" : "var(--color-border-strong)",
+                      background: includeDisposed ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    Include no longer held
                   </button>
                 </Tooltip>
               </div>
@@ -885,6 +932,8 @@ export function InventoryListPanel({
                 onAddToOffer={(it) => setDialog({ kind: "addToOffer", items: [it] })}
                 onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", items: [it] })}
                 onViewOffers={(it) => setDialog({ kind: "viewOffers", item: it })}
+                onDispose={(it) => setDialog({ kind: "dispose", item: it })}
+                onRestore={(it) => setDialog({ kind: "restore", item: it })}
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
             </div>
@@ -1057,6 +1106,52 @@ export function InventoryListPanel({
                 it.certificateStatusId,
                 entries
               );
+              if (result.status === "success") handleSuccess();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {/* No longer held (#394/#395): reason + note. The domain's refusals — a copy that has not
+          arrived, or one sitting in a live offer — come back as the dialog's error, naming the
+          offer to withdraw first. */}
+      {dialog.kind === "dispose" && (
+        <DisposeCopyDialog
+          collectionId={collectionId}
+          item={dialog.item}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onSubmit={(fd) => {
+            const id = dialog.item.id;
+            setActionError(undefined);
+            startTransition(async () => {
+              const { disposeItemAction } = await import("@/app/actions/items");
+              const result = await disposeItemAction(id, fd);
+              if (result.status === "success") handleSuccess();
+              else if (result.status === "error") setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {/* The copy turned up again: one fact with nothing to fill in, so a confirmation rather
+          than a form. */}
+      {dialog.kind === "restore" && (
+        <ConfirmDialog
+          title="Mark as held again"
+          message="This copy goes back into the collection: it counts towards collection value again and can be listed for sale."
+          actionLabel="Mark as held"
+          pendingLabel="Saving…"
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onConfirm={() => {
+            const id = dialog.item.id;
+            startTransition(async () => {
+              const { restoreItemAction } = await import("@/app/actions/items");
+              const result = await restoreItemAction(id);
               if (result.status === "success") handleSuccess();
               else if (result.status === "error") setActionError(result.message);
             });

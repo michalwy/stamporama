@@ -56,6 +56,10 @@ interface InventoryCopyListProps {
   /** When provided, each row gains a "View offers" action opening the read-only popup of every
    * offer that references the copy (#276). */
   onViewOffers?: (item: ItemListItem) => void;
+  /** When provided, each row gains the disposal entry (#395) — *No longer held* on a copy still in
+   * hand, *Mark as held again* on one already disposed of. */
+  onDispose?: (item: ItemListItem) => void;
+  onRestore?: (item: ItemListItem) => void;
   /** When provided, each row's catalog-value cell becomes the quick-price trigger (#228): a
    * "+ catalog value" link when unpriced, click-to-edit when priced — mirroring the purchase
    * intake view (#121). The dialog itself is owned by the caller. */
@@ -97,6 +101,8 @@ export function InventoryCopyList({
   onAddToOffer,
   onAddToNewOffer,
   onViewOffers,
+  onDispose,
+  onRestore,
   onSetCatalogPrice,
   selection,
 }: InventoryCopyListProps) {
@@ -133,6 +139,8 @@ export function InventoryCopyList({
             onAddToOffer={onAddToOffer}
             onAddToNewOffer={onAddToNewOffer}
             onViewOffers={onViewOffers}
+            onDispose={onDispose}
+            onRestore={onRestore}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}
           />
         );

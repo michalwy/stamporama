@@ -70,6 +70,9 @@ export interface InventoryItemFilters {
   /** Show copies that have already sold (#207). Sold copies are hidden by default; set true to
    * include them. */
   includeSold?: boolean;
+  /** Show copies no longer held (#394/#395) — lost, damaged in storage, discarded. Hidden by
+   * default, since the list answers "what do I have". */
+  includeDisposed?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -98,6 +101,8 @@ export interface InventoryYearFacetFilters {
   deliveryState?: string;
   /** Include already-sold copies in the facet counts (#207); hidden by default. */
   includeSold?: boolean;
+  /** Include copies no longer held in the facet counts (#395); hidden by default. */
+  includeDisposed?: boolean;
 }
 
 export const inventoryKeys = {
@@ -140,6 +145,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
   if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
   if (filters.includeSold) params.set("includeSold", "true");
+  if (filters.includeDisposed) params.set("includeDisposed", "true");
   return params;
 }
 
@@ -198,7 +204,11 @@ export function useCopyGroupsInfinite(
 
 /** Holdings valuation total over the whole filtered copy set (ADR-0007 §7, #101).
  * Shares the list's disposition/condition/certificate filters (not sort/pagination)
- * so the figure tracks what the list is showing. */
+ * so the figure tracks what the list is showing.
+ *
+ * `includeDisposed` is deliberately **not** among them (#396): the server always reads the whole
+ * scope and splits it into held copies and a write-off line, so passing the flag would only cost a
+ * refetch for an identical answer. */
 export function useHoldingsValuation(
   collectionId: string,
   filters: InventoryItemFilters
@@ -288,6 +298,7 @@ export function useItemYears(
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
       if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
       if (filters.includeSold) params.set("includeSold", "true");
+      if (filters.includeDisposed) params.set("includeDisposed", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );

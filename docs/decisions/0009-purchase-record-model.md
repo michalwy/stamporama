@@ -245,3 +245,49 @@ stream across every lot — not a stack of per-lot sections. Its estimate denomi
 (`getPurchaseIntakeSummary.lotWeightBase[lotId]`) since each copy's estimate uses its own lot's
 pool; issue groups are merged across the purchase's lots, and per-issue bulk actions scope to
 `{ purchaseId, issueKey, onlyOpenLots }`.
+
+## Addendum: the disposal axis (#394, #396)
+
+A copy can leave the collector's physical holdings **after** it was received — lost, damaged in
+storage, discarded. Neither existing axis expresses that, and deleting the row is not an option
+(it destroys history, and `Item.lot` is `onDelete: Restrict`).
+
+- `deliveryState` describes physical **intake** and ends at arrival. Its `not_delivered` /
+  `damaged` outcomes mean "found broken while sorting"; conflating them with "broke a year later"
+  makes supplier quality unmeasurable, and `not_delivered` additionally removes the copy from its
+  lot and redistributes the allocation (§5 above), which would be wrong here — the copy *did*
+  arrive and *was* paid for.
+- `inCollection` / `forSale` / `forTrade` express **intent**, not possession: a duplicate held for
+  sale is `inCollection: false` and still owned.
+
+So disposal is a **fourth axis**, orthogonal to both: three nullable columns on `Item`
+(`disposedAt`, `disposalReason`, `disposalNote`), with `disposedAt` doubling as flag and timestamp
+so every filter stays a plain `where`. The vocabulary — `lost | damaged | other`, a note required
+for `other` — is pure in `src/lib/disposal.ts`, mirroring `delivery-state.ts`. It is the
+involuntary counterpart to a sale: both are ways a copy stops being physically held, one with
+proceeds and one without.
+
+**The allocation is never touched.** Unlike `not_delivered`, the cost really was incurred, so
+`costBasis`, `lotId`, `itemNo`, photos and `ItemVariantHistory` all stay, and `itemNo` is retired
+rather than reused — the number is written on the physical piece. Two preconditions, both of which
+say why when they refuse: only a **delivered** copy can be disposed of (anything earlier is the
+delivery axis's business), and a copy in a **non-terminal offer** needs that offer withdrawn first,
+or the listing would advertise something that cannot be shipped. Reversing a disposal clears all
+three columns: the axis records possession, not a history of it.
+
+**`isHeld` is the single predicate** behind availability, collection value and the copies-held
+badge: a copy is held when it is neither disposed of nor in one of the two
+`UNAVAILABLE_DELIVERY_STATES`. The in-flight states pass — those copies are on their way in.
+Soldness is deliberately *not* part of it: that already has one established mechanism at every
+reader (the `saleLineItems: { none: {} }` guard behind `excludeSold`, #207), and folding it into a
+pure field test would be a second mechanism for one rule.
+
+What the predicate excludes is **moved, not dropped** (#396). `HoldingsSummary` gained a
+`writeOff` figure: the retained cost basis of the copies in scope that are gone, stated on its own
+line beside catalog value and purchase cost. It carries a cost and no catalog value on purpose — a
+copy that is gone is worth nothing to its owner however the catalog prices it, but it did cost what
+it cost, and omitting it would flatter purchase performance by hiding exactly the copies that did
+not work out. Because disposed copies are hidden from the list by default, the valuation read
+deliberately **lifts that one exclusion** and partitions the scope itself; a write-off summed over
+the visible set would read `0.00` in exactly the case it exists for. Sold copies stay out of it —
+a realised sale is not a write-off (#168).

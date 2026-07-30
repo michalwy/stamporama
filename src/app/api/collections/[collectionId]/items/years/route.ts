@@ -36,8 +36,10 @@ export async function GET(
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
       notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
       deliveryState: deliveryStateParam(sp.get("deliveryState")),
-      // Match the list: sold copies are excluded unless includeSold=true (#207).
+      // Match the list: sold copies are excluded unless includeSold=true (#207), and copies no
+      // longer held unless includeDisposed=true (#395).
       excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
+      includeDisposed: boolParam(sp.get("includeDisposed")),
     });
     return NextResponse.json({ years });
   } catch {

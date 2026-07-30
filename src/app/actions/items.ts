@@ -7,10 +7,13 @@ import {
   createItem,
   updateItem,
   deleteItem,
+  disposeItem,
+  restoreItem,
   resolveItemVariant,
   getItemListItem,
 } from "@/lib/items";
 import type { ItemListItem } from "@/lib/items";
+import { isDisposalReason } from "@/lib/disposal";
 import { applyPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 
 export type ItemActionState =
@@ -174,6 +177,44 @@ export async function resolveItemVariantAction(
   } catch (e) {
     const message =
       e instanceof Error ? e.message : "Failed to identify variant. Please try again.";
+    return { status: "error", message };
+  }
+}
+
+/** Mark a copy as no longer held (#394/#395). The domain's refusals are surfaced verbatim: they
+ * name the offer to withdraw first, or say why the copy cannot be disposed of yet — a blocked path
+ * that only said "failed" would be unguessable. */
+export async function disposeItemAction(
+  itemId: string,
+  formData: FormData
+): Promise<ItemActionState> {
+  const session = await getSession();
+  const reason = str(formData, "disposalReason");
+  if (!isDisposalReason(reason)) {
+    return { status: "error", message: "Pick why this copy is no longer held." };
+  }
+  try {
+    await disposeItem(session.user.id, itemId, {
+      reason,
+      note: str(formData, "disposalNote") || null,
+    });
+    return { status: "success" };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "Failed to update this copy. Please try again.";
+    return { status: "error", message };
+  }
+}
+
+/** Reverse a disposal — the copy turned up again (#394). */
+export async function restoreItemAction(itemId: string): Promise<ItemActionState> {
+  const session = await getSession();
+  try {
+    await restoreItem(session.user.id, itemId);
+    return { status: "success" };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "Failed to update this copy. Please try again.";
     return { status: "error", message };
   }
 }

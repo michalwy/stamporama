@@ -2509,7 +2509,10 @@ async function assertAddableCopies(
 ): Promise<string[]> {
   if (itemIds.length === 0) return [];
   const valid = await prisma.item.findMany({
-    where: { id: { in: itemIds }, collectionId },
+    // A copy the collector no longer holds cannot be listed (#394) — the listing would advertise
+    // something they cannot ship. Enforced here rather than at each caller: this is the one
+    // chokepoint every composition path goes through.
+    where: { id: { in: itemIds }, collectionId, disposedAt: null },
     select: { id: true },
   });
   const validIds = new Set(valid.map((v) => v.id));

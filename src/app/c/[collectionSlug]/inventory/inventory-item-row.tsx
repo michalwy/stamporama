@@ -11,6 +11,7 @@ import type { ItemListItem } from "@/lib/items";
 import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
+import { describeDisposal, disposalReasonLabel, disposalReasonToken } from "@/lib/disposal";
 import { formatItemNo } from "@/lib/item-number";
 import { useCollectionItemNoPad } from "./use-inventory-query";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
@@ -56,6 +57,19 @@ function dispositionChip(token: string): React.CSSProperties {
  * `muted` (a value outside the vocabulary) falls back to the plain chip. */
 function deliveryChipStyle(state: string): React.CSSProperties {
   const token = deliveryStateToken(state);
+  if (token === "muted") return CHIP;
+  return {
+    ...CHIP,
+    color: `var(--color-${token})`,
+    borderColor: `var(--color-${token}-border, var(--color-border))`,
+    background: `var(--color-${token}-soft, var(--color-bg-page))`,
+  };
+}
+
+/** Disposal chip (#394/#395), tinted exactly as a delivery-state chip is — the two are sibling
+ * axes and a collector reads them in the same glance. */
+function disposalChipStyle(reason: string | null): React.CSSProperties {
+  const token = reason ? disposalReasonToken(reason) : "error";
   if (token === "muted") return CHIP;
   return {
     ...CHIP,
@@ -319,6 +333,11 @@ interface InventoryItemRowProps {
    * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
    * question as a live one's, and the row carries no offer count to hide it by. */
   onViewOffers?: (item: ItemListItem) => void;
+  /** When provided, adds the disposal entry (#395): *No longer held* on a copy still in hand, and
+   * *Mark as held again* on one already disposed of. The two are one prop because they are one
+   * axis — the row is always in exactly one of the two states. */
+  onDispose?: (item: ItemListItem) => void;
+  onRestore?: (item: ItemListItem) => void;
 }
 
 export function InventoryItemRow({
@@ -347,6 +366,8 @@ export function InventoryItemRow({
   onAddToOffer,
   onAddToNewOffer,
   onViewOffers,
+  onDispose,
+  onRestore,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
   const itemNoPad = useCollectionItemNoPad(collectionId);
@@ -372,12 +393,18 @@ export function InventoryItemRow({
   // A for-sale copy that has not arrived keeps both entries **visible but disabled**, carrying the
   // reason: dropping them silently left the restriction unguessable (#273). Not-for-sale copies
   // still show nothing — that disposition is set on the row itself, so it explains itself.
+  // A disposed copy (#394) fails the same test from the other end — it arrived and then left — so
+  // it carries its own reason rather than the delivery one.
   const delivered = isDelivered(item.deliveryState);
-  const offerHint = delivered
-    ? undefined
-    : `Only a delivered copy can be listed — this one is ${deliveryStateLabel(
-        item.deliveryState
-      ).toLowerCase()}.`;
+  const disposed = item.disposedAt != null;
+  const listable = delivered && !disposed;
+  const offerHint = disposed
+    ? "You no longer hold this copy, so it cannot be listed. Mark it as held again first."
+    : delivered
+      ? undefined
+      : `Only a delivered copy can be listed — this one is ${deliveryStateLabel(
+          item.deliveryState
+        ).toLowerCase()}.`;
 
   const menuActions: RowAction[] = [
     ...(item.unknownVariant
@@ -396,7 +423,7 @@ export function InventoryItemRow({
           key: "add-to-offer",
           label: "Add to offer",
           icon: "🏷",
-          disabled: !delivered,
+          disabled: !listable,
           hint: offerHint,
           onSelect: () => onAddToOffer(item),
         }]
@@ -406,9 +433,35 @@ export function InventoryItemRow({
           key: "add-to-new-offer",
           label: "Add to new offer",
           icon: "🆕",
-          disabled: !delivered,
+          disabled: !listable,
           hint: offerHint,
           onSelect: () => onAddToNewOffer(item),
+        }]
+      : []),
+    // Disposal (#394/#395). Exactly one of the two shows, because a copy is either held or not.
+    // A copy that has not arrived keeps the entry **visible but disabled** with the reason, the
+    // same rule the offer entries follow (#273): that axis belongs to delivery, and silently
+    // dropping the entry leaves the restriction unguessable.
+    ...(onDispose && !disposed
+      ? [{
+          key: "dispose",
+          label: "No longer held",
+          icon: "⊘",
+          disabled: !delivered,
+          hint: delivered
+            ? undefined
+            : `A copy that has not arrived is handled by its delivery state — this one is ${deliveryStateLabel(
+                item.deliveryState
+              ).toLowerCase()}.`,
+          onSelect: () => onDispose(item),
+        }]
+      : []),
+    ...(onRestore && disposed
+      ? [{
+          key: "restore",
+          label: "Mark as held again",
+          icon: "↺",
+          onSelect: () => onRestore(item),
         }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
@@ -618,6 +671,16 @@ export function InventoryItemRow({
             >
               <span style={deliveryChipStyle(item.deliveryState)}>
                 {deliveryStateLabel(item.deliveryState)}
+              </span>
+            </Tooltip>
+          )}
+          {/* Disposal (#394/#395). Chipped whenever it applies — unlike delivery, where the
+              common state is deliberately left unlabelled, "no longer held" is never the default
+              and is the one fact that changes how every other chip on this row should be read. */}
+          {disposed && (
+            <Tooltip content={describeDisposal(item) ?? ""}>
+              <span style={disposalChipStyle(item.disposalReason)}>
+                ⊘ {item.disposalReason ? disposalReasonLabel(item.disposalReason) : "No longer held"}
               </span>
             </Tooltip>
           )}

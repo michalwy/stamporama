@@ -55,8 +55,10 @@ Three rules worth knowing:
   badge, not its parent's — in the issue tree the child's badge is right underneath, so counting it
   twice would be misleading.
 - **Sold copies are not counted**, matching the **View copies** popup the badge sits beside: what
-  the badge says and what the popup lists are always the same set. Copies still on their way to you
-  *are* counted — they are bought and yours; see
+  the badge says and what the popup lists are always the same set. Neither are copies you no longer
+  hold — marked [no longer held](inventory.md#copies-you-no-longer-hold), or *Not delivered /
+  missing* or *Damaged* — since the badge answers *how many of this do I have*. Copies still on
+  their way to you *are* counted — they are bought and yours; see
   [Delivery state](inventory.md#delivery-state).
 
 To see the copies themselves, use **View copies** in the row's **⋮** menu.

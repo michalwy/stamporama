@@ -142,9 +142,35 @@ export interface HoldingsTotal {
 
 /** The holdings summary bar's full figure (#134): the catalog {@link HoldingsTotal} plus
  * the actual purchase {@link CostBasisTotal} aggregated over the same filtered copy set,
- * so a collector can compare paid-vs-catalog value at a glance. */
+ * so a collector can compare paid-vs-catalog value at a glance.
+ *
+ * Both figures cover the copies **actually held** (`isHeld`, #396). What the predicate excludes is
+ * not dropped, it is moved: {@link writeOff} carries the cost of the copies in the same scope that
+ * are gone, so the two halves partition the scope instead of some of it silently vanishing. */
 export interface HoldingsSummary extends HoldingsTotal {
   cost: CostBasisTotal;
+  writeOff: WriteOffTotal;
+}
+
+/** What the copies in scope that are no longer held cost (#396) — disposed after delivery (#394),
+ * or never arrived in usable form (`not_delivered` / `damaged`).
+ *
+ * Only a **cost** figure, never a catalog value: catalog value answers "what is my collection
+ * worth", and a copy that is gone is worth nothing to its owner however the catalog prices it. The
+ * cost, by contrast, was really paid, and omitting it would flatter purchase performance by hiding
+ * exactly the copies that did not work out. */
+export interface WriteOffTotal {
+  /** Cost basis of those copies, aggregated exactly as held copies' is. */
+  cost: CostBasisTotal;
+  /** How many copies are in it — including the ones whose cost is pending or unrecorded, which
+   * contribute nothing to the total but are still gone. */
+  count: number;
+}
+
+/** How many copies a {@link CostBasisTotal} was aggregated over: every copy lands in exactly one
+ * of the three states, so the counts partition the set. */
+export function costBasisCopyCount(total: CostBasisTotal): number {
+  return total.knownCount + total.pendingCount + total.noneCount;
 }
 
 /** Aggregate per-copy valuations into a holdings total in the base currency. Pure. */

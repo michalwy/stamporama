@@ -627,6 +627,15 @@ model Item {
   // — a manually added copy is in hand; purchase intake sets `ordered` explicitly (and leaves
   // the copy out of the collection until it arrives).
   deliveryState       String   @default("delivered")
+  // Disposal axis (#394), orthogonal to disposition and delivery: the copy left the collector's
+  // hands *after* it arrived — lost, damaged in storage, discarded. The involuntary counterpart to
+  // a sale. `disposedAt` doubles as flag and timestamp (null = still held), so every filter stays a
+  // plain `where`; `disposalReason` is one of lost | damaged | other, and `disposalNote` is
+  // required when the reason is `other`. The lot allocation is never touched — unlike
+  // `not_delivered`, the cost really was incurred, so `costBasis`/`lotId`/`itemNo` all stay.
+  disposedAt          DateTime?
+  disposalReason      String?
+  disposalNote        String?
   // Base-currency cost-basis snapshot (ADR-0009 §2/§3). Null = pending (lot still open,
   // or the copy entered via a channel that has not written a cost yet).
   costBasis           Decimal? @db.Decimal(10, 2)
@@ -663,6 +672,9 @@ model Item {
   @@index([lotId])
   @@index([locationId])
   @@index([formatId])
+  // Every collection-scoped read narrows to the copies still held (#394/#396), so the flag is
+  // indexed together with the scope rather than on its own.
+  @@index([collectionId, disposedAt])
   @@map("item")
 }
 

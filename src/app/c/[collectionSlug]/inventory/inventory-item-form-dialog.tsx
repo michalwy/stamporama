@@ -13,6 +13,7 @@ import { useCollectionFormats, useCollectionItemNoPad } from "./use-inventory-qu
 import type { ItemListItem } from "@/lib/items";
 import { formatItemNo } from "@/lib/item-number";
 import { DELIVERY_STATES, deliveryStateLabel } from "@/lib/delivery-state";
+import { describeDisposal } from "@/lib/disposal";
 import type { CollectionAreaData } from "@/lib/areas";
 import {
   effectiveVendorsForArea,
@@ -180,6 +181,8 @@ export function InventoryItemFormDialog({
     }
   }, [locationId]);
   const [deliveryState, setDeliveryState] = useState(item?.deliveryState ?? "delivered");
+  // Null for a copy still held, which is every copy in add mode.
+  const disposalSummary = item ? describeDisposal(item) : null;
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
     item
@@ -362,6 +365,21 @@ export function InventoryItemFormDialog({
                     </option>
                   ))}
                 </select>
+                {/* Disposal (#394/#395) sits *beside* the delivery state, never instead of it:
+                    the two axes are independent — how the copy arrived, and that it has since
+                    gone — and both stay legible. Read-only here, because marking and reversing a
+                    disposal is its own action with its own guards, not a field on this form. */}
+                {disposalSummary && (
+                  <p
+                    style={{
+                      margin: "0.375rem 0 0",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-error)",
+                    }}
+                  >
+                    ⊘ {disposalSummary}
+                  </p>
+                )}
               </div>
 
               <DispositionField

@@ -97,6 +97,10 @@ Stamps, Copies, Offers, Sales and Purchases.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
   to look up what a piece went for). The holdings totals and year panel follow this filter too.
+- **Include no longer held** — copies you have marked as [no longer held](#copies-you-no-longer-hold)
+  are **hidden by default**, for the same reason sold ones are: the list answers *what do I have*.
+  Toggle this on to bring them back into view. The year panel follows this filter too; the holdings
+  totals always account for them, on their own **Written off** line.
 - **Delivery state** — show only copies in one delivery state, e.g. everything still
   *In transit* or every copy marked *Damaged*. See [Delivery state](#delivery-state).
 - **Condition** — show only copies of one condition.
@@ -147,6 +151,20 @@ current filters (change the filters and both totals follow):
 
 Comparing the two lines shows paid-versus-catalog value at a glance.
 
+Both lines cover the copies you **actually hold**. A copy you have marked as
+[no longer held](#copies-you-no-longer-hold), and one whose delivery state is *Not delivered /
+missing* or *Damaged*, is worth nothing to you however the catalog prices it, so it counts towards
+neither figure. It is not simply dropped, though — a third line appears when there are any:
+
+- **Written off** — what those copies cost you, in red. You really spent it, and leaving it out
+  would make your purchases look better than they went. Only a cost is shown here, never a catalog
+  value.
+
+This line appears whether or not the **Include no longer held** filter is on: the totals always
+account for the whole filtered scope, and the written-off line is what keeps the two halves adding
+up. Copies that have **sold** are a different story and never appear here — those are proceeds, not
+a loss.
+
 ## Cost-basis
 
 Where **catalog value** is what a copy is worth, its **cost-basis** is what you actually
@@ -193,6 +211,39 @@ the [purchase intake screen](purchases.md).
 
 Delivery state matters beyond bookkeeping: **only a delivered copy can be listed for sale**
 (see [Adding a copy to an offer](#adding-a-copy-to-an-offer)).
+
+## Copies you no longer hold
+
+A copy can leave your hands **after** it arrived: lost, damaged in storage, given away, thrown
+out. That is its own axis, separate from delivery state and from disposition — the piece did
+arrive and you did pay for it, and you may still want its record.
+
+Open a copy's **⋮** menu and choose **No longer held**. Pick a reason — **Lost**, **Damaged**, or
+**Other** — and add a note; the note is required for *Other*, which on its own says only that the
+copy is gone. If the copy turns up again, the same menu offers **Mark as held again**, which
+reverses it completely.
+
+Two things stop the action, and both say so:
+
+- **Only a delivered copy can be marked.** Something that never arrived belongs to
+  [delivery state](#delivery-state) instead, which handles it differently — a *Not delivered*
+  copy leaves its purchase lot and its cost share goes to the others.
+- **A copy in a live offer must have that offer withdrawn first**, or the listing would be
+  advertising something you cannot ship. The message names the offer.
+
+What marking a copy does **not** do is touch the purchase: its cost basis, its purchase lot, its
+internal number, its photos and its refinement history all stay exactly as they were, and the
+number is never handed to another copy. What changes is that the copy:
+
+- carries a red **⊘** chip on its row, with the reason, the date and your note on hover;
+- disappears from the Copies list unless you turn on **Include no longer held**;
+- stops counting towards **collection value** and towards the copies-held badge on the Stamps and
+  Issues lists;
+- stops being offered for listing anywhere, and cannot be added to an offer;
+- has what it cost reported on the holdings bar's **Written off** line — see below.
+
+The **Edit copy** dialog shows the disposal beside the delivery state rather than instead of it:
+the two are independent, and both stay readable.
 
 ## Viewing copies from the catalog
 

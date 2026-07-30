@@ -115,6 +115,18 @@ export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefin
     costNotes.push(`${cost.noneCount} no cost recorded`);
   }
 
+  // Copies no longer held (#396). Their cost is stated on its own line rather than folded into
+  // the purchase total: what was spent on the collection and what was spent on copies that are
+  // gone are two different questions, and adding them answers neither.
+  const writeOff = total.writeOff;
+  const writeOffNotes: string[] = [];
+  if (writeOff.cost.pendingCount > 0) {
+    writeOffNotes.push(`${writeOff.cost.pendingCount} cost pending`);
+  }
+  if (writeOff.cost.noneCount > 0) {
+    writeOffNotes.push(`${writeOff.cost.noneCount} no cost recorded`);
+  }
+
   return (
     <div style={FRAME_STYLE}>
       <div style={ROW_STYLE}>
@@ -137,6 +149,23 @@ export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefin
           {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
         </span>
       </div>
+      {/* Copies in scope that are gone (#396): disposed after delivery, or never arrived in usable
+          form. Only shown when there are some — a permanent 0.00 row would put a loss on every
+          screen that has never had one. It carries a **cost** and no catalog value on purpose: a
+          copy that is gone is worth nothing to its owner however the catalog prices it, but it did
+          cost what it cost, and dropping that would flatter what the purchases achieved. */}
+      {writeOff.count > 0 && (
+        <div style={ROW_STYLE}>
+          <span style={{ ...LABEL_STYLE, color: "var(--color-error)" }}>Written off</span>
+          <span style={{ ...AMOUNT_STYLE, color: "var(--color-error)" }}>
+            −{writeOff.cost.totalCostBasis} {writeOff.cost.baseCurrency}
+          </span>
+          <span style={NOTE_STYLE}>
+            {writeOff.count} no longer held
+            {writeOffNotes.length > 0 ? ` · ${writeOffNotes.join(" · ")}` : ""}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

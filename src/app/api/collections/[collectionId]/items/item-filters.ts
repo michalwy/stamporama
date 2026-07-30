@@ -45,5 +45,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // Sold copies are hidden from the inventory list by default (#207); an explicit
     // `includeSold=true` shows them again.
     excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
+    // Copies no longer held are hidden the same way (#395) — the list answers "what do I have".
+    includeDisposed: boolParam(sp.get("includeDisposed")),
   };
 }
