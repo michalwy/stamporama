@@ -267,13 +267,56 @@ candidate; each is gated by an in-popup confirm naming the active profile and in
 `confirm()` is avoided — it can dismiss an MV3 popup). Written items move to *Already linked*
 immediately. **Rescan** re-reads the page after you navigate.
 
+## Listing (#408)
+
+A platform module has **two halves**, and the second one is optional:
+
+| | Extraction (#249/#253) | Listing (#408) |
+|---|---|---|
+| Direction | reads a marketplace page | writes one |
+| Interface | `matches(url)` + `extract(doc)` | `listing: { formUrl, isFormUrl, fill }` |
+| Required | yes | no — a read-only module is a complete module |
+
+A module without the listing half simply offers no **List via Assistant** (#407); the registry says
+which modules carry which (`moduleReports()`), so a surface asking "can the Assistant post here?"
+never consults a hard-coded list of ids.
+
+The task a module fills from is the **listing kit** (#405) — the endpoint's payload unchanged,
+mirrored by hand in `src/platform/listing.ts` the way `core/decisions.ts` mirrors the matcher
+response. It says what the listing *holds* — catalog item-IDs, graded conditions, a quantity, a
+price, the two texts, the photos in upload order — and never how a form is laid out. Mapping those
+onto fields is the module's whole job, which is why Colnect's URL shape and field names appear
+nowhere outside `src/platform/colnect/`.
+
+Driving one is `src/platform/listing-run.ts`, and it is **two steps** because a navigation sits
+between them:
+
+1. `resolveListingTarget(task)` → the module that owns the platform and the sale form's URL.
+2. `fillListing(task, doc, url)` on the page that lands there → a `ListingFillOutcome`.
+
+Both are pure — no `chrome.*`, no fetch — so opening the tab and reporting back to the instance stay
+in the wiring (#407/#409), which is the part a second marketplace reuses unchanged. Three things are
+deliberate:
+
+- **Nothing is submitted.** Filling stops before submit; the collector clicks the platform's own
+  button, so nothing reaches a marketplace without a human look.
+- **The page is checked first.** `isFormUrl` guards the fill, because the collector may have
+  navigated on and filling a page that is not the sale form is worth refusing outright.
+- **The outcome is a report, not a verdict.** `filled` and `skipped` both come back, each entry named
+  for the collector rather than for the DOM. A field the task cannot answer — an unmapped condition
+  above all — is a skip and not an error: the rest of the form is still filled.
+
+Refusals name their own reason, and the three ways a task can fail to find a module — the platform
+names none, the id is unknown here, the module only reads — are three different answers.
+
 ## Layout
 
 - `src/platform/` — the `PlatformModule` interface + registry; `colnect/` is the first module (#249),
   registered by the content bootstrap. It reads two page shapes: catalog **list** pages (`div.pl-it`
   cards) and a **single stamp's** page, where the minor-variant rows carry catalog codes in the same
   abbreviated form. The main stamp on that page is skipped — its codes are printed with full catalog
-  names, which the abbreviation mapping (#248) can't key off.
+  names, which the abbreviation mapping (#248) can't key off. `listing.ts` is the listing half's
+  contract + the mirrored task shape, `listing-run.ts` the neutral driver (#408).
 - `src/core/` — profile store + colour derivation (#251), the registration payload contract (#252),
   decision types, message contracts.
 - `src/background/` — service worker + instance HTTP client (bearer-token, CORS-free background

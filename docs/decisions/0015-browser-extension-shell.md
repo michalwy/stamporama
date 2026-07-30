@@ -36,6 +36,17 @@ needed. The popup drives the flow and messages the SW; the content script only e
 into a registry the content script consults. The shell ships none; Colnect is the first module (#249).
 This keeps DOM specifics out of the neutral core and lets Delcampe/Allegro/… follow.
 
+**Two halves per module, the second optional (#408).** Reading a page and posting a listing are the
+symmetric halves of the same job, so listing is part of the same interface rather than a Colnect
+extra: an optional `listing` (`formUrl` / `isFormUrl` / `fill`) beside the extraction pair. Optional,
+because a module that only reads a marketplace is a complete module — the platform it serves simply
+offers no **List via Assistant** (#407) — and the registry reports which modules carry which half so
+no surface has to hard-code ids. The task a module fills from is the **listing kit** (#405)
+unchanged: it states what the listing holds, never how a form is laid out, and the mapping onto
+fields is the module's own. Driving it is two pure steps around the navigation that separates them
+(`resolveListingTarget` → `fillListing`), with the tab-opening and the report back to the instance
+left to the wiring (#407/#409) — the part a second marketplace reuses without change.
+
 **Bearer token auth (`AssistantToken`).** A per-collection token authenticates the extension. It is
 stored only as a SHA-256 hash, authorizes as the collection's owner for that one collection, and is
 accepted by the matcher endpoints alongside a session via `resolveCollectionOwner` (session wins;
@@ -92,5 +103,10 @@ host). Manual token generation stays for callers that cannot register.
 - The extension answers the page by setting `data-registration-*` attributes on the payload element
   (attributes, because its world is isolated and React owns the node), so the outcome is visible
   where the user is looking rather than inside the extension.
+- Listing is **filling, never posting**: a module stops before submit, so nothing reaches a
+  marketplace without the collector clicking the platform's own button. The fill is guarded by the
+  module's `isFormUrl`, and its outcome is a report of what was filled *and* what was skipped —
+  a field the task cannot answer (an unmapped condition above all) is a skip, not an error, and the
+  rest of the form is still filled.
 - The shell remains partial where the work is scheduled elsewhere: there is no
   packaging/distribution (#254).
