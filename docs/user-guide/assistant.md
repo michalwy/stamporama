@@ -86,6 +86,22 @@ registers your instance's address when you connect it, which is what lets a page
 offer over without any click on the toolbar. Connect it again from **Settings → Assistant** if the
 button says it is not installed on a browser where it plainly is.
 
+## Clickable Stamporama links
+
+If you put the [`{offerUrl}` token](contacts.md) in a platform's **private note** template, your
+listings carry a link back to the offer here. Colnect prints that note as plain text, so following
+it would otherwise mean selecting the address by hand. The Assistant turns it into a real link on
+the sale page — shown as the Stamporama mark and a label like **Offer #42** rather than a raw
+address, opening in a new tab so you keep your place in the listing you were reading.
+
+Only links to **instances you have connected** are turned into links; anything else in the note is
+left as the text you wrote. That restriction is the point: an extension that made every address on a
+page clickable would be handing you links it cannot vouch for. Both the short address and the longer
+one older notes carry are recognised, so notes you posted before this existed work too.
+
+Nothing to configure, and nothing changes on Colnect's side — the link is drawn in your browser
+only, and only for you, since the private note is yours alone to see.
+
 ## Keeping it up to date
 
 Nothing to do — Chrome updates it from the store. Each Stamporama release publishes a matching

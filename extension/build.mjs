@@ -67,6 +67,12 @@ const options = {
   logLevel: "info",
   sourcemap: watch ? "inline" : false,
   minify: !watch,
+  // The toolbar icon, inlined as a `data:` URL wherever it is imported (#417). A content script
+  // that shows the mark inside someone else's page needs the bytes, and the alternative —
+  // `chrome.runtime.getURL` — requires a `web_accessible_resources` entry that hands every page
+  // the extension's id. At 355 bytes for the 16px icon, inlining is cheaper than that trade, and
+  // the icon file stays the single source of truth rather than being copied into a TS constant.
+  loader: { ".png": "dataurl" },
 };
 
 await rm(outdir, { recursive: true, force: true });

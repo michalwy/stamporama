@@ -141,13 +141,20 @@ always generates, falling back to your default text. The tokens fill in from the
   it simply contribute nothing.
 - `{setTitle}` — the set's own title, on the description and private-note tabs (blank unless you
   named the set, so pair it as `{setTitle|catalog}`)
-- `{offerUrl}` — a link straight to this offer's own screen in Stamporama, on the description and
-  private-note tabs. Unlike every other token it describes the *offer* rather than the stamps in it,
-  which is what makes it useful in a **private note**: from the marketplace listing you are looking
-  at, one click back to the copies, photos and location refs behind it. The link is built from the
-  address this instance is reached at (`BETTER_AUTH_URL`); if that is not set, the token stays empty
-  and takes its line with it — a half-written link on someone else's site helps nobody. Its preview
-  shows an example address, since the offer does not exist yet while you are writing the template.
+- `{offerUrl}` — a link straight to this offer in Stamporama, on the description and private-note
+  tabs. Unlike every other token it describes the *offer* rather than the stamps in it, which is what
+  makes it useful in a **private note**: from the marketplace listing you are looking at, one click
+  back to the copies, photos and location refs behind it. It renders the offer's
+  [short address](offers.md#offer-number-and-short-link) — `https://your-instance/o/main/42`, around
+  forty characters, which matters because Colnect's note field holds only a hundred and refuses
+  anything longer outright. The link is built from the address this instance is reached at
+  (`BETTER_AUTH_URL`); if that is not set, the token stays empty and takes its line with it — a
+  half-written link on someone else's site helps nobody. Its preview shows an example address, since
+  the offer does not exist yet while you are writing the template.
+
+  Marketplaces generally print a private note as plain text, so the link is not clickable on their
+  page by itself. The [Assistant](assistant.md#clickable-stamporama-links) turns it into a real link
+  where it can.
 
 Literal text between tokens — spaces, `-`, `/`, `:`, `=` — is kept as written; it only disappears
 when it was gluing on a token that turned out empty. Use `{a|b|c}` to show the **first non-empty** of several

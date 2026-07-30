@@ -1,5 +1,8 @@
 import { findModuleForUrl } from "../platform/modules";
 import { fillListing } from "../platform/listing-run";
+import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
+import { getProfileStore } from "../core/profile";
+import iconUrl from "../../icons/icon-16.png";
 import type {
   DetectedNotice,
   ExtractRequest,
@@ -106,6 +109,25 @@ function watchForSubmit(): void {
   );
 }
 
+/**
+ * Make the Stamporama link in a Colnect **private note** clickable (#417).
+ *
+ * Colnect prints the note as text in one dedicated element on a sale page, so the `{offerUrl}` a
+ * listing carries there (#415) cannot be followed without selecting it by hand. The note element is
+ * the entire search area — deliberately, rather than the whole page: this rewrites only the field
+ * the collector's own text is in, never Colnect's copy.
+ *
+ * Which URLs become links is decided by `linkifyInstanceUrls` on the registered origins alone, so a
+ * page with no note, no profile, or a link to somewhere else is silently untouched.
+ */
+async function linkifyPrivateNote(): Promise<void> {
+  const notes = document.querySelectorAll("._sl-private-note");
+  if (notes.length === 0) return;
+  const { profiles } = await getProfileStore();
+  const origins = registeredOrigins(profiles.map((p) => p.apiBaseUrl));
+  for (const note of Array.from(notes)) linkifyInstanceUrls(note, origins, iconUrl);
+}
+
 if (!window.__stamporamaAssistantLoaded) {
   window.__stamporamaAssistantLoaded = true;
 
@@ -161,4 +183,8 @@ if (!window.__stamporamaAssistantLoaded) {
   } catch {
     /* detection must never break the page */
   }
+
+  // Best-effort and last, for the same reason detection is guarded: a note that fails to linkify
+  // must cost the collector nothing but the click they were already making.
+  void linkifyPrivateNote().catch(() => {});
 }
