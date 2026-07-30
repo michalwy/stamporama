@@ -24,6 +24,7 @@ function copy(over: Partial<PreconditionCopy> = {}): PreconditionCopy {
 
 function input(over: Partial<PreconditionInput> = {}): PreconditionInput {
   return {
+    platformModule: "colnect",
     state: "ready",
     sets: [{ setId: "set-1", label: "Mi·PL 1-2", copies: [copy(), copy()] }],
     ...over,
@@ -35,6 +36,20 @@ const codes = (i: PreconditionInput) => evaluateListingPreconditions(i).map((b) 
 describe("evaluateListingPreconditions", () => {
   it("passes a Ready offer whose copies are all matched and graded", () => {
     assert.deepEqual(evaluateListingPreconditions(input()), []);
+  });
+
+  it("refuses a platform with no Assistant module, and says nothing else about the offer", () => {
+    const blockers = evaluateListingPreconditions(
+      input({
+        platformModule: null,
+        sets: [{ setId: "set-1", label: "A", copies: [copy({ catalogItemId: null })] }],
+      })
+    );
+    assert.deepEqual(
+      blockers.map((b) => b.code),
+      ["no-platform-module"]
+    );
+    assert.match(blockers[0].message, /by hand/);
   });
 
   it("refuses anything but Ready, and says which state it is in", () => {

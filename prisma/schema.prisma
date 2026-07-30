@@ -1573,6 +1573,14 @@ model Contact {
   // them. Nothing is ever truncated against them; the app reports, it does not cut.
   maxDescriptionLength Int?
   maxPrivateNoteLength Int?
+  // Which Assistant **platform module** can post to this platform (#406, part of #155) — the
+  // extension's `PlatformModule` id (`"colnect"`), or null for a platform the Assistant knows
+  // nothing about. It is what makes the listing preconditions answerable: they are that module's
+  // rules — a Colnect item-ID on every stamp, a Colnect grade for every condition — and applying
+  // them to a Delcampe listing would be noise about a form nobody is going to fill from here.
+  // Nullable and unset by default, so a collection that has never used the Assistant sees none of
+  // it; validated against the modules the app knows (`src/lib/platform-modules.ts`).
+  platformModule   String?
   // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
   // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both`) and
   // the two per-tile label templates (#312). Changing any of them here never touches an offer

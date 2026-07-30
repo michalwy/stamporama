@@ -673,6 +673,36 @@ mark it ready again, and it is back in the next session. Marking ready is
 If an offer has no images yet, the card says so rather than quietly offering an empty upload. Generate
 them from the offer screen — see [Generating the photos](#generating-the-photos).
 
+### What the Assistant can't post
+
+This applies to the platform you named as Colnect under
+[**Settings → Colnect**](collections.md#colnect-platform). Every other platform is listed by hand,
+and none of what follows is checked or shown for its offers: reporting a Colnect requirement on a
+Delcampe listing would be noise about a form nobody is going to fill from here. Name no platform at
+all and nothing is checked anywhere.
+
+For the platform that is named, letting the [Assistant](assistant.md) fill its sale form needs
+three things to be true of the offer, and the card says so when one of them isn't — a **Can't list**
+chip on the line, and the reasons spelled out when you expand it. You find out here rather than
+half-way through a filled form.
+
+- **Every stamp needs the platform's catalog item-ID.** The form is opened *on* the catalog items
+  being sold, so a stamp the platform doesn't know is a form with nothing to point at. Match the named
+  stamps with the Assistant on the platform's own catalog pages — that is what it already does.
+- **Every condition needs a grade on that platform.** The card names the conditions with none; map
+  them under **Settings → Colnect** (see [Colnect condition mapping](collections.md#colnect-condition-mapping)). A
+  blank is a legitimate answer for a condition the platform has no grade for — it just means offers
+  using it are posted by hand.
+- **The sets must be interchangeable.** A listing carries one quantity, and a quantity says "N of the
+  same thing". Sets holding different stamps, or the same stamps in different conditions, are
+  different goods and one listing would misdescribe them. Either make the sets match, or list them
+  separately.
+
+This gates the Assistant only. **Publish stays available**, and so does everything else on the card:
+posting the form yourself is exactly what you do about a gap the Assistant can't fill. A description
+that is [over the platform's limit](#how-long-the-text-may-be) is *not* one of these — the platform's
+own field will refuse a long paste, and nothing about the stamps is misstated.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

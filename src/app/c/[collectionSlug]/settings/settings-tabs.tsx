@@ -12,6 +12,7 @@ import { SubtypesPanel } from "./subtypes-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
+import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -48,6 +49,11 @@ interface SettingsTabsProps {
   initialColnectMappings: ColnectMappingData[];
   /** Every condition with the Colnect grade it maps to (#404) — one row each, mapped or not. */
   initialColnectConditionMappings: ColnectConditionMappingData[];
+  /** Which platform contact is Colnect (#406), or null when none is — the setting the listing
+   * checks ride on. */
+  colnectPlatformId: string | null;
+  /** Every platform contact, for that picker. */
+  platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
   /** Internal copy-number display width (#268), edited on the General tab. */
   itemNoPad: number;
@@ -95,6 +101,8 @@ export function SettingsTabs({
   initialCollageTemplates,
   initialColnectMappings,
   initialColnectConditionMappings,
+  colnectPlatformId,
+  platformContacts,
   initialAssistantTokens,
   itemNoPad,
   duplicateCatalogMode,
@@ -265,7 +273,16 @@ export function SettingsTabs({
       )}
       {activeTab === "colnect" && (
         <section>
-          <h2 style={sectionHeadingStyle}>Colnect catalog mapping</h2>
+          {/* Which platform is Colnect (#406) leads the tab: the two mappings below it only ever
+              matter for offers headed there, and it is what switches the listing checks on. */}
+          <h2 style={sectionHeadingStyle}>Colnect platform</h2>
+          <ColnectPlatformPanel
+            collectionId={collectionId}
+            platforms={platformContacts}
+            selectedId={colnectPlatformId}
+          />
+
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect catalog mapping</h2>
           <ColnectPanel
             collectionId={collectionId}
             initialMappings={initialColnectMappings}

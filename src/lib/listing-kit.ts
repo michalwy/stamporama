@@ -21,11 +21,13 @@ import type { DescriptionFormat } from "./description-format";
 // platform's form is laid out. Which field each value goes in belongs to the platform module in the
 // extension (#408/#410).
 //
-// One Colnect-shaped assumption is unavoidable today and is deliberately confined here: the grade
-// vocabulary comes from the collection's Colnect condition mapping (#404), which is per collection
-// rather than per platform because Colnect's list is fixed and global (#402). A second marketplace
-// bringing its own vocabulary is what would turn `platformCondition` into a per-platform lookup —
-// nothing else in this shape would move.
+// Which module a platform belongs to is `Contact.platformModule` (#406); a platform naming none is
+// refused outright, because there is nobody to fill its form from here. One Colnect-shaped
+// assumption is unavoidable today and is deliberately confined here: the grade vocabulary comes from
+// the collection's Colnect condition mapping (#404), which is per collection rather than per
+// platform because Colnect's list is fixed and global (#402). A second marketplace bringing its own
+// vocabulary is what would turn `platformCondition` into a per-platform lookup — nothing else in
+// this shape would move.
 
 /** One copy of the listing, with the two platform-side values a form needs for it. Both are
  *  nullable, and both being non-null on every copy is exactly what the preconditions check. */
@@ -87,7 +89,9 @@ export interface OfferListingKit {
   offerId: string;
   collectionId: string;
   state: OfferState;
-  platform: { id: string; name: string };
+  /** The platform, and the Assistant module that knows its sale form (#406) — null when it names
+   *  none, which is itself the `no-platform-module` refusal below. */
+  platform: { id: string; name: string; module: string | null };
   /** The listing title (#209) — the stored one, falling back to the derived label as every surface
    *  does. Carried because a listing has a title on most platforms; Colnect's own sale form has no
    *  title field (#402) and its module simply ignores this. */
@@ -155,7 +159,7 @@ export async function getOfferListingKit(
       price: true,
       currency: true,
       collection: { select: { ownerId: true } },
-      platform: { select: { id: true, name: true } },
+      platform: { select: { id: true, name: true, platformModule: true } },
       sets: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: { id: true, title: true, items: { select: KIT_ITEM_SELECT } },
@@ -199,6 +203,7 @@ export async function getOfferListingKit(
   });
 
   const blockers = evaluateListingPreconditions({
+    platformModule: offer.platform.platformModule,
     state: offer.state as OfferState,
     sets: sets.map((s) => ({
       setId: s.setId,
@@ -219,7 +224,11 @@ export async function getOfferListingKit(
     offerId: offer.id,
     collectionId: offer.collectionId,
     state: offer.state as OfferState,
-    platform: { id: offer.platform.id, name: offer.platform.name },
+    platform: {
+      id: offer.platform.id,
+      name: offer.platform.name,
+      module: offer.platform.platformModule,
+    },
     title: offer.name ?? labeller.offer(offer.sets.map((s) => ({ title: s.title, items: s.items }))),
     description: offer.description,
     privateNote: offer.privateNote,

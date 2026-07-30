@@ -34,6 +34,11 @@ import {
   type OfferLabeller,
 } from "./offer-labels";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
+import { loadColnectConditionMap } from "./colnect";
+import {
+  evaluateListingPreconditions,
+  type ListingBlocker,
+} from "./listing-preconditions";
 import {
   compareSetItems,
   hasManualItemOrder,
@@ -1316,7 +1321,8 @@ export async function offersSummary(
 // ── Bulk listing workspace (#322) ────────────────────────────────────────────
 
 /** The offer's sets as the workspace reads them: the label select every offer list uses, plus each
- * copy's area links and issued year for the area/year grouping. */
+ * copy's area links and issued year for the area/year grouping, and the two values the listing
+ * preconditions are judged on (#406) — the stamp's Colnect item-ID and the copy's condition. */
 const LISTING_SETS_SELECT = {
   id: true,
   title: true,
@@ -1326,11 +1332,15 @@ const LISTING_SETS_SELECT = {
       sortOrder: true,
       item: {
         select: {
+          stampId: true,
+          conditionId: true,
+          condition: { select: { name: true } },
           stamp: {
             select: {
               // The label select already carries the area links the grouping needs (#379).
               ...STAMP_LABEL_SELECT.stamp.select,
               issuedYear: true,
+              colnectId: true,
             },
           },
         },
@@ -1365,6 +1375,12 @@ export interface ListingWorkspaceOffer {
   /** The distinct (area, year) pairs across the offer's copies, for the grouping and the rail
    * (`listing-groups.ts`). One entry when every copy agrees. */
   areaYears: OfferAreaYear[];
+  /** Why this offer cannot be handed to the Assistant to post (#406), empty when it can. The same
+   * evaluation the listing-kit endpoint refuses on (#405), so the card and the endpoint can never
+   * disagree about whether an offer is postable or why it is not. It says nothing about posting the
+   * listing **by hand** — Publish stays open, because a collector typing the form in themselves is
+   * exactly who fills a gap the Assistant cannot. */
+  blockers: ListingBlocker[];
 }
 
 /**
@@ -1384,6 +1400,14 @@ export async function listReadyOffersForListing(
   platformId: string
 ): Promise<ListingWorkspaceOffer[]> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  // Which Assistant module, if any, can post to this platform (#406). It decides whether the listing
+  // preconditions are asked at all: they are that module's own rules, and reporting "no Colnect
+  // item-ID" on a Delcampe batch is noise about a form nobody is going to fill from here.
+  const platform = await prisma.contact.findFirst({
+    where: { id: platformId, collectionId },
+    select: { platformModule: true },
+  });
+  const platformModule = platform?.platformModule ?? null;
   const rows = await prisma.offer.findMany({
     where: { collectionId, platformId, state: "ready" },
     orderBy: { createdAt: "desc" },
@@ -1399,7 +1423,13 @@ export async function listReadyOffersForListing(
     },
   });
 
-  const labeller = await makeOfferLabeller(collectionId);
+  // Both lookups are loaded **once for the whole batch** (#404): a posting session is dozens of
+  // offers over one collection's areas and a handful of conditions. The condition map is not read at
+  // all where no module asks for it.
+  const [labeller, conditionMap] = await Promise.all([
+    makeOfferLabeller(collectionId),
+    platformModule ? loadColnectConditionMap(collectionId) : new Map<string, string>(),
+  ]);
   const items: ListingWorkspaceOffer[] = rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -1414,10 +1444,52 @@ export async function listReadyOffersForListing(
     photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
     url: row.url,
     areaYears: distinctAreaYears(row.sets),
+    blockers: listingBlockersFor(row.sets, platformModule, labeller, conditionMap),
   }));
 
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
+}
+
+/** One of the batch's sets, exactly as {@link LISTING_SETS_SELECT} returns it. */
+type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SELECT }>;
+
+/**
+ * The listing preconditions for one offer of the batch (#406), or **nothing** where the platform
+ * names no Assistant module.
+ *
+ * Silence rather than the `no-platform-module` blocker the evaluator would return: that is a fact
+ * about the platform, not something to fix on the offer, and a *Can't list* chip on every card of
+ * every Delcampe batch is exactly the noise this check exists to avoid. The listing-kit endpoint
+ * still refuses such a platform (#405) — a caller that asked for a posting payload asked for
+ * something impossible, which is a different question from what the collector should go and fix.
+ *
+ * Every offer reaching here is `ready` by the caller's own query, so the state check can never fire.
+ */
+function listingBlockersFor(
+  sets: readonly ListingSetRow[],
+  platformModule: string | null,
+  labeller: OfferLabeller,
+  conditionMap: Map<string, string>
+): ListingBlocker[] {
+  if (!platformModule) return [];
+  return evaluateListingPreconditions({
+    platformModule,
+    state: "ready",
+    sets: sets.map((set) => ({
+      setId: set.id,
+      label: labeller.set(set),
+      copies: orderedItems(set.items).map(({ itemId, item }) => ({
+        itemId,
+        label: labeller.copy(item.stamp),
+        stampId: item.stampId,
+        catalogItemId: item.stamp.colnectId?.trim() || null,
+        conditionId: item.conditionId,
+        conditionName: item.condition.name,
+        platformCondition: conditionMap.get(item.conditionId) ?? null,
+      })),
+    })),
+  });
 }
 
 type AreaLinkedSet = {

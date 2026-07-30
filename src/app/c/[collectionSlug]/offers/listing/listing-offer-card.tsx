@@ -12,6 +12,7 @@ import { PhotoLightbox } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatBytes } from "@/lib/format-bytes";
 import { normalizeDescriptionFormat } from "@/lib/description-format";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
+import type { ListingBlocker } from "@/lib/listing-preconditions";
 import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
 import { useOfferDetail, useOfferPhotoPlan } from "../use-offers-query";
 
@@ -25,6 +26,16 @@ import { useOfferDetail, useOfferPhotoPlan } from "../use-offers-query";
 // screen already uses: a batch of forty prepared offers should not fetch forty descriptions and forty
 // photo plans to draw forty collapsed lines. Only one card is open at a time, which is also how the
 // work goes — one listing is being typed in at any moment.
+//
+// The **listing preconditions** (#406) apply only to a platform naming an Assistant module — they
+// are that module's own rules, and a marketplace listed by hand carries none of them, so its rows
+// come back with nothing to say. Where there are any, they ride on the row itself rather than on the
+// expanded kit: which of a batch the Assistant can post is a question asked while scanning, and an
+// answer that needs forty expansions is no answer. They are evaluated server-side
+// (`listing-preconditions.ts`), the same evaluation the listing-kit endpoint refuses on (#405), so
+// the card and the endpoint cannot disagree. They gate the **Assistant handoff** (#407) and nothing
+// else: Publish stays open, because posting the form by hand is exactly what a collector does about
+// a gap the Assistant cannot fill.
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -205,6 +216,23 @@ export function ListingOfferCard({
             >
               {title}
             </span>
+            {offer.blockers.length > 0 && (
+              <Tooltip
+                content="The Assistant cannot post this offer yet — expand the card for what to fix"
+                style={{ flexShrink: 0 }}
+              >
+                <span
+                  style={{
+                    ...CHIP,
+                    color: "var(--color-error)",
+                    borderColor: "var(--color-error)",
+                    background: "var(--color-error-soft)",
+                  }}
+                >
+                  Can’t list
+                </span>
+              </Tooltip>
+            )}
             {offer.setCount > 1 && (
               <Tooltip content="Sets in this offer" style={{ flexShrink: 0 }}>
                 <span style={CHIP}>{offer.setCount}×</span>
@@ -271,6 +299,7 @@ export function ListingOfferCard({
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           offerId={offer.id}
+          blockers={offer.blockers}
         />
       )}
     </div>
@@ -282,20 +311,30 @@ function PostingKit({
   collectionId,
   collectionSlug,
   offerId,
+  blockers,
 }: {
   collectionId: string;
   collectionSlug: string;
   offerId: string;
+  blockers: ListingBlocker[];
 }) {
   const { data: offer, isLoading, isError } = useOfferDetail(collectionId, offerId);
   const { data: plan, isLoading: planLoading } = useOfferPhotoPlan(collectionId, offerId);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
-  if (isLoading) {
-    return <Note>Loading the listing…</Note>;
-  }
-  if (isError || !offer) {
-    return <Note tone="error">Could not load this offer.</Note>;
+  // The preconditions come with the row, so they are stated while the rest of the kit is still
+  // loading — and even when it fails to load, since what has to be fixed is knowable either way.
+  if (isLoading || isError || !offer) {
+    return (
+      <div style={{ borderTop: "1px solid var(--color-border)" }}>
+        <ListingBlockers blockers={blockers} />
+        {isLoading ? (
+          <Note>Loading the listing…</Note>
+        ) : (
+          <Note tone="error">Could not load this offer.</Note>
+        )}
+      </div>
+    );
   }
 
   const format = normalizeDescriptionFormat(offer.descriptionFormat);
@@ -316,6 +355,8 @@ function PostingKit({
         background: "var(--color-bg-page)",
       }}
     >
+      <ListingBlockers blockers={blockers} inset />
+
       <Field label="Title" copyValue={offer.name}>
         <p style={{ ...BODY, color: offer.name ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
           {offer.name ?? "No title yet — the derived label is used instead."}
@@ -504,6 +545,61 @@ function PostingKit({
           onClose={() => setLightbox(null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Why the Assistant cannot post this offer (#406), named one reason at a time — a count would say
+ * only that something is wrong, and each of these is fixed in a different place. Rendering nothing
+ * when there is nothing to say keeps the caller a single code path.
+ *
+ * Deliberately **not** a per-reason link: an unmatched stamp is matched on the platform's own catalog
+ * pages through the Assistant, which the app cannot navigate to, and a condition is mapped in
+ * Settings — so the messages name where they are fixed and the offer's own screen is one click away
+ * in the header above.
+ */
+function ListingBlockers({ blockers, inset }: { blockers: ListingBlocker[]; inset?: boolean }) {
+  if (blockers.length === 0) return null;
+  return (
+    <div
+      style={{
+        margin: inset ? 0 : "0.75rem",
+        padding: "0.5rem 0.75rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-error)",
+        background: "var(--color-error-soft)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.25rem",
+      }}
+    >
+      <span style={{ ...FIELD_LABEL, color: "var(--color-error)" }}>
+        Cannot be listed by the Assistant
+      </span>
+      <ul
+        style={{
+          listStyle: "disc",
+          margin: 0,
+          paddingLeft: "1.125rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.25rem",
+        }}
+      >
+        {blockers.map((blocker) => (
+          <li
+            key={blocker.code}
+            style={{
+              fontSize: "0.8125rem",
+              lineHeight: 1.5,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            {blocker.message}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

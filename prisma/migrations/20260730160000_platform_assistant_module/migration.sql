@@ -1,0 +1,12 @@
+-- Which Assistant platform module can post to a platform (#406, part of #155).
+--
+-- The listing preconditions — a Colnect item-ID on every stamp, a mapped Colnect grade for every
+-- condition, interchangeable sets — are one module's rules, not a general truth about listings.
+-- Without a column saying which module a platform belongs to, they would be checked and reported on
+-- every offer on every marketplace, which is noise about a form nobody is going to fill from here.
+--
+-- Holds the extension's `PlatformModule` id (`'colnect'`). Nullable and unset by default: a platform
+-- the Assistant knows nothing about is the normal case, and a collection that has never used the
+-- Assistant sees nothing change. Validated in the domain layer against the modules the app knows,
+-- not by a CHECK — the list lives in code and grows with the extension.
+ALTER TABLE "contact" ADD COLUMN "platformModule" TEXT;

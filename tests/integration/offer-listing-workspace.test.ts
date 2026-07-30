@@ -10,6 +10,7 @@ import {
   setOfferState,
 } from "../../src/lib/offers";
 import { offerGroupKey } from "../../src/lib/listing-groups";
+import { setColnectConditionMapping } from "../../src/lib/colnect";
 
 // The bulk listing workspace's read model (#322). The grouping rules themselves are unit-tested
 // (`listing-groups.test.ts`); what needs a real database is the part that produces its inputs — the
@@ -54,8 +55,12 @@ describe("bulk listing workspace read model (#322)", () => {
         data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
       })
     ).id;
+    // The batch's platform names the Colnect Assistant module (#406) — without one the listing
+    // preconditions are not asked at all, which is what `otherPlatformId` below covers.
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.contact.create({
+        data: { collectionId, name: "Delcampe", platform: true, platformModule: "colnect" },
+      })
     ).id;
     otherPlatformId = (
       await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
@@ -78,9 +83,17 @@ describe("bulk listing workspace read model (#322)", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  /** A stamp with its area links, the first of which is the primary one. */
-  async function stamp(name: string, issuedYear: number | null, areaIds: string[]): Promise<string> {
-    const created = await prisma.stamp.create({ data: { collectionId, name, issuedYear } });
+  /** A stamp with its area links, the first of which is the primary one. `colnectId` is what the
+   * listing preconditions (#406) read: a stamp without one cannot be pointed at by a listing form. */
+  async function stamp(
+    name: string,
+    issuedYear: number | null,
+    areaIds: string[],
+    colnectId: string | null = null
+  ): Promise<string> {
+    const created = await prisma.stamp.create({
+      data: { collectionId, name, issuedYear, colnectId },
+    });
     await prisma.stampCollectionArea.createMany({
       data: areaIds.map((collectionAreaId, i) => ({
         stampId: created.id,
@@ -180,6 +193,44 @@ describe("bulk listing workspace read model (#322)", () => {
       await listReadyOffersForListing(userId, collectionId, otherPlatformId)
     ).map((r) => r.id);
     assert.deepEqual(otherIds, [elsewhere]);
+  });
+
+  // ── Listing preconditions (#406) ───────────────────────────────────────────
+  //
+  // The rules themselves are unit-tested (`listing-preconditions.test.ts`); what the batch read has
+  // to get right is that it resolves their inputs — the stamp's Colnect item-ID and the condition
+  // mapping — and reports them per row, so the card can say which of a session's offers are postable
+  // without expanding any of them.
+
+  it("names an unmapped condition and an unmatched stamp on the row", async () => {
+    const offerId = await readyOffer([await stamp("PL unmatched", 1960, [plId])]);
+
+    const row = await rowFor(offerId);
+    assert.deepEqual(
+      row?.blockers.map((b) => b.code).sort(),
+      ["missing-catalog-id", "unmapped-condition"]
+    );
+  });
+
+  it("says nothing at all on a platform with no Assistant module", async () => {
+    // Same offer, same gaps — but nothing here posts that platform's form, so reporting them would
+    // put a "can't list" chip on every card of every batch that is listed by hand.
+    const offerId = await readyOffer([await stamp("PL hand-listed", 1960, [plId])], {
+      platformId: otherPlatformId,
+    });
+
+    const rows = await listReadyOffersForListing(userId, collectionId, otherPlatformId);
+    assert.deepEqual(rows.find((r) => r.id === offerId)?.blockers, []);
+  });
+
+  it("clears once the stamp is matched and the condition is mapped", async () => {
+    const offerId = await readyOffer([await stamp("PL listable", 1960, [plId], "90001")]);
+    await setColnectConditionMapping(userId, conditionId, "4");
+    try {
+      assert.deepEqual((await rowFor(offerId))?.blockers, []);
+    } finally {
+      await setColnectConditionMapping(userId, conditionId, null);
+    }
   });
 
   it("refuses another owner's collection", async () => {

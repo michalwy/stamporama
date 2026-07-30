@@ -12,6 +12,7 @@ import { OFFER_STATE_LABEL, type OfferState } from "./offer-rules";
 // platform's own field will visibly refuse, not a false claim about the stamps.
 
 export type ListingBlockerCode =
+  | "no-platform-module"
   | "not-ready"
   | "no-sets"
   | "missing-catalog-id"
@@ -55,6 +56,10 @@ export interface PreconditionSet {
 }
 
 export interface PreconditionInput {
+  /** The Assistant platform module the offer's platform names (`platform-modules.ts`), or null when
+   *  it names none. Every other check here is that module's rule, so a platform without one has
+   *  nothing to fail — see {@link evaluateListingPreconditions}. */
+  platformModule: string | null;
   state: OfferState;
   sets: readonly PreconditionSet[];
 }
@@ -88,11 +93,29 @@ function distinct(values: readonly string[]): string[] {
  * Every reason this offer cannot be handed over, in the order they are worth fixing. An empty array
  * means the listing kit is servable.
  *
- * `not-ready` and `no-sets` are checked first and stand alone: with no sets there is no composition
- * to say anything else about, and repeating "no catalog item-ID" under an offer that simply is not
- * finished buries the one thing to do about it.
+ * `no-platform-module`, `not-ready` and `no-sets` are checked first and each stands **alone**: every
+ * other check is one module's rule, with no sets there is no composition to say anything else about,
+ * and repeating "no catalog item-ID" under an offer that simply is not finished buries the one thing
+ * to do about it.
+ *
+ * `no-platform-module` is a refusal, not a fault to fix: a marketplace the Assistant cannot post to
+ * is a perfectly good marketplace, listed by hand. A surface that only ever asks "what do I fix"
+ * — the workspace card — should therefore not evaluate at all for such a platform rather than draw
+ * this blocker, which is a fact about the platform and not about the offer.
  */
 export function evaluateListingPreconditions(input: PreconditionInput): ListingBlocker[] {
+  if (!input.platformModule) {
+    return [
+      {
+        code: "no-platform-module",
+        message:
+          "This platform has no Assistant module, so the Assistant cannot fill its listing form. Post it by hand.",
+        subjects: [],
+        stampIds: [],
+      },
+    ];
+  }
+
   if (input.state !== "ready") {
     return [
       {
@@ -124,7 +147,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     const subjects = distinct(unmatched.map((c) => c.label));
     blockers.push({
       code: "missing-catalog-id",
-      message: `${subjects.length === 1 ? "One stamp has" : `${subjects.length} stamps have`} no catalog item-ID on this platform: ${subjects.join(", ")}. Match them first — the listing form has nothing to point at without one.`,
+      message: `${subjects.length === 1 ? "One stamp has" : `${subjects.length} stamps have`} no catalog item-ID on this platform: ${subjects.join(", ")}. Match ${subjects.length === 1 ? "it" : "them"} with the Assistant on the platform's own catalog pages first — the listing form has nothing to point at without one.`,
       subjects,
       stampIds: distinct(unmatched.map((c) => c.stampId)),
     });

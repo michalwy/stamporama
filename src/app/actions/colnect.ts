@@ -10,6 +10,9 @@ import {
   getColnectMappings,
   getColnectConditionMappings,
   setColnectConditionMapping,
+  getColnectPlatform,
+  listPlatformContacts,
+  setColnectPlatform,
   ColnectAbbrevTakenError,
   ColnectConditionValueError,
   type ColnectMappingData,
@@ -59,6 +62,38 @@ export async function setColnectConditionMappingAction(
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save the condition mapping. Please try again." };
+  }
+}
+
+/** The platform contact marked as Colnect (#406), and every platform that could be — the picker
+ *  reads both at once, since a picker showing only the current answer cannot change it. */
+export async function getColnectPlatformAction(collectionId: string): Promise<{
+  selectedId: string | null;
+  platforms: { id: string; name: string }[];
+}> {
+  const session = await getSession();
+  const [selected, platforms] = await Promise.all([
+    getColnectPlatform(session.user.id, collectionId),
+    listPlatformContacts(session.user.id, collectionId),
+  ]);
+  return { selectedId: selected?.id ?? null, platforms };
+}
+
+/**
+ * Point the Colnect settings at one platform contact, or clear it with an empty id (#406). One
+ * write per change, like the condition mapping beside it: the select *is* the control. Exclusive —
+ * the domain layer clears whoever held it, so this can never leave two.
+ */
+export async function setColnectPlatformAction(
+  collectionId: string,
+  contactId: string
+): Promise<ColnectActionState> {
+  const session = await getSession();
+  try {
+    await setColnectPlatform(session.user.id, collectionId, contactId || null);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to save the Colnect platform. Please try again." };
   }
 }
 

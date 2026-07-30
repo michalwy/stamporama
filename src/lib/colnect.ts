@@ -23,6 +23,7 @@ import {
   type ColnectBackfillProposal,
 } from "./colnect-backfill";
 import { colnectGradeFor, isColnectConditionValue } from "./colnect-conditions";
+import { COLNECT_PLATFORM_MODULE } from "./platform-modules";
 import {
   colnectRefKey,
   decideColnectItem,
@@ -322,6 +323,81 @@ export async function loadColnectConditionMap(
     select: { stampConditionId: true, colnectValue: true },
   });
   return new Map(rows.map((r) => [r.stampConditionId, r.colnectValue]));
+}
+
+// ── Which platform is Colnect (#406) ─────────────────────────────────────────
+//
+// The listing preconditions are **Colnect's own rules** — an item-ID on every stamp, a grade for
+// every condition, interchangeable sets — so they are only worth checking on offers actually headed
+// for Colnect. Which platform `Contact` that is has to be said somewhere, and it is said **here**,
+// beside the two vocabulary mappings, rather than as a field on the contact form: it is one fact per
+// collection, and the collector who is setting up Colnect is looking at this tab.
+//
+// The store is `Contact.platformModule` (the extension's `PlatformModule` id, #408), so the offer
+// side asks the platform and never this setting. Exactly **one** contact may hold it: Colnect is one
+// marketplace, and two platforms claiming it could only disagree.
+
+/** The platform contact currently marked as Colnect, or null when none is. */
+export async function getColnectPlatform(
+  ownerId: string,
+  collectionId: string
+): Promise<{ id: string; name: string } | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.contact.findFirst({
+    where: { collectionId, platformModule: COLNECT_PLATFORM_MODULE },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Every platform contact of the collection, for the picker — a listing platform is the only kind
+ *  of contact that could be Colnect. */
+export async function listPlatformContacts(
+  ownerId: string,
+  collectionId: string
+): Promise<{ id: string; name: string }[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.contact.findMany({
+    where: { collectionId, platform: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Mark one platform contact as Colnect, or clear the setting with null. **Exclusive**: whoever held
+ * it before is cleared in the same transaction, so the collection can never have two Colnect
+ * platforms and "which one is it" always has one answer. Passing a contact that is not a platform of
+ * this collection is refused — the marker only means anything on a platform an offer can be listed
+ * on.
+ */
+export async function setColnectPlatform(
+  ownerId: string,
+  collectionId: string,
+  contactId: string | null
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (contactId) {
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId, collectionId, platform: true },
+      select: { id: true },
+    });
+    if (!contact) throw new Error("Platform not found in this collection.");
+  }
+  await prisma.$transaction([
+    prisma.contact.updateMany({
+      where: { collectionId, platformModule: COLNECT_PLATFORM_MODULE },
+      data: { platformModule: null },
+    }),
+    ...(contactId
+      ? [
+          prisma.contact.update({
+            where: { id: contactId },
+            data: { platformModule: COLNECT_PLATFORM_MODULE },
+          }),
+        ]
+      : []),
+  ]);
 }
 
 // ── Catalog-number matcher (#250, part of #155) ──────────────────────────────

@@ -81,6 +81,7 @@ describe("offer listing kit (#405)", () => {
           collectionId,
           name: "Colnect",
           platform: true,
+          platformModule: "colnect",
           platformCurrency: "EUR",
           descriptionTemplate: "Stamps as pictured.",
         },
@@ -162,6 +163,28 @@ describe("offer listing kit (#405)", () => {
     // Nothing has been generated, so the upload set is empty rather than absent.
     assert.deepEqual(kit.photos.images, []);
     assert.equal(kit.photos.status, "none");
+  });
+
+  it("refuses a platform the Assistant has no module for, and says nothing else", async () => {
+    const handListed = (
+      await prisma.contact.create({
+        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      })
+    ).id;
+    const offerId = await createOffer(userId, collectionId, {
+      platformId: handListed,
+      url: null,
+      price: "9.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    await addOfferSet(userId, offerId, [await copy(await stamp("PL hand", null))]);
+    await setOfferState(userId, offerId, "ready");
+
+    const kit = await getOfferListingKit(userId, collectionId, offerId);
+    assert.deepEqual(kit?.blockers.map((b) => b.code), ["no-platform-module"]);
+    assert.equal(kit?.platform.module, null);
   });
 
   it("refuses an offer that is not Ready", async () => {

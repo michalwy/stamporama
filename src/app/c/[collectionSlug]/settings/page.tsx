@@ -10,7 +10,12 @@ import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
-import { getColnectMappings, getColnectConditionMappings } from "@/lib/colnect";
+import {
+  getColnectMappings,
+  getColnectConditionMappings,
+  getColnectPlatform,
+  listPlatformContacts,
+} from "@/lib/colnect";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
@@ -45,6 +50,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     collageTemplates,
     colnectMappings,
     colnectConditionMappings,
+    colnectPlatform,
+    platformContacts,
     assistantTokens,
     photoStorageBytes,
     titleLanguages,
@@ -60,6 +67,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCollageTemplates(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
+    getColnectPlatform(session.user.id, collection.id),
+    listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
@@ -87,6 +96,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialCollageTemplates={collageTemplates}
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
+          colnectPlatformId={colnectPlatform?.id ?? null}
+          platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}

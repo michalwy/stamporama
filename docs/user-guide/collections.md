@@ -139,6 +139,22 @@ Stamp names are the largest set of text to translate and every entry is typed by
 
 The **Add stamp** and **Edit stamp** dialogs include a **Colnect** field in the catalog-numbers section, filled in like any other number. It holds the stamp's [Colnect](https://colnect.com) Marketplace **item-ID** — the number in a catalog page's address (`…/stamps/stamp/123456-…`). It is an external reference, not a catalog number, so it has no vendor prefix and is not checked for duplicates; leave it blank if you don't use Colnect. When a stamp has one, a small dashed **Colnect** tag, with an open-in-new-tab icon, appears next to the stamp's catalog numbers — on the **Stamps** list, on the stamps inside an issue on the **Issues** list, and on the copy rows in **Inventory**. Click it to open that stamp's page on colnect.com in a new tab; hover it to see the recorded item-ID. The ID itself is not printed on the row, so it doesn't crowd out the catalog numbers.
 
+## Colnect platform
+
+**Settings → Colnect** starts by asking which of your [platforms](contacts.md) *is* Colnect. Pick it
+from the list — every contact carrying the **Platform** role is offered — and the choice saves on the
+spot. Only one platform can be Colnect, so picking a different one moves the marker rather than
+adding a second.
+
+Naming it is what turns on the [listing checks](offers.md#what-the-assistant-cant-post) in the bulk
+listing workspace: offers headed for that platform are tested against what Colnect's sale form needs
+— an item-ID on every stamp, a grade for every condition, and sets that are interchangeable — before
+you hand one to the Assistant. Leave it **— not set —** and nothing is checked anywhere; every
+platform is listed by hand, exactly as before. It changes nothing else: templates, limits, photos,
+pricing and publishing all work the same either way.
+
+The two mappings below only ever matter for that platform, which is why they sit under it.
+
 ## Colnect catalog mapping
 
 Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`Mi`, `Sn`, `Yt`, `Sg`, `AFA`, `Pol`…), which don't all match yours — notably Colnect's `Pol` is **Fischer**, which you may abbreviate `Fi`. **Settings → Colnect** lets you record, per collection, which local catalog each Colnect abbreviation means.
@@ -159,7 +175,7 @@ Every one of your conditions gets a row, with a picker holding Colnect's five gr
 | U - Used |
 | CTO - Cancelled To Order |
 
-Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the listing flow says so.
+Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the [bulk listing workspace says so](offers.md#what-the-assistant-cant-post) before you start filling a form.
 
 ## Connecting the browser extension
 

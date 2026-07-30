@@ -118,6 +118,12 @@ export interface ContactData extends ContactRoles {
    * the `platform` role. */
   maxDescriptionLength: number | null;
   maxPrivateNoteLength: number | null;
+  /** Which Assistant platform module can post to this platform (#406), or null when the Assistant
+   * knows nothing about it — the normal case. It is what makes the listing preconditions
+   * answerable, since they are that module's own rules. **Read-only here**: it is set in
+   * Settings → Colnect by picking the platform (`setColnectPlatform`), because which platform is
+   * Colnect is one fact per collection rather than a property each contact form re-asks. */
+  platformModule: string | null;
   /** Photo defaults seeded onto every offer created on this platform (#308): which scan sides to
    * include, the per-tile label template (#312), and which collage template (#307) supplies the
    * render numbers. Changing them never touches an offer already prepared. */
@@ -162,6 +168,7 @@ const CONTACT_SELECT = {
   maxPhotoFileSizeMib: true,
   maxDescriptionLength: true,
   maxPrivateNoteLength: true,
+  platformModule: true,
   photoSides: true,
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
