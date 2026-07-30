@@ -1104,14 +1104,29 @@ export async function listOfferPlatforms(
   ownerId: string,
   collectionId: string
 ): Promise<
-  { id: string; name: string; platformCurrency: string | null; defaultOfferPrice: string | null }[]
+  {
+    id: string;
+    name: string;
+    platformCurrency: string | null;
+    defaultOfferPrice: string | null;
+    /** The Assistant module that knows this platform's sale form (#406), or null where it is listed
+     *  by hand. It rides with the platform because the listing workspace asks it of the platform it
+     *  is posting to — whether to offer **List via Assistant** at all (#407). */
+    platformModule: string | null;
+  }[]
 > {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.offer.findMany({
     where: { collectionId },
     select: {
       platform: {
-        select: { id: true, name: true, platformCurrency: true, defaultOfferPrice: true },
+        select: {
+          id: true,
+          name: true,
+          platformCurrency: true,
+          defaultOfferPrice: true,
+          platformModule: true,
+        },
       },
     },
     distinct: ["platformId"],

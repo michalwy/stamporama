@@ -703,6 +703,37 @@ posting the form yourself is exactly what you do about a gap the Assistant can't
 that is [over the platform's limit](#how-long-the-text-may-be) is *not* one of these — the platform's
 own field will refuse a long paste, and nothing about the stamps is misstated.
 
+### List via Assistant
+
+Where the platform is the one named as Colnect and nothing on the list above is blocking it, the card
+carries **⚡ List via Assistant** beside Publish. It is the same posting step with the typing done for
+you: the [Assistant](assistant.md) opens the platform's sale form in a new tab and fills it in from
+this offer — the items being sold, each copy's condition in the platform's own grades, the price, the
+number of sets and the two texts.
+
+**Nothing is submitted.** The form is filled and handed to you; you look it over and press the
+platform's own button. Photos are not uploaded either — download them from the card as usual.
+
+When it is done the card says how it went, under the offer's line:
+
+- the fields that were **filled**, named in one line;
+- the fields that were **skipped**, one per line with the reason. A skip is not a failure — the rest
+  of the form is still filled, and you finish that field in front of the form. A text over the
+  platform's limit is skipped rather than cut short, for instance, because cutting it would mangle
+  wording you chose.
+
+Then **Publish** from the same strip, once the platform has taken the listing.
+
+One offer goes at a time — the Assistant puts the marketplace's tab in front, so a second would be two
+forms fighting over the same window. While one is running, the other cards say so.
+
+The button is **disabled with the reason** rather than hidden when it can't be used: the offer has
+something to fix, the Assistant isn't installed in this browser (or hasn't been
+[connected](assistant.md#connecting-it-to-your-collection) to this instance), or another offer is
+mid-listing.
+It doesn't appear at all for a platform with no Assistant module, since there is no form it knows how
+to fill.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

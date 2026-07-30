@@ -185,9 +185,17 @@ export function useOffersForTarget(
   });
 }
 
-/** Platforms that currently have at least one offer, for the list filter dropdown. */
+/** Platforms that currently have at least one offer, for the list filter dropdown — and, in the
+ * listing workspace, for whether the Assistant has a module for the platform being posted to (#407). */
 export function useOfferPlatforms(collectionId: string) {
-  return useQuery<{ id: string; name: string; platformCurrency: string | null }[]>({
+  return useQuery<
+    {
+      id: string;
+      name: string;
+      platformCurrency: string | null;
+      platformModule: string | null;
+    }[]
+  >({
     queryKey: ["offers", collectionId, "platforms"] as const,
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/offers/platforms`);

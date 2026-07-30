@@ -51,6 +51,23 @@ When there are hidden rows, a **Show N already linked elsewhere** checkbox appea
 missing catalog numbers* — tick it to bring them back and change one. It only filters what is on
 screen (nothing is re-matched), and the extension remembers the setting.
 
+## Filling a sale form for you
+
+The Assistant also works the other way round: from the [bulk listing
+workspace](offers.md#list-via-assistant), **⚡ List via Assistant** on a ready offer opens the
+platform's sale form in a new tab and fills it in — the items being sold, each copy's condition in the
+platform's own grades, the price, the number of sets and the two texts.
+
+It **never submits**. The form is filled and left in front of you to check and post yourself, and no
+photos are uploaded. When it is done, the offer's card in Stamporama lists what was filled and what
+was skipped, so a field it couldn't answer — a condition with no grade on that platform, a text over
+the platform's limit — is something you learn there rather than after posting.
+
+For this to be offered, the connection has to be the one this instance is scripting: the Assistant
+registers your instance's address when you connect it, which is what lets a page of yours hand an
+offer over without any click on the toolbar. Connect it again from **Settings → Assistant** if the
+button says it is not installed on a browser where it plainly is.
+
 ## Keeping it up to date
 
 Nothing to do — Chrome updates it from the store. Each Stamporama release publishes a matching

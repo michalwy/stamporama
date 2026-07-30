@@ -21,6 +21,11 @@ import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
 import { useListingOffers, useOfferPlatforms, useInvalidateOffers } from "../use-offers-query";
 import { ListingOfferCard } from "./listing-offer-card";
+import {
+  LISTING_ELEMENT_ID,
+  useAssistantHandoff,
+  useAssistantPresence,
+} from "./assistant-handoff";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 
 // The bulk listing workspace (#322): one posting session on one marketplace. Most platforms have no
@@ -183,7 +188,16 @@ export function ListingWorkspacePanel({
       : expandedId;
 
   const areaNames = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
-  const platformName = platforms.find((p) => p.id === platformId)?.name ?? "this platform";
+  const platform = platforms.find((p) => p.id === platformId);
+  const platformName = platform?.name ?? "this platform";
+
+  // The Assistant handoff (#407). Both halves are session-wide rather than per card: the hidden
+  // element is one node the page owns (#409's contract, the registration one again), and only one
+  // offer can be in flight, since the extension puts the marketplace's tab in front.
+  const assistantPresent = useAssistantPresence();
+  const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } =
+    useAssistantHandoff(collectionId);
+  const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
 
   function groupHeading(key: GroupKey): { label: string; hint?: string } {
     if (key.mixed) {
@@ -217,6 +231,9 @@ export function ListingWorkspacePanel({
       const result = await publishOfferAction(offer.id, url);
       if (result.status === "success") {
         setPublishing(null);
+        // Whatever the Assistant reported about this offer described the form, and the form has now
+        // been posted — the report has nothing left to say.
+        if (handoff?.offerId === offer.id) dismissHandoff();
         // The offer has left this batch — it is `active` now, so the workspace, the Offers list and
         // the toolbar counts all want re-reading.
         invalidateAll(collectionId);
@@ -549,6 +566,15 @@ export function ListingWorkspacePanel({
                         setPublishing(offer);
                       }}
                       onSendBack={() => sendBack(offer)}
+                      onListViaAssistant={() => {
+                        setActionError(undefined);
+                        void startHandoff(offer.id);
+                      }}
+                      onDismissHandoff={dismissHandoff}
+                      assistantModule={platform?.platformModule ?? null}
+                      assistantPresent={assistantPresent}
+                      handoff={handoff?.offerId === offer.id ? handoff : null}
+                      handoffBusy={Boolean(handoffRunning) && handoff?.offerId !== offer.id}
                       isPublishing={isPending && publishing?.id === offer.id}
                       isPending={isPending}
                     />
@@ -586,6 +612,15 @@ export function ListingWorkspacePanel({
             }
           }}
         />
+      )}
+
+      {/* The handoff itself: machine-readable, never shown. A hidden element holding JSON text
+          rather than a <script> tag, so React owns it like any other node — the same shape the
+          registration payload uses (#252), read and answered by the Assistant (#409). */}
+      {handoff?.payload && (
+        <div ref={nodeRef} id={LISTING_ELEMENT_ID} hidden>
+          {handoff.payload}
+        </div>
       )}
 
       {publishing && (
