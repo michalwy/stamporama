@@ -16,7 +16,8 @@ import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-s
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
-import { flattenAreaTree, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { flattenAreaTree, resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
 import { useListingOffers, useOfferPlatforms, useInvalidateOffers } from "../use-offers-query";
 import { ListingOfferCard } from "./listing-offer-card";
@@ -132,12 +133,11 @@ export function ListingWorkspacePanel({
 
   const { data: offers = [], isLoading } = useListingOffers(collectionId, platformId);
 
-  const areaIds = useMemo(() => {
-    if (!filterAreaId) return undefined;
-    const ids = getDescendantIds(areas, filterAreaId);
-    ids.add(filterAreaId);
-    return [...ids];
-  }, [filterAreaId, areas]);
+  const [includeSubAreas] = useSubtreeScope("area");
+  const areaIds = useMemo(
+    () => resolveAreaFilterIds(areas, filterAreaId, includeSubAreas) ?? undefined,
+    [filterAreaId, areas, includeSubAreas]
+  );
 
   const parsedYear = year === "" ? undefined : year === "none" ? ("none" as const) : Number(year);
 

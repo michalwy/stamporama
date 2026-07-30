@@ -154,6 +154,19 @@ async function resolveLocationSubtree(
   return [...ids];
 }
 
+/** The location ids a filter narrows to: null when no location is selected, the subtree by
+ * default (#56), or that one node when the collector has scoped the filter to it (#385). Every
+ * read that filters by location goes through this, so the list, its holdings bar and its year
+ * facets can never disagree about what "in Klaser A" means. */
+async function resolveLocationScope(
+  collectionId: string,
+  filters: { locationId?: string; locationExact?: boolean }
+): Promise<string[] | null> {
+  if (!filters.locationId) return null;
+  if (filters.locationExact) return [filters.locationId];
+  return resolveLocationSubtree(collectionId, filters.locationId);
+}
+
 /** Hand out `count` consecutive internal copy numbers for a collection (#268).
  *
  * The counter lives on `Collection.nextItemNo` and is bumped in one statement, so concurrent
@@ -248,6 +261,16 @@ function stampLabel(stamp: {
   const cn = stamp.catalogNumbers.map((c) => c.number).join(", ");
   const parts = [cn || null, stamp.name || null].filter(Boolean);
   return parts.join(" · ") || "(unnamed)";
+}
+
+/** Supplier + date — the pair the purchases list leads with — naming the order a copy came from
+ * (#387), so its row menu says *which* purchase before navigating to it. */
+function purchaseLabel(p: {
+  purchasedAt: Date;
+  contact: { name: string } | null;
+}): string {
+  const date = p.purchasedAt.toISOString().slice(0, 10);
+  return p.contact?.name ? `${p.contact.name} · ${date}` : date;
 }
 
 const ITEM_SELECT = {
@@ -683,6 +706,10 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   issueId?: string;
   /** Restrict to copies stored in this location or any of its descendants (#56). */
   locationId?: string;
+  /** Narrow {@link locationId} to that location **alone**, dropping its descendants (#385).
+   * Absent / false keeps #56's subtree behaviour, which is what a collector browsing a tree
+   * expects; this is the explicit "this location only" reading. */
+  locationExact?: boolean;
   /** Restrict to copies identified into a single purchase lot (intake view, #121). */
   lotId?: string;
   /** Restrict to a fixed set of copy ids (e.g. the members of a sale lot, #164). */
@@ -704,6 +731,11 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   /** Exclude copies already packaged into any set of this offer (ADR-0013), so the composition
    * picker only offers copies not yet in the offer being built. */
   notInOfferId?: string;
+  /** Restrict to the copies this lot could take on (#388): not already on it, and either on no
+   * lot at all or on one still **open**. A copy on a closed lot is left out because its cost
+   * basis has been frozen into that lot's split (ADR-0009 §3) — moving it would under-cost the
+   * copies that stayed, so that lot has to be reopened first. */
+  attachableToLotId?: string;
   /** Restrict to copies whose linked stamp has this issued year. A number matches
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
@@ -822,6 +854,22 @@ function buildItemWhere(
     // way is exactly what one plans a listing for.
     and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
   }
+  if (filters.attachableToLotId) {
+    // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
+    // inequality is not a reliable way to say that about a nullable column.
+    and.push({
+      OR: [
+        { lotId: null },
+        {
+          AND: [
+            { lotId: { not: filters.attachableToLotId } },
+            { lot: { status: "open" } },
+          ],
+        },
+      ],
+    });
+  }
+
   return {
     collectionId,
     ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
@@ -961,6 +1009,10 @@ export interface ItemListItem {
    * Feeds `resolveCostBasis` so a null cost-basis on an open lot reads as **pending**
    * rather than "no cost" (#123). */
   lotStatus: string | null;
+  /** The purchase order the owning lot belongs to (#387), or null when the copy has no lot.
+   * `label` is what the row menu names it by — supplier + date, the same pair the purchases
+   * list leads with — so "Go to purchase" says *which* purchase before it navigates. */
+  purchase: { id: string; label: string } | null;
   /** Physical delivery axis (ADR-0009 §5): in_transit | delivered | not_delivered | damaged. */
   deliveryState: string;
   /** Disposal axis (#394): when this copy stopped being held, or null while it still is. */
@@ -1001,7 +1053,15 @@ const ITEM_LIST_SELECT = {
   forSale: true,
   forTrade: true,
   lotId: true,
-  lot: { select: { status: true } },
+  lot: {
+    select: {
+      status: true,
+      // The owning order, for the copy's "Go to purchase" action (#387).
+      purchase: {
+        select: { id: true, purchasedAt: true, contact: { select: { name: true } } },
+      },
+    },
+  },
   deliveryState: true,
   disposedAt: true,
   disposalReason: true,
@@ -1090,6 +1150,9 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     forTrade: row.forTrade,
     lotId: row.lotId,
     lotStatus: row.lot?.status ?? null,
+    purchase: row.lot?.purchase
+      ? { id: row.lot.purchase.id, label: purchaseLabel(row.lot.purchase) }
+      : null,
     deliveryState: row.deliveryState,
     disposedAt: row.disposedAt,
     disposalReason: row.disposalReason,
@@ -1137,10 +1200,7 @@ export async function listItemsPaginated(
   const dir = filters.sortDir ?? "asc";
   const orderBy = [{ createdAt: dir }];
 
-  // A location filter matches the location and all its descendants (subtree, #56).
-  const locationIds = filters.locationId
-    ? await resolveLocationSubtree(collectionId, filters.locationId)
-    : null;
+  const locationIds = await resolveLocationScope(collectionId, filters);
 
   const where = await withMissingCatalogFilter(
     collectionId,
@@ -1284,9 +1344,7 @@ export async function listItemDuplicateGroups(
   const offset = filters.offset ?? 0;
 
   const eligible: ItemListFiltersPaginated = { ...filters, ...GROUP_ELIGIBILITY };
-  const locationIds = eligible.locationId
-    ? await resolveLocationSubtree(collectionId, eligible.locationId)
-    : null;
+  const locationIds = await resolveLocationScope(collectionId, eligible);
   const where = await withMissingCatalogFilter(
     collectionId,
     eligible,
@@ -2075,9 +2133,7 @@ export async function getHoldingsValuation(
 ): Promise<HoldingsSummary> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const locationIds = filters.locationId
-    ? await resolveLocationSubtree(collectionId, filters.locationId)
-    : null;
+  const locationIds = await resolveLocationScope(collectionId, filters);
 
   // The disposal exclusion is deliberately lifted here (#396). Disposed copies are hidden from the
   // list by default, so a write-off summed over the *visible* set would read 0.00 in exactly the
@@ -2228,9 +2284,7 @@ export async function listItemYearFacets(
   filters: Omit<ItemListFiltersPaginated, "year" | "offset" | "pageSize" | "sortBy" | "sortDir">
 ): Promise<ItemYearFacet[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  const locationIds = filters.locationId
-    ? await resolveLocationSubtree(collectionId, filters.locationId)
-    : null;
+  const locationIds = await resolveLocationScope(collectionId, filters);
   const where = await withMissingCatalogFilter(
     collectionId,
     filters,

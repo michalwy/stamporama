@@ -26,6 +26,32 @@ export function getDescendantIds(
   return result;
 }
 
+/**
+ * The area ids a filter selection narrows to (#385): the selected area on its own, or it plus every
+ * area under it. `null` means "All areas" and stays `null` — no selection is not a scope question.
+ *
+ * Every list screen resolved this itself (`getDescendantIds` + the node); shared here so the toggle
+ * that decides it cannot apply on one screen and not another.
+ */
+export function resolveAreaFilterIds(
+  areas: CollectionAreaData[],
+  areaId: string | null,
+  includeDescendants: boolean
+): string[] | null {
+  if (!areaId) return null;
+  if (!includeDescendants) return [areaId];
+  const ids = getDescendantIds(areas, areaId);
+  ids.add(areaId);
+  return [...ids];
+}
+
+/** True when the area has at least one child — what decides whether the scope toggle is worth
+ *  rendering at all (on a leaf both of its states select the same areas). */
+export function hasChildAreas(areas: CollectionAreaData[], areaId: string | null): boolean {
+  if (!areaId) return false;
+  return areas.some((a) => a.parentId === areaId);
+}
+
 export interface AreaTreeItem {
   area: CollectionAreaData;
   depth: number;

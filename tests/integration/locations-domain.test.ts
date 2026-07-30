@@ -158,6 +158,45 @@ describe("assignment validation + subtree filter", () => {
       "Expected the child-book copy under the parent-cabinet filter"
     );
   });
+
+  // #385: the subtree is the default reading, not the only one. "This location only" answers
+  // "what is loose in the cabinet itself" — the copies filed on the node, none of its children's.
+  it("narrows to the location alone when the scope is exact", async () => {
+    const cabinet = await createLocation(f.userId, f.collectionId, {
+      name: "Cabinet 3",
+      assignable: true,
+    });
+    const book = await createLocation(f.userId, f.collectionId, {
+      name: "Book 3",
+      parentId: cabinet.id,
+    });
+    await createItem(f.userId, f.collectionId, {
+      stampId: f.stamp.id,
+      conditionId: f.condition.id,
+      locationId: cabinet.id,
+      locationRef: "loose",
+    });
+    await createItem(f.userId, f.collectionId, {
+      stampId: f.stamp.id,
+      conditionId: f.condition.id,
+      locationId: book.id,
+      locationRef: "p.2",
+    });
+
+    const subtree = await listItemsPaginated(f.userId, f.collectionId, {
+      locationId: cabinet.id,
+    });
+    const refs = subtree.items.map((i) => i.locationRef);
+    assert.ok(refs.includes("loose") && refs.includes("p.2"), "the subtree holds both");
+
+    const exact = await listItemsPaginated(f.userId, f.collectionId, {
+      locationId: cabinet.id,
+      locationExact: true,
+    });
+    const exactRefs = exact.items.map((i) => i.locationRef);
+    assert.ok(exactRefs.includes("loose"), "the copy on the node itself stays");
+    assert.ok(!exactRefs.includes("p.2"), "the child book's copy is dropped");
+  });
 });
 
 describe("deleteLocation guards", () => {

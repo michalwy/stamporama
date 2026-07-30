@@ -51,6 +51,8 @@ export interface InventoryItemFilters {
   issueId?: string;
   /** Restrict to copies stored in a location or its descendants (subtree, #56). */
   locationId?: string;
+  /** Narrow {@link locationId} to that location alone, dropping its descendants (#385). */
+  locationExact?: boolean;
   /** Restrict to copies whose linked stamp has this issued year. "none" for the
    * no-year bucket, otherwise a numeric year string (#142). */
   year?: string;
@@ -89,6 +91,7 @@ export interface InventoryYearFacetFilters {
   stampId?: string;
   issueId?: string;
   locationId?: string;
+  locationExact?: boolean;
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
@@ -135,6 +138,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.locationId) params.set("locationId", filters.locationId);
+  if (filters.locationExact) params.set("locationExact", "true");
   if (filters.year) params.set("year", filters.year);
   if (filters.inCollection) params.set("inCollection", "true");
   if (filters.forSale) params.set("forSale", "true");
@@ -224,6 +228,7 @@ export function useHoldingsValuation(
       catalogNumber: filters.catalogNumber,
       issueId: filters.issueId,
       locationId: filters.locationId,
+      locationExact: filters.locationExact,
       year: filters.year,
       inCollection: filters.inCollection,
       forSale: filters.forSale,
@@ -247,6 +252,7 @@ export function useHoldingsValuation(
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
+      if (filters.locationExact) params.set("locationExact", "true");
       if (filters.year) params.set("year", filters.year);
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
@@ -289,6 +295,7 @@ export function useItemYears(
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
+      if (filters.locationExact) params.set("locationExact", "true");
       if (filters.inCollection) params.set("inCollection", "true");
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");

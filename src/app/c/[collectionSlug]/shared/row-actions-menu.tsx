@@ -23,7 +23,9 @@ export interface RowAction {
   disabled?: boolean;
   /** Muted second line under the label. Written for a `disabled` entry, to say *why* it is
    * unavailable — a greyed-out row with no explanation is the mystery #273 is about. Shown
-   * in place of a tooltip because a disabled control never receives hover events. */
+   * in place of a tooltip because a disabled control never receives hover events. Also carries
+   * the *object* of an enabled navigation, where the label alone would not say where it goes
+   * ("Go to purchase" naming the order, #387). */
   hint?: string;
   /** Draw a divider line above this item (used to set destructive actions apart). */
   separatorBefore?: boolean;

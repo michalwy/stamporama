@@ -1,7 +1,12 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { allocateItemNumbers, valuateItemsByIds } from "./items";
+import {
+  allocateItemNumbers,
+  listItemsPaginated,
+  valuateItemsByIds,
+  type ItemListItem,
+} from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
 import {
@@ -342,6 +347,123 @@ export async function removeLotItem(ownerId: string, itemId: string): Promise<vo
   if (!item) throw new Error("Copy not found.");
   await assertCollectionOwner(ownerId, item.collectionId);
   await prisma.item.delete({ where: { id: itemId } });
+}
+
+/** The copies an open lot could take on (#388): every copy in the collection that is not already
+ * on it and not frozen into a closed lot's cost split. Unpaginated like the offer composition
+ * picker it mirrors — the dialog filters client-side over an area/year scope the collector picks.
+ *
+ * Sold and disposed copies are left out by the list's own defaults: this is an intake correction,
+ * and a piece that has left the collection is not what one is filing a receipt against. */
+export async function listAttachableCopies(
+  ownerId: string,
+  lotId: string,
+  opts: { areaIds?: string[] | null; search?: string; year?: number | "none" } = {}
+): Promise<ItemListItem[]> {
+  const { collectionId } = await assertLotOwner(ownerId, lotId);
+  const { items } = await listItemsPaginated(ownerId, collectionId, {
+    attachableToLotId: lotId,
+    areaIds: opts.areaIds ?? undefined,
+    search: opts.search,
+    year: opts.year,
+    sortDir: "asc",
+    pageSize: 1000,
+  });
+  return items;
+}
+
+/** A copy that cannot be attached, with the reason a person can act on (#388). */
+export interface AttachRefusal {
+  itemId: string;
+  reason: string;
+}
+
+/** Attach copies that already exist to an open lot (#388) — the third verb beside `intakeStamps`
+ * (which *creates* copies) and `removeLotItem` (which deletes them). What it is for: a copy
+ * entered by hand before the order was recorded, or one filed under the wrong purchase.
+ *
+ * Only `lotId` changes. Delivery state, dispositions, location, `itemNo` and photos all stay as
+ * they are — a copy already in hand does not go back to `ordered` because its cost was recorded
+ * late, and its internal number is written on the physical piece (#268).
+ *
+ * Both ends must be **open**, because a cost basis is frozen at close (ADR-0009 §3):
+ *  - a closed *target* would not include the copy in the split it has already made;
+ *  - a closed *source* has already distributed its pool over a set this would silently shrink,
+ *    leaving the copies that stayed under-costed. Reopening it is the honest way through, and it
+ *    is what the refusal says.
+ *
+ * Moving a copy off another **open** lot is allowed but never silent: the caller has to pass
+ * `allowRelink`, which the dialog only sets once the collector has confirmed a warning naming the
+ * purchase being left. Copies already on this lot are a no-op, not an error — re-confirming a
+ * selection should not fail.
+ *
+ * Refusals are **collected, not thrown**: one copy stuck on a closed lot is no reason to abandon
+ * the other nineteen. Returns what was attached and what was not, with the reason for each.
+ */
+export async function attachItemsToLot(
+  ownerId: string,
+  lotId: string,
+  itemIds: string[],
+  opts: { allowRelink?: boolean } = {}
+): Promise<{ attached: number; refused: AttachRefusal[] }> {
+  const { collectionId, status } = await assertLotOwner(ownerId, lotId);
+  if (status !== "open") {
+    throw new Error("This lot is closed. Reopen it before attaching copies.");
+  }
+  const ids = [...new Set(itemIds.filter(Boolean))];
+  if (ids.length === 0) throw new Error("Nothing selected to attach.");
+
+  const items = await prisma.item.findMany({
+    where: { id: { in: ids }, collectionId },
+    select: {
+      id: true,
+      lotId: true,
+      lot: {
+        select: {
+          status: true,
+          purchase: {
+            select: { id: true, purchasedAt: true, contact: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  const found = new Set(items.map((i) => i.id));
+  const refused: AttachRefusal[] = ids
+    .filter((id) => !found.has(id))
+    .map((id) => ({ itemId: id, reason: "Copy not found in this collection." }));
+
+  const toAttach: string[] = [];
+  for (const item of items) {
+    if (item.lotId === lotId) continue; // already here — nothing to do
+    if (item.lot && item.lot.status !== "open") {
+      const label = item.lot.purchase.contact?.name ?? "another purchase";
+      refused.push({
+        itemId: item.id,
+        reason: `This copy belongs to a closed lot (${label}). Reopen that lot before moving it.`,
+      });
+      continue;
+    }
+    if (item.lot && !opts.allowRelink) {
+      refused.push({
+        itemId: item.id,
+        reason: "This copy already belongs to another purchase. Confirm the move to continue.",
+      });
+      continue;
+    }
+    toAttach.push(item.id);
+  }
+
+  if (toAttach.length > 0) {
+    await prisma.item.updateMany({
+      where: { id: { in: toAttach }, collectionId },
+      // The cost basis is written when the lot closes, so a copy joining an open lot has a
+      // pending one. A copy coming off another *open* lot has one already pending; setting it
+      // explicitly keeps the invariant true whichever way the copy arrived.
+      data: { lotId, costBasis: null },
+    });
+  }
+  return { attached: toAttach.length, refused };
 }
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single

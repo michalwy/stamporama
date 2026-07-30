@@ -2,9 +2,10 @@
 
 import { useMemo, useCallback, useSyncExternalStore } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
-import { getDescendantIds, flattenAreaTree } from "./area-helpers";
+import { getDescendantIds, flattenAreaTree, hasChildAreas } from "./area-helpers";
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 import { Tooltip } from "./tooltip";
+import { SubtreeScopeToggle, useSubtreeScope } from "./subtree-scope";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
 
@@ -132,12 +133,18 @@ export function AreaFilterSidebar({
     return flatTree.filter(({ area }) => !hidden.has(area.id));
   }, [flatTree, collapsed, areas]);
 
+  // The scope the selection actually filters by (#385) — also what the in-scope shading below
+  // marks, so the tree shows the same set the list is showing.
+  const [includeDescendants, setIncludeDescendants] = useSubtreeScope("area");
+  const showScopeToggle = hasChildAreas(areas, filterAreaId);
+
   const activeIds = useMemo(() => {
     if (!filterAreaId) return null;
+    if (!includeDescendants) return new Set([filterAreaId]);
     const desc = getDescendantIds(areas, filterAreaId);
     desc.add(filterAreaId);
     return desc;
-  }, [areas, filterAreaId]);
+  }, [areas, filterAreaId, includeDescendants]);
 
   return (
     <CollapsibleFilterPanel
@@ -174,6 +181,25 @@ export function AreaFilterSidebar({
         >
           All areas
         </button>
+
+        {/* Scope of the current selection (#385). Rendered only when the selected area has
+            children — on a leaf both states pick out the same areas. It sits here, under
+            "All areas" and above the tree, because it qualifies the selection rather than any one
+            row of it, and the tree below can be far taller than the panel. */}
+        {showScopeToggle && (
+          <div
+            style={{
+              padding: "0.4rem 1rem",
+              borderBottom: "1px solid var(--color-border)",
+            }}
+          >
+            <SubtreeScopeToggle
+              axis="area"
+              includeDescendants={includeDescendants}
+              onChange={setIncludeDescendants}
+            />
+          </div>
+        )}
 
         {extraEntry && (
           <Tooltip content={extraEntry.title} placement="bottom" style={{ width: "100%" }}>

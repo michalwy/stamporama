@@ -218,6 +218,29 @@ lot.
 To remove a stamp from a lot, use its **⋮** menu → **Remove from lot**. Because these copies
 exist only to populate the lot, removing one **deletes** it.
 
+### Attaching a copy that already exists
+
+Intake *creates* copies. Sometimes the copy is already there — you entered a piece by hand
+before recording the receipt, or you filed one under the wrong order. Use the lot's **⋮** menu →
+**Attach existing copies…**.
+
+The dialog is the same picker used elsewhere: areas and years down the left, a searchable list
+of copies on the right, tick the ones you want. Attaching changes the copy's **purchase link and
+nothing else** — its condition, storage, delivery status, dispositions, photos and
+[internal number](inventory.md#internal-copy-number) all stay exactly as they were. A copy
+already in hand does **not** go back to *Ordered* because you recorded its cost late.
+
+Two rules follow from cost-basis being frozen when a lot closes:
+
+- **The lot you are attaching to must be open.** A closed lot has already split its pool across
+  the copies it held; a copy added afterwards would not be in that split.
+- **A copy sitting in a closed lot is not offered.** Moving it out would leave the copies that
+  stayed in that lot under-costed. Reopen the source lot first, then attach.
+
+A copy that belongs to **another open purchase** *is* offered, but never moved quietly: the
+dialog names the order it would be taken off and asks you to confirm the move before the
+**Attach** button becomes available.
+
 ### The delivery lifecycle: ordered → to sort → delivered
 
 Each copy carries a **delivery status** shown as a chip on its row, separate from its

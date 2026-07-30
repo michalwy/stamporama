@@ -12,7 +12,8 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
@@ -145,13 +146,13 @@ export function StampPickerBrowser({
   // number will carry. The list below resolves its own for the rows it renders.
   const { vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
-  // Selecting a parent area includes its descendants, so their issues surface too.
-  const areaIds = useMemo(() => {
-    if (!areaId) return null;
-    const ids = getDescendantIds(areas, areaId);
-    ids.add(areaId);
-    return [...ids];
-  }, [areas, areaId]);
+  // Selecting a parent area brings its descendants' issues with it, unless the collector has
+  // narrowed the scope to the node alone (#385) — the toggle is in the sidebar rendered below.
+  const [includeSubAreas] = useSubtreeScope("area");
+  const areaIds = useMemo(
+    () => resolveAreaFilterIds(areas, areaId, includeSubAreas),
+    [areas, areaId, includeSubAreas]
+  );
 
   const { data: issues = [], isLoading } = useIssuesByArea(collectionId, areaIds);
 
@@ -314,6 +315,9 @@ export function StampPickerBrowser({
               const { issue, parentStampId } = create;
               // Already deduplicated by vendor, and carrying the issue's own prefix override (#377).
               const uniqueVendors = [...vendorMapFor(issue.collectionAreaId, issue.id).values()];
+              // `members` is the issue's stamps *flat* (each carrying its own `parentId`), so a
+              // parent is found by id however deep it hangs in the variant tree.
+              const parent = issue.members.find((m) => m.stampId === parentStampId);
               return (
                 <StampFormDialog
                   mode="add"
@@ -322,9 +326,11 @@ export function StampPickerBrowser({
                   areaVendors={uniqueVendors}
                   prefilledIssueId={issue.id}
                   prefilledParentStampId={parentStampId ?? null}
-                  prefilledParentIssuedYear={
-                    issue.members.find((m) => m.stampId === parentStampId)?.issuedYear ?? null
-                  }
+                  prefilledParentIssuedYear={parent?.issuedYear ?? null}
+                  // A variant is numbered off its parent (`309` → `309A`), so the inputs open on
+                  // the parent's numbers for the collector to suffix — the same prefill the
+                  // issue list's add-variant entry does (#386).
+                  defaultCatalogNumbers={parent?.catalogNumbers}
                   isPending={isPending}
                   error={createError}
                   onClose={closeCreate}

@@ -329,6 +329,10 @@ interface InventoryItemRowProps {
   /** When provided, adds an "Add to new offer" menu entry beside "Add to offer" (same eligibility),
    * jumping straight into offer creation seeded with this copy, skipping the picker (#277). */
   onAddToNewOffer?: (item: ItemListItem) => void;
+  /** When provided, adds a "Go to purchase" menu entry on a copy that came from a purchase order
+   * (#387). Shown **only** when the copy has one: a copy entered by hand was never bought through
+   * an order, so there is no precondition to explain — nothing on the row promises otherwise. */
+  onViewPurchase?: (item: ItemListItem) => void;
   /** When provided, adds a "View offers" menu entry opening the read-only popup of every offer
    * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
    * question as a live one's, and the row carries no offer count to hide it by. */
@@ -366,6 +370,7 @@ export function InventoryItemRow({
   onAddToOffer,
   onAddToNewOffer,
   onViewOffers,
+  onViewPurchase,
   onDispose,
   onRestore,
 }: InventoryItemRowProps) {
@@ -417,6 +422,15 @@ export function InventoryItemRow({
       // Same "▤" as the stamp/issue lists' read-only "View copies" popup — one icon for
       // "open a read-only list of related records".
       ? [{ key: "offers", label: "View offers", icon: "▤", onSelect: () => onViewOffers(item) }]
+      : []),
+    ...(onViewPurchase && item.purchase
+      ? [{
+          key: "purchase",
+          label: "Go to purchase",
+          icon: "🧾",
+          hint: item.purchase.label,
+          onSelect: () => onViewPurchase(item),
+        }]
       : []),
     ...(onAddToOffer && item.forSale
       ? [{

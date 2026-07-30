@@ -55,7 +55,8 @@ import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/conditio
 import { useDisplayCondition } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { FormatPriceSwitcher } from "@/app/c/[collectionSlug]/shared/format-price-switcher";
 import { useDisplayFormat } from "@/app/c/[collectionSlug]/shared/use-display-format";
-import { effectivePrimaryVendorId, getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { effectivePrimaryVendorId, resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 
@@ -152,12 +153,13 @@ export function IssuesListPanel({
     writeStore({ areaId: filterAreaId, year: year || null });
   }, [filterAreaId, year, writeStore]);
 
-  const filterAreaIds = useMemo(() => {
-    if (!filterAreaId) return undefined;
-    const ids = getDescendantIds(areas, filterAreaId);
-    ids.add(filterAreaId);
-    return [...ids];
-  }, [filterAreaId, areas]);
+  // Whether a selected area brings its sub-areas with it is the collector's choice (#385); the
+  // toggle lives in the area sidebar and the resolution is shared so every list agrees.
+  const [includeSubAreas] = useSubtreeScope("area");
+  const filterAreaIds = useMemo(
+    () => resolveAreaFilterIds(areas, filterAreaId, includeSubAreas) ?? undefined,
+    [filterAreaId, areas, includeSubAreas]
+  );
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<IssueActionState>({
     status: "idle",

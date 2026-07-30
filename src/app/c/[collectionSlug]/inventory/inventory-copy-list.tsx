@@ -56,6 +56,9 @@ interface InventoryCopyListProps {
   /** When provided, each row gains a "View offers" action opening the read-only popup of every
    * offer that references the copy (#276). */
   onViewOffers?: (item: ItemListItem) => void;
+  /** When provided, a row whose copy came from a purchase order gains a "Go to purchase"
+   * action (#387). */
+  onViewPurchase?: (item: ItemListItem) => void;
   /** When provided, each row gains the disposal entry (#395) — *No longer held* on a copy still in
    * hand, *Mark as held again* on one already disposed of. */
   onDispose?: (item: ItemListItem) => void;
@@ -101,6 +104,7 @@ export function InventoryCopyList({
   onAddToOffer,
   onAddToNewOffer,
   onViewOffers,
+  onViewPurchase,
   onDispose,
   onRestore,
   onSetCatalogPrice,
@@ -139,6 +143,7 @@ export function InventoryCopyList({
             onAddToOffer={onAddToOffer}
             onAddToNewOffer={onAddToNewOffer}
             onViewOffers={onViewOffers}
+            onViewPurchase={onViewPurchase}
             onDispose={onDispose}
             onRestore={onRestore}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}

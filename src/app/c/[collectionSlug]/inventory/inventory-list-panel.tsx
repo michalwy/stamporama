@@ -17,7 +17,8 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
-import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { SubtreeScopeToggle, useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
@@ -143,12 +144,13 @@ export function InventoryListPanel({
     writeStore({ areaId: filterAreaId, year: year || null });
   }, [filterAreaId, year, writeStore]);
 
-  const filterAreaIds = useMemo(() => {
-    if (!filterAreaId) return undefined;
-    const ids = getDescendantIds(areas, filterAreaId);
-    ids.add(filterAreaId);
-    return [...ids];
-  }, [filterAreaId, areas]);
+  // Whether a selected area brings its sub-areas with it is the collector's choice (#385); the
+  // toggle lives in the area sidebar and the resolution is shared so every list agrees.
+  const [includeSubAreas] = useSubtreeScope("area");
+  const filterAreaIds = useMemo(
+    () => resolveAreaFilterIds(areas, filterAreaId, includeSubAreas) ?? undefined,
+    [filterAreaId, areas, includeSubAreas]
+  );
 
   const search = searchParams.get("search") ?? "";
   const conditionId = searchParams.get("conditionId") ?? "";
@@ -157,6 +159,9 @@ export function InventoryListPanel({
   // choice — the copies with no format — which an absent value could not express.
   const formatId = searchParams.get("formatId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
+  // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
+  // area axis — the location subtree is resolved in `resolveLocationScope`.
+  const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
   const issueId = searchParams.get("issueId") ?? "";
   const noPhotos = searchParams.get("noPhotos") === "true";
   const missingCatalogValue = searchParams.get("missingCatalogValue") === "true";
@@ -257,6 +262,7 @@ export function InventoryListPanel({
       conditionId: conditionId || undefined,
       formatId: formatId || undefined,
       locationId: locationId || undefined,
+      locationExact: locationId && !includeSubLocations ? true : undefined,
       issueId: issueId || undefined,
       year: year || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
@@ -271,7 +277,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -283,6 +289,7 @@ export function InventoryListPanel({
       conditionId: conditionId || undefined,
       formatId: formatId || undefined,
       locationId: locationId || undefined,
+      locationExact: locationId && !includeSubLocations ? true : undefined,
       issueId: issueId || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
@@ -294,7 +301,7 @@ export function InventoryListPanel({
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -303,6 +310,10 @@ export function InventoryListPanel({
   );
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+  const hasChildLocations = useMemo(
+    () => !!locationId && locations.some((l) => l.parentId === locationId),
+    [locations, locationId]
+  );
 
   // Per-area vendor maps + area names for the quick-price dialog (#228), resolved once here so the
   // dialog can format catalog numbers identically to the rows (mirrors the purchase intake view).
@@ -866,6 +877,16 @@ export function InventoryListPanel({
                 </div>
               )}
 
+              {/* Scope of the location filter (#385), shown only once a location with boxes
+                  under it is picked — on a leaf both readings select the same copies. */}
+              {hasChildLocations && (
+                <SubtreeScopeToggle
+                  axis="location"
+                  includeDescendants={includeSubLocations}
+                  onChange={setIncludeSubLocations}
+                />
+              )}
+
               <IssueFilterAutocomplete
                 collectionId={collectionId}
                 areaIds={filterAreaIds}
@@ -932,6 +953,12 @@ export function InventoryListPanel({
                 onAddToOffer={(it) => setDialog({ kind: "addToOffer", items: [it] })}
                 onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", items: [it] })}
                 onViewOffers={(it) => setDialog({ kind: "viewOffers", item: it })}
+                onViewPurchase={(it) =>
+                  it.purchase &&
+                  router.push(
+                    `/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}`
+                  )
+                }
                 onDispose={(it) => setDialog({ kind: "dispose", item: it })}
                 onRestore={(it) => setDialog({ kind: "restore", item: it })}
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}

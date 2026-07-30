@@ -61,6 +61,12 @@ Stamps, Copies, Offers, Sales and Purchases.
 - **Area** — the panel on the left lists your collection's [areas](collections.md) as a
   tree. Pick one to show only copies whose linked stamp belongs to that area; selecting an
   area includes its nested sub-areas. Choose **All areas** to clear it.
+  Once you pick an area that *has* sub-areas, a small **+ sub-areas / this area only** switch
+  appears above the tree. **+ sub-areas** is the default and the usual way to browse; **this
+  area only** narrows the list to what sits directly on the area you picked, which is how you
+  find pieces that were never filed into a sub-area. The switch is remembered, and it applies to
+  every list with an area panel — Issues, Stamps, Copies and the stamp picker — so they always
+  agree about what an area selection means.
 - **Search** — type in the search box to match copies by the linked stamp's **name**, its
   **issue name**, a **catalog number**, or the copy's own **location ref** (case-insensitive).
   A catalog number can be typed bare (`200`) or with its full prefix and any spacing
@@ -106,7 +112,10 @@ Stamps, Copies, Offers, Sales and Purchases.
 - **Condition** — show only copies of one condition.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
-  shows the copies in all of its stockbooks at once.
+  shows the copies in all of its stockbooks at once. Pick a location that has others nested
+  inside it and the same **+ sub-locations / this location only** switch appears beside the
+  select — *this location only* answers "what is loose in the cabinet itself". Like the area
+  one, it is remembered, and the holdings totals and year panel follow it.
 - **Sort** — by date added, ascending or descending.
 
 The holdings summary totals follow whatever the filters are showing, so a filtered view
@@ -185,6 +194,18 @@ On a copy's row the cost-basis shows as:
 A frozen cost-basis is **not** recomputed automatically if you later edit catalog prices
 or re-point the copy to another variant — to change it, reopen the lot, correct the copies,
 and close it again.
+
+### Going to a copy's purchase
+
+A copy bought through a [purchase order](purchases.md) carries a **Go to purchase** entry in its
+**⋮** menu, naming the order (supplier and date) underneath. It opens that purchase and takes you
+straight to the **lot the copy is in**: the lot's card opens, scrolls into view and stays ringed
+until you dismiss the mark with its **✕**. A copy you added by hand has no purchase behind it, so
+the entry is simply not there.
+
+If a copy *should* have a purchase behind it but doesn't — you entered it before recording the
+receipt — you can
+[attach it to a lot after the fact](purchases.md#attaching-a-copy-that-already-exists).
 
 ## Delivery state
 

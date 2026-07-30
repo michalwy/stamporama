@@ -15,7 +15,8 @@ import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
-import { getDescendantIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -101,12 +102,11 @@ export function ComposeSetDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
 
-  const areaIds = useMemo(() => {
-    if (!areaId) return null;
-    const ids = getDescendantIds(areas, areaId);
-    ids.add(areaId);
-    return [...ids];
-  }, [areas, areaId]);
+  const [includeSubAreas] = useSubtreeScope("area");
+  const areaIds = useMemo(
+    () => resolveAreaFilterIds(areas, areaId, includeSubAreas),
+    [areas, areaId, includeSubAreas]
+  );
 
   const { data: copies = [], isLoading } = useComposableCopies(collectionId, offerId, areaIds, true);
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);

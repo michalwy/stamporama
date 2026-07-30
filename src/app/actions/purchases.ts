@@ -17,6 +17,7 @@ import {
   updateLot,
   deleteLot,
   removeLotItem,
+  attachItemsToLot,
   intakeStamps,
   closeLot,
   reopenLot,
@@ -288,6 +289,36 @@ export async function removeLotItemAction(itemId: string): Promise<PurchaseActio
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to remove copy. Please try again.",
+    };
+  }
+}
+
+/** Outcome of an attach (#388). A per-copy refusal is reported, not thrown: one copy stuck on a
+ * closed lot is no reason to abandon the rest of the selection. */
+export type AttachCopiesActionState =
+  | { status: "success"; attached: number; refusals: string[] }
+  | { status: "error"; message: string };
+
+/** Attach copies that already exist to an open lot (#388) — for a copy entered by hand before the
+ * order was recorded, or one filed under the wrong purchase. `allowRelink` is set only once the
+ * collector has confirmed the warning naming the purchase being left. */
+export async function attachCopiesToLotAction(
+  lotId: string,
+  itemIds: string[],
+  allowRelink: boolean
+): Promise<AttachCopiesActionState> {
+  const session = await getSession();
+  try {
+    const result = await attachItemsToLot(session.user.id, lotId, itemIds, { allowRelink });
+    return {
+      status: "success",
+      attached: result.attached,
+      refusals: result.refused.map((r) => r.reason),
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to attach copies. Please try again.",
     };
   }
 }

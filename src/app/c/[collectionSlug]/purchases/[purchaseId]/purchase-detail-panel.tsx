@@ -10,7 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DialogShell,
   DialogBody,
@@ -48,6 +48,7 @@ import {
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
+import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -176,9 +177,27 @@ export function PurchaseDetailPanel({
   // Briefly highlight a lot right after it is created, so the new card is easy to spot once
   // the panel refreshes with it (#158).
   const [justAddedLotId, markLotAdded] = useJustAdded();
+  // Which lot the collector arrived to see (#387). A copy's "Go to purchase" lands here with
+  // `?lot=<id>`; the card for it opens, scrolls into view and stays marked — the same arrival
+  // treatment an auction sale gives #374's deep link.
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const highlightLotId = searchParams.get("lot");
+  // Clearing the mark drops that one param and `replace`s, so undoing a highlight is not a step
+  // to walk back through.
+  function clearHighlight() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lot");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
   // Lot cards are collapsed by default (#382): an order is read as its lots, and a lot's copies
-  // are a second question. A lot added while the screen is open opens itself.
-  const lotExpansion = useCardExpansion(purchase.lots.map((l) => l.id));
+  // are a second question. A lot added while the screen is open opens itself, as does the one
+  // that was navigated to.
+  const lotExpansion = useCardExpansion(
+    purchase.lots.map((l) => l.id),
+    highlightLotId
+  );
 
   // Order-level grouping of the copies view (#121): group by lot and/or by issue. Both off is
   // a flat list of every copy in the order. Persisted per collection; default groups by both.
@@ -563,6 +582,8 @@ export function PurchaseDetailPanel({
               index={idx}
               lot={lot}
               justAdded={lot.id === justAddedLotId}
+              highlighted={lot.id === highlightLotId}
+              onClearHighlight={clearHighlight}
               expanded={lotExpansion.isExpanded(lot.id)}
               onToggleExpanded={() => lotExpansion.toggle(lot.id)}
               issueHeaderById={issueHeaderById}
@@ -765,6 +786,12 @@ interface LotCardProps {
   lot: LotSummary;
   /** Flash the card once right after this lot is created (#158). */
   justAdded: boolean;
+  /** The lot named by `?lot=` — what a copy's "Go to purchase" arrived to see (#387). The mark
+   * **persists** (a ring plus a labelled strip), unlike the one-shot `justAdded` flash: an order
+   * can hold a dozen lots, and a flash is over before the eye has finished reading them. */
+  highlighted: boolean;
+  /** Drop that mark — the panel owns the URL it lives in. */
+  onClearHighlight: () => void;
   /** Whether this lot's copies are shown. Owned by the panel (#382) so the whole order shares
    * one collapsed-by-default rule and a lot added here opens by itself. */
   expanded: boolean;
@@ -1449,6 +1476,8 @@ function LotCard({
   index,
   lot,
   justAdded,
+  highlighted,
+  onClearHighlight,
   expanded,
   onToggleExpanded,
   issueHeaderById,
@@ -1466,7 +1495,14 @@ function LotCard({
   onRun,
 }: LotCardProps) {
   const [dialog, setDialog] = useState<
-    "none" | "picker" | "intake-condition" | "edit-price" | "delete" | "close" | "reopen"
+    | "none"
+    | "picker"
+    | "intake-condition"
+    | "attach"
+    | "edit-price"
+    | "delete"
+    | "close"
+    | "reopen"
   >("none");
   const [pending, setPending] = useState<PendingSelection | null>(null);
   // Collapsed issue groups are remembered per lot; the grouping mode itself is an order-level
@@ -1490,6 +1526,14 @@ function LotCard({
   // headers can pin just beneath it.
   const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(0);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
+
+  // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
+  // default: this card's own header is sticky, so a card scrolled to the top edge would sit under
+  // the toolbar it just scrolled past.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlighted) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlighted]);
 
   const copy = useCopyEditing({
     collectionId,
@@ -1580,6 +1624,15 @@ function LotCard({
     ...(open
       ? [
           // "Add stamps" is surfaced as a standalone quick-access button in the header, not here.
+          // Attaching an *existing* copy is the correction path beside it (#388) — rare enough to
+          // live in the menu, unlike intake, which is what this screen is for.
+          {
+            key: "attach",
+            label: "Attach existing copies…",
+            icon: "🔗",
+            hint: "For a copy entered by hand, or filed under the wrong purchase",
+            onSelect: () => setDialog("attach"),
+          },
           { key: "price", label: "Edit lot", icon: "✎", onSelect: () => setDialog("edit-price") },
           ...(totalCount > 0
             ? [
@@ -1628,14 +1681,53 @@ function LotCard({
 
   return (
     <div
+      ref={cardRef}
       className={justAdded ? "just-added-flash" : undefined}
       style={{
         border: `1px solid ${blockMessage ? "var(--color-error)" : "var(--color-border)"}`,
         borderRadius: "0.75rem",
         background: "var(--color-bg-elevated)",
         overflow: "clip",
+        // Drawn as a ring rather than a border so the card does not change size when it appears.
+        boxShadow: highlighted ? "0 0 0 2px var(--color-accent)" : undefined,
       }}
     >
+      {/* Why this one card is ringed, and the way to stop it being. Deliberately not sticky: the
+          ring carries the mark once the strip has scrolled off, and a second sticky band would
+          push this lot's figures down the screen. */}
+      {highlighted && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.375rem 1.25rem",
+            borderBottom: "1px solid var(--color-border)",
+            background: "var(--color-accent-soft)",
+            fontSize: "0.75rem",
+            color: "var(--color-accent)",
+          }}
+        >
+          <span>Opened from a copy</span>
+          <button
+            type="button"
+            onClick={onClearHighlight}
+            aria-label="Clear the highlight"
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "inherit",
+              fontSize: "0.75rem",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* Lot header + pool line — pinned to the top while scrolling through this lot's copies
           (#172), so the lot name / counts / pool / actions stay in view; released at the card's
           bottom, where the next lot's header takes over. A drop shadow appears once pinned.
@@ -2017,6 +2109,25 @@ function LotCard({
                 setPending(null);
               }
             );
+          }}
+        />
+      )}
+
+      {/* Attach copies that already exist (#388) — the counterpart to intake above, which
+          creates them. */}
+      {dialog === "attach" && (
+        <AttachCopiesDialog
+          collectionId={collectionId}
+          lotId={lot.id}
+          lotLabel={lotName}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          onClose={closeDialog}
+          onDone={() => {
+            setDialog("none");
+            // The dialog owns the mutation; this only refreshes the order and its copy pages.
+            onRun(async () => ({ status: "success" }));
           }}
         />
       )}
