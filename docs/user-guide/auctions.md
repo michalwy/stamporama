@@ -139,6 +139,12 @@ recomputation: catalogue value **less** the auction's all-in cost, i.e. the cell
 cell in the **Auction / all-in** corner. That is why the labels differ. Nothing on this side is a
 bid, and nothing on it is a cost.
 
+A lot with nothing described yet says so, with an amber **Not described** chip among the row's other
+chips — on this list and on the lot's card on its parcel's screen. It is not an error: an empty
+composition is where every lot starts, and the chip is there because everything on the **worth**
+side stays blank until it is filled in. Cancelled lots never carry it. The **Not described** filter
+below collects them.
+
 Shipping is deliberately in none of them. It belongs to the parcel, so it is added once on the
 sale, not once per lot.
 
@@ -316,12 +322,25 @@ The second row is **what became of it** — the recorded outcome:
 - **Status** chips — *Watching*, *Won*, *Lost*, *Cancelled*, each with a count. Watching lots read
   soonest-closing first; a settled status reads most-recent first. With no status chosen the list is
   everything, newest tracked first.
+Then, on its own, the one that asks what is **missing from the record** rather than anything about
+the bidding:
+
+- **Not described** — lots with nothing recorded as being in them, with a count. These are the lots
+  with no catalogue value to bid against and nothing to file if you win, so this chip is how you sit
+  down and clear the backlog of them. *Cancelled* lots are never included: describing one buys
+  nothing. A **lost** lot is, though — what it held and what it went for is a price record worth
+  keeping.
+
+Finally:
+
 - **Seller** and **platform** selects, so "everything I have running on Allegro right now" is one
   filter rather than a walk through parcels.
 - **Group by sale** turns the flat list into sections, off by default.
 
 Your choices are remembered per collection and are also in the address bar, so a filtered view can
-be bookmarked or shared.
+be bookmarked or shared. The three that ask a question of *today's* list — the closing windows, the
+first row, and **Not described** — live in the address bar only: they are jobs you go and do, and
+coming back tomorrow to a list still narrowed to them would hide everything actually running.
 
 ## Sales — paying for a parcel
 

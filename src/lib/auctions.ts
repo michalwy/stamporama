@@ -415,6 +415,10 @@ export interface AuctionLotFilters {
    * its needs-action overlay (ADR-0013 §4): the comparison spans two tables and some arithmetic,
    * which no `where` can express, and a watchlist is small enough to walk. */
   signal?: LotSignal;
+  /** Only lots still waiting to be described (#442) — no composition lines, and not cancelled.
+   * Expressible as a `where` (unlike a signal) because it asks nothing of the arithmetic: it is a
+   * relation being empty, which is exactly what the badge on the row reads off `lineCount`. */
+  undescribed?: boolean;
   sellerId?: string;
   platformId?: string;
   saleId?: string;
@@ -443,9 +447,19 @@ function lotListWhere(
     },
     ...(filters.saleId ? { auctionSaleId: filters.saleId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
+    // `AND` rather than a second `status` key, which the selected status would otherwise overwrite:
+    // both narrow the same field, and `status=cancelled` + this filter is legitimately empty.
+    ...(filters.undescribed ? { AND: [UNDESCRIBED_WHERE] } : {}),
     ...closingWhere(filters.closing),
   };
 }
+
+/** The stored side of `lotNeedsComposition` (#442), kept beside the `where` it is spliced into so
+ * the filter and the row's badge state one rule twice rather than two rules once. */
+const UNDESCRIBED_WHERE: Prisma.AuctionLotWhereInput = {
+  lines: { none: {} },
+  status: { not: "cancelled" },
+};
 
 /** The rows a signal is computed over: every live lot the rest of the filters admit. Bounded by
  * what one person is currently bidding on, and each row is a handful of numbers. */
@@ -589,6 +603,8 @@ export interface AuctionLotFilterCounts {
   /** Lots per closing window, under everything else selected. Each is counted on its own, so the
    * three overlap not at all (`ended` is in the past) or fully (`today` ⊂ `week`). */
   closing: Record<AuctionClosingWindow, number>;
+  /** Lots with nothing described yet (#442), under everything else selected. */
+  undescribed: number;
   /** Total under the selected status + seller + platform — what "All" would show. */
   total: number;
 }
@@ -606,7 +622,7 @@ export async function auctionLotFilterCounts(
   await assertCollectionOwner(ownerId, collectionId);
 
   const { status, sellerId, platformId, closing, signal, ...rest } = filters;
-  const [byStatus, bySeller, byPlatform, closingCounts, signalIds, total] = await Promise.all([
+  const [byStatus, bySeller, byPlatform, closingCounts, signalIds, undescribed, total] = await Promise.all([
     prisma.auctionLot.groupBy({
       by: ["status"],
       where: lotListWhere(collectionId, { ...rest, sellerId, platformId, closing }),
@@ -626,6 +642,18 @@ export async function auctionLotFilterCounts(
     ),
     // The signal facet ignores the selected signal, like every other facet ignores its own.
     resolveSignals(collectionId, { ...rest, status, sellerId, platformId, closing }),
+    // …and this one ignores whether it is itself selected, so its badge always says how many lots
+    // clicking it would show.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, {
+        ...rest,
+        status,
+        sellerId,
+        platformId,
+        closing,
+        undescribed: true,
+      }),
+    }),
     (async () =>
       prisma.auctionLot.count({
         where: lotListWhere(
@@ -653,6 +681,7 @@ export async function auctionLotFilterCounts(
     signals: Object.fromEntries(
       LOT_SIGNALS.map((s) => [s, signalIds[s].length])
     ) as Record<LotSignal, number>,
+    undescribed,
     total,
   };
 }

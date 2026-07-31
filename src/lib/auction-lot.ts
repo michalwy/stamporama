@@ -299,6 +299,22 @@ export interface LotLineValue {
   uncertain: boolean;
 }
 
+/**
+ * Does this lot still need saying what it holds (#442)?
+ *
+ * Zero lines is the normal state while a lot is merely being watched, so this is not an error — it
+ * is the work left, and the flag exists because catalogue value, headroom and everything bid
+ * against them follow from the composition and stay blank without it.
+ *
+ * **Every status but `cancelled`.** A cancelled lot is not coming back and describing it buys
+ * nothing, so flagging it would be pure noise on the historical rows. A *lost* one is flagged
+ * deliberately, though it may look equally over: what it held, at what it went for, is a price
+ * record — which is most of why the composition is worth entering before the hammer falls.
+ */
+export function lotNeedsComposition(lot: { status: AuctionLotStatus; lineCount: number }): boolean {
+  return lot.lineCount === 0 && lot.status !== "cancelled";
+}
+
 /** What a lot's composition is worth, and how much of it could be answered. */
 export interface LotCompositionValue {
   /** Lines entered. Zero is the normal state while bidding. */

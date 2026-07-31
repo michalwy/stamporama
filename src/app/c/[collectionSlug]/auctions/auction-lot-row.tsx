@@ -7,9 +7,22 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { closingUrgency, isTerminalLotStatus, type ClosingUrgency } from "@/lib/auction-rules";
-import { allIn, bidCosting, ceilingAllowing, maxBidWithin, type AuctionFees } from "@/lib/auction-lot";
+import {
+  allIn,
+  bidCosting,
+  ceilingAllowing,
+  lotNeedsComposition,
+  maxBidWithin,
+  type AuctionFees,
+} from "@/lib/auction-lot";
 import type { AuctionLotView } from "./use-auctions-query";
-import { BidFreshnessChip, BidStandingChip, LotStatusChip, OverCeilingChip } from "./auction-badges";
+import {
+  BidFreshnessChip,
+  BidStandingChip,
+  LotStatusChip,
+  NotDescribedChip,
+  OverCeilingChip,
+} from "./auction-badges";
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
 
@@ -778,6 +791,9 @@ export function AuctionLotRow({
               settled={terminal}
             />
               {lot.overCeiling && <OverCeilingChip />}
+              {/* Last of the chips: the composition is work outstanding, not news about the
+                  bidding, so it never stands between the status and what the price is doing. */}
+              {lotNeedsComposition(lot) && <NotDescribedChip />}
 
             </div>
             </div>

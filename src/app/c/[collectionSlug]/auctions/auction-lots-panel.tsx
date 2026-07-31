@@ -132,13 +132,17 @@ export function AuctionLotsPanel({
   const signalRaw = searchParams.get("signal") ?? "";
   const signal = SIGNALS.some((s) => s.value === signalRaw) ? (signalRaw as LotSignal) : undefined;
 
+  // "What still needs describing?" (#442) — the same kind of question, so the same URL-only rule:
+  // it is a batch of work to sit down to, not the shape the list should keep having tomorrow.
+  const undescribed = searchParams.get("undescribed") === "1" || undefined;
+
   const [groupBySale, setGroupBySale] = usePersistedFlag(
     `stamporama:auctions:groupBySale:${collectionId}`
   );
 
   const filters: AuctionLotFilters = useMemo(
-    () => ({ status, closing, signal, sellerId, platformId }),
-    [status, closing, signal, sellerId, platformId]
+    () => ({ status, closing, signal, undescribed, sellerId, platformId }),
+    [status, closing, signal, undescribed, sellerId, platformId]
   );
 
   const updateParams = useCallback(
@@ -197,7 +201,8 @@ export function AuctionLotsPanel({
     });
   }
 
-  const hasActiveFilters = !!status || !!closing || !!signal || !!sellerId || !!platformId;
+  const hasActiveFilters =
+    !!status || !!closing || !!signal || !!undescribed || !!sellerId || !!platformId;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -274,6 +279,25 @@ export function AuctionLotsPanel({
               />
             );
           })}
+          <span
+            style={{
+              width: "1px",
+              height: "1.25rem",
+              background: "var(--color-border)",
+              margin: "0 0.25rem",
+            }}
+          />
+          {/* Its own segment, after the three that ask about the bidding: this one asks what is
+              missing from the record, and it is the only chip here that a cancelled lot can never
+              answer to. */}
+          <Tooltip content="Lots with nothing recorded as being in them — no catalogue value to bid against, and nothing to file if you win. Cancelled lots are left out.">
+            <FilterChip
+              label="Not described"
+              count={counts ? counts.undescribed : undefined}
+              active={!!undescribed}
+              onClick={() => updateParams({ undescribed: undescribed ? "" : "1" })}
+            />
+          </Tooltip>
           <span
             style={{
               width: "1px",

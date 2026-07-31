@@ -163,6 +163,21 @@ export function BidStandingChip({
     : tinted("error", "Outbid", "The price has passed the bid you placed — raise it or let it go");
 }
 
+/**
+ * Nothing described yet (#442) — the composition is empty, so catalogue value, headroom and every
+ * figure derived from them are blank on this row and will stay blank until someone says what the
+ * lot holds. `warning`, like the other two chips that name work outstanding rather than a state of
+ * the bidding, and shown for every status but `cancelled` — the rule is `lotNeedsComposition` in
+ * `auction-lot.ts`, shared with the filter chip so the two can never disagree.
+ */
+export function NotDescribedChip() {
+  return tinted(
+    "warning",
+    "Not described",
+    "Nothing is recorded as being in this lot, so it has no catalogue value to bid against"
+  );
+}
+
 /** Over the collector's ceiling — measured against the **all-in** cost, not the hammer price
  * (ADR-0021 §6), which is the whole reason the column exists. */
 export function OverCeilingChip() {

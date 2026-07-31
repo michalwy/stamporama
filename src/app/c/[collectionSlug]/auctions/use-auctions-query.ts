@@ -50,6 +50,8 @@ export interface AuctionLotFilters {
   closing?: AuctionClosingWindow;
   /** A derived state: still biddable, outbid, over ceiling… */
   signal?: LotSignal;
+  /** Only lots with nothing described yet (#442). */
+  undescribed?: boolean;
   sellerId?: string;
   platformId?: string;
 }
@@ -72,6 +74,7 @@ function lotParams(filters: AuctionLotFilters): URLSearchParams {
   if (filters.status) params.set("status", filters.status);
   if (filters.closing) params.set("closing", filters.closing);
   if (filters.signal) params.set("signal", filters.signal);
+  if (filters.undescribed) params.set("undescribed", "1");
   if (filters.sellerId) params.set("sellerId", filters.sellerId);
   if (filters.platformId) params.set("platformId", filters.platformId);
   return params;

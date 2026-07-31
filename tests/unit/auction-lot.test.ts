@@ -5,6 +5,7 @@ import {
   bidStanding,
   headroom,
   lotHasSignal,
+  lotNeedsComposition,
   maxBidWithin,
   bidCosting,
   ceilingAllowing,
@@ -438,5 +439,25 @@ describe("summarizeLotComposition", () => {
       unconvertibleLines: 0,
       uncertain: false,
     });
+  });
+});
+
+// lotNeedsComposition -------------------------------------------------------
+
+describe("lotNeedsComposition", () => {
+  it("flags a lot with no lines, whatever became of it", () => {
+    for (const status of ["watching", "won", "lost"] as const) {
+      assert.equal(lotNeedsComposition({ status, lineCount: 0 }), true, status);
+    }
+  });
+
+  it("never flags a cancelled lot — describing it buys nothing", () => {
+    assert.equal(lotNeedsComposition({ status: "cancelled", lineCount: 0 }), false);
+  });
+
+  it("says nothing once a single line is entered", () => {
+    for (const status of ["watching", "won", "lost", "cancelled"] as const) {
+      assert.equal(lotNeedsComposition({ status, lineCount: 1 }), false, status);
+    }
   });
 });
