@@ -9,9 +9,13 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { OfferDetailPanel } from "./offer-detail-panel";
+import { OfferListNav } from "./offer-list-nav";
+import { offerListHref, parseOfferListContext } from "../list-context";
 
 interface OfferDetailPageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
+  /** The filter context the offer was opened from, when it was opened from the list (#429). */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: OfferDetailPageProps): Promise<Metadata> {
@@ -23,8 +27,11 @@ export async function generateMetadata({ params }: OfferDetailPageProps): Promis
   return { title: `Offer — ${offer.platformName}` };
 }
 
-export default async function OfferDetailPage({ params }: OfferDetailPageProps) {
+export default async function OfferDetailPage({ params, searchParams }: OfferDetailPageProps) {
   const { collectionSlug, offerId } = await params;
+  // The filtered list this offer was opened from (#429) — the back link goes back to it as it was,
+  // and the walk through it is offered beside that link.
+  const listContext = parseOfferListContext(await searchParams);
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
@@ -51,17 +58,35 @@ export default async function OfferDetailPage({ params }: OfferDetailPageProps) 
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Link
-        href={`/c/${collectionSlug}/offers`}
+      <div
         style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-          textDecoration: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          flexWrap: "wrap",
           marginBottom: "1rem",
         }}
       >
-        ← Offers
-      </Link>
+        <Link
+          href={offerListHref(collectionSlug, listContext)}
+          style={{
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+            textDecoration: "none",
+          }}
+        >
+          ← Offers
+        </Link>
+        {/* Step through the filtered list without returning to it (#429). */}
+        {listContext && (
+          <OfferListNav
+            collectionId={collection.id}
+            collectionSlug={collectionSlug}
+            offerId={offerId}
+            context={listContext}
+          />
+        )}
+      </div>
       <OfferDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}

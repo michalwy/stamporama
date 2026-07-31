@@ -977,6 +977,22 @@ The **Needs action** chip turns **red** as soon as its count is above zero, so a
 visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
 count — it widens the list rather than selecting a slice of it.
 
+### Stepping through the filtered list
+
+Opening an offer from the list carries the filter with it. At the top of the offer's own screen,
+beside **← Offers**, you get **‹ Previous**, the offer's position (**3 of 12**) and **Next ›** —
+the same list, in the same order, without going back to it between offers. This is what preparing a
+batch looks like: filter by platform and **Preparing**, open the first one, finish it, and step on.
+
+- **← Offers** goes back to the list **as you left it**, with the same platform and state filter.
+- The position and the two steps are worked out **once, when the offer opens**, and stay put while
+  you work on it. Marking the offer Ready takes it out of a **Preparing** filter, and **Next ›**
+  still goes where it was going to.
+- At either end of the list, the step is shown but **greyed out** — the position beside it says
+  which end you are at.
+- Offers opened from anywhere else — the **View offers** popup on a copy, a stamp or an issue, a
+  short link, a bookmark — show no steps. There is no list behind them to walk.
+
 ## The summary bar
 
 Above the toolbar, a summary bar sums the offers you are currently looking at — it follows the

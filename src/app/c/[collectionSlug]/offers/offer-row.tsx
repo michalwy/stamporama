@@ -59,6 +59,9 @@ function advanceLabel(to: ManualOfferTarget): { label: string; icon: string } {
 interface OfferRowProps {
   offer: OfferListItem;
   collectionSlug: string;
+  /** The list's active filters as a query string (#429), carried into the offer this row opens so
+   * the detail screen can step to the next one without a trip back here. */
+  listContextQuery: string;
   isLast: boolean;
   onEdit: (offer: OfferListItem) => void;
   onSetState: (offer: OfferListItem, state: ManualOfferTarget) => void;
@@ -73,6 +76,7 @@ interface OfferRowProps {
 export function OfferRow({
   offer,
   collectionSlug,
+  listContextQuery,
   isLast,
   onEdit,
   onSetState,
@@ -83,7 +87,9 @@ export function OfferRow({
 }: OfferRowProps) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
-  const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
+  // The detail screen walks the same filtered list this row is in (#429), so the row hands the
+  // filter context on with the offer it opens.
+  const detailHref = `/c/${collectionSlug}/offers/${offer.id}${listContextQuery}`;
   const terminal = isTerminalState(offer.state);
 
   // One-click advance through the linear part of the lifecycle (#255). Only shown where the next

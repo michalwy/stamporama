@@ -10,7 +10,9 @@ import type {
   OffersSummary,
   ListingWorkspaceOffer,
   OfferLookupTarget,
+  OfferListNeighbours,
 } from "@/lib/offers";
+import type { OfferListContext } from "./list-context";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
@@ -88,6 +90,38 @@ export function useOfferPhotoPlan(collectionId: string, offerId: string) {
     },
     refetchInterval: (query) =>
       query.state.data?.status === "queued" || query.state.data?.status === "running" ? 2000 : false,
+  });
+}
+
+/**
+ * Where this offer sits in the filtered list it was opened from, and what comes before and after it
+ * (#429). Asked **once per offer** and then frozen: the whole use case is finishing an offer — which
+ * usually moves it out of the filter that was showing it — and then stepping on, so an answer that
+ * refreshed itself would take the walk away at exactly the moment it is needed. That is also why it
+ * lives outside `offerKeys.all`: `invalidateAll` must not reach it.
+ */
+export function useOfferNeighbours(
+  collectionId: string,
+  offerId: string,
+  context: OfferListContext | null
+) {
+  return useQuery<OfferListNeighbours>({
+    queryKey: ["offer-neighbours", collectionId, offerId, context] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ offerId });
+      if (context?.platformId) params.set("platformId", context.platformId);
+      if (context?.needsAction) params.set("needsAction", "1");
+      else if (context?.state) params.set("state", context.state);
+      else if (context?.includeClosed) params.set("includeClosed", "1");
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/neighbours?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to locate the offer in the list");
+      return res.json();
+    },
+    enabled: !!context,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 

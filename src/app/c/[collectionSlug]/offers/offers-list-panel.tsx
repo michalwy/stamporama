@@ -20,6 +20,7 @@ import {
   type OfferFilters,
 } from "./use-offers-query";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { offerListContextQuery } from "./list-context";
 import { OffersSummaryBar } from "./offers-summary-bar";
 import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
@@ -140,6 +141,10 @@ export function OffersListPanel({
     () => ({ platformId, state, needsAction, includeClosed }),
     [platformId, state, needsAction, includeClosed]
   );
+
+  // What every row hands to the offer it opens (#429): the filters this list is showing, so the
+  // detail screen can step through them instead of sending the collector back here each time.
+  const listContextQuery = useMemo(() => offerListContextQuery(filters), [filters]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -365,6 +370,7 @@ export function OffersListPanel({
                 key={offer.id}
                 offer={offer}
                 collectionSlug={collectionSlug}
+                listContextQuery={listContextQuery}
                 isLast={idx === rows.length - 1 && !hasNextPage}
                 onEdit={(row) => setDialog({ kind: "edit", offer: row })}
                 onSetState={setOfferState}

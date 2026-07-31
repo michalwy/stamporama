@@ -1052,6 +1052,15 @@ function offerListWhere(
   };
 }
 
+/** The order the offer list is read in, shared by the paginated list and the detail screen's
+ * next/previous navigation (#429) so the two can never disagree about what "the next offer" is.
+ * The id is a tiebreak, not a second sort key: offers created in the same transaction share a
+ * timestamp, and an unstable order would both repeat a row across pages and skip its neighbour. */
+const OFFER_LIST_ORDER_BY: Prisma.OfferOrderByWithRelationInput[] = [
+  { createdAt: "desc" },
+  { id: "desc" },
+];
+
 /** Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or by the
  * derived "needs action" overlay — resolved to its flagged offer ids first, then paginated as a
  * normal `where`, so a page never costs more than the offers it shows. */
@@ -1069,7 +1078,7 @@ export async function listOffersPaginated(
     if (counts.size === 0) return { items: [], nextCursor: null };
     const rows = await prisma.offer.findMany({
       where: offerListWhere(collectionId, filters, [...counts.keys()]),
-      orderBy: { createdAt: "desc" },
+      orderBy: OFFER_LIST_ORDER_BY,
       take: pageSize + 1,
       skip: offset,
       select: OFFER_SELECT,
@@ -1084,7 +1093,7 @@ export async function listOffersPaginated(
 
   const rows = await prisma.offer.findMany({
     where: offerListWhere(collectionId, filters),
-    orderBy: { createdAt: "desc" },
+    orderBy: OFFER_LIST_ORDER_BY,
     take: pageSize + 1,
     skip: offset,
     select: OFFER_SELECT,
@@ -1095,6 +1104,64 @@ export async function listOffersPaginated(
   return {
     items: await withNeedsAction(page, collectionId, baseCurrency),
     nextCursor: hasMore ? String(offset + pageSize) : null,
+  };
+}
+
+/** Where one offer sits in the filtered list it was opened from (#429). */
+export interface OfferListNeighbours {
+  previousId: string | null;
+  nextId: string | null;
+  /** 1-based position in the filtered list, or null when the offer is not in it at all. */
+  position: number | null;
+  total: number;
+}
+
+/**
+ * The offer before and after this one in the list's own order (#429), under the filters the
+ * collector had active — so preparing a batch is a walk through the filtered list rather than a
+ * return trip to it after every offer.
+ *
+ * Ids only, unpaginated: it is one column over the same `where` and `orderBy` the list reads, and
+ * the whole point is knowing what comes after the last row loaded so far. Reading the position out
+ * of it is what makes the "3 of 12" indicator free.
+ *
+ * An offer that is **not** in the filtered set answers `position: null` with no neighbours — a link
+ * carrying someone else's filters, or an offer that has since left them. The screen asks once and
+ * keeps the answer, so advancing an offer out of its own filter does not strand the walk.
+ */
+export async function offerListNeighbours(
+  ownerId: string,
+  collectionId: string,
+  offerId: string,
+  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+): Promise<OfferListNeighbours> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  // The needs-action overlay is derived, not a column (ADR-0013 §4), so it resolves to ids first —
+  // exactly as the list page and the summary bar do.
+  let needsActionIds: string[] | undefined;
+  if (filters.needsAction) {
+    needsActionIds = [...(await needsActionCounts(collectionId)).keys()];
+    if (needsActionIds.length === 0) {
+      return { previousId: null, nextId: null, position: null, total: 0 };
+    }
+  }
+
+  const rows = await prisma.offer.findMany({
+    where: offerListWhere(collectionId, filters, needsActionIds),
+    orderBy: OFFER_LIST_ORDER_BY,
+    select: { id: true },
+  });
+
+  const index = rows.findIndex((r) => r.id === offerId);
+  if (index === -1) {
+    return { previousId: null, nextId: null, position: null, total: rows.length };
+  }
+  return {
+    previousId: index > 0 ? rows[index - 1].id : null,
+    nextId: index < rows.length - 1 ? rows[index + 1].id : null,
+    position: index + 1,
+    total: rows.length,
   };
 }
 
