@@ -3,12 +3,14 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CopyGroupRow,
+  LocationGroupRow,
   ItemListItem,
   ItemSortBy,
   ItemVariantHistoryData,
   ItemYearFacet,
 } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
+import type { LocationGroupBy } from "@/lib/location-groups";
 import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
@@ -25,6 +27,11 @@ interface InventoryItemsPage {
 
 interface CopyGroupsPage {
   groups: CopyGroupRow[];
+  nextCursor: string | null;
+}
+
+interface LocationGroupsPage {
+  groups: LocationGroupRow[];
   nextCursor: string | null;
 }
 
@@ -53,6 +60,9 @@ export interface InventoryItemFilters {
   locationId?: string;
   /** Narrow {@link locationId} to that location alone, dropping its descendants (#385). */
   locationExact?: boolean;
+  /** Restrict to copies carrying this exact in-location ref (#421); `"none"` is the copies with
+   * none. Set by a ref group to address its own members. */
+  locationRef?: string;
   /** Restrict to copies whose linked stamp has this issued year. "none" for the
    * no-year bucket, otherwise a numeric year string (#142). */
   year?: string;
@@ -117,6 +127,11 @@ export const inventoryKeys = {
     filters: InventoryItemFilters,
     axes: CopyGroupAxes
   ) => ["inventory", collectionId, "groups", filters, axes] as const,
+  locationGroups: (
+    collectionId: string,
+    filters: InventoryItemFilters,
+    by: LocationGroupBy
+  ) => ["inventory", collectionId, "locationGroups", filters, by] as const,
   years: (collectionId: string, filters: InventoryYearFacetFilters) =>
     ["inventory", collectionId, "years", filters] as const,
 };
@@ -139,6 +154,7 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.locationId) params.set("locationId", filters.locationId);
   if (filters.locationExact) params.set("locationExact", "true");
+  if (filters.locationRef) params.set("locationRef", filters.locationRef);
   if (filters.year) params.set("year", filters.year);
   if (filters.inCollection) params.set("inCollection", "true");
   if (filters.forSale) params.set("forSale", "true");
@@ -198,6 +214,33 @@ export function useCopyGroupsInfinite(
         `/api/collections/${collectionId}/items/groups?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch duplicate groups");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled,
+  });
+}
+
+/** The same copy set collapsed to one row per storage location, or per `(location, ref)` pair
+ * (#421). Server-side for the same reason as the duplicate groups, and its members come back
+ * through {@link useInventoryItemsInfinite} with the group's own location / ref pinned. */
+export function useLocationGroupsInfinite(
+  collectionId: string,
+  filters: InventoryItemFilters,
+  by: LocationGroupBy,
+  enabled = true
+) {
+  return useInfiniteQuery<LocationGroupsPage>({
+    queryKey: inventoryKeys.locationGroups(collectionId, filters, by),
+    queryFn: async ({ pageParam }) => {
+      const params = itemFilterParams(filters);
+      if (pageParam) params.set("offset", pageParam as string);
+      params.set("by", by);
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/location-groups?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch location groups");
       return res.json();
     },
     initialPageParam: undefined as string | undefined,

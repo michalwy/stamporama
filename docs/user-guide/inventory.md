@@ -12,7 +12,8 @@ Open the **Inventory** screen from the **Collection** section of the sidebar.
 Each row shows:
 
 - The copy's **internal number** (e.g. `#00123`) — see [Internal copy number](#internal-copy-number).
-- The linked stamp's **catalog number**, **name**, and **issue**.
+- The linked stamp's **catalog number**, **name**, and **issue**. A catalog-number chip is
+  **clickable — it copies the number** (see [Copying a catalog number](#copying-a-catalog-number)).
 - The **condition** and any **certificate status**.
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once. Copies you intend to sell are composed into [offers](offers.md).
@@ -571,17 +572,41 @@ The same checkboxes are on the copies inside an expanded [duplicate group](#grou
 a group row can tick all of its copies at once — see [Listing a group's
 copies](#listing-a-groups-copies).
 
+## Copying a catalog number
+
+Every catalog-number chip in the app — on this list, the Stamps and Issues lists, the pickers, the
+*Set catalog value* dialog — copies its number when you click it. The chip flashes green to confirm.
+
+What lands on the clipboard is **not quite what the chip reads**: the area prefix stays and the
+catalog abbreviation goes. `Mi·PL 200` copies as `PL 200`, and `Mi 200` as plain `200`. The prefix is
+part of the number's identity — `Mi·PL 200` and `Mi·DE 200` are different stamps — while the
+catalogue it came out of is something you already know in the box you are pasting into.
+
+## Grouping the list
+
+The toolbar's **▦ grouping** select collapses the list into groups. There are three, and they answer
+three different questions:
+
+- **Group duplicates** — what stock do I hold several of? (below)
+- **Group by location** — what is in this box? ([Grouping by where copies are
+  filed](#grouping-by-where-copies-are-filed))
+- **Group by location ref** — the same, split down to the ref written on the shelf.
+
+Only one can be in effect, and the choice is remembered per collection. Every group row works the
+same way: the count leads it, **▶** expands it into the copies underneath, and the **checkbox** in
+front of it ticks all of them at once.
+
 ## Grouping duplicates
 
 When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
-Turn on **▦ Group duplicates** in the toolbar and the list collapses to one row per duplicate, with
-its count up front (`×10`). Expand a row (**▶**) to see the individual copies underneath.
+Pick **▦ Group duplicates** and the list collapses to one row per duplicate, with its count up front
+(`×10`). Expand a row (**▶**) to see the individual copies underneath.
 
 Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
 never optional: Colnect refuses more than one offer for the same stamp in the same condition and
 expects a quantity offer instead, so a group mixing conditions could not be posted.
 
-Two further toggles appear once grouping is on, and each adds an axis to that rule:
+Two further toggles appear once duplicate grouping is on, and each adds an axis to that rule:
 
 - **Split by format** — a pair or a block becomes a different item from a single, rather than
   joining the same group. Only shown once your collection has [formats](#pairs-blocks-and-other-multiples).
@@ -611,10 +636,10 @@ selection uses — the [checkboxes and the **🏷 Add selected to offer**
 bar](#adding-several-copies-to-an-offer-at-once). Expand a group and its copies carry exactly those
 checkboxes.
 
-For the common case there is a shortcut: the group row's **⋮** has **Select all copies**, which opens
-the group and ticks its copies in one click. Ask again once they are all ticked and it reads
-**Deselect these copies**. Selections from several groups add up, so you can tick two stacks and deal
-with them together.
+For the common case there is a shortcut: the **checkbox in front of the group row** opens the group
+and ticks its copies in one click. Untick it to let them go again. It shows a dash while only some of
+the group's copies are ticked. Selections from several groups add up, so you can tick two stacks and
+deal with them together.
 
 Copies that **differ from the rest of the group** on an axis you left off are highlighted with a
 *differs from the group* mark and are **left out of Select all** — tick them by hand if you do want
@@ -630,6 +655,29 @@ answers — set it first and the whole screen becomes that platform's worklist, 
 pre-filled into the offer form for you.
 
 The group row also reports how many of its copies are **already listed** somewhere, on any platform.
+
+## Grouping by where copies are filed
+
+**▦ Group by location** collapses the list to one row per [storage location](locations.md), over the
+copies filed there — so a klaser is one row, with its count, and expanding it lists what is in it.
+**▦ Group by location ref** goes one level finer and splits each location by the **ref** written on
+the copies (`A234`), in shelf order: prefix first, then the number, so `A2` comes before `A10`.
+
+A few things worth knowing:
+
+- A location counts **only what is filed in it**, never what is in the boxes under it. A cupboard
+  holding two klasers is its own row for the copies put straight into the cupboard, and each klaser
+  is a row of its own. (To read a whole branch as one set, use the location filter with its
+  *include sub-locations* scope instead.)
+- Copies **filed nowhere** are the last row, and copies with **no ref** are the last row within their
+  location. There is nothing to walk to, so they sort last.
+- Unlike duplicate grouping, this covers **whatever the list is showing**. Every filter still applies
+  — including *Include sold* and *Include no longer held* — because "where is it?" is a fair question
+  about a copy you have already sold but not yet posted.
+- The **checkbox** in front of a group row ticks the copies filed there that can be listed (for sale
+  and in hand), exactly as it does on a duplicate group.
+
+Both groupings are computed on the server, so a group is never split in half by scrolling.
 
 ## Seeing which offers something is in
 

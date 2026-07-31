@@ -153,8 +153,8 @@ or dropped into an **existing set** to build a series. With several picked, an *
 chooses between one set each and one set holding all — the same choice **Add set** offers here.
 
 For a stock of duplicates there is a faster route still: turn on
-[**Group duplicates**](inventory.md#grouping-duplicates) on the Copies list and use a group's
-**Select all copies** — one click ticks the whole stack, and **Add as → N sets** makes it one offer
+[**Group duplicates**](inventory.md#grouping-duplicates) on the Copies list and tick the **checkbox
+in front of a group row** — one click ticks the whole stack, and **Add as → N sets** makes it one offer
 with one single-copy set per copy, which is the quantity listing platforms like Colnect expect.
 
 Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer

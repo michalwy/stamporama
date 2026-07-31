@@ -31,6 +31,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     locationId: sp.get("locationId") || undefined,
     // "This location only" (#385) — absent means #56's subtree, the default.
     locationExact: boolParam(sp.get("locationExact")),
+    // The exact in-location ref a filing group addresses (#421); `"none"` is the unlabelled bucket.
+    locationRef: sp.get("locationRef") || undefined,
     year:
       yearParam === "none"
         ? ("none" as const)

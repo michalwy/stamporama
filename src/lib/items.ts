@@ -45,6 +45,14 @@ import {
   type CopyGroupAxes,
   type CopyGroupKey,
 } from "./copy-groups";
+import {
+  compareLocationGroups,
+  locationGroupKey,
+  NO_LOCATION,
+  NO_LOCATION_REF,
+  type LocationGroupBy,
+} from "./location-groups";
+import { buildLocationPath } from "./location-path";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -162,7 +170,8 @@ async function resolveLocationScope(
   collectionId: string,
   filters: { locationId?: string; locationExact?: boolean }
 ): Promise<string[] | null> {
-  if (!filters.locationId) return null;
+  // The unfiled bucket (#421) is not a subtree — `buildItemWhere` turns it into `locationId: null`.
+  if (!filters.locationId || filters.locationId === NO_LOCATION) return null;
   if (filters.locationExact) return [filters.locationId];
   return resolveLocationSubtree(collectionId, filters.locationId);
 }
@@ -729,12 +738,20 @@ export interface ItemListFiltersPaginated extends ItemListFilters {
   stampId?: string;
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
   issueId?: string;
-  /** Restrict to copies stored in this location or any of its descendants (#56). */
+  /** Restrict to copies stored in this location or any of its descendants (#56). The literal
+   *  {@link NO_LOCATION} matches the copies filed **nowhere** — null *is* a value here, exactly as
+   *  `"single"` is for format, and an absent filter cannot express it. Needed to address the
+   *  unfiled bucket of a location grouping (#421). */
   locationId?: string;
   /** Narrow {@link locationId} to that location **alone**, dropping its descendants (#385).
    * Absent / false keeps #56's subtree behaviour, which is what a collector browsing a tree
    * expects; this is the explicit "this location only" reading. */
   locationExact?: boolean;
+  /** Restrict to copies carrying this exact in-location ref (#421) — the identifier written on the
+   *  shelf (`A234`). Matched exactly rather than as a substring (the search box already does
+   *  substrings, #303), so a ref group and its members can never disagree. The literal
+   *  {@link NO_LOCATION_REF} matches the copies with none, blank refs included. */
+  locationRef?: string;
   /** Restrict to copies identified into a single purchase lot (intake view, #121). */
   lotId?: string;
   /** Restrict to a fixed set of copy ids (e.g. the members of a sale lot, #164). */
@@ -879,6 +896,11 @@ function buildItemWhere(
     // way is exactly what one plans a listing for.
     and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
   }
+  // "No ref" (#421) is two stored values — null, and the empty string a cleared field can leave —
+  // so it goes in the AND list rather than as a top-level `OR` the search would collide with.
+  if (filters.locationRef === NO_LOCATION_REF) {
+    and.push({ OR: [{ locationRef: null }, { locationRef: "" }] });
+  }
   if (filters.attachableToLotId) {
     // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
     // inequality is not a reliable way to say that about a nullable column.
@@ -913,7 +935,16 @@ function buildItemWhere(
       ? { id: { notIn: filters.excludeIds } }
       : {}),
     ...(Object.keys(stampWhere).length > 0 ? { stamp: stampWhere } : {}),
-    ...(locationIds ? { locationId: { in: locationIds } } : {}),
+    // The unfiled bucket is a value, not the absence of a filter (#421); a resolved subtree is the
+    // ordinary case (#56/#385).
+    ...(filters.locationId === NO_LOCATION
+      ? { locationId: null }
+      : locationIds
+        ? { locationId: { in: locationIds } }
+        : {}),
+    ...(filters.locationRef && filters.locationRef !== NO_LOCATION_REF
+      ? { locationRef: filters.locationRef }
+      : {}),
     ...(filters.lotId ? { lotId: filters.lotId } : {}),
     ...(filters.deliveryState ? { deliveryState: filters.deliveryState } : {}),
     ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
@@ -1538,6 +1569,110 @@ export async function listItemDuplicateGroups(
     });
   }
   return { groups, nextCursor };
+}
+
+// ── Filing groups: by location and by ref (#421) ─────────────────────────────
+
+/** One row of the Copies list grouped by where its copies are filed. Deliberately thin next to
+ * {@link CopyGroupRow}: a filing group is a *place*, so the row states the place and how many
+ * copies are in it, and the copies themselves are what the expanded members show. */
+export interface LocationGroupRow {
+  /** Stable per-group key — the React key. Built, never parsed: members are addressed by the
+   * row's own fields. */
+  key: string;
+  /** Null is the unfiled bucket — copies with no location at all. */
+  locationId: string | null;
+  /** Breadcrumb path (`Szafa 1 › Klaser A`), resolved once for the whole page. */
+  locationPath: string | null;
+  /** The location's own name, for the row's lead line. */
+  locationName: string | null;
+  /** Set in `ref` mode only; null is "no ref written on these copies". */
+  locationRef: string | null;
+  /** How many copies of the *filtered* set this group holds. */
+  count: number;
+}
+
+export interface PaginatedLocationGroupsResult {
+  groups: LocationGroupRow[];
+  nextCursor: string | null;
+}
+
+/**
+ * The Copies list collapsed to **one row per storage location** — or, in `ref` mode, per
+ * `(location, ref)` pair (#421). Grouped server-side for the same reason duplicate groups are
+ * (#372): the list is offset-paginated, and a client-side grouping would split a group at a page
+ * boundary and report two half-counts.
+ *
+ * Unlike duplicate grouping this forces **no eligibility**. Where a copy is filed is a question
+ * about the whole list — the sold copy still on the shelf is exactly the one being looked for — so
+ * the panel's own filters are all that narrow it, `Include sold` and `Include no longer held`
+ * included.
+ *
+ * The groups are read **whole** and paged in memory, because the reading order is by location path
+ * and then by {@link compareLocationRef}'s prefix-then-number rule (#330), neither of which SQL can
+ * express. That is affordable and bounded: a collection has as many groups as it has locations
+ * (times the refs actually in use), not as many as it has copies. The order is total, so paging over
+ * it can neither repeat nor skip a group.
+ */
+export async function listItemLocationGroups(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated & { by?: LocationGroupBy } = {}
+): Promise<PaginatedLocationGroupsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const by: LocationGroupBy = filters.by ?? "location";
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+
+  const [grouped, locations] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma.item.groupBy as any)({
+      by: by === "ref" ? ["locationId", "locationRef"] : ["locationId"],
+      where,
+      _count: { id: true },
+    }) as Promise<
+      { locationId: string | null; locationRef?: string | null; _count: { id: number } }[]
+    >,
+    prisma.location.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, parentId: true },
+    }),
+  ]);
+
+  const locationById = new Map(locations.map((l) => [l.id, l]));
+
+  // Fold the raw buckets into the rows the list shows. A blank ref and a null one are one group —
+  // "nothing is written on these" — which the database cannot merge for us.
+  const rows = new Map<string, LocationGroupRow>();
+  for (const g of grouped) {
+    const locationRef = by === "ref" ? (g.locationRef?.trim() || null) : null;
+    const key = locationGroupKey({ locationId: g.locationId, locationRef }, by);
+    const existing = rows.get(key);
+    if (existing) {
+      existing.count += g._count.id;
+      continue;
+    }
+    rows.set(key, {
+      key,
+      locationId: g.locationId,
+      locationPath: buildLocationPath(locations, g.locationId),
+      locationName: g.locationId ? (locationById.get(g.locationId)?.name ?? null) : null,
+      locationRef,
+      count: g._count.id,
+    });
+  }
+
+  const ordered = [...rows.values()].sort(compareLocationGroups);
+  const page = ordered.slice(offset, offset + pageSize);
+  const nextCursor = offset + pageSize < ordered.length ? String(offset + pageSize) : null;
+  return { groups: page, nextCursor };
 }
 
 /** The `where` addressing exactly one group's members. Only the axes that joined the key are
