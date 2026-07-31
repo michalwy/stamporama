@@ -127,7 +127,11 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    straight away. An offer
    needs at least one set **and an asking price** before it can be marked ready or activated — an
    unpriced offer shows *Set a price to…* beside its price, and the quick-advance button waits until
-   you set one. On the platform named as Colnect it also needs to pass the
+   you set one. It also needs its [listing photos](#generating-the-photos) **generated and current**:
+   an offer whose plan would render images but has none, whose stored images are *Out of date*, whose
+   run failed, or whose run is still going cannot be marked ready — the button says which, and you fix
+   it on the **Photos** card. An offer whose plan renders nothing at all (no collage configured and no
+   attachments) is asked nothing about photos. On the platform named as Colnect it also needs to pass the
    [listing preconditions](#what-the-assistant-cant-post) — every stamp matched, every condition
    mapped, the sets interchangeable — before it can be marked ready. For the same reason you cannot clear the price of an offer that is already **Ready**
    or **Active**; step it back to **Preparing** first. You can step a **Ready** offer back to
@@ -478,6 +482,12 @@ ready to re-upload.
 
 Regenerating replaces the whole set of images at once. If a run fails, the previous images are still
 there.
+
+On a **Preparing** offer, *Out of date* is more than a reminder: an offer cannot be marked **Ready**
+while its images are stale, missing, still rendering or left by a failed run — Ready means the listing
+is assembled, and images that no longer show what is being sold are not that. A listing already
+**Ready** or live is never held back this way: it exists on the platform, and stepping it back to
+**Preparing** is what lets you re-prepare it.
 
 ### When a set sells
 

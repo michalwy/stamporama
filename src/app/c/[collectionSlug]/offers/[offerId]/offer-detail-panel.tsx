@@ -210,10 +210,11 @@ export function OfferDetailPanel({
   // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
   // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
   const advanceTo = editable ? quickAdvanceTarget(offer.state) : null;
-  // Marking it ready is gated on the listing preconditions (#418): a fault is fixed while the offer
-  // is still being assembled rather than in the middle of a posting session. Unlike a missing set or
-  // price, each of these is fixed on another screen, so the button stays put and is **disabled with
-  // its reasons** (#273) instead of quietly disappearing.
+  // Marking it ready is gated on the listing preconditions (#418) and on the listing photos being
+  // generated and current (#311): a fault is fixed while the offer is still being assembled rather
+  // than in the middle of a posting session. Unlike a missing set or price, each of these is fixed
+  // elsewhere — another screen, or the photos card below — so the button stays put and is **disabled
+  // with its reasons** (#273) instead of quietly disappearing.
   const advanceReady =
     advanceTo !== null &&
     (!requiresSets(advanceTo) || offer.sets.length > 0) &&
@@ -421,9 +422,10 @@ export function OfferDetailPanel({
                 <Tooltip
                   content={
                     blocked ? (
-                      // One line per reason, never a count: each is fixed somewhere different (#406).
+                      // One line per reason, never a count: each is fixed somewhere different (#406,
+                      // #311) — a catalogue match on another screen, a photo run on the card below.
                       <span style={{ display: "grid", gap: "0.25rem", maxWidth: "22rem" }}>
-                        <strong>This offer cannot be listed on {offer.platformName} yet:</strong>
+                        <strong>This offer is not ready to be listed on {offer.platformName} yet:</strong>
                         {readyBlockers.map((b) => (
                           <span key={b.code}>{b.message}</span>
                         ))}

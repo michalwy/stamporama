@@ -896,6 +896,49 @@ export async function getOfferPhotoPlanState(
   };
 }
 
+/**
+ * Just enough of the plan state to judge whether this offer's photos let it be marked **Ready**
+ * (#311 gate): the run's status, whether the stored images are stale, how many there are, and how
+ * many one right now would produce. The rules over it are pure (`offer-photo-readiness.ts`).
+ *
+ * Not owner-checked, unlike {@link getOfferPhotoPlanState}: the one caller is the offers domain,
+ * which has already established ownership of the offer it is about to move. Returns `null` for an
+ * offer that does not exist.
+ *
+ * It re-derives the plan rather than reading a stored count because a *stale* plan is exactly what
+ * it is looking for — the whole question is whether what would be rendered now still matches what
+ * was rendered then. It stops short of the read model's image list and previews, which the gate has
+ * no use for.
+ */
+export async function readOfferPhotoReadiness(offerId: string): Promise<{
+  status: OfferPhotoGenerationStatus;
+  outOfDate: boolean;
+  storedCount: number;
+  plannedCount: number;
+} | null> {
+  const inputs = await readInputs(offerId);
+  if (!inputs) return null;
+  const [generation, storedCount] = await Promise.all([
+    prisma.offerPhotoGeneration.findUnique({
+      where: { offerId },
+      select: { status: true, fingerprint: true },
+    }),
+    prisma.offerPhotoEntry.count({ where: { offerId } }),
+  ]);
+  const plan = planFor(inputs);
+  return {
+    status: (generation?.status as OfferPhotoGenerationStatus) ?? "none",
+    // Same rule as the panel's: only stored images can be stale, and only against a recorded
+    // fingerprint.
+    outOfDate:
+      storedCount > 0 &&
+      generation?.fingerprint != null &&
+      generation.fingerprint !== fingerprintFor(inputs, plan),
+    storedCount,
+    plannedCount: plan.images.length,
+  };
+}
+
 // ── Archive ──────────────────────────────────────────────────────────────────
 
 /**

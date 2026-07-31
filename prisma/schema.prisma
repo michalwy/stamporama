@@ -1203,8 +1203,10 @@ model Offer {
 //
 // `fingerprint` is the hash of the inputs the *stored* images were produced from (composition and
 // order, source photo ids, the offer's photo configuration, the platform's limits). Comparing it with
-// the current inputs is what marks a plan **out of date**; it is only a signal, never a trigger —
-// images are served as stored and regenerated on request alone. Null until a run has succeeded.
+// the current inputs is what marks a plan **out of date**; it never triggers a render — images are
+// served as stored and regenerated on request alone — but it is read by the `preparing → ready` gate,
+// which refuses an offer whose plan would render images and whose stored ones are missing, stale, in
+// flight or left by a failed run. Null until a run has succeeded.
 model OfferPhotoGeneration {
   id       String @id @default(cuid())
   offerId  String @unique

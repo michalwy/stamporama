@@ -44,6 +44,11 @@ import {
   type ListingBlocker,
 } from "./listing-preconditions";
 import {
+  evaluatePhotoReadiness,
+  type PhotoReadinessBlocker,
+  type ReadyBlocker,
+} from "./offer-photo-readiness";
+import {
   compareSetItems,
   hasManualItemOrder,
   nextItemSortOrder,
@@ -74,6 +79,7 @@ import { normalizeCollageGridMode } from "./collage-template-rules";
 import type { PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
+  readOfferPhotoReadiness,
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
 import type { OfferAreaYear } from "./listing-groups";
@@ -1636,21 +1642,23 @@ function listingBlockersFor(
 }
 
 /**
- * The listing preconditions (#406) for one offer, judged at **`ready`** — the state it is about to
- * reach (#418), never the one it is in.
+ * Everything that stands between one offer and **`ready`** — the state it is about to reach (#418),
+ * never the one it is in: the Assistant's listing preconditions (#406) and its listing photos.
  *
  * The gate sits on `preparing → ready` and nowhere else in the lifecycle, because that transition is
  * what the collector means by "this listing is assembled": a fault caught here is fixed while the
  * offer is still being put together, rather than surfacing in the bulk listing workspace at the
  * moment there are thirty of them to post. Later transitions are deliberately left open — an offer
- * already live is a listing that exists, and refusing to pause or withdraw it over a mapping gap
- * would trap the collector.
+ * already live is a listing that exists, and refusing to pause or withdraw it over a mapping gap or
+ * a stale collage would trap the collector.
  *
- * Empty for a platform naming no Assistant module, exactly as {@link listingBlockersFor} is: these
- * are one module's rules, and a marketplace listed by hand has nothing to fail. That is also why the
- * condition map is not read for one.
+ * The preconditions are empty for a platform naming no Assistant module, exactly as
+ * {@link listingBlockersFor} is: these are one module's rules, and a marketplace listed by hand has
+ * nothing to fail. That is also why the condition map is not read for one. The **photo** check has no
+ * such exemption — every marketplace is posted with images — but it only applies where there is
+ * something to render at all; see {@link evaluatePhotoReadiness}.
  */
-async function readReadyBlockers(collectionId: string, offerId: string): Promise<ListingBlocker[]> {
+async function readReadyBlockers(collectionId: string, offerId: string): Promise<ReadyBlocker[]> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {
@@ -1660,12 +1668,25 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
   });
   if (!offer) return [];
   const platformModule = offer.platform.platformModule;
-  if (!platformModule) return [];
-  const [labeller, conditionMap] = await Promise.all([
-    makeOfferLabeller(collectionId),
-    loadColnectConditionMap(collectionId),
+  const [preconditions, photos] = await Promise.all([
+    (async (): Promise<ListingBlocker[]> => {
+      if (!platformModule) return [];
+      const [labeller, conditionMap] = await Promise.all([
+        makeOfferLabeller(collectionId),
+        loadColnectConditionMap(collectionId),
+      ]);
+      return listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready");
+    })(),
+    readOfferPhotoBlockers(offerId),
   ]);
-  return listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready");
+  return [...preconditions, ...photos];
+}
+
+/** The photo half of the ready gate (#311) for one offer: the plan's state, judged by the pure
+ *  rules. Empty for an offer that has vanished under the read. */
+async function readOfferPhotoBlockers(offerId: string): Promise<PhotoReadinessBlocker[]> {
+  const readiness = await readOfferPhotoReadiness(offerId);
+  return readiness ? evaluatePhotoReadiness(readiness) : [];
 }
 
 type AreaLinkedSet = {
@@ -1892,11 +1913,12 @@ export interface OfferDetail {
    * (#405) use. Note it is evaluated at the offer's **own** state, so anything not Ready reports
    * `not-ready` alone. */
   listingBlockers: ListingBlocker[];
-  /** Why this offer cannot be marked **Ready** (#418) — the same preconditions, judged at the state
-   * it is about to reach rather than at the one it is in. Non-empty only while `preparing`, which is
-   * the one transition the gate sits on; every other state reports nothing, because there is no such
-   * step to take from it. */
-  readyBlockers: ListingBlocker[];
+  /** Why this offer cannot be marked **Ready** (#418) — the listing preconditions judged at the state
+   * it is about to reach rather than at the one it is in, plus the state of its listing photos
+   * (#311): a listing whose images do not exist, or were rendered from a composition it no longer
+   * has, is not assembled. Non-empty only while `preparing`, which is the one transition the gate
+   * sits on; every other state reports nothing, because there is no such step to take from it. */
+  readyBlockers: ReadyBlocker[];
   /** The offer's stamps as the platform's own catalogue knows them (#423), empty for a platform with
    * no module. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
@@ -2174,6 +2196,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           },
   };
 
+  // The photo half of the ready gate (#311), asked only where the step actually exists: an offer
+  // past `preparing` has no **Mark ready** to disable, and this re-derives the whole photo plan.
+  const readyPhotoBlockers = state === "preparing" ? await readOfferPhotoBlockers(offerId) : [];
+
   // Asking price converted to base at the current rate (#208). Skipped when already in base or
   // unpriced; a missing rate leaves it null.
   const priceNum = Number(offer.price);
@@ -2257,11 +2283,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformModule,
     listingBlockers: listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, state),
     // The same evaluation at the target state (#418), so the header can disable **Mark ready** with
-    // the reasons rather than let the collector press it and be refused. It reuses this screen's own
-    // sets and condition map — a second read would be the same answer at twice the cost.
+    // the reasons rather than let the collector press it and be refused. The preconditions reuse this
+    // screen's own sets and condition map — a second read would be the same answer at twice the cost;
+    // the photo state (#311) is the one thing here that costs a read of its own.
     readyBlockers:
       state === "preparing"
-        ? listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready")
+        ? [
+            ...listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready"),
+            ...readyPhotoBlockers,
+          ]
         : [],
     platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap),
     createdAt: offer.createdAt,
@@ -3019,14 +3049,14 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
     }
   }
-  // Marking it ready is also where the listing preconditions are asked (#418) — see
-  // {@link readReadyBlockers} for why here and nowhere else in the lifecycle.
+  // Marking it ready is also where the listing preconditions (#418) and the listing photos (#311)
+  // are asked — see {@link readReadyBlockers} for why here and nowhere else in the lifecycle.
   if (to === "ready") {
     const blockers = await readReadyBlockers(ref.collectionId, offerId);
     if (blockers.length > 0) {
       throw new OfferActionBlockedError(
         "listing-preconditions",
-        `This offer cannot be listed on its platform yet: ${blockers.map((b) => b.message).join(" ")}`
+        `This offer is not ready to be listed yet: ${blockers.map((b) => b.message).join(" ")}`
       );
     }
   }
