@@ -37,6 +37,13 @@ shows the active one in a coloured badge, so it is always clear where a match wi
 
 You can revoke a connection at any time from the same **Settings → Assistant** screen.
 
+## Closing the window
+
+The Assistant opens in its own small window. **Escape** closes it — or, while a confirmation is on
+screen, cancels that first and leaves the window open. Nothing is lost either way: a confirmed write
+reached your collection the moment you confirmed it, and the page is scanned afresh the next time you
+click the toolbar icon.
+
 ## Decisions that are already made
 
 The Assistant never silently replaces a Colnect ID you already have. So when one of your stamps is

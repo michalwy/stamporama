@@ -167,8 +167,16 @@ confirmOk.addEventListener("click", () => closeConfirm(true));
 confirmCancel.addEventListener("click", () => closeConfirm(false));
 // Escape cancels. Enter is left to the focused button's native activation (Confirm is focused on
 // open), so tabbing to Cancel and pressing Enter cancels rather than writing.
+//
+// With nothing to cancel it closes the Assistant itself. The window has no address bar and no close
+// keystroke of its own worth reaching for, and it is opened from a page the collector is returning
+// to — Escape is the gesture they already have in hand for "I am done here". It never discards work:
+// every write went to the instance the moment it was confirmed, and the scan is redone on the next
+// icon click anyway.
 document.addEventListener("keydown", (e) => {
-  if (!overlay.hidden && e.key === "Escape") closeConfirm(false);
+  if (e.key !== "Escape") return;
+  if (!overlay.hidden) closeConfirm(false);
+  else window.close();
 });
 
 /** The "you are about to write to X" line shared by every write confirm. */
