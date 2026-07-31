@@ -78,6 +78,17 @@ A seller's defaults are **copied onto the sale**, never referenced from it. Rais
 premium on their contact never re-prices a parcel you are already bidding on. Change a parcel's
 terms on the sale itself.
 
+### Capturing a lot from the listing instead
+
+On **Allegro**, the four fields above are already written on the page you are looking at, and the
+[Stamporama Assistant](assistant.md#capturing-an-allegro-lot) can read them: click its toolbar icon
+on an auction and it captures the address, title, offer number, seller, closing time and current bid
+into a small window, shows you which parcel the lot would land in, and saves it on one click. Capturing the same
+listing again refreshes its bid rather than making a second lot.
+
+It needs one setting first — **Settings → Allegro**, naming which of your platforms *is* Allegro —
+and it never reads the lot's contents: what a lot holds is still entered here, on the lot itself.
+
 ## The lots screen
 
 The right of each row is a small grid in **two halves, divided by a rule**: what the lot **costs**,
@@ -222,6 +233,10 @@ ways, both one click from the list:
 
 - **type the new bid** over the old one, or
 - pick **Bid unchanged** from the row's ⋮ menu when it has not moved.
+
+On Allegro there is a third: click the [Assistant's](assistant.md#capturing-an-allegro-lot) toolbar
+icon on the listing itself and save. It recognises the lot you already track and records the price it
+reads, which saves reading a figure off one window and typing it into another.
 
 Either way the observation is stamped with the moment you made it, and that is what the staleness
 signal reads:
@@ -510,7 +525,9 @@ stay standing, only the link goes.
 - Anything that reads the prices lost lots have produced back as a valuation.
 - Any recommendation beyond the raw catalogue value — what a lot is *worth bidding* is a separate
   question from what its contents catalogue at.
-- Capturing a listing straight from the browser.
+- Capturing a listing from anywhere but Allegro. Other marketplaces are still typed in by hand.
+- Any automatic refreshing of bids. Capturing an Allegro listing again re-reads its price, but only
+  when you ask it to — nothing polls a marketplace on your behalf.
 
 A lot's **notes** field is a good place for anything the contents list has no room for — condition
 doubts, what to check before bidding.

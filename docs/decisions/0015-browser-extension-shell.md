@@ -32,9 +32,9 @@ copied to `dist/`) — deliberately boring and explicit over an extension framew
 whose `fetch` under `host_permissions` is exempt from CORS — so no server-side CORS changes are
 needed. The popup drives the flow and messages the SW; the content script only extracts.
 
-**Pluggable platform modules.** A `PlatformModule` (`matches(url)` + `extract(document)`) registers
-into a registry the content script consults. The shell ships none; Colnect is the first module (#249).
-This keeps DOM specifics out of the neutral core and lets Delcampe/Allegro/… follow.
+**Pluggable platform modules.** A `PlatformModule` registers into a registry the content script
+consults. The shell ships none; Colnect is the first module (#249). This keeps DOM specifics out of
+the neutral core and lets Delcampe/Allegro/… follow.
 
 **Two halves per module, the second optional (#408).** Reading a page and posting a listing are the
 symmetric halves of the same job, so listing is part of the same interface rather than a Colnect
@@ -46,6 +46,20 @@ unchanged: it states what the listing holds, never how a form is laid out, and t
 fields is the module's own. Driving it is two pure steps around the navigation that separates them
 (`resolveListingTarget` → `fillListing`), with the tab-opening and the report back to the instance
 left to the wiring (#407/#409) — the part a second marketplace reuses without change.
+
+**A third half, and every half optional (#355).** Capturing one **auction listing** for the
+[watchlist](0021-auction-tracking-model.md) is neither of the two above: it reads a page, but it
+reads *one lot* rather than the stamps on a catalogue page, and it produces a watchlist entry rather
+than a match. It is therefore a third optional member — `capture` (`isListingUrl` / `capture`) — and
+the extraction pair moved into an optional `extraction` member beside it, because Allegro carries
+capture **alone**: it is a marketplace this collection bids on, not a catalogue to match against or a
+shop to list into, and a module carrying one half is a complete module exactly as a read-only one is.
+`moduleReports()` names all three, so no surface hard-codes ids. The captured shape is neutral (offer
+id, URL, title, seller, closing instant, opening price, current bid); where it lands — which platform,
+which seller, which parcel — is decided **server-side** (`captureAuctionLot`), since every part of
+that answer is a `Contact` of a collection the marketplace knows nothing about. Which platform *is*
+Allegro is one setting on its own Settings tab (`Contact.platformModule`, the same marker #406 uses),
+because it is the one fact a listing page cannot state.
 
 **Bearer token auth (`AssistantToken`).** A per-collection token authenticates the extension. It is
 stored only as a SHA-256 hash, authorizes as the collection's owner for that one collection, and is

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Capture lot — Stamporama Assistant</title>
+    <style>
+      /* Deliberately the match window's own palette and controls (src/popup/index.html): the two
+         windows open from the same toolbar icon and are one tool wearing two faces. */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --panel: #f9fafb;
+        --sunk: #f3f4f6;
+        --primary: #2563eb;
+        --primary-fg: #ffffff;
+        --danger: #dc2626;
+        --warn: #b45309;
+        --ok: #15803d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1e1e1e;
+          --fg: #ececec;
+          --muted: #9ca3af;
+          --border: #3a3a3a;
+          --panel: #262626;
+          --sunk: #1a1a1a;
+          --primary: #3b82f6;
+        }
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      body {
+        margin: 0;
+        min-width: 380px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .pad { padding: 20px 24px 32px; max-width: 640px; margin: 0 auto; }
+      h1 { font-size: 17px; margin: 0 0 12px; }
+      .badge {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 8px 10px; border-radius: 8px;
+        background: var(--panel); border: 1px solid var(--border);
+        border-left: 5px solid var(--accent, var(--border));
+        margin-bottom: 12px;
+      }
+      .badge .top { display: flex; align-items: center; gap: 8px; }
+      .badge .dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--accent, var(--muted)); }
+      .badge .name { font-weight: 600; flex: 1; min-width: 0; }
+      .badge .url { color: var(--muted); font-size: 12px; word-break: break-all; }
+      .badge.none { color: var(--warn); }
+      .badge.none .dot { display: none; }
+      .badge select {
+        font: inherit; font-size: 12px; max-width: 260px;
+        padding: 3px 6px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      }
+      .source {
+        padding: 8px 10px; margin-bottom: 12px; font-size: 12px;
+        border: 1px solid var(--border); border-radius: 8px; background: var(--sunk);
+        color: var(--muted); word-break: break-all;
+      }
+      .field { margin-bottom: 10px; }
+      .field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+      .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+      input {
+        font: inherit; width: 100%; padding: 6px 8px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      }
+      .pair { display: flex; gap: 10px; }
+      .pair .field { flex: 1; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 8px; align-items: center; }
+      button {
+        font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+      }
+      button.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { color: var(--muted); min-height: 16px; margin: 4px 0; }
+      .status.err { color: var(--danger); }
+      .status.ok { color: var(--ok); }
+      /* What the instance says will happen — the parcel, the seller, whether this is already watched.
+         A panel of its own because it is the answer the collector is checking before they press Save. */
+      .plan {
+        padding: 10px 12px; border-radius: 8px; margin-bottom: 4px;
+        border: 1px solid var(--border); border-left: 4px solid var(--accent, var(--border));
+        background: var(--panel);
+      }
+      .plan.new { --accent: var(--ok); }
+      .plan.refresh { --accent: var(--primary); }
+      .plan.blocked { --accent: var(--danger); }
+      .plan .head { font-weight: 600; margin-bottom: 4px; }
+      .plan .line { font-size: 12px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="pad">
+      <h1>Capture auction lot</h1>
+
+      <div class="badge none" id="badge">
+        <div class="top">
+          <span class="dot"></span>
+          <span class="name" id="badgeName">No active profile</span>
+          <select id="profileSelect" hidden></select>
+        </div>
+        <div class="url" id="badgeUrl"></div>
+      </div>
+
+      <div class="source" id="source">Reading the page…</div>
+
+      <form id="form" hidden>
+        <div class="field">
+          <label for="title">Title</label>
+          <input id="title" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="lotNo">Lot no<span class="hint">the marketplace's own number for this listing</span></label>
+          <input id="lotNo" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="seller">Seller<span class="hint">as printed on the listing — corrected here if they trade under another name</span></label>
+          <input id="seller" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="endsAt">Closes<span class="hint" id="endsAtHint"></span></label>
+          <input id="endsAt" type="datetime-local" step="1" />
+        </div>
+        <div class="pair">
+          <div class="field">
+            <label for="currentBid">Current bid<span class="hint" id="bidHint"></span></label>
+            <input id="currentBid" type="text" inputmode="decimal" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="startingPrice">Opening price</label>
+            <input id="startingPrice" type="text" inputmode="decimal" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="plan" id="plan" hidden>
+          <div class="head" id="planHead"></div>
+          <div class="line" id="planLine"></div>
+        </div>
+
+        <div class="row">
+          <button class="primary" id="save" type="submit" disabled>Save lot</button>
+          <button id="recheck" type="button">Re-read page</button>
+        </div>
+      </form>
+
+      <div class="status" id="status"></div>
+    </div>
+    <script src="capture.js"></script>
+  </body>
+</html>

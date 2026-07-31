@@ -3,6 +3,7 @@ import { CATALOG_BACKFILL, getCatalogBackfill, getMatchOnLoad } from "../core/se
 import type {
   BackgroundMessage,
   BackgroundRequest,
+  CaptureSaveResponse,
   CachedResultsResponse,
   ConfirmResponse,
   DetectedNotice,
@@ -12,6 +13,8 @@ import type {
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
+import { callCapture } from "./capture-client";
+import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
 import { captureListedUrl, listingSubmitted, listingTabClosed, runListingTask } from "./listing";
 import { handleRegistrationClick } from "./registration";
@@ -102,6 +105,17 @@ async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmRe
   return { ok: false, error: outcome.error };
 }
 
+async function captureLot(
+  lot: Parameters<typeof callCapture>[1],
+  dryRun: boolean
+): Promise<CaptureSaveResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return { ok: false, error: "No active profile. Set one in the extension options." };
+  }
+  return callCapture(profile, lot, dryRun);
+}
+
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
   // Fire-and-forget page report from a content script: show what's there, then refine the badge
   // into "work to do" once the dry-run comes back. No response expected.
@@ -133,6 +147,21 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         } satisfies OpenMatchResponse)
+      );
+    return true;
+  }
+
+  // A lot captured from a marketplace page (#355). It needs the active profile — unlike a listing
+  // handoff, nothing about a marketplace page says which collection it belongs to — so it is answered
+  // here rather than in `handle`, which is shaped around the matcher's own two calls.
+  if (msg?.type === "capture-save") {
+    captureLot(msg.lot, msg.dryRun)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies CaptureSaveResponse)
       );
     return true;
   }
@@ -202,15 +231,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Sized for comparing a stamp against its candidates: wide enough for the two columns to hold an
 // image plus its details without crowding, tall enough to see several rows at once. `centredBounds`
-// clamps to the parent window, so a smaller screen just gets as much as it has.
+// clamps to the parent window, so a smaller screen just gets as much as it has. The capture window
+// (#355) is far smaller — it is one lot's five fields — and shares the window slot rather than the
+// size: two Assistant windows over one browser window would compete for the collector's attention,
+// and the page that is open is always about the page they were just looking at.
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 980;
+const CAPTURE_WINDOW_WIDTH = 560;
+const CAPTURE_WINDOW_HEIGHT = 760;
 
 let assistantWindowId: number | null = null;
 
-function centredBounds(parent: chrome.windows.Window): { left: number; top: number; width: number; height: number } {
-  const width = Math.min(WINDOW_WIDTH, parent.width ?? WINDOW_WIDTH);
-  const height = Math.min(WINDOW_HEIGHT, parent.height ?? WINDOW_HEIGHT);
+function centredBounds(
+  parent: chrome.windows.Window,
+  maxWidth: number,
+  maxHeight: number
+): { left: number; top: number; width: number; height: number } {
+  const width = Math.min(maxWidth, parent.width ?? maxWidth);
+  const height = Math.min(maxHeight, parent.height ?? maxHeight);
   return {
     width,
     height,
@@ -219,8 +257,23 @@ function centredBounds(parent: chrome.windows.Window): { left: number; top: numb
   };
 }
 
+/** The match window (#253) — the default meaning of the toolbar click. */
 async function openAssistant(sourceTab: chrome.tabs.Tab): Promise<void> {
-  const url = chrome.runtime.getURL(`popup.html${sourceTab.id ? `?tabId=${sourceTab.id}` : ""}`);
+  await openAssistantWindow(sourceTab, "popup.html", WINDOW_WIDTH, WINDOW_HEIGHT);
+}
+
+/** The capture window (#355), for a page that holds one auction rather than a page of stamps. */
+async function openCapture(sourceTab: chrome.tabs.Tab): Promise<void> {
+  await openAssistantWindow(sourceTab, "capture.html", CAPTURE_WINDOW_WIDTH, CAPTURE_WINDOW_HEIGHT);
+}
+
+async function openAssistantWindow(
+  sourceTab: chrome.tabs.Tab,
+  page: string,
+  maxWidth: number,
+  maxHeight: number
+): Promise<void> {
+  const url = chrome.runtime.getURL(`${page}${sourceTab.id ? `?tabId=${sourceTab.id}` : ""}`);
 
   // Reuse an open Assistant window: point it at the new source tab and focus it, so clicking the
   // icon on another page refreshes rather than stacking windows. Clicking the icon is the *only*
@@ -244,7 +297,11 @@ async function openAssistant(sourceTab: chrome.tabs.Tab): Promise<void> {
   // Centre on the window holding the page we were launched from, not merely the "current" one —
   // in a service worker that distinction is not always the same window.
   const parent = await chrome.windows.get(sourceTab.windowId);
-  const created = await chrome.windows.create({ url, type: "popup", ...centredBounds(parent) });
+  const created = await chrome.windows.create({
+    url,
+    type: "popup",
+    ...centredBounds(parent, maxWidth, maxHeight),
+  });
   assistantWindowId = created.id ?? null;
 }
 
@@ -331,6 +388,14 @@ async function broadcastMatched(): Promise<void> {
 chrome.action.onClicked.addListener((tab) => {
   void (async () => {
     if (tab.id !== undefined && (await handleRegistrationClick(tab.id))) return;
+    // A page holding one auction opens the capture window instead (#355). Decided from the URL alone,
+    // in the worker, because the click is what grants `activeTab` and the content script has not been
+    // injected yet — and because a marketplace this collection only ever bids on holds no stamps to
+    // match, so the match window would open on an empty scan.
+    if (tab.url && findCaptureModuleForUrl(tab.url)) {
+      await openCapture(tab);
+      return;
+    }
     await openAssistant(tab);
   })();
 });

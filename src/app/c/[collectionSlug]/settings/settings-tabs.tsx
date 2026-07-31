@@ -13,6 +13,7 @@ import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
+import { AllegroPlatformPanel } from "./allegro-platform-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -52,6 +53,9 @@ interface SettingsTabsProps {
   /** Which platform contact is Colnect (#406), or null when none is — the setting the listing
    * checks ride on. */
   colnectPlatformId: string | null;
+  /** Which platform contact is Allegro (#355), or null when none is — the setting the Assistant's
+   * lot capture rides on. */
+  allegroPlatformId: string | null;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -71,6 +75,7 @@ const TABS = [
   { key: "collages", label: "Collage templates" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
+  { key: "allegro", label: "Allegro" },
   { key: "assistant", label: "Assistant" },
 ] as const;
 
@@ -102,6 +107,7 @@ export function SettingsTabs({
   initialColnectMappings,
   initialColnectConditionMappings,
   colnectPlatformId,
+  allegroPlatformId,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -122,6 +128,7 @@ export function SettingsTabs({
     rawTab === "collages" ||
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
+    rawTab === "allegro" ||
     rawTab === "assistant"
       ? rawTab
       : "general";
@@ -298,6 +305,19 @@ export function SettingsTabs({
               is called on Colnect — and are set up in one sitting. */}
           <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect condition mapping</h2>
           <ColnectConditionsPanel mappings={initialColnectConditionMappings} />
+        </section>
+      )}
+      {activeTab === "allegro" && (
+        <section>
+          {/* One setting, and the tab is named after the marketplace it answers for — the same
+              question the Colnect tab leads with, asked separately because a collection may well buy
+              on one platform and sell on another. */}
+          <h2 style={sectionHeadingStyle}>Allegro platform</h2>
+          <AllegroPlatformPanel
+            collectionId={collectionId}
+            platforms={platformContacts}
+            selectedId={allegroPlatformId}
+          />
         </section>
       )}
       {activeTab === "assistant" && (

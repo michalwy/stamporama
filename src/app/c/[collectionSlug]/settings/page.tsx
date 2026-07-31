@@ -16,6 +16,7 @@ import {
   getColnectPlatform,
   listPlatformContacts,
 } from "@/lib/colnect";
+import { getAllegroPlatform } from "@/lib/allegro";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
@@ -51,6 +52,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     colnectMappings,
     colnectConditionMappings,
     colnectPlatform,
+    allegroPlatform,
     platformContacts,
     assistantTokens,
     photoStorageBytes,
@@ -68,6 +70,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
     getColnectPlatform(session.user.id, collection.id),
+    getAllegroPlatform(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -97,6 +100,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
           colnectPlatformId={colnectPlatform?.id ?? null}
+          allegroPlatformId={allegroPlatform?.id ?? null}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}

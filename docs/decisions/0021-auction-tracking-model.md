@@ -242,9 +242,28 @@ last bid anybody happened to observe.
 ### 8. Data entry is manual, plus one assisted capture path
 
 Manual entry, plus Stamporama Assistant support for `allegro.pl` (#355; ADR-0015/ADR-0017): a click
-on a listing captures URL, title, closing date and current bid through an `AssistantToken`-
-authenticated endpoint. Composition is always entered by hand — it cannot be extracted from a
-listing reliably.
+on a listing captures URL, title, the marketplace's own **offer number** (into `lotNo`, the slot a
+house sale's lot number occupies), **seller**, closing date and current bid through an
+`AssistantToken`-authenticated endpoint (`POST …/auctions/capture`), reviewed in a window of the
+Assistant's own before anything is written. Composition is always entered by hand — it cannot be
+extracted from a listing reliably.
+
+Four rules that fall out of the model above rather than out of the extension:
+
+- The **platform is a setting**, not something the capture reads: the page knows it is Allegro, but
+  which `Contact` that marketplace is, is a fact about the collection. `Contact.platformModule`
+  carries it (the marker #406 introduced), set on **Settings → Allegro**.
+- The **seller** is read off the page as a *proposal* and resolved by name exactly as a name typed
+  into the add-lot dialog is; the parcel then follows from seller + platform through §9's open-sale
+  matching, re-read server-side rather than trusted from a browser extension.
+- **Only auctions.** A fixed-price offer has no bid to observe and no close to age against, so it is
+  refused rather than turned into a lot with an invented closing time.
+- A **re-capture is a refresh**, recognised by the marketplace's own offer id in either of the two
+  places it is recorded — `lotNo` (equality, scoped to that platform's sales) or the stored URL (at
+  the address's own boundaries) — so a lot added by hand with only the number, or only the link, is
+  still recognised. It re-records `currentBid` + `checkedAt` and
+  nothing else, since everything else on the lot is what the collector has since typed. That makes
+  the extension the fastest expression of §5's manual refresh, not an exception to it.
 
 There is no scraping and no scheduled bid refreshing. Both are fragile dependencies on markup and
 terms of service we do not control, and they would be a separate architectural decision, not a

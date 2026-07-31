@@ -21,6 +21,9 @@ import {
 } from "./auction-lines";
 import { getOrFetchRate } from "./exchange-rates";
 import { allocateItemNumbers } from "./items";
+import { resolvePurchaseContact } from "./contacts";
+import { getModulePlatform } from "./module-platform";
+import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
   deriveAuctionLotLabel,
   deriveAuctionSaleName,
@@ -60,7 +63,11 @@ export type AuctionBlockReason =
   // Settlement (#28): the parcel's outcome is not fully recorded yet, and nothing was picked to go
   // into it. Distinct because the first is answered on the lots and the second in the dialog.
   | "unresolved"
-  | "no-lots";
+  | "no-lots"
+  // Capture (#355): no platform of this collection is marked as the marketplace the page came from.
+  // Distinct from `no-platform`, which is a lot being written without one — here the collector named
+  // nothing and nothing is missing from the page; a setting has simply not been made yet.
+  | "no-platform-module";
 
 /** Raised when an auction action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1257,6 +1264,249 @@ export async function createAuctionLot(
   // it is the moment the collector confirmed this seller is reached through this platform.
   await rememberSellerPlatform(parties.sellerId, parties.platformId);
   return lot.id;
+}
+
+// ── Capture from a marketplace page (#355) ──────────────────────────────────
+//
+// The Assistant reads a listing and hands over what the page already knows. Everything here is the
+// add-lot dialog's own behaviour (#352) reached without a dialog: the platform, the seller, the open
+// sale and the lot, in that order, each decided server-side rather than trusted from a browser
+// extension. What the capture deliberately does **not** carry is composition — it cannot be derived
+// from a listing, and a wrong one is worse than none, so it stays something the collector enters
+// here.
+
+/** One listing as a marketplace page states it. Platform-neutral: Allegro is the first module to
+ *  produce one, and nothing in this shape is Allegro's. */
+export interface AuctionLotCaptureInput {
+  /**
+   * The marketplace's own id for the listing — the one thing that survives a slug change, a
+   * redirect, or the collector having stored the URL in a different shape. It is what makes a
+   * re-capture a **refresh** instead of a duplicate.
+   */
+  platformOfferId: string;
+  /** The listing's address as the module decided to record it. */
+  url: string;
+  title: string | null;
+  /** The marketplace's own number for the listing, for the lot's own number field — the same slot a
+   *  house sale's lot number occupies, so the watchlist reads the same however a lot got there. */
+  lotNo: string | null;
+  /** The seller as printed on the page. Resolved against the collection's contacts by name, and
+   *  created as a seller when it matches none — exactly as a name typed into the dialog is. */
+  sellerName: string | null;
+  endsAt: Date;
+  /** What the listing opened at, when the page says so and nobody has bid yet. A record, never a
+   *  cost (#351). */
+  startingPrice: string | null;
+  /** What it stands at — an observation, so writing it stamps `checkedAt`. Null while no bid has
+   *  been placed: a lot nobody has bid on costs nothing, whatever it opens at. */
+  currentBid: string | null;
+}
+
+/** What a capture did, or — on a dry run — what it would do. Both halves are stated in the same
+ *  shape so the Assistant's window can show the collector the outcome before and after. */
+export interface AuctionLotCaptureResult {
+  /** `created` writes a new lot; `refreshed` finds the lot already tracking this listing and
+   *  re-records its bid, which is what makes the extension the fastest way to check a price. */
+  outcome: "created" | "refreshed";
+  /** Null on a dry run of a `created`, where nothing exists yet. */
+  lotId: string | null;
+  saleId: string | null;
+  saleName: string;
+  saleCurrency: string;
+  /** True when this capture starts the seller's parcel rather than joining an open one. */
+  saleCreated: boolean;
+  sellerId: string | null;
+  sellerName: string;
+  /** True when the page's seller matches no contact and one would be (or was) created. */
+  sellerCreated: boolean;
+  platformName: string;
+  /** What the lot carried before a refresh, so the window can say whether the price moved. */
+  previousBid: string | null;
+}
+
+/**
+ * The lot already tracking this listing, found by the marketplace's own **offer id** — never by URL
+ * equality, because the same listing is reachable through several addresses (the canonical one a
+ * capture stores, the slug the collector pasted, the product page that carries the offer in a
+ * parameter) and the id is the part of every one of them that is the listing.
+ *
+ * The id is looked for in **two places**, because it is recorded in two:
+ *
+ *  • `lotNo`, where a capture writes the marketplace's own number. This is the exact half — an offer
+ *    number is unique on the marketplace, so equality is the whole test — and it is scoped to sales
+ *    on *this* platform, since `lotNo` is a shared field and a house sale's `Lot 42` is a different
+ *    vocabulary that must never collide with an offer number.
+ *  • the `url`, at the **address's own boundaries** (`/<id>`, `-<id>`, `offerId=<id>`) and never as a
+ *    bare substring: an id is a run of digits, and a plain `contains` would let a short one match the
+ *    middle of an unrelated listing's number and refresh the wrong lot's bid.
+ *
+ * Both, rather than the better one, because a lot added by hand carries whichever of the two the
+ * collector happened to type — the number off the listing, or the link to it — and either is enough
+ * to recognise that this auction is already being watched.
+ */
+async function findCapturedLot(collectionId: string, platformId: string, platformOfferId: string) {
+  return prisma.auctionLot.findFirst({
+    where: {
+      auctionSale: { collectionId },
+      OR: [
+        { lotNo: platformOfferId, auctionSale: { collectionId, platformId } },
+        { url: { endsWith: `/${platformOfferId}` } },
+        { url: { endsWith: `-${platformOfferId}` } },
+        { url: { contains: `/${platformOfferId}?` } },
+        { url: { contains: `-${platformOfferId}?` } },
+        { url: { contains: `offerId=${platformOfferId}` } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      currentBid: true,
+      purchaseLotId: true,
+      auctionSale: { select: { id: true, name: true, currency: true } },
+    },
+  });
+}
+
+/**
+ * Write — or refresh — the lot a captured listing describes.
+ *
+ * `dryRun` answers the same question without touching anything, which is what the Assistant's window
+ * shows before the collector presses Save: which parcel this lands in, whether the seller is new
+ * here, and whether this listing is already being watched. It resolves nothing into existence, so a
+ * previewed seller and a previewed sale are reported as *would be created*.
+ */
+export async function captureAuctionLot(
+  ownerId: string,
+  collectionId: string,
+  input: AuctionLotCaptureInput,
+  opts: { dryRun?: boolean } = {}
+): Promise<AuctionLotCaptureResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const dryRun = opts.dryRun ?? true;
+
+  // The one fact a listing page cannot state: which of this collection's platforms Allegro is. It
+  // is a setting rather than a question the capture asks, so an unset one is a refusal pointing at
+  // the tab that answers it (#355).
+  const platform = await getModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE);
+  if (!platform) {
+    throw new AuctionActionBlockedError(
+      "no-platform-module",
+      "No platform in this collection is marked as Allegro. Set one under Settings → Allegro, then capture again."
+    );
+  }
+
+  const existing = await findCapturedLot(collectionId, platform.id, input.platformOfferId);
+  if (existing) {
+    assertLotEditable(existing);
+    const previousBid = money(existing.currentBid);
+    // Only the bid and its timestamp. A capture is an observation of a price, not a re-import of the
+    // listing: the title, the closing time and everything the collector has since typed onto the lot
+    // are theirs, and a refresh that overwrote them would punish keeping the watchlist tidy.
+    if (!dryRun) await setAuctionLotBid(ownerId, existing.id, input.currentBid);
+    return {
+      outcome: "refreshed",
+      lotId: existing.id,
+      saleId: existing.auctionSale.id,
+      saleName: existing.auctionSale.name,
+      saleCurrency: existing.auctionSale.currency,
+      saleCreated: false,
+      sellerId: null,
+      sellerName: input.sellerName ?? "",
+      sellerCreated: false,
+      platformName: platform.name,
+      previousBid,
+    };
+  }
+
+  const sellerName = input.sellerName?.trim() ?? "";
+  if (!sellerName) {
+    throw new AuctionActionBlockedError(
+      "no-seller",
+      "This listing names no seller. Name the seller in the window before saving."
+    );
+  }
+
+  // A dry run must leave no trace, so it looks the seller up instead of resolving them: a name that
+  // matches nothing is reported as a contact that *would* be created, which is the answer the
+  // collector is checking before they press Save.
+  const existingSeller = await prisma.contact.findFirst({
+    where: { collectionId, name: { equals: sellerName, mode: "insensitive" } },
+    select: { id: true, name: true },
+  });
+  const sellerId = dryRun
+    ? existingSeller?.id ?? null
+    : await resolvePurchaseContact(collectionId, { name: sellerName, role: "seller" });
+  if (!dryRun && !sellerId) {
+    throw new AuctionActionBlockedError("no-seller", "That seller could not be resolved.");
+  }
+
+  const open = sellerId
+    ? await findOpenAuctionSale(ownerId, collectionId, sellerId, platform.id)
+    : null;
+
+  if (dryRun) {
+    return {
+      outcome: "created",
+      lotId: null,
+      saleId: open?.id ?? null,
+      saleName: open?.name ?? deriveAuctionSaleName(existingSeller?.name ?? sellerName, platform.name),
+      saleCurrency:
+        open?.currency ?? (await resolveNewSaleCurrency(collectionId, sellerId, platform.id)),
+      saleCreated: !open,
+      sellerId,
+      sellerName: existingSeller?.name ?? sellerName,
+      sellerCreated: !existingSeller,
+      platformName: platform.name,
+      previousBid: null,
+    };
+  }
+
+  const saleId =
+    open?.id ??
+    (await createAuctionSale(ownerId, collectionId, {
+      sellerId: sellerId!,
+      platformId: platform.id,
+      name: null,
+      url: null,
+      // A marketplace basket has no closing date of its own; the first lot's is a harmless seed the
+      // sale's own screen edits, exactly as the add-lot dialog seeds it (#352).
+      endsAt: input.endsAt,
+      currency: "",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    }));
+
+  const lotId = await createAuctionLot(ownerId, collectionId, {
+    auctionSaleId: saleId,
+    lotNo: input.lotNo,
+    url: input.url,
+    title: input.title,
+    endsAt: input.endsAt,
+    startingPrice: input.startingPrice,
+    currentBid: input.currentBid,
+    myBid: null,
+    maxBid: null,
+    notes: null,
+  });
+
+  const sale = await prisma.auctionSale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: { name: true, currency: true },
+  });
+  return {
+    outcome: "created",
+    lotId,
+    saleId,
+    saleName: sale.name,
+    saleCurrency: sale.currency,
+    saleCreated: !open,
+    sellerId: sellerId!,
+    sellerName: existingSeller?.name ?? sellerName,
+    sellerCreated: !existingSeller,
+    platformName: platform.name,
+    previousBid: null,
+  };
 }
 
 /**

@@ -1,6 +1,8 @@
 import type { ExtractedItem } from "../platform/types";
 import type { ListingFillOutcome, ListingTask } from "../platform/listing";
+import type { CapturedLot, CaptureRefusal } from "../platform/capture";
 import type { BackfillProposal, MatchResult } from "./decisions";
+import type { CaptureOutcome } from "./capture";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -51,6 +53,30 @@ export interface AttachPhotoPayload {
 }
 export type AttachPhotosResponse =
   | { ok: true; outcome: ListingFillOutcome }
+  | { ok: false; error: string };
+
+// capture window → content script (in the tab holding the auction, #355). The same shape as
+// `extract`, for the same reason: reading a page is DOM work and happens where the DOM is. A refusal
+// carries its `reason` so the window can say what the page *is* — a fixed-price offer is not an
+// error, and telling the collector that is more use than a lot with an invented closing time.
+export interface CaptureRequest {
+  type: "capture";
+}
+export type CaptureResponse =
+  | { ok: true; moduleId: string; moduleName: string; lot: CapturedLot }
+  | ({ ok: false; error: string } & Partial<CaptureRefusal>);
+
+// capture window → background service worker: write the lot to the active profile's instance (#355).
+// It goes through the worker like every other instance call, because a cross-site fetch is only
+// exempt from CORS there. `dryRun` asks what *would* happen — which parcel it lands in, whether the
+// seller is new here, whether this listing is already watched — and writes nothing.
+export interface CaptureSaveRequest {
+  type: "capture-save";
+  lot: CapturedLot;
+  dryRun: boolean;
+}
+export type CaptureSaveResponse =
+  | { ok: true; result: CaptureOutcome }
   | { ok: false; error: string };
 
 // popup → background service worker
@@ -177,6 +203,7 @@ export interface MatchedNotice {
 
 export type BackgroundMessage =
   | BackgroundRequest
+  | CaptureSaveRequest
   | ListRequest
   | ListingSubmittedNotice
   | DetectedNotice

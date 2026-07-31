@@ -27,6 +27,9 @@ const entryPoints = {
   // a self-hosted instance has no origin to declare — but bundled like any other entrypoint.
   instance: resolve(root, "src/content/instance.ts"),
   popup: resolve(root, "src/popup/index.ts"),
+  // The capture window (#355) — a page of its own rather than a mode of the match window: a
+  // marketplace listing and a catalogue page are different questions about different pages.
+  capture: resolve(root, "src/capture/index.ts"),
   options: resolve(root, "src/options/index.ts"),
 };
 
@@ -48,6 +51,7 @@ async function copyStatic() {
   await writeFile(resolve(outdir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
   await cp(resolve(root, "src/popup/index.html"), resolve(outdir, "popup.html"));
+  await cp(resolve(root, "src/capture/index.html"), resolve(outdir, "capture.html"));
   await cp(resolve(root, "src/options/index.html"), resolve(outdir, "options.html"));
   await cp(resolve(root, "icons"), resolve(outdir, "icons"), {
     recursive: true,

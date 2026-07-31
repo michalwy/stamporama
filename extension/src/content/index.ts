@@ -1,4 +1,4 @@
-import { findModuleForUrl } from "../platform/modules";
+import { findCaptureModuleForUrl, findModuleForUrl } from "../platform/modules";
 import { attachListingPhotos, fillListing } from "../platform/listing-run";
 import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
 import { getProfileStore } from "../core/profile";
@@ -8,6 +8,8 @@ import type {
   AttachPhotosRequest,
   AttachPhotosResponse,
   DetectedNotice,
+  CaptureRequest,
+  CaptureResponse,
   ExtractRequest,
   ExtractResponse,
   FillRequest,
@@ -78,7 +80,7 @@ function captureThumb(img: HTMLImageElement): string | undefined {
 function extractHere(withImages: boolean) {
   const module = findModuleForUrl(location.href);
   if (!module) return null;
-  const items = module.extract(document);
+  const items = module.extraction.extract(document);
   if (withImages) {
     for (const item of items) {
       if (!item.imageUrl) continue;
@@ -187,6 +189,29 @@ if (!window.__stamporamaAssistantLoaded) {
           msg.photos.map(toFile)
         );
         sendResponse(result);
+      } catch (e) {
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  );
+
+  // One auction, read for the watchlist (#355). Same shape as `extract` and for the same reason —
+  // reading a page is DOM work — but a different question, so a different module half answers it.
+  chrome.runtime.onMessage.addListener(
+    (msg: CaptureRequest, _sender, sendResponse: (r: CaptureResponse) => void) => {
+      if (msg?.type !== "capture") return;
+      try {
+        const module = findCaptureModuleForUrl(location.href);
+        if (!module) {
+          sendResponse({ ok: false, error: "No Assistant module captures lots from this page." });
+          return;
+        }
+        const result = module.capture.capture(document, location.href);
+        sendResponse(
+          result.ok
+            ? { ok: true, moduleId: module.id, moduleName: module.name, lot: result.lot }
+            : { ok: false, error: result.message, reason: result.reason, message: result.message }
+        );
       } catch (e) {
         sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
       }

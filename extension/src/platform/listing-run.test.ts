@@ -18,8 +18,7 @@ import type { ListingPhotoFile, ListingTask, ListingTaskPhoto } from "./listing"
 const listingModule: PlatformModule = {
   id: "fake-market",
   name: "FakeMarket",
-  matches: (url) => url.startsWith("https://fake.test/"),
-  extract: () => [],
+  extraction: { matches: (url) => url.startsWith("https://fake.test/"), extract: () => [] },
   listing: {
     formUrl: (task) => `https://fake.test/sell?offer=${task.offerId}`,
     isFormUrl: (url) => url.startsWith("https://fake.test/sell"),
@@ -41,8 +40,7 @@ const listingModule: PlatformModule = {
 const noPicturesModule: PlatformModule = {
   id: "no-pictures-market",
   name: "NoPicturesMarket",
-  matches: (url) => url.startsWith("https://no-pictures.test/"),
-  extract: () => [],
+  extraction: { matches: (url) => url.startsWith("https://no-pictures.test/"), extract: () => [] },
   listing: {
     formUrl: () => "https://no-pictures.test/sell",
     isFormUrl: (url) => url.startsWith("https://no-pictures.test/sell"),
@@ -55,8 +53,7 @@ const noPicturesModule: PlatformModule = {
 const readOnlyModule: PlatformModule = {
   id: "read-only-market",
   name: "ReadOnlyMarket",
-  matches: (url) => url.startsWith("https://read-only.test/"),
-  extract: () => [],
+  extraction: { matches: (url) => url.startsWith("https://read-only.test/"), extract: () => [] },
 };
 
 registerPlatformModule(listingModule);
@@ -166,8 +163,7 @@ test("the sale form's address without the sale form on it is a wait, not a refus
   registerPlatformModule({
     id: "guarded-market",
     name: "GuardedMarket",
-    matches: () => false,
-    extract: () => [],
+    extraction: { matches: () => false, extract: () => [] },
     listing: {
       formUrl: () => "https://guarded.test/sell",
       isFormUrl: () => true,
@@ -193,8 +189,7 @@ test("a module throwing on unexpected DOM comes back as a refusal", () => {
   registerPlatformModule({
     id: "broken-market",
     name: "BrokenMarket",
-    matches: () => false,
-    extract: () => [],
+    extraction: { matches: () => false, extract: () => [] },
     listing: {
       formUrl: () => "https://broken.test/sell",
       isFormUrl: () => true,
@@ -332,8 +327,7 @@ test("a module throwing while attaching leaves the filled form standing", () => 
   registerPlatformModule({
     id: "broken-pictures-market",
     name: "BrokenPicturesMarket",
-    matches: () => false,
-    extract: () => [],
+    extraction: { matches: () => false, extract: () => [] },
     listing: {
       formUrl: () => "https://broken-pictures.test/sell",
       isFormUrl: () => true,

@@ -25,6 +25,11 @@ import {
 import { colnectGradeFor, isColnectConditionValue } from "./colnect-conditions";
 import { COLNECT_PLATFORM_MODULE } from "./platform-modules";
 import {
+  getModulePlatform,
+  listPlatformContactRows,
+  setModulePlatform,
+} from "./module-platform";
+import {
   colnectRefKey,
   decideColnectItem,
   type CandidateStampRefs,
@@ -337,17 +342,17 @@ export async function loadColnectConditionMap(
 // side asks the platform and never this setting. Exactly **one** contact may hold it: Colnect is one
 // marketplace, and two platforms claiming it could only disagree.
 
+// The exclusivity rule itself lives in `module-platform.ts` since #355, where Allegro asks the same
+// question on its own tab: an exclusive setter written twice is a rule that drifts. What stays here
+// is the ownership check and the Colnect id.
+
 /** The platform contact currently marked as Colnect, or null when none is. */
 export async function getColnectPlatform(
   ownerId: string,
   collectionId: string
 ): Promise<{ id: string; name: string } | null> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.contact.findFirst({
-    where: { collectionId, platformModule: COLNECT_PLATFORM_MODULE },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  return getModulePlatform(collectionId, COLNECT_PLATFORM_MODULE);
 }
 
 /** Every platform contact of the collection, for the picker — a listing platform is the only kind
@@ -357,11 +362,7 @@ export async function listPlatformContacts(
   collectionId: string
 ): Promise<{ id: string; name: string }[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.contact.findMany({
-    where: { collectionId, platform: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  return listPlatformContactRows(collectionId);
 }
 
 /**
@@ -377,27 +378,7 @@ export async function setColnectPlatform(
   contactId: string | null
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
-  if (contactId) {
-    const contact = await prisma.contact.findFirst({
-      where: { id: contactId, collectionId, platform: true },
-      select: { id: true },
-    });
-    if (!contact) throw new Error("Platform not found in this collection.");
-  }
-  await prisma.$transaction([
-    prisma.contact.updateMany({
-      where: { collectionId, platformModule: COLNECT_PLATFORM_MODULE },
-      data: { platformModule: null },
-    }),
-    ...(contactId
-      ? [
-          prisma.contact.update({
-            where: { id: contactId },
-            data: { platformModule: COLNECT_PLATFORM_MODULE },
-          }),
-        ]
-      : []),
-  ]);
+  await setModulePlatform(collectionId, COLNECT_PLATFORM_MODULE, contactId);
 }
 
 // ── Catalog-number matcher (#250, part of #155) ──────────────────────────────

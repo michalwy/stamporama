@@ -1,4 +1,12 @@
-import { canList, type ListingCapableModule, type PlatformModule } from "./module";
+import {
+  canCapture,
+  canExtract,
+  canList,
+  type CaptureCapableModule,
+  type ExtractionCapableModule,
+  type ListingCapableModule,
+  type PlatformModule,
+} from "./module";
 
 // The shell's module registry. Platform modules register themselves at import time; the content
 // script consults the registry for one matching the current page. The shell ships with none —
@@ -11,9 +19,22 @@ export function registerPlatformModule(module: PlatformModule): void {
   modules.push(module);
 }
 
-/** The first registered module that handles `url`, or null when none does. */
-export function findModuleForUrl(url: string): PlatformModule | null {
-  return modules.find((m) => m.matches(url)) ?? null;
+/** The first registered module that **extracts** from `url`, or null when none does. A module with
+ *  no extraction half is not a candidate here at all: a page it handles for another reason — an
+ *  Allegro auction, say — holds no catalogue items, and answering with it would report zero of
+ *  something the page never had. */
+export function findModuleForUrl(url: string): ExtractionCapableModule | null {
+  return modules.find((m): m is ExtractionCapableModule => canExtract(m) && m.extraction.matches(url)) ?? null;
+}
+
+/** The first registered module that can **capture a lot** from `url`, or null when none can (#355).
+ *  Separate from {@link findModuleForUrl} for the same reason the halves are separate: one page can
+ *  be a catalogue entry, a listing to capture, both, or neither. */
+export function findCaptureModuleForUrl(url: string): CaptureCapableModule | null {
+  return (
+    modules.find((m): m is CaptureCapableModule => canCapture(m) && m.capture.isListingUrl(url)) ??
+    null
+  );
 }
 
 /** The module with this id, or null. Ids come off a listing task (`platform.module`, #406) rather
@@ -33,8 +54,8 @@ export function registeredModules(): readonly PlatformModule[] {
   return modules;
 }
 
-/** What one module can do, by name (#408). */
-export type ModuleCapability = "extract" | "listing";
+/** What one module can do, by name (#408/#355). */
+export type ModuleCapability = "extract" | "listing" | "capture";
 
 export interface ModuleReport {
   id: string;
@@ -46,9 +67,11 @@ export interface ModuleReport {
  *  Assistant post to this platform?" reads — never a hard-coded list of ids, so a module added later
  *  is answered for without touching the asker. */
 export function moduleReports(): ModuleReport[] {
-  return modules.map((m) => ({
-    id: m.id,
-    name: m.name,
-    capabilities: canList(m) ? ["extract", "listing"] : ["extract"],
-  }));
+  return modules.map((m) => {
+    const capabilities: ModuleCapability[] = [];
+    if (canExtract(m)) capabilities.push("extract");
+    if (canList(m)) capabilities.push("listing");
+    if (canCapture(m)) capabilities.push("capture");
+    return { id: m.id, name: m.name, capabilities };
+  });
 }

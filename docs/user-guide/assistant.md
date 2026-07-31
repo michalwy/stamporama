@@ -1,8 +1,9 @@
 # Stamporama Assistant (browser extension)
 
-The Assistant is a Chrome extension that matches Colnect catalog pages against your collection while
-you browse. On a Colnect list page it tells you which stamps you already have, which need a
-decision, and writes the Colnect links back into Stamporama.
+The Assistant is a Chrome extension that connects marketplace pages to your collection while you
+browse. On a Colnect list page it tells you which stamps you already have, which need a decision, and
+writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
+bidding on into your [watchlist](auctions.md).
 
 It reads three kinds of Colnect page: a catalog **list** page, a single **stamp** page (its minor
 variants), and the site-wide **search results** page — so a stamp you found by searching can be
@@ -49,12 +50,48 @@ on it; you match as usual, and the item-ID appears on the offer screen without r
 Those buttons only appear on an instance the Assistant is connected to — connecting is what lets the
 extension read that page at all.
 
+## Capturing an Allegro lot
+
+Click the toolbar icon while an **Allegro auction** is in front of you and the Assistant opens a
+small **Capture auction lot** window instead of the matching one. It has read the page already: the
+title, the seller, the closing time and the current bid, with Allegro's **offer number** in the lot's
+own number field and the listing's address recorded for you.
+
+Everything shown is editable before it is saved — what a marketplace prints is a proposal, not a
+fact about your collection. The seller in particular: Allegro shows a shop name, and you may well
+file that seller under another name here. Correct it and the parcel is chosen for the name you typed.
+
+Under the fields, the Assistant says what saving will do:
+
+- **Joins the open parcel: Philkam · Allegro** — the seller already has a sale being bid on, and
+  this lot goes into it, exactly as [Add lot](auctions.md#adding-a-lot) would.
+- **New parcel: Philkam · Allegro** — the seller has no open sale, so one is started with their own
+  premium and shipping copied onto it.
+- **Already watched — the bid will be refreshed** — you have captured this listing before. Saving
+  records the new bid and the moment you checked it, and touches nothing else you have typed onto the
+  lot. That makes the toolbar icon the fastest way to bring a price up to date.
+
+Two rules are worth knowing, because they are deliberate:
+
+- **Only auctions.** A *Kup teraz* offer is refused, in as many words. The watchlist is for things
+  that are being bid on and close at a known moment; a fixed-price offer has neither, and you would
+  be tracking a lot that never ends. Buy it and record it as a [purchase](purchases.md).
+- **What the lot holds is never read off the listing.** The stamps a lot contains are entered in
+  Stamporama, on the lot itself. A description cannot be turned into `stamp × condition × quantity`
+  reliably, and a composition that is quietly wrong is worse than one you have not written yet — it
+  is what every catalogue figure and every headroom is computed from.
+
+Before the first capture, tell Stamporama **which of your platforms is Allegro**: **Settings →
+Allegro**, one select. That is the one thing an auction page cannot tell the Assistant — the page
+knows it is Allegro, but not which of your [contacts](contacts.md) that marketplace is. Until it is
+set, the capture window says so and saves nothing.
+
 ## Closing the window
 
-The Assistant opens in its own small window. **Escape** closes it — or, while a confirmation is on
-screen, cancels that first and leaves the window open. Nothing is lost either way: a confirmed write
-reached your collection the moment you confirmed it, and the page is scanned afresh the next time you
-click the toolbar icon.
+The Assistant opens in its own small window — the matching one and the capture one alike. **Escape**
+closes it, or, while a confirmation is on screen, cancels that first and leaves the window open.
+Nothing is lost either way: a confirmed write reached your collection the moment you confirmed it,
+and the page is read afresh the next time you click the toolbar icon.
 
 ## Decisions that are already made
 
