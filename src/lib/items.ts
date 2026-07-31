@@ -244,6 +244,44 @@ export async function allocateOfferNumber(
   return rows[0].nextOfferNo - 1;
 }
 
+/** The collection counters that hand out a short per-entity number (#432), keyed by the entity they
+ * count. Adding one is a column here and a `<entity>No` on the row — nothing else in this file. */
+const ENTITY_NUMBER_COUNTERS = {
+  issue: "nextIssueNo",
+  purchase: "nextPurchaseNo",
+  sale: "nextSaleNo",
+  auctionLot: "nextAuctionLotNo",
+} as const;
+
+export type NumberedEntity = keyof typeof ENTITY_NUMBER_COUNTERS;
+
+/** Hand out the next short number for one of the remaining major entities (#432) — an issue, a
+ * purchase, a sale or an auction lot.
+ *
+ * The same statement as {@link allocateItemNumbers} against a different column, and the same
+ * reasoning: never `max + 1`, so a deleted row retires its number instead of passing it on. A
+ * number a collector has quoted — typed into the quick-jump box (#431), written on a parcel — must
+ * not later mean something else.
+ *
+ * Must be called with the transaction that creates the row, so a rolled-back creation also rolls
+ * back the number it reserved. */
+export async function allocateEntityNumber(
+  client: Prisma.TransactionClient,
+  collectionId: string,
+  entity: NumberedEntity
+): Promise<number> {
+  // The column name is chosen here from a closed set, never taken from a caller's string, so the
+  // interpolation below cannot carry anything but one of the four identifiers above.
+  const column = ENTITY_NUMBER_COUNTERS[entity];
+  const rows = await client.$queryRawUnsafe<{ next: number }[]>(
+    `UPDATE "collection" SET "${column}" = "${column}" + 1 WHERE "id" = $1 RETURNING "${column}" AS next`,
+    collectionId
+  );
+  if (rows.length === 0) throw new Error("Collection not found.");
+  // The statement returns the value *after* the bump, so the reserved number is the one below it.
+  return rows[0].next - 1;
+}
+
 export interface ItemData {
   id: string;
   collectionId: string;

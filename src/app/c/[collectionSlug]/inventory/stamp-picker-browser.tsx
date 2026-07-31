@@ -43,6 +43,7 @@ function toIssueListItem(issue: IssueData): IssueListItem {
   return {
     id: issue.id,
     collectionId: issue.collectionId,
+    issueNo: issue.issueNo,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
     nameByLanguage: issue.nameByLanguage,

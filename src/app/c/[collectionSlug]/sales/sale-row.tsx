@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { SaleListItem } from "@/lib/sales";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 
 const CHIP: React.CSSProperties = {
@@ -123,6 +124,11 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
             flexWrap: "wrap",
           }}
         >
+          {/* Ours, not the marketplace's: line 1 already carries `externalRef` behind a `#`, which
+              is the platform's own word for this transaction. This one is the collection's, and
+              it is the number the quick-jump box takes (#431/#432) — hence the separate chip
+              rather than a second `#…` in the same sentence. */}
+          <EntityNoChip entity="sale" no={sale.saleNo} prefix="s" />
           <Tooltip content="Fulfillment status">
             <span style={saleStatusChipStyle(status.token)}>{status.label}</span>
           </Tooltip>

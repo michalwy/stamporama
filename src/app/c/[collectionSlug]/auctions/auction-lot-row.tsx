@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { closingUrgency, isTerminalLotStatus, type ClosingUrgency } from "@/lib/auction-rules";
 import { allIn, bidCosting, ceilingAllowing, maxBidWithin, type AuctionFees } from "@/lib/auction-lot";
@@ -710,6 +711,11 @@ export function AuctionLotRow({
               >
                 {lotLabel(lot)}
               </span>
+              {/* Two numbers, deliberately side by side and deliberately styled apart: ours (#432,
+                  monospace and muted, always present) identifies the lot in this collection and is
+                  what the quick-jump box takes; the boxed chip beside it is the *house's* number,
+                  which only some lots have and which repeats across sales. */}
+              <EntityNoChip entity="auctionLot" no={lot.auctionLotNo} prefix="lot" />
               {lot.lotNo && (lot.title || lot.derivedTitle) && (
                 <Tooltip content="Lot number in the sale">
                   <span style={CHIP}>#{lot.lotNo}</span>

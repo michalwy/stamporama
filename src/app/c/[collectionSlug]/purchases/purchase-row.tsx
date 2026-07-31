@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -123,8 +124,9 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           </span>
         </div>
 
-        {/* Line 2: date + status */}
+        {/* Line 2: number + date + status */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem" }}>
+          <EntityNoChip entity="purchase" no={p.purchaseNo} prefix="p" />
           <span style={META_INLINE}>{p.purchasedAt}</span>
           <Tooltip content="Delivery status">
             <span style={status.style}>{status.label}</span>

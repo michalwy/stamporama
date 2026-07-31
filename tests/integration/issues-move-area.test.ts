@@ -26,9 +26,13 @@ async function createTestArea(collectionId: string, name: string) {
   return prisma.collectionArea.create({ data: { collectionId, name } });
 }
 
+// Past the collection's counter: these rows bypass `allocateEntityNumber` (#432), so they hand
+// themselves distinct numbers from a range the app's own allocation will not reach.
+let nextTestIssueNo = 9001;
+
 async function createTestIssue(collectionId: string, areaId: string, name: string) {
   return prisma.issue.create({
-    data: { collectionId, collectionAreaId: areaId, name },
+    data: { collectionId, issueNo: nextTestIssueNo++, collectionAreaId: areaId, name },
   });
 }
 

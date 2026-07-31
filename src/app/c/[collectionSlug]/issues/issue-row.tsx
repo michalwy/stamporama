@@ -22,6 +22,7 @@ import {
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
@@ -588,16 +589,21 @@ export function IssueRow({
           )}
         </div>
 
-        {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              marginTop: "0.3rem",
-              flexWrap: "wrap",
-            }}
-          >
+        {/* Unconditional since #432: the issue number is always there, and it is the row's own
+            identifier — an issue with no catalog numbers and no members yet is exactly the one a
+            collector is most likely to want to reach by number. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+            marginTop: "0.3rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <EntityNoChip entity="issue" no={issue.issueNo} prefix="iss" />
+          {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
+            <>
             <IssueCatalogChips
               catalogNumbers={issue.catalogNumbers}
               vendorMap={vendorMap}
@@ -707,8 +713,9 @@ export function IssueRow({
                 </Tooltip>
               );
             })()}
-          </div>
-        )}
+            </>
+          )}
+        </div>
         </div>
       </div>
 

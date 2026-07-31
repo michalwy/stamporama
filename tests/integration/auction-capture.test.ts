@@ -212,6 +212,9 @@ describe("auction lot capture (#355)", () => {
     const byHand = await prisma.auctionLot.create({
       data: {
         auctionSaleId: sale.id,
+        // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432). Note the
+        // two numbers side by side — `auctionLotNo` is ours, `lotNo` is what the collector typed.
+        auctionLotNo: 9001,
         lotNo: "18795044444",
         title: "typed in by hand",
         endsAt: hourFromNow(),
@@ -249,7 +252,7 @@ describe("auction lot capture (#355)", () => {
       },
     });
     await prisma.auctionLot.create({
-      data: { auctionSaleId: houseSale.id, lotNo: "42", endsAt: hourFromNow() },
+      data: { auctionSaleId: houseSale.id, auctionLotNo: 9002, lotNo: "42", endsAt: hourFromNow() },
     });
 
     const preview = await captureAuctionLot(

@@ -41,7 +41,8 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       data: { collectionId, name: "Germany" },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "First Issue", year: 1872 },
+      // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432).
+      data: { collectionId, issueNo: 9001, collectionAreaId: area.id, name: "First Issue", year: 1872 },
     });
     issueId = issue.id;
 

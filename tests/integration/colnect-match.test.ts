@@ -98,7 +98,8 @@ async function seed(suffix: string): Promise<Seed> {
 
   // One issue, so candidate results can be checked to carry the issue name (#249 preview detail).
   const issue = await prisma.issue.create({
-    data: { collectionId, collectionAreaId: area.id, name: `Birds-${suffix}`, year: 1960 },
+    // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432).
+    data: { collectionId, issueNo: 9001, collectionAreaId: area.id, name: `Birds-${suffix}`, year: 1960 },
   });
 
   const stamps: Record<string, string> = {

@@ -20,7 +20,7 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { getOrFetchRate } from "./exchange-rates";
-import { allocateItemNumbers } from "./items";
+import { allocateEntityNumber, allocateItemNumbers } from "./items";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
@@ -169,6 +169,9 @@ export interface AuctionLotListItem {
   platformId: string;
   platformName: string;
   currency: string;
+  /** Ours, per collection (#432) — what the quick-jump box takes after `lot`. Always present. */
+  auctionLotNo: number;
+  /** The **house's** number for the lot, as typed in or captured. Optional and free to repeat. */
   lotNo: string | null;
   url: string | null;
   title: string | null;
@@ -275,6 +278,7 @@ export interface AuctionLotListItem {
 
 const LOT_SELECT = {
   id: true,
+  auctionLotNo: true,
   lotNo: true,
   url: true,
   title: true,
@@ -331,6 +335,7 @@ function toLotListItem(row: LotRow, composition?: AuctionLotComposition): Auctio
     platformId: sale.platformId,
     platformName: sale.platform.name,
     currency: sale.currency,
+    auctionLotNo: row.auctionLotNo,
     lotNo: row.lotNo,
     url: row.url,
     title: row.title,
@@ -1231,35 +1236,41 @@ export async function createAuctionLot(
   // Every line is checked before anything is written, so a lot is never created with half of the
   // composition the collector entered — the nested create below is one statement either way.
   for (const line of lines) await assertLineTargets(collectionId, line);
-  const lot = await prisma.auctionLot.create({
-    data: {
-      auctionSaleId: input.auctionSaleId,
-      lotNo: input.lotNo,
-      url: input.url,
-      title: input.title,
-      endsAt: input.endsAt,
-      startingPrice: input.startingPrice,
-      currentBid: input.currentBid,
-      checkedAt: input.currentBid !== null ? new Date() : null,
-      myBid: input.myBid,
-      maxBid: input.maxBid,
-      notes: input.notes,
-      ...(lines.length > 0
-        ? {
-            lines: {
-              create: lines.map((line) => ({
-                stampId: line.stampId,
-                conditionId: line.conditionId,
-                certificateStatusId: line.certificateStatusId,
-                formatId: line.formatId,
-                quantity: line.quantity,
-              })),
-            },
-          }
-        : {}),
-    },
-    select: { id: true },
-  });
+  // In a transaction for the number's sake (#432): the counter bump and the lot it belongs to stand
+  // or fall together, composition included.
+  const lot = await prisma.$transaction(async (tx) =>
+    tx.auctionLot.create({
+      data: {
+        auctionSaleId: input.auctionSaleId,
+        // Ours, per collection — distinct from `lotNo`, the house's own number for the lot.
+        auctionLotNo: await allocateEntityNumber(tx, collectionId, "auctionLot"),
+        lotNo: input.lotNo,
+        url: input.url,
+        title: input.title,
+        endsAt: input.endsAt,
+        startingPrice: input.startingPrice,
+        currentBid: input.currentBid,
+        checkedAt: input.currentBid !== null ? new Date() : null,
+        myBid: input.myBid,
+        maxBid: input.maxBid,
+        notes: input.notes,
+        ...(lines.length > 0
+          ? {
+              lines: {
+                create: lines.map((line) => ({
+                  stampId: line.stampId,
+                  conditionId: line.conditionId,
+                  certificateStatusId: line.certificateStatusId,
+                  formatId: line.formatId,
+                  quantity: line.quantity,
+                })),
+              },
+            }
+          : {}),
+      },
+      select: { id: true },
+    })
+  );
   // Adding a lot is what "last used" means — it happens far more often than starting a sale, and
   // it is the moment the collector confirmed this seller is reached through this platform.
   await rememberSellerPlatform(parties.sellerId, parties.platformId);
@@ -2073,6 +2084,7 @@ export async function settleAuctionSale(
     const purchase = await tx.purchase.create({
       data: {
         collectionId: sale.collectionId,
+        purchaseNo: await allocateEntityNumber(tx, sale.collectionId, "purchase"),
         // A sale's seller and platform are already the two contacts a purchase carries (§1), so
         // this is a rename rather than a mapping.
         contactId: sale.sellerId,

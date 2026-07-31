@@ -183,7 +183,14 @@ describe("contact referenced by a purchase (onDelete: Restrict)", () => {
     // now protects a contact referenced as a purchase supplier.
     const contact = await createContact(userId, collectionId, { name: "Cornerstone Auctions" });
     await prisma.purchase.create({
-      data: { collectionId, contactId: contact.id, purchasedAt: new Date("2024-05-01"), currency: "EUR" },
+      data: {
+        collectionId,
+        // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432).
+        purchaseNo: 9001,
+        contactId: contact.id,
+        purchasedAt: new Date("2024-05-01"),
+        currency: "EUR",
+      },
     });
 
     // The Restrict FK rejects the delete at the database level.

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
+import { QuickJumpBox } from "./quick-jump-box";
 
 interface CollectionSidebarProps {
   collectionSlug: string;
@@ -322,6 +323,10 @@ export function CollectionSidebar({
         </span>
         <ActionItemsBell collectionId={collectionId} collectionSlug={collectionSlug} />
       </div>
+
+      {/* Directly under the collection it is scoped to (#431): the numbers it takes are per
+          collection, so the field belongs to that identity rather than floating above the nav. */}
+      <QuickJumpBox collectionId={collectionId} />
 
       {/* Main navigation */}
       <nav

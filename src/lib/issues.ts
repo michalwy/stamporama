@@ -24,6 +24,8 @@ import {
 import { syncStampTranslations } from "./stamps";
 import { makeFormatFactorResolver } from "./format-pricing";
 import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
+import { allocateEntityNumber } from "./items";
+import { parseEntityNoSearch } from "./quick-jump";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -150,6 +152,8 @@ export interface IssueCatalogPrefixData {
 export interface IssueData {
   id: string;
   collectionId: string;
+  /** The short per-collection issue number (#432). */
+  issueNo: number;
   collectionAreaId: string;
   /** Default-language name (#295); {@link nameByLanguage} overrides it per language. */
   name: string | null;
@@ -334,6 +338,7 @@ function toStampNode(
 const ISSUE_SELECT = {
   id: true,
   collectionId: true,
+  issueNo: true,
   collectionAreaId: true,
   name: true,
   year: true,
@@ -349,6 +354,7 @@ const ISSUE_SELECT = {
 function toIssueData(issue: {
   id: string;
   collectionId: string;
+  issueNo: number;
   collectionAreaId: string;
   name: string | null;
   year: number | null;
@@ -382,6 +388,7 @@ function toIssueData(issue: {
   return {
     id: issue.id,
     collectionId: issue.collectionId,
+    issueNo: issue.issueNo,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
     nameByLanguage: translationsByLanguage(issue.translations, (t) => t.name),
@@ -517,6 +524,8 @@ export type IssueSortBy = "year" | "name" | "catalogNumber";
 export interface IssueListItem {
   id: string;
   collectionId: string;
+  /** The short per-collection issue number (#432) — what the quick-jump box takes after `iss`. */
+  issueNo: number;
   collectionAreaId: string;
   /** Default-language name (#295); {@link nameByLanguage} overrides it per language. */
   name: string | null;
@@ -552,6 +561,7 @@ export interface PaginatedIssuesResult {
 const ISSUE_LIST_SELECT = {
   id: true,
   collectionId: true,
+  issueNo: true,
   collectionAreaId: true,
   name: true,
   year: true,
@@ -732,6 +742,7 @@ function toIssueListItem(
   issue: {
     id: string;
     collectionId: string;
+    issueNo: number;
     collectionAreaId: string;
     name: string | null;
     year: number | null;
@@ -794,6 +805,7 @@ function toIssueListItem(
   return {
     id: issue.id,
     collectionId: issue.collectionId,
+    issueNo: issue.issueNo,
     collectionAreaId: issue.collectionAreaId,
     name: issue.name,
     nameByLanguage: translationsByLanguage(issue.translations, (t) => t.name),
@@ -917,6 +929,13 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
       { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
       { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } },
     ];
+
+    // The issue's own short number (#432), on exactly the copy search's rule (#268): matched *in
+    // addition to* the text, never instead of it, because `200` is also a perfectly good catalog
+    // number. `#200` and `200` both reach it — the first is how the number reads on screen, and it
+    // is what the quick-jump box (#431) puts in this field to land on one issue.
+    const issueNo = parseEntityNoSearch(s);
+    if (issueNo !== null) or.push({ issueNo });
 
     // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
     // never appears in a stored number, so the caller also hands us the number parsed out
@@ -1553,6 +1572,8 @@ export async function createIssue(
     const issue = await tx.issue.create({
       data: {
         collectionId,
+        // #432, inside the creating transaction so a rolled-back issue also retires the number.
+        issueNo: await allocateEntityNumber(tx, collectionId, "issue"),
         collectionAreaId: areaId,
         name: data.name ?? null,
         year: data.year ?? null,

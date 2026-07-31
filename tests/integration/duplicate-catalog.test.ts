@@ -182,10 +182,11 @@ describe("duplicate-catalog detection with an issue prefix override (#377)", () 
     });
 
     ordinaryIssue = (
-      await prisma.issue.create({ data: { collectionId, collectionAreaId: areaId, name: "Ordinary" } })
+      // Past the collection's counter: these rows bypass `allocateEntityNumber` (#432).
+      await prisma.issue.create({ data: { collectionId, issueNo: 9001, collectionAreaId: areaId, name: "Ordinary" } })
     ).id;
     specialIssue = (
-      await prisma.issue.create({ data: { collectionId, collectionAreaId: areaId, name: "Special" } })
+      await prisma.issue.create({ data: { collectionId, issueNo: 9002, collectionAreaId: areaId, name: "Special" } })
     ).id;
     await prisma.issueCatalogPrefix.create({
       data: { issueId: specialIssue, catalogVendorId: vendorId, areaPrefix: "SP" },

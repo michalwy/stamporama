@@ -91,6 +91,12 @@ and it never reads the lot's contents: what a lot holds is still entered here, o
 
 ## The lots screen
 
+Each lot carries two numbers, and they mean different things. `#3` in muted type is **the
+collection's own number** for the lot — always there, never reused, and what the sidebar's **Jump
+to…** box takes as `lot 3` ([Quick jump](quick-jump.md)). The boxed chip beside it is the
+**house's** lot number, as printed in the catalogue or captured from the marketplace; only some
+lots have one, and it repeats freely across sales.
+
 The right of each row is a small grid in **two halves, divided by a rule**: what the lot **costs**,
 and what it is **worth**. Each half has its own two row labels, because the two lines mean something
 different on each side.

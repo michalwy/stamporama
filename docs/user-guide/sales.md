@@ -226,6 +226,11 @@ available again, and returns any offers it marked sold to **Active**.
 
 ## Finding a sale
 
+Each sale carries its own **number** (`#7`), shown on the row beside the fulfillment status. It is
+the collection's own number for the sale, separate from the marketplace's order number that appears
+after the platform name — type `s 7` in the sidebar's **Jump to…** box to go straight to it
+([Quick jump](quick-jump.md)).
+
 The Sales toolbar has a **search** box, a **platform** filter and a row of **status** chips.
 Search matches the buyer name, the platform name, the order number, and the **name or catalog
 number of any copy** sold on the sale — so you can find a sale by what was in it, not just who

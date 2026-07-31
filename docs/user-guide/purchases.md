@@ -49,7 +49,8 @@ record.
 
 ## The purchases list
 
-Each row shows the **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, the delivery **status**, a
+Each row shows the purchase's **number** (`#7` — see [Quick jump](quick-jump.md)), the
+**supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, the delivery **status**, a
 short summary of its lines (how many **lots** and **expenses**), and the **total** — the sum
 of every lot, every expense, and the shipping cost, shown in the purchase's currency. A
 freshly recorded purchase shows *0 lots* until you add its lines during intake.

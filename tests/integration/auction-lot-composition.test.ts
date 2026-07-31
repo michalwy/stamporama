@@ -132,7 +132,8 @@ describe("auction lot composition (#353)", () => {
     ).id;
     issueId = (
       await prisma.issue.create({
-        data: { collectionId, collectionAreaId: areaId, name: "Definitives", year: 1950 },
+        // Past the collection's counter: these rows bypass `allocateEntityNumber` (#432).
+        data: { collectionId, issueNo: 9001, collectionAreaId: areaId, name: "Definitives", year: 1950 },
       })
     ).id;
 
@@ -448,7 +449,7 @@ describe("auction lot composition (#353)", () => {
     ]);
 
     const emptyIssue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: areaId, name: "Nothing required", year: 1960 },
+      data: { collectionId, issueNo: 9002, collectionAreaId: areaId, name: "Nothing required", year: 1960 },
     });
     // Silence here would create a lot line for nothing at all, so it is refused out loud.
     await assert.rejects(() => resolveAuctionLineStamps(collectionId, { issueId: emptyIssue.id }));

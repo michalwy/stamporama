@@ -85,6 +85,8 @@ describe("translation gaps + in-place filling (#299, #300)", () => {
       await prisma.issue.create({
         data: {
           collectionId,
+          // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432).
+          issueNo: 9001,
           collectionAreaId: leafAreaId,
           name: "First Issue",
           members: { create: [{ stampId, requiredForCompleteness: true }] },

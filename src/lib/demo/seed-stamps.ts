@@ -1,6 +1,7 @@
 import "server-only";
 import { PrismaClient } from "@/generated/prisma/client";
 import { seedDefaultConditions } from "../conditions";
+import { allocateEntityNumber } from "../items";
 import type { DemoCatalog } from "./seed-catalog";
 import type { DemoAreas } from "./seed-areas";
 
@@ -660,6 +661,7 @@ export async function seedStamps(
     const issue = await tx.issue.create({
       data: {
         collectionId,
+        issueNo: await allocateEntityNumber(tx, collectionId, "issue"),
         collectionAreaId: areaId,
         name: def.n,
         year: def.y,

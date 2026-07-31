@@ -7,6 +7,11 @@ services:
       POSTGRES_DB: stamporama_test
       POSTGRES_USER: stamporama
       POSTGRES_PASSWORD: stamporama
+    # The suite runs one worker per CPU and each worker opens its own Prisma pool, so the ceiling
+    # that matters is workers × pool size, not the number of tests. Postgres' default 100 was
+    # already the binding constraint — adding a test file started failing *other* files with
+    # "sorry, too many clients already", which reads as a broken feature and is nothing of the kind.
+    command: ["postgres", "-c", "max_connections=300"]
     ports:
       - "5433:5432"
     healthcheck:

@@ -382,6 +382,10 @@ stock card, or on a printed label, so it has to keep pointing at the same copy f
 The number appears on every inventory row, next to the condition, and in the title of the copy's
 **Edit** dialog.
 
+Typing `i 123` in the sidebar's **Jump to…** box takes you straight to it — see
+[Quick jump](quick-jump.md), which does the same for offers, issues, purchases, sales and auction
+lots.
+
 It is shown zero-padded — `#00123` — so a column of numbers lines up. How many digits it pads to is
 your choice, under **Settings → General → Copy number width**: pick `2` and the same copy reads
 `#42`, pick `8` and it reads `#00000042`. That is a display setting only — nothing is renumbered,

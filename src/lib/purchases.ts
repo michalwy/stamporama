@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
+import { allocateEntityNumber } from "./items";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -88,6 +89,8 @@ export interface PurchaseData {
  * transaction currency (2 dp). */
 export interface PurchaseListItem {
   id: string;
+  /** The short per-collection purchase number (#432) — what the quick-jump box takes after `p`. */
+  purchaseNo: number;
   contactId: string | null;
   contactName: string | null;
   platformId: string | null;
@@ -210,6 +213,7 @@ export async function listPurchasesPaginated(
     skip: offset,
     select: {
       id: true,
+      purchaseNo: true,
       contactId: true,
       platformId: true,
       purchasedAt: true,
@@ -234,6 +238,7 @@ export async function listPurchasesPaginated(
     const total = row.shippingCost ? linesTotal.add(row.shippingCost) : linesTotal;
     return {
       id: row.id,
+      purchaseNo: row.purchaseNo,
       contactId: row.contactId,
       contactName: row.contact?.name ?? null,
       platformId: row.platformId,
@@ -335,20 +340,25 @@ export async function createPurchase(
     role: "platform",
   });
 
-  const created = await prisma.purchase.create({
-    data: {
-      collectionId,
-      contactId,
-      platformId,
-      purchasedAt,
-      currency,
-      fxRateToBase,
-      shippingCost: data.shippingCost != null ? money(data.shippingCost) : null,
-      status: normalizeStatus(data.status),
-      // No line items here — lots and expenses are created during intake (#121).
-    },
-    select: { id: true },
-  });
+  // In a transaction for the number's sake (#432): the counter bump and the row it belongs to have
+  // to stand or fall together, or a failed create would burn a number.
+  const created = await prisma.$transaction(async (tx) =>
+    tx.purchase.create({
+      data: {
+        collectionId,
+        purchaseNo: await allocateEntityNumber(tx, collectionId, "purchase"),
+        contactId,
+        platformId,
+        purchasedAt,
+        currency,
+        fxRateToBase,
+        shippingCost: data.shippingCost != null ? money(data.shippingCost) : null,
+        status: normalizeStatus(data.status),
+        // No line items here — lots and expenses are created during intake (#121).
+      },
+      select: { id: true },
+    })
+  );
 
   return (await getPurchase(ownerId, created.id))!;
 }

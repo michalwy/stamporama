@@ -102,7 +102,7 @@ describe("stamp copy counts", () => {
     });
     const offerSet = await prisma.offerSet.create({ data: { offerId: offer.id } });
     const sale = await prisma.sale.create({
-      data: { collectionId, platformId, soldAt: new Date(), currency: "EUR" },
+      data: { collectionId, saleNo: 9001, platformId, soldAt: new Date(), currency: "EUR" },
     });
     const saleLine = await prisma.saleLine.create({
       data: { saleId: sale.id, offerId: offer.id, offerSetId: offerSet.id, price: "5.00" },

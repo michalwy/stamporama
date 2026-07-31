@@ -69,7 +69,7 @@ describe("issue list price staleness", () => {
       data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "First Issue", year: 1872 },
+      data: { collectionId, issueNo: 9001, collectionAreaId: area.id, name: "First Issue", year: 1872 },
     });
     issueId = issue.id;
 
@@ -172,7 +172,7 @@ describe("issue member price tracks the display condition (#238)", () => {
       data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "Condition Issue", year: 1872 },
+      data: { collectionId, issueNo: 9002, collectionAreaId: area.id, name: "Condition Issue", year: 1872 },
     });
     issueId = issue.id;
 
@@ -264,7 +264,7 @@ describe("issue headline price rolls up from variants (#238)", () => {
       data: { collectionId, name: "Poland", primaryCatalogNameId: catalogName.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "Rollup Issue", year: 1990 },
+      data: { collectionId, issueNo: 9003, collectionAreaId: area.id, name: "Rollup Issue", year: 1990 },
     });
     issueId = issue.id;
 
@@ -400,7 +400,7 @@ describe("issue total edition-mix handling", () => {
       data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "Mixed Issue", year: 1872 },
+      data: { collectionId, issueNo: 9004, collectionAreaId: area.id, name: "Mixed Issue", year: 1872 },
     });
     issueId = issue.id;
 
@@ -545,7 +545,7 @@ describe("issue price details cross-catalog averaging", () => {
       data: { collectionId, name: "Area", primaryCatalogNameId: catalogA.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "Averaged Issue", year: 1900 },
+      data: { collectionId, issueNo: 9005, collectionAreaId: area.id, name: "Averaged Issue", year: 1900 },
     });
     issueId = issue.id;
 
@@ -656,7 +656,7 @@ describe("issue price details certificate breakdown", () => {
       data: { collectionId, name: "Area", primaryCatalogNameId: catalog.id },
     });
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: area.id, name: "Cert Issue", year: 1900 },
+      data: { collectionId, issueNo: 9006, collectionAreaId: area.id, name: "Cert Issue", year: 1900 },
     });
     issueId = issue.id;
 

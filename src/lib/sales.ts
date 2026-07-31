@@ -7,7 +7,7 @@ import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
-import { listItemsPaginated, type ItemListItem } from "./items";
+import { allocateEntityNumber, listItemsPaginated, type ItemListItem } from "./items";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -394,25 +394,30 @@ export async function createSale(
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
-  const sale = await prisma.sale.create({
-    data: {
-      collectionId,
-      platformId: input.platformId,
-      buyerId: input.buyerId,
-      externalRef: input.externalRef,
-      transactionUrl: input.transactionUrl,
-      soldAt: input.soldAt,
-      currency,
-      fxRateToBase,
-      buyerHandling: input.buyerHandling,
-      buyerPaidTotal: input.buyerPaidTotal,
-      commission: input.commission,
-      // Seed the transition log with the initial `ordered` event (#191), so every sale has a
-      // non-empty status timeline from the moment it is recorded.
-      statusEvents: { create: { status: "ordered" } },
-    },
-    select: { id: true },
-  });
+  // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
+  // row it belongs to stand or fall together.
+  const sale = await prisma.$transaction(async (tx) =>
+    tx.sale.create({
+      data: {
+        collectionId,
+        saleNo: await allocateEntityNumber(tx, collectionId, "sale"),
+        platformId: input.platformId,
+        buyerId: input.buyerId,
+        externalRef: input.externalRef,
+        transactionUrl: input.transactionUrl,
+        soldAt: input.soldAt,
+        currency,
+        fxRateToBase,
+        buyerHandling: input.buyerHandling,
+        buyerPaidTotal: input.buyerPaidTotal,
+        commission: input.commission,
+        // Seed the transition log with the initial `ordered` event (#191), so every sale has a
+        // non-empty status timeline from the moment it is recorded.
+        statusEvents: { create: { status: "ordered" } },
+      },
+      select: { id: true },
+    })
+  );
   return sale.id;
 }
 
@@ -732,6 +737,8 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
 
 export interface SaleListItem {
   id: string;
+  /** The short per-collection sale number (#432) — what the quick-jump box takes after `s`. */
+  saleNo: number;
   platformId: string;
   platformName: string;
   /** The buyer's name, or null when unknown/anonymous. */
@@ -759,6 +766,7 @@ export interface SaleListItem {
 
 const SALE_LIST_SELECT = {
   id: true,
+  saleNo: true,
   platformId: true,
   externalRef: true,
   transactionUrl: true,
@@ -807,6 +815,7 @@ function shippingToBase(
 function toSaleListItem(
   row: {
     id: string;
+    saleNo: number;
     platformId: string;
     externalRef: string | null;
     transactionUrl: string | null;
@@ -842,6 +851,7 @@ function toSaleListItem(
   const netBase = buyerNetTx * rate - shippingBase;
   return {
     id: row.id,
+    saleNo: row.saleNo,
     platformId: row.platformId,
     platformName: row.platform.name,
     buyerName: row.buyer?.name ?? null,

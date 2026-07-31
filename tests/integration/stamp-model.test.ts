@@ -135,7 +135,8 @@ describe("Issue and IssueMember", () => {
     s3Id = s3.id;
 
     const issue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: areaId, name: "Test Issue", isAutoCreated: false },
+      // Past the collection's counter: these rows bypass `allocateEntityNumber` (#432).
+      data: { collectionId, issueNo: 9001, collectionAreaId: areaId, name: "Test Issue", isAutoCreated: false },
     });
     issueId = issue.id;
 
@@ -185,7 +186,7 @@ describe("Issue and IssueMember", () => {
 
   it("isAutoCreated roundtrip with true", async () => {
     const autoIssue = await prisma.issue.create({
-      data: { collectionId, collectionAreaId: areaId, isAutoCreated: true },
+      data: { collectionId, issueNo: 9002, collectionAreaId: areaId, isAutoCreated: true },
     });
     const fetched = await prisma.issue.findUnique({ where: { id: autoIssue.id } });
     assert.ok(fetched);

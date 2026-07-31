@@ -170,7 +170,8 @@ describe("format multipliers", () => {
     ).id;
     issueId = (
       await prisma.issue.create({
-        data: { collectionId, collectionAreaId: childAreaId, name: "Infla", year: 1923 },
+        // Past the collection's counter: this row bypasses `allocateEntityNumber` (#432).
+        data: { collectionId, issueNo: 9001, collectionAreaId: childAreaId, name: "Infla", year: 1923 },
       })
     ).id;
   });

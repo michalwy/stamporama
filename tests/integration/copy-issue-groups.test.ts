@@ -54,17 +54,18 @@ describe("issue groups", () => {
     // created first, which is what makes it the *first* membership of the stamp shared with Sport.
     chopinIssueId = (
       await prisma.issue.create({
-        data: { collectionId, collectionAreaId: areaId, name: "Chopin", year: 1949 },
+        // Past the collection's counter: these rows bypass `allocateEntityNumber` (#432).
+        data: { collectionId, issueNo: 9001, collectionAreaId: areaId, name: "Chopin", year: 1949 },
       })
     ).id;
     sportIssueId = (
       await prisma.issue.create({
-        data: { collectionId, collectionAreaId: areaId, name: "Sport", year: 1952 },
+        data: { collectionId, issueNo: 9002, collectionAreaId: areaId, name: "Sport", year: 1952 },
       })
     ).id;
     undatedIssueId = (
       await prisma.issue.create({
-        data: { collectionId, collectionAreaId: areaId, name: "Overprints", year: null },
+        data: { collectionId, issueNo: 9003, collectionAreaId: areaId, name: "Overprints", year: null },
       })
     ).id;
 

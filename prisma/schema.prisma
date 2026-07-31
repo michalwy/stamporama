@@ -49,6 +49,17 @@ model Collection {
   // to a different offer. Separate from `nextItemNo` because copies and listings are counted
   // separately — sharing one sequence would make both numbers jump for no reason a collector can see.
   nextOfferNo  Int      @default(1)
+  // The same counter, once per remaining major entity (#432): `Issue.issueNo`,
+  // `Purchase.purchaseNo`, `Sale.saleNo`, `AuctionLot.auctionLotNo`. Bumped by the same atomic
+  // `UPDATE ... RETURNING` and never `max + 1`, for the reason #268 gives: a number a collector has
+  // quoted — in the quick-jump box (#431), in a note, out loud — must not later mean something else.
+  // One counter per entity rather than one shared sequence: a collector counts purchases and issues
+  // separately, and a shared sequence would make every number jump for reasons nothing on screen
+  // explains.
+  nextIssueNo    Int    @default(1)
+  nextPurchaseNo Int    @default(1)
+  nextSaleNo     Int    @default(1)
+  nextAuctionLotNo Int  @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -835,6 +846,9 @@ model ItemVariantHistory {
 model Purchase {
   id           String   @id @default(cuid())
   collectionId String
+  // Short per-collection purchase number (#432) — see `Issue.issueNo`. What the quick-jump box
+  // takes after `p` (#431), and the short handle for a parcel one refers to away from the screen.
+  purchaseNo   Int
   // Optional supplier — who the stamps were bought from. `onDelete: Restrict`: a contact
   // referenced by a purchase cannot be deleted without first detaching it (ADR-0008 §4,
   // ADR-0009).
@@ -865,6 +879,7 @@ model Purchase {
   // The auction settlement this purchase was transcribed from, when it came from one (ADR-0021).
   auctionSale AuctionSale?
 
+  @@unique([collectionId, purchaseNo])
   @@index([collectionId])
   @@index([contactId])
   @@index([platformId])
@@ -978,6 +993,17 @@ model AuctionSale {
 model AuctionLot {
   id             String   @id @default(cuid())
   auctionSaleId  String
+  // Short per-collection lot number (#432), allocated from `Collection.nextAuctionLotNo`. Named
+  // apart from `lotNo` on purpose, and the two are genuinely different facts: `lotNo` is the
+  // **house's** number for the lot (or, for a captured Allegro listing, its offer id — #355), which
+  // is typed in, may repeat across sales and may be absent; this one is ours, per collection,
+  // allocated once and never reused. It is what the quick-jump box takes after `lot` (#431).
+  //
+  // There is no `@@unique([collectionId, auctionLotNo])`, because a lot carries no `collectionId` —
+  // it reaches its collection through its sale, and denormalizing that would be a second answer to
+  // "which collection is this lot in" for the sake of a safety net. The counter is the guarantee,
+  // as it is for every other number here; the index below is what makes the lookup cheap.
+  auctionLotNo   Int
   lotNo          String?
   url            String?
   title          String?
@@ -1029,6 +1055,7 @@ model AuctionLot {
 
   @@unique([purchaseLotId])
   @@index([auctionSaleId])
+  @@index([auctionLotNo])
   @@map("auction_lot")
 }
 
@@ -1411,6 +1438,10 @@ model OfferSetItem {
 model Sale {
   id            String   @id @default(cuid())
   collectionId  String
+  // Short per-collection sale number (#432) — see `Issue.issueNo`. What the quick-jump box takes
+  // after `s` (#431). Distinct from `externalRef`, which is the *marketplace's* order number: that
+  // one is the platform's word for the transaction, this one is the collection's.
+  saleNo        Int
   platformId    String
   // Optional buyer — the `Contact` (carrying the `buyer` role) the sale went to. `onDelete:
   // Restrict`: a referenced buyer cannot be deleted without first detaching it (like the
@@ -1463,6 +1494,7 @@ model Sale {
   lines         SaleLine[]
   statusEvents  SaleStatusEvent[]
 
+  @@unique([collectionId, saleNo])
   @@index([collectionId])
   @@index([platformId])
   @@index([buyerId])
@@ -1749,6 +1781,10 @@ model IssueCatalogPrefix {
 model Issue {
   id               String   @id @default(cuid())
   collectionId     String
+  // Short per-collection issue number (#432), allocated from `Collection.nextIssueNo` exactly as
+  // `Item.itemNo` (#268) and `Offer.offerNo` (#416) are. Assigned at creation, never editable,
+  // never reused. It is what the quick-jump box takes after `iss` (#431).
+  issueNo          Int
   collectionAreaId String
   name             String?
   year             Int?
@@ -1768,6 +1804,7 @@ model Issue {
   translations   IssueTranslation[]
   formatFactors  StampFormatFactor[]
 
+  @@unique([collectionId, issueNo])
   @@index([collectionId, year, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
   @@map("issue")
