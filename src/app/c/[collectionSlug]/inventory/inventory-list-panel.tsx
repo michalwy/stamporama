@@ -21,6 +21,7 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SubtreeScopeToggle, useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -152,7 +153,13 @@ export function InventoryListPanel({
   );
 
   const search = searchParams.get("search") ?? "";
-  const conditionId = searchParams.get("conditionId") ?? "";
+  // Condition is a **multi-select** (#425): "the mint grades" is as ordinary a question of the
+  // Copies list as one grade is, and asking it three times over is not the same as asking it once.
+  // Comma-separated in the URL exactly as `areaIds` is; an empty list is the absence of a filter.
+  const conditionIds = useMemo(() => {
+    const raw = searchParams.get("conditionIds");
+    return raw ? raw.split(",").filter(Boolean) : [];
+  }, [searchParams]);
   // Format is a *filter* here, not a price switcher (#343): a copy's format is a fact it carries,
   // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
   // choice — the copies with no format — which an absent value could not express.
@@ -274,7 +281,7 @@ export function InventoryListPanel({
       search: search || undefined,
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
-      conditionId: conditionId || undefined,
+      conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       formatId: formatId || undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
@@ -292,7 +299,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, formatId, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -301,7 +308,7 @@ export function InventoryListPanel({
       search: search || undefined,
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
-      conditionId: conditionId || undefined,
+      conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       formatId: formatId || undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
@@ -316,7 +323,7 @@ export function InventoryListPanel({
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionId, formatId, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, formatId, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -480,7 +487,7 @@ export function InventoryListPanel({
   const hasActiveFilters =
     !!search ||
     !!issueId ||
-    !!conditionId ||
+    conditionIds.length > 0 ||
     !!formatId ||
     !!locationId ||
     !!year ||
@@ -814,19 +821,16 @@ export function InventoryListPanel({
                 )}
               </div>
 
-              <select
-                value={conditionId}
-                onChange={(e) => updateParams({ conditionId: e.target.value })}
-                style={CONTROL_STYLE}
-                aria-label="Filter by condition"
-              >
-                <option value="">All conditions</option>
-                {conditions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              {/* Several conditions at once (#425): a copy is in exactly one condition, but the
+                  question asked of the list is routinely a group of them ("the mint grades"). */}
+              <MultiSelectFilter
+                options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+                selected={conditionIds}
+                onChange={(ids) => updateParams({ conditionIds: ids.join(",") })}
+                allLabel="All conditions"
+                itemNoun="conditions"
+                ariaLabel="Filter by condition"
+              />
 
               {/* Delivery state filter (#272), beside the condition one: the axis the row chip
                   shows, so "what is still in transit?" is one click from seeing it flagged. */}

@@ -711,7 +711,13 @@ export async function restoreItem(ownerId: string, itemId: string): Promise<Item
 
 export type ItemSortBy = "created";
 
-export interface ItemListFiltersPaginated extends ItemListFilters {
+export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditionId"> {
+  /** Restrict to copies in any of these conditions (#425) — an **OR**, empty/absent meaning every
+   *  condition. A list rather than the single id the axis used to carry, because the question the
+   *  Copies list asks of it is routinely "the mint grades" rather than one grade; a duplicate group
+   *  addressing its own members passes the one condition it grouped on, which is the same filter
+   *  with one entry in it and needs no second knob on the axis. */
+  conditionIds?: string[];
   /** Restrict to copies with one certificate status. The literal `"none"` matches the copies with
    *  no certificate — null *is* a value here (ADR-0006 §2), exactly as `"single"` is for format,
    *  and an absent filter cannot express it. Needed to address a duplicate group whose members
@@ -919,7 +925,11 @@ function buildItemWhere(
 
   return {
     collectionId,
-    ...(filters.conditionId ? { conditionId: filters.conditionId } : {}),
+    // One condition or several, one shape (#425): a single-entry `in` is what a duplicate group's
+    // member read passes, so the axis has exactly one filter on it.
+    ...(filters.conditionIds && filters.conditionIds.length > 0
+      ? { conditionId: { in: filters.conditionIds } }
+      : {}),
     ...(filters.certificateStatusId
       ? {
           certificateStatusId:

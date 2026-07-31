@@ -216,7 +216,7 @@ describe("duplicate groups", () => {
 
   it("still narrows by the list's own filters — grouping and filtering compose", async () => {
     const { groups } = await listItemDuplicateGroups(userId, collectionId, {
-      conditionId: usedId,
+      conditionIds: [usedId],
     });
     assert.equal(groups.length, 1);
     assert.equal(groups[0].conditionId, usedId);
@@ -231,7 +231,7 @@ describe("duplicate groups", () => {
     const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
     const { items } = await listItemsPaginated(userId, collectionId, {
       stampId,
-      conditionId: mnhId,
+      conditionIds: [mnhId],
       forSale: true,
       deliveryState: "delivered",
       excludeSold: true,

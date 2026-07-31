@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { getHoldingsValuation } from "@/lib/items";
+import { readConditionIds } from "../item-filters";
 
 /** Holdings valuation total over every copy matching the current filters (whole set,
  * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
@@ -29,7 +30,7 @@ export async function GET(
           ? parseInt(yearParam, 10)
           : undefined;
     const total = await getHoldingsValuation(session.user.id, collectionId, {
-      conditionId: sp.get("conditionId") || undefined,
+      conditionIds: readConditionIds(sp),
       certificateStatusId: sp.get("certificateStatusId") || undefined,
       formatId: sp.get("formatId") || undefined,
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,

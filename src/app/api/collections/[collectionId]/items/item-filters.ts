@@ -8,6 +8,19 @@ export function boolParam(value: string | null): boolean | undefined {
 }
 
 /**
+ * The conditions in scope (#425), comma-separated as `areaIds` already are — a list because the
+ * filter is a multi-select, and a duplicate group addressing its own members simply sends the one
+ * condition it grouped on. An all-blank value is no filter rather than an unmatchable empty set, so
+ * a link carrying a cleared parameter shows the list instead of an empty screen.
+ */
+export function readConditionIds(sp: URLSearchParams): string[] | undefined {
+  const raw = sp.get("conditionIds");
+  if (!raw) return undefined;
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
+}
+
+/**
  * The Copies list's filter set, read off a query string. Shared by the flat list and the duplicate
  * groups (#372) so the two can never disagree about which copies are in scope — grouping narrows
  * the *same* set the list shows, it just collapses it.
@@ -19,7 +32,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
   // through, so a stale link shows the list instead of an empty screen.
   const deliveryStateParam = sp.get("deliveryState");
   return {
-    conditionId: sp.get("conditionId") || undefined,
+    conditionIds: readConditionIds(sp),
     certificateStatusId: sp.get("certificateStatusId") || undefined,
     formatId: sp.get("formatId") || undefined,
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,

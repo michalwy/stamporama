@@ -36,7 +36,10 @@ interface LocationGroupsPage {
 }
 
 export interface InventoryItemFilters {
-  conditionId?: string;
+  /** The conditions in scope (#425) — an OR, absent meaning every condition. A list because the
+   * filter is a multi-select; a duplicate group addressing its members passes the single condition
+   * it grouped on through the same field. */
+  conditionIds?: string[];
   /** Restrict to copies with one certificate status. `"none"` matches the copies with no
    * certificate — needed to address a duplicate group whose members carry none (#372). */
   certificateStatusId?: string;
@@ -91,7 +94,7 @@ export interface InventoryItemFilters {
 
 /** Filters that affect the year facet counts (everything except year itself). */
 export interface InventoryYearFacetFilters {
-  conditionId?: string;
+  conditionIds?: string[];
   certificateStatusId?: string;
   formatId?: string;
   areaIds?: string[];
@@ -141,7 +144,8 @@ export const inventoryKeys = {
  * narrow the same set and must never disagree about it. */
 function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters.conditionId) params.set("conditionId", filters.conditionId);
+  if (filters.conditionIds && filters.conditionIds.length > 0)
+    params.set("conditionIds", filters.conditionIds.join(","));
   if (filters.certificateStatusId)
     params.set("certificateStatusId", filters.certificateStatusId);
   if (filters.formatId) params.set("formatId", filters.formatId);
@@ -262,7 +266,7 @@ export function useHoldingsValuation(
 ) {
   return useQuery<HoldingsSummary>({
     queryKey: ["inventory", collectionId, "valuation", {
-      conditionId: filters.conditionId,
+      conditionIds: filters.conditionIds,
       certificateStatusId: filters.certificateStatusId,
       formatId: filters.formatId,
       areaIds: filters.areaIds,
@@ -284,7 +288,8 @@ export function useHoldingsValuation(
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (filters.conditionId) params.set("conditionId", filters.conditionId);
+      if (filters.conditionIds && filters.conditionIds.length > 0)
+        params.set("conditionIds", filters.conditionIds.join(","));
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
       if (filters.formatId) params.set("formatId", filters.formatId);
@@ -326,7 +331,8 @@ export function useItemYears(
     queryKey: inventoryKeys.years(collectionId, filters),
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (filters.conditionId) params.set("conditionId", filters.conditionId);
+      if (filters.conditionIds && filters.conditionIds.length > 0)
+        params.set("conditionIds", filters.conditionIds.join(","));
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
       if (filters.formatId) params.set("formatId", filters.formatId);

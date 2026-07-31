@@ -357,7 +357,10 @@ export function groupMemberFilters(
   return {
     ...baseFilters,
     stampId: group.stampId,
-    conditionId: group.conditionId,
+    // The one condition the group was keyed on, through the same list the panel's multi-select uses
+    // (#425) — it replaces the panel's own selection rather than intersecting with it, since the
+    // group's members are by definition all in this condition.
+    conditionIds: [group.conditionId],
     // `"single"` / `"none"` are the sentinels for a null value — an absent filter means "any",
     // which is the opposite of what a key carrying null says.
     ...(axes.format ? { formatId: group.formatId ?? "single" } : {}),

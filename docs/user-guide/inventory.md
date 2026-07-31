@@ -112,7 +112,12 @@ Stamps, Copies, Offers, Sales and Purchases.
   totals always account for them, on their own **Written off** line.
 - **Delivery state** — show only copies in one delivery state, e.g. everything still
   *In transit* or every copy marked *Damaged*. See [Delivery state](#delivery-state).
-- **Condition** — show only copies of one condition.
+- **Condition** — show only copies in the conditions you tick. It takes **several at once**: click
+  it and tick as many grades as you like, and the list shows copies in *any* of them — "the mint
+  grades" is as ordinary a question as one grade is. The control reads the grade's name when one is
+  ticked and counts them when more are (`3 conditions`); **All conditions** at the top of the list
+  clears it. Everything that follows the list follows this filter too — the year panel, the holdings
+  totals, and the grouped views.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once. Pick a location that has others nested

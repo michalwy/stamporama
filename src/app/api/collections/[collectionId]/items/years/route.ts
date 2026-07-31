@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { listItemYearFacets } from "@/lib/items";
+import { readConditionIds } from "../item-filters";
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
 
   try {
     const years = await listItemYearFacets(session.user.id, collectionId, {
-      conditionId: sp.get("conditionId") || undefined,
+      conditionIds: readConditionIds(sp),
       certificateStatusId: sp.get("certificateStatusId") || undefined,
       formatId: sp.get("formatId") || undefined,
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
