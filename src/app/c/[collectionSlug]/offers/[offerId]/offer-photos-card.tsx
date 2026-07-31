@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useOfferPhotoPlan, useInvalidateOffers, type OfferPhotoPlanView } from "../use-offers-query";
 import { formatBytes } from "@/lib/format-bytes";
 import { PhotoLightbox } from "../../inventory/photo-thumb";
@@ -706,7 +706,7 @@ export function OfferPhotosCard({
   offerState: string;
 }) {
   const { data: plan, isLoading, refetch } = useOfferPhotoPlan(collectionId, offerId);
-  const { invalidateAll } = useInvalidateOffers();
+  const { invalidateAll, invalidateDetail } = useInvalidateOffers();
   const [error, setError] = useState<string | undefined>();
   // Whether the card is open is remembered across visits: a collector working through a batch of
   // listings opens it on every one of them. One key for the card, not one per offer — the habit is
@@ -719,6 +719,27 @@ export function OfferPhotosCard({
     preparing ? "stamporama.offerPhotos.expanded.preparing" : "stamporama.offerPhotos.expanded",
     preparing
   );
+  // The ready gate reads exactly what this card shows (#311/#418), so the header's **Mark ready**
+  // has to be judged again whenever the plan's answer changes — above all when a background run
+  // *finishes*, which is the one moment nothing else on the screen is waiting for: this card polls
+  // itself to the end of the run, while the header would sit on its stale reasons until a reload.
+  //
+  // Only the offer's own read model is invalidated, and only on a real change: the first render is
+  // the answer the detail query already arrived with, and every offer list on the collection would be
+  // a lot of refetching for one button.
+  const readiness = plan
+    ? `${plan.status}|${plan.outOfDate}|${plan.images.length}|${plan.plan.imageCount}`
+    : null;
+  const lastReadiness = useRef<string | null>(null);
+  useEffect(() => {
+    if (readiness === null) return;
+    if (lastReadiness.current !== null && lastReadiness.current !== readiness) {
+      void invalidateDetail(collectionId, offerId);
+    }
+    lastReadiness.current = readiness;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `invalidateDetail` is rebuilt per render
+  }, [readiness, collectionId, offerId]);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | undefined>();
   const [attachOpen, setAttachOpen] = useState(false);

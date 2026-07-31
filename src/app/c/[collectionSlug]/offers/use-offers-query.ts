@@ -346,5 +346,10 @@ export function useInvalidateOffers() {
   return {
     invalidateAll: (collectionId: string) =>
       queryClient.invalidateQueries({ queryKey: offerKeys.all(collectionId) }),
+    /** Just this offer's own read model. For a change that answers a question the detail screen is
+     *  asking but nothing else is — a photo run finishing under the ready gate (#311/#418) — where
+     *  invalidating every offer list on the collection would be noise for one header. */
+    invalidateDetail: (collectionId: string, offerId: string) =>
+      queryClient.invalidateQueries({ queryKey: offerKeys.detail(collectionId, offerId) }),
   };
 }
