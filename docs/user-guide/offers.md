@@ -617,9 +617,9 @@ An offer on the platform you have named as Colnect (under
 [**Settings → Colnect**](collections.md#colnect-platform)) therefore carries an **On Colnect** card,
 between the photos and the sets. It lists the offer's stamps — one row per **stamp and condition**,
 since that is what the marketplace pages are keyed on, with a `×3` where several copies of the offer
-share a row. A row names the stamp, says which condition it is in, and ends with two links — lined up
-in a column of their own, so a batch of them is clicked straight down the card. Both open in a new
-tab:
+share a row. A row names the stamp, says which condition it is in, then carries two links and the
+stamp's catalog value — each lined up in a column of its own, so a batch of them is worked straight
+down the card. The two links open in a new tab:
 
 - **Catalog** — that stamp's own page in the platform's catalogue.
 - **Market** — what copies *in that condition* are being asked for right now, **cheapest first**:
@@ -634,6 +634,17 @@ printed bare, because the set around it already says which catalogue it came fro
 cross-checking against somebody else's catalogue, so which one a number belongs to is the point.
 They are the ordinary [click-to-copy chips](inventory.md#copying-a-catalog-number), so a number goes
 into the platform's own search box without being retyped.
+
+The last column is the offer's **other** gap: a **+ CV** button on any row whose stamp has no catalog
+value recorded in that condition. It opens the same *Set catalog value* dialog the copies below do,
+so the values can be filled in from the one list that already names each stamp and grade once —
+rather than by scrolling the sets looking for which copy is unpriced. A row that is priced says
+nothing: this card shows gaps, never figures.
+
+Both gaps are marked in **amber**: the *N not matched* count in the heading, and the **⚡ Link** and
+**+ CV** buttons in the rows. Amber is always something to *do* — Search is left plain, being a link
+to a page like Catalog and Market. A row with no amber on it is ready. The heading's count is
+readable with the card collapsed, which is where you are looking before you have opened it.
 
 A stamp with **no Colnect item-ID** cannot have a page of its own here, so its **Catalog** link
 becomes **Search** — Colnect's own catalogue search for that stamp's leading catalog number, in the
@@ -664,10 +675,12 @@ all.
 Without the extension neither button appears — Search is still there, and the rest of the job is
 manual, exactly as before.
 
-A link that is greyed out instead is telling you about a gap nothing can stand in for: a stamp with
-no item-ID *and* no catalog number to search by, or a condition not mapped to one of Colnect's own
-grades. Hover for which. The row is still listed — this is the screen where you are most likely to
-notice.
+An unmatched row carries **no Market chip** at all: without an item-ID there is no market search to
+be had, and the missing ID is already what Search and Link are there for. A greyed-out link means the
+one gap that is neither of those — a matched stamp whose condition is not mapped to one of Colnect's
+own grades (fix it in [Settings → Colnect](collections.md#colnect-condition-mapping)), or a stamp with
+no item-ID *and* no catalog number to search by. Hover for which. The row is still listed — this is
+the screen where you are most likely to notice.
 
 The card follows the same rule as the Photos one: **open** while the offer is **Preparing**, since
 those links are the work you are doing, and **collapsed** from **Ready** onward, when it is a

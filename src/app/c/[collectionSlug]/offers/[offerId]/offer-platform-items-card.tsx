@@ -1,7 +1,11 @@
 "use client";
 
 import type { OfferPlatformItem } from "@/lib/offers";
-import { useCallback, useRef, useState } from "react";
+import type { ItemListItem } from "@/lib/items";
+import type { CollectionAreaData } from "@/lib/areas";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useAssistantPresence } from "../assistant-handoff";
 import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
@@ -22,9 +26,13 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 // `stamp × condition`, not on the copy. So the list is keyed that way too, and says how many of the
 // offer's copies each row stands for rather than repeating the row.
 //
-// Deliberately **not** the sets card in miniature. It carries no price, no value, no per-copy
+// Deliberately **not** the sets card in miniature. It carries no price, no figure, no per-copy
 // anything: everything about *this* listing is a scroll away, and the one thing this card is for is
-// leaving the screen for the platform. The rows are therefore a **grid**, not a stack of flex lines:
+// leaving the screen for the platform. What it does carry is what a row is **missing** — no item-ID,
+// no catalog value — because both are answered on `stamp × condition`, both stop the listing, and
+// hunting for them copy by copy in the sets below is exactly the walk this card exists to end. A
+// value that *is* recorded stays silent: the gap is the news, the number is not.
+// The rows are therefore a **grid**, not a stack of flex lines:
 // the links follow the condition in a column of their own, and a column is the point — they are
 // pressed one row after another, and a pair that shifts sideways with the length of the name above
 // it is a pair the collector has to find again on every line.
@@ -68,19 +76,19 @@ const LINK: React.CSSProperties = {
 };
 
 /**
- * The list is one grid rather than a stack of rows, so the four things a row says line up into
- * columns: numbers, stamp name, condition, links. Exactly **four** tracks, matching the four cells a
- * row hands over — a fifth would take the next row's first cell into it and stagger the whole list.
- * Only the name may shrink; the rest are sized to what they hold, and the space left over at the
- * right is simply unused, which is what keeps the links beside the condition rather than flung out
- * to the card's edge.
+ * The list is one grid rather than a stack of rows, so the five things a row says line up into
+ * columns: numbers, stamp name, condition, links, catalog value. Exactly **five** tracks, matching
+ * the five cells a row hands over — one track more or fewer would take the next row's first cell
+ * into it and stagger the whole list. Only the name may shrink; the rest are sized to what they
+ * hold, and the space left over at the right is simply unused, which is what keeps the columns
+ * beside the condition rather than flung out to the card's edge.
  */
 const LIST: React.CSSProperties = {
   margin: 0,
   padding: 0,
   listStyle: "none",
   display: "grid",
-  gridTemplateColumns: "max-content minmax(0, max-content) max-content max-content",
+  gridTemplateColumns: "max-content minmax(0, max-content) max-content max-content max-content",
   justifyContent: "start",
   alignItems: "center",
 };
@@ -100,6 +108,36 @@ const CELL: React.CSSProperties = {
 const MUTED: React.CSSProperties = {
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
+};
+
+/**
+ * What a row is **missing**, in the warning tint the rest of the app marks work-to-do with. It goes
+ * on the two things that close a gap — **⚡ Link** and **+ CV** — and on the heading's count of them,
+ * so the work left in this offer reads as amber down the card.
+ *
+ * Not on Search: that is a link to a page, the way Catalog and Market are, and one the collector may
+ * follow for a dozen reasons that are not "fix this". Only what *does* something is marked.
+ */
+const ATTENTION: React.CSSProperties = {
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning-border, var(--color-warning))",
+  background: "var(--color-warning-soft, var(--color-bg-page))",
+};
+
+/** One box for both things in the heading — the count and the walk — so a `<span>` and a `<button>`
+ *  sitting side by side are the same height rather than each the height its own element defaults to. */
+const HEADER_CHIP: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  padding: "0.25rem 0.625rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  fontFamily: "inherit",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  lineHeight: 1.35,
+  whiteSpace: "nowrap",
 };
 
 /** The same "opens in a new tab" glyph the Colnect chip uses, in `currentColor`. */
@@ -130,6 +168,8 @@ export function OfferPlatformItemsCard({
   platformName,
   offerState,
   collectionId,
+  copies,
+  areas,
 }: {
   items: OfferPlatformItem[];
   /** Named in the heading, so the card says whose catalogue these links go to. */
@@ -138,6 +178,11 @@ export function OfferPlatformItemsCard({
   offerState: string;
   /** Whose offers to re-read when the Assistant reports a match. */
   collectionId: string;
+  /** The offer's copies, as the sets view below reads them — what a row's catalog value is recorded
+   *  against, and the subject the quick-value dialog is opened with. */
+  copies: ItemListItem[];
+  /** For the vendor maps that dialog prices against. */
+  areas: CollectionAreaData[];
 }) {
   // One key for the card rather than one per offer — the habit is about the step, not the listing —
   // but a separate one, open by default, while the offer is still `preparing`: the two habits are
@@ -158,6 +203,29 @@ export function OfferPlatformItemsCard({
   const { invalidateAll } = useInvalidateOffers();
 
   const unmatched = items.filter((i) => i.searchUrl);
+
+  // ── The catalog value a row has, or has not ────────────────────────────────
+  // A row is `stamp × condition`, which is exactly what a catalog value is recorded against, so the
+  // gap is answerable right here — and answering it here is the point: the copies are a scroll away
+  // and give the same answer copy by copy, which is the hunt this saves. The card still carries no
+  // *figure*: a value it has is silence, and only the gap is shown.
+  const unpricedBy = useMemo(() => {
+    const map = new Map<string, ItemListItem>();
+    for (const copy of copies) {
+      if (!copy.value.unpriced) continue;
+      const key = `${copy.stampId}|${copy.conditionId}`;
+      if (!map.has(key)) map.set(key, copy);
+    }
+    return map;
+  }, [copies]);
+  const unpricedFor = (item: OfferPlatformItem) =>
+    unpricedBy.get(`${item.stampId}|${item.conditionId}`) ?? null;
+
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
+  const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  const [priceError, setPriceError] = useState<string | undefined>();
+  const [isPricing, startPricing] = useTransition();
 
   const handOver = useCallback(
     (item: OfferPlatformItem) => start(item.searchUrl!, item.catalogNumbers[0] ?? item.label),
@@ -246,9 +314,14 @@ export function OfferPlatformItemsCard({
           >
             On {platformName} ({items.length})
           </h3>
+          {/* Amber, and stated in the heading, because it is the one thing that stops the offer being
+              posted at all — and it is readable with the card shut, which is where a collector who
+              has not opened it yet is looking. */}
           {linkable < items.length && (
-            <Tooltip content="These stamps carry no item-ID for this platform, so there is nothing to link to. Match them from the stamp's own screen.">
-              <span style={MUTED}>{items.length - linkable} not matched</span>
+            <Tooltip content={`These stamps carry no ${platformName} item-ID, so the listing cannot be posted yet. Link them from the rows below.`}>
+              <span style={{ ...HEADER_CHIP, ...ATTENTION }}>
+                {items.length - linkable} not matched
+              </span>
             </Tooltip>
           )}
         </button>
@@ -268,16 +341,11 @@ export function OfferPlatformItemsCard({
               type="button"
               onClick={walking ? stopWalk : startWalk}
               style={{
+                ...HEADER_CHIP,
                 marginLeft: "auto",
-                padding: "0.25rem 0.75rem",
-                border: "1px solid var(--color-border-strong)",
-                borderRadius: "0.375rem",
-                fontSize: "0.8125rem",
-                fontWeight: 600,
                 color: "var(--color-text-primary)",
                 background: "var(--color-bg-elevated)",
                 cursor: "pointer",
-                whiteSpace: "nowrap",
               }}
             >
               {walking ? "Stop linking" : `⚡ Link all (${unmatched.length})`}
@@ -416,6 +484,7 @@ export function OfferPlatformItemsCard({
                           onClick={() => handOver(item)}
                           style={{
                             ...LINK,
+                            ...ATTENTION,
                             fontFamily: "inherit",
                             margin: 0,
                             cursor: "pointer",
@@ -431,6 +500,11 @@ export function OfferPlatformItemsCard({
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
                   </Tooltip>
                 )}
+                {/* Market only where the stamp *has* a page here. Without an item-ID it could never
+                    have been anything but greyed out, and a dead chip beside Search says nothing
+                    the row has not already said — the missing ID is the one fact, stated once.
+                    A matched stamp whose condition is unmapped is a different gap and keeps its
+                    greyed chip: there, the link is one setting away. */}
                 {item.marketUrl ? (
                   <Tooltip
                     content={`What ${item.conditionName} copies are being asked for right now, cheapest first.`}
@@ -441,20 +515,81 @@ export function OfferPlatformItemsCard({
                     </a>
                   </Tooltip>
                 ) : (
-                  <Tooltip
-                    content={
-                      item.catalogUrl
-                        ? "This condition is not mapped to the platform's own grades, so a market search would ask a different question. Map it in Settings → Colnect."
-                        : "This stamp has no item-ID recorded for this platform yet."
-                    }
-                  >
-                    <span style={{ ...LINK, opacity: 0.5 }}>Market</span>
-                  </Tooltip>
+                  item.catalogUrl && (
+                    <Tooltip content="This condition is not mapped to the platform's own grades, so a market search would ask a different question. Map it in Settings → Colnect.">
+                      <span style={{ ...LINK, opacity: 0.5 }}>Market</span>
+                    </Tooltip>
+                  )
                 )}
+              </span>
+              {/* The last column is the *other* gap this card is read for. A stamp and a condition
+                  are what a catalog value is recorded against, so the row can say whether one is
+                  missing and open the same quick dialog the copies below do — which is the scroll it
+                  saves. Priced rows say nothing: the figure is still not this card's business. */}
+              <span style={CELL}>
+                {(() => {
+                  const unpriced = unpricedFor(item);
+                  if (!unpriced) return null;
+                  return (
+                    <Tooltip
+                      content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPriceError(undefined);
+                          setQuickPriceItem(unpriced);
+                        }}
+                        style={{ ...LINK, ...ATTENTION, fontFamily: "inherit", margin: 0, cursor: "pointer" }}
+                      >
+                        + CV
+                      </button>
+                    </Tooltip>
+                  );
+                })()}
               </span>
             </li>
           ))}
         </ul>
+      )}
+
+      {/* The same dialog and the same save the copies below use (#147/#170/#341) — a value set from
+          here is set the one way it is ever set. */}
+      {quickPriceItem && (
+        <QuickPriceDialog
+          subject={quickPriceItem}
+          collectionId={collectionId}
+          areaName={quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null}
+          primaryVendorId={
+            quickPriceItem.areaId ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null) : null
+          }
+          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
+          isPending={isPricing}
+          error={priceError}
+          onClose={() => {
+            if (isPricing) return;
+            setQuickPriceItem(null);
+            setPriceError(undefined);
+          }}
+          onSubmit={(entries) => {
+            const copy = quickPriceItem;
+            setPriceError(undefined);
+            startPricing(async () => {
+              const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");
+              const r = await quickSetCatalogPricesAction(
+                copy.stampId,
+                copy.conditionId,
+                copy.certificateStatusId,
+                entries
+              );
+              if (r.status === "error") setPriceError(r.message);
+              else {
+                setQuickPriceItem(null);
+                void invalidateAll(collectionId); // the row's gap closes, and the offer's totals move
+              }
+            });
+          }}
+        />
       )}
     </div>
   );
