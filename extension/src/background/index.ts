@@ -338,7 +338,7 @@ function tabLoaded(tabId: number): Promise<void> {
       clearTimeout(timer);
       resolve();
     };
-    const listener = (id: number, change: chrome.tabs.TabChangeInfo) => {
+    const listener = (id: number, change: chrome.tabs.OnUpdatedInfo) => {
       if (id === tabId && change.status === "complete") finish();
     };
     chrome.tabs.onUpdated.addListener(listener);

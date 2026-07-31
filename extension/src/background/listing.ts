@@ -367,7 +367,7 @@ function waitForLoad(tabId: number): Promise<void> {
       clearTimeout(timer);
       fn();
     };
-    const onUpdated = (id: number, change: chrome.tabs.TabChangeInfo) => {
+    const onUpdated = (id: number, change: chrome.tabs.OnUpdatedInfo) => {
       if (id === tabId && change.status === "complete") done(resolve);
     };
     const onRemoved = (id: number) => {
@@ -411,7 +411,7 @@ function watchNextLoad(tabId: number): { settled: Promise<boolean>; cancel: () =
       clearTimeout(timer);
       resolve(value);
     };
-    const onUpdated = (id: number, change: chrome.tabs.TabChangeInfo) => {
+    const onUpdated = (id: number, change: chrome.tabs.OnUpdatedInfo) => {
       if (id === tabId && change.status === "complete") finish(true);
     };
     const onRemoved = (id: number) => {
