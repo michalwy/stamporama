@@ -83,6 +83,24 @@ export function isColnectSaleFormUrl(url: string): boolean {
   }
 }
 
+/**
+ * True when this document is the sale form itself, rather than something Colnect served at its
+ * address (#419).
+ *
+ * Colnect sometimes answers a sale-form request with an **anti-bot interstitial** that reloads itself
+ * into the real form a moment later. The URL is the same one throughout, so {@link
+ * isColnectSaleFormUrl} says yes to both, and filling the interstitial writes nothing while reporting
+ * every field as missing — a listing that looks filled in the report and is blank in the browser.
+ *
+ * The test is the form's own controls: Colnect keys every field of the sale form under `new_sale[…]`
+ * (#402), so one such control anywhere in the document is the form having arrived. Deliberately not
+ * the *price* field or any other single one — a form Colnect has switched a field off on is still the
+ * form, and this question is only ever "has the page loaded".
+ */
+export function isColnectSaleFormDocument(doc: Document): boolean {
+  return doc.querySelector('[name^="new_sale["]') !== null;
+}
+
 /** A form control the sale form addresses by name. */
 type FormField = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
@@ -434,6 +452,7 @@ function putFiles(input: HTMLInputElement, files: File[]): void {
 export const colnectListing: PlatformListing = {
   formUrl: colnectSaleFormUrl,
   isFormUrl: isColnectSaleFormUrl,
+  isFormDocument: isColnectSaleFormDocument,
   fill: fillColnectSaleForm,
   listedUrl: colnectListedSaleUrl,
   attachPhotos: attachColnectPictures,

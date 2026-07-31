@@ -63,6 +63,13 @@ is done, the offer's card in Stamporama lists what was filled and what was skipp
 couldn't answer — a condition with no grade on that platform, a text over the platform's limit — is
 something you learn there rather than after posting.
 
+Colnect sometimes answers the sale form's own address with a short **"checking your browser"** page
+that reloads itself into the real form a moment later. The Assistant waits that page out: it fills the
+form once the form is actually there, rather than filling the interstitial and reporting a listing
+that is blank in the browser. If the page never turns into the form — a sign-in, a challenge you have
+to solve yourself — it gives up after a few seconds and says so; deal with the page and hand the offer
+over again.
+
 ### The pictures go in too
 
 Your offer's rendered images are attached as the **last** step, once every other field is in: the same

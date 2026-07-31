@@ -23,7 +23,10 @@ export interface FillRequest {
 }
 export type FillResponse =
   | { ok: true; moduleId: string; moduleName: string; outcome: ListingFillOutcome }
-  | { ok: false; error: string };
+  /** `retry` says the page is not the form **yet** (#419) — the marketplace answered the sale form's
+   *  own address with something that reloads itself into it, so the worker waits for the next load
+   *  and asks again instead of reporting a fill that never happened. */
+  | { ok: false; error: string; retry?: boolean };
 
 // background → content script, **after** the fill and on the same page (#411): the offer's rendered
 // images, for the module to hand to the form's own uploader. A second message rather than part of

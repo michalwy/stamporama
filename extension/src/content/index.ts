@@ -168,7 +168,7 @@ if (!window.__stamporamaAssistantLoaded) {
               moduleName: result.moduleName,
               outcome: result.outcome,
             }
-          : { ok: false, error: result.error }
+          : { ok: false, error: result.error, retry: result.retry }
       );
     }
   );

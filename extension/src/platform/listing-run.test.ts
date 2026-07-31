@@ -23,6 +23,7 @@ const listingModule: PlatformModule = {
   listing: {
     formUrl: (task) => `https://fake.test/sell?offer=${task.offerId}`,
     isFormUrl: (url) => url.startsWith("https://fake.test/sell"),
+    isFormDocument: () => true,
     fill: (_doc, task) => ({
       filled: [{ field: "Price", value: `${task.price} ${task.currency}` }],
       skipped: [{ field: "Title", reason: "FakeMarket has no title field." }],
@@ -45,6 +46,7 @@ const noPicturesModule: PlatformModule = {
   listing: {
     formUrl: () => "https://no-pictures.test/sell",
     isFormUrl: (url) => url.startsWith("https://no-pictures.test/sell"),
+    isFormDocument: () => true,
     fill: () => ({ filled: [], skipped: [] }),
     listedUrl: () => null,
   },
@@ -158,6 +160,35 @@ test("a page that is not the sale form is refused, never filled", () => {
   assert.match(result.ok ? "" : result.error, /not FakeMarket's listing form/);
 });
 
+test("the sale form's address without the sale form on it is a wait, not a refusal", () => {
+  // The anti-bot interstitial (#419): the URL is the form's own and the document is not, so the
+  // answer says "not yet" rather than filling nothing and calling it filled.
+  registerPlatformModule({
+    id: "guarded-market",
+    name: "GuardedMarket",
+    matches: () => false,
+    extract: () => [],
+    listing: {
+      formUrl: () => "https://guarded.test/sell",
+      isFormUrl: () => true,
+      isFormDocument: () => false,
+      fill: () => {
+        throw new Error("The fill must never be reached on a page that is not the form.");
+      },
+      listedUrl: () => null,
+    },
+  });
+  const result = fillListing(task("guarded-market"), noDoc, "https://guarded.test/sell");
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? undefined : result.retry, true);
+  assert.match(result.ok ? "" : result.error, /has not served the listing form/);
+});
+
+test("a page that is not the sale form at all is refused outright, never retried", () => {
+  const result = fillListing(task("fake-market"), noDoc, "https://fake.test/account/login");
+  assert.equal(result.ok ? undefined : result.retry, undefined);
+});
+
 test("a module throwing on unexpected DOM comes back as a refusal", () => {
   registerPlatformModule({
     id: "broken-market",
@@ -167,6 +198,7 @@ test("a module throwing on unexpected DOM comes back as a refusal", () => {
     listing: {
       formUrl: () => "https://broken.test/sell",
       isFormUrl: () => true,
+      isFormDocument: () => true,
       fill: () => {
         throw new Error("Price field not found.");
       },
@@ -305,6 +337,7 @@ test("a module throwing while attaching leaves the filled form standing", () => 
     listing: {
       formUrl: () => "https://broken-pictures.test/sell",
       isFormUrl: () => true,
+      isFormDocument: () => true,
       fill: () => ({ filled: [], skipped: [] }),
       listedUrl: () => null,
       attachPhotos: () => {

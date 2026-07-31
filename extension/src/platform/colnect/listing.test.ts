@@ -8,6 +8,7 @@ import {
   colnectPictureInput,
   colnectSaleFormUrl,
   fillColnectSaleForm,
+  isColnectSaleFormDocument,
   isColnectSaleFormUrl,
 } from "./listing";
 import type { ListingPhotoFile, ListingTask, ListingTaskItem } from "../listing";
@@ -143,6 +144,20 @@ describe("the sale form URL", () => {
     assert.equal(isColnectSaleFormUrl("https://colnect.com/en/sell"), false);
     assert.equal(isColnectSaleFormUrl("https://colnect.com/en/stamps/list"), false);
     assert.equal(isColnectSaleFormUrl("https://not-colnect.test/en/sell/new/x"), false);
+  });
+
+  // #419: Colnect answers the very same address with an anti-bot page that reloads itself into the
+  // form, so the address alone cannot say whether there is a form to fill.
+  it("tells the sale form apart from what Colnect serves at its address meanwhile", () => {
+    assert.equal(isColnectSaleFormDocument(docOf(formHtml(["111"]))), true);
+    assert.equal(
+      isColnectSaleFormDocument(
+        docOf(`<html><body><h1>Checking your browser…</h1><noscript>Enable JavaScript</noscript></body></html>`)
+      ),
+      false
+    );
+    // A form Colnect switched a field off on is still the form — this only asks whether it arrived.
+    assert.equal(isColnectSaleFormDocument(docOf(formHtml(["111"], { separateListings: true }))), true);
   });
 
   // #412: Save navigates straight to the new entry, which is where the offer's URL comes from.

@@ -138,7 +138,14 @@ function photoStatusReason(status: ListingTaskPhotos["status"]): string {
 
 export type ListingFillResult =
   | { ok: true; moduleId: string; moduleName: string; outcome: ListingFillOutcome }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** The page may still **become** the form on its own (#419) — an interstitial that reloads into
+       *  it, a redirect on its way. The wiring answers this by waiting for the next load and asking
+       *  again, rather than by reporting a listing that was never filled. */
+      retry?: boolean;
+    };
 
 /**
  * Fill `doc` — the page at `url` — from `task`, through the task's own module.
@@ -146,6 +153,11 @@ export type ListingFillResult =
  * The page is checked against the module's own `isFormUrl` first: the collector may have navigated
  * on, or the platform may have answered with a sign-in page, and filling a form that is not the sale
  * form is the one outcome worth refusing outright. Nothing is submitted here or anywhere below.
+ *
+ * The **document** is then checked too (#419), and that refusal is a different one: the address is
+ * the sale form's and its contents are not, which is what an anti-bot interstitial looks like from
+ * here — a page on its way to becoming the form. It is reported as `retry`, so the wiring waits for
+ * the reload rather than filling nothing and calling it a fill.
  */
 export function fillListing(task: ListingTask, doc: Document, url: string): ListingFillResult {
   const module = resolveListingModule(task);
@@ -153,6 +165,13 @@ export function fillListing(task: ListingTask, doc: Document, url: string): List
   const { listing } = module.module;
   if (!listing.isFormUrl(url)) {
     return { ok: false, error: `This page is not ${module.module.name}'s listing form.` };
+  }
+  if (!listing.isFormDocument(doc)) {
+    return {
+      ok: false,
+      error: `${module.module.name} has not served the listing form on this page yet.`,
+      retry: true,
+    };
   }
   try {
     return {

@@ -134,6 +134,20 @@ export interface PlatformListing {
    *  Broader than an equality test against {@link formUrl}: the platform may redirect, add its own
    *  parameters, or restore a draft. */
   isFormUrl(url: string): boolean;
+  /**
+   * True when `doc` — a document already at {@link isFormUrl} — actually **holds** the sale form
+   * (#419).
+   *
+   * The URL is the address, not the contents: a marketplace may answer the very same address with an
+   * anti-bot interstitial that reloads itself into the form a moment later, and Colnect does. Filling
+   * that page writes nothing and reports every field as missing, which reads like a broken form
+   * rather than like a page that has not arrived yet — so the two are asked separately, and the shell
+   * waits for the reload instead (`fillListing` → `retry`).
+   *
+   * A structural check over the controls the module is about to write, never a marker of the
+   * platform's own: what matters is whether the fields are there to fill.
+   */
+  isFormDocument(doc: Document): boolean;
   /** Fill the form in `doc` from `task`, and stop. Never submits, and never touches a field the
    *  task has nothing to say about (#410). Throws only on unexpected DOM. */
   fill(doc: Document, task: ListingTask): ListingFillOutcome;

@@ -34,6 +34,16 @@ import { postListedUrl, profileForListing } from "./listing-client";
  *  a timeout instead of leaving the offer card spinning for ever. */
 const LOAD_TIMEOUT_MS = 90_000;
 
+/** How long to wait for a page that is **not the form yet** to turn into it (#419) — an anti-bot
+ *  interstitial reloads itself after a moment, and a sign-in page never does. Short, because this is
+ *  a wait the collector is watching, and the error the page already has is the honest answer once it
+ *  runs out. */
+const RELOAD_TIMEOUT_MS = 20_000;
+
+/** How many times a listing is filled again after the page reloaded under it (#419). A challenge
+ *  page may serve a second one; a loop that never gives up would fill the same form for ever. */
+const FILL_ATTEMPTS = 4;
+
 /**
  * Run one listing task: resolve the module and the form URL, open it, fill it, and report.
  *
@@ -72,14 +82,7 @@ export async function runListingTask(
 
   try {
     await waitForLoad(tab.id);
-    // The declared content script covers the marketplace's own origin, but a tab that was already
-    // open before an extension reload never ran it — the popup injects for the same reason. The
-    // script guards itself against running twice.
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
-    const res = (await chrome.tabs.sendMessage(tab.id, {
-      type: "fill",
-      task,
-    } satisfies FillRequest)) as FillResponse;
+    const res = await fillThroughReloads(tab.id, task);
     if (!res.ok) return { ok: false, error: res.error };
 
     // The form is filled and the collector takes over. What they do next — Save, or nothing at all —
@@ -118,6 +121,55 @@ export async function runListingTask(
     };
   } catch (e) {
     return { ok: false, error: message(e) };
+  }
+}
+
+/**
+ * Fill the form in `tabId`, following the page through a reload it performs under us (#419).
+ *
+ * Colnect sometimes answers the sale form's own address with an **anti-bot interstitial** that
+ * reloads itself into the real form a second or two later. Filled once and reported, that page costs
+ * the whole text half of the listing: the form arrives blank while the pictures — fetched meanwhile
+ * and attached afterwards — land on it perfectly, which is exactly what the bug looked like.
+ *
+ * So a page the module recognises by address but not by contents is not an outcome, it is a **wait**:
+ * the next load in this tab starts the fill over, injection included, since a fresh document has no
+ * content script in it. Bounded twice over — a fixed number of attempts and a short wait for each —
+ * because a page that never becomes the form (a sign-in, a challenge the collector has to solve) must
+ * end in the error it already has rather than in a spinner.
+ */
+async function fillThroughReloads(tabId: number, task: ListingTask): Promise<FillResponse> {
+  let last: FillResponse = { ok: false, error: "The listing form never loaded." };
+  for (let attempt = 1; attempt <= FILL_ATTEMPTS; attempt += 1) {
+    // Armed **before** the attempt: an interstitial can reload while the fill message is in flight,
+    // and a watcher started afterwards would have missed the one event it exists to catch.
+    const reload = watchNextLoad(tabId);
+    last = await fillOnce(tabId, task);
+    if (last.ok || !last.retry) {
+      reload.cancel();
+      return last;
+    }
+    // Nothing settled in time: the page is what it is, and its own answer is the one worth giving.
+    if (!(await reload.settled)) return last;
+  }
+  return last;
+}
+
+/** One injection and one fill on whatever the tab is showing now. A messaging failure is reported as
+ *  **retryable**: the usual cause is the page navigating out from under the message, which is the very
+ *  thing {@link fillThroughReloads} is waiting for. */
+async function fillOnce(tabId: number, task: ListingTask): Promise<FillResponse> {
+  try {
+    // The declared content script covers the marketplace's own origin, but a tab that was already
+    // open before an extension reload never ran it — the popup injects for the same reason. The
+    // script guards itself against running twice.
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    return (await chrome.tabs.sendMessage(tabId, {
+      type: "fill",
+      task,
+    } satisfies FillRequest)) as FillResponse;
+  } catch (e) {
+    return { ok: false, error: message(e), retry: true };
   }
 }
 
@@ -335,6 +387,41 @@ function waitForLoad(tabId: number): Promise<void> {
       () => done(() => reject(new Error("The listing tab was closed.")))
     );
   });
+}
+
+/**
+ * Watch for the tab finishing a **further** document load: `settled` resolves `true` when one lands,
+ * and `false` when nothing does inside {@link RELOAD_TIMEOUT_MS} or the collector closes the tab
+ * (#419).
+ *
+ * Deliberately without {@link waitForLoad}'s "it may already be complete" shortcut: the page this is
+ * armed on is *already* complete and is exactly the one being waited out, so reading its state would
+ * answer instantly and turn the retry into a spin. Deliberately not a rejection either — a page that
+ * stays put is the normal outcome here, and the caller has the page's own error to report.
+ *
+ * `cancel()` is what a run that no longer needs it calls, so a listing that filled first time leaves
+ * no listener and no timer behind in a worker that goes on serving other work.
+ */
+function watchNextLoad(tabId: number): { settled: Promise<boolean>; cancel: () => void } {
+  let finish: (value: boolean) => void = () => {};
+  const settled = new Promise<boolean>((resolve) => {
+    finish = (value: boolean) => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const onUpdated = (id: number, change: chrome.tabs.TabChangeInfo) => {
+      if (id === tabId && change.status === "complete") finish(true);
+    };
+    const onRemoved = (id: number) => {
+      if (id === tabId) finish(false);
+    };
+    const timer = setTimeout(() => finish(false), RELOAD_TIMEOUT_MS);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.onRemoved.addListener(onRemoved);
+  });
+  return { settled, cancel: () => finish(false) };
 }
 
 function message(e: unknown): string {
