@@ -52,6 +52,12 @@ import {
   NO_LOCATION_REF,
   type LocationGroupBy,
 } from "./location-groups";
+import {
+  compareIssueGroups,
+  issueGroupLabel,
+  NO_ISSUE,
+  type SortableIssueGroup,
+} from "./issue-groups";
 import { buildLocationPath } from "./location-path";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
@@ -709,6 +715,14 @@ export async function restoreItem(ownerId: string, itemId: string): Promise<Item
   return toItemData(item);
 }
 
+/** A copy is reported under **one** issue, even though issue membership is many-to-many: the first
+ * one its stamp was added to. Ordering the `take: 1` explicitly is what makes it *one* answer — an
+ * unordered take returns whatever the database hands back, so the row, the valuation and #424's
+ * issue groups could each name a different issue for the same copy, and a group's count would stop
+ * matching the rows under it. `issueId` ascending is creation order (a cuid carries its timestamp),
+ * which is the only signal a membership row carries. */
+const FIRST_ISSUE_MEMBERSHIP = { orderBy: { issueId: "asc" }, take: 1 } as const;
+
 export type ItemSortBy = "created";
 
 export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditionId"> {
@@ -824,7 +838,10 @@ function buildItemWhere(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stampWhere: any = {};
   if (filters.issueId) {
-    stampWhere.issueMemberships = { some: { issueId: filters.issueId } };
+    // `NO_ISSUE` is a value on this axis, not the absence of the filter (#424): it is what an
+    // issue group of copies belonging to no series addresses its own members with.
+    stampWhere.issueMemberships =
+      filters.issueId === NO_ISSUE ? { none: {} } : { some: { issueId: filters.issueId } };
   }
   if (filters.areaIds && filters.areaIds.length > 0) {
     stampWhere.stampAreaLinks = { some: { collectionAreaId: { in: filters.areaIds } } };
@@ -1162,8 +1179,8 @@ const ITEM_LIST_SELECT = {
       // The copy's own stamp's subtype, for the row's chip (#340).
       subtype: { select: { name: true, isDefault: true } },
       issueMemberships: {
+        ...FIRST_ISSUE_MEMBERSHIP,
         select: { issue: { select: { id: true, name: true, year: true } } },
-        take: 1,
       },
     },
   },
@@ -1375,8 +1392,8 @@ const GROUP_STAMP_SELECT = {
   variants: { select: VARIANT_FLAG_SELECT },
   subtype: { select: { name: true, isDefault: true } },
   issueMemberships: {
+    ...FIRST_ISSUE_MEMBERSHIP,
     select: { issue: { select: { id: true, name: true, year: true } } },
-    take: 1,
   },
 } satisfies Prisma.StampSelect;
 
@@ -1683,6 +1700,132 @@ export async function listItemLocationGroups(
   const page = ordered.slice(offset, offset + pageSize);
   const nextCursor = offset + pageSize < ordered.length ? String(offset + pageSize) : null;
   return { groups: page, nextCursor };
+}
+
+// ── Issue groups (#424) ──────────────────────────────────────────────────────
+
+/** One row of the Copies list grouped by the issue its copies belong to. Thin like a filing group
+ * (#421) and for the same reason: a series is a *subject*, so the row names it and counts what is
+ * held under it, and what those copies are is the question the member rows answer. */
+export interface IssueGroupRow {
+  /** Stable per-group key — the React key, and the value the members are read back with: an issue
+   * id, or `NO_ISSUE` for the copies whose stamp is in no issue. */
+  key: string;
+  /** Null is the issue-less bucket. */
+  issueId: string | null;
+  /** Ready-made label (`Chopin (1949)`), written by the shared `issueGroupLabel`. */
+  label: string;
+  issueName: string | null;
+  issueYear: number | null;
+  /** How many copies of the *filtered* set this group holds. */
+  count: number;
+}
+
+export interface PaginatedIssueGroupsResult {
+  groups: IssueGroupRow[];
+  nextCursor: string | null;
+}
+
+/**
+ * The Copies list collapsed to **one row per issue** (#424) — "what have I got of this series",
+ * which is the reading a collector works a set through. Grouped server-side for the same reason the
+ * duplicate (#372) and filing (#421) groups are: the list is offset-paginated, and a client-side
+ * grouping would split a group at a page boundary and report two half-counts.
+ *
+ * Like the filing groups and unlike the duplicate ones this forces **no eligibility** — what a
+ * collector holds of a series includes the copy that has sold and the one no longer held, if the
+ * panel's own filters let them through.
+ *
+ * A group is *counted* on the first membership and its members are *read back* through the ordinary
+ * `issueId` filter, which matches **any** membership — the same pair the lot intake's issue groups
+ * have carried since #172, and deliberately not a third rule. They differ only for a stamp filed in
+ * two issues, which is not how the model is used in practice (the valuation read says as much), and
+ * the alternative — an issue filter meaning "and no earlier one" — would make the sidebar's own
+ * issue filter answer a question nobody asks of it.
+ *
+ * The issue lives on the *stamp*, which `groupBy` cannot reach, so the matching copies are read and
+ * counted in memory — the same shape `listItemYearFacets` uses for the year, which is on the stamp
+ * for the same reason. Only the two ids come back per row, so the cost is one narrow scan of the
+ * filtered set rather than a page of enriched copies.
+ *
+ * The groups are then read **whole** and paged in memory, because the reading order is the Issues
+ * list's own (`compareIssueGroups`) and the counts are the whole point. That is bounded by the
+ * number of issues a collection has entered, not by its copies. The order is total, so paging over
+ * it can neither repeat nor skip a group.
+ */
+export async function listItemIssueGroups(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<PaginatedIssueGroupsResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+
+  const rows = await prisma.item.findMany({
+    where,
+    select: {
+      stamp: {
+        select: {
+          // A copy is reported under **one** issue — its stamp's first membership, the same one
+          // `ItemListItem.issueId` reports and the lot intake groups on (#172) — so the groups
+          // partition the list and their counts add up to it.
+          issueMemberships: {
+            ...FIRST_ISSUE_MEMBERSHIP,
+            select: {
+              issue: {
+                select: { id: true, name: true, year: true, primaryCatalogSortKey: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const groups = new Map<string, IssueGroupRow & SortableIssueGroup>();
+  for (const row of rows) {
+    const issue = row.stamp.issueMemberships[0]?.issue ?? null;
+    const key = issue?.id ?? NO_ISSUE;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    groups.set(key, {
+      key,
+      issueId: issue?.id ?? null,
+      label: issueGroupLabel(issue?.id ?? null, issue?.name ?? null, issue?.year ?? null),
+      issueName: issue?.name ?? null,
+      issueYear: issue?.year ?? null,
+      catalogSortKey: issue?.primaryCatalogSortKey ?? null,
+      count: 1,
+    });
+  }
+
+  const ordered = [...groups.values()].sort(compareIssueGroups);
+  const page = ordered.slice(offset, offset + pageSize);
+  const nextCursor = offset + pageSize < ordered.length ? String(offset + pageSize) : null;
+  // `catalogSortKey` is an ordering input, not something a row states — it is a denormalized
+  // column, and a screen has the catalog numbers themselves.
+  return {
+    groups: page.map(({ key, issueId, label, issueName, issueYear, count }) => ({
+      key,
+      issueId,
+      label,
+      issueName,
+      issueYear,
+      count,
+    })),
+    nextCursor,
+  };
 }
 
 /** The `where` addressing exactly one group's members. Only the axes that joined the key are

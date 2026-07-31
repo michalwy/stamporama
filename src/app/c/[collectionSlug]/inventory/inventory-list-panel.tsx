@@ -31,6 +31,7 @@ import {
   useInventoryItemsInfinite,
   useCopyGroupsInfinite,
   useLocationGroupsInfinite,
+  useIssueGroupsInfinite,
   useHoldingsValuation,
   useItemYears,
   useInvalidateInventory,
@@ -44,6 +45,7 @@ import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-sum
 import { InventoryCopyList } from "./inventory-copy-list";
 import { DuplicateGroupList } from "./duplicate-group-list";
 import { LocationGroupList } from "./location-group-list";
+import { IssueGroupList } from "./issue-group-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
@@ -201,11 +203,12 @@ export function InventoryListPanel({
   const includeSold = searchParams.get("includeSold") === "true";
   // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
   const includeDisposed = searchParams.get("includeDisposed") === "true";
-  // How the rows are grouped (#372, #421). A client preference rather than URL state — it changes
-  // *what the rows are*, not what is being looked at, and it is a way of working the collector keeps.
-  // The three modes answer three different questions: what stock do I have in duplicate (#372), and
-  // — since #421 — where is it filed, at two levels of the same axis. Which axes join the duplicate
-  // key is remembered separately, so switching away and back does not lose the split.
+  // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
+  // changes *what the rows are*, not what is being looked at, and it is a way of working the
+  // collector keeps. The modes answer different questions: what stock do I have in duplicate (#372),
+  // where is it filed (#421, at two levels of one axis), and what have I got of this series (#424).
+  // Which axes join the duplicate key is remembered separately, so switching away and back does not
+  // lose the split.
   const [groupMode, setGroupMode] = usePersistentString(
     `stamporama:inventory:groupMode:${collectionId}`,
     "none"
@@ -222,8 +225,11 @@ export function InventoryListPanel({
         : groupMode === "ref"
           ? "ref"
           : null;
+  // Grouping by issue needs no precondition the way the filing modes do: every collection has
+  // stamps, and the copies belonging to no issue are a legitimate group rather than a degenerate one.
+  const groupIssues = groupMode === "issue";
   /** Nothing is collapsed: the list is the copies themselves. */
-  const flatList = !groupDuplicates && !locationGroupBy;
+  const flatList = !groupDuplicates && !locationGroupBy && !groupIssues;
   const [groupByFormat, setGroupByFormat] = usePersistedFlag(
     `stamporama:inventory:groupByFormat:${collectionId}`
   );
@@ -373,6 +379,7 @@ export function InventoryListPanel({
     locationGroupBy ?? "location",
     !!locationGroupBy
   );
+  const issueGroupsQuery = useIssueGroupsInfinite(collectionId, filters, groupIssues);
   // Grouping narrows the set to for-sale, delivered, unsold copies, so the holdings bar must narrow
   // with it — a total counting copies the list no longer shows is worse than none (#151).
   const valuationFilters = useMemo(
@@ -401,6 +408,10 @@ export function InventoryListPanel({
   const allLocationGroups = useMemo(
     () => locationGroupsQuery.data?.pages.flatMap((p) => p.groups) ?? [],
     [locationGroupsQuery.data]
+  );
+  const allIssueGroups = useMemo(
+    () => issueGroupsQuery.data?.pages.flatMap((p) => p.groups) ?? [],
+    [issueGroupsQuery.data]
   );
 
   // Multi-select (#373). Restricted to copies that can actually be listed — for sale and in hand,
@@ -462,12 +473,16 @@ export function InventoryListPanel({
     ? groupsQuery.isLoading
     : locationGroupBy
       ? locationGroupsQuery.isLoading
-      : isLoading;
+      : groupIssues
+        ? issueGroupsQuery.isLoading
+        : isLoading;
   const listEmpty = groupDuplicates
     ? allGroups.length === 0
     : locationGroupBy
       ? allLocationGroups.length === 0
-      : allCopies.length === 0;
+      : groupIssues
+        ? allIssueGroups.length === 0
+        : allCopies.length === 0;
 
   // Only a for-sale, in-hand copy can be listed — the offer composition picker's own eligibility
   // (#164/#188). A copy that fails it gets no checkbox rather than a disabled one: its disposition
@@ -750,16 +765,16 @@ export function InventoryListPanel({
                 </Tooltip>
               </div>
 
-              {/* Grouping (#372, #421). *Duplicates* collapses the list to one row per
+              {/* Grouping (#372, #421, #424). *Duplicates* collapses the list to one row per
                   `stamp × condition` — Colnect's own rule, since it refuses a second offer for the
-                  same stamp in the same condition — while *Location* and *Ref* collapse it by where
-                  the copies are filed. One select rather than a chip each: they are three readings
-                  of the same list and exactly one can be in effect. The two splits join a further
-                  axis to the duplicate key; with both on, every group has one unambiguous per-copy
-                  catalog value. They only appear under Duplicates, because elsewhere they name
-                  nothing. */}
+                  same stamp in the same condition — *Location* and *Ref* collapse it by where the
+                  copies are filed, and *Issue* by the series they belong to. One select rather than
+                  a chip each: they are readings of the same list and exactly one can be in effect.
+                  The two splits join a further axis to the duplicate key; with both on, every group
+                  has one unambiguous per-copy catalog value. They only appear under Duplicates,
+                  because elsewhere they name nothing. */}
               <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-                <Tooltip content="Collapse the list into groups: duplicates ready to list as one offer with a quantity, or the copies filed in one place.">
+                <Tooltip content="Collapse the list into groups: duplicates ready to list as one offer with a quantity, the copies filed in one place, or what you hold of one issue.">
                   <select
                     value={groupMode}
                     onChange={(e) => setGroupMode(e.target.value)}
@@ -781,6 +796,7 @@ export function InventoryListPanel({
                     <option value="duplicates">▦ Group duplicates</option>
                     {locations.length > 0 && <option value="location">▦ Group by location</option>}
                     {locations.length > 0 && <option value="ref">▦ Group by location ref</option>}
+                    <option value="issue">▦ Group by issue</option>
                   </select>
                 </Tooltip>
                 {groupDuplicates && formats.length > 0 && (
@@ -956,14 +972,17 @@ export function InventoryListPanel({
             </div>
           </ListToolbar>
 
-          {/* List — flat copies, one row per duplicate group (#372), or one per place (#421) */}
+          {/* List — flat copies, one row per duplicate group (#372), per place (#421), or per
+              issue (#424) */}
           {listLoading && (
             <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
               {groupDuplicates
                 ? "Grouping duplicates…"
                 : locationGroupBy
                   ? "Grouping by location…"
-                  : "Loading copies…"}
+                  : groupIssues
+                    ? "Grouping by issue…"
+                    : "Loading copies…"}
             </div>
           )}
 
@@ -973,6 +992,8 @@ export function InventoryListPanel({
                 ? "No duplicate groups here. Grouping covers copies that are For sale, delivered and unsold."
                 : locationGroupBy
                 ? "No copies match these filters, so there is nothing filed to group."
+                : groupIssues
+                ? "No copies match these filters, so there is nothing to group by issue."
                 : hasActiveFilters
                   ? "No copies match these filters."
                   : filterAreaId
@@ -1012,6 +1033,23 @@ export function InventoryListPanel({
                 hasNextPage={!!locationGroupsQuery.hasNextPage}
                 isFetchingNextPage={locationGroupsQuery.isFetchingNextPage}
                 onLoadMore={locationGroupsQuery.fetchNextPage}
+                selection={copySelection}
+              />
+            </div>
+          )}
+
+          {groupIssues && allIssueGroups.length > 0 && (
+            <div style={{ flex: 1 }}>
+              <IssueGroupList
+                collectionId={collectionId}
+                groups={allIssueGroups}
+                baseFilters={filters}
+                areas={areas}
+                locations={locations}
+                baseCurrency={baseCurrency}
+                hasNextPage={!!issueGroupsQuery.hasNextPage}
+                isFetchingNextPage={issueGroupsQuery.isFetchingNextPage}
+                onLoadMore={issueGroupsQuery.fetchNextPage}
                 selection={copySelection}
               />
             </div>

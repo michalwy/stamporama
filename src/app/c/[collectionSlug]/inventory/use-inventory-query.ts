@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import type {
   CopyGroupRow,
   LocationGroupRow,
+  IssueGroupRow,
   ItemListItem,
   ItemSortBy,
   ItemVariantHistoryData,
@@ -32,6 +33,11 @@ interface CopyGroupsPage {
 
 interface LocationGroupsPage {
   groups: LocationGroupRow[];
+  nextCursor: string | null;
+}
+
+interface IssueGroupsPage {
+  groups: IssueGroupRow[];
   nextCursor: string | null;
 }
 
@@ -135,6 +141,8 @@ export const inventoryKeys = {
     filters: InventoryItemFilters,
     by: LocationGroupBy
   ) => ["inventory", collectionId, "locationGroups", filters, by] as const,
+  issueGroups: (collectionId: string, filters: InventoryItemFilters) =>
+    ["inventory", collectionId, "issueGroups", filters] as const,
   years: (collectionId: string, filters: InventoryYearFacetFilters) =>
     ["inventory", collectionId, "years", filters] as const,
 };
@@ -245,6 +253,31 @@ export function useLocationGroupsInfinite(
         `/api/collections/${collectionId}/items/location-groups?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch location groups");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled,
+  });
+}
+
+/** The same copy set collapsed to one row per issue (#424). Server-side for the same reason as the
+ * other two groupings, and its members come back through {@link useInventoryItemsInfinite} with the
+ * group's own issue pinned — `NO_ISSUE` for the copies belonging to no series. */
+export function useIssueGroupsInfinite(
+  collectionId: string,
+  filters: InventoryItemFilters,
+  enabled = true
+) {
+  return useInfiniteQuery<IssueGroupsPage>({
+    queryKey: inventoryKeys.issueGroups(collectionId, filters),
+    queryFn: async ({ pageParam }) => {
+      const params = itemFilterParams(filters);
+      if (pageParam) params.set("offset", pageParam as string);
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/issue-groups?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch issue groups");
       return res.json();
     },
     initialPageParam: undefined as string | undefined,

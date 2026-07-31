@@ -589,13 +589,15 @@ catalogue it came out of is something you already know in the box you are pastin
 
 ## Grouping the list
 
-The toolbar's **▦ grouping** select collapses the list into groups. There are three, and they answer
-three different questions:
+The toolbar's **▦ grouping** select collapses the list into groups. There are four, and they answer
+different questions:
 
 - **Group duplicates** — what stock do I hold several of? (below)
 - **Group by location** — what is in this box? ([Grouping by where copies are
   filed](#grouping-by-where-copies-are-filed))
 - **Group by location ref** — the same, split down to the ref written on the shelf.
+- **Group by issue** — what have I got of this series? ([Grouping by
+  issue](#grouping-by-issue))
 
 Only one can be in effect, and the choice is remembered per collection. Every group row works the
 same way: the count leads it, **▶** expands it into the copies underneath, and the **checkbox** in
@@ -683,6 +685,24 @@ A few things worth knowing:
   and in hand), exactly as it does on a duplicate group.
 
 Both groupings are computed on the server, so a group is never split in half by scrolling.
+
+## Grouping by issue
+
+**▦ Group by issue** collapses the list to one row per [issue](collections.md), over the copies you
+hold of it — the reading you work a series through, and the one that shows at a glance where a set is
+thin. Rows are in the **Issues list's own order**: by year, then by the issue's primary catalog
+number, then by name. An issue with no year comes after the dated ones, and the copies whose stamp
+belongs to **no issue** are the last row of all.
+
+Like the filing groupings and unlike duplicate grouping, this covers **whatever the list is
+showing** — every filter still applies, *Include sold* and *Include no longer held* among them,
+because "what have I got of this set" includes the piece you have already sold. The **checkbox** in
+front of a group row ticks the copies of that issue that can be listed, and the grouping is computed
+on the server, so a group is never split in half by scrolling.
+
+A stamp can belong to more than one issue. A copy is counted under **one** of them — the first issue
+its stamp was added to — so the counts add up to the list exactly rather than reporting one copy
+under two series.
 
 ## Seeing which offers something is in
 
