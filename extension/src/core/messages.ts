@@ -153,9 +153,32 @@ export interface CachedResultsResponse {
   results: MatchResult[] | null;
 }
 
+// instance content script → background: "the collector asked for this stamp to be matched". The
+// worker opens the search beside the page that asked and puts the match window in front of it —
+// the two steps the page cannot take itself. It answers as soon as the window is up: what happens in
+// it is the collector's own work, reported later by {@link MatchedNotice} and to every instance tab
+// rather than to this one handoff.
+export interface OpenMatchRequest {
+  type: "open-match";
+  /** The marketplace search the instance built (#423). */
+  url: string;
+  /** The handoff this is, echoed straight back so the page can tell an answer from a leftover. */
+  requestId: string;
+}
+export type OpenMatchResponse = { ok: true } | { ok: false; error: string };
+
+// background → every instance content script: "a match was just written". Fire-and-forget, no
+// response, no request id: any confirmed match may be the one a screen is waiting for, and what the
+// page does with it is re-read its own data. It is sent for matches started from the toolbar icon
+// too, which is the whole point — those have no handoff to answer.
+export interface MatchedNotice {
+  type: "matched";
+}
+
 export type BackgroundMessage =
   | BackgroundRequest
   | ListRequest
   | ListingSubmittedNotice
   | DetectedNotice
+  | OpenMatchRequest
   | CachedResultsRequest;

@@ -1,7 +1,11 @@
 "use client";
 
 import type { OfferPlatformItem } from "@/lib/offers";
+import { useCallback, useRef, useState } from "react";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { useAssistantPresence } from "../assistant-handoff";
+import { useAssistantMatch, useAssistantMatchSignal, MATCH_ELEMENT_ID } from "../assistant-match-handoff";
+import { useInvalidateOffers } from "../use-offers-query";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import {
   STAMP_PRIMARY_CHIP,
@@ -125,12 +129,15 @@ export function OfferPlatformItemsCard({
   items,
   platformName,
   offerState,
+  collectionId,
 }: {
   items: OfferPlatformItem[];
   /** Named in the heading, so the card says whose catalogue these links go to. */
   platformName: string;
   /** Where the offer is in its lifecycle: the card is the working surface only while `preparing`. */
   offerState: string;
+  /** Whose offers to re-read when the Assistant reports a match. */
+  collectionId: string;
 }) {
   // One key for the card rather than one per offer — the habit is about the step, not the listing —
   // but a separate one, open by default, while the offer is still `preparing`: the two habits are
@@ -142,14 +149,65 @@ export function OfferPlatformItemsCard({
       : "stamporama.offerPlatformItems.expanded",
     preparing
   );
+
+  // Handing a stamp over for matching. Offered only where the Assistant is actually scripting this
+  // origin — the same honesty **List via Assistant** keeps (#407): without it, Link would be a button
+  // that silently does nothing, and Search still takes the collector to the same page by hand.
+  const assistantPresent = useAssistantPresence() !== null;
+  const { handoff, nodeRef, start, dismiss } = useAssistantMatch();
+  const { invalidateAll } = useInvalidateOffers();
+
+  const unmatched = items.filter((i) => i.searchUrl);
+
+  const handOver = useCallback(
+    (item: OfferPlatformItem) => start(item.searchUrl!, item.catalogNumbers[0] ?? item.label),
+    [start]
+  );
+
+  // **Link all** is a queue taken when the walk starts, not a re-read of what is still missing after
+  // each match: the doorbell says *a* match landed, never which, and a walk that re-derived itself
+  // would reopen the row the collector deliberately left alone. Each stamp is therefore shown once,
+  // which is also what guarantees the walk ends.
+  const [walking, setWalking] = useState(false);
+  const queue = useRef<OfferPlatformItem[]>([]);
+
+  const advance = useCallback(() => {
+    const next = queue.current.shift();
+    if (next) handOver(next);
+    else setWalking(false);
+  }, [handOver]);
+
+  // A match was written — by this card's own handoff or by the collector matching a Colnect page
+  // from the toolbar icon. Re-read the offer either way: the whole point is that the item-IDs on
+  // this screen stop needing a manual reload.
+  const onMatched = useCallback(() => {
+    void invalidateAll(collectionId);
+    if (walking) advance();
+  }, [invalidateAll, collectionId, walking, advance]);
+  useAssistantMatchSignal(onMatched);
+
   // The platform has no module, or the offer has no copies yet: there is nothing to look up.
   if (items.length === 0) return null;
 
   const linkable = items.filter((i) => i.catalogUrl).length;
 
+  const startWalk = () => {
+    if (unmatched.length === 0) return;
+    queue.current = unmatched.slice(1);
+    setWalking(true);
+    handOver(unmatched[0]);
+  };
+
+  const stopWalk = () => {
+    queue.current = [];
+    setWalking(false);
+    dismiss();
+  };
+
   return (
     // Collapsed, the card is its header alone, so it drops the body's bottom padding.
     <div style={expanded ? CARD : { ...CARD, padding: "0.875rem 1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
       {/* The whole heading is the toggle, as it is on the photos card, so the count and the
           not-matched chip are all clickable and the header carries no separate button. */}
       <Tooltip
@@ -195,6 +253,78 @@ export function OfferPlatformItemsCard({
           )}
         </button>
       </Tooltip>
+        {/* One press for the whole gap: the walk hands over the first stamp with no item-ID and, as
+            each match lands, the next — which is the shape of the job, since a listing cannot be
+            posted until none are left. */}
+        {assistantPresent && unmatched.length > 0 && (
+          <Tooltip
+            content={
+              walking
+                ? "Stop after this one — the matches already made are kept."
+                : `Open each unmatched stamp's ${platformName} search in turn and match it in the Assistant, without leaving this offer.`
+            }
+          >
+            <button
+              type="button"
+              onClick={walking ? stopWalk : startWalk}
+              style={{
+                marginLeft: "auto",
+                padding: "0.25rem 0.75rem",
+                border: "1px solid var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {walking ? "Stop linking" : `⚡ Link all (${unmatched.length})`}
+            </button>
+          </Tooltip>
+        )}
+      </div>
+
+      {/* What the Assistant says about the handoff in flight. It ends at "matched it in the window" —
+          the write itself comes back as a refreshed list, which is the answer the collector wanted. */}
+      {handoff && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            fontSize: "0.8125rem",
+            color: handoff.state === "error" ? "var(--color-error)" : "var(--color-text-secondary)",
+          }}
+        >
+          <span>
+            {handoff.message ??
+              (handoff.label ? `Opening the search for ${handoff.label}…` : "Opening the search…")}
+          </span>
+          <button
+            type="button"
+            onClick={dismiss}
+            style={{
+              marginLeft: "auto",
+              padding: 0,
+              border: "none",
+              background: "none",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+              fontSize: "0.8125rem",
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* The page's half of the match handoff: the task goes in as text, the extension's answer comes
+          back as attributes on this same node. Hidden — it is a wire, not a control. */}
+      <div ref={nodeRef} id={MATCH_ELEMENT_ID} hidden>
+        {handoff?.payload ?? ""}
+      </div>
 
       {expanded && (
         <ul style={LIST}>
@@ -264,16 +394,38 @@ export function OfferPlatformItemsCard({
                     <ExternalLinkIcon />
                   </a>
                 ) : item.searchUrl ? (
-                  // No item-ID, so no page to link to — but the number will find it. This is also
-                  // the first step of recording the ID that turns this back into a Catalog link.
-                  <Tooltip
-                    content={`No item-ID recorded for this stamp yet — search ${platformName} for its catalog number, then match it from the stamp's own screen.`}
-                  >
-                    <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
-                      Search
-                      <ExternalLinkIcon />
-                    </a>
-                  </Tooltip>
+                  <>
+                    {/* No item-ID, so no page to link to — but the number will find it. Search opens
+                        that search and leaves the rest to the collector; Link takes the same two
+                        steps they would then take by hand, which is why it sits beside it rather
+                        than replacing it — a browser without the Assistant still has Search. */}
+                    <Tooltip
+                      content={`No item-ID recorded for this stamp yet — search ${platformName} for its catalog number, then match it from the stamp's own screen.`}
+                    >
+                      <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
+                        Search
+                        <ExternalLinkIcon />
+                      </a>
+                    </Tooltip>
+                    {assistantPresent && (
+                      <Tooltip
+                        content={`Open that search and match it in the Assistant, without leaving this offer. The item-ID appears here on its own.`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handOver(item)}
+                          style={{
+                            ...LINK,
+                            fontFamily: "inherit",
+                            margin: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ⚡ Link
+                        </button>
+                      </Tooltip>
+                    )}
+                  </>
                 ) : (
                   <Tooltip content="This stamp has no item-ID recorded for this platform yet, and no catalog number to search by.">
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>

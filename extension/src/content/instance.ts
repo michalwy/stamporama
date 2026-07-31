@@ -12,7 +12,24 @@ import {
   type ListingHandoffReport,
   type ListingHandoffState,
 } from "../core/listing-handoff";
-import type { ListedNotice, ListedResponse, ListRequest, ListResponse } from "../core/messages";
+import {
+  MATCH_ELEMENT_ID,
+  MATCH_MESSAGE_ATTRIBUTE,
+  MATCH_REQUEST_ATTRIBUTE,
+  MATCH_STATE_ATTRIBUTE,
+  MATCHED_ATTRIBUTE,
+  parseMatchHandoff,
+  type MatchHandoffState,
+} from "../core/match-handoff";
+import type {
+  ListedNotice,
+  ListedResponse,
+  ListRequest,
+  ListResponse,
+  MatchedNotice,
+  OpenMatchRequest,
+  OpenMatchResponse,
+} from "../core/messages";
 
 // The content script that runs on a **registered instance's own origin** (#409) — registered
 // dynamically as profiles are (`background/instance-scripts.ts`), because a self-hosted instance has
@@ -96,6 +113,64 @@ async function pump(): Promise<void> {
   report(handoff.requestId, "filled", describeListingReport(detail), detail);
 }
 
+// ── The match handoff ────────────────────────────────────────────────────────
+// The same two motions on a second node: read a task the extension has not seen, answer on the node
+// it came in on. Its own `handled` set, since the two handoffs mint ids independently.
+
+const matchesHandled = new Set<string>();
+
+function matchElement(): HTMLElement | null {
+  return document.getElementById(MATCH_ELEMENT_ID);
+}
+
+function reportMatch(requestId: string, state: MatchHandoffState, message: string): void {
+  const el = matchElement();
+  if (!el) return; // the collector navigated on; the search tab is open regardless
+  el.setAttribute(MATCH_REQUEST_ATTRIBUTE, requestId);
+  el.setAttribute(MATCH_STATE_ATTRIBUTE, state);
+  el.setAttribute(MATCH_MESSAGE_ATTRIBUTE, message);
+}
+
+async function pumpMatch(): Promise<void> {
+  const el = matchElement();
+  if (!el) return;
+  const handoff = parseMatchHandoff(el.textContent);
+  if (!handoff || matchesHandled.has(handoff.requestId)) return;
+  matchesHandled.add(handoff.requestId);
+
+  // Said before anything opens: loading a marketplace search and matching it against the collection
+  // takes long enough that a button with no acknowledgement reads as a dead one.
+  reportMatch(handoff.requestId, "running", "Opening the search…");
+
+  let res: OpenMatchResponse;
+  try {
+    res = (await chrome.runtime.sendMessage({
+      type: "open-match",
+      url: handoff.task.url,
+      requestId: handoff.requestId,
+    } satisfies OpenMatchRequest)) as OpenMatchResponse;
+  } catch (e) {
+    // The worker is gone or the extension was reloaded mid-handoff. Forget it, so pressing the
+    // button again actually retries.
+    matchesHandled.delete(handoff.requestId);
+    reportMatch(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
+    return;
+  }
+
+  if (!res.ok) {
+    matchesHandled.delete(handoff.requestId);
+    reportMatch(handoff.requestId, "error", res.error);
+    return;
+  }
+  reportMatch(
+    handoff.requestId,
+    "opened",
+    handoff.task.label
+      ? `Searching for ${handoff.task.label} — match it in the Assistant window.`
+      : "Match it in the Assistant window."
+  );
+}
+
 /**
  * Whether this page is still following `requestId` — which is what decides who activates the offer
  * (#412).
@@ -139,6 +214,15 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
     }
   );
 
+  // A match was written somewhere — this page's own handoff, or the collector matching a Colnect
+  // page from the toolbar icon. Ring the doorbell; what the page does with it is its own business,
+  // and every screen showing item-IDs wants the same thing: to re-read them.
+  chrome.runtime.onMessage.addListener((msg: MatchedNotice) => {
+    if (msg?.type !== "matched") return;
+    // The value only has to differ from the last one for the page's observer to fire.
+    document.documentElement.setAttribute(MATCHED_ATTRIBUTE, String(Date.now()));
+  });
+
   // Tell the page the Assistant is here and scripting this origin, so **List via Assistant** can be
   // offered by a page that has no other way to find out — and stays honest on a browser without the
   // extension, where the attribute simply never appears.
@@ -148,12 +232,16 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
   );
 
   void pump();
+  void pumpMatch();
 
-  // The element is written by a click inside a client-rendered screen, so it appears (and is
+  // The elements are written by a click inside a client-rendered screen, so they appear (and are
   // rewritten for the next offer) long after load. Watching the whole document is the cheap,
-  // obvious thing: the observer fires on the page's own renders and `pump` exits on the first line
-  // whenever there is nothing new.
-  new MutationObserver(() => void pump()).observe(document.documentElement, {
+  // obvious thing: the observer fires on the page's own renders and both pumps exit on the first
+  // line whenever there is nothing new.
+  new MutationObserver(() => {
+    void pump();
+    void pumpMatch();
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true,

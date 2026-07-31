@@ -641,6 +641,29 @@ form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the catalogue 
 exactly as when you copy the chip). It answers the question you had, and it is the first step of
 recording the item-ID that turns the row's real links on.
 
+### Filling the missing item-IDs without leaving the offer
+
+An offer cannot be posted on Colnect until **every** stamp in it carries an item-ID, and Search only
+gets you as far as the search results: you still had to press the Assistant's toolbar icon, match,
+and reload this screen. With the [Assistant](assistant.md) installed, two buttons take those steps
+for you:
+
+- **⚡ Link**, beside Search on any unmatched row — opens that search *and* brings up the Assistant's
+  match window on it. Match the stamp there and the item-ID lands in your collection.
+- **⚡ Link all (N)** in the card's heading — the same thing for every unmatched stamp in the offer,
+  one after another: as each match is confirmed, the next stamp's search opens by itself. **Stop
+  linking** ends the walk; whatever was matched along the way is kept. Each stamp is offered once,
+  so a row you deliberately leave unmatched does not come back round.
+
+The offer screen **updates itself** when a match is written — a stamp that was showing Search now
+shows its Catalog and Market links, with nothing reloaded by hand. That works however the match was
+made, including matching a Colnect page from the toolbar icon while the offer sits in another tab.
+And returning to the offer's tab re-reads it in any case, which covers a browser with no Assistant at
+all.
+
+Without the extension neither button appears — Search is still there, and the rest of the job is
+manual, exactly as before.
+
 A link that is greyed out instead is telling you about a gap nothing can stand in for: a stamp with
 no item-ID *and* no catalog number to search by, or a condition not mapped to one of Colnect's own
 grades. Hover for which. The row is still listed — this is the screen where you are most likely to

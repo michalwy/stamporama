@@ -37,6 +37,18 @@ shows the active one in a coloured badge, so it is always clear where a match wi
 
 You can revoke a connection at any time from the same **Settings → Assistant** screen.
 
+## Matching from an offer
+
+The Assistant is usually started from a Colnect page you are already on. It also works the other way
+round: an offer being prepared knows which of its stamps have no Colnect item-ID, and its **On
+Colnect** card can hand them over one at a time — **⚡ Link** on a row, or **⚡ Link all** for the
+whole gap. Each opens that stamp's Colnect search in a tab beside the offer and brings this window up
+on it; you match as usual, and the item-ID appears on the offer screen without reloading it. See
+[Filling the missing item-IDs](offers.md#filling-the-missing-item-ids-without-leaving-the-offer).
+
+Those buttons only appear on an instance the Assistant is connected to — connecting is what lets the
+extension read that page at all.
+
 ## Closing the window
 
 The Assistant opens in its own small window. **Escape** closes it — or, while a confirmation is on

@@ -671,6 +671,7 @@ export function OfferDetailPanel({
         items={offer.platformItems}
         platformName={offer.platformName}
         offerState={offer.state}
+        collectionId={collectionId}
       />
 
       {/* Sets. The heading and Add set are handed to the view, which lays them out in one band with

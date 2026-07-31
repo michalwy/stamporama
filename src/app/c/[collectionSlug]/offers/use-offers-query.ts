@@ -62,7 +62,15 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
   });
 }
 
-/** Full offer (header + sets) for the offer detail / compose screen. */
+/**
+ * Full offer (header + sets) for the offer detail / compose screen.
+ *
+ * Refetched when the tab comes back to the front, against the app's default: preparing a listing is
+ * a walk in and out of other tabs — the Assistant's match window, the marketplace itself — and each
+ * of those can change what this screen is showing. The Assistant rings a doorbell of its own when it
+ * writes a match, but only for a browser carrying the extension and only for what it did; coming
+ * back to the tab is the gesture that covers the rest.
+ */
 export function useOfferDetail(collectionId: string, offerId: string) {
   return useQuery<OfferDetail>({
     queryKey: offerKeys.detail(collectionId, offerId),
@@ -71,6 +79,7 @@ export function useOfferDetail(collectionId: string, offerId: string) {
       if (!res.ok) throw new Error("Failed to fetch offer");
       return res.json();
     },
+    refetchOnWindowFocus: true,
   });
 }
 

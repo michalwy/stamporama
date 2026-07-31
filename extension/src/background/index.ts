@@ -1,4 +1,4 @@
-import { getActiveProfile } from "../core/profile";
+import { getActiveProfile, getProfileStore } from "../core/profile";
 import { CATALOG_BACKFILL, getCatalogBackfill, getMatchOnLoad } from "../core/settings";
 import type {
   BackgroundMessage,
@@ -6,11 +6,13 @@ import type {
   CachedResultsResponse,
   ConfirmResponse,
   DetectedNotice,
+  MatchedNotice,
   MatchResponse,
+  OpenMatchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch } from "./matching-client";
-import { syncInstanceContentScripts } from "./instance-scripts";
+import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
 import { captureListedUrl, listingSubmitted, listingTabClosed, runListingTask } from "./listing";
 import { handleRegistrationClick } from "./registration";
 
@@ -88,7 +90,12 @@ async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmRe
     backfill,
     catalogRefs: msg.catalogRefs,
   });
-  if (outcome.ok) return { ok: true, backfill: outcome.backfill };
+  if (outcome.ok) {
+    // The instance now knows something a screen of it may be showing. Ring the doorbell — not
+    // awaited, since the popup's answer must not wait on other tabs.
+    void broadcastMatched();
+    return { ok: true, backfill: outcome.backfill };
+  }
   if (outcome.conflict) {
     return { ok: false, error: "conflict", conflict: true, existingColnectId: outcome.existingColnectId };
   }
@@ -113,6 +120,21 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   if (msg?.type === "listing-submitted") {
     void listingSubmitted(sender.tab?.id);
     return false;
+  }
+
+  // A stamp handed over from an offer screen for matching. Like `list`, it needs no profile — the
+  // origin that wrote it is one the collector registered — so it is answered ahead of the profile
+  // check every matcher call goes through.
+  if (msg?.type === "open-match") {
+    openMatch(msg.url, sender.tab)
+      .then(() => sendResponse({ ok: true } satisfies OpenMatchResponse))
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies OpenMatchResponse)
+      );
+    return true;
   }
 
   if (msg?.type === "list") {
@@ -224,6 +246,82 @@ async function openAssistant(sourceTab: chrome.tabs.Tab): Promise<void> {
   const parent = await chrome.windows.get(sourceTab.windowId);
   const created = await chrome.windows.create({ url, type: "popup", ...centredBounds(parent) });
   assistantWindowId = created.id ?? null;
+}
+
+// ── Opening a match from an instance's own page ──────────────────────────────
+//
+// The gesture the toolbar click is, taken for a collector who is looking at an offer rather than at
+// a marketplace: open the search the instance built (#423) and put the match window in front of it.
+// Only the two steps the page cannot take — what happens in the window is unchanged, and the write
+// it makes reaches every instance tab through `broadcastMatched` rather than back down this path.
+
+/** How long to wait for the search page to load before matching it anyway. Matching an unloaded page
+ *  finds nothing, and a marketplace that is slow, challenging us, or simply down must still end in a
+ *  window the collector can see rather than in silence. */
+const MATCH_TAB_LOAD_TIMEOUT_MS = 15_000;
+
+/** Resolve when `tabId` finishes loading — or when the wait runs out, which is not an error. */
+function tabLoaded(tabId: number): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      resolve();
+    };
+    const listener = (id: number, change: chrome.tabs.TabChangeInfo) => {
+      if (id === tabId && change.status === "complete") finish();
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    const timer = setTimeout(finish, MATCH_TAB_LOAD_TIMEOUT_MS);
+    // It may already be there: a tab created moments ago can complete before the listener is on.
+    void chrome.tabs.get(tabId).then(
+      (tab) => {
+        if (tab.status === "complete") finish();
+      },
+      () => finish()
+    );
+  });
+}
+
+async function openMatch(url: string, sourceTab: chrome.tabs.Tab | undefined): Promise<void> {
+  // Beside the page that asked, in its own window — the collector is coming back to the offer, and a
+  // search opened somewhere else is a search they have to go and find.
+  const created = await chrome.tabs.create({
+    url,
+    active: true,
+    ...(sourceTab?.windowId !== undefined ? { windowId: sourceTab.windowId } : {}),
+    ...(sourceTab?.index !== undefined ? { index: sourceTab.index + 1 } : {}),
+  });
+  if (created.id === undefined) throw new Error("The search tab could not be opened.");
+  await tabLoaded(created.id);
+  // Re-read it: the tab now holds the loaded page, and `openAssistant` centres the window on the one
+  // it is in. A tab closed while we waited is the collector changing their mind, not an error worth
+  // reporting into their offer screen.
+  const tab = await chrome.tabs.get(created.id).catch(() => null);
+  if (tab) await openAssistant(tab);
+}
+
+/**
+ * Tell every instance page that a match was written, so a screen showing item-IDs can re-read them
+ * instead of waiting to be reloaded by hand. Sent for **every** confirmed match, including those the
+ * collector started from the toolbar icon — those have no handoff to answer, and are exactly the
+ * case a page-driven signal would miss.
+ *
+ * Best-effort by design: a tab with no content script (an instance page open since before the
+ * profile was registered) simply does not answer, and nothing depends on it having.
+ */
+async function broadcastMatched(): Promise<void> {
+  const { profiles } = await getProfileStore();
+  const patterns = instancePatterns(profiles);
+  if (patterns.length === 0) return;
+  const tabs = await chrome.tabs.query({ url: patterns }).catch(() => []);
+  for (const tab of tabs) {
+    if (tab.id === undefined) continue;
+    chrome.tabs.sendMessage(tab.id, { type: "matched" } satisfies MatchedNotice).catch(() => {});
+  }
 }
 
 // The icon click has two meanings, decided by what the page in front offers. On a Stamporama
