@@ -25,7 +25,10 @@ import {
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import {
+  ColnectChip,
+  colnectSearchQueryFor,
+} from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
@@ -615,7 +618,10 @@ export function InventoryItemRow({
               style={STAMP_SECONDARY_CHIP}
             />
           ))}
-          <ColnectChip colnectId={item.colnectId} />
+          <ColnectChip
+            colnectId={item.colnectId}
+            searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+          />
           <SubtypeChip subtype={item.subtype} />
           {!hasCatalog && !item.stampName && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>

@@ -12,7 +12,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import {
+  ColnectChip,
+  colnectSearchQueryFor,
+} from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { InventoryCopyList, type CopySelection } from "./inventory-copy-list";
@@ -236,7 +239,10 @@ export function DuplicateGroupRow({
                 style={STAMP_SECONDARY_CHIP}
               />
             ))}
-            <ColnectChip colnectId={group.colnectId} />
+            <ColnectChip
+              colnectId={group.colnectId}
+              searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+            />
             <SubtypeChip subtype={group.subtype} />
             {group.unknownVariant && (
               <Tooltip content="These copies link to the base stamp; the specific variant is unknown.">

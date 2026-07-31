@@ -20,7 +20,7 @@ import {
 } from "./chip-styles";
 import { CatalogNumberChip } from "./catalog-number-chip";
 import { StalePriceIcon } from "./stale-price-icon";
-import { ColnectChip } from "./colnect-chip";
+import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
 
@@ -241,7 +241,10 @@ export function StampDetailLine({
           style={STAMP_SECONDARY_CHIP}
         />
       ))}
-      <ColnectChip colnectId={node.colnectId} />
+      <ColnectChip
+        colnectId={node.colnectId}
+        searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+      />
       <SubtypeChip subtype={node.subtype} />
       <CopyCountBadge copies={node.copies} />
       {!node.mainCatalogPrice && onSetPrice && (

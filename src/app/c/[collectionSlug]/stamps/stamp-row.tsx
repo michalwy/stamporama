@@ -14,7 +14,10 @@ import {
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import {
+  ColnectChip,
+  colnectSearchQueryFor,
+} from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -271,7 +274,11 @@ export function StampRow({
               style={STAMP_SECONDARY_CHIP}
             />
           ))}
-          <ColnectChip colnectId={stamp.colnectId} size="medium" />
+          <ColnectChip
+            colnectId={stamp.colnectId}
+            searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+            size="medium"
+          />
           <SubtypeChip subtype={stamp.subtype} size="medium" />
           <CopyCountBadge copies={stamp.copies} size="medium" />
           {stamp.mainCatalogPrice && (

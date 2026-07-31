@@ -13,7 +13,10 @@ import {
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
+import {
+  ColnectChip,
+  colnectSearchQueryFor,
+} from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -317,7 +320,10 @@ export function AuctionLotLineRow({
                 style={STAMP_SECONDARY_CHIP}
               />
             ))}
-            <ColnectChip colnectId={line.colnectId} />
+            <ColnectChip
+              colnectId={line.colnectId}
+              searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
+            />
             <SubtypeChip subtype={line.subtype} />
             {!hasCatalog && !line.stampName && (
               <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
