@@ -11,6 +11,7 @@ import {
 } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import {
   LS_LAST_CERT,
   LS_LAST_CONDITION,
@@ -255,9 +256,11 @@ export function AuctionLotLineDialog({
                 }}
               >
                 {selection.picked.catalogLabels.map((label) => (
-                  <span key={label} style={STAMP_SECONDARY_CHIP}>
-                    {label}
-                  </span>
+                  <CatalogNumberChip
+                    key={label}
+                    label={label}
+                    style={STAMP_SECONDARY_CHIP}
+                  />
                 ))}
                 {(selection.picked.name || selection.picked.catalogLabels.length === 0) && (
                   <span>{selection.picked.name || "(unnamed stamp)"}</span>

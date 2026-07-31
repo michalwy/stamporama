@@ -14,12 +14,11 @@ import type { AreaCatalogEntry } from "@/lib/areas";
 import type { PhotoSummary } from "@/lib/photos";
 import type { QuickCatalogPriceContext } from "@/lib/stamps";
 import {
-  formatStampCN,
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -198,17 +197,20 @@ export function QuickPriceDialog({
             {issueLabel && <div style={{ color: "var(--color-text-muted)" }}>Issue: {issueLabel}</div>}
             {catalogNumbers.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
+                {/* The chips carry the copy hint (#420) rather than a "Primary catalog" one: the
+                    accent styling already says which catalogue leads, exactly as it does on every
+                    list, and a chip cannot show two bubbles. */}
                 {catalogNumbers.map((cn) => (
-                  <Tooltip
+                  <CatalogNumberChip
                     key={cn.catalogVendorId}
-                    content={cn.catalogVendorId === primaryVendorId ? "Primary catalog" : undefined}
-                  >
-                    <span
-                      style={cn.catalogVendorId === primaryVendorId ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
-                    >
-                      {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-                    </span>
-                  </Tooltip>
+                    number={cn.number}
+                    vendor={vendorMap.get(cn.catalogVendorId)}
+                    style={
+                      cn.catalogVendorId === primaryVendorId
+                        ? STAMP_PRIMARY_CHIP
+                        : STAMP_SECONDARY_CHIP
+                    }
+                  />
                 ))}
               </div>
             )}

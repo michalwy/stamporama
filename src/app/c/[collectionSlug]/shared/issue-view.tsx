@@ -17,8 +17,8 @@ import {
   STAMP_MUTED_PRIMARY_CHIP,
   PRICE_MAIN,
   PRICE_CONVERTED,
-  formatStampCN,
 } from "./chip-styles";
+import { CatalogNumberChip } from "./catalog-number-chip";
 import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
@@ -107,18 +107,18 @@ export function IssueCatalogChips({
     const warn = warnById.get(c.catalogVendorId);
     const label = formatIssueCatalogNumber(c.firstNumber, c.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix);
     if (!warn) {
-      return (
-        <span key={c.catalogVendorId} style={style}>
-          {label}
-        </span>
-      );
+      return <CatalogNumberChip key={c.catalogVendorId} label={label} style={style} />;
     }
     const proposed = `${warn.proposedFirst}${warn.proposedLast ? `–${warn.proposedLast}` : ""}`;
+    // A chip that already has something to say says *that*, not "click to copy" — but it still
+    // copies, since the range is exactly what one takes over to fix the numbering elsewhere.
     return (
-      <Tooltip
+      <CatalogNumberChip
         key={c.catalogVendorId}
-        align="start"
-        content={
+        label={label}
+        style={{ ...style, ...CHIP_RANGE_WARNING_STYLE }}
+        tooltipAlign="start"
+        tooltip={
           <span>
             {warn.kind === "adopt-basic"
               ? "Required stamps use the basic numbering — set this catalog's range to "
@@ -127,9 +127,7 @@ export function IssueCatalogChips({
             edit the issue.
           </span>
         }
-      >
-        <span style={{ ...style, ...CHIP_RANGE_WARNING_STYLE, cursor: "help" }}>{label}</span>
-      </Tooltip>
+      />
     );
   };
   return (
@@ -229,14 +227,19 @@ export function StampDetailLine({
       }}
     >
       {primaryCN && (
-        <span style={notRequired ? STAMP_MUTED_PRIMARY_CHIP : STAMP_PRIMARY_CHIP}>
-          {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
-        </span>
+        <CatalogNumberChip
+          number={primaryCN.number}
+          vendor={vendorMap.get(primaryCN.catalogVendorId)}
+          style={notRequired ? STAMP_MUTED_PRIMARY_CHIP : STAMP_PRIMARY_CHIP}
+        />
       )}
       {secondaryCNs.map((cn) => (
-        <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
-          {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-        </span>
+        <CatalogNumberChip
+          key={cn.catalogVendorId}
+          number={cn.number}
+          vendor={vendorMap.get(cn.catalogVendorId)}
+          style={STAMP_SECONDARY_CHIP}
+        />
       ))}
       <ColnectChip colnectId={node.colnectId} />
       <SubtypeChip subtype={node.subtype} />

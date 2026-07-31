@@ -9,6 +9,7 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import type { CollectionAreaData } from "@/lib/areas";
 import { deriveAuctionSaleName } from "@/lib/auction-rules";
 import type { AuctionLotLineRaw, AuctionLotRaw, AuctionSaleRaw } from "@/app/actions/auctions";
@@ -596,9 +597,11 @@ export function AuctionLotFormDialog({
                           }}
                         >
                           {entry.summary.catalogLabels.map((label) => (
-                            <span key={label} style={STAMP_SECONDARY_CHIP}>
-                              {label}
-                            </span>
+                            <CatalogNumberChip
+                              key={label}
+                              label={label}
+                              style={STAMP_SECONDARY_CHIP}
+                            />
                           ))}
                           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
                             {entry.summary.label}

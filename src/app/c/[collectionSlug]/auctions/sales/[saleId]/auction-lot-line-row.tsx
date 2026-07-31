@@ -9,8 +9,8 @@ import {
   STAMP_SECONDARY_CHIP,
   PRICE_MAIN,
   PRICE_CONVERTED,
-  formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
@@ -303,14 +303,19 @@ export function AuctionLotLineRow({
             }}
           >
             {primaryCN && (
-              <span style={STAMP_PRIMARY_CHIP}>
-                {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
-              </span>
+              <CatalogNumberChip
+                number={primaryCN.number}
+                vendor={vendorMap.get(primaryCN.catalogVendorId)}
+                style={STAMP_PRIMARY_CHIP}
+              />
             )}
             {secondaryCNs.map((cn) => (
-              <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
-                {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-              </span>
+              <CatalogNumberChip
+                key={cn.catalogVendorId}
+                number={cn.number}
+                vendor={vendorMap.get(cn.catalogVendorId)}
+                style={STAMP_SECONDARY_CHIP}
+              />
             ))}
             <ColnectChip colnectId={line.colnectId} />
             <SubtypeChip subtype={line.subtype} />

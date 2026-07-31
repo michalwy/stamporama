@@ -6,6 +6,7 @@ import { DialogShell, DialogBody, DialogFooter, DialogSecondaryButton } from "@/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
@@ -249,9 +250,11 @@ export function AuctionLotLinesDialog({
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem" }}>
                       {labels.map((label) => (
-                        <span key={label} style={STAMP_SECONDARY_CHIP}>
-                          {label}
-                        </span>
+                        <CatalogNumberChip
+                          key={label}
+                          label={label}
+                          style={STAMP_SECONDARY_CHIP}
+                        />
                       ))}
                       <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
                         {line.stampName || (labels.length === 0 ? "(unnamed stamp)" : "")}

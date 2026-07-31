@@ -10,8 +10,8 @@ import {
   STAMP_MUTED_PRIMARY_CHIP,
   PRICE_MAIN,
   PRICE_CONVERTED,
-  formatStampCN,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ColnectChip } from "@/app/c/[collectionSlug]/shared/colnect-chip";
@@ -257,14 +257,19 @@ export function StampRow({
           }}
         >
           {primaryCN && (
-            <span style={isRequired ? STAMP_PRIMARY_CHIP : STAMP_MUTED_PRIMARY_CHIP}>
-              {formatStampCN(primaryCN.number, vendorMap.get(primaryCN.catalogVendorId))}
-            </span>
+            <CatalogNumberChip
+              number={primaryCN.number}
+              vendor={vendorMap.get(primaryCN.catalogVendorId)}
+              style={isRequired ? STAMP_PRIMARY_CHIP : STAMP_MUTED_PRIMARY_CHIP}
+            />
           )}
           {secondaryCNs.map((cn) => (
-            <span key={cn.catalogVendorId} style={STAMP_SECONDARY_CHIP}>
-              {formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))}
-            </span>
+            <CatalogNumberChip
+              key={cn.catalogVendorId}
+              number={cn.number}
+              vendor={vendorMap.get(cn.catalogVendorId)}
+              style={STAMP_SECONDARY_CHIP}
+            />
           ))}
           <ColnectChip colnectId={stamp.colnectId} size="medium" />
           <SubtypeChip subtype={stamp.subtype} size="medium" />
