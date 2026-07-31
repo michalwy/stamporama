@@ -107,6 +107,70 @@ describe("auction tracking (#351/#352)", () => {
     });
   });
 
+  // A seller met for the first time has no currency of their own, and that is the common case for
+  // the add-lot dialog: it creates the contact as it creates the lot. The platform's own fixed
+  // currency (#196) answers it before the collection's base does — a lot on a zloty-only
+  // marketplace was landing in a EUR sale.
+  it("falls back to the platform's currency, then the collection's base, for a seller with none", async () => {
+    await prisma.contact.update({
+      where: { id: platformId },
+      data: { platformCurrency: "PLN" },
+    });
+    const onPlatform = await createAuctionSale(userId, collectionId, {
+      sellerId: otherSellerId,
+      platformId,
+      name: null,
+      url: null,
+      endsAt: null,
+      currency: "",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    assert.equal((await getAuctionSaleDetail(userId, onPlatform)).currency, "PLN");
+
+    // The seller still wins when they have one: an aggregator carries houses trading in EUR, CHF
+    // and GBP alike, so the platform can never overrule them.
+    const sellerWins = await createAuctionSale(userId, collectionId, {
+      sellerId,
+      platformId,
+      name: "Second parcel",
+      url: null,
+      endsAt: null,
+      currency: "",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    assert.equal((await getAuctionSaleDetail(userId, sellerWins)).currency, "PLN");
+
+    // Neither side says anything: the collection's base, rather than a hard-coded currency.
+    await prisma.contact.update({ where: { id: platformId }, data: { platformCurrency: null } });
+    const neither = await createAuctionSale(userId, collectionId, {
+      sellerId: otherSellerId,
+      platformId,
+      name: "Third parcel",
+      url: null,
+      endsAt: null,
+      currency: "",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    assert.equal((await getAuctionSaleDetail(userId, neither)).currency, "EUR");
+
+    // Housekeeping: these parcels are open sales for their pairs, and the matching tests that
+    // follow expect the first sale to be the only one — and creating a sale also *remembers* the
+    // platform on its seller, which a later test reads as never-tracked.
+    await prisma.auctionSale.deleteMany({
+      where: { id: { in: [onPlatform, sellerWins, neither] } },
+    });
+    await prisma.contact.update({
+      where: { id: otherSellerId },
+      data: { defaultAuctionPlatformId: null },
+    });
+  });
+
   it("proposes the open sale for a seller + platform pair, and only that pair", async () => {
     const proposal = await findOpenAuctionSale(userId, collectionId, sellerId, platformId);
     assert.ok(proposal, "the open sale for the pair should be proposed");

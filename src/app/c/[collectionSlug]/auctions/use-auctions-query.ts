@@ -148,12 +148,14 @@ export function useAuctionSaleDetail(collectionId: string, saleId: string) {
 }
 
 /**
- * The seller's defaults — including the platform they were last tracked on — and, once a platform
- * is known too, the open sale proposed for that pair (#352).
+ * The seller's defaults — including the platform they were last tracked on — the open sale proposed
+ * for the seller + platform pair (#352), and the currency a new sale would open in.
  *
- * Keyed on the **seller alone** for the defaults half: the platform pre-fill has to arrive before a
- * platform has been picked, so requiring one would deadlock the very thing it feeds. A seller name
- * typed but never matched to a contact still has no id, and nothing can be looked up for it.
+ * Every part is answered for as much as is known, which is why **neither id is required**. The
+ * platform pre-fill has to arrive before a platform has been picked, so requiring one would deadlock
+ * the very thing it feeds; and the currency has to be answerable for a seller typed in for the first
+ * time, who has no id until the lot is saved — that case is precisely how a lot on a PLN platform
+ * used to land in a EUR sale.
  */
 export function useOpenAuctionSale(
   collectionId: string,
@@ -161,10 +163,17 @@ export function useOpenAuctionSale(
   platformId: string,
   enabled: boolean
 ) {
-  return useQuery<{ proposal: AuctionSaleProposalView | null; sellerDefaults: AuctionSellerDefaults | null }>({
+  return useQuery<{
+    proposal: AuctionSaleProposalView | null;
+    sellerDefaults: AuctionSellerDefaults | null;
+    /** Seller's default → platform's fixed currency → collection base. Seeded onto a new sale and
+     * editable there; never applied to a sale that already exists. */
+    newSaleCurrency: string;
+  }>({
     queryKey: ["auctions", collectionId, "open-sale", sellerId, platformId] as const,
     queryFn: async () => {
-      const params = new URLSearchParams({ sellerId });
+      const params = new URLSearchParams();
+      if (sellerId) params.set("sellerId", sellerId);
       if (platformId) params.set("platformId", platformId);
       const res = await fetch(
         `/api/collections/${collectionId}/auctions/sales/open?${params.toString()}`
@@ -172,7 +181,7 @@ export function useOpenAuctionSale(
       if (!res.ok) throw new Error("Failed to look up the open sale");
       return res.json();
     },
-    enabled: enabled && !!sellerId,
+    enabled,
   });
 }
 

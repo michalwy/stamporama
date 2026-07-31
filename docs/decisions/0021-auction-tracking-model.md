@@ -64,11 +64,20 @@ reasoning does not change with the entity. A seller who raises their premium nex
 silently re-price a parcel already being tracked, and must certainly not re-price one already
 settled into a purchase — the amounts there are what was actually paid.
 
-Currency belongs to the **seller**, so `platformCurrency` (#196) does not apply. That column exists
-because a marketplace really does fix one currency for everything transacted on it, which is what
-guarantees offer↔sale consistency. An auction aggregator does the opposite: philasearch carries
+Currency belongs to the **seller**, so `platformCurrency` (#196) does not decide it. That column
+exists because a marketplace really does fix one currency for everything transacted on it, which is
+what guarantees offer↔sale consistency. An auction aggregator does the opposite: philasearch carries
 houses listing in EUR, CHF and GBP side by side, so a platform-level currency would be wrong for
 most of what passes through it.
+
+It is, however, the **second** answer rather than no answer. A new sale's currency is seeded in
+order: the seller's `defaultCurrency`, then the platform's `platformCurrency`, then the collection's
+base currency. The seller still overrules the platform in every case where they have said anything,
+so the aggregator argument above is untouched — but the add-lot dialog creates sellers as it creates
+lots, and a seller met for the first time has no default at all. Falling straight to a hard-coded
+`EUR` there landed lots bid on a zloty-only marketplace in a EUR parcel. The dialog **shows** the
+seeded currency and lets it be changed before the sale is created, because every amount on the lot
+is entered in it.
 
 ### 4. Outcome lives on the lot, never on the sale
 

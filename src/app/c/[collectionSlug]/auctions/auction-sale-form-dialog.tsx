@@ -85,10 +85,21 @@ export function AuctionSaleFormDialog({
    * the same seller doesn't overwrite figures typed since. */
   const [seeded, setSeeded] = useState(mode === "edit");
 
-  // Only for its `sellerDefaults` half: a new house sale should open with the seller's own terms
-  // rather than an empty form, which is the same seeding the marketplace path gets server-side.
+  // Not for the proposal — a house sale is being created, not matched — but for the seeding: a new
+  // sale should open with the seller's own terms rather than an empty form, which is the same
+  // seeding the marketplace path gets server-side.
   const { data: match } = useOpenAuctionSale(collectionId, sellerId, platformId, mode === "add");
   const defaults = match?.sellerDefaults ?? null;
+
+  // The currency, seeded on its own: seller's default → platform's fixed currency (#196) →
+  // collection base. It is answered even before either party resolves to a contact, so a sale for a
+  // seller typed in for the first time no longer opens in a currency nobody chose.
+  const [currencySeededFor, setCurrencySeededFor] = useState(mode === "edit" ? "seeded" : "");
+  const currencySeedKey = `${sellerId}|${platformId}`;
+  if (match?.newSaleCurrency && !currency && currencySeededFor !== currencySeedKey) {
+    setCurrencySeededFor(currencySeedKey);
+    setCurrency(match.newSaleCurrency);
+  }
 
   // The same seller → platform memory the add-lot dialog reads: a house that always comes through
   // one aggregator should not have to be told twice, whichever dialog started the parcel.
@@ -107,7 +118,6 @@ export function AuctionSaleFormDialog({
 
   if (mode === "add" && defaults && !seeded) {
     setSeeded(true);
-    if (!currency && defaults.defaultCurrency) setCurrency(defaults.defaultCurrency);
     if (!shippingCost && defaults.defaultShippingCost) setShippingCost(defaults.defaultShippingCost);
     if (!premiumPercent && defaults.buyerPremiumPercent) setPremiumPercent(defaults.buyerPremiumPercent);
     if (!premiumFixed && defaults.buyerPremiumFixed) setPremiumFixed(defaults.buyerPremiumFixed);

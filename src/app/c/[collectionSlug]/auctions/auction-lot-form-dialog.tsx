@@ -11,6 +11,7 @@ import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/share
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import type { CollectionAreaData } from "@/lib/areas";
+import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { deriveAuctionSaleName } from "@/lib/auction-rules";
 import type { AuctionLotLineRaw, AuctionLotRaw, AuctionSaleRaw } from "@/app/actions/auctions";
 import { AuctionLotLineDialog, type LineSelectionSummary } from "./auction-lot-line-dialog";
@@ -123,6 +124,15 @@ export function AuctionLotFormDialog({
   const [endsAtTouched, setEndsAtTouched] = useState(false);
   /** Explicitly refusing the proposed sale — a second parcel from the same seller. */
   const [startNewSale, setStartNewSale] = useState(false);
+  /** The currency a sale started from here opens in. Seeded by the server — seller's own currency,
+   * then the platform's fixed one, then the collection's base — and shown rather than assumed,
+   * because a lot's every amount is in it and nothing later re-reads it. */
+  const [newSaleCurrency, setNewSaleCurrency] = useState("");
+  /** The seller + platform pair whose seeded currency has already been poured in, and whether the
+   * collector has since answered the field themselves. Same rule as the platform pre-fill: a
+   * suggestion must never overwrite an answer. */
+  const [currencySeededFor, setCurrencySeededFor] = useState("");
+  const [currencyTouched, setCurrencyTouched] = useState(false);
 
   const [saleId, setSaleId] = useState(lot?.saleId ?? "");
   const [lotNo, setLotNo] = useState(lot?.lotNo ?? "");
@@ -152,8 +162,9 @@ export function AuctionLotFormDialog({
   const nameById = (rows: { id: string; name: string }[], id: string) =>
     rows.find((r) => r.id === id)?.name ?? null;
 
-  // The matching lookup. Only meaningful while adding, and only once both parties resolve to a
-  // contact — a name typed but not matched has no id yet, and no sale can be proposed for it.
+  // The matching lookup. Only while adding, and answered for as much as is known: a proposal needs
+  // both parties resolved to a contact, but the seeded currency does not — a seller typed in for
+  // the first time has no id, and their sale still has to open in some currency.
   const { data: match, isFetching: matching } = useOpenAuctionSale(
     collectionId,
     sellerId,
@@ -183,10 +194,24 @@ export function AuctionLotFormDialog({
   // seller + platform pair, or none yet.
   const attachingTo =
     mode === "add" && !fixedSale && proposal && !startNewSale ? proposal : null;
+
+  // Both parties **named** — typed counts. A name with no id behind it is a contact that does not
+  // exist yet, which is a perfectly good answer to "who is this from": the server creates it. Only
+  // the *proposal* needs ids, and a seller who has never been tracked has no open sale anyway.
+  const hasSeller = !!(sellerId || sellerName.trim());
+  const hasPlatform = !!(platformId || platformName.trim());
+
+  // Pour in the seeded currency, once per seller + platform pair. Never over an answer.
+  const currencySeedKey = `${sellerId}|${platformId}`;
+  if (match?.newSaleCurrency && currencySeededFor !== currencySeedKey && !currencyTouched) {
+    setCurrencySeededFor(currencySeedKey);
+    setNewSaleCurrency(match.newSaleCurrency);
+  }
+
   const currency =
     mode === "edit"
       ? (lot?.currency ?? "")
-      : (fixedSale?.currency ?? attachingTo?.currency ?? sellerDefaults?.defaultCurrency ?? "");
+      : (fixedSale?.currency ?? attachingTo?.currency ?? newSaleCurrency);
 
   // A sale's own `endsAt` exists for exactly this: it is a **default for new lots in the sale**,
   // never the sale's own outcome date. A house sale closes all its lots on one evening, so
@@ -214,7 +239,9 @@ export function AuctionLotFormDialog({
     name: "",
     url: "",
     endsAt: "",
-    currency: "",
+    // The one seeded field the collector can see and correct here: every amount on the lot is in
+    // it. The rest are seeded server-side from the seller and edited on the sale itself.
+    currency: newSaleCurrency,
     shippingCost: "",
     premiumPercent: "",
     premiumFixed: "",
@@ -329,7 +356,9 @@ export function AuctionLotFormDialog({
                 the aggregator is the platform.
               </p>
 
-              {/* The proposal. Shown as soon as both parties resolve to a contact. */}
+              {/* The proposal. Shown as soon as both parties are **named** — a seller typed in for
+                  the first time has no contact behind them yet, and the answer for them is the same
+                  one they get after being created: a new sale, in a currency stated here. */}
               <div
                 style={{
                   ...FIELD_GAP,
@@ -342,12 +371,12 @@ export function AuctionLotFormDialog({
                 <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
                   Settlement
                 </div>
-                {!sellerId || !platformId ? (
+                {!hasSeller || !hasPlatform ? (
                   <p style={NOTE}>
-                    Pick a seller and a platform and the parcel this lot settles into follows from
+                    Name a seller and a platform and the parcel this lot settles into follows from
                     them — you never have to go and find it.
                   </p>
-                ) : matching && !match ? (
+                ) : sellerId && platformId && matching && !match ? (
                   <p style={NOTE}>Looking for an open sale…</p>
                 ) : attachingTo ? (
                   <>
@@ -381,7 +410,6 @@ export function AuctionLotFormDialog({
                   <>
                     <p style={{ ...NOTE, color: "var(--color-text-primary)" }}>
                       Starting a new sale: <strong>{derivedSaleName}</strong>
-                      {sellerDefaults?.defaultCurrency ? ` · ${sellerDefaults.defaultCurrency}` : ""}
                       {sellerDefaults?.buyerPremiumPercent
                         ? ` · ${sellerDefaults.buyerPremiumPercent}% premium`
                         : ""}
@@ -389,9 +417,58 @@ export function AuctionLotFormDialog({
                         ? ` · ${sellerDefaults.defaultShippingCost} shipping`
                         : ""}
                     </p>
+                    {/* The currency is the one seeded field worth deciding **here**: every amount
+                        on this lot is entered in it, so finding it wrong afterwards means the
+                        figures were typed against the wrong sale. The rest of the terms are read
+                        off the seller and corrected on the sale itself. */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        marginTop: "0.5rem",
+                      }}
+                    >
+                      <label
+                        htmlFor="auction-new-sale-currency"
+                        style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}
+                      >
+                        Currency
+                      </label>
+                      <select
+                        id="auction-new-sale-currency"
+                        value={newSaleCurrency}
+                        onChange={(e) => {
+                          setCurrencyTouched(true);
+                          setNewSaleCurrency(e.target.value);
+                        }}
+                        style={{
+                          ...INPUT_STYLE,
+                          width: "auto",
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.8125rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {/* Whatever was seeded stays selectable even if it is outside the offered
+                            list — a collection's base currency is the collector's own choice. */}
+                        {(COMMON_CURRENCIES as readonly string[]).includes(newSaleCurrency) ||
+                        !newSaleCurrency ? null : (
+                          <option value={newSaleCurrency}>{newSaleCurrency}</option>
+                        )}
+                        {COMMON_CURRENCIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <p style={NOTE}>
-                      Seeded from the seller&apos;s defaults and editable on the sale itself. Changing
-                      the seller later never re-prices a parcel already tracked.
+                      The seller&apos;s own currency, then the platform&apos;s, then your
+                      collection&apos;s base — change it here if this parcel trades in another. The
+                      premium and shipping come from the seller&apos;s defaults; all of it stays
+                      editable on the sale itself, and changing the seller later never re-prices a
+                      parcel already tracked.
                     </p>
                     {proposal && startNewSale && (
                       <button

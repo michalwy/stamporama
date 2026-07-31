@@ -944,6 +944,60 @@ export interface AuctionSellerDefaults {
   defaultPlatform: { id: string; name: string } | null;
 }
 
+/**
+ * The currency a **new** sale would open in.
+ *
+ * Three answers in order, and the order is the whole point. The seller's own `defaultCurrency`
+ * first: currency belongs to the seller (#350), because an aggregator like philasearch carries
+ * houses listing in EUR, CHF and GBP alike. Then the platform's fixed `platformCurrency` (#196) —
+ * a marketplace that only ever trades in one currency *does* answer it, and a seller met for the
+ * first time has no default to read, which is exactly when a lot on Allegro was landing in EUR.
+ * Then the collection's base currency, which is at least a currency the collector uses, rather
+ * than a hard-coded one.
+ *
+ * Seeded, never referenced: what comes out of here is written onto the sale at creation and edited
+ * there afterwards, so changing a seller's or a platform's settings never re-prices a parcel
+ * already being tracked.
+ */
+async function resolveNewSaleCurrency(
+  collectionId: string,
+  sellerId: string | null,
+  platformId: string | null
+): Promise<string> {
+  const [seller, platform, collection] = await Promise.all([
+    sellerId
+      ? prisma.contact.findFirst({
+          where: { id: sellerId, collectionId },
+          select: { defaultCurrency: true },
+        })
+      : null,
+    platformId
+      ? prisma.contact.findFirst({
+          where: { id: platformId, collectionId },
+          select: { platformCurrency: true },
+        })
+      : null,
+    prisma.collection.findUniqueOrThrow({
+      where: { id: collectionId },
+      select: { baseCurrency: true },
+    }),
+  ]);
+  return seller?.defaultCurrency || platform?.platformCurrency || collection.baseCurrency;
+}
+
+/** {@link resolveNewSaleCurrency}, for the dialogs: what to *show* as the currency a new sale will
+ * open in, before it exists. Either party may still be unnamed — a seller typed in for the first
+ * time has no id yet — and the answer then falls through to whatever is known. */
+export async function getNewAuctionSaleCurrency(
+  ownerId: string,
+  collectionId: string,
+  sellerId: string | null,
+  platformId: string | null
+): Promise<string> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return resolveNewSaleCurrency(collectionId, sellerId, platformId);
+}
+
 /** The seller's defaults, as a new sale seeds them (#308/#319 seeding rule): read once at creation
  * and stored, so a seller raising their premium never re-prices a parcel already tracked. */
 export async function getAuctionSellerDefaults(
@@ -1027,7 +1081,9 @@ export async function createAuctionSale(
       name: input.name ?? deriveAuctionSaleName(seller.name, platform.name),
       url: input.url,
       endsAt: input.endsAt,
-      currency: input.currency || defaults?.defaultCurrency || "EUR",
+      currency:
+        input.currency ||
+        (await resolveNewSaleCurrency(collectionId, input.sellerId, input.platformId)),
       shippingCost: input.shippingCost ?? defaults?.defaultShippingCost ?? null,
       premiumPercent: input.premiumPercent ?? defaults?.buyerPremiumPercent ?? null,
       premiumFixed: input.premiumFixed ?? defaults?.buyerPremiumFixed ?? null,

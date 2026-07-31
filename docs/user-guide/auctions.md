@@ -45,8 +45,14 @@ and the settlement follows from them:
      **Closes** field in; a marketplace basket has none, so there each lot keeps its own moment.
      **Start a new sale instead** is right beside it, for when the previous parcel has already
      shipped: that settles separately, so its shipping is distributed separately.
-   - If there is none, a new sale is started, named after the seller and the platform, with the
-     seller's own **currency, premium and shipping** copied onto it.
+   - If there is none, it says *Starting a new sale: Philkam · Allegro*, with the seller's own
+     **premium and shipping** copied onto it. That is what you see for a seller you are naming for
+     the first time too — they have no sale to attach to, because they have no history at all.
+   - The new sale's **currency** is shown right there and can be changed before you save. It is the
+     seller's own currency when they have one; failing that the platform's fixed currency, so a lot
+     on a zloty-only marketplace opens in PLN rather than in something nobody chose; failing that
+     your collection's base currency. Every amount on the lot is entered in it, and it stays
+     editable on the sale itself afterwards.
 3. Fill in the lot: the **listing URL**, **lot number** and **title**, when it **closes**, then the
    auction's own figures — the **starting price** and the **current bid** — and finally yours:
    **my bid** and **my ceiling**.
