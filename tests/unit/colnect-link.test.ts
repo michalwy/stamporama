@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { colnectMarketUrl, colnectStampUrl } from "@/lib/colnect-link";
+import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "@/lib/colnect-link";
 import { COLNECT_CONDITIONS } from "@/lib/colnect-conditions";
 
 describe("colnectStampUrl", () => {
@@ -53,5 +53,26 @@ describe("colnectMarketUrl", () => {
       assert.ok(grade.marketSlug.length > 0, grade.abbrev);
       assert.ok(colnectMarketUrl("1", grade.marketSlug));
     }
+  });
+});
+
+describe("colnectSearchUrl", () => {
+  it("searches Colnect's catalogue for a number, spaces travelling as +", () => {
+    assert.equal(
+      colnectSearchUrl("RU-CH 35"),
+      "https://colnect.com/en/search/list/collectibles/stamps/q/RU-CH+35"
+    );
+  });
+
+  it("escapes what a catalog number may otherwise carry", () => {
+    assert.equal(
+      colnectSearchUrl("PL 12/56"),
+      "https://colnect.com/en/search/list/collectibles/stamps/q/PL+12%2F56"
+    );
+  });
+
+  it("returns null when there is nothing to search for", () => {
+    assert.equal(colnectSearchUrl(null), null);
+    assert.equal(colnectSearchUrl("   "), null);
   });
 });

@@ -630,14 +630,25 @@ After the links the row names the stamp by **every catalogue number you have rec
 with its catalogue and area prefix (`Mi·PL 865`), the leading catalogue first. Elsewhere a number is
 printed bare, because the set around it already says which catalogue it came from; here you are
 cross-checking against somebody else's catalogue, so which one a number belongs to is the point.
+They are the ordinary [click-to-copy chips](inventory.md#copying-a-catalog-number), so a number goes
+into the platform's own search box without being retyped.
 
-A row whose links are greyed out is telling you about a gap: the stamp has no Colnect item-ID
-recorded yet, or its condition is not mapped to one of Colnect's own grades. Hover for which. The row
-is still listed — this is the screen where you are most likely to notice.
+A stamp with **no Colnect item-ID** cannot have a page of its own here, so its **Catalog** link
+becomes **Search** — Colnect's own catalogue search for that stamp's leading catalog number, in the
+form Colnect understands (`Mi·RU-CH 35` searches for `RU-CH 35`, the catalogue abbreviation dropped
+exactly as when you copy the chip). It answers the question you had, and it is the first step of
+recording the item-ID that turns the row's real links on.
 
-While the offer is still **Preparing** the card is simply open: those links are the work you are
-doing. Once it has left your hands it is a reference you consult rarely, so from **Ready** onward it
-collapses behind **Show**, with the heading counting the stamps.
+A link that is greyed out instead is telling you about a gap nothing can stand in for: a stamp with
+no item-ID *and* no catalog number to search by, or a condition not mapped to one of Colnect's own
+grades. Hover for which. The row is still listed — this is the screen where you are most likely to
+notice.
+
+The card follows the same rule as the Photos one: **open** while the offer is **Preparing**, since
+those links are the work you are doing, and **collapsed** from **Ready** onward, when it is a
+reference you consult rarely. Click its heading either way — the heading counts the stamps, so a
+listing you are only skimming does not pay for the list. The two states are remembered separately, so
+collapsing it on a live listing does not shut it on the one you are building next.
 
 ## Bulk listing — posting a prepared batch
 

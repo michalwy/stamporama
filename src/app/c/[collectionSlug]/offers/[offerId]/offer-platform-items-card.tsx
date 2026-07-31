@@ -2,6 +2,11 @@
 
 import type { OfferPlatformItem } from "@/lib/offers";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import {
+  STAMP_PRIMARY_CHIP,
+  STAMP_SECONDARY_CHIP,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // The offer's stamps as the **platform's own catalogue** knows them (#423), each with the two pages
@@ -15,16 +20,21 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //
 // Deliberately **not** the sets card in miniature. It carries no price, no value, no per-copy
 // anything: everything about *this* listing is a scroll away, and the one thing this card is for is
-// leaving the screen for the platform. The links **lead** each row rather than trailing it, and
-// while the offer is still `preparing` the list is simply open, with no toggle at all: there the
-// card is the work in hand, and a ragged right edge behind a Show button puts two steps between the
-// collector and the one thing they came here to click. From `ready` on it collapses again, for the
-// reason the photos card does (#382) — a step taken once, with the header's count already saying how
-// many stamps a buyer would be comparing.
+// leaving the screen for the platform. The links **lead** each row rather than trailing it: a ragged
+// right edge chasing the longest stamp name puts a hunt between the collector and the one thing they
+// came here to click.
+//
+// Open by default while the offer is `preparing` and collapsed from `ready` on, remembered
+// separately for the two — the same rule the photos card follows and for the same reason (#382): in
+// one state this is the work in hand, in the other a reference consulted once, and one memory shared
+// across both would fight the collector on every visit. It collapses from the heading itself, as
+// that card does; the header's count already says how many stamps a buyer would be comparing.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
-// that would otherwise have taken them to the market.
+// that would otherwise have taken them to the market. An unmatched stamp does better than being
+// noticed: its Catalog link becomes a **Search** for the catalog number, which both answers the
+// question at hand and is the first step of recording the ID that would have answered it directly.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -91,47 +101,69 @@ export function OfferPlatformItemsCard({
   /** Where the offer is in its lifecycle: the card is the working surface only while `preparing`. */
   offerState: string;
 }) {
+  // One key for the card rather than one per offer — the habit is about the step, not the listing —
+  // but a separate one, open by default, while the offer is still `preparing`: the two habits are
+  // genuinely different, exactly as the photos card's are.
   const preparing = offerState === "preparing";
-  const [shown, setShown] = usePersistentToggle("stamporama.offerPlatformItems.expanded", false);
-  const expanded = preparing || shown;
+  const [expanded, setExpanded] = usePersistentToggle(
+    preparing
+      ? "stamporama.offerPlatformItems.expanded.preparing"
+      : "stamporama.offerPlatformItems.expanded",
+    preparing
+  );
   // The platform has no module, or the offer has no copies yet: there is nothing to look up.
   if (items.length === 0) return null;
 
   const linkable = items.filter((i) => i.catalogUrl).length;
 
   return (
-    <div style={CARD}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <h3
-          style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
+    // Collapsed, the card is its header alone, so it drops the body's bottom padding.
+    <div style={expanded ? CARD : { ...CARD, padding: "0.875rem 1.5rem" }}>
+      {/* The whole heading is the toggle, as it is on the photos card, so the count and the
+          not-matched chip are all clickable and the header carries no separate button. */}
+      <Tooltip
+        content={expanded ? "Collapse" : `Show these stamps on ${platformName}`}
+        align="start"
+      >
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+            padding: 0,
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
         >
-          On {platformName} ({items.length})
-        </h3>
-        {linkable < items.length && (
-          <Tooltip content="These stamps carry no item-ID for this platform, so there is nothing to link to. Match them from the stamp's own screen.">
-            <span style={MUTED}>{items.length - linkable} not matched</span>
-          </Tooltip>
-        )}
-        {!preparing && (
-          <button
-            type="button"
-            onClick={() => setShown(!shown)}
+          <span
+            aria-hidden="true"
             style={{
-              marginLeft: "auto",
-              padding: "0.375rem 0.875rem",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-              background: "var(--color-bg-elevated)",
-              cursor: "pointer",
+              fontSize: "0.75rem",
+              color: "var(--color-text-secondary)",
+              transform: expanded ? "rotate(90deg)" : "none",
+              transition: "transform 120ms ease",
             }}
           >
-            {shown ? "Hide" : "Show"}
-          </button>
-        )}
-      </div>
+            ▶
+          </span>
+          <h3
+            style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
+          >
+            On {platformName} ({items.length})
+          </h3>
+          {linkable < items.length && (
+            <Tooltip content="These stamps carry no item-ID for this platform, so there is nothing to link to. Match them from the stamp's own screen.">
+              <span style={MUTED}>{items.length - linkable} not matched</span>
+            </Tooltip>
+          )}
+        </button>
+      </Tooltip>
 
       {expanded && (
         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column" }}>
@@ -155,8 +187,19 @@ export function OfferPlatformItemsCard({
                     Catalog
                     <ExternalLinkIcon />
                   </a>
+                ) : item.searchUrl ? (
+                  // No item-ID, so no page to link to — but the number will find it. This is also
+                  // the first step of recording the ID that turns this back into a Catalog link.
+                  <Tooltip
+                    content={`No item-ID recorded for this stamp yet — search ${platformName} for its catalog number, then match it from the stamp's own screen.`}
+                  >
+                    <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
+                      Search
+                      <ExternalLinkIcon />
+                    </a>
+                  </Tooltip>
                 ) : (
-                  <Tooltip content="This stamp has no item-ID recorded for this platform yet.">
+                  <Tooltip content="This stamp has no item-ID recorded for this platform yet, and no catalog number to search by.">
                     <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
                   </Tooltip>
                 )}
@@ -183,18 +226,30 @@ export function OfferPlatformItemsCard({
               </span>
               {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
                   against the *platform's* catalogue, so which vendor a number belongs to is the
-                  thing being checked, and a stamp recorded in two is looked up in both. The bare
-                  label is left only for a stamp carrying no number at all. */}
-              <span
-                style={{
-                  fontSize: "0.8125rem",
-                  fontWeight: 600,
-                  color: "var(--color-text-primary)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {item.catalogNumbers.length > 0 ? item.catalogNumbers.join(" · ") : item.label}
-              </span>
+                  thing being checked, and a stamp recorded in two is looked up in both. They are the
+                  same click-to-copy chips as everywhere else (#420) — leading catalogue first —
+                  because pasting a number into the platform's own search is exactly what this card
+                  is for. A stamp carrying no number at all falls back to its bare label. */}
+              {item.catalogNumbers.length > 0 ? (
+                item.catalogNumbers.map((label, i) => (
+                  <CatalogNumberChip
+                    key={`${i}|${label}`}
+                    label={label}
+                    style={i === 0 ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
+                  />
+                ))
+              ) : (
+                <span
+                  style={{
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                    color: "var(--color-text-primary)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {item.label}
+                </span>
+              )}
               {item.stampName && (
                 <span
                   style={{

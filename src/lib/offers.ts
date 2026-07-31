@@ -37,7 +37,8 @@ import {
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
-import { colnectMarketUrl, colnectStampUrl } from "./colnect-link";
+import { catalogChipCopyValueFromLabel } from "./catalog-number";
+import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
   evaluateListingPreconditions,
   type ListingBlocker,
@@ -1930,6 +1931,10 @@ export interface OfferPlatformItem {
   conditionName: string;
   /** The stamp's page in the platform's catalogue (#290), null when it was never matched. */
   catalogUrl: string | null;
+  /** Where to *look* for a stamp that has no page here — the platform's own catalogue search for the
+   * leading catalog number. Null when the stamp is matched (its page is the better link) or carries
+   * no number to search by. */
+  searchUrl: string | null;
   /** What this stamp in this grade is currently being asked for (#423), null when the stamp is
    * unmatched or its condition is not mapped into the platform's vocabulary. */
   marketUrl: string | null;
@@ -2295,14 +2300,22 @@ function platformItemsFor(
       }
       const colnectId = item.stamp.colnectId?.trim() || null;
       const grade = colnectGradeFor(conditionMap.get(item.conditionId) ?? "");
+      const catalogNumbers = labeller.catalogNumbers(item.stamp);
       rows.set(key, {
         stampId: item.stampId,
         conditionId: item.conditionId,
         label: labeller.copy(item.stamp),
-        catalogNumbers: labeller.catalogNumbers(item.stamp),
+        catalogNumbers,
         stampName: item.stamp.name?.trim() || null,
         conditionName: item.condition.name,
         catalogUrl: colnectStampUrl(colnectId),
+        // Only for a stamp with no page of its own: searching for one already matched would offer
+        // the long way round to a link that is right there.
+        searchUrl: colnectId
+          ? null
+          : colnectSearchUrl(
+              catalogNumbers[0] ? catalogChipCopyValueFromLabel(catalogNumbers[0]) : null
+            ),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
         copyCount: 1,
       });
