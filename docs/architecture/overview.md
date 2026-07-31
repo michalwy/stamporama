@@ -24,14 +24,15 @@ The `COMPOSE_FILE` variable in `.env` sets the active file list so operators can
                │ DATABASE_URL
                ▼
 ┌─────────────────────────────────┐
-│  db  (PostgreSQL 16, port 5432) │
+│  db  (PostgreSQL 18, port 5432) │
 │  volume: db_data                │
+│  mounted at /var/lib/postgresql │
 └─────────────────────────────────┘
 ```
 
 ## Production services
 
-Production does not run a database container. The operator provides an external PostgreSQL via `DATABASE_URL`. **PostgreSQL 15 or newer is required** — migrations use `NULLS NOT DISTINCT` unique indexes (see [ADR-0006](../decisions/0006-multidimensional-catalog-prices.md)). The bundled dev/e2e containers run Postgres 16.
+Production does not run a database container. The operator provides an external PostgreSQL via `DATABASE_URL`. **PostgreSQL 15 or newer is required** — migrations use `NULLS NOT DISTINCT` unique indexes (see [ADR-0006](../decisions/0006-multidimensional-catalog-prices.md)). The bundled dev/e2e containers run Postgres 18, mounted at `/var/lib/postgresql` because 18+ images keep the cluster in a major-version-specific subdirectory; bumping that major requires a dump/restore of the dev volume (see [Upgrading the local Postgres major version](../development/postgres-upgrade.md)).
 
 ```
 ┌─────────────────────────────────┐

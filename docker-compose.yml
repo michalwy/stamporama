@@ -5,8 +5,12 @@ services:
       POSTGRES_DB: stamporama
       POSTGRES_USER: stamporama
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stamporama}
+    # Postgres 18+ images store the cluster in a major-version-specific subdirectory
+    # (/var/lib/postgresql/<major>/docker) and refuse to start when a pre-18 cluster is
+    # found at /var/lib/postgresql/data. Mount the parent directory instead, which is the
+    # layout the image documents and which keeps future pg_upgrade --link inside one mount.
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U stamporama"]
       interval: 5s

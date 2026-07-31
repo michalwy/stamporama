@@ -60,6 +60,7 @@ Prefer Architect before changing Prisma schema, permissions, collection scoping,
 - Collection URLs: `/c/[collectionSlug]/...`; slug resolution authorizes by internal `collectionId`.
 - Better Auth for authentication.
 - Prisma with PostgreSQL (minimum **version 15** — migrations use `NULLS NOT DISTINCT`; see ADR-0006). Treat schema changes as product decisions.
+- Bumping the bundled `postgres:` image to a new major breaks the dev stack: the `db_data` volume keeps the old cluster and 18+ images relocated the data directory. It needs a dump/restore, never just a tag change — follow `docs/development/postgres-upgrade.md`. Production uses an external database and is unaffected.
 - SPA-like collection interaction: Next.js App Router as route/auth shell, client-side queries/mutations for rich screens.
 - TanStack Query for data fetching, TanStack Table for list views.
 - Cursor-backed infinite scrolling for large lists via shared primitives.

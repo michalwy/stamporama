@@ -46,7 +46,13 @@ There is also the **Stamporama Assistant**, a Chrome extension that matches Coln
 
 ## Development
 
-Prerequisites: Docker, Node.js 22+, pnpm. Self-hosting against an external database requires **PostgreSQL 15+** (the bundled containers use Postgres 16).
+Prerequisites: Docker, Node.js 22+, pnpm. Self-hosting against an external database requires **PostgreSQL 15+** (the bundled containers use Postgres 18).
+
+> **Upgrading a local stack created before Postgres 18?** The dev `db_data` volume holds a
+> Postgres 16 cluster that Postgres 18 cannot read, and the 18+ images moved the data directory
+> to `/var/lib/postgresql/<major>/docker`. Dump before switching, then restore into a fresh
+> volume — see [Upgrading the local Postgres major version](docs/development/postgres-upgrade.md).
+> Production is unaffected: it uses an external database, not this container.
 
 **Run the standard local stack** (built image, `next start`):
 

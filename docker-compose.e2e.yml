@@ -19,5 +19,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Must match the Postgres 18+ layout: the cluster lives in /var/lib/postgresql/<major>/docker,
+    # so a tmpfs pinned to .../data would sit unused and the throwaway cluster would land on the
+    # container's writable layer instead — losing the in-memory speed this mount exists for.
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
