@@ -16,6 +16,7 @@ import {
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
+import type { BulkCopyPhotoAttachResult } from "@/lib/offer-photo-attachments";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
@@ -687,6 +688,50 @@ function SkippedNotice({ skipped }: { skipped: OfferPhotoPlanView["plan"]["skipp
   );
 }
 
+/**
+ * What the last "one photo per copy" run did (#434). Its own block rather than a toast: the copies it
+ * skipped are named, and a listing is prepared over minutes — a message that vanishes in seconds
+ * would leave exactly the gap #314 exists to close. Warning-tinted only when something was left out.
+ */
+function BulkAttachNotice({ result }: { result: BulkCopyPhotoAttachResult | null }) {
+  if (!result) return null;
+  const missing = result.skipped.length > 0;
+  const parts = [
+    result.attached === 1 ? "Attached 1 photo" : `Attached ${result.attached} photos`,
+  ];
+  if (result.alreadyAttached > 0) {
+    parts.push(
+      `${result.alreadyAttached} ${result.alreadyAttached === 1 ? "copy was" : "copies were"} already attached`
+    );
+  }
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.25rem",
+        padding: "0.5rem 0.75rem",
+        borderRadius: "0.5rem",
+        border: missing
+          ? "1px solid var(--color-warning-border, var(--color-border))"
+          : "1px solid var(--color-border)",
+        background: missing ? "var(--color-warning-soft, var(--color-bg-page))" : "var(--color-bg-page)",
+      }}
+    >
+      <p style={NOTE}>{parts.join(" · ")}.</p>
+      {missing && (
+        <p style={{ ...NOTE, color: "var(--color-warning)" }}>
+          No front scan, so left out:{" "}
+          {result.skipped.length === 1
+            ? result.skipped[0]
+            : `${result.skipped.length} copies (${result.skipped.join(", ")})`}
+          .
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function OfferPhotosCard({
   collectionId,
   offerId,
@@ -744,6 +789,9 @@ export function OfferPhotosCard({
   const [settingsError, setSettingsError] = useState<string | undefined>();
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | undefined>();
+  // What the last "one photo per copy" run did (#434) — kept until the next one, because the copies
+  // it could not cover are the point of the action having an answer at all.
+  const [bulkResult, setBulkResult] = useState<BulkCopyPhotoAttachResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   /** Run one attachment mutation (#313) and pick up the plan it changed. Nothing here touches the
@@ -757,6 +805,23 @@ export function OfferPhotosCard({
       const result = await run();
       if (result.status === "error") setAttachError(result.message);
       else onDone?.();
+      await refetch();
+    });
+  };
+
+  /**
+   * One photo per copy (#434): the bulk form of attaching a copy's photo by hand. What it did is
+   * reported rather than left to be counted off the plan — above all which copies it could not cover,
+   * which is the one thing a longer plan does not show.
+   */
+  const attachEachCopy = () => {
+    setAttachError(undefined);
+    setBulkResult(null);
+    startTransition(async () => {
+      const { attachOfferItemFrontPhotosAction } = await import("@/app/actions/offers");
+      const result = await attachOfferItemFrontPhotosAction(offerId);
+      if (result.status === "error") setAttachError(result.message);
+      else setBulkResult(result.result);
       await refetch();
     });
   };
@@ -1026,20 +1091,36 @@ export function OfferPhotosCard({
               (collages and attachments) can be seen and changed (#313). Stored files follow below. */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
             <h4 style={SECTION_HEADING}>Plan</h4>
-            <Tooltip
-              content="Attach photos of copies, upload images, or build a collage from a selection"
-              align="end"
-            >
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => setAttachOpen(true)}
-                style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Tooltip
+                content="Attach every copy's front scan as an image of its own, beside the collages. A copy with no front scan is skipped and named; one already attached is left alone."
+                align="end"
               >
-                + Add attachments
-              </button>
-            </Tooltip>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={attachEachCopy}
+                  style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+                >
+                  + One photo per copy
+                </button>
+              </Tooltip>
+              <Tooltip
+                content="Attach photos of copies, upload images, or build a collage from a selection"
+                align="end"
+              >
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setAttachOpen(true)}
+                  style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+                >
+                  + Add attachments
+                </button>
+              </Tooltip>
+            </div>
           </div>
+          <BulkAttachNotice result={bulkResult} />
           {plan.plan.images.length > 0 ? (
             <PlanSequence
               collectionId={collectionId}

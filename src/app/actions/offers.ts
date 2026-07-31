@@ -34,12 +34,14 @@ import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
 import {
   attachOfferCopyPhotos,
+  attachOfferItemFrontPhotos,
   attachOfferPhotoCollage,
   attachOfferUploads,
   removeOfferPhotoAttachment,
   renameOfferPhotoAttachment,
   setOfferPhotoPlanOrder,
   setOfferPhotoPublish,
+  type BulkCopyPhotoAttachResult,
   type CollageAttachmentInput,
   type CopyPhotoAttachmentInput,
   type UploadAttachmentInput,
@@ -468,6 +470,27 @@ export async function attachOfferCopyPhotosAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to attach the photos.");
+  }
+}
+
+export type AttachItemPhotosActionState =
+  | { status: "success"; result: BulkCopyPhotoAttachResult }
+  | { status: "error"; message: string };
+
+/**
+ * Attach every copy's front scan as an image of its own (#434) — one click instead of picking them
+ * one by one in the dialog. Copies with no front scan are skipped and named in the result, and one
+ * already attached on its own is passed over, so the button tops the plan up rather than doubling it.
+ */
+export async function attachOfferItemFrontPhotosAction(
+  offerId: string
+): Promise<AttachItemPhotosActionState> {
+  const session = await getSession();
+  try {
+    const result = await attachOfferItemFrontPhotos(session.user.id, offerId);
+    return { status: "success", result };
+  } catch (e) {
+    return fail(e, "Failed to attach the copies' photos.");
   }
 }
 

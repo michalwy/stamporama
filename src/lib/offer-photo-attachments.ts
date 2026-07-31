@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "./db";
 import { getOfferPhotoPlanState } from "./offer-photo-generation";
+import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { MAX_COLLAGE_AXIS, MIN_COLLAGE_AXIS } from "./collage-template-rules";
 import {
   getStorage,
@@ -218,6 +219,123 @@ export async function attachOfferCopyPhotos(
     )
   );
   return created.map(toRow);
+}
+
+/** What one click of "one photo per copy" (#434) did, so the panel can say it rather than leaving
+ * the collector to count rows. */
+export interface BulkCopyPhotoAttachResult {
+  /** Copies whose front scan is now an attachment of its own. */
+  attached: number;
+  /** Copies passed over because their front scan is already attached on its own. */
+  alreadyAttached: number;
+  /** Copies with no front scan, named — an omission the plan would otherwise hide (#314). */
+  skipped: string[];
+}
+
+/**
+ * Attach **every** copy's front scan as an image of its own (#434) — the bulk form of #313 mode a,
+ * for the listing that wants one photo per stamp beside the collages rather than only the collage.
+ *
+ * The rule is deliberately narrow: the **front** scan, or nothing. A back is the other side of a
+ * stamp already shown and an extra is a detail shot (a perforation, a flaw, a cancel) — neither
+ * reads as *the* photo of the copy, and a plan silently made of them would be worse than one copy
+ * short. A copy without a front scan is therefore skipped and **named** in the result.
+ *
+ * Sets the plan leaves out (sold, in active bidding elsewhere — #315) are left out here too: a photo
+ * of a copy that cannot be bought is exactly what the exclusion exists to prevent.
+ *
+ * Running it twice is not running it twice: a copy whose front scan is already a `copy_photo`
+ * attachment is passed over, so the button is a top-up after copies are added, not a way to double
+ * the plan. A front scan that is only a *tile* of a hand-built collage (#331) is not that — the
+ * collage shows it beside others, which is the grouping this action exists to break out of.
+ *
+ * The attachments land at the end of the plan in set order, then copy order — the order the collages
+ * themselves follow — and are dragged from there like any other.
+ *
+ * @throws {OfferPhotoAttachmentError} when the offer is not the caller's.
+ */
+export async function attachOfferItemFrontPhotos(
+  ownerId: string,
+  offerId: string
+): Promise<BulkCopyPhotoAttachResult> {
+  const collectionId = await assertOfferOwner(ownerId, offerId);
+
+  // The plan answers both questions no query here should re-derive: which sets it leaves out, and
+  // where its last image sits.
+  const state = await getOfferPhotoPlanState(ownerId, offerId);
+  const excluded = new Set(state.plan.excludedSets.map((set) => set.setId));
+  const base = state.plan.imageCount;
+
+  const [sets, existing, labeller] = await Promise.all([
+    prisma.offerSet.findMany({
+      where: { offerId },
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        items: {
+          orderBy: [{ sortOrder: "asc" }, { itemId: "asc" }],
+          select: {
+            itemId: true,
+            item: {
+              select: {
+                photos: { where: { role: "front" }, select: { id: true }, take: 1 },
+                stamp: { select: STAMP_LABEL_SELECT.stamp.select },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.offerPhotoAttachment.findMany({
+      where: { offerId, source: "copy_photo" },
+      select: { photoId: true },
+    }),
+    makeOfferLabeller(collectionId),
+  ]);
+
+  const attachedPhotoIds = new Set(existing.flatMap((row) => (row.photoId ? [row.photoId] : [])));
+  const picks: CopyPhotoAttachmentInput[] = [];
+  const skipped: string[] = [];
+  let alreadyAttached = 0;
+
+  for (const set of sets) {
+    if (excluded.has(set.id)) continue;
+    for (const line of set.items) {
+      const photoId = line.item.photos[0]?.id;
+      if (!photoId) {
+        skipped.push(labeller.copy(line.item.stamp));
+        continue;
+      }
+      if (attachedPhotoIds.has(photoId)) {
+        alreadyAttached += 1;
+        continue;
+      }
+      // Guards against a copy that somehow sits in two of the offer's sets as well as against a
+      // second pass of this very loop.
+      attachedPhotoIds.add(photoId);
+      picks.push({ itemId: line.itemId, photoId });
+    }
+  }
+
+  if (picks.length > 0) {
+    await prisma.$transaction(
+      picks.map((pick, index) =>
+        prisma.offerPhotoAttachment.create({
+          data: {
+            offerId,
+            sortOrder: base + index,
+            source: "copy_photo",
+            photoId: pick.photoId,
+            itemId: pick.itemId,
+            title: null,
+          },
+          select: { id: true },
+        })
+      )
+    );
+  }
+
+  return { attached: picks.length, alreadyAttached, skipped };
 }
 
 /** {@link attachOfferCopyPhotos} for a single photo. */

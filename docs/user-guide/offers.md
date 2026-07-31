@@ -544,6 +544,22 @@ The result is one attachment: it takes one place in the plan, carries one captio
 click, and a regeneration leaves it alone like every other attachment. To change what it shows,
 remove it and build it again.
 
+#### One photo per copy
+
+When what you want is simply *a photo of every stamp, not just the collage*, use **+ One photo per
+copy** beside **+ Add attachments**. It attaches each copy's **front** scan as an image of its own, in
+set order, on top of whatever the collages already show.
+
+It is the front scan or nothing: a back is the other side of a stamp the front already shows, and an
+extra is a detail shot, so neither stands in as *the* photo of a copy. A copy with no front scan is
+skipped and **named** on the card, so you know which ones to scan rather than finding out by counting
+the plan. Sets that have [left the plan](#when-a-set-sells) are left out here too.
+
+Press it again after adding copies and it only tops the plan up: a copy whose front scan is already
+attached on its own is passed over, so nothing is doubled. (A scan used as a tile inside a collage you
+built by hand does not count — that collage shows it beside others, which is what you are breaking out
+of here.) Everything it adds is an ordinary attachment: drag it, caption it, remove it one by one.
+
 Remove an attachment with the **✕** beside it in the plan; an image you uploaded is deleted with it,
 a copy's own photo is left alone — including the uploads and the borrowed scans inside a collage you
 built.

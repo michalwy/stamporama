@@ -11,6 +11,7 @@ import { createOffer, addOfferSet, updateOfferPhotoConfig } from "../../src/lib/
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import {
   attachOfferCopyPhoto,
+  attachOfferItemFrontPhotos,
   attachOfferPhotoCollage,
   attachOfferUpload,
   listOfferPhotoAttachments,
@@ -607,6 +608,181 @@ describe("offer photo attachments (#313)", () => {
       await prisma.offerPhotoAttachment.findMany({ where: { id: attachment.id } }),
       [],
       "the attachment cascades with the scan it pointed at"
+    );
+  });
+});
+
+// One photo per copy (#434) — the bulk form of mode a. Its own fixture and its own offer: the rules
+// it exists for are about a *whole* offer (which copies it covers, which it names, what a second
+// press does), and the offer above has been attached to, reordered and regenerated test by test.
+describe("one photo per copy (#434)", () => {
+  let userId: string;
+  let collectionId: string;
+  let offerId: string;
+  /** A copy with a front scan, one with a back scan only, and one with no photos at all. */
+  let withFrontId: string;
+  let backOnlyId: string;
+  let unscannedId: string;
+  /** A copy in a set of its own, so that set does produce a collage. */
+  let collagedId: string;
+  let frontId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-offer-bulk-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User offer-bulk-${ts}`,
+        email: `test-offer-bulk-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: {
+          slug: `col-offer-bulk-${ts}`,
+          name: `Collection offer-bulk-${ts}`,
+          baseCurrency: "EUR",
+          ownerId: userId,
+        },
+      })
+    ).id;
+    const conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+    const platformId = (
+      await prisma.contact.create({
+        data: {
+          collectionId,
+          name: `Delcampe bulk ${ts}`,
+          platform: true,
+          maxPhotos: 12,
+          maxPhotoEdge: 700,
+        },
+      })
+    ).id;
+    offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "10.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    await updateOfferPhotoConfig(userId, offerId, {
+      photoSides: "front",
+      photoLabelLeftTemplate: "{ref}",
+      photoLabelRightTemplate: "",
+      collage: {
+        collageGridMode: "fixed",
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    });
+
+    const makeCopy = async (index: number, roles: readonly ("front" | "back")[]) => {
+      const stamp = await prisma.stamp.create({
+        data: { collectionId, name: `Bulk stamp ${index}`, primaryCatalogSortKey: index },
+      });
+      const item = await createItem(userId, collectionId, {
+        stampId: stamp.id,
+        conditionId,
+        forSale: true,
+      });
+      for (const role of roles) {
+        const upload = await stageUpload(userId, collectionId, {
+          bytes: await scan(120, 160, 20 + index * 40),
+          mime: "image/png",
+        });
+        await applyPhotoChangeSet(userId, item.id, {
+          add: [{ uploadId: upload.id, role, title: null, sortOrder: 0 }],
+          update: [],
+          remove: [],
+        });
+      }
+      return item.id;
+    };
+
+    withFrontId = await makeCopy(0, ["front", "back"]);
+    backOnlyId = await makeCopy(1, ["back"]);
+    unscannedId = await makeCopy(2, []);
+    await addOfferSet(userId, offerId, [withFrontId, backOnlyId, unscannedId]);
+    // A second set every copy of which has a front scan, so the offer plans a collage as well: the
+    // first set cannot produce one, and an attachment has to be seen landing *after* the collages.
+    collagedId = await makeCopy(3, ["front"]);
+    await addOfferSet(userId, offerId, [collagedId]);
+    frontId = (await prisma.photo.findFirstOrThrow({
+      where: { itemId: withFrontId, role: "front" },
+      select: { id: true },
+    })).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.deleteMany({ where: { id: userId } });
+  });
+
+  it("attaches every front scan and names the copies it could not cover", async () => {
+    const result = await attachOfferItemFrontPhotos(userId, offerId);
+
+    assert.equal(result.attached, 2, "the two copies that have a front scan");
+    assert.equal(result.alreadyAttached, 0);
+    assert.deepEqual(
+      [...result.skipped].sort(),
+      ["Bulk stamp 1", "Bulk stamp 2"],
+      "a back-only copy is skipped like an unscanned one, and both are named rather than counted"
+    );
+
+    const attachments = await listOfferPhotoAttachments(userId, offerId);
+    assert.deepEqual(
+      attachments.map((a) => [a.source, a.itemId]),
+      [
+        ["copy_photo", withFrontId],
+        ["copy_photo", collagedId],
+      ],
+      "one per covered copy, in set order"
+    );
+    assert.equal(
+      attachments[0].photoId,
+      frontId,
+      "the front scan, and never a back or an extra in its place"
+    );
+    assert.ok(
+      attachments.every((a) => a.itemId !== backOnlyId && a.itemId !== unscannedId),
+      "a copy without a front scan gets no attachment at all"
+    );
+  });
+
+  it("tops the plan up rather than doubling it when pressed again", async () => {
+    const again = await attachOfferItemFrontPhotos(userId, offerId);
+    assert.equal(again.attached, 0);
+    assert.equal(again.alreadyAttached, 2, "both front scans are already attachments of their own");
+    assert.equal(
+      (await listOfferPhotoAttachments(userId, offerId)).length,
+      2,
+      "no second attachment for the same scan"
+    );
+  });
+
+  it("lands at the end of the plan, after the generated collages", async () => {
+    const state = await getOfferPhotoPlanState(userId, offerId);
+    const last = state.plan.images[state.plan.images.length - 1];
+    assert.equal(last.source, "copy_photo");
+    assert.equal(state.plan.images[0].source, "collage");
+  });
+
+  it("refuses another user's offer", async () => {
+    await assert.rejects(
+      () => attachOfferItemFrontPhotos("nobody", offerId),
+      OfferPhotoAttachmentError
     );
   });
 });
