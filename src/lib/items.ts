@@ -737,9 +737,11 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  and an absent filter cannot express it. Needed to address a duplicate group whose members
    *  carry no certificate (#372). */
   certificateStatusId?: string;
-  /** Restrict to copies of one physical format (#343). The literal `"single"` matches the copies
-   *  with no format — null *is* the single (ADR-0020), and an absent filter cannot express it. */
-  formatId?: string;
+  /** Restrict to copies of any of these physical formats (#343, #427) — an **OR**, empty/absent
+   *  meaning every format. The literal `"single"` is a tickable value like any other and matches the
+   *  copies with no format: null *is* the single (ADR-0020), and an absent filter cannot express it.
+   *  A duplicate group addressing its own members passes the one format it grouped on. */
+  formatIds?: string[];
   /** Restrict to copies whose linked stamp belongs to any of these areas (the selected
    * area plus its descendants, resolved by the caller). Mirrors the stamps list area
    * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
@@ -779,9 +781,12 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   /** Exclude a fixed set of copy ids (e.g. copies already represented in a quantity lot's
    * sub-lots, #164). */
   excludeIds?: string[];
-  /** Restrict to copies in this physical delivery state (ADR-0009 §5), e.g. `"delivered"`
-   * for copies actually in hand — the sale-lot composition picker only offers those (#164). */
-  deliveryState?: string;
+  /** Restrict to copies in any of these physical delivery states (ADR-0009 §5, #427) — an **OR**,
+   * empty/absent meaning every state. A list because "everything still on its way to me" is
+   * *Ordered*, *In transit* and *To sort* together, and asking it three times over is not the same
+   * question; a caller pinning one state (the sale-lot composition picker, #164, which only offers
+   * copies actually in hand) passes a single-entry list through the same field. */
+  deliveryStates?: string[];
   /** Exclude copies that have already left on a sale line (the no-double-sale guard,
    * ADR-0013). Used by the offer composition picker. */
   excludeSold?: boolean;
@@ -827,6 +832,26 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
  * the list and its holdings total filter over exactly the same copies. `locationIds` is
  * the pre-resolved location subtree (or null when no location filter is set) since it
  * needs an async lookup the caller already did. */
+/**
+ * The `where` fragment for a set of formats (#427). Not a plain `in` like the other multi-value
+ * axes, because `"single"` is the **null** format (ADR-0020): a null can never be a member of an
+ * `in` list, so ticking *Single* alongside a real format is two branches ORed together. Ticking it
+ * alone is the null test on its own, which is the reading the single-select already had.
+ *
+ * Returns null when the filter is off, and an `OR` goes to the caller's **AND list** rather than to
+ * the top level, where the search's own `OR` would collide with it.
+ */
+function formatWhere(
+  formatIds: readonly string[] | undefined
+): Prisma.ItemWhereInput | null {
+  if (!formatIds || formatIds.length === 0) return null;
+  const single = formatIds.includes("single");
+  const ids = formatIds.filter((id) => id !== "single");
+  if (!single) return { formatId: { in: ids } };
+  if (ids.length === 0) return { formatId: null };
+  return { OR: [{ formatId: null }, { formatId: { in: ids } }] };
+}
+
 function buildItemWhere(
   collectionId: string,
   filters: ItemListFiltersPaginated,
@@ -919,6 +944,8 @@ function buildItemWhere(
     // way is exactly what one plans a listing for.
     and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
   }
+  const formats = formatWhere(filters.formatIds);
+  if (formats) and.push(formats);
   // "No ref" (#421) is two stored values — null, and the empty string a cleared field can leave —
   // so it goes in the AND list rather than as a top-level `OR` the search would collide with.
   if (filters.locationRef === NO_LOCATION_REF) {
@@ -953,9 +980,6 @@ function buildItemWhere(
             filters.certificateStatusId === "none" ? null : filters.certificateStatusId,
         }
       : {}),
-    ...(filters.formatId
-      ? { formatId: filters.formatId === "single" ? null : filters.formatId }
-      : {}),
     ...(filters.stampId ? { stampId: filters.stampId } : {}),
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.excludeIds && filters.excludeIds.length > 0
@@ -973,7 +997,9 @@ function buildItemWhere(
       ? { locationRef: filters.locationRef }
       : {}),
     ...(filters.lotId ? { lotId: filters.lotId } : {}),
-    ...(filters.deliveryState ? { deliveryState: filters.deliveryState } : {}),
+    ...(filters.deliveryStates && filters.deliveryStates.length > 0
+      ? { deliveryState: { in: filters.deliveryStates } }
+      : {}),
     ...(filters.excludeSold ? { saleLineItems: { none: {} } } : {}),
     // Disposed copies are hidden unless asked for (#395) — `disposedAt` doubles as the flag, so
     // this stays a plain `where` rather than a derived narrowing.
@@ -1321,9 +1347,9 @@ export async function listItemsPaginated(
  * silently produce a group nothing in it could be listed from. */
 const GROUP_ELIGIBILITY = {
   forSale: true,
-  deliveryState: "delivered",
+  deliveryStates: ["delivered"],
   excludeSold: true,
-} as const;
+} as const satisfies Partial<ItemListFiltersPaginated>;
 
 /** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for
  * what "interchangeable" means and why condition is never optional). Carries the stamp identity a

@@ -2280,7 +2280,7 @@ export async function listComposableCopies(
 ): Promise<ItemListItem[]> {
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     forSale: true,
-    deliveryState: "delivered",
+    deliveryStates: ["delivered"],
     excludeSold: true,
     notInOfferId: opts.offerId,
     areaIds: opts.areaIds,

@@ -233,7 +233,7 @@ describe("duplicate groups", () => {
       stampId,
       conditionIds: [mnhId],
       forSale: true,
-      deliveryState: "delivered",
+      deliveryStates: ["delivered"],
       excludeSold: true,
     });
     assert.equal(items.length, top.count);

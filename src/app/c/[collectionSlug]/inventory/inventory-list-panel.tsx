@@ -97,6 +97,14 @@ const CONTROL_STYLE: React.CSSProperties = {
   minHeight: "2rem",
 };
 
+/** A comma-separated multi-select filter read off the URL (#425, #427), memoised so the filter
+ * objects it feeds stay referentially stable and do not refetch every render. An absent or
+ * all-blank parameter is the empty list — the absence of the filter, never an empty set. */
+function useCsvParam(searchParams: ReturnType<typeof useSearchParams>, key: string): string[] {
+  const raw = searchParams.get(key);
+  return useMemo(() => (raw ? raw.split(",").filter(Boolean) : []), [raw]);
+}
+
 interface InventoryListPanelProps {
   collectionId: string;
   collectionSlug: string;
@@ -155,17 +163,16 @@ export function InventoryListPanel({
   );
 
   const search = searchParams.get("search") ?? "";
-  // Condition is a **multi-select** (#425): "the mint grades" is as ordinary a question of the
-  // Copies list as one grade is, and asking it three times over is not the same as asking it once.
-  // Comma-separated in the URL exactly as `areaIds` is; an empty list is the absence of a filter.
-  const conditionIds = useMemo(() => {
-    const raw = searchParams.get("conditionIds");
-    return raw ? raw.split(",").filter(Boolean) : [];
-  }, [searchParams]);
+  // Condition, format and delivery state are **multi-selects** (#425, #427): a copy is in exactly
+  // one of each, but the question asked of the list is routinely a group of them — "the mint
+  // grades", "everything still on its way to me" — and asking it three times over is not the same as
+  // asking it once. Comma-separated in the URL exactly as `areaIds` is; an empty list is the absence
+  // of the filter.
+  const conditionIds = useCsvParam(searchParams, "conditionIds");
   // Format is a *filter* here, not a price switcher (#343): a copy's format is a fact it carries,
   // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
   // choice — the copies with no format — which an absent value could not express.
-  const formatId = searchParams.get("formatId") ?? "";
+  const formatIds = useCsvParam(searchParams, "formatIds");
   const locationId = searchParams.get("locationId") ?? "";
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
@@ -196,9 +203,10 @@ export function InventoryListPanel({
     return id ? offerPlatforms.find((p) => p.id === id) : undefined;
   }, [offerPlatforms, notOfferedPlatformId, lastPlatformId]);
 
-  // Physical delivery state (#272): a plain single-select like the condition one — a copy is in
-  // exactly one state, and the chip on the row is what this filter narrows to.
-  const deliveryState = searchParams.get("deliveryState") ?? "";
+  // Physical delivery state (#272): the axis the row chip shows, and a multi-select like the
+  // condition one (#427) — the states worth asking about come in groups ("ordered, in transit, to
+  // sort" is one question: what is still on its way).
+  const deliveryStates = useCsvParam(searchParams, "deliveryStates");
   // Sold copies are hidden by default (#207); this toggle brings them back into the list.
   const includeSold = searchParams.get("includeSold") === "true";
   // Copies no longer held are hidden the same way (#394/#395): the list answers "what do I have".
@@ -288,7 +296,7 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
-      formatId: formatId || undefined,
+      formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       issueId: issueId || undefined,
@@ -299,13 +307,13 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
-      deliveryState: deliveryState || undefined,
+      deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, formatId, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -315,7 +323,7 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
-      formatId: formatId || undefined,
+      formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       issueId: issueId || undefined,
@@ -325,11 +333,11 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
-      deliveryState: deliveryState || undefined,
+      deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, formatId, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryState, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -382,13 +390,13 @@ export function InventoryListPanel({
   const issueGroupsQuery = useIssueGroupsInfinite(collectionId, filters, groupIssues);
   // Grouping narrows the set to for-sale, delivered, unsold copies, so the holdings bar must narrow
   // with it — a total counting copies the list no longer shows is worse than none (#151).
-  const valuationFilters = useMemo(
+  const valuationFilters: InventoryItemFilters = useMemo(
     () =>
       groupDuplicates
         ? {
             ...filters,
             forSale: true,
-            deliveryState: "delivered",
+            deliveryStates: ["delivered"],
             includeSold: undefined,
             includeDisposed: undefined,
           }
@@ -503,13 +511,13 @@ export function InventoryListPanel({
     !!search ||
     !!issueId ||
     conditionIds.length > 0 ||
-    !!formatId ||
+    formatIds.length > 0 ||
     !!locationId ||
     !!year ||
     noPhotos ||
     missingCatalogValue ||
     !!notOfferedPlatformId ||
-    !!deliveryState ||
+    deliveryStates.length > 0 ||
     includeSold ||
     includeDisposed ||
     activeDispositions.size > 0;
@@ -849,7 +857,9 @@ export function InventoryListPanel({
               />
 
               {/* Delivery state filter (#272), beside the condition one: the axis the row chip
-                  shows, so "what is still in transit?" is one click from seeing it flagged. */}
+                  shows, so "what is still in transit?" is one click from seeing it flagged. A
+                  multi-select (#427) because the states worth asking about come in groups —
+                  *Ordered*, *In transit* and *To sort* together are "what is still on its way". */}
               <Tooltip
                 content={
                   groupDuplicates
@@ -857,51 +867,39 @@ export function InventoryListPanel({
                     : ""
                 }
               >
-              <select
-                value={deliveryState}
-                disabled={groupDuplicates}
-                onChange={(e) => updateParams({ deliveryState: e.target.value })}
-                style={{
-                  ...CONTROL_STYLE,
-                  ...(groupDuplicates ? { opacity: 0.5 } : null),
-                  ...(deliveryState
-                    ? {
-                        fontWeight: 600,
-                        color: "var(--color-accent)",
-                        border: "1px solid var(--color-accent)",
-                        background: "var(--color-accent-soft)",
-                      }
-                    : null),
-                }}
-                aria-label="Filter by delivery state"
-              >
-                <option value="">All delivery states</option>
-                {DELIVERY_STATES.map((state) => (
-                  <option key={state} value={state}>
-                    {DELIVERY_STATE_META[state].label}
-                  </option>
-                ))}
-              </select>
+                <span>
+                  <MultiSelectFilter
+                    options={DELIVERY_STATES.map((state) => ({
+                      id: state,
+                      label: DELIVERY_STATE_META[state].label,
+                    }))}
+                    selected={deliveryStates}
+                    onChange={(ids) => updateParams({ deliveryStates: ids.join(",") })}
+                    allLabel="All delivery states"
+                    itemNoun="delivery states"
+                    ariaLabel="Filter by delivery state"
+                    disabled={groupDuplicates}
+                  />
+                </span>
               </Tooltip>
 
-              {/* Format filter (#343), beside the condition one. Absent entirely when the
-                  collection defines no formats — most never do. "Single" is a listed choice
-                  because it is a real answer (no format set), not the absence of a filter. */}
+              {/* Format filter (#343), beside the condition one, and a multi-select like it (#427).
+                  Absent entirely when the collection defines no formats — most never do. "Single" is
+                  a tickable choice because it is a real answer (no format set), not the absence of a
+                  filter, and it can be ticked *alongside* a format: null is never a member of an
+                  `in`, so the server ORs the two branches. */}
               {formats.length > 0 && (
-                <select
-                  value={formatId}
-                  onChange={(e) => updateParams({ formatId: e.target.value })}
-                  style={CONTROL_STYLE}
-                  aria-label="Filter by format"
-                >
-                  <option value="">All formats</option>
-                  <option value="single">Single</option>
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
+                <MultiSelectFilter
+                  options={[
+                    { id: "single", label: "Single" },
+                    ...formats.map((f) => ({ id: f.id, label: f.name })),
+                  ]}
+                  selected={formatIds}
+                  onChange={(ids) => updateParams({ formatIds: ids.join(",") })}
+                  allLabel="All formats"
+                  itemNoun="formats"
+                  ariaLabel="Filter by format"
+                />
               )}
 
               {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface

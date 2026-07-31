@@ -49,9 +49,10 @@ export interface InventoryItemFilters {
   /** Restrict to copies with one certificate status. `"none"` matches the copies with no
    * certificate — needed to address a duplicate group whose members carry none (#372). */
   certificateStatusId?: string;
-  /** Restrict to copies of one physical format (#343). `"single"` matches the copies with no
-   * format set — null *is* the single (ADR-0020), which an absent filter cannot express. */
-  formatId?: string;
+  /** The physical formats in scope (#343, #427) — an OR, absent meaning every format. `"single"` is
+   * a tickable value like any other and matches the copies with no format set: null *is* the single
+   * (ADR-0020), which an absent filter cannot express. */
+  formatIds?: string[];
   /** Restrict to copies whose linked stamp belongs to any of these areas (selected area
    * plus descendants). Mirrors the stamps list area sidebar (#106). */
   areaIds?: string[];
@@ -85,9 +86,9 @@ export interface InventoryItemFilters {
   /** Restrict to for-sale copies not yet offered on this platform (#259) — no non-terminal offer
    * on it. Implies "for sale". */
   notOfferedPlatformId?: string;
-  /** Restrict to copies in one physical delivery state (ADR-0009 §5, #272) — e.g. only the
-   * copies still in transit. */
-  deliveryState?: string;
+  /** The physical delivery states in scope (ADR-0009 §5, #272, #427) — an OR, absent meaning every
+   * state, so "everything still on its way to me" is one filter rather than three passes. */
+  deliveryStates?: string[];
   /** Show copies that have already sold (#207). Sold copies are hidden by default; set true to
    * include them. */
   includeSold?: boolean;
@@ -102,7 +103,7 @@ export interface InventoryItemFilters {
 export interface InventoryYearFacetFilters {
   conditionIds?: string[];
   certificateStatusId?: string;
-  formatId?: string;
+  formatIds?: string[];
   areaIds?: string[];
   search?: string;
   catalogVendorId?: string;
@@ -118,9 +119,9 @@ export interface InventoryYearFacetFilters {
   missingCatalogValue?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259). */
   notOfferedPlatformId?: string;
-  /** Restrict to copies in one physical delivery state (ADR-0009 §5, #272) — e.g. only the
-   * copies still in transit. */
-  deliveryState?: string;
+  /** The physical delivery states in scope (ADR-0009 §5, #272, #427) — an OR, absent meaning every
+   * state, so "everything still on its way to me" is one filter rather than three passes. */
+  deliveryStates?: string[];
   /** Include already-sold copies in the facet counts (#207); hidden by default. */
   includeSold?: boolean;
   /** Include copies no longer held in the facet counts (#395); hidden by default. */
@@ -156,7 +157,8 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
     params.set("conditionIds", filters.conditionIds.join(","));
   if (filters.certificateStatusId)
     params.set("certificateStatusId", filters.certificateStatusId);
-  if (filters.formatId) params.set("formatId", filters.formatId);
+  if (filters.formatIds && filters.formatIds.length > 0)
+    params.set("formatIds", filters.formatIds.join(","));
   if (filters.areaIds && filters.areaIds.length > 0)
     params.set("areaIds", filters.areaIds.join(","));
   if (filters.search) params.set("search", filters.search);
@@ -175,7 +177,8 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.notOfferedPlatformId)
     params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
-  if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
+  if (filters.deliveryStates && filters.deliveryStates.length > 0)
+    params.set("deliveryStates", filters.deliveryStates.join(","));
   if (filters.includeSold) params.set("includeSold", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
   return params;
@@ -301,7 +304,7 @@ export function useHoldingsValuation(
     queryKey: ["inventory", collectionId, "valuation", {
       conditionIds: filters.conditionIds,
       certificateStatusId: filters.certificateStatusId,
-      formatId: filters.formatId,
+      formatIds: filters.formatIds,
       areaIds: filters.areaIds,
       search: filters.search,
       catalogVendorId: filters.catalogVendorId,
@@ -316,7 +319,7 @@ export function useHoldingsValuation(
       noPhotos: filters.noPhotos,
       missingCatalogValue: filters.missingCatalogValue,
       notOfferedPlatformId: filters.notOfferedPlatformId,
-      deliveryState: filters.deliveryState,
+      deliveryStates: filters.deliveryStates,
       includeSold: filters.includeSold,
     }] as const,
     queryFn: async () => {
@@ -325,7 +328,8 @@ export function useHoldingsValuation(
         params.set("conditionIds", filters.conditionIds.join(","));
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
-      if (filters.formatId) params.set("formatId", filters.formatId);
+      if (filters.formatIds && filters.formatIds.length > 0)
+        params.set("formatIds", filters.formatIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
@@ -342,7 +346,8 @@ export function useHoldingsValuation(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
-      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
+      if (filters.deliveryStates && filters.deliveryStates.length > 0)
+        params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeSold) params.set("includeSold", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
@@ -368,7 +373,8 @@ export function useItemYears(
         params.set("conditionIds", filters.conditionIds.join(","));
       if (filters.certificateStatusId)
         params.set("certificateStatusId", filters.certificateStatusId);
-      if (filters.formatId) params.set("formatId", filters.formatId);
+      if (filters.formatIds && filters.formatIds.length > 0)
+        params.set("formatIds", filters.formatIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
@@ -385,7 +391,8 @@ export function useItemYears(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
-      if (filters.deliveryState) params.set("deliveryState", filters.deliveryState);
+      if (filters.deliveryStates && filters.deliveryStates.length > 0)
+        params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeSold) params.set("includeSold", "true");
       if (filters.includeDisposed) params.set("includeDisposed", "true");
       const res = await fetch(

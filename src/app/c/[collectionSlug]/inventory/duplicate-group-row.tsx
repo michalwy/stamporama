@@ -362,13 +362,15 @@ export function groupMemberFilters(
     // group's members are by definition all in this condition.
     conditionIds: [group.conditionId],
     // `"single"` / `"none"` are the sentinels for a null value — an absent filter means "any",
-    // which is the opposite of what a key carrying null says.
-    ...(axes.format ? { formatId: group.formatId ?? "single" } : {}),
+    // which is the opposite of what a key carrying null says. Like the condition, the format the
+    // group was keyed on goes through the panel's own multi-select field as a single-entry list
+    // (#427) and replaces its selection.
+    ...(axes.format ? { formatIds: [group.formatId ?? "single"] } : {}),
     ...(axes.certificate
       ? { certificateStatusId: group.certificateStatusId ?? "none" }
       : {}),
     forSale: true,
-    deliveryState: "delivered",
+    deliveryStates: ["delivered"],
     includeSold: undefined,
   };
 }

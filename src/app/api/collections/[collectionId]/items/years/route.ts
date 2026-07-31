@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { isDeliveryState } from "@/lib/delivery-state";
 import { listItemYearFacets } from "@/lib/items";
-import { readConditionIds } from "../item-filters";
+import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +21,7 @@ export async function GET(
     const years = await listItemYearFacets(session.user.id, collectionId, {
       conditionIds: readConditionIds(sp),
       certificateStatusId: sp.get("certificateStatusId") || undefined,
-      formatId: sp.get("formatId") || undefined,
+      formatIds: readCsvParam(sp, "formatIds"),
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
       catalogVendorId: sp.get("catalogVendorId") || undefined,
@@ -36,7 +35,7 @@ export async function GET(
       noPhotos: boolParam(sp.get("noPhotos")),
       missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
       notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
-      deliveryState: deliveryStateParam(sp.get("deliveryState")),
+      deliveryStates: readDeliveryStates(sp),
       // Match the list: sold copies are excluded unless includeSold=true (#207), and copies no
       // longer held unless includeDisposed=true (#395).
       excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,
@@ -53,8 +52,3 @@ function boolParam(value: string | null): boolean | undefined {
   return value === "true" ? true : undefined;
 }
 
-/** Delivery-state filter (#272), mirroring the list endpoint: an unrecognised value turns
- * the filter off rather than narrowing to nothing. */
-function deliveryStateParam(value: string | null): string | undefined {
-  return isDeliveryState(value) ? value : undefined;
-}

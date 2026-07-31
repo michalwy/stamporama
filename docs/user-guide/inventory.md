@@ -110,8 +110,10 @@ Stamps, Copies, Offers, Sales and Purchases.
   are **hidden by default**, for the same reason sold ones are: the list answers *what do I have*.
   Toggle this on to bring them back into view. The year panel follows this filter too; the holdings
   totals always account for them, on their own **Written off** line.
-- **Delivery state** — show only copies in one delivery state, e.g. everything still
-  *In transit* or every copy marked *Damaged*. See [Delivery state](#delivery-state).
+- **Delivery state** — show only copies in the delivery states you tick. Like the condition filter
+  it takes **several at once**, which is how you ask the question that actually comes up: ticking
+  *Ordered*, *In transit* and *To sort* together is "everything still on its way to me". Or tick one
+  — every copy marked *Damaged*. See [Delivery state](#delivery-state).
 - **Condition** — show only copies in the conditions you tick. It takes **several at once**: click
   it and tick as many grades as you like, and the list shows copies in *any* of them — "the mint
   grades" is as ordinary a question as one grade is. The control reads the grade's name when one is
@@ -478,8 +480,9 @@ thing's price.
 ### Filtering the list by format
 
 Once your collection has any formats, the Copies list grows a **format** filter beside the
-condition one. It works the same way: pick a format to see only those copies, or **Single** to see
-only the ordinary ones. Leaving it on *All formats* shows everything.
+condition one. It works the same way, multi-select included: tick a format to see only those copies,
+or **Single** to see only the ordinary ones — and tick both to see, say, every pair *and* every
+single while leaving blocks out. Leaving it on *All formats* shows everything.
 
 ### Seeing a format's prices on the Stamps and Issues lists
 

@@ -8,16 +8,31 @@ export function boolParam(value: string | null): boolean | undefined {
 }
 
 /**
- * The conditions in scope (#425), comma-separated as `areaIds` already are — a list because the
- * filter is a multi-select, and a duplicate group addressing its own members simply sends the one
- * condition it grouped on. An all-blank value is no filter rather than an unmatchable empty set, so
- * a link carrying a cleared parameter shows the list instead of an empty screen.
+ * A multi-value filter (#425, #427), comma-separated as `areaIds` already is — a list because the
+ * control is a multi-select, and a group addressing its own members simply sends the one value it
+ * grouped on. An all-blank value is no filter rather than an unmatchable empty set, so a link
+ * carrying a cleared parameter shows the list instead of an empty screen.
  */
-export function readConditionIds(sp: URLSearchParams): string[] | undefined {
-  const raw = sp.get("conditionIds");
+export function readCsvParam(sp: URLSearchParams, key: string): string[] | undefined {
+  const raw = sp.get(key);
   if (!raw) return undefined;
-  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
-  return ids.length > 0 ? ids : undefined;
+  const values = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+/** The conditions in scope (#425). */
+export function readConditionIds(sp: URLSearchParams): string[] | undefined {
+  return readCsvParam(sp, "conditionIds");
+}
+
+/**
+ * The delivery states in scope (#272, #427). Unrecognised values are **dropped** rather than passed
+ * through, so a stale link narrows to the states it does name — or, once nothing is left, shows the
+ * whole list rather than an empty screen.
+ */
+export function readDeliveryStates(sp: URLSearchParams): string[] | undefined {
+  const values = readCsvParam(sp, "deliveryStates")?.filter(isDeliveryState);
+  return values && values.length > 0 ? values : undefined;
 }
 
 /**
@@ -28,13 +43,11 @@ export function readConditionIds(sp: URLSearchParams): string[] | undefined {
 export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
   const areaIdsParam = sp.get("areaIds");
   const yearParam = sp.get("year");
-  // Delivery state (#272): an unrecognised value turns the filter off rather than being passed
-  // through, so a stale link shows the list instead of an empty screen.
-  const deliveryStateParam = sp.get("deliveryState");
   return {
     conditionIds: readConditionIds(sp),
     certificateStatusId: sp.get("certificateStatusId") || undefined,
-    formatId: sp.get("formatId") || undefined,
+    formatIds: readCsvParam(sp, "formatIds"),
+    deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
     search: sp.get("search") || undefined,
     catalogVendorId: sp.get("catalogVendorId") || undefined,
@@ -58,7 +71,6 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     noPhotos: boolParam(sp.get("noPhotos")),
     missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
-    deliveryState: isDeliveryState(deliveryStateParam) ? deliveryStateParam : undefined,
     // Sold copies are hidden from the inventory list by default (#207); an explicit
     // `includeSold=true` shows them again.
     excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,

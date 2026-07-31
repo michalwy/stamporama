@@ -25,6 +25,7 @@ export function MultiSelectFilter({
   allLabel,
   itemNoun,
   ariaLabel,
+  disabled = false,
 }: {
   options: { id: string; label: string }[];
   /** The selected ids. Empty is "every value" — the absence of a filter, not an empty set. */
@@ -35,6 +36,9 @@ export function MultiSelectFilter({
   /** What several selected values are counted in, e.g. `conditions` → `3 conditions`. */
   itemNoun: string;
   ariaLabel: string;
+  /** A precondition elsewhere has fixed this axis, so the control is shown greyed rather than
+   *  hidden (#273) — the caller supplies the tooltip saying why. */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
@@ -52,7 +56,7 @@ export function MultiSelectFilter({
         : `${chosen.size} ${itemNoun}`;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const el = triggerRef.current;
     if (el) {
       const rect = el.getBoundingClientRect();
@@ -79,7 +83,7 @@ export function MultiSelectFilter({
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);
     };
-  }, [open]);
+  }, [open, disabled]);
 
   function toggle(id: string) {
     onChange(chosen.has(id) ? selected.filter((s) => s !== id) : [...selected, id]);
@@ -95,8 +99,10 @@ export function MultiSelectFilter({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         style={{
+          ...(disabled ? { opacity: 0.5 } : null),
           padding: "0.375rem 0.625rem",
           border: `1px solid ${active ? "var(--color-accent)" : "var(--color-border-strong)"}`,
           borderRadius: "0.375rem",
@@ -105,7 +111,7 @@ export function MultiSelectFilter({
           color: active ? "var(--color-accent)" : "var(--color-text-primary)",
           background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
           minHeight: "2rem",
-          cursor: "pointer",
+          cursor: disabled ? "default" : "pointer",
           display: "inline-flex",
           alignItems: "center",
           gap: "0.4rem",
@@ -116,6 +122,7 @@ export function MultiSelectFilter({
         <span style={{ fontSize: "0.625rem", opacity: 0.7 }}>▾</span>
       </button>
       {open &&
+        !disabled &&
         pos &&
         typeof document !== "undefined" &&
         createPortal(
