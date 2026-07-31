@@ -39,6 +39,12 @@ export interface BackfillProposal {
   number: string | null;
   label: string;
   existingNumber?: string;
+  /** For `conflict`: the bare number "use Colnect's number" (#433) would store instead, already
+   *  resolved against the stamp's own area prefix. Null when the printed value cannot be turned
+   *  into one we would store, and so when there is nothing to offer. */
+  overwriteNumber?: string | null;
+  /** Label of {@link BackfillProposal.overwriteNumber}, for naming the action. */
+  overwriteLabel?: string;
   /** Written despite colliding with an existing catalog identity (collection is in warn mode). */
   duplicateWarning?: boolean;
   duplicateStampNames?: string[];

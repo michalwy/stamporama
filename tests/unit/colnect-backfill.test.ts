@@ -104,6 +104,27 @@ describe("proposeBackfill", () => {
     assert.equal(out[0].number, null);
     assert.equal(out[0].existingNumber, "3690");
     assert.equal(out[0].label, "Mi·PL 3690");
+    // …but it says what taking Colnect's word would store, which is what #433 offers.
+    assert.equal(out[0].overwriteNumber, "3691");
+    assert.equal(out[0].overwriteLabel, "Mi·PL 3691");
+  });
+
+  it("offers no overwrite for a conflict whose printed number we could not store (#433)", () => {
+    // The same two refusals a fill reports: no prefix configured, and a prefix from another area.
+    const noPrefix = proposeBackfill(
+      [ref("Mi", "PL 3691", V_MI, "Mi")],
+      target({ [V_MI]: "3690" }, { [V_MI]: null })
+    );
+    assert.equal(noPrefix[0].status, "conflict");
+    assert.equal(noPrefix[0].overwriteNumber, null);
+    assert.equal(noPrefix[0].overwriteLabel, undefined);
+
+    const otherArea = proposeBackfill(
+      [ref("Mi", "DE 200", V_MI, "Mi")],
+      target({ [V_MI]: "3690" }, { [V_MI]: "PL" })
+    );
+    assert.equal(otherArea[0].status, "conflict");
+    assert.equal(otherArea[0].overwriteNumber, null);
   });
 
   it("lets only the first reference per vendor fill; a second conflicts with it", () => {
@@ -116,5 +137,8 @@ describe("proposeBackfill", () => {
       ["would-fill", "conflict"]
     );
     assert.equal(out[1].existingNumber, "3382");
+    // Nothing to correct: the number it disagrees with is the fill this batch is about to make,
+    // not something the stamp holds (#433).
+    assert.equal(out[1].overwriteNumber, null);
   });
 });

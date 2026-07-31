@@ -10,9 +10,10 @@ import type {
   MatchedNotice,
   MatchResponse,
   OpenMatchResponse,
+  OverwriteNumberResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
-import { callConfirm, callMatch } from "./matching-client";
+import { callConfirm, callMatch, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
@@ -73,7 +74,9 @@ async function matchOnLoad(tabId: number, notice: DetectedNotice): Promise<void>
   }
 }
 
-async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmResponse> {
+async function handle(
+  msg: BackgroundRequest
+): Promise<MatchResponse | ConfirmResponse | OverwriteNumberResponse> {
   const profile = await getActiveProfile();
   if (!profile) {
     return { ok: false, error: "No active profile. Set one in the extension options." };
@@ -86,6 +89,13 @@ async function handle(msg: BackgroundRequest): Promise<MatchResponse | ConfirmRe
   if (msg.type === "match") {
     const results = await callMatch(profile, msg.items, msg.dryRun, backfill);
     return { ok: true, results };
+  }
+
+  // Correcting a catalog number (#433) writes no Colnect ID, so no doorbell: the screens listening
+  // for one are waiting on a *match*, and re-reading them over a number they never showed would be
+  // noise. The window renders the new value from this answer.
+  if (msg.type === "overwrite-number") {
+    return callOverwriteNumber(profile, msg.stampId, msg.catalogVendorId, msg.number);
   }
 
   const outcome = await callConfirm(profile, msg.colnectId, msg.stampId, {

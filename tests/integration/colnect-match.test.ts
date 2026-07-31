@@ -4,7 +4,9 @@ import { prisma } from "../../src/lib/db";
 import {
   matchColnectItems,
   confirmColnectMatch,
+  overwriteColnectCatalogNumber,
   ColnectMatchConflictError,
+  ColnectDuplicateNumberError,
   type ColnectMatchItemInput,
 } from "../../src/lib/colnect";
 
@@ -114,6 +116,8 @@ async function seed(suffix: string): Promise<Seed> {
     existing: await makeStamp("Existing", [{ vendorId: mi.id, number: "600" }], "old-600"),
     // Filed as "IIIa" while Colnect prints "IIIA": recall on a digit-free number must ignore case.
     roman: await makeStamp("Local Roman", [{ vendorId: mi.id, number: "IIIa" }], undefined, localArea.id),
+    // Two digit runs in one number (#435): recall has to look for each run, not for "304".
+    multiRun: await makeStamp("Block 30 B4", [{ vendorId: mi.id, number: "BL30 B4" }]),
   };
 
   await prisma.issueMember.create({ data: { issueId: issue.id, stampId: stamps.auto } });
@@ -310,6 +314,25 @@ describe("matchColnectItems", () => {
     }
   });
 
+  it("matches a catalog number carrying two digit runs (#435)", async () => {
+    const results = byColnect(
+      await matchColnectItems(
+        s.userId,
+        s.collectionId,
+        [{ colnectId: "900", catalogRefs: [{ catalog: "Mi", number: "PL BL30 B4" }] }],
+        { dryRun: true }
+      )
+    );
+    const multi = results.get("900");
+    // All the digits at once ("304") appear nowhere in the stored "BL30 B4", so recall used to
+    // return nothing and the item read as `no-candidates` with the stamp sitting right there.
+    assert.equal(multi?.status, "auto", "each digit run must be recalled on its own");
+    if (multi?.status === "auto") {
+      assert.equal(multi.stampId, s.stamps.multiRun);
+      assert.deepEqual(multi.stamp?.catalogNumbers, [{ label: "Mi·PL BL30 B4", status: "matched" }]);
+    }
+  });
+
   it("requires ownership", async () => {
     await assert.rejects(
       () => matchColnectItems("wrong-user", s.collectionId, batch()),
@@ -359,6 +382,101 @@ describe("confirmColnectMatch", () => {
     await assert.rejects(
       () => confirmColnectMatch(s.userId, s.collectionId, { colnectId: "x", stampId: "nonexistent-stamp" }),
       /not found/i
+    );
+  });
+});
+
+describe("overwriteColnectCatalogNumber", () => {
+  let s: Seed;
+
+  before(async () => {
+    s = await seed(`overwrite-${Date.now()}`);
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: s.userId } });
+    await prisma.user.delete({ where: { id: s.userId } });
+  });
+
+  async function numberOf(stampId: string, vendorId: string): Promise<string | undefined> {
+    const row = await prisma.stampCatalogNumber.findFirst({
+      where: { stampId, catalogVendorId: vendorId },
+      select: { number: true },
+    });
+    return row?.number;
+  }
+
+  it("replaces the stamp's number for one vendor and labels what it stored (#433)", async () => {
+    // The `partial` stamp holds Scott 55 while Colnect prints 99 — the conflict #250 surfaces.
+    const result = await overwriteColnectCatalogNumber(s.userId, s.collectionId, {
+      stampId: s.stamps.partial,
+      catalogVendorId: s.scVendorId,
+      number: "99",
+    });
+    assert.equal(result.number, "99");
+    assert.equal(result.label, "Sc 99"); // Scott carries no area prefix in this collection
+    assert.equal(await numberOf(s.stamps.partial, s.scVendorId), "99");
+    // Only that vendor's number moves; the Michel number the match was made on is untouched.
+    assert.equal(await numberOf(s.stamps.partial, s.miVendorId), "500");
+  });
+
+  it("refuses a catalog the stamp has no number in — that is the backfill's job", async () => {
+    await assert.rejects(
+      () =>
+        overwriteColnectCatalogNumber(s.userId, s.collectionId, {
+          stampId: s.stamps.auto,
+          catalogVendorId: s.fiVendorId,
+          number: "1234",
+        }),
+      /no number in that catalog/i
+    );
+  });
+
+  it("blocks an overwrite onto an identity another stamp holds when the policy is block (#85)", async () => {
+    await prisma.collection.update({
+      where: { id: s.collectionId },
+      data: { duplicateCatalogMode: "block" },
+    });
+    try {
+      // `dupA` and `dupB` are both Michel PL 400; moving `auto` (PL 200) onto 400 collides with both.
+      await assert.rejects(
+        () =>
+          overwriteColnectCatalogNumber(s.userId, s.collectionId, {
+            stampId: s.stamps.auto,
+            catalogVendorId: s.miVendorId,
+            number: "400",
+          }),
+        (err: unknown) =>
+          err instanceof ColnectDuplicateNumberError && err.stampNames.length === 2
+      );
+      assert.equal(await numberOf(s.stamps.auto, s.miVendorId), "200"); // untouched
+    } finally {
+      await prisma.collection.update({
+        where: { id: s.collectionId },
+        data: { duplicateCatalogMode: "warn" },
+      });
+    }
+  });
+
+  it("writes and reports the collision under the warn policy", async () => {
+    const result = await overwriteColnectCatalogNumber(s.userId, s.collectionId, {
+      stampId: s.stamps.auto,
+      catalogVendorId: s.miVendorId,
+      number: "400",
+    });
+    assert.deepEqual(result.duplicateStampNames, ["Dup A", "Dup B"]);
+    assert.equal(await numberOf(s.stamps.auto, s.miVendorId), "400");
+  });
+
+  it("requires ownership", async () => {
+    await assert.rejects(
+      () =>
+        overwriteColnectCatalogNumber("wrong-user", s.collectionId, {
+          stampId: s.stamps.partial,
+          catalogVendorId: s.scVendorId,
+          number: "1",
+        }),
+      /access denied/i
     );
   });
 });

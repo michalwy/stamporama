@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import {
-  catalogDigits,
+  catalogDigitRuns,
   catalogIdentityKey,
   catalogMatchKey,
   formatCatalogNumber,
@@ -756,31 +756,38 @@ function pickPhotoId(
   return ordered[0]?.id ?? null;
 }
 
-/** One `contains` condition of the candidate recall net: what to look for inside a stored number,
+/** One condition of the candidate recall net: the substrings a stored number must **all** contain,
  *  and whether the comparison must ignore case. */
 interface ColnectRecallCondition {
   catalogVendorId: string;
-  value: string;
+  values: string[];
   insensitive: boolean;
 }
 
 /**
- * The substring to recall candidate stamps by, for one printed Colnect number.
+ * The substrings to recall candidate stamps by, for one printed Colnect number — a stored number
+ * has to contain **all** of them.
  *
- * Digits are the sharpest handle and the common case: `"PL 3690"` → `"3690"`, `"BL132"` → `"132"`,
- * matched case-sensitively (digits have no case). A number with **no digits at all** — Michel's
- * Roman local-issue numbers, e.g. `"RU-BW IIIA"` — would otherwise recall nothing and be
- * reported `no-candidates` even with the very stamp in the collection. For those the handle is the
- * bare number the backfill would store, i.e. the value minus its leading area-prefix token
- * (`"RU-BW IIIA"` → `"IIIA"`, `"IIIA"` → `"IIIA"`), compared case-insensitively so a stamp filed as
- * `IIIa` is still recalled. Null when nothing usable is left. Recall may over-match freely — the
- * strict full-key check that follows is what decides.
+ * Digits are the sharpest handle and the common case, taken one **run** at a time: `"PL 3690"` →
+ * `["3690"]`, `"BL132"` → `["132"]`, `"PL BL30 B4"` → `["30", "4"]`, matched case-sensitively
+ * (digits have no case). Per run rather than all the digits at once because a number carrying two of
+ * them concatenates to something no stored value contains (`"304"` against a filed `"BL30 B4"`),
+ * which recalled nothing and reported `no-candidates` with the very stamp in the collection (#435).
+ * A run, by contrast, survives every spacing and punctuation difference between the two sides —
+ * which is what the strict key already folds away.
+ *
+ * A number with **no digits at all** — Michel's Roman local-issue numbers, e.g. `"RU-BW IIIA"` —
+ * would likewise recall nothing. For those the handle is the bare number the backfill would store,
+ * i.e. the value minus its leading area-prefix token (`"RU-BW IIIA"` → `"IIIA"`, `"IIIA"` →
+ * `"IIIA"`), compared case-insensitively so a stamp filed as `IIIa` is still recalled. Null when
+ * nothing usable is left. Recall may over-match freely — the strict full-key check that follows is
+ * what decides.
  */
-function colnectRecallToken(printed: string): { value: string; insensitive: boolean } | null {
-  const digits = catalogDigits(printed);
-  if (digits) return { value: digits, insensitive: false };
+function colnectRecallToken(printed: string): { values: string[]; insensitive: boolean } | null {
+  const runs = catalogDigitRuns(printed);
+  if (runs.length > 0) return { values: runs, insensitive: false };
   const bare = splitColnectNumber(printed).number.trim();
-  return bare ? { value: bare, insensitive: true } : null;
+  return bare ? { values: [bare], insensitive: true } : null;
 }
 
 /**
@@ -873,7 +880,7 @@ export async function matchColnectItems(
       if (!vendorId) continue;
       const token = colnectRecallToken(ref.number);
       if (!token) continue;
-      recall.set(`${vendorId}~${token.value}`, { catalogVendorId: vendorId, ...token });
+      recall.set(`${vendorId}~${token.values.join("~")}`, { catalogVendorId: vendorId, ...token });
     }
   }
 
@@ -885,9 +892,13 @@ export async function matchColnectItems(
             catalogNumbers: {
               some: {
                 catalogVendorId: r.catalogVendorId,
-                number: r.insensitive
-                  ? { contains: r.value, mode: "insensitive" as const }
-                  : { contains: r.value },
+                // Every run has to be inside the *same* stored number, so they are ANDed on one
+                // `some` rather than spread over several.
+                AND: r.values.map((value) => ({
+                  number: r.insensitive
+                    ? { contains: value, mode: "insensitive" as const }
+                    : { contains: value },
+                })),
               },
             },
           })),
@@ -1040,6 +1051,120 @@ export async function matchColnectItems(
   }
 
   return results;
+}
+
+// ── Resolving a conflicting number with Colnect's (#433) ─────────────────────
+//
+// The backfill never touches a catalog number the stamp already has: a match is not evidence that
+// our number is the wrong one, so a disagreement is reported and left alone (#280). This is the
+// collector taking that decision explicitly, one field at a time — "Colnect is right, store its
+// number here". It is deliberately *not* part of confirming a match: linking an item and correcting
+// a number are two different claims, and only one of them destroys something.
+
+/** Raised when an overwrite would land on a catalog identity another stamp already holds while the
+ *  collection's duplicate policy (#85) is `block`. Carries the holders, for naming them. */
+export class ColnectDuplicateNumberError extends Error {
+  constructor(readonly stampNames: string[]) {
+    super(`That number is already on ${stampNames.join(", ") || "another stamp"}.`);
+    this.name = "ColnectDuplicateNumberError";
+  }
+}
+
+/** What an overwrite actually did: the stored number, its full label, and — under `warn` — the
+ *  stamps it now collides with (#85). */
+export interface ColnectNumberOverwrite {
+  number: string;
+  label: string;
+  duplicateStampNames?: string[];
+}
+
+/**
+ * Replace one stamp's catalog number for a single vendor with the value Colnect prints (#433).
+ * Owner-authorized and collection-scoped.
+ *
+ * `number` is the **bare** number to store, exactly as `proposeBackfill` resolved it for the
+ * conflict (prefix already stripped against the stamp's area) — this call does not re-split a
+ * printed value, so what the window offered is what lands. It only ever *replaces*: a vendor the
+ * stamp holds no number for is the backfill's job and is refused here, so the two paths can't both
+ * claim one field. The collection's duplicate policy applies exactly as it does to a fill — `block`
+ * refuses with {@link ColnectDuplicateNumberError}, `warn` writes and reports the collision — and
+ * the primary sort key is recomputed (#181), a changed number being able to change it.
+ */
+export async function overwriteColnectCatalogNumber(
+  ownerId: string,
+  collectionId: string,
+  input: { stampId: string; catalogVendorId: string; number: string }
+): Promise<ColnectNumberOverwrite> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const number = input.number.trim();
+  if (!number) throw new Error("A catalog number is required.");
+
+  const stamp = await prisma.stamp.findFirst({
+    where: { id: input.stampId, collectionId },
+    select: {
+      id: true,
+      catalogNumbers: { select: { catalogVendorId: true, number: true } },
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      issueMemberships: { select: { issueId: true }, take: 1 },
+    },
+  });
+  if (!stamp) throw new Error("Stamp not found in this collection.");
+
+  const row = stamp.catalogNumbers.find((cn) => cn.catalogVendorId === input.catalogVendorId);
+  if (!row) throw new Error("This stamp has no number in that catalog to replace.");
+
+  const ctx = await loadColnectContext(collectionId);
+  const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
+  const target: BackfillStamp = {
+    stampId: stamp.id,
+    areaId: link?.collectionAreaId ?? null,
+    issueId: stamp.issueMemberships[0]?.issueId ?? null,
+    numbersByVendor: new Map(stamp.catalogNumbers.map((cn) => [cn.catalogVendorId, cn.number])),
+  };
+  const prefix = effectivePrefixFor(
+    target.areaId,
+    input.catalogVendorId,
+    ctx.areaNodes,
+    target.issueId,
+    ctx.issuePrefixes
+  );
+  const vendorAbbreviation = ctx.vendorAbbrById.get(input.catalogVendorId);
+  if (vendorAbbreviation === undefined) {
+    throw new Error("Catalog vendor not found in this collection.");
+  }
+  const label = formatCatalogNumber(vendorAbbreviation, prefix, number);
+
+  // The duplicate check is the fill's own, run over a proposal shaped like one, so an overwrite and
+  // a fill can never disagree about what collides with what.
+  const proposal: ColnectBackfillProposal = {
+    catalog: vendorAbbreviation,
+    printedNumber: number,
+    catalogVendorId: input.catalogVendorId,
+    vendorAbbreviation,
+    status: "would-fill",
+    number,
+    label,
+  };
+  await markBackfillDuplicates(collectionId, [{ stamp: target, proposal }], ctx);
+  if (proposal.status === "duplicate") {
+    throw new ColnectDuplicateNumberError(proposal.duplicateStampNames ?? []);
+  }
+
+  if (row.number !== number) {
+    await prisma.stampCatalogNumber.update({
+      where: { stampId_catalogVendorId: { stampId: stamp.id, catalogVendorId: input.catalogVendorId } },
+      data: { number },
+    });
+    await recomputeStampSortKeys(collectionId, [stamp.id]);
+  }
+
+  return {
+    number,
+    label,
+    ...(proposal.duplicateStampNames
+      ? { duplicateStampNames: proposal.duplicateStampNames }
+      : {}),
+  };
 }
 
 /**

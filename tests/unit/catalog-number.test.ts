@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeCatalogKey,
-  catalogDigits,
+  catalogDigitRuns,
   catalogIdentityKey,
   formatCatalogNumber,
   catalogMatchKey,
@@ -74,10 +74,16 @@ describe("normalizeCatalogKey", () => {
   });
 });
 
-describe("catalogDigits", () => {
-  it("extracts only digits", () => {
-    assert.equal(catalogDigits("Mi PL200a"), "200");
-    assert.equal(catalogDigits("MiPL"), "");
+describe("catalogDigitRuns", () => {
+  it("extracts each digit run in order", () => {
+    assert.deepEqual(catalogDigitRuns("Mi PL200a"), ["200"]);
+    assert.deepEqual(catalogDigitRuns("MiPL"), []);
+  });
+
+  it("keeps the runs of a multi-part number apart (#435)", () => {
+    // "304" appears nowhere in a stored "BL30 B4", which is what used to lose the stamp.
+    assert.deepEqual(catalogDigitRuns("PL BL30 B4"), ["30", "4"]);
+    assert.deepEqual(catalogDigitRuns("3706 - 3711"), ["3706", "3711"]);
   });
 });
 

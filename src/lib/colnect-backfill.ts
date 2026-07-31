@@ -16,8 +16,9 @@ import { normalizeCatalogKey } from "./catalog-number";
  * matched to:
  *   - `would-fill` / `filled`      — the stamp has no number for that catalog; the bare number is
  *                                    the proposal (dry-run) or was written (real run).
- *   - `conflict`                   — the stamp already has a *different* number there. Read-only:
- *                                    existing numbers are never overwritten.
+ *   - `conflict`                   — the stamp already has a *different* number there. Never
+ *                                    overwritten as part of a match; the collector can resolve one
+ *                                    deliberately, which is what `overwriteNumber` carries (#433).
  *   - `skipped-no-area-prefix`     — Colnect prints a prefix but the stamp's area configures none
  *                                    for that catalog, so the bare number can't be recovered.
  *   - `prefix-mismatch`            — both sides carry a prefix and they differ (likely another area).
@@ -93,6 +94,14 @@ export interface ColnectBackfillProposal {
   label: string;
   /** For `conflict`: the number our stamp already carries in that catalog. */
   existingNumber?: string;
+  /** For `conflict`: the bare number an overwrite would store instead (#433), resolved by the same
+   *  prefix rules a fill uses. Null when the printed value cannot be turned into one we would store
+   *  — no area prefix configured, or a prefix that disagrees with the stamp's area — which is
+   *  exactly when a fill would be skipped rather than written, and so when there is nothing to
+   *  offer. */
+  overwriteNumber?: string | null;
+  /** Label of {@link overwriteNumber}, e.g. `"Mi·PL 3690"`, for naming the action. */
+  overwriteLabel?: string;
   /** Set on a written/proposed fill that collides with an existing catalog identity while the
    *  collection's duplicate policy is `warn` (#85) — written, but worth saying out loud. */
   duplicateWarning?: boolean;
@@ -104,6 +113,20 @@ export interface ColnectBackfillProposal {
 function label(vendorAbbreviation: string, areaPrefix: string | null, number: string): string {
   const head = areaPrefix ? `${vendorAbbreviation}·${areaPrefix}` : vendorAbbreviation;
   return `${head} ${number}`;
+}
+
+/**
+ * The bare number a printed Colnect value would be stored as under `areaPrefix`, or null when it
+ * cannot be recovered: the printed value carries a prefix and the stamp's area configures none, or
+ * the two prefixes disagree (likely another area entirely). Those are the same two refusals the fill
+ * path reports as `skipped-no-area-prefix` / `prefix-mismatch` — it keeps them apart because it says
+ * *why* it wrote nothing, while an overwrite only has to know whether there is anything to offer.
+ */
+function storableNumber(split: SplitColnectNumber, areaPrefix: string | null): string | null {
+  if (split.areaPrefix === null) return split.number;
+  if (areaPrefix === null) return null;
+  if (normalizeCatalogKey(split.areaPrefix) !== normalizeCatalogKey(areaPrefix)) return null;
+  return split.number;
 }
 
 /**
@@ -135,6 +158,11 @@ export function proposeBackfill(
       const theirs = normalizeCatalogKey(`${split.areaPrefix ?? areaPrefix ?? ""}${split.number}`);
       const mine = normalizeCatalogKey(`${areaPrefix ?? ""}${existing}`);
       if (theirs === mine) continue; // the matching evidence — nothing to add
+      // What "use Colnect's number" would store (#433) — but only against a number the stamp really
+      // holds. A second ref for the same vendor conflicts with the fill this very batch intends to
+      // make, and there is nothing stored there to correct.
+      const stored = target.numbersByVendor.get(ref.catalogVendorId) === existing;
+      const overwriteNumber = stored ? storableNumber(split, areaPrefix) : null;
       out.push({
         catalog: ref.catalog,
         printedNumber: ref.printedNumber,
@@ -144,6 +172,10 @@ export function proposeBackfill(
         number: null,
         label: label(ref.vendorAbbreviation, areaPrefix, existing),
         existingNumber: existing,
+        overwriteNumber,
+        ...(overwriteNumber !== null
+          ? { overwriteLabel: label(ref.vendorAbbreviation, areaPrefix, overwriteNumber) }
+          : {}),
       });
       continue;
     }

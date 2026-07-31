@@ -76,3 +76,47 @@ export async function callConfirm(
   if (res.status === 401) return { ok: false, conflict: false, error: "Unauthorized — check the profile token." };
   return { ok: false, conflict: false, error: `Confirm request failed (HTTP ${res.status}).` };
 }
+
+export type OverwriteNumberOutcome =
+  | { ok: true; label: string; duplicateStampNames?: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Replace one of a stamp's catalog numbers with the value Colnect prints (#433). The number sent is
+ * the bare one the matcher already resolved for that conflict, so the instance stores exactly what
+ * the window offered. A 409 is the collection refusing a duplicate catalog identity (#85) — a
+ * refusal with a reason, phrased here rather than left as a status code.
+ */
+export async function callOverwriteNumber(
+  profile: Profile,
+  stampId: string,
+  catalogVendorId: string,
+  number: string
+): Promise<OverwriteNumberOutcome> {
+  const res = await fetch(endpoint(profile, "overwrite-number"), {
+    method: "POST",
+    headers: authHeaders(profile),
+    body: JSON.stringify({ stampId, catalogVendorId, number }),
+  });
+  if (res.ok) {
+    const data = (await res.json().catch(() => ({}))) as {
+      label?: string;
+      duplicateStampNames?: string[];
+    };
+    return {
+      ok: true,
+      label: data.label ?? number,
+      ...(data.duplicateStampNames ? { duplicateStampNames: data.duplicateStampNames } : {}),
+    };
+  }
+  if (res.status === 409) {
+    const data = (await res.json().catch(() => ({}))) as { stampNames?: string[] };
+    const names = data.stampNames?.join(", ");
+    return {
+      ok: false,
+      error: `Not changed — that number is already on ${names || "another stamp"}.`,
+    };
+  }
+  if (res.status === 401) return { ok: false, error: "Unauthorized — check the profile token." };
+  return { ok: false, error: `Overwrite request failed (HTTP ${res.status}).` };
+}

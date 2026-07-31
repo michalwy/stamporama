@@ -107,6 +107,35 @@ When there are hidden rows, a **Show N already linked elsewhere** checkbox appea
 missing catalog numbers* — tick it to bring them back and change one. It only filters what is on
 screen (nothing is re-matched), and the extension remembers the setting.
 
+## When Colnect's number disagrees with yours
+
+Matching a stamp also compares the catalog numbers on both sides. Numbers Colnect lists for catalogs
+your stamp has none of are added for you — that is the **Fill missing catalog numbers** tick box, and
+it is the whole of what a match writes to your numbers by default. A catalog where the two sides
+carry *different* numbers is only reported: a match is not evidence that yours is the wrong one.
+
+When you look and decide Colnect is right, the row says so and offers the change:
+
+> `Mi·PL 3690` → `Mi·PL 3691`  **Use Colnect's**
+
+Clicking it replaces that one number, on that one stamp, after a confirmation naming both values.
+Nothing else moves — your other catalogs, and the Colnect link itself, are untouched — and once it is
+written both sides show the number as agreeing.
+
+It is offered only where the window knows which stamp it is talking about: a stamp already linked to
+the item, or a row with a single candidate. A row still offering you several stamps to choose between
+has not settled which one this is, so there is nothing to correct yet — pick the stamp first.
+
+Two things it will not do:
+
+- **Store a number it cannot read as yours.** Colnect prints numbers with a country code (`PL 3691`)
+  and you store them bare (`3691`) under an area that knows the prefix. If your area sets no prefix
+  for that catalog, or Colnect's prefix is another area's entirely, no button appears — the same two
+  cases where a missing number is not filled in either.
+- **Quietly create a [duplicate catalog number](duplicate-catalog-numbers.md).** If the new number is
+  one another stamp already holds, the collection's own rule decides: under *block* the change is
+  refused and the other stamp is named, under *warn* it is made and the collision reported.
+
 ## Filling a sale form for you
 
 The Assistant also works the other way round: **⚡ List via Assistant** on a ready offer — in the

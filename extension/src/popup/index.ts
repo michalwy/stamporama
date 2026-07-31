@@ -13,6 +13,7 @@ import type {
   ConfirmResponse,
   ExtractResponse,
   MatchResponse,
+  OverwriteNumberResponse,
 } from "../core/messages";
 import {
   CATALOG_BACKFILL,
@@ -545,6 +546,69 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
   setStatus(res.error, true);
 }
 
+/**
+ * Take Colnect's number for one catalog our stamp disagrees on (#433). Deliberately separate from
+ * confirming the match: linking an item and rewriting a number we already hold are two different
+ * claims, and only this one destroys something — so it is confirmed on its own, naming both values.
+ */
+async function overwriteOne(pick: OverwritePick): Promise<void> {
+  if (!profile) return;
+  const { stamp, proposal } = pick;
+  const number = proposal.overwriteNumber;
+  if (!number) return;
+  const from = proposal.label;
+  const to = proposal.overwriteLabel ?? proposal.printedNumber;
+  const ok = await askConfirm(
+    `<div>Replace <strong>${esc(from)}</strong> on <strong>${esc(
+      stamp.name || "this stamp"
+    )}</strong> with Colnect's <strong>${esc(to)}</strong>?</div>` +
+      `<div class="warnline">Your current number is overwritten.</div>${targetLine()}`
+  );
+  if (!ok) return;
+
+  setStatus("Writing…");
+  const res = await sendToBackground<OverwriteNumberResponse>({
+    type: "overwrite-number",
+    stampId: stamp.stampId,
+    catalogVendorId: proposal.catalogVendorId,
+    number,
+  });
+  if (!res.ok) {
+    setStatus(res.error, true);
+    return;
+  }
+  applyOverwrite(pick, res.label);
+  render();
+  const dupe = res.duplicateStampNames?.length
+    ? ` — also on ${res.duplicateStampNames.join(", ")}`
+    : "";
+  setStatus(`${from} → ${res.label}${dupe}.`);
+}
+
+/**
+ * Fold a written overwrite into what is on screen. The two sides were marked as disagreeing over
+ * this catalog, and after the write they hold the same number — so both marks are corrected, rather
+ * than leaving a conflict on display that no longer exists. The objects belong to `results`, so the
+ * next render reads the new state without a re-match.
+ */
+function applyOverwrite(pick: OverwritePick, label: string): void {
+  const { stamp, proposal, refs } = pick;
+  const mine = stamp.catalogNumbers.find((n) => n.label === proposal.label);
+  if (mine) {
+    mine.label = label;
+    mine.status = "matched";
+  }
+  const ref = refs.find(
+    (r) => r.catalog === proposal.catalog && r.number === proposal.printedNumber
+  );
+  if (ref) ref.status = "matched";
+  proposal.status = "filled";
+  proposal.number = proposal.overwriteNumber ?? null;
+  proposal.label = label;
+  proposal.overwriteNumber = null;
+  delete proposal.existingNumber;
+}
+
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 const REASON_LABEL: Record<string, string> = {
@@ -657,10 +721,19 @@ function noFillReason(p: BackfillProposal): string {
   }
 }
 
-function backfillMarkup(proposals: BackfillProposal[]): string {
+/** Whether a conflict can be settled in Colnect's favour here (#433): the disagreement is still
+ *  open, and the printed value resolved to a number we would actually store. */
+function isResolvableConflict(p: BackfillProposal): boolean {
+  return p.status === "conflict" && !!p.overwriteNumber;
+}
+
+function backfillMarkup(proposals: BackfillProposal[], resolvable: boolean): string {
   if (proposals.length === 0) return "";
   const fills = proposals.filter((p) => p.status === "would-fill" || p.status === "filled");
-  const rest = proposals.filter((p) => p.status !== "would-fill" && p.status !== "filled");
+  const fixable = resolvable ? proposals.filter(isResolvableConflict) : [];
+  const rest = proposals.filter(
+    (p) => p.status !== "would-fill" && p.status !== "filled" && !fixable.includes(p)
+  );
 
   const chips = fills.length
     ? `<div class="fills">${fills
@@ -681,11 +754,33 @@ function backfillMarkup(proposals: BackfillProposal[]): string {
         .join(", ")}</div>`
     : "";
 
-  return `${chips}${skipped}`;
+  // Each disagreement gets its own line and its own button: they are settled one field at a time,
+  // and which catalog is being corrected has to be readable without opening anything.
+  const fixes = fixable
+    .map((p) => {
+      overwrites.push(p);
+      return (
+        `<div class="fix"><span class="ref conflict">${esc(p.label)}</span>` +
+        `<span class="arrow">→</span><span class="ref missing">${esc(
+          p.overwriteLabel ?? p.printedNumber
+        )}</span>` +
+        `<button class="small" data-overwrite="${overwrites.length - 1}" title="${esc(
+          `Replace ${p.label} with the number Colnect prints. Your current number is overwritten.`
+        )}">Use Colnect's</button></div>`
+      );
+    })
+    .join("");
+
+  return `${chips}${fixes}${skipped}`;
 }
 
 /** One of our stamps, with enough detail to tell it from a sibling. */
-function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
+function stampBlock(
+  c: Candidate,
+  label: string,
+  opts: { actionIndex?: number; resolveConflicts?: boolean } = {}
+): string {
+  const { actionIndex, resolveConflicts = false } = opts;
   const meta = [c.issuedYear ? String(c.issuedYear) : null, c.areaName].filter(Boolean).join(" · ");
   const warn = c.existingColnectId
     ? `<div class="warnline">already has Colnect ID ${esc(c.existingColnectId)}</div>`
@@ -710,7 +805,7 @@ function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
             )
             .join(" ")
         : undefined,
-      meta: [backfillMarkup(c.backfill), meta, warn].filter(Boolean).join(""),
+      meta: [backfillMarkup(c.backfill, resolveConflicts), meta, warn].filter(Boolean).join(""),
     },
     thumb,
     { action, label: esc(label) }
@@ -720,19 +815,50 @@ function stampBlock(c: Candidate, label: string, actionIndex?: number): string {
 /** Click targets for "Use this", indexed so we can hand back the full candidate object. */
 let picks: { colnectId: string; stamp: Candidate; overwrite: boolean }[] = [];
 
+/**
+ * Click targets for "Use Colnect's number" (#433). Filled while a card renders, so a proposal is
+ * registered exactly where its button is drawn; the stamp and the item's own refs are attached when
+ * the card is built, since a proposal alone doesn't know which stamp it landed on.
+ */
+interface OverwritePick {
+  stamp: Candidate;
+  proposal: BackfillProposal;
+  refs: RefView[];
+}
+let overwrites: BackfillProposal[] = [];
+let overwritePicks: OverwritePick[] = [];
+
+/**
+ * Turn the proposals registered while one card rendered into full click targets. Rendering a card
+ * cannot do this itself — `backfillMarkup` is handed proposals, not the stamp or the item — so the
+ * card closes the loop for whatever its own stamp block just pushed.
+ */
+function claimOverwrites(from: number, stamp: Candidate, refs: RefView[]): void {
+  for (let i = from; i < overwrites.length; i++) {
+    overwritePicks[i] = { stamp, proposal: overwrites[i], refs };
+  }
+}
+
 function itemCard(r: MatchResult): string {
   const src = sourceOf(r.colnectId);
   let tag: string;
   let matchLabel: string;
   let matchBody: string;
 
+  // Which rows may settle a catalog-number disagreement (#433): the ones that name a single stamp.
+  // A row still offering several candidates has not said which stamp this item is, and correcting a
+  // number on the wrong sibling is a change nobody would think to look for.
+  const resolveConflicts = r.status === "auto" || (r.status === "needs-confirm" && r.candidates.length === 1);
+
   if (r.status === "auto") {
     const state = r.alreadySet ? "already linked" : r.written ? "written ✓" : "will write";
     tag = `<span class="tag auto">${state}</span>`;
     matchLabel = "Your stamp";
+    const from = overwrites.length;
     matchBody = r.stamp
-      ? stampBlock(r.stamp, matchLabel)
+      ? stampBlock(r.stamp, matchLabel, { resolveConflicts })
       : labelledNote(matchLabel, `stamp ${esc(r.stampId)}`);
+    if (r.stamp) claimOverwrites(from, r.stamp, r.refs);
   } else if (r.status === "needs-confirm") {
     tag = `<span class="tag needs">${esc(REASON_LABEL[r.reason] || r.reason)}</span>`;
     matchLabel = r.candidates.length > 1 ? "Pick the right stamp" : "Your stamp";
@@ -740,7 +866,10 @@ function itemCard(r: MatchResult): string {
     matchBody = r.candidates
       .map((c) => {
         picks.push({ colnectId: r.colnectId, stamp: c, overwrite });
-        return stampBlock(c, matchLabel, picks.length - 1);
+        const from = overwrites.length;
+        const block = stampBlock(c, matchLabel, { actionIndex: picks.length - 1, resolveConflicts });
+        claimOverwrites(from, c, r.refs);
+        return block;
       })
       .join("");
   } else {
@@ -803,6 +932,8 @@ function section(
 
 function render(): void {
   picks = [];
+  overwrites = [];
+  overwritePicks = [];
   // Decisions already taken elsewhere (#305) leave the list unless asked for. The control lives in
   // the toolbar row rather than in the section heading: with every such row hidden the section is
   // gone, and a toggle inside it would take the only way back with it.
@@ -827,6 +958,11 @@ function render(): void {
   resultsEl.querySelectorAll<HTMLButtonElement>("button[data-pick]").forEach((btn) => {
     const pick = picks[Number(btn.dataset.pick)];
     btn.addEventListener("click", () => confirmOne(pick.colnectId, pick.stamp, pick.overwrite));
+  });
+
+  resultsEl.querySelectorAll<HTMLButtonElement>("button[data-overwrite]").forEach((btn) => {
+    const pick = overwritePicks[Number(btn.dataset.overwrite)];
+    if (pick) btn.addEventListener("click", () => overwriteOne(pick));
   });
 
   renderChips();

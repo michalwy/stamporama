@@ -102,7 +102,22 @@ export type ConfirmResponse =
   | { ok: true; backfill: BackfillProposal[] }
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
-export type BackgroundRequest = MatchRequest | ConfirmRequest;
+// popup → background: "Colnect is right about this number" (#433). One field of one stamp, taken
+// deliberately and on its own — confirming a match links an item, while this rewrites something we
+// already hold, and the two are not the same claim. The number travels already resolved to what we
+// would store (the matcher stripped the area prefix against the stamp's own area), so the window and
+// the instance cannot disagree about the value.
+export interface OverwriteNumberRequest {
+  type: "overwrite-number";
+  stampId: string;
+  catalogVendorId: string;
+  number: string;
+}
+export type OverwriteNumberResponse =
+  | { ok: true; label: string; duplicateStampNames?: string[] }
+  | { ok: false; error: string };
+
+export type BackgroundRequest = MatchRequest | ConfirmRequest | OverwriteNumberRequest;
 
 // instance content script → background: "the collector handed this offer over" (#409). The worker
 // resolves the module, opens the sale form in a tab of its own and has it filled; the answer is what

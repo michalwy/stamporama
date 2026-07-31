@@ -2,7 +2,7 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import {
-  catalogDigits,
+  catalogDigitRuns,
   catalogKeyMatches,
   catalogMatchKey,
   formatCatalogNumber,
@@ -767,27 +767,32 @@ export interface StampSearchItem {
 const PICKER_LIMIT = 20;
 
 /**
- * The substring to recall stamps by from a picker query, matched against the stored catalog
- * `number`.
+ * The substrings to recall stamps by from a picker query, matched against the stored catalog
+ * `number` — which has to contain **all** of them.
  *
- * Digits are the sharpest handle and the common case: `"Mi PL 200"` → `"200"`, matched
- * case-sensitively. A query with **no digits at all** would otherwise never reach the catalog
- * branch, which loses digit-free numbering — Michel's Roman local issues, e.g. `Mi·RU-BW IIIA`.
- * For those the handle is the query's last whitespace-separated token (`"Mi RU-BW IIIA"` →
- * `"IIIA"`, `"IIIA"` → `"IIIA"`), matched case-insensitively so a stamp filed as `IIIa` is still
- * recalled. An ordinary word query ("eagle") simply lands on this branch and matches no number —
- * recall may over-match freely, since the precision pass below is what decides.
+ * Digits are the sharpest handle and the common case, taken one **run** at a time: `"Mi PL 200"` →
+ * `["200"]`, `"Mi PL BL30 B4"` → `["30", "4"]`, matched case-sensitively. Per run rather than all
+ * the digits at once because a number carrying two of them concatenates to something no stored value
+ * contains (`"304"` against a filed `"BL30 B4"`), so the stamp was never recalled however it was
+ * typed (#435).
+ *
+ * A query with **no digits at all** would otherwise never reach the catalog branch, which loses
+ * digit-free numbering — Michel's Roman local issues, e.g. `Mi·RU-BW IIIA`. For those the handle is
+ * the query's last whitespace-separated token (`"Mi RU-BW IIIA"` → `"IIIA"`, `"IIIA"` → `"IIIA"`),
+ * matched case-insensitively so a stamp filed as `IIIa` is still recalled. An ordinary word query
+ * ("eagle") simply lands on this branch and matches no number — recall may over-match freely, since
+ * the precision pass below is what decides.
  *
  * The whitespace split is what the vendor/prefix are shed by, so — unlike the numeric case — a
  * *fully concatenated* digit-free query ("MiRU-BWIIIA") is not recalled: there is no digit run to
  * cut on, and stripping a vendor abbreviation here would need the collection's vendors before the
  * query is built. Typing the parts apart, or the bare number, finds the stamp.
  */
-function catalogRecallToken(text: string): { value: string; insensitive: boolean } | null {
-  const digits = catalogDigits(text);
-  if (digits) return { value: digits, insensitive: false };
+function catalogRecallToken(text: string): { values: string[]; insensitive: boolean } | null {
+  const runs = catalogDigitRuns(text);
+  if (runs.length > 0) return { values: runs, insensitive: false };
   const last = text.trim().split(/\s+/).at(-1) ?? "";
-  return last ? { value: last, insensitive: true } : null;
+  return last ? { values: [last], insensitive: true } : null;
 }
 
 /**
@@ -820,10 +825,13 @@ export async function searchStampsForPicker(
   if (catalogToken) {
     or.push({
       catalogNumbers: {
+        // Every run has to be inside the *same* stored number, so they are ANDed on one `some`.
         some: {
-          number: catalogToken.insensitive
-            ? { contains: catalogToken.value, mode: "insensitive" }
-            : { contains: catalogToken.value },
+          AND: catalogToken.values.map((value) => ({
+            number: catalogToken.insensitive
+              ? { contains: value, mode: "insensitive" }
+              : { contains: value },
+          })),
         },
       },
     });
