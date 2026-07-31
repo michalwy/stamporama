@@ -312,7 +312,7 @@ async function openAssistantWindow(
     type: "popup",
     ...centredBounds(parent, maxWidth, maxHeight),
   });
-  assistantWindowId = created.id ?? null;
+  assistantWindowId = created?.id ?? null;
 }
 
 // ── Opening a match from an instance's own page ──────────────────────────────
