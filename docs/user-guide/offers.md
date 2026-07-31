@@ -617,7 +617,9 @@ An offer on the platform you have named as Colnect (under
 [**Settings → Colnect**](collections.md#colnect-platform)) therefore carries an **On Colnect** card,
 between the photos and the sets. It lists the offer's stamps — one row per **stamp and condition**,
 since that is what the marketplace pages are keyed on, with a `×3` where several copies of the offer
-share a row. Each row *starts* with its two links, which open in a new tab:
+share a row. A row names the stamp, says which condition it is in, and ends with two links — lined up
+in a column of their own, so a batch of them is clicked straight down the card. Both open in a new
+tab:
 
 - **Catalog** — that stamp's own page in the platform's catalogue.
 - **Market** — what copies *in that condition* are being asked for right now, **cheapest first**:
@@ -626,7 +628,7 @@ share a row. Each row *starts* with its two links, which open in a new tab:
   [Colnect condition mapping](collections.md#colnect-condition-mapping), so a used copy takes you to
   used listings rather than to everything on offer.
 
-After the links the row names the stamp by **every catalogue number you have recorded for it**, each
+The stamp is named by **every catalogue number you have recorded for it**, each
 with its catalogue and area prefix (`Mi·PL 865`), the leading catalogue first. Elsewhere a number is
 printed bare, because the set around it already says which catalogue it came from; here you are
 cross-checking against somebody else's catalogue, so which one a number belongs to is the point.
@@ -991,7 +993,8 @@ count — it widens the list rather than selecting a slice of it.
 ### Stepping through the filtered list
 
 Opening an offer from the list carries the filter with it. At the top of the offer's own screen,
-beside **← Offers**, you get **‹ Previous**, the offer's position (**3 of 12**) and **Next ›** —
+opposite **← Offers** on the right, you get **‹ Previous**, the offer's position (**3 of 12**) and
+**Next ›** —
 the same list, in the same order, without going back to it between offers. This is what preparing a
 batch looks like: filter by platform and **Preparing**, open the first one, finish it, and step on.
 

@@ -58,10 +58,15 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Back on the left, the walk through the list on the right: the two answer different
+          questions — leaving this screen, and staying on it for the next offer — and the step
+          controls are pressed repeatedly, so they sit at the edge rather than shifting with the
+          length of the link beside them. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: "1rem",
           flexWrap: "wrap",
           marginBottom: "1rem",

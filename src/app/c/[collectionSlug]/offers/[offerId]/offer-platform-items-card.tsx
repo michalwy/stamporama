@@ -20,9 +20,10 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //
 // Deliberately **not** the sets card in miniature. It carries no price, no value, no per-copy
 // anything: everything about *this* listing is a scroll away, and the one thing this card is for is
-// leaving the screen for the platform. The links **lead** each row rather than trailing it: a ragged
-// right edge chasing the longest stamp name puts a hunt between the collector and the one thing they
-// came here to click.
+// leaving the screen for the platform. The rows are therefore a **grid**, not a stack of flex lines:
+// the links follow the condition in a column of their own, and a column is the point — they are
+// pressed one row after another, and a pair that shifts sideways with the length of the name above
+// it is a pair the collector has to find again on every line.
 //
 // Open by default while the offer is `preparing` and collapsed from `ready` on, remembered
 // separately for the two — the same rule the photos card follows and for the same reason (#382): in
@@ -60,6 +61,36 @@ const LINK: React.CSSProperties = {
   textDecoration: "none",
   whiteSpace: "nowrap",
   flexShrink: 0,
+};
+
+/**
+ * The list is one grid rather than a stack of rows, so the four things a row says line up into
+ * columns: numbers, stamp name, condition, links. Exactly **four** tracks, matching the four cells a
+ * row hands over — a fifth would take the next row's first cell into it and stagger the whole list.
+ * Only the name may shrink; the rest are sized to what they hold, and the space left over at the
+ * right is simply unused, which is what keeps the links beside the condition rather than flung out
+ * to the card's edge.
+ */
+const LIST: React.CSSProperties = {
+  margin: 0,
+  padding: 0,
+  listStyle: "none",
+  display: "grid",
+  gridTemplateColumns: "max-content minmax(0, max-content) max-content max-content",
+  justifyContent: "start",
+  alignItems: "center",
+};
+
+/**
+ * One cell of that grid. No rule between rows: the columns already carry the eye down the card, and
+ * a per-cell border — the rows being `contents`, there is no row box to draw one on — reads as
+ * stripes rather than as a line.
+ */
+const CELL: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  padding: "0.3rem 0.75rem 0.3rem 0",
 };
 
 const MUTED: React.CSSProperties = {
@@ -166,22 +197,67 @@ export function OfferPlatformItemsCard({
       </Tooltip>
 
       {expanded && (
-        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column" }}>
+        <ul style={LIST}>
           {items.map((item) => (
-            <li
-              key={`${item.stampId}|${item.conditionId}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                flexWrap: "wrap",
-                padding: "0.4rem 0",
-                borderTop: "1px solid var(--color-border)",
-              }}
-            >
-              {/* The links lead the row: they are what the card exists for, and left-aligned they
-                  stack into one column instead of a ragged edge chasing the longest stamp name. */}
-              <span style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+            // `display: contents` hands the four cells straight to the list's own grid, which is
+            // what makes every column line up down the card — a per-row flex line cannot, since each
+            // row would size itself.
+            <li key={`${item.stampId}|${item.conditionId}`} style={{ display: "contents" }}>
+              {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
+                  against the *platform's* catalogue, so which vendor a number belongs to is the
+                  thing being checked, and a stamp recorded in two is looked up in both. They are the
+                  same click-to-copy chips as everywhere else (#420) — leading catalogue first —
+                  because pasting a number into the platform's own search is exactly what this card
+                  is for. A stamp carrying no number at all falls back to its bare label. */}
+              <span style={{ ...CELL, gap: "0.375rem" }}>
+                {item.catalogNumbers.length > 0 ? (
+                  item.catalogNumbers.map((label, i) => (
+                    <CatalogNumberChip
+                      key={`${i}|${label}`}
+                      label={label}
+                      style={i === 0 ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
+                    />
+                  ))
+                ) : (
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: "var(--color-text-primary)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </span>
+              <span style={{ ...CELL, minWidth: 0 }}>
+                {item.stampName && (
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.stampName}
+                  </span>
+                )}
+              </span>
+              <span style={CELL}>
+                <span style={{ ...MUTED, whiteSpace: "nowrap" }}>{item.conditionName}</span>
+                {item.copyCount > 1 && (
+                  <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
+                    <span style={MUTED}>×{item.copyCount}</span>
+                  </Tooltip>
+                )}
+              </span>
+              {/* The links close the row, in a column of their own: they are pressed one row after
+                  another, and a pair that shifts sideways with the length of the stamp name above it
+                  is a pair the collector has to re-find every time. */}
+              <span style={{ ...CELL, gap: "0.375rem" }}>
                 {item.catalogUrl ? (
                   <a href={item.catalogUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                     Catalog
@@ -224,51 +300,6 @@ export function OfferPlatformItemsCard({
                   </Tooltip>
                 )}
               </span>
-              {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
-                  against the *platform's* catalogue, so which vendor a number belongs to is the
-                  thing being checked, and a stamp recorded in two is looked up in both. They are the
-                  same click-to-copy chips as everywhere else (#420) — leading catalogue first —
-                  because pasting a number into the platform's own search is exactly what this card
-                  is for. A stamp carrying no number at all falls back to its bare label. */}
-              {item.catalogNumbers.length > 0 ? (
-                item.catalogNumbers.map((label, i) => (
-                  <CatalogNumberChip
-                    key={`${i}|${label}`}
-                    label={label}
-                    style={i === 0 ? STAMP_PRIMARY_CHIP : STAMP_SECONDARY_CHIP}
-                  />
-                ))
-              ) : (
-                <span
-                  style={{
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    color: "var(--color-text-primary)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label}
-                </span>
-              )}
-              {item.stampName && (
-                <span
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "var(--color-text-secondary)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.stampName}
-                </span>
-              )}
-              <span style={MUTED}>{item.conditionName}</span>
-              {item.copyCount > 1 && (
-                <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
-                  <span style={MUTED}>×{item.copyCount}</span>
-                </Tooltip>
-              )}
             </li>
           ))}
         </ul>
