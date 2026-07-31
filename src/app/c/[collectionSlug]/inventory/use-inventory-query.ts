@@ -46,9 +46,10 @@ export interface InventoryItemFilters {
    * filter is a multi-select; a duplicate group addressing its members passes the single condition
    * it grouped on through the same field. */
   conditionIds?: string[];
-  /** Restrict to copies with one certificate status. `"none"` matches the copies with no
-   * certificate — needed to address a duplicate group whose members carry none (#372). */
-  certificateStatusId?: string;
+  /** The certificate statuses in scope (#428) — an OR, absent meaning every status. `"none"` is a
+   * tickable value like any other and matches the copies with no certificate: null *is* a value here
+   * (ADR-0006 §2), which an absent filter cannot express. */
+  certificateStatusIds?: string[];
   /** The physical formats in scope (#343, #427) — an OR, absent meaning every format. `"single"` is
    * a tickable value like any other and matches the copies with no format set: null *is* the single
    * (ADR-0020), which an absent filter cannot express. */
@@ -102,7 +103,7 @@ export interface InventoryItemFilters {
 /** Filters that affect the year facet counts (everything except year itself). */
 export interface InventoryYearFacetFilters {
   conditionIds?: string[];
-  certificateStatusId?: string;
+  certificateStatusIds?: string[];
   formatIds?: string[];
   areaIds?: string[];
   search?: string;
@@ -155,8 +156,8 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.conditionIds && filters.conditionIds.length > 0)
     params.set("conditionIds", filters.conditionIds.join(","));
-  if (filters.certificateStatusId)
-    params.set("certificateStatusId", filters.certificateStatusId);
+  if (filters.certificateStatusIds && filters.certificateStatusIds.length > 0)
+    params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
   if (filters.formatIds && filters.formatIds.length > 0)
     params.set("formatIds", filters.formatIds.join(","));
   if (filters.areaIds && filters.areaIds.length > 0)
@@ -303,7 +304,7 @@ export function useHoldingsValuation(
   return useQuery<HoldingsSummary>({
     queryKey: ["inventory", collectionId, "valuation", {
       conditionIds: filters.conditionIds,
-      certificateStatusId: filters.certificateStatusId,
+      certificateStatusIds: filters.certificateStatusIds,
       formatIds: filters.formatIds,
       areaIds: filters.areaIds,
       search: filters.search,
@@ -326,8 +327,8 @@ export function useHoldingsValuation(
       const params = new URLSearchParams();
       if (filters.conditionIds && filters.conditionIds.length > 0)
         params.set("conditionIds", filters.conditionIds.join(","));
-      if (filters.certificateStatusId)
-        params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.certificateStatusIds && filters.certificateStatusIds.length > 0)
+        params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
       if (filters.formatIds && filters.formatIds.length > 0)
         params.set("formatIds", filters.formatIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)
@@ -371,8 +372,8 @@ export function useItemYears(
       const params = new URLSearchParams();
       if (filters.conditionIds && filters.conditionIds.length > 0)
         params.set("conditionIds", filters.conditionIds.join(","));
-      if (filters.certificateStatusId)
-        params.set("certificateStatusId", filters.certificateStatusId);
+      if (filters.certificateStatusIds && filters.certificateStatusIds.length > 0)
+        params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
       if (filters.formatIds && filters.formatIds.length > 0)
         params.set("formatIds", filters.formatIds.join(","));
       if (filters.areaIds && filters.areaIds.length > 0)

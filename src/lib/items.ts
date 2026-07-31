@@ -732,11 +732,12 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  addressing its own members passes the one condition it grouped on, which is the same filter
    *  with one entry in it and needs no second knob on the axis. */
   conditionIds?: string[];
-  /** Restrict to copies with one certificate status. The literal `"none"` matches the copies with
-   *  no certificate — null *is* a value here (ADR-0006 §2), exactly as `"single"` is for format,
-   *  and an absent filter cannot express it. Needed to address a duplicate group whose members
-   *  carry no certificate (#372). */
-  certificateStatusId?: string;
+  /** Restrict to copies carrying any of these certificate statuses (#428) — an **OR**, empty/absent
+   *  meaning every status. The literal `"none"` is a tickable value like any other and matches the
+   *  copies with no certificate: null *is* a value here (ADR-0006 §2), exactly as `"single"` is for
+   *  format, and an absent filter cannot express it. A duplicate group addressing its own members
+   *  passes the one status it grouped on (#372). */
+  certificateStatusIds?: string[];
   /** Restrict to copies of any of these physical formats (#343, #427) — an **OR**, empty/absent
    *  meaning every format. The literal `"single"` is a tickable value like any other and matches the
    *  copies with no format: null *is* the single (ADR-0020), and an absent filter cannot express it.
@@ -833,23 +834,26 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
  * the pre-resolved location subtree (or null when no location filter is set) since it
  * needs an async lookup the caller already did. */
 /**
- * The `where` fragment for a set of formats (#427). Not a plain `in` like the other multi-value
- * axes, because `"single"` is the **null** format (ADR-0020): a null can never be a member of an
- * `in` list, so ticking *Single* alongside a real format is two branches ORed together. Ticking it
- * alone is the null test on its own, which is the reading the single-select already had.
+ * The `where` fragment for a multi-value axis whose **null is a value** (#427, #428) — format, where
+ * `"single"` is the absence of one (ADR-0020), and certificate, where `"none"` is (ADR-0006 §2).
+ * Not a plain `in` like condition or delivery state, because a null can never be a member of an `in`
+ * list: ticking the sentinel alongside a real value is two branches ORed together, and ticking it
+ * alone is the null test on its own — the reading each single-select already had.
  *
- * Returns null when the filter is off, and an `OR` goes to the caller's **AND list** rather than to
- * the top level, where the search's own `OR` would collide with it.
+ * Returns null when the filter is off. An `OR` goes to the caller's **AND list** rather than to the
+ * top level, where the search's own `OR` would collide with it.
  */
-function formatWhere(
-  formatIds: readonly string[] | undefined
+function nullableIdWhere(
+  field: "formatId" | "certificateStatusId",
+  ids: readonly string[] | undefined,
+  nullSentinel: string
 ): Prisma.ItemWhereInput | null {
-  if (!formatIds || formatIds.length === 0) return null;
-  const single = formatIds.includes("single");
-  const ids = formatIds.filter((id) => id !== "single");
-  if (!single) return { formatId: { in: ids } };
-  if (ids.length === 0) return { formatId: null };
-  return { OR: [{ formatId: null }, { formatId: { in: ids } }] };
+  if (!ids || ids.length === 0) return null;
+  const wantsNull = ids.includes(nullSentinel);
+  const real = ids.filter((id) => id !== nullSentinel);
+  if (!wantsNull) return { [field]: { in: real } };
+  if (real.length === 0) return { [field]: null };
+  return { OR: [{ [field]: null }, { [field]: { in: real } }] };
 }
 
 function buildItemWhere(
@@ -944,8 +948,14 @@ function buildItemWhere(
     // way is exactly what one plans a listing for.
     and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
   }
-  const formats = formatWhere(filters.formatIds);
+  const formats = nullableIdWhere("formatId", filters.formatIds, "single");
   if (formats) and.push(formats);
+  const certificates = nullableIdWhere(
+    "certificateStatusId",
+    filters.certificateStatusIds,
+    "none"
+  );
+  if (certificates) and.push(certificates);
   // "No ref" (#421) is two stored values — null, and the empty string a cleared field can leave —
   // so it goes in the AND list rather than as a top-level `OR` the search would collide with.
   if (filters.locationRef === NO_LOCATION_REF) {
@@ -973,12 +983,6 @@ function buildItemWhere(
     // member read passes, so the axis has exactly one filter on it.
     ...(filters.conditionIds && filters.conditionIds.length > 0
       ? { conditionId: { in: filters.conditionIds } }
-      : {}),
-    ...(filters.certificateStatusId
-      ? {
-          certificateStatusId:
-            filters.certificateStatusId === "none" ? null : filters.certificateStatusId,
-        }
       : {}),
     ...(filters.stampId ? { stampId: filters.stampId } : {}),
     ...(filters.ids ? { id: { in: filters.ids } } : {}),

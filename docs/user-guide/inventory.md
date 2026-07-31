@@ -114,6 +114,10 @@ Stamps, Copies, Offers, Sales and Purchases.
   it takes **several at once**, which is how you ask the question that actually comes up: ticking
   *Ordered*, *In transit* and *To sort* together is "everything still on its way to me". Or tick one
   — every copy marked *Damaged*. See [Delivery state](#delivery-state).
+- **Certificate** — show only copies carrying the certificate statuses you tick, **No certificate**
+  among them: a copy having none is an answer, not the absence of the question, so you can ask for
+  the uncertified pieces on their own or for "certified *or* not yet certified" together. Like the
+  format filter it appears only once your collection defines certificate statuses.
 - **Condition** — show only copies in the conditions you tick. It takes **several at once**: click
   it and tick as many grades as you like, and the list shows copies in *any* of them — "the mint
   grades" is as ordinary a question as one grade is. The control reads the grade's name when one is

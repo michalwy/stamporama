@@ -367,7 +367,7 @@ export function groupMemberFilters(
     // (#427) and replaces its selection.
     ...(axes.format ? { formatIds: [group.formatId ?? "single"] } : {}),
     ...(axes.certificate
-      ? { certificateStatusId: group.certificateStatusId ?? "none" }
+      ? { certificateStatusIds: [group.certificateStatusId ?? "none"] }
       : {}),
     forSale: true,
     deliveryStates: ["delivered"],

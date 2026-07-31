@@ -173,6 +173,11 @@ export function InventoryListPanel({
   // so the list narrows to it exactly the way it narrows to a condition. `"single"` is a real
   // choice — the copies with no format — which an absent value could not express.
   const formatIds = useCsvParam(searchParams, "formatIds");
+  // Certificate is the fourth fact a copy carries that this list reasons about — it is a
+  // duplicate-grouping axis, a valuation axis and a listing axis — and until #428 it was the one with
+  // no filter at all. `"none"` is a tickable value, not the absence of the filter: null *is* a value
+  // here (ADR-0006 §2), exactly as `"single"` is for format.
+  const certificateStatusIds = useCsvParam(searchParams, "certificateStatusIds");
   const locationId = searchParams.get("locationId") ?? "";
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
@@ -296,6 +301,8 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
+      certificateStatusIds:
+        certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
@@ -313,7 +320,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -323,6 +330,8 @@ export function InventoryListPanel({
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
+      certificateStatusIds:
+        certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
@@ -337,7 +346,7 @@ export function InventoryListPanel({
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -511,6 +520,7 @@ export function InventoryListPanel({
     !!search ||
     !!issueId ||
     conditionIds.length > 0 ||
+    certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
     !!locationId ||
     !!year ||
@@ -899,6 +909,24 @@ export function InventoryListPanel({
                   allLabel="All formats"
                   itemNoun="formats"
                   ariaLabel="Filter by format"
+                />
+              )}
+
+              {/* Certificate filter (#428), beside the format one and built the same way: absent
+                  when the collection defines no statuses, and "No certificate" is a tickable value
+                  rather than the absence of the filter — null *is* a value on this axis
+                  (ADR-0006 §2), so the server ORs the two branches exactly as it does for Single. */}
+              {certificateStatuses.length > 0 && (
+                <MultiSelectFilter
+                  options={[
+                    { id: "none", label: "No certificate" },
+                    ...certificateStatuses.map((c) => ({ id: c.id, label: c.name })),
+                  ]}
+                  selected={certificateStatusIds}
+                  onChange={(ids) => updateParams({ certificateStatusIds: ids.join(",") })}
+                  allLabel="All certificates"
+                  itemNoun="certificates"
+                  ariaLabel="Filter by certificate status"
                 />
               )}
 

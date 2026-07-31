@@ -45,7 +45,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
   const yearParam = sp.get("year");
   return {
     conditionIds: readConditionIds(sp),
-    certificateStatusId: sp.get("certificateStatusId") || undefined,
+    certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
     formatIds: readCsvParam(sp, "formatIds"),
     deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,

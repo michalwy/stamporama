@@ -20,7 +20,7 @@ export async function GET(
   try {
     const years = await listItemYearFacets(session.user.id, collectionId, {
       conditionIds: readConditionIds(sp),
-      certificateStatusId: sp.get("certificateStatusId") || undefined,
+      certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
       formatIds: readCsvParam(sp, "formatIds"),
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
       search: sp.get("search") || undefined,
