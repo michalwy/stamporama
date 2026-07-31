@@ -102,7 +102,9 @@ export type OfferBlockReason =
   /** A reorder (#306) did not carry the current composition — the client is stale. */
   | "bad-order"
   /** Recording a listing (#412) without the URL that *is* the record. */
-  | "no-url";
+  | "no-url"
+  /** Marking an offer ready (#418) while a listing precondition (#406) still fails. */
+  | "listing-preconditions";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -1554,6 +1556,39 @@ function listingBlockersFor(
   });
 }
 
+/**
+ * The listing preconditions (#406) for one offer, judged at **`ready`** — the state it is about to
+ * reach (#418), never the one it is in.
+ *
+ * The gate sits on `preparing → ready` and nowhere else in the lifecycle, because that transition is
+ * what the collector means by "this listing is assembled": a fault caught here is fixed while the
+ * offer is still being put together, rather than surfacing in the bulk listing workspace at the
+ * moment there are thirty of them to post. Later transitions are deliberately left open — an offer
+ * already live is a listing that exists, and refusing to pause or withdraw it over a mapping gap
+ * would trap the collector.
+ *
+ * Empty for a platform naming no Assistant module, exactly as {@link listingBlockersFor} is: these
+ * are one module's rules, and a marketplace listed by hand has nothing to fail. That is also why the
+ * condition map is not read for one.
+ */
+async function readReadyBlockers(collectionId: string, offerId: string): Promise<ListingBlocker[]> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      platform: { select: { platformModule: true } },
+      sets: { select: LISTING_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  if (!offer) return [];
+  const platformModule = offer.platform.platformModule;
+  if (!platformModule) return [];
+  const [labeller, conditionMap] = await Promise.all([
+    makeOfferLabeller(collectionId),
+    loadColnectConditionMap(collectionId),
+  ]);
+  return listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready");
+}
+
 type AreaLinkedSet = {
   items: {
     item: {
@@ -1778,6 +1813,11 @@ export interface OfferDetail {
    * (#405) use. Note it is evaluated at the offer's **own** state, so anything not Ready reports
    * `not-ready` alone. */
   listingBlockers: ListingBlocker[];
+  /** Why this offer cannot be marked **Ready** (#418) — the same preconditions, judged at the state
+   * it is about to reach rather than at the one it is in. Non-empty only while `preparing`, which is
+   * the one transition the gate sits on; every other state reports nothing, because there is no such
+   * step to take from it. */
+  readyBlockers: ListingBlocker[];
   createdAt: Date;
 }
 
@@ -2091,6 +2131,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     },
     platformModule,
     listingBlockers: listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, state),
+    // The same evaluation at the target state (#418), so the header can disable **Mark ready** with
+    // the reasons rather than let the collector press it and be refused. It reuses this screen's own
+    // sets and condition map — a second read would be the same answer at twice the cost.
+    readyBlockers:
+      state === "preparing"
+        ? listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready")
+        : [],
     createdAt: offer.createdAt,
   };
 }
@@ -2787,6 +2834,17 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     if (setCount === 0) {
       const verb = to === "active" ? "activating" : "marking this offer ready";
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
+    }
+  }
+  // Marking it ready is also where the listing preconditions are asked (#418) — see
+  // {@link readReadyBlockers} for why here and nowhere else in the lifecycle.
+  if (to === "ready") {
+    const blockers = await readReadyBlockers(ref.collectionId, offerId);
+    if (blockers.length > 0) {
+      throw new OfferActionBlockedError(
+        "listing-preconditions",
+        `This offer cannot be listed on its platform yet: ${blockers.map((b) => b.message).join(" ")}`
+      );
     }
   }
   // The same two targets also need an asking price (#336): an offer with no price is not prepared,

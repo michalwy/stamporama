@@ -123,7 +123,11 @@ describe("bulk listing workspace read model (#322)", () => {
       state: "preparing",
     });
     await addOfferSet(userId, offerId, itemIds);
-    await setOfferState(userId, offerId, "ready");
+    // Written directly, not through `setOfferState`: this batch is deliberately full of offers that
+    // *cannot* be listed — that is what the blockers under test are — and marking one ready is now
+    // gated on exactly those preconditions (#418), which is covered on its own in
+    // `offer-ready-gate.test.ts`.
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "ready" } });
     return offerId;
   }
 

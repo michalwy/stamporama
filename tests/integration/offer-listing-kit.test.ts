@@ -125,7 +125,12 @@ describe("offer listing kit (#405)", () => {
       state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
-    if ((over.state ?? "ready") === "ready") await setOfferState(userId, offerId, "ready");
+    // Written directly rather than through `setOfferState`: several of these offers fail a listing
+    // precondition on purpose — the endpoint's refusal is what is under test — and that same
+    // evaluation now gates the transition (#418, `offer-ready-gate.test.ts`).
+    if ((over.state ?? "ready") === "ready") {
+      await prisma.offer.update({ where: { id: offerId }, data: { state: "ready" } });
+    }
     return offerId;
   }
 

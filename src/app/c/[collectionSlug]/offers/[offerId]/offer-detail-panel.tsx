@@ -209,10 +209,16 @@ export function OfferDetailPanel({
   // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
   // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
   const advanceTo = editable ? quickAdvanceTarget(offer.state) : null;
-  const canAdvance =
+  // Marking it ready is gated on the listing preconditions (#418): a fault is fixed while the offer
+  // is still being assembled rather than in the middle of a posting session. Unlike a missing set or
+  // price, each of these is fixed on another screen, so the button stays put and is **disabled with
+  // its reasons** (#273) instead of quietly disappearing.
+  const advanceReady =
     advanceTo !== null &&
     (!requiresSets(advanceTo) || offer.sets.length > 0) &&
     (!requiresPrice(advanceTo) || hasPrice(offer.price));
+  const readyBlockers = advanceReady && advanceTo === "ready" ? offer.readyBlockers : [];
+  const canAdvance = advanceReady && readyBlockers.length === 0;
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button.
   const blockedOnPrice =
@@ -407,16 +413,31 @@ export function OfferDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />
-            {canAdvance && advanceTo && (() => {
+            {(canAdvance || readyBlockers.length > 0) && advanceTo && (() => {
               const { label, icon } = advanceLabel(advanceTo);
+              const blocked = readyBlockers.length > 0;
               return (
-                <Tooltip content={label}>
+                <Tooltip
+                  content={
+                    blocked ? (
+                      // One line per reason, never a count: each is fixed somewhere different (#406).
+                      <span style={{ display: "grid", gap: "0.25rem", maxWidth: "22rem" }}>
+                        <strong>This offer cannot be listed on {offer.platformName} yet:</strong>
+                        {readyBlockers.map((b) => (
+                          <span key={b.code}>{b.message}</span>
+                        ))}
+                      </span>
+                    ) : (
+                      label
+                    )
+                  }
+                >
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={isPending || blocked}
                     onClick={() => setState(advanceTo)}
                     aria-label={label}
-                    style={QUICK_ADVANCE_BTN}
+                    style={{ ...QUICK_ADVANCE_BTN, ...(blocked ? { opacity: 0.55, cursor: "default" } : null) }}
                   >
                     <span aria-hidden>{icon}</span>
                     {label}

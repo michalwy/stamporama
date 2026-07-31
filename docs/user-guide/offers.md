@@ -127,7 +127,9 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    straight away. An offer
    needs at least one set **and an asking price** before it can be marked ready or activated — an
    unpriced offer shows *Set a price to…* beside its price, and the quick-advance button waits until
-   you set one. For the same reason you cannot clear the price of an offer that is already **Ready**
+   you set one. On the platform named as Colnect it also needs to pass the
+   [listing preconditions](#what-the-assistant-cant-post) — every stamp matched, every condition
+   mapped, the sets interchangeable — before it can be marked ready. For the same reason you cannot clear the price of an offer that is already **Ready**
    or **Active**; step it back to **Preparing** first. You can step a **Ready** offer back to
    **Preparing** at any time (from the **⋮** menu) to keep editing.
 
@@ -718,6 +720,13 @@ half-way through a filled form.
   same thing". Sets holding different stamps, or the same stamps in different conditions, are
   different goods and one listing would misdescribe them. Either make the sets match, or list them
   separately.
+
+The same three checks also gate **Mark ready**: an offer on that platform stays in **Preparing**
+until they pass, so you find out while you are still assembling it rather than in the middle of a
+posting session. The quick-advance button on the offer's own screen stays where it is and is
+**disabled with the reasons in its hover hint**; marking it ready from the Offers list or the **⋮**
+menu is refused with the same wording. Only that one step is gated — an offer already live can still
+be paused, withdrawn or sold, and a platform naming no Assistant module is not checked at all.
 
 This gates the Assistant only. **Publish stays available**, and so does everything else on the card:
 posting the form yourself is exactly what you do about a gap the Assistant can't fill. A description
