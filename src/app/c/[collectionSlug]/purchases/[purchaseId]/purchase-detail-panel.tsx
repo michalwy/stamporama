@@ -49,6 +49,7 @@ import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inve
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
+import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -171,6 +172,9 @@ export function PurchaseDetailPanel({
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
   const { invalidateLotCopies } = useInvalidateLotCopies();
+  // The purchase list is a client-side infinite query with a 30s stale time, so it survives a
+  // back-navigation from here and would keep showing the pre-edit delivery status (#440).
+  const { invalidateList: invalidatePurchaseList } = useInvalidatePurchases();
   const [isPending, startTransition] = useTransition();
   const [addingLot, setAddingLot] = useState(false);
   const [arriving, setArriving] = useState(false);
@@ -256,6 +260,7 @@ export function PurchaseDetailPanel({
         // Copies stream in via paginated client queries (#172), so a server refresh alone
         // won't reflect copy/lot mutations — invalidate the lot-copies pages and summaries too.
         invalidateLotCopies(collectionId);
+        invalidatePurchaseList(collectionId);
         onDone?.(result);
       } else if (result.status === "error") {
         setError(result.message);
