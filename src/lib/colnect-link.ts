@@ -18,3 +18,35 @@ export function colnectStampUrl(colnectId: string | null | undefined): string | 
   if (!id) return null;
   return `${COLNECT_STAMP_BASE}${encodeURIComponent(id)}`;
 }
+
+// ── What the market is asking (#423) ─────────────────────────────────────────
+//
+// The catalog page says what a stamp *is*; the marketplace search says what people are asking for it
+// right now, which is the other half of pricing a listing. Colnect states both in the path: the item
+// and the **condition**, the latter by its own slug (`mint_never_hinged`) rather than by the numeric
+// option its sale form submits — hence `ColnectGrade.marketSlug` beside `value`.
+//
+// Sorted by price, **descending**. A seller is judging their own asking price against the ones above
+// it, and the cheapest listings — often a different lot size or a damaged copy — are the least
+// informative end of the list.
+
+const COLNECT_MARKET_BASE = "https://colnect.com/en/market/list/category/stamps";
+
+/**
+ * The Colnect marketplace search for one item in one condition (#423), or null when either is
+ * missing — an unmatched stamp (#247) or an unmapped condition (#404). Null rather than a
+ * condition-less search: a price for "any grade" is not the figure being judged, and a link that
+ * quietly answers a different question is worse than no link.
+ */
+export function colnectMarketUrl(
+  colnectId: string | null | undefined,
+  conditionSlug: string | null | undefined
+): string | null {
+  const id = colnectId?.trim();
+  const slug = conditionSlug?.trim();
+  if (!id || !slug) return null;
+  return (
+    `${COLNECT_MARKET_BASE}/condition/${encodeURIComponent(slug)}` +
+    `/item/${encodeURIComponent(id)}/sort_order/descending/sort/by_price`
+  );
+}

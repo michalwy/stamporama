@@ -14,6 +14,11 @@ export interface ColnectGrade {
   /** The leading token of the label. Not part of Colnect's markup; it is what
    *  {@link guessColnectGrade} matches a local condition's abbreviation against. */
   abbrev: string;
+  /** How the **marketplace search** names this grade in a URL path (#423) — a different vocabulary
+   *  from `value`, which is the *form's*. Colnect's market list addresses a condition by a slug
+   *  (`…/condition/mint_never_hinged/…`) rather than by the form's numeric option, so the two are
+   *  stated separately instead of one being derived from the other. */
+  marketSlug: string;
 }
 
 /**
@@ -24,11 +29,11 @@ export interface ColnectGrade {
  * per-collection mapping stays correct.
  */
 export const COLNECT_CONDITIONS: readonly ColnectGrade[] = [
-  { value: "1", label: "MNH - Mint Never Hinged", abbrev: "MNH" },
-  { value: "2", label: "MH - Mint Hinged", abbrev: "MH" },
-  { value: "3", label: "MNG - Mint No Gum", abbrev: "MNG" },
-  { value: "4", label: "U - Used", abbrev: "U" },
-  { value: "5", label: "CTO - Cancelled To Order", abbrev: "CTO" },
+  { value: "1", label: "MNH - Mint Never Hinged", abbrev: "MNH", marketSlug: "mint_never_hinged" },
+  { value: "2", label: "MH - Mint Hinged", abbrev: "MH", marketSlug: "mint_hinged" },
+  { value: "3", label: "MNG - Mint No Gum", abbrev: "MNG", marketSlug: "mint_no_gum" },
+  { value: "4", label: "U - Used", abbrev: "U", marketSlug: "used" },
+  { value: "5", label: "CTO - Cancelled To Order", abbrev: "CTO", marketSlug: "cancelled_to_order" },
 ];
 
 /** The grade for a stored value, or null when the value is not one Colnect offers. */

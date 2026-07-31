@@ -36,6 +36,8 @@ import {
 } from "./offer-labels";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
+import { colnectGradeFor } from "./colnect-conditions";
+import { colnectMarketUrl, colnectStampUrl } from "./colnect-link";
 import {
   evaluateListingPreconditions,
   type ListingBlocker,
@@ -1827,7 +1829,39 @@ export interface OfferDetail {
    * the one transition the gate sits on; every other state reports nothing, because there is no such
    * step to take from it. */
   readyBlockers: ListingBlocker[];
+  /** The offer's stamps as the platform's own catalogue knows them (#423), empty for a platform with
+   * no module. See {@link OfferPlatformItem}. */
+  platformItems: OfferPlatformItem[];
   createdAt: Date;
+}
+
+/**
+ * One of an offer's stamps as the **platform's** catalogue knows it (#423) — the compact list that
+ * puts the marketplace one click from the listing being priced.
+ *
+ * Keyed on `stamp × condition`, not on the copy: a komplet is dozens of copies over a handful of
+ * stamps, and two copies of one stamp in one grade are the same catalogue page and the same market
+ * search. That is also the key the platform's own vocabulary is defined on (#404/#405).
+ *
+ * Both URLs are null when what they need is missing — an unmatched stamp (#247), an unmapped
+ * condition (#404) — and the row is still listed, because a gap the collector can go and fix is
+ * exactly what a list of the offer's items should show them.
+ */
+export interface OfferPlatformItem {
+  stampId: string;
+  conditionId: string;
+  /** The copy's own derived label (#379) — the catalogue number it is named by. */
+  label: string;
+  /** The stamp's name, where it has one; the label already carries the number. */
+  stampName: string | null;
+  conditionName: string;
+  /** The stamp's page in the platform's catalogue (#290), null when it was never matched. */
+  catalogUrl: string | null;
+  /** What this stamp in this grade is currently being asked for (#423), null when the stamp is
+   * unmatched or its condition is not mapped into the platform's vocabulary. */
+  marketUrl: string | null;
+  /** How many of the offer's copies this row stands for. */
+  copyCount: number;
 }
 
 /** Full offer read model for the detail / compose screen (ADR-0013): the offer header plus each
@@ -2151,8 +2185,56 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       state === "preparing"
         ? listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready")
         : [],
+    platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap),
     createdAt: offer.createdAt,
   };
+}
+
+/**
+ * The offer's stamps as the platform's catalogue knows them (#423), one row per `stamp × condition`
+ * in the order the sets list them.
+ *
+ * Empty for a platform naming no module, exactly as the listing blockers are: this is one
+ * marketplace's catalogue, not a general fact about an offer, and a Delcampe listing has no such
+ * pages to link to. It is deliberately **not** gated on the preconditions, unlike the listing kit
+ * (#405): the collector is checking what the market is asking, which is a question about an offer at
+ * any stage and one an unmatched stamp does not spoil — that row simply carries no links, which is
+ * how the gap gets noticed.
+ *
+ * Reads nothing of its own: the item-IDs come off the same set select the screen already loads, and
+ * the grades off the condition map already read once for the whole offer (#404).
+ */
+function platformItemsFor(
+  sets: readonly ListingSetRow[],
+  platformModule: string | null,
+  labeller: OfferLabeller,
+  conditionMap: Map<string, string>
+): OfferPlatformItem[] {
+  if (!platformModule) return [];
+  const rows = new Map<string, OfferPlatformItem>();
+  for (const set of sets) {
+    for (const { item } of orderedItems(set.items)) {
+      const key = `${item.stampId} ${item.conditionId}`;
+      const existing = rows.get(key);
+      if (existing) {
+        existing.copyCount += 1;
+        continue;
+      }
+      const colnectId = item.stamp.colnectId?.trim() || null;
+      const grade = colnectGradeFor(conditionMap.get(item.conditionId) ?? "");
+      rows.set(key, {
+        stampId: item.stampId,
+        conditionId: item.conditionId,
+        label: labeller.copy(item.stamp),
+        stampName: item.stamp.name?.trim() || null,
+        conditionName: item.condition.name,
+        catalogUrl: colnectStampUrl(colnectId),
+        marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
+        copyCount: 1,
+      });
+    }
+  }
+  return [...rows.values()];
 }
 
 /** Distinct issue ids across every copy in an offer's sets, for the sets view's issue-group

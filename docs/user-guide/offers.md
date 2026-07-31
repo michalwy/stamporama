@@ -604,6 +604,30 @@ title yet falls back to a short piece of its id, so two untitled offers still do
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.
 
+## What the market is asking
+
+Pricing a listing means two questions about each stamp in it: what it *is*, and what people are
+currently asking for one. Both live on the marketplace, and reaching them meant expanding every set
+and clicking through copy after copy.
+
+An offer on the platform you have named as Colnect (under
+[**Settings → Colnect**](collections.md#colnect-platform)) therefore carries an **On Colnect** card,
+between the photos and the sets. Expand it and it lists the offer's stamps — one row per
+**stamp and condition**, since that is what the marketplace pages are keyed on, with a `×3` where
+several copies of the offer share a row — each with two links that open in a new tab:
+
+- **Catalog** — that stamp's own page in the platform's catalogue.
+- **Market** — what copies *in that condition* are being asked for right now, priced high to low. The
+  condition follows the [Colnect condition mapping](collections.md#colnect-condition-mapping), so a
+  used copy takes you to used listings rather than to everything on offer.
+
+A row whose links are greyed out is telling you about a gap: the stamp has no Colnect item-ID
+recorded yet, or its condition is not mapped to one of Colnect's own grades. Hover for which. The row
+is still listed — this is the screen where you are most likely to notice.
+
+The card is collapsed by default and its heading counts the stamps, so a listing you are only
+composing does not pay for it.
+
 ## Bulk listing — posting a prepared batch
 
 Once you have several offers marked **Ready**, posting them is the same handful of motions over and

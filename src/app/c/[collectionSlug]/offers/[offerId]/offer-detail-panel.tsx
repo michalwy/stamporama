@@ -21,6 +21,7 @@ import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from ".
 import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
+import { OfferPlatformItemsCard } from "./offer-platform-items-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
@@ -660,6 +661,12 @@ export function OfferDetailPanel({
         photoLimits={offer.platformPhotoLimits}
         platformName={offer.platformName}
       />
+
+      {/* The offer's stamps on the platform's own catalogue (#423), between the images and the sets:
+          it is the last thing consulted before posting and the first place one leaves the screen
+          from, and it is keyed on `stamp × condition` rather than on the copy, so it belongs beside
+          the sets rather than inside them. Renders nothing for a platform with no module. */}
+      <OfferPlatformItemsCard items={offer.platformItems} platformName={offer.platformName} />
 
       {/* Sets. The heading and Add set are handed to the view, which lays them out in one band with
           its own controls and the listing's figures (#378) — two separately-rendered rows aligned to
