@@ -257,44 +257,69 @@ signal reads:
   goes stale in minutes; one closing next month keeps a day-old reading. Bids move as the close
   approaches, which is exactly when the mark tightens.
 - **No bid yet** — nothing has ever been recorded for this lot.
-- **Closed** — the closing time has passed and the lot is still being watched. Unlike a stale
-  reading, this one will not fix itself: what is missing is the outcome.
+- **Closed** — the closing time has passed and the lot is still open. Unlike a stale reading, this
+  one will not fix itself: what is missing is the final price.
 
 A lot that is current shows no mark at all.
 
-### Recording what happened
+### Closing a lot
 
 Once a lot has closed, the row's ⋮ menu files it:
 
-- **Mark as won** — it is yours. It asks for **what you paid**: the hammer price, before the
-  seller's premium, in the sale's currency. The premium and the shipping belong to the parcel and
-  are added there, once.
-- **Mark as lost** — you were outbid, or it went unsold. It asks for **what it went for**, the same
-  figure on the other side of the result.
-- **Mark as cancelled** — the seller withdrew the listing, or it ended without a sale. No price, no
-  record of a result.
-- **Back to watching** — undoes either, for a lot filed by mistake. If a final price was recorded,
-  it warns before discarding it.
+- **Close the lot** — asks for **what it went for**: the hammer price, before the seller's premium,
+  in the sale's currency. The premium and the shipping belong to the parcel and are added there,
+  once.
+- **Mark as cancelled** — the seller withdrew the listing, or it ended without a sale. No price, and
+  no record of a result.
+- **Back to open** — undoes either, for a lot filed by mistake. If a final price was recorded, it
+  warns before discarding it.
 
-On a **lost** lot the price is **optional, and left blank on purpose**. If the lot vanished before
-you saw the result, leave it empty: that records the loss without inventing a figure. The last bid
-you recorded is not the answer either — it is only what the price had reached the last time you
-looked, which is why it is never filled in for you, on either outcome.
+There is no *Mark as won* and no *Mark as lost*, because those are not things you tell Stamporama —
+they are things it works out. Closing a lot records **what it went for**, and the outcome follows
+from that against **your bid**, the maximum you placed at the platform:
 
-On a **won** lot the price is required. You paid it, so there is nothing to have missed, and it is
-what the parcel's total is worked out from — and, once settling a sale exists, what prices the
-purchase line.
+| what happened | outcome |
+| --- | --- |
+| it went for **less** than your maximum | **Won** |
+| it went for **more** than your maximum | **Lost** |
+| you never bid on it at all | **Watched** |
+| the listing was withdrawn or ended unsold | **Cancelled** |
 
-Recording a price is what turns a lot you lost into a **price datapoint**: a real price, for a
-composition you already described, on a known date. The exchange rate of that moment is frozen with
+The dialog says which of these it will be as you type, so you see the conclusion before you commit
+to it rather than after. The reason it works this way is that winning an auction pays the
+runner-up's maximum plus one increment — which always lands *under* your own — while being outbid
+puts the result *above* it. Your bid and the final price already contain the answer, so filing it
+separately could only ever disagree with them.
+
+**Lots you never bid on.** Adding a lot purely to record what it fetched is a normal thing to do
+here — it is how you build a price base for valuing your own material, and it costs nothing beyond
+the composition you were going to enter anyway. Such a lot has no bid of yours on it, so closing it
+files it as **Watched**: a real price on a real date, and nothing you owe anything on. It is not a
+loss, and the list never calls it one.
+
+**If you never saw the result.** A lot you bid on cannot be closed without a price — with your bid
+and the final price being the whole of the answer, half of it is not an answer. The last bid you
+recorded is not a substitute: it is only what the price had reached the last time you looked, which
+is why it is never filled in for you. Leave the lot **open** until you know, or — if you never
+really placed that bid — clear your bid on the row, and the lot becomes one you simply watched.
+
+**When it goes for exactly your maximum.** Then the figures genuinely cannot say. Whoever bid that
+amount first won it, and that is not something either the platform's page or Stamporama can work
+out — so the dialog asks you, once, and only in this case.
+
+Recording a price is what turns a closed lot into a **price datapoint**: a real price, for a
+composition you already described, on a known date. That is as true of a lot you only watched as of
+one you were outbid on — arguably more so, since recording the price is the entire reason it is
+here. The exchange rate of that moment is frozen with
 it, so a result from three years ago keeps saying what it cost three years ago rather than being
 quietly revalued at today's rate.
 
-Once a result is recorded, the row shows it in place of the last bid — that is what the lot actually
-went for, and it is the figure the all-in beside it is worked out from. The **Won?** / **Lost?**
-guess disappears, replaced by the plain status.
+Once a lot is closed, the row shows the final price in place of the last bid — that is what the lot
+actually went for, and it is the figure the all-in beside it is worked out from. The **Won?** /
+**Lost?** guess disappears: it was the same comparison against the last bid anyone happened to see,
+and it is replaced by the same comparison against the price you confirmed.
 
-Lost lots stay on the list and stay filterable. They are the archive the market data comes out of,
+Closed lots stay on the list and stay filterable. They are the archive the market data comes out of,
 not clutter to be cleared away.
 
 Won lots stay on the list too, and count into what the parcel will cost — a won lot is priced at
@@ -317,11 +342,11 @@ out from its figures rather than recorded by you:
 These only ever describe a lot still being watched: once you record an outcome there is nothing left
 to decide, and the status says it plainly.
 
-The second row is **what became of it** — the recorded outcome:
+The second row is **what became of it** — the outcome, worked out from the figures:
 
-- **Status** chips — *Watching*, *Won*, *Lost*, *Cancelled*, each with a count. Watching lots read
-  soonest-closing first; a settled status reads most-recent first. With no status chosen the list is
-  everything, newest tracked first.
+- **Outcome** chips — *Open*, *Won*, *Lost*, *Watched*, *Cancelled*, each with a count. Open lots
+  read soonest-closing first; a finished outcome reads most-recent first. With no outcome chosen the
+  list is everything, newest tracked first.
 Then, on its own, the one that asks what is **missing from the record** rather than anything about
 the bidding:
 
@@ -345,8 +370,8 @@ coming back tomorrow to a list still narrowed to them would hide everything actu
 ## Sales — paying for a parcel
 
 **Auctions → Sales** in the sidebar lists the settlements. Each row shows the parcel's **all-in total**:
-every bid you would actually pay for — *watching* and *won* lots — plus the premium on each, plus
-shipping once. A lost lot costs nothing and is left out of the total. Beside it is the parcel's
+every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus
+shipping once. Lots you lost, watched or cancelled cost nothing and are left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping
 included, because that is what the parcel actually costs.
 

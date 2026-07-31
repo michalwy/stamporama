@@ -30,14 +30,14 @@ lot there is greyed out rather than reddened.
 
 ## What it reports
 
-**Closing soon** — amber. [Auction lots](auctions.md) you are watching that close within the next 24 hours.
+**Closing soon** — amber. [Auction lots](auctions.md) still open that close within the next 24 hours.
 The row names the lot and its seller and says how long is left; opening it goes to the lot's sale
 with that lot marked, which is where you refresh the bid.
 
-**Awaiting an outcome** — blue. Lots you are watching whose closing time has passed with no result
+**Waiting to be closed** — blue. Lots still open whose closing time has passed with no result
 recorded. This is the one thing on the list that never fixes itself: the lot list deliberately mutes
 an ended lot rather than raising an alarm about it, so this is how you find the ones still to be
-marked won or lost. Recording the outcome removes it from the list.
+closed. Closing the lot — confirming what it went for — removes it from the list.
 
 **Listing a copy sold elsewhere** — red. An active [offer](offers.md) holding a copy that has already
 sold through a different listing. The copy is gone, so the listing is stale on its platform: remove

@@ -19,7 +19,7 @@ import type { AuctionLotView } from "./use-auctions-query";
 import {
   BidFreshnessChip,
   BidStandingChip,
-  LotStatusChip,
+  LotOutcomeChip,
   NotDescribedChip,
   OverCeilingChip,
 } from "./auction-badges";
@@ -778,7 +778,7 @@ export function AuctionLotRow({
                   <span style={CHIP}>{lot.platformName}</span>
                 </Tooltip>
               )}
-              <LotStatusChip status={lot.status} />
+              <LotOutcomeChip outcome={lot.outcome} />
               <BidFreshnessChip
                 status={lot.status}
                 endsAt={lot.endsAt}
@@ -895,7 +895,7 @@ export function AuctionLotRow({
             <Tooltip
               content={
                 lot.finalPrice !== null
-                  ? lot.status === "won"
+                  ? lot.outcome === "won"
                     ? `What you paid for this lot, ${formatInstant(lot.endsAt)}`
                     : `What this lot went for, ${formatInstant(lot.endsAt)}`
                   : lot.checkedAt

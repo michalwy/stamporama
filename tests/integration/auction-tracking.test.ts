@@ -10,7 +10,7 @@ import {
   getAuctionSellerDefaults,
   listAuctionLots,
   auctionLotFilterCounts,
-  recordAuctionLotOutcome,
+  recordAuctionLotTransition,
   setAuctionLotBid,
   setAuctionLotMyBid,
   touchAuctionLotChecked,
@@ -340,7 +340,7 @@ describe("auction tracking (#351/#352)", () => {
     assert.ok(items.every((l) => l.saleName === "Philkam · Allegro"));
 
     const counts = await auctionLotFilterCounts(userId, collectionId, {});
-    assert.equal(counts.statuses.watching, 2);
+    assert.equal(counts.outcomes.pending, 2);
     assert.equal(counts.sellers[sellerId], 2);
     assert.equal(counts.platforms[platformId], 2);
     assert.equal(counts.total, 2);
@@ -427,51 +427,77 @@ describe("auction tracking (#351/#352)", () => {
         where: { id: lotId },
         select: { status: true, finalPrice: true, fxRateToBase: true, currentBid: true },
       });
+    /** What the lot derives to — read through the list, so this asserts on the same figure the
+     * screen shows rather than on a re-implementation of the rule. */
+    const lotOutcomeOf = async (id: string) =>
+      (await listAuctionLots(userId, collectionId)).items.find((l) => l.id === id)?.outcome;
 
-    await recordAuctionLotOutcome(userId, lotId, { status: "lost", finalPrice: "62.00" });
+    // The lot carries a maximum of 45.00, so every outcome below follows from what it fetched
+    // against that figure — nothing here files a verdict (ADR-0021 §4).
+
+    // Above the maximum: outbid.
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: "62.00",
+      wonTie: null,
+    });
     const lost = await read();
-    assert.equal(lost.status, "lost");
+    assert.equal(lost.status, "closed");
     assert.equal(lost.finalPrice?.toFixed(2), "62.00");
     // Base currency: there is no conversion to freeze, exactly as on a same-currency purchase.
     assert.equal(lost.fxRateToBase, null);
     // The last bid anyone saw is left alone — it is what the lot had reached, not what it fetched.
     assert.equal(lost.currentBid?.toFixed(2), "40.00");
+    assert.equal((await lotOutcomeOf(lotId)), "lost");
 
     // Withdrawn or ended without a sale: no datapoint, so a price recorded before is cleared.
-    await recordAuctionLotOutcome(userId, lotId, { status: "cancelled" });
+    await recordAuctionLotTransition(userId, lotId, { status: "cancelled" });
     const cancelled = await read();
     assert.equal(cancelled.status, "cancelled");
     assert.equal(cancelled.finalPrice, null);
     assert.equal(cancelled.fxRateToBase, null);
 
-    // Lost with no figure at all: the lot went away before the result was seen, which is an
-    // absent observation and not an error to be filled in.
-    await recordAuctionLotOutcome(userId, lotId, { status: "lost", finalPrice: null });
-    const unpriced = await read();
-    assert.equal(unpriced.status, "lost");
-    assert.equal(unpriced.finalPrice, null);
-
-    // Reversible: a lot filed by mistake goes back on the watchlist carrying no result.
-    await recordAuctionLotOutcome(userId, lotId, { status: "watching" });
-    const reopened = await read();
-    assert.equal(reopened.status, "watching");
-    assert.equal(reopened.finalPrice, null);
-
-    // Winning carries the price paid, and refuses to be recorded without one: settlement (#28)
-    // prices its purchase line from exactly this figure.
+    // Closing without a price is refused while a bid stands: the outcome is derived from the two
+    // figures, and with one of them missing there is nothing to derive. The old model filed this
+    // as "lost with no figure"; there is no such state to file into any more.
     await assert.rejects(
-      recordAuctionLotOutcome(userId, lotId, {
-        status: "won",
-        // The domain guard is what is under test, so the type is deliberately bypassed here — the
-        // server action refuses a blank field before it ever gets this far.
-        finalPrice: null as unknown as string,
+      recordAuctionLotTransition(userId, lotId, {
+        status: "closed",
+        finalPrice: null,
+        wonTie: null,
       }),
-      /what you paid/i
+      /what this lot went for/i
     );
-    await recordAuctionLotOutcome(userId, lotId, { status: "won", finalPrice: "58.00" });
+
+    // Clearing the bid is the honest way out, and it says something true: a lot never bid on is one
+    // that was only watched. It may then close carrying no price at all.
+    await setAuctionLotMyBid(userId, lotId, null);
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: null,
+      wonTie: null,
+    });
+    assert.equal((await read()).status, "closed");
+    assert.equal(await lotOutcomeOf(lotId), "observed");
+
+    // Reversible: a lot filed by mistake goes back in play carrying no result.
+    await recordAuctionLotTransition(userId, lotId, { status: "open" });
+    const reopened = await read();
+    assert.equal(reopened.status, "open");
+    assert.equal(reopened.finalPrice, null);
+    assert.equal(await lotOutcomeOf(lotId), "pending");
+
+    // Below the maximum: won, with no flag set anywhere — the money says so.
+    await setAuctionLotMyBid(userId, lotId, "60.00");
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: "58.00",
+      wonTie: null,
+    });
     const won = await read();
-    assert.equal(won.status, "won");
+    assert.equal(won.status, "closed");
     assert.equal(won.finalPrice?.toFixed(2), "58.00");
+    assert.equal(await lotOutcomeOf(lotId), "won");
 
     // A won lot is payable, and is costed at what was paid rather than at the last bid observed.
     const sale = await getAuctionSaleDetail(userId, saleId);
@@ -479,10 +505,43 @@ describe("auction tracking (#351/#352)", () => {
     assert.equal(sale.summary.payableCount, 1);
     assert.equal(sale.summary.bidTotal, "58.00");
 
-    await recordAuctionLotOutcome(userId, lotId, { status: "watching" });
+    // Exactly the maximum: the one case the figures cannot settle, since bid order decided it.
+    await assert.rejects(
+      recordAuctionLotTransition(userId, lotId, {
+        status: "closed",
+        finalPrice: "60.00",
+        wonTie: null,
+      }),
+      /bid that amount first/i
+    );
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: "60.00",
+      wonTie: true,
+    });
+    assert.equal(await lotOutcomeOf(lotId), "won");
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: "60.00",
+      wonTie: false,
+    });
+    assert.equal(await lotOutcomeOf(lotId), "lost");
+    // …and the answer is dropped as soon as the figures stop tying, where it would mean nothing.
+    await recordAuctionLotTransition(userId, lotId, {
+      status: "closed",
+      finalPrice: "58.00",
+      wonTie: true,
+    });
+    assert.equal(
+      (await prisma.auctionLot.findUniqueOrThrow({ where: { id: lotId }, select: { wonTie: true } }))
+        .wonTie,
+      null
+    );
+
+    await recordAuctionLotTransition(userId, lotId, { status: "open" });
 
     await assert.rejects(
-      recordAuctionLotOutcome("someone-else", lotId, { status: "cancelled" }),
+      recordAuctionLotTransition("someone-else", lotId, { status: "cancelled" }),
       /not found/i
     );
 

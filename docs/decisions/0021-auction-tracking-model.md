@@ -79,13 +79,59 @@ lots, and a seller met for the first time has no default at all. Falling straigh
 seeded currency and lets it be changed before the sale is created, because every amount on the lot
 is entered in it.
 
-### 4. Outcome lives on the lot, never on the sale
+### 4. Outcome lives on the lot, never on the sale — and is **derived**, never recorded
 
-`AuctionLot.status` is `watching | won | lost | cancelled`. The sale's own `status`
-(`open | settled | closed`) is about the parcel's lifecycle, not about how the bidding went.
+`AuctionLot.status` is the lot's **lifecycle**: `open | closed | cancelled`. The sale's own `status`
+(`open | settled | closed`) is about the parcel, not about how the bidding went. Within one
+settlement some lots are won and others lost, and that is the ordinary case rather than an edge one —
+it is what bidding *is*. A sale-level outcome would have no meaning to record.
 
-Within one settlement some lots are won and others lost, and that is the ordinary case rather than
-an edge one — it is what bidding *is*. A sale-level outcome would have no meaning to record.
+How the bidding went is **computed** from the money and never stored (`lotOutcome`,
+`src/lib/auction-lot.ts`):
+
+| lifecycle | figures | outcome |
+| --- | --- | --- |
+| `open` | — | **pending** |
+| `cancelled` | — | **cancelled** |
+| `closed` | no `myBid` | **observed** |
+| `closed` | `finalPrice < myBid` | **won** |
+| `closed` | `finalPrice > myBid` | **lost** |
+| `closed` | `finalPrice = myBid` | `wonTie` decides |
+| `closed` | `myBid`, no `finalPrice` | **lost** — pre-existing rows only |
+
+The status used to be `watching | won | lost | cancelled`, hand-set from the row's menu. Three things
+were wrong with that, and the third is what forced the change.
+
+**Won and lost are not facts.** They follow from `myBid` against `finalPrice`, and `bidStanding`
+already computed exactly that arithmetic for the live case. Recording a conclusion by hand meant a
+lot could sit filed `won` while its own figures said it was outbid, with nothing to catch it — the
+class of bug a derived value cannot have.
+
+**`closed` says something the old vocabulary could not.** A lot sitting `watching` past its `endsAt`
+was standing in for "ended, not yet looked at", which is a real and common state with real work
+attached. It is now the plain reading of `open` after the close, and the `won-pending` signal is
+literally that list.
+
+**Watching a lot without bidding on it had nowhere to go.** Adding lots purely to record what they
+fetch is a first-class use of this feature — it is how the price base for #24 gets built, and it
+costs nothing beyond the composition that was going to be entered anyway. Such a lot is not `lost`
+(there was no defeat) and not `cancelled` (the auction ended and its price is real). Under the
+derived rule it needs no new vocabulary at all: **no bid recorded is exactly what makes it
+`observed`**, which is the strongest evidence the split was the right cut.
+
+The tie is the sole exception, and it is why `wonTie Boolean?` exists. At `finalPrice = myBid` the
+two real cases — you bid your maximum first and won, or someone else bid the same maximum first and
+you lost — carry identical figures, and only the order of the bids separates them. That order is a
+fact no column holds, so it is asked once at closing and stored. This does not walk the decision
+back: the principle is *record facts, derive conclusions*, and bid order is a fact. `wonTie` is
+consulted only at a tie, cleared whenever the figures stop tying, and null-on-a-tie reads as `lost` —
+guessing a win would feed a fabricated line into settlement (§7).
+
+Filtering is by outcome, never by lifecycle: `open | closed | cancelled` is bookkeeping, while what
+the collector looks for is "what did I win", "what did I only watch". The predicates in
+`outcomeWhere` restate `lotOutcome` in SQL — accepted duplication, because every figure the rule
+reads sits on the row, so the alternative is loading the whole table to bucket it. Unit tests pin the
+arithmetic and integration tests pin the predicates against it.
 
 ### 5. The bid is a single overwritten figure with `checkedAt`, not a history
 
@@ -95,8 +141,15 @@ history table.
 Refreshing is manual — see §8 — so every field that must be kept current is real work done by a
 person. A history bought with that work would answer questions nobody asks; the one question that
 does get asked before a lot closes is "how stale is this?", and `checkedAt` answers it in one
-column. `finalPrice` is separately optional, because a lot that simply vanished from view yields no
-datapoint: that is an absent observation, not an error state to be filled in.
+column. `finalPrice` is separately optional, because a lot nobody bid on yields no result to record:
+that is an absent observation, not an error state to be filled in.
+
+What that optionality **stopped** covering under §4 is "I bid, and never saw how it ended". With the
+outcome derived, a bid and no result cannot be read at all, so closing refuses it. The honest answers
+are to leave the lot `open` until the result is known, or — if the bid was never really placed — to
+clear it, which files the lot as `observed`. Nothing is ever inferred from the last observed bid:
+that figure is a lower bound on the result, and promoting it would poison the very data #24 consumes.
+Rows written before §4 can still hold that shape and read as `lost`, which is what they always meant.
 
 ### 6. Composition is structured, and reuses the pricing machinery that exists
 
@@ -218,26 +271,30 @@ frozen at `endsAt` through the `Purchase` mechanism from #20. That is what #24 c
 nothing extra to capture — the composition was entered to decide the bid — which is the whole
 argument for getting market data this way instead of importing it.
 
-Three consequences of that, settled with #354. The rate is stored **only where there is a price to
-convert**: null covers "the sale is already in base currency", "no rate could be had" and "no result
-was ever seen", all of which mean the same thing to a reader, and freezing today's rate against an
-absent observation would only look like data. Nothing is ever **inferred** into `finalPrice` — the
-last bid recorded is a lower bound on the result, so a lot whose outcome was missed is filed lost
-with no figure rather than with a guess, and the entry form leaves the field blank instead of
-offering one. And `cancelled` is a **third outcome, not a flavour of lost**: a listing withdrawn or
-ended without a sale produces no datapoint at all, so recording one clears any price and its rate,
-exactly as putting a lot back to `watching` does. Every one of the three is reversible, because
-misfiling a lot is a clerical error and a watchlist that cannot take one back invites leaving it
-wrong.
+Three consequences of that, settled with #354 and amended by §4. The rate is stored **only where
+there is a price to convert**: null covers "the sale is already in base currency", "no rate could be
+had" and "no result was ever seen", all of which mean the same thing to a reader, and freezing
+today's rate against an absent observation would only look like data. Nothing is ever **inferred**
+into `finalPrice` — the last bid recorded is a lower bound on the result, so the entry form leaves
+the field blank rather than offering a guess, and closing a lot you bid on without a price is refused
+outright. And `cancelled` is a **lifecycle state, not a flavour of lost**: a listing withdrawn or
+ended without a sale produces no datapoint at all, so recording one clears the price, its rate and
+the tie-break together, exactly as putting a lot back to `open` does. Every move is reversible,
+because misfiling a lot is a clerical error and a watchlist that cannot take one back invites leaving
+it wrong.
 
-`won` is recorded on the lot the same way, and has to be: settlement operates on *a sale holding
-`won` lots*, so without it the sale can never reach the state that action reads. It carries the
-price **paid** — required, unlike a lost lot's, because you cannot have missed what you paid and
-because the purchase line is priced from exactly that figure — and it stops there. It writes no
-`Purchase`: the parcel is settled as a whole, once, when the seller has invoiced it, and a per-lot
-purchase would be the parallel acquisition path this section exists to refuse. What it does change
-at once is the parcel's own rollup, which then costs a won lot at what was paid rather than at the
-last bid anybody happened to observe.
+Settlement still operates on *a sale holding won lots*, but it now reads won-ness off the money
+(§4) rather than off a flag: a sale reaches that state by having its figures entered, not by being
+told twice. Closing a lot stops at the figures and writes no `Purchase` — the parcel is settled as a
+whole, once, when the seller has invoiced it, and a per-lot purchase would be the parallel
+acquisition path this section exists to refuse. What closing does change at once is the parcel's own
+rollup, which then costs a won lot at what was paid rather than at the last bid anybody happened to
+observe.
+
+One constraint this places on §4, and it holds: a settled lot **must** keep deriving to `won`, or
+what settlement wrote and what the lot reads back would disagree. `assertLotEditable` freezes a
+settled lot's figures, so once true it stays true — which is what made deriving the outcome safe on
+this side of the fork at all.
 
 ### 8. Data entry is manual, plus one assisted capture path
 

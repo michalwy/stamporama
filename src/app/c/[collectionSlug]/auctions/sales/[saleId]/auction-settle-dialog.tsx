@@ -78,7 +78,7 @@ export function AuctionSettleDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
 
-  const won = useMemo(() => sale.lots.filter((lot) => lot.status === "won" && !lot.settled), [sale]);
+  const won = useMemo(() => sale.lots.filter((lot) => lot.outcome === "won" && !lot.settled), [sale]);
 
   // The premium the pre-filled prices are built from. Shipping is deliberately absent: it becomes
   // the purchase's own shared cost and is distributed across these very lines by ADR-0009 §3, so

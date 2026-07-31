@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listAuctionLots } from "@/lib/auctions";
-import { isAuctionLotStatus } from "@/lib/auction-rules";
+import { isAuctionLotOutcome } from "@/lib/auction-rules";
 import type { AuctionClosingWindow } from "@/lib/auctions";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 
@@ -30,12 +30,12 @@ export async function GET(
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
   const offsetParam = sp.get("offset");
-  const statusParam = sp.get("status");
+  const outcomeParam = sp.get("outcome");
 
   try {
     const result = await listAuctionLots(session.user.id, collectionId, {
       offset: offsetParam ? parseInt(offsetParam, 10) : undefined,
-      status: statusParam && isAuctionLotStatus(statusParam) ? statusParam : undefined,
+      outcome: outcomeParam && isAuctionLotOutcome(outcomeParam) ? outcomeParam : undefined,
       closing: closingWindow(sp.get("closing")),
       signal: lotSignal(sp.get("signal")),
       undescribed: sp.get("undescribed") === "1" || undefined,

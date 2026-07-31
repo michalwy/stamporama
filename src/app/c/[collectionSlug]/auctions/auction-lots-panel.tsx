@@ -11,9 +11,9 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
-  AUCTION_LOT_STATUSES,
-  AUCTION_LOT_STATUS_LABEL,
-  isAuctionLotStatus,
+  AUCTION_LOT_OUTCOMES,
+  AUCTION_LOT_OUTCOME_LABEL,
+  isAuctionLotOutcome,
 } from "@/lib/auction-rules";
 import {
   useAuctionLotCounts,
@@ -92,17 +92,17 @@ export function AuctionLotsPanel({
 
   // Remembered filter selections, per collection, with the URL winning whenever it carries one —
   // the offers list's rule (#325), so a shared link still means exactly what it says.
-  const [storedStatus, rememberStatus] = usePersistedCollectionValue("auction-status", collectionId);
+  const [storedOutcome, rememberOutcome] = usePersistedCollectionValue("auction-outcome", collectionId);
   const [storedSeller, rememberSeller] = usePersistedCollectionValue("auction-seller", collectionId);
   const [storedPlatform, rememberPlatform] = usePersistedCollectionValue(
     "auction-platform",
     collectionId
   );
 
-  const statusRaw = searchParams.has("status")
-    ? (searchParams.get("status") ?? "")
-    : (storedStatus ?? "");
-  const status = isAuctionLotStatus(statusRaw) ? statusRaw : undefined;
+  const outcomeRaw = searchParams.has("outcome")
+    ? (searchParams.get("outcome") ?? "")
+    : (storedOutcome ?? "");
+  const outcome = isAuctionLotOutcome(outcomeRaw) ? outcomeRaw : undefined;
 
   // Only a *stored* party is checked against the loaded lists: one whose sales have since gone
   // would silently narrow the list to nothing, and unlike a link nobody typed it this time.
@@ -141,8 +141,8 @@ export function AuctionLotsPanel({
   );
 
   const filters: AuctionLotFilters = useMemo(
-    () => ({ status, closing, signal, undescribed, sellerId, platformId }),
-    [status, closing, signal, undescribed, sellerId, platformId]
+    () => ({ outcome, closing, signal, undescribed, sellerId, platformId }),
+    [outcome, closing, signal, undescribed, sellerId, platformId]
   );
 
   const updateParams = useCallback(
@@ -202,7 +202,7 @@ export function AuctionLotsPanel({
   }
 
   const hasActiveFilters =
-    !!status || !!closing || !!signal || !!undescribed || !!sellerId || !!platformId;
+    !!outcome || !!closing || !!signal || !!undescribed || !!sellerId || !!platformId;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -243,18 +243,18 @@ export function AuctionLotsPanel({
               margin: "0 0.25rem",
             }}
           />
-          {AUCTION_LOT_STATUSES.map((value) => {
-            const active = status === value;
+          {AUCTION_LOT_OUTCOMES.map((value) => {
+            const active = outcome === value;
             return (
               <FilterChip
                 key={value}
-                label={AUCTION_LOT_STATUS_LABEL[value]}
-                count={counts ? (counts.statuses[value] ?? 0) : undefined}
+                label={AUCTION_LOT_OUTCOME_LABEL[value]}
+                count={counts ? (counts.outcomes[value] ?? 0) : undefined}
                 active={active}
                 onClick={() => {
                   const next = active ? "" : value;
-                  rememberStatus(next);
-                  updateParams({ status: next });
+                  rememberOutcome(next);
+                  updateParams({ outcome: next });
                 }}
               />
             );

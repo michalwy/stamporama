@@ -2,9 +2,10 @@
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
-  AUCTION_LOT_STATUS_LABEL,
+  AUCTION_LOT_OUTCOME_LABEL,
   AUCTION_SALE_STATUS_LABEL,
   bidFreshness,
+  type AuctionLotOutcome,
   type AuctionLotStatus,
   type AuctionSaleStatus,
   type BidFreshness,
@@ -48,19 +49,24 @@ function tinted(token: string | null, label: string, title?: string) {
   );
 }
 
-const LOT_STATUS: Record<AuctionLotStatus, { token: string | null; title: string }> = {
-  // Neutral on purpose. `watching` is what every live lot is — it says nothing the row does not
+/** The chip names the **derived** outcome (ADR-0021 §4), not the recorded lifecycle: `open |
+ * closed | cancelled` is bookkeeping, and what the collector wants off a row is how it went. */
+const LOT_OUTCOME: Record<AuctionLotOutcome, { token: string | null; title: string }> = {
+  // Neutral on purpose. `pending` is what every live lot is — it says nothing the row does not
   // already say — while **Leading** beside it is a real, hard-won piece of news. Two tinted chips
   // side by side made the ordinary one compete with the one worth reading.
-  watching: { token: null, title: "Still running — the bid is worth keeping current" },
-  won: { token: "success", title: "Won; payable in this sale's parcel" },
-  lost: { token: null, title: "Outbid or unsold — nothing to pay" },
-  cancelled: { token: null, title: "Withdrawn by the seller, or no longer being bid on" },
+  pending: { token: null, title: "Still open — the bid is worth keeping current" },
+  won: { token: "success", title: "It went for less than your maximum; payable in this sale's parcel" },
+  lost: { token: null, title: "It went past your maximum — nothing to pay" },
+  // Tinted like nothing else here because it is the one outcome that is not about the bidding at
+  // all: no bid was ever placed, and the lot exists to record what it fetched.
+  observed: { token: "accent", title: "You never bid on this one — it is here for the price it fetched" },
+  cancelled: { token: null, title: "Withdrawn by the seller, or ended without a sale" },
 };
 
-export function LotStatusChip({ status }: { status: AuctionLotStatus }) {
-  const meta = LOT_STATUS[status];
-  return tinted(meta.token, AUCTION_LOT_STATUS_LABEL[status], meta.title);
+export function LotOutcomeChip({ outcome }: { outcome: AuctionLotOutcome }) {
+  const meta = LOT_OUTCOME[outcome];
+  return tinted(meta.token, AUCTION_LOT_OUTCOME_LABEL[outcome], meta.title);
 }
 
 const SALE_STATUS: Record<AuctionSaleStatus, { token: string | null; title: string }> = {
@@ -129,9 +135,10 @@ export function BidFreshnessChip({
  * Nothing renders until they have actually bid: a lot merely being watched is neither.
  *
  * Once the moment has passed the same comparison stops being a position and becomes a **result**,
- * so it reads *Won?* / *Lost?* — with the question mark, because it is inferred from the last bid
- * anyone bothered to record, not from the platform. Recording the outcome replaces it: a settled
- * lot renders nothing here, since its status chip already says Won or Lost without the doubt.
+ * so it reads *Won?* / *Lost?* — with the question mark, because it is computed against the last bid
+ * anyone bothered to record rather than against what the lot actually fetched. Closing the lot
+ * replaces it: the outcome chip is then the same arithmetic over the confirmed figure, and prints
+ * without the doubt.
  */
 export function BidStandingChip({
   standing,
@@ -141,7 +148,7 @@ export function BidStandingChip({
   standing: "leading" | "outbid" | null;
   /** The closing time has passed. */
   closed?: boolean;
-  /** The outcome has been recorded, so the status chip says it properly. */
+  /** The lot has been closed, so the outcome chip states it against a confirmed price. */
   settled?: boolean;
 }) {
   if (!standing || settled) return null;
@@ -150,12 +157,12 @@ export function BidStandingChip({
       ? tinted(
           "success",
           "Won?",
-          "Your bid was ahead of the last price recorded — record the outcome to confirm it"
+          "Your bid was ahead of the last price recorded — close the lot to confirm what it went for"
         )
       : tinted(
           null,
           "Lost?",
-          "The last price recorded was above your bid — record the outcome to confirm it"
+          "The last price recorded was above your bid — close the lot to confirm what it went for"
         );
   }
   return standing === "leading"

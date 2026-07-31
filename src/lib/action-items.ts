@@ -142,8 +142,8 @@ function plural(n: number, one: string, many: string): string {
 
 const auctionProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    // Two windows of the *watching* lots, each one already a filter the lots screen offers, so the
-    // "see all" links are the same query rather than an approximation of it.
+    // Two windows over the lots still in play, each one already a filter the lots screen offers, so
+    // the "see all" links are the same query rather than an approximation of it.
     const windows = [
       {
         id: "auction-closing" as const,
@@ -154,7 +154,7 @@ const auctionProvider: ActionItemProvider = {
       },
       {
         id: "auction-outcome" as const,
-        title: "Awaiting an outcome",
+        title: "Waiting to be closed",
         // The bidding happened without you — nothing is at risk, but nothing will ask again.
         severity: "info" as const,
         closing: "ended" as const,
@@ -163,7 +163,7 @@ const auctionProvider: ActionItemProvider = {
 
     return Promise.all(
       windows.map(async ({ id, title, severity, closing }) => {
-        const filters = { status: "watching" as const, closing };
+        const filters = { outcome: "pending" as const, closing };
         const [page, count] = await Promise.all([
           listAuctionLots(ownerId, collectionId, { ...filters, pageSize: limit }),
           countAuctionLots(ownerId, collectionId, filters),
@@ -174,7 +174,7 @@ const auctionProvider: ActionItemProvider = {
           severity,
           count,
           items: page.items.map(lotItem),
-          href: `auctions?status=watching&closing=${closing}`,
+          href: `auctions?outcome=pending&closing=${closing}`,
         };
       })
     );

@@ -1041,8 +1041,19 @@ model AuctionLot {
   // is already in the base currency, when no rate could be had, and whenever there is no
   // `finalPrice` — a rate exists to convert a figure, and an absent observation has none.
   fxRateToBase   Decimal?
-  // watching | won | lost | cancelled.
-  status         String   @default("watching")
+  // The lot's **lifecycle**, recorded by hand: `open` | `closed` | `cancelled`. Not its outcome —
+  // won/lost/observed are *derived* from `myBid` against `finalPrice` by `lotOutcome` in
+  // `auction-lot.ts` and never stored (ADR-0021 §4). `closed` means the figures have been confirmed
+  // after the close, which is what the old `watching`-past-`endsAt` state could not say.
+  status         String   @default("open")
+  // Who bid first, and **only** consulted when `finalPrice` equals `myBid`.
+  //
+  // At equal figures the two real cases are indistinguishable — you bid your maximum first and won,
+  // or somebody else bid the same maximum first and you lost — and what separates them is the order
+  // the bids were placed in, which no arithmetic recovers. So it is asked once, at closing, and
+  // stored. Null everywhere else, where it means nothing; null *on* a tie reads as lost, because
+  // guessing a win would feed a fabricated line into settlement (§7).
+  wonTie         Boolean?
   // Set when the lot is settled into the purchase (#28). `SetNull`/unique for the same reasons as
   // `AuctionSale.purchaseId`.
   purchaseLotId  String?

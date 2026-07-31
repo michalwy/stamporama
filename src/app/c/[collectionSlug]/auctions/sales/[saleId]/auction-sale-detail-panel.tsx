@@ -17,9 +17,9 @@ import { AuctionLotCardsView } from "./auction-lot-cards-view";
 import { AuctionSaleFormDialog } from "../../auction-sale-form-dialog";
 import { AuctionSettleDialog } from "./auction-settle-dialog";
 import {
-  AUCTION_LOT_STATUSES,
-  AUCTION_LOT_STATUS_LABEL,
-  type AuctionLotStatus,
+  AUCTION_LOT_OUTCOMES,
+  AUCTION_LOT_OUTCOME_LABEL,
+  type AuctionLotOutcome,
 } from "@/lib/auction-rules";
 import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
@@ -98,7 +98,7 @@ export function AuctionSaleDetailPanel({
   // Which outcome the lot list below is narrowed to. Local state rather than a URL param, unlike
   // the flat list: this is one parcel being worked through — "what is still running", then "what
   // did I win" while settling — not a view anyone links to.
-  const [status, setStatus] = useState<AuctionLotStatus | undefined>();
+  const [outcome, setOutcome] = useState<AuctionLotOutcome | undefined>();
   // The same derived states the flat list filters by, asked of one parcel. Computed here rather
   // than fetched: the sale's lots are already in hand, and the rules are pure.
   const [signal, setSignal] = useState<LotSignal | undefined>();
@@ -129,8 +129,8 @@ export function AuctionSaleDetailPanel({
   const { summary } = sale;
   // The whole parcel is already loaded, so narrowing it is a client-side question — no second
   // request, and the counts come off the same rows the chips filter.
-  const statusCounts = sale.lots.reduce<Partial<Record<AuctionLotStatus, number>>>((acc, lot) => {
-    acc[lot.status] = (acc[lot.status] ?? 0) + 1;
+  const outcomeCounts = sale.lots.reduce<Partial<Record<AuctionLotOutcome, number>>>((acc, lot) => {
+    acc[lot.outcome] = (acc[lot.outcome] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -155,18 +155,18 @@ export function AuctionSaleDetailPanel({
   ) as Record<LotSignal, number>;
 
   const visibleLots = sale.lots.filter(
-    (lot) => (!status || lot.status === status) && (!signal || carries(lot, signal))
+    (lot) => (!outcome || lot.outcome === outcome) && (!signal || carries(lot, signal))
   );
 
   // Settlement (#28). A parcel is paid for as a whole, so the action only appears once every lot's
   // outcome is recorded: while something is still being watched the parcel's contents — and its
   // total — are not yet known. With nothing won there is no purchase to make and the parcel is
   // simply closed, which is the same end of the same road.
-  const wonCount = sale.lots.filter((lot) => lot.status === "won" && !lot.settled).length;
-  const watchingCount = statusCounts.watching ?? 0;
+  const wonCount = sale.lots.filter((lot) => lot.outcome === "won" && !lot.settled).length;
+  const openCount = outcomeCounts.pending ?? 0;
   const settleBlocked =
-    watchingCount > 0
-      ? `Record the outcome of ${watchingCount} lot${watchingCount === 1 ? "" : "s"} still being watched first.`
+    openCount > 0
+      ? `Close ${openCount} lot${openCount === 1 ? "" : "s"} still open first — confirming what ${openCount === 1 ? "it went" : "they went"} for is what says whether ${openCount === 1 ? "it is" : "they are"} in this parcel.`
       : undefined;
   const canSettle = sale.status === "open" && wonCount > 0;
   const canClose = sale.status === "open" && wonCount === 0 && sale.lots.length > 0;
@@ -388,15 +388,15 @@ export function AuctionSaleDetailPanel({
               }}
             />
           )}
-          {AUCTION_LOT_STATUSES.filter((value) => (statusCounts[value] ?? 0) > 0).map((value) => {
-            const active = status === value;
+          {AUCTION_LOT_OUTCOMES.filter((value) => (outcomeCounts[value] ?? 0) > 0).map((value) => {
+            const active = outcome === value;
             return (
               <FilterChip
                 key={value}
-                label={AUCTION_LOT_STATUS_LABEL[value]}
-                count={statusCounts[value] ?? 0}
+                label={AUCTION_LOT_OUTCOME_LABEL[value]}
+                count={outcomeCounts[value] ?? 0}
                 active={active}
-                onClick={() => setStatus(active ? undefined : value)}
+                onClick={() => setOutcome(active ? undefined : value)}
               />
             );
           })}

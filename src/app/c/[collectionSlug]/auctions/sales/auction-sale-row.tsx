@@ -149,8 +149,9 @@ export function AuctionSaleRow({
             {sale.platformName !== sale.sellerName ? ` · ${sale.platformName}` : ""}
           </span>
           <span style={{ color: "var(--color-text-muted)" }}>
-            {sale.summary.watchingCount} watching · {sale.summary.wonCount} won ·{" "}
+            {sale.summary.pendingCount} open · {sale.summary.wonCount} won ·{" "}
             {sale.summary.lostCount} lost
+            {sale.summary.observedCount > 0 ? ` · ${sale.summary.observedCount} watched` : ""}
           </span>
           {sale.summary.unbidCount > 0 && (
             <Tooltip content="Payable lots with no bid recorded — they add nothing to the total yet">

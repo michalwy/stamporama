@@ -191,8 +191,60 @@ export function bidStanding(myBid: Amount, currentBid: Amount): "leading" | "out
   return mine >= current ? "leading" : "outbid";
 }
 
-/** A lot's outcome. `watching` is still running; the other three are terminal. */
-export type AuctionLotStatus = "watching" | "won" | "lost" | "cancelled";
+/** Where a lot is in its life, as the collector records it. `open` is still in play; the other two
+ * are terminal. Mirrored from `auction-rules.ts`, which owns the vocabulary. */
+export type AuctionLotStatus = "open" | "closed" | "cancelled";
+
+/** How the bidding went — derived here, never stored. Mirrored from `auction-rules.ts`. */
+export type AuctionLotOutcome = "pending" | "won" | "lost" | "observed" | "cancelled";
+
+/** What {@link lotOutcome} reads. Everything on it is already recorded on the lot. */
+export interface LotOutcomeInput {
+  status: AuctionLotStatus;
+  /** The collector's own **maximum**, as placed at the platform. Absent means they never bid. */
+  myBid?: Amount;
+  /** What the lot fetched. */
+  finalPrice?: Amount;
+  /** Who bid first, consulted only at {@link lotOutcome}'s tie. */
+  wonTie?: boolean | null;
+}
+
+/**
+ * How the bidding went, computed from the figures the lot already carries (ADR-0021 §4).
+ *
+ * The comparison works because `myBid` is a **proxy maximum**, not a bid the lot stands at: winning
+ * pays the runner-up's maximum plus an increment, which lands *below* your own, while being outbid
+ * puts the result *above* it. So `finalPrice < myBid` is a win and `finalPrice > myBid` is a loss,
+ * with no flag to keep in step and nothing that can contradict the money.
+ *
+ * Three cases the arithmetic cannot answer on its own:
+ *
+ * - **No `myBid` at all** — `observed`. The lot was tracked to record what it went for without ever
+ *   being bid on, which is a price datapoint and not a defeat. This is the case the old
+ *   won/lost/cancelled vocabulary had nowhere to put.
+ * - **A tie.** Equal figures come from two different worlds — you bid your maximum first and won, or
+ *   somebody else bid the same maximum first and you lost — and only the order of the bids tells
+ *   them apart. That is what `wonTie` records, asked once at closing. Null there reads as `lost`:
+ *   the close form always asks, so it should not arise, and guessing a win would feed a fabricated
+ *   line into settlement (§7).
+ * - **A bid but no `finalPrice`** — `lost`, and **only reachable on rows written before this
+ *   model**. Closing now refuses a blank price unless the collector's own bid is cleared, so the
+ *   state cannot be created; ADR-0021 §5 filed exactly this shape as "lost with no figure", and
+ *   reading it any other way would silently restate history.
+ */
+export function lotOutcome(lot: LotOutcomeInput): AuctionLotOutcome {
+  if (lot.status === "open") return "pending";
+  if (lot.status === "cancelled") return "cancelled";
+
+  const mine = num(lot.myBid);
+  if (mine === null) return "observed";
+
+  const final = num(lot.finalPrice);
+  if (final === null) return "lost";
+  if (final < mine) return "won";
+  if (final > mine) return "lost";
+  return lot.wonTie === true ? "won" : "lost";
+}
 
 /**
  * The **derived** states a live lot can be in — what the row already shows as tint and chip, made
@@ -208,7 +260,9 @@ export type AuctionLotStatus = "watching" | "won" | "lost" | "cancelled";
  * - `leading` — your bid still covers it.
  * - `over-ceiling` — the current price, all-in, has passed your ceiling: it has become too
  *   expensive, whoever is winning.
- * - `won-pending` — it closed with your bid ahead, and the outcome has not been recorded yet.
+ * - `won-pending` — its moment has gone by with your bid ahead and the lot is still `open`, so the
+ *   figures have not been confirmed. Since the outcome is derived rather than recorded (§4), this
+ *   is exactly the list of lots waiting to be closed.
  */
 export type LotSignal = "bid-possible" | "outbid" | "leading" | "over-ceiling" | "won-pending";
 
@@ -234,13 +288,13 @@ export interface LotSignalInput {
 /**
  * Whether a lot carries a signal, at the instant `now`.
  *
- * Signals only apply while a lot is `watching`: once an outcome is recorded there is nothing to
- * decide, and the status says it plainly. `won-pending` is the exception in appearance only — it is
- * about a lot still marked `watching` whose moment has gone by, which is precisely the case the
- * collector has to come back and close.
+ * Signals only apply while a lot is `open`: once it is closed there is nothing to decide, and the
+ * derived outcome says how it went. `won-pending` is the exception in appearance only — it is about
+ * a lot still `open` whose moment has gone by, which is precisely the case the collector has to come
+ * back and close.
  */
 export function lotHasSignal(signal: LotSignal, lot: LotSignalInput, now: Date): boolean {
-  if (lot.status !== "watching") return false;
+  if (lot.status !== "open") return false;
   const ended = lot.endsAt.getTime() <= now.getTime();
   const standing = bidStanding(lot.myBid, lot.currentBid);
 
@@ -306,10 +360,12 @@ export interface LotLineValue {
  * is the work left, and the flag exists because catalogue value, headroom and everything bid
  * against them follow from the composition and stay blank without it.
  *
- * **Every status but `cancelled`.** A cancelled lot is not coming back and describing it buys
+ * **Every lot but a cancelled one.** A cancelled lot is not coming back and describing it buys
  * nothing, so flagging it would be pure noise on the historical rows. A *lost* one is flagged
  * deliberately, though it may look equally over: what it held, at what it went for, is a price
- * record — which is most of why the composition is worth entering before the hammer falls.
+ * record — which is most of why the composition is worth entering before the hammer falls. An
+ * `observed` lot is the same argument at full strength, since recording the price is the only
+ * reason that lot exists at all.
  */
 export function lotNeedsComposition(lot: { status: AuctionLotStatus; lineCount: number }): boolean {
   return lot.lineCount === 0 && lot.status !== "cancelled";
@@ -374,10 +430,16 @@ export function summarizeLotComposition(lines: LotLineValue[]): LotCompositionVa
   };
 }
 
-/** One lot as the aggregation reads it. */
+/** One lot as the aggregation reads it. Carries what {@link lotOutcome} needs rather than an
+ * outcome, so the sale's totals and the row's chip can never disagree about how a lot went. */
 export interface AuctionLotSummaryRow {
   status: AuctionLotStatus;
-  /** The live bid while watching. */
+  /** The collector's own maximum — absent means they never bid, which is what makes the lot an
+   * observation rather than a loss. */
+  myBid?: Amount;
+  /** Tie-break at equal figures; see {@link lotOutcome}. */
+  wonTie?: boolean | null;
+  /** The live bid while the lot is open. */
   currentBid?: Amount;
   /** What the lot fetched once it closed. Preferred over `currentBid` when present: it is the
    * settled figure, and the last observed bid is only ever an approximation of it. */
@@ -388,15 +450,17 @@ export interface AuctionLotSummaryRow {
 
 /** Sale-level totals over the lots that cost money. */
 export interface AuctionSaleSummary {
-  /** Every lot handed in, whatever its status. */
+  /** Every lot handed in, whatever became of it. */
   lotCount: number;
-  /** Lots by status, so a caller need not re-walk the list to label the sale. */
-  watchingCount: number;
+  /** Lots by **derived outcome**, so a caller need not re-walk the list to label the sale. */
+  pendingCount: number;
   wonCount: number;
   lostCount: number;
+  observedCount: number;
   cancelledCount: number;
-  /** Lots counted into the totals below: `watching` and `won`. A lost or cancelled lot is not
-   * something the collector pays for, so it can only distort what the parcel will cost. */
+  /** Lots counted into the totals below: `pending` and `won`. Nothing else is something the
+   * collector pays for, so it can only distort what the parcel will cost. An `observed` lot is
+   * excluded for the plainest reason of all — no bid was ever placed on it. */
   payableCount: number;
   /** Payable lots with no bid recorded yet — they contribute nothing, and a total that silently
    * omits them would otherwise look complete. */
@@ -417,8 +481,8 @@ export interface AuctionSaleSummary {
 }
 
 /** Whether a lot is one the collector would pay for. */
-function isPayable(status: AuctionLotStatus): boolean {
-  return status === "watching" || status === "won";
+function isPayable(outcome: AuctionLotOutcome): boolean {
+  return outcome === "pending" || outcome === "won";
 }
 
 /** The figure a lot is costed at: the settled price when it closed, else the last observed bid. */
@@ -436,9 +500,10 @@ export function summarizeAuctionSale(
   lots: AuctionLotSummaryRow[],
   fees: AuctionFees = {}
 ): AuctionSaleSummary {
-  let watchingCount = 0;
+  let pendingCount = 0;
   let wonCount = 0;
   let lostCount = 0;
+  let observedCount = 0;
   let cancelledCount = 0;
   let payableCount = 0;
   let unbidCount = 0;
@@ -450,12 +515,14 @@ export function summarizeAuctionSale(
   let comparableCount = 0;
 
   for (const lot of lots) {
-    if (lot.status === "watching") watchingCount++;
-    else if (lot.status === "won") wonCount++;
-    else if (lot.status === "lost") lostCount++;
+    const outcome = lotOutcome(lot);
+    if (outcome === "pending") pendingCount++;
+    else if (outcome === "won") wonCount++;
+    else if (outcome === "lost") lostCount++;
+    else if (outcome === "observed") observedCount++;
     else cancelledCount++;
 
-    if (!isPayable(lot.status)) continue;
+    if (!isPayable(outcome)) continue;
     payableCount++;
 
     const bid = lotBid(lot);
@@ -479,9 +546,10 @@ export function summarizeAuctionSale(
 
   return {
     lotCount: lots.length,
-    watchingCount,
+    pendingCount,
     wonCount,
     lostCount,
+    observedCount,
     cancelledCount,
     payableCount,
     unbidCount,

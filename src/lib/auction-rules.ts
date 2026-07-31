@@ -11,26 +11,28 @@
 import { normalizeDecimalInput } from "./decimal-input";
 import { compactCatalogNumbers } from "./offer-title-template";
 
-// ── Lot outcome ─────────────────────────────────────────────────────────────
+// ── Lot lifecycle and outcome (ADR-0021 §4) ─────────────────────────────────
+//
+// Two different questions, deliberately kept apart. **Lifecycle** is where the lot is in its life
+// and is recorded by hand. **Outcome** is how the bidding went and is *computed* from the figures by
+// `lotOutcome` in `auction-lot.ts` — never stored, because it is a conclusion rather than a fact.
+// The vocabulary for both lives here; the arithmetic behind the second lives next door.
 
-/** A lot's outcome. `watching` is still running; the other three are terminal. Re-stated from
- * `auction-lot.ts` rather than imported both ways — that module owns the arithmetic, this one the
- * vocabulary, and the type is the seam between them. */
-export type AuctionLotStatus = "watching" | "won" | "lost" | "cancelled";
+/** Where a lot is in its life, as the collector records it.
+ *
+ * - `open` — still running, or ended and not yet gone back to.
+ * - `closed` — the auction ended and its figures have been confirmed.
+ * - `cancelled` — withdrawn by the seller, or ended without a sale. No datapoint at all.
+ *
+ * Re-stated from `auction-lot.ts` rather than imported both ways — that module owns the arithmetic,
+ * this one the vocabulary, and the type is the seam between them. */
+export type AuctionLotStatus = "open" | "closed" | "cancelled";
 
-/** Lifecycle order: what is still live first, then what was paid for, then what was not. Doubles as
- * the filter-chip order and as the sort rank when lots of several statuses are listed together. */
-export const AUCTION_LOT_STATUSES: readonly AuctionLotStatus[] = [
-  "watching",
-  "won",
-  "lost",
-  "cancelled",
-];
+export const AUCTION_LOT_STATUSES: readonly AuctionLotStatus[] = ["open", "closed", "cancelled"];
 
 export const AUCTION_LOT_STATUS_LABEL: Record<AuctionLotStatus, string> = {
-  watching: "Watching",
-  won: "Won",
-  lost: "Lost",
+  open: "Open",
+  closed: "Closed",
   cancelled: "Cancelled",
 };
 
@@ -40,10 +42,48 @@ export function isAuctionLotStatus(value: string): value is AuctionLotStatus {
   return VALID_LOT_STATUS.has(value as AuctionLotStatus);
 }
 
-/** Whether the outcome is settled. Only a `watching` lot can still be bid on, so this is what the
+/** Whether the lot is finished with. Only an `open` lot can still be bid on, so this is what the
  * inline bid editor and the staleness signal key off. */
 export function isTerminalLotStatus(status: AuctionLotStatus): boolean {
-  return status !== "watching";
+  return status !== "open";
+}
+
+/**
+ * How the bidding went — **derived**, and what the screens actually name a lot by.
+ *
+ * - `pending` — the lot is `open`, so there is no outcome yet to speak of.
+ * - `won` — the result came in below the collector's own maximum.
+ * - `lost` — it went past it.
+ * - `observed` — no bid was ever placed. The lot was tracked to record what it fetched, which is a
+ *   price datapoint for #24 and emphatically not a defeat.
+ * - `cancelled` — the lifecycle state of the same name; there was no result to have.
+ */
+export type AuctionLotOutcome = "pending" | "won" | "lost" | "observed" | "cancelled";
+
+/** Order: what is still live first, then what was paid for, then what was not, then what was only
+ * watched, then what never happened. Doubles as the filter-chip order. */
+export const AUCTION_LOT_OUTCOMES: readonly AuctionLotOutcome[] = [
+  "pending",
+  "won",
+  "lost",
+  "observed",
+  "cancelled",
+];
+
+/** `pending` is labelled after its lifecycle state rather than as "Pending": on a filter chip the
+ * collector is picking between lots still in play and lots filed, and "Open" is what the row says. */
+export const AUCTION_LOT_OUTCOME_LABEL: Record<AuctionLotOutcome, string> = {
+  pending: "Open",
+  won: "Won",
+  lost: "Lost",
+  observed: "Observed",
+  cancelled: "Cancelled",
+};
+
+const VALID_LOT_OUTCOME = new Set<AuctionLotOutcome>(AUCTION_LOT_OUTCOMES);
+
+export function isAuctionLotOutcome(value: string): value is AuctionLotOutcome {
+  return VALID_LOT_OUTCOME.has(value as AuctionLotOutcome);
 }
 
 // ── Sale status ─────────────────────────────────────────────────────────────

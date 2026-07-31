@@ -13,7 +13,7 @@ import {
   resolveAuctionLineStamps,
   deleteAuctionSale,
   findOpenAuctionSale,
-  recordAuctionLotOutcome,
+  recordAuctionLotTransition,
   setAuctionLotBid,
   setAuctionLotMaxBid,
   setAuctionLotMyBid,
@@ -23,7 +23,7 @@ import {
   updateAuctionLot,
   updateAuctionLotLine,
   updateAuctionSale,
-  type AuctionLotOutcome,
+  type AuctionLotTransition,
   type AuctionSettlementInput,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
@@ -390,43 +390,37 @@ export async function touchAuctionLotCheckedAction(lotId: string): Promise<Aucti
 }
 
 /**
- * Record what became of a lot, or take the record back (#354).
+ * Move a lot along its lifecycle, or take the move back (#354, rewritten for ADR-0021 §4).
  *
- * `rawFinalPrice` means something for the two outcomes that carry one. Blank is a valid answer for
- * `lost` — a lot that vanished from view before the result was seen yields no datapoint, which is
- * an absent observation rather than a form the collector failed to fill in — and is refused for
- * `won`, where the figure is what settlement (#28) prices the purchase line from.
+ * This records **figures**, not a verdict: won, lost and observed are derived from what the lot
+ * fetched against what the collector placed, so there is no outcome to submit. `rawFinalPrice`
+ * matters only when closing, and the domain refuses a blank one unless no bid was ever placed —
+ * the lot then reads as observed, which is what tracking a price without bidding actually is.
+ *
+ * `wonTie` is passed through untouched, including as null. Null is not "no" but "not answered", and
+ * the domain is the one place that knows whether the figures even tie and so whether the question
+ * had to be answered at all.
  */
-export async function setAuctionLotOutcomeAction(
+export async function setAuctionLotStatusAction(
   lotId: string,
-  status: "lost" | "won" | "cancelled" | "watching",
-  rawFinalPrice = ""
+  status: "closed" | "cancelled" | "open",
+  rawFinalPrice = "",
+  wonTie: boolean | null = null
 ): Promise<AuctionActionState> {
   const session = await getSession();
-  let outcome: AuctionLotOutcome;
-  if (status === "lost" || status === "won") {
-    const label = status === "won" ? "Price paid" : "Final price";
-    const finalPrice = parseAuctionAmount(rawFinalPrice, label);
+  let transition: AuctionLotTransition;
+  if (status === "closed") {
+    const finalPrice = parseAuctionAmount(rawFinalPrice, "Final price");
     if (!finalPrice.ok) return { status: "error", message: finalPrice.message };
-    if (status === "won") {
-      if (finalPrice.value === null) {
-        return {
-          status: "error",
-          message: "Enter what you paid for this lot — the purchase it settles into is priced from it.",
-        };
-      }
-      outcome = { status: "won", finalPrice: finalPrice.value };
-    } else {
-      outcome = { status: "lost", finalPrice: finalPrice.value };
-    }
+    transition = { status: "closed", finalPrice: finalPrice.value, wonTie };
   } else {
-    outcome = { status };
+    transition = { status };
   }
   try {
-    await recordAuctionLotOutcome(session.user.id, lotId, outcome);
+    await recordAuctionLotTransition(session.user.id, lotId, transition);
     return { status: "success" };
   } catch (e) {
-    return fail(e, "Failed to record the outcome.");
+    return fail(e, "Failed to record the lot.");
   }
 }
 

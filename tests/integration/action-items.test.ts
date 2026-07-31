@@ -12,7 +12,11 @@ import {
   setOfferState,
 } from "../../src/lib/offers";
 import { addSaleLines, createSale } from "../../src/lib/sales";
-import { createAuctionLot, createAuctionSale, recordAuctionLotOutcome } from "../../src/lib/auctions";
+import {
+  createAuctionLot,
+  createAuctionSale,
+  recordAuctionLotTransition,
+} from "../../src/lib/auctions";
 
 // The notification centre's aggregation (#367). What earns a real database here is that every group
 // is a *read of an existing derivation*, so the things worth asserting are the ones a unit test
@@ -289,7 +293,7 @@ describe("action items notification centre (#367)", () => {
       [closing],
       "only the lot inside the day"
     );
-    assert.equal(byId["auction-closing"].href, "auctions?status=watching&closing=today");
+    assert.equal(byId["auction-closing"].href, "auctions?outcome=pending&closing=today");
     assert.deepEqual(
       byId["auction-outcome" satisfies ActionItemGroupId].items.map((i) => i.key),
       [ended]
@@ -299,10 +303,15 @@ describe("action items notification centre (#367)", () => {
     assert.equal(byId["auction-closing"].severity, "warning");
     assert.equal(byId["auction-outcome"].severity, "info");
 
-    // Recording what happened is exactly what the group asks for, so it must empty it.
-    await recordAuctionLotOutcome(userId, ended, { status: "lost", finalPrice: null });
+    // Closing the lot is exactly what the group asks for, so it must empty it. Nothing was bid on
+    // this one, so it closes carrying no price — a lot that was only ever watched.
+    await recordAuctionLotTransition(userId, ended, {
+      status: "closed",
+      finalPrice: null,
+      wonTie: null,
+    });
     const after = await groups();
-    assert.equal(after["auction-outcome"], undefined, "a lot with an outcome is nobody's to-do");
+    assert.equal(after["auction-outcome"], undefined, "a closed lot is nobody's to-do");
     assert.equal(after["auction-closing"].count, 1, "the live lot is untouched");
   });
 

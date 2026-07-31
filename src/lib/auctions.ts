@@ -6,6 +6,7 @@ import {
   bidStanding,
   headroom,
   lotHasSignal,
+  lotOutcome,
   maxBidWithin,
   summarizeAuctionSale,
   LOT_SIGNALS,
@@ -29,6 +30,8 @@ import {
   deriveAuctionSaleName,
   isAuctionLotStatus,
   isAuctionSaleStatus,
+  AUCTION_LOT_OUTCOMES,
+  type AuctionLotOutcome,
   type AuctionLotStatus,
   type AuctionSaleStatus,
 } from "./auction-rules";
@@ -56,6 +59,9 @@ export type AuctionBlockReason =
   | "no-platform"
   | "no-sale"
   | "no-price"
+  // Closing a lot (§4): it went for exactly the collector's own maximum, so the money alone cannot
+  // say whether they won it — bid order did, and only they know it.
+  | "tie-unresolved"
   | "bad-sale"
   | "bad-line"
   | "settled"
@@ -185,7 +191,15 @@ export interface AuctionLotListItem {
   myBid: string | null;
   maxBid: string | null;
   finalPrice: string | null;
+  /** Where the lot is in its life, as recorded: `open | closed | cancelled`. */
   status: AuctionLotStatus;
+  /** Who bid first, and only meaningful when `finalPrice` equals `myBid`. Carried so the row can
+   * offer the tie question back for correction; it decides {@link outcome} in that one case. */
+  wonTie: boolean | null;
+  /** How the bidding went: `pending | won | lost | observed | cancelled`. **Derived on every read**
+   * from `myBid` against `finalPrice` (ADR-0021 §4), never stored — the money is the record, and a
+   * status kept in step by hand is a status that can contradict it. */
+  outcome: AuctionLotOutcome;
   /**
    * What to call a lot the collector never named, derived from what it holds (#353) — collapsed
    * catalogue numbers and the issue, e.g. `1-12 · Definitives (1950)`.
@@ -290,6 +304,7 @@ const LOT_SELECT = {
   maxBid: true,
   finalPrice: true,
   status: true,
+  wonTie: true,
   notes: true,
   purchaseLotId: true,
   createdAt: true,
@@ -314,7 +329,13 @@ type LotRow = Prisma.AuctionLotGetPayload<{ select: typeof LOT_SELECT }>;
 
 function toLotListItem(row: LotRow, composition?: AuctionLotComposition): AuctionLotListItem {
   const sale = row.auctionSale;
-  const status = (isAuctionLotStatus(row.status) ? row.status : "watching") as AuctionLotStatus;
+  const status = (isAuctionLotStatus(row.status) ? row.status : "open") as AuctionLotStatus;
+  const outcome = lotOutcome({
+    status,
+    myBid: money(row.myBid),
+    finalPrice: money(row.finalPrice),
+    wonTie: row.wonTie,
+  });
   const costed = row.finalPrice ?? row.currentBid;
   const fees = {
     premiumPercent: money(sale.premiumPercent),
@@ -347,6 +368,8 @@ function toLotListItem(row: LotRow, composition?: AuctionLotComposition): Auctio
     maxBid: ceiling,
     finalPrice: money(row.finalPrice),
     status,
+    wonTie: row.wonTie,
+    outcome,
     derivedTitle: deriveAuctionLotLabel(
       (composition?.lines ?? []).map((line) => ({
         // Prefix-formatted (`Mi·PL 12`): `1-12` alone does not say which catalogue it is 1–12 of,
@@ -408,7 +431,11 @@ async function compositionsFor(
 export type AuctionClosingWindow = "ended" | "today" | "week";
 
 export interface AuctionLotFilters {
-  status?: AuctionLotStatus;
+  /** How the bidding went — **derived**, so this is a set of predicates over the money rather than
+   * one column (see {@link outcomeWhere}). The list filters by outcome and not by the recorded
+   * lifecycle because that is what the collector is looking for: "what did I win", "what did I only
+   * watch". `open | closed | cancelled` is bookkeeping and never appears as a chip. */
+  outcome?: AuctionLotOutcome;
   closing?: AuctionClosingWindow;
   /** A **derived** state (`auction-lot.ts`) rather than a stored one — outbid, over ceiling, still
    * biddable. Resolved to ids in memory before the page query, exactly as the offers list resolves
@@ -438,6 +465,13 @@ function lotListWhere(
   filters: AuctionLotFilters,
   signalIds?: string[]
 ): Prisma.AuctionLotWhereInput {
+  // Every narrowing goes into one `AND` list rather than onto the object as sibling keys. Several of
+  // them touch `status` — the outcome predicates and the undescribed rule both do — and as sibling
+  // keys the later one would silently overwrite the earlier instead of narrowing it.
+  const and: Prisma.AuctionLotWhereInput[] = [];
+  if (filters.outcome) and.push(outcomeWhere(filters.outcome));
+  if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
+
   return {
     ...(signalIds ? { id: { in: signalIds } } : {}),
     auctionSale: {
@@ -446,12 +480,58 @@ function lotListWhere(
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
     },
     ...(filters.saleId ? { auctionSaleId: filters.saleId } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
-    // `AND` rather than a second `status` key, which the selected status would otherwise overwrite:
-    // both narrow the same field, and `status=cancelled` + this filter is legitimately empty.
-    ...(filters.undescribed ? { AND: [UNDESCRIBED_WHERE] } : {}),
+    ...(and.length > 0 ? { AND: and } : {}),
     ...closingWhere(filters.closing),
   };
+}
+
+/**
+ * `lotOutcome` restated as a `where` — the same rules the row's chip is drawn from, in SQL.
+ *
+ * Two implementations of one rule is exactly the kind of thing that drifts, and it is accepted here
+ * for a specific reason: the alternative is loading every lot to filter it in memory, which is what
+ * a *signal* has to do (the arithmetic spans two tables) and what an outcome pointedly does not —
+ * every figure it reads sits on the row. `tests/unit/auction-lot.test.ts` pins the arithmetic and
+ * `tests/integration/auction-tracking.test.ts` pins these against it.
+ *
+ * Comparing `finalPrice` to `myBid` is a **column-to-column** comparison, which is why the field
+ * references are here rather than a plain value.
+ */
+function outcomeWhere(outcome: AuctionLotOutcome): Prisma.AuctionLotWhereInput {
+  const mine = prisma.auctionLot.fields.myBid;
+  switch (outcome) {
+    case "pending":
+      return { status: "open" };
+    case "cancelled":
+      return { status: "cancelled" };
+    // No bid was ever placed: the lot was tracked to record what it fetched.
+    case "observed":
+      return { status: "closed", myBid: null };
+    case "won":
+      return {
+        status: "closed",
+        myBid: { not: null },
+        finalPrice: { not: null },
+        OR: [
+          { finalPrice: { lt: mine } },
+          // A tie is a win only when the collector said so at closing.
+          { finalPrice: { equals: mine }, wonTie: true },
+        ],
+      };
+    case "lost":
+      return {
+        status: "closed",
+        myBid: { not: null },
+        OR: [
+          // Legacy rows only: bid, and the result was never seen. ADR-0021 §5 files these as lost,
+          // and closing can no longer create one.
+          { finalPrice: null },
+          { finalPrice: { gt: mine } },
+          // Includes `wonTie` null, which reads as lost exactly as `lotOutcome` has it.
+          { finalPrice: { equals: mine }, NOT: { wonTie: true } },
+        ],
+      };
+  }
 }
 
 /** The stored side of `lotNeedsComposition` (#442), kept beside the `where` it is spliced into so
@@ -480,8 +560,8 @@ async function resolveSignals(
   filters: AuctionLotFilters
 ): Promise<Record<LotSignal, string[]>> {
   const rows = await prisma.auctionLot.findMany({
-    // A signal only says something about a lot still being watched, so the candidate set is that.
-    where: lotListWhere(collectionId, { ...filters, signal: undefined, status: "watching" }),
+    // A signal only says something about a lot still in play, so the candidate set is that.
+    where: lotListWhere(collectionId, { ...filters, signal: undefined, outcome: "pending" }),
     select: SIGNAL_SELECT,
   });
   const now = new Date();
@@ -491,7 +571,7 @@ async function resolveSignals(
   >;
   for (const row of rows) {
     const input = {
-      status: "watching" as const,
+      status: "open" as const,
       endsAt: row.endsAt,
       currentBid: money(row.currentBid),
       myBid: money(row.myBid),
@@ -519,21 +599,21 @@ function closingWhere(window: AuctionClosingWindow | undefined): Prisma.AuctionL
 }
 
 /**
- * Order for a given status selection, and the one place the list's reading order is decided.
+ * Order for a given outcome selection, and the one place the list's reading order is decided.
  *
- * A watchlist is scanned by **closing time**, so live lots come soonest-first: that is the daily
- * job, and the lot at the top is the one to look at. A terminal selection is history, so it reads
- * most-recently-closed first. With no status chosen at all the two orders contradict each other —
- * a lot closing in six months would sit above one closing tonight — so the mixed list falls back to
- * newest-tracked first, which is meaningful for both halves.
+ * A watchlist is scanned by **closing time**, so lots still in play come soonest-first: that is the
+ * daily job, and the lot at the top is the one to look at. A finished selection is history, so it
+ * reads most-recently-closed first. With no outcome chosen at all the two orders contradict each
+ * other — a lot closing in six months would sit above one closing tonight — so the mixed list falls
+ * back to newest-tracked first, which is meaningful for both halves.
  */
 function lotOrderBy(filters: AuctionLotFilters): Prisma.AuctionLotOrderByWithRelationInput {
-  // A window of lots that have already closed is history, whatever their status: most recent first.
+  // A window of lots that have already closed is history, whatever became of them: most recent first.
   if (filters.closing === "ended") return { endsAt: "desc" };
   // Any other window is entirely in the future, so the soonest is the one to deal with.
   if (filters.closing) return { endsAt: "asc" };
-  if (filters.status === "watching") return { endsAt: "asc" };
-  if (filters.status) return { endsAt: "desc" };
+  if (filters.outcome === "pending") return { endsAt: "asc" };
+  if (filters.outcome) return { endsAt: "desc" };
   return { createdAt: "desc" };
 }
 
@@ -592,11 +672,11 @@ export async function countAuctionLots(
 }
 
 export interface AuctionLotFilterCounts {
-  /** Lots per status, under the selected seller / platform. Statuses with none are absent. */
-  statuses: Partial<Record<AuctionLotStatus, number>>;
-  /** Lots per seller, under the selected status / platform. */
+  /** Lots per derived outcome, under the selected seller / platform. Outcomes with none are absent. */
+  outcomes: Partial<Record<AuctionLotOutcome, number>>;
+  /** Lots per seller, under the selected outcome / platform. */
   sellers: Record<string, number>;
-  /** Lots per platform, under the selected status / seller. */
+  /** Lots per platform, under the selected outcome / seller. */
   platforms: Record<string, number>;
   /** Lots carrying each derived signal, under everything else selected. */
   signals: Record<LotSignal, number>;
@@ -605,7 +685,7 @@ export interface AuctionLotFilterCounts {
   closing: Record<AuctionClosingWindow, number>;
   /** Lots with nothing described yet (#442), under everything else selected. */
   undescribed: number;
-  /** Total under the selected status + seller + platform — what "All" would show. */
+  /** Total under the selected outcome + seller + platform — what "All" would show. */
   total: number;
 }
 
@@ -621,33 +701,38 @@ export async function auctionLotFilterCounts(
 ): Promise<AuctionLotFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const { status, sellerId, platformId, closing, signal, ...rest } = filters;
-  const [byStatus, bySeller, byPlatform, closingCounts, signalIds, undescribed, total] = await Promise.all([
-    prisma.auctionLot.groupBy({
-      by: ["status"],
-      where: lotListWhere(collectionId, { ...rest, sellerId, platformId, closing }),
-      _count: { _all: true },
-    }),
+  const { outcome, sellerId, platformId, closing, signal, ...rest } = filters;
+  const [byOutcome, bySeller, byPlatform, closingCounts, signalIds, undescribed, total] = await Promise.all([
+    // One count per outcome rather than a `groupBy`: the outcome is derived, so there is no column
+    // to group on — each is its own predicate over the money ({@link outcomeWhere}). Five cheap
+    // indexed counts, and the alternative is loading every lot in the collection to bucket it.
+    Promise.all(
+      AUCTION_LOT_OUTCOMES.map((o) =>
+        prisma.auctionLot.count({
+          where: lotListWhere(collectionId, { ...rest, sellerId, platformId, closing, outcome: o }),
+        })
+      )
+    ),
     // Seller and platform live on the sale, so their facets group over sales and are folded back
     // onto the lots by sale id — `groupBy` cannot reach through a relation.
-    lotCountsBySale(collectionId, { ...rest, status, platformId, closing }),
-    lotCountsBySale(collectionId, { ...rest, status, sellerId, closing }),
+    lotCountsBySale(collectionId, { ...rest, outcome, platformId, closing }),
+    lotCountsBySale(collectionId, { ...rest, outcome, sellerId, closing }),
     // Each window counted with the *other* dimensions applied but its own ignored, like the rest.
     Promise.all(
       (["ended", "today", "week"] as const).map((w) =>
         prisma.auctionLot.count({
-          where: lotListWhere(collectionId, { ...rest, status, sellerId, platformId, closing: w }),
+          where: lotListWhere(collectionId, { ...rest, outcome, sellerId, platformId, closing: w }),
         })
       )
     ),
     // The signal facet ignores the selected signal, like every other facet ignores its own.
-    resolveSignals(collectionId, { ...rest, status, sellerId, platformId, closing }),
+    resolveSignals(collectionId, { ...rest, outcome, sellerId, platformId, closing }),
     // …and this one ignores whether it is itself selected, so its badge always says how many lots
     // clicking it would show.
     prisma.auctionLot.count({
       where: lotListWhere(collectionId, {
         ...rest,
-        status,
+        outcome,
         sellerId,
         platformId,
         closing,
@@ -660,7 +745,7 @@ export async function auctionLotFilterCounts(
           collectionId,
           filters,
           signal
-            ? (await resolveSignals(collectionId, { ...rest, status, sellerId, platformId, closing }))[
+            ? (await resolveSignals(collectionId, { ...rest, outcome, sellerId, platformId, closing }))[
                 signal
               ]
             : undefined
@@ -668,13 +753,15 @@ export async function auctionLotFilterCounts(
       }))(),
   ]);
 
-  const statuses: Partial<Record<AuctionLotStatus, number>> = {};
-  for (const row of byStatus) {
-    if (isAuctionLotStatus(row.status)) statuses[row.status] = row._count._all;
-  }
+  // Absent rather than zero, matching what `groupBy` used to hand back — the chips read a missing
+  // key and a zero the same way, and keeping the shape spares every caller a change.
+  const outcomes: Partial<Record<AuctionLotOutcome, number>> = {};
+  AUCTION_LOT_OUTCOMES.forEach((o, i) => {
+    if (byOutcome[i] > 0) outcomes[o] = byOutcome[i];
+  });
 
   return {
-    statuses,
+    outcomes,
     sellers: foldByParty(bySeller, "sellerId"),
     platforms: foldByParty(byPlatform, "platformId"),
     closing: { ended: closingCounts[0], today: closingCounts[1], week: closingCounts[2] },
@@ -790,6 +877,10 @@ const SALE_SELECT = {
       status: true,
       currentBid: true,
       finalPrice: true,
+      // The parcel's totals count the lots the collector pays for, and which those are is now read
+      // off the money (ADR-0021 §4) — so the rollup needs the two figures the outcome follows from.
+      myBid: true,
+      wonTie: true,
       // What the parcel's catalogue total is summed from (#353); the ids of the lots that have one
       // are what the batched valuation is asked for.
       _count: { select: { lines: true } },
@@ -825,7 +916,9 @@ function toSaleListItem(
     purchaseId: row.purchaseId,
     summary: summarizeAuctionSale(
       row.lots.map((lot) => ({
-        status: (isAuctionLotStatus(lot.status) ? lot.status : "watching") as AuctionLotStatus,
+        status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
+        myBid: money(lot.myBid),
+        wonTie: lot.wonTie,
         currentBid: money(lot.currentBid),
         finalPrice: money(lot.finalPrice),
         // Already in this sale's currency (#353) — the conversion happens once per sale currency in
@@ -1655,31 +1748,21 @@ export async function setAuctionLotMaxBid(
 // ── Outcome (#354) ──────────────────────────────────────────────────────────
 
 /**
- * What became of a lot that stopped running, as the row's ⋮ menu records it.
+ * What the row's ⋮ menu records: a move along the lot's **lifecycle**, never an outcome.
  *
- * Two of the four carry a price. `lost` produces the datapoint #24 consumes — a real price against
- * a known composition on a known date — and `won` records what the lot actually cost, which is what
- * settlement (#28) transcribes into a `PurchaseLot` and what makes the parcel's rollup exact rather
- * than an estimate from the last bid anyone happened to see. `cancelled` is a listing withdrawn or
- * ended without a sale and carries nothing; `watching` is the undo.
+ * Won/lost/observed are not recordable and never were facts — they follow from the money (ADR-0021
+ * §4). What the collector actually does at the end of an auction is go and look at the figures, so
+ * that is what this takes: `closed` carries what the lot fetched, `cancelled` says there was no
+ * result to have, and `open` is the undo.
  *
- * The two prices differ in one way, and only one: a lost lot's is **optional**, a won lot's is
- * **required**. Losing sight of a lot before the result is normal; not knowing what you paid for
- * something you won is not, and #28 cannot price a purchase line without it.
+ * `wonTie` rides along with `closed` because it is the one thing the figures cannot say. It is
+ * required exactly when `finalPrice` equals the collector's own maximum and meaningless otherwise;
+ * {@link recordAuctionLotTransition} enforces both halves.
  */
-export type AuctionLotOutcome =
-  | { status: "lost"; finalPrice: string | null }
-  | { status: "won"; finalPrice: string }
+export type AuctionLotTransition =
+  | { status: "closed"; finalPrice: string | null; wonTie: boolean | null }
   | { status: "cancelled" }
-  | { status: "watching" };
-
-/** Whether an outcome carries a price at all — the two that do are the two that cost or earn the
- * collector something, and they are handled identically from there on. */
-function outcomeHasPrice(
-  outcome: AuctionLotOutcome
-): outcome is Extract<AuctionLotOutcome, { finalPrice: string | null }> {
-  return outcome.status === "lost" || outcome.status === "won";
-}
+  | { status: "open" };
 
 /**
  * Freeze the base-currency rate for a lot's result (ADR-0009 §4, the rule `Purchase` follows at
@@ -1702,59 +1785,75 @@ async function freezeLotFxRate(
 }
 
 /**
- * Record what became of a lot — the fork at the end of ADR-0021 §7 (#354).
+ * Move a lot along its lifecycle — the fork at the end of ADR-0021 §7 (#354), rewritten for §4.
  *
- * A lost lot's `finalPrice` stays **optional** on purpose. A lot that vanished from view before the
- * collector saw the result simply yields no datapoint; forcing a number would poison the very data
- * the feature exists to produce with a guess. The last bid anyone recorded is not it either — it is
- * a lower bound — so nothing is inferred here.
+ * Closing a lot is **confirming its figures**, not filing a verdict. What comes back out is derived
+ * by `lotOutcome`, so the only judgements this makes are about whether the figures can be read at
+ * all, and there are exactly two:
  *
- * Marking a lot **won** is where settlement starts (#28): that action's input is a sale holding
- * `won` lots, so without this the sale could never reach the state it acts on. It stops at the
- * status and the price, and writes no `Purchase` — the parcel is settled as a whole, once, when the
- * seller has invoiced it, and a per-lot purchase would be exactly the acquisition path ADR-0021 §7
- * refuses to grow.
+ * - **A price is required unless no bid was placed.** A lot the collector bid on and then lost sight
+ *   of used to be filed "lost with no figure", and that state is retired: the honest way to say "I
+ *   never saw what it went for" is to leave the lot `open`, or to clear the bid if it was really
+ *   never placed. Nothing is inferred from the last observed bid — that figure is a lower bound, and
+ *   promoting it to a result would poison the very data #24 consumes.
+ * - **A tie needs answering.** Equal figures are the one case the arithmetic cannot resolve, so
+ *   `wonTie` is demanded there and refused everywhere else, where it would mean nothing.
  *
- * `cancelled` and `watching` clear both the price and its rate: a cancelled listing carries no
- * result, and a lot put back on the watchlist must not keep a figure describing how it ended.
+ * `cancelled` and `open` clear the price, its rate and the tie-break together: a cancelled listing
+ * carries no result, and a lot put back in play must not keep a figure describing how it ended.
+ *
+ * Settlement (#28) still starts from a sale holding won lots — it just reads them off the money now
+ * instead of off a flag, so a sale reaches that state by having its figures entered rather than by
+ * being told twice.
  */
-export async function recordAuctionLotOutcome(
+export async function recordAuctionLotTransition(
   ownerId: string,
   lotId: string,
-  outcome: AuctionLotOutcome
+  transition: AuctionLotTransition
 ): Promise<void> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
 
-  if (!outcomeHasPrice(outcome)) {
+  if (transition.status !== "closed") {
     await prisma.auctionLot.update({
       where: { id: lotId },
-      data: { status: outcome.status, finalPrice: null, fxRateToBase: null },
+      data: { status: transition.status, finalPrice: null, fxRateToBase: null, wonTie: null },
     });
     return;
-  }
-
-  // A won lot without a price cannot be settled — #28 prices its purchase line from exactly this
-  // figure — and unlike a lost one there is nothing to have missed: you paid it.
-  if (outcome.status === "won" && outcome.finalPrice === null) {
-    throw new AuctionActionBlockedError(
-      "no-price",
-      "Enter what you paid for this lot — the purchase it settles into is priced from it."
-    );
   }
 
   const row = await prisma.auctionLot.findUniqueOrThrow({
     where: { id: lotId },
     select: {
+      myBid: true,
       auctionSale: {
         select: { currency: true, collection: { select: { baseCurrency: true } } },
       },
     },
   });
+
+  if (row.myBid !== null && transition.finalPrice === null) {
+    throw new AuctionActionBlockedError(
+      "no-price",
+      "Enter what this lot went for. If you never actually bid on it, clear your own bid first — that records it as one you only watched."
+    );
+  }
+
+  // The tie is the sole thing about the outcome that the money cannot say, so it is stored only
+  // where it means something and demanded only there. Anywhere else it would be a second, silently
+  // disagreeing answer to a question the figures already settle.
+  const tie = row.myBid !== null && transition.finalPrice !== null && row.myBid.equals(transition.finalPrice);
+  if (tie && transition.wonTie === null) {
+    throw new AuctionActionBlockedError(
+      "tie-unresolved",
+      "This lot went for exactly your own maximum, so the figures cannot say whether it was yours — whoever bid that amount first won it. Say which it was."
+    );
+  }
+
   // A rate exists to convert a figure. With no price recorded there is nothing to convert, and
   // storing today's rate against an absent observation would only look like data.
   const fxRateToBase =
-    outcome.finalPrice === null
+    transition.finalPrice === null
       ? null
       : await freezeLotFxRate(
           lot.collectionId,
@@ -1765,7 +1864,12 @@ export async function recordAuctionLotOutcome(
   await prisma.auctionLot.update({
     where: { id: lotId },
     // Re-freezing on a corrected price is intended: the rate travels with the figure it converts.
-    data: { status: outcome.status, finalPrice: outcome.finalPrice, fxRateToBase },
+    data: {
+      status: "closed",
+      finalPrice: transition.finalPrice,
+      fxRateToBase,
+      wonTie: tie ? transition.wonTie : null,
+    },
   });
 }
 
@@ -1989,6 +2093,11 @@ const SETTLEMENT_LOT_SELECT = {
   id: true,
   title: true,
   status: true,
+  // The three the outcome is derived from — settlement acts on won lots, and won is no longer a
+  // stored flag it could simply read (ADR-0021 §4).
+  myBid: true,
+  finalPrice: true,
+  wonTie: true,
   purchaseLotId: true,
   _count: { select: { lines: true } },
   lines: {
@@ -2001,6 +2110,23 @@ const SETTLEMENT_LOT_SELECT = {
     },
   },
 } satisfies Prisma.AuctionLotSelect;
+
+/** `lotOutcome` over a settlement row, with the stored status validated on the way in. One helper so
+ * the two places settlement asks — "is anything still open?" and "is this one won?" — cannot answer
+ * the question differently. */
+function settlementOutcome(lot: {
+  status: string;
+  myBid: Prisma.Decimal | null;
+  finalPrice: Prisma.Decimal | null;
+  wonTie: boolean | null;
+}): AuctionLotOutcome {
+  return lotOutcome({
+    status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
+    myBid: money(lot.myBid),
+    finalPrice: money(lot.finalPrice),
+    wonTie: lot.wonTie,
+  });
+}
 
 /**
  * Settle a sale into a `Purchase` — the 1:1 transcription of ADR-0021 §7.
@@ -2052,11 +2178,11 @@ export async function settleAuctionSale(
     },
   });
 
-  const watching = sale.lots.filter((lot) => lot.status === "watching").length;
-  if (watching > 0) {
+  const open = sale.lots.filter((lot) => settlementOutcome(lot) === "pending").length;
+  if (open > 0) {
     throw new AuctionActionBlockedError(
       "unresolved",
-      `${watching} lot${watching === 1 ? " is" : "s are"} still being watched. Record ${watching === 1 ? "its outcome" : "their outcomes"} before settling the parcel.`
+      `${open} lot${open === 1 ? " is" : "s are"} still open. Close ${open === 1 ? "it" : "them"} — confirming what ${open === 1 ? "it went" : "they went"} for — before settling the parcel.`
     );
   }
 
@@ -2071,7 +2197,10 @@ export async function settleAuctionSale(
   const selected = input.lots.map((line) => {
     const lot = byId.get(line.lotId);
     if (!lot) throw new AuctionActionBlockedError("bad-sale", "That lot is not in this sale.");
-    if (lot.status !== "won" || lot.purchaseLotId) {
+    // Won-ness is read off the money like everywhere else (ADR-0021 §4). A settled lot's figures are
+    // then frozen by `assertLotEditable`, so what settlement wrote and what the lot derives to stay
+    // in step — which is the constraint that made deriving it safe here in the first place.
+    if (settlementOutcome(lot) !== "won" || lot.purchaseLotId) {
       throw new AuctionActionBlockedError(
         "bad-sale",
         "Only won lots that have not been settled yet can go into a purchase."

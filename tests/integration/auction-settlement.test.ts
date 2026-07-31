@@ -7,7 +7,8 @@ import {
   createAuctionLotLine,
   createAuctionSale,
   getAuctionSaleDetail,
-  recordAuctionLotOutcome,
+  recordAuctionLotTransition,
+  setAuctionLotMyBid,
   settleAuctionSale,
   updateAuctionLot,
 } from "../../src/lib/auctions";
@@ -70,6 +71,20 @@ describe("auction settlement (#28)", () => {
       maxBid: null,
       notes: null,
     });
+  }
+
+  // Outcomes are derived from the money (ADR-0021 §4), so a test cannot declare a lot won — it has
+  // to make the figures say so. Winning pays the runner-up's maximum plus an increment, which lands
+  // *below* your own maximum; being outbid puts the result above it. These two helpers set up each
+  // shape and then close the lot, which is the only thing the collector actually records.
+  async function closeWon(owner: string, lotId: string, finalPrice: string): Promise<void> {
+    await setAuctionLotMyBid(owner, lotId, (Number(finalPrice) + 10).toFixed(2));
+    await recordAuctionLotTransition(owner, lotId, { status: "closed", finalPrice, wonTie: null });
+  }
+
+  async function closeLost(owner: string, lotId: string, finalPrice: string): Promise<void> {
+    await setAuctionLotMyBid(owner, lotId, (Number(finalPrice) - 10).toFixed(2));
+    await recordAuctionLotTransition(owner, lotId, { status: "closed", finalPrice, wonTie: null });
   }
 
   before(async () => {
@@ -165,8 +180,8 @@ describe("auction settlement (#28)", () => {
       quantity: 1,
     });
 
-    await recordAuctionLotOutcome(userId, wonId, { status: "won", finalPrice: "100.00" });
-    await recordAuctionLotOutcome(userId, lostId, { status: "lost", finalPrice: "80.00" });
+    await closeWon(userId, wonId, "100.00");
+    await closeLost(userId, lostId, "80.00");
 
     // 100 hammer + 10% + 2 fixed. Shipping is deliberately absent from the line and lands on the
     // purchase, where ADR-0009 §3 distributes it.
@@ -235,7 +250,7 @@ describe("auction settlement (#28)", () => {
     const lost = detail.lots.find((l) => l.id === lostId)!;
     assert.equal(won.settled, true);
     assert.equal(lost.settled, false);
-    assert.equal(lost.status, "lost");
+    assert.equal(lost.outcome, "lost");
     assert.equal(lost.finalPrice, "80.00");
   });
 
@@ -249,7 +264,7 @@ describe("auction settlement (#28)", () => {
       formatId: null,
       quantity: 1,
     });
-    await recordAuctionLotOutcome(userId, lotId, { status: "won", finalPrice: "10.00" });
+    await closeWon(userId, lotId, "10.00");
 
     const { purchaseId } = await settleAuctionSale(userId, saleId, {
       purchasedAt: "2026-03-06",
@@ -265,8 +280,8 @@ describe("auction settlement (#28)", () => {
     const saleId = await newSale("Two wins, one parcel");
     const takenId = await newLot(saleId, "Taken");
     const heldBackId = await newLot(saleId, "Shipping separately");
-    await recordAuctionLotOutcome(userId, takenId, { status: "won", finalPrice: "20.00" });
-    await recordAuctionLotOutcome(userId, heldBackId, { status: "won", finalPrice: "30.00" });
+    await closeWon(userId, takenId, "20.00");
+    await closeWon(userId, heldBackId, "30.00");
 
     await settleAuctionSale(userId, saleId, {
       purchasedAt: "2026-03-07",
@@ -277,7 +292,7 @@ describe("auction settlement (#28)", () => {
     const detail = await getAuctionSaleDetail(userId, saleId);
     const heldBack = detail.lots.find((l) => l.id === heldBackId)!;
     // Nothing about it is lost — it is still won, still priced, and simply not in this purchase.
-    assert.equal(heldBack.status, "won");
+    assert.equal(heldBack.outcome, "won");
     assert.equal(heldBack.finalPrice, "30.00");
     assert.equal(heldBack.settled, false);
 
@@ -297,7 +312,7 @@ describe("auction settlement (#28)", () => {
     const saleId = await newSale("Still running");
     const wonId = await newLot(saleId, "Won");
     await newLot(saleId, "Still open", hourFromNow());
-    await recordAuctionLotOutcome(userId, wonId, { status: "won", finalPrice: "40.00" });
+    await closeWon(userId, wonId, "40.00");
 
     await assert.rejects(
       () =>
@@ -314,7 +329,13 @@ describe("auction settlement (#28)", () => {
   it("refuses a parcel with nothing in it, and a lot that was not won", async () => {
     const saleId = await newSale("Nothing won");
     const lostId = await newLot(saleId, "Lost");
-    await recordAuctionLotOutcome(userId, lostId, { status: "lost", finalPrice: null });
+    // Nothing was bid on it, so closing it records a lot that was only watched — not a win, and
+    // therefore not something this parcel can be settled from.
+    await recordAuctionLotTransition(userId, lostId, {
+      status: "closed",
+      finalPrice: null,
+      wonTie: null,
+    });
 
     await assert.rejects(
       () =>
@@ -340,7 +361,7 @@ describe("auction settlement (#28)", () => {
   it("freezes the bidding record once a lot is settled", async () => {
     const saleId = await newSale("Frozen");
     const lotId = await newLot(saleId, "Won");
-    await recordAuctionLotOutcome(userId, lotId, { status: "won", finalPrice: "50.00" });
+    await closeWon(userId, lotId, "50.00");
     await settleAuctionSale(userId, saleId, {
       purchasedAt: "2026-03-11",
       shippingCost: null,
@@ -368,7 +389,7 @@ describe("auction settlement (#28)", () => {
   it("leaves the bidding record standing when the purchase is deleted", async () => {
     const saleId = await newSale("Undone");
     const lotId = await newLot(saleId, "Won");
-    await recordAuctionLotOutcome(userId, lotId, { status: "won", finalPrice: "60.00" });
+    await closeWon(userId, lotId, "60.00");
     const { purchaseId } = await settleAuctionSale(userId, saleId, {
       purchasedAt: "2026-03-12",
       shippingCost: null,
@@ -384,6 +405,6 @@ describe("auction settlement (#28)", () => {
     assert.equal(detail.lots[0].settled, false);
     // The result itself is untouched: it is a datapoint in its own right (ADR-0021 §7).
     assert.equal(detail.lots[0].finalPrice, "60.00");
-    assert.equal(detail.lots[0].status, "won");
+    assert.equal(detail.lots[0].outcome, "won");
   });
 });

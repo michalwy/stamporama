@@ -1,11 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_STATUSES,
   AUCTION_SALE_STATUSES,
   bidFreshness,
   closingUrgency,
   deriveAuctionSaleName,
+  isAuctionLotOutcome,
   isAuctionLotStatus,
   isAuctionSaleStatus,
   isTerminalLotStatus,
@@ -22,11 +24,24 @@ import {
 // Vocabulary -----------------------------------------------------------------
 
 describe("auction status vocabulary", () => {
-  it("accepts exactly the four lot outcomes", () => {
-    assert.deepEqual([...AUCTION_LOT_STATUSES], ["watching", "won", "lost", "cancelled"]);
+  it("accepts exactly the three lot lifecycle states", () => {
+    assert.deepEqual([...AUCTION_LOT_STATUSES], ["open", "closed", "cancelled"]);
     for (const s of AUCTION_LOT_STATUSES) assert.equal(isAuctionLotStatus(s), true);
     assert.equal(isAuctionLotStatus("bidding"), false);
     assert.equal(isAuctionLotStatus(""), false);
+  });
+
+  it("accepts exactly the five derived outcomes, and no lifecycle state as one", () => {
+    assert.deepEqual(
+      [...AUCTION_LOT_OUTCOMES],
+      ["pending", "won", "lost", "observed", "cancelled"]
+    );
+    for (const o of AUCTION_LOT_OUTCOMES) assert.equal(isAuctionLotOutcome(o), true);
+    // `open` and `closed` are how a lot is *filed*, never how it went — the two vocabularies meet
+    // only at `cancelled`, which is genuinely both.
+    assert.equal(isAuctionLotOutcome("open"), false);
+    assert.equal(isAuctionLotOutcome("closed"), false);
+    assert.equal(isAuctionLotOutcome("open"), false);
   });
 
   it("accepts exactly the three sale statuses", () => {
@@ -35,10 +50,9 @@ describe("auction status vocabulary", () => {
     assert.equal(isAuctionSaleStatus("paid"), false);
   });
 
-  it("treats only watching as still running", () => {
-    assert.equal(isTerminalLotStatus("watching"), false);
-    assert.equal(isTerminalLotStatus("won"), true);
-    assert.equal(isTerminalLotStatus("lost"), true);
+  it("treats only an open lot as still running", () => {
+    assert.equal(isTerminalLotStatus("open"), false);
+    assert.equal(isTerminalLotStatus("closed"), true);
     assert.equal(isTerminalLotStatus("cancelled"), true);
   });
 });
@@ -57,7 +71,7 @@ describe("bidFreshness", () => {
 
   it("reports a never-checked live lot as unchecked", () => {
     assert.equal(
-      bidFreshness({ status: "watching", endsAt: at(now, 2 * HOUR), checkedAt: null }, now),
+      bidFreshness({ status: "open", endsAt: at(now, 2 * HOUR), checkedAt: null }, now),
       "unchecked"
     );
   });
@@ -65,11 +79,11 @@ describe("bidFreshness", () => {
   it("reports a live lot whose closing time has passed as closed", () => {
     // Outcome, not bid, is what is missing — and unlike staleness it will never fix itself.
     assert.equal(
-      bidFreshness({ status: "watching", endsAt: at(now, -HOUR), checkedAt: at(now, -2 * HOUR) }, now),
+      bidFreshness({ status: "open", endsAt: at(now, -HOUR), checkedAt: at(now, -2 * HOUR) }, now),
       "closed"
     );
     assert.equal(
-      bidFreshness({ status: "watching", endsAt: at(now, -HOUR), checkedAt: null }, now),
+      bidFreshness({ status: "open", endsAt: at(now, -HOUR), checkedAt: null }, now),
       "closed"
     );
   });
@@ -79,7 +93,7 @@ describe("bidFreshness", () => {
     // is ~17 min, so a 10-minute-old reading still counts.
     assert.equal(
       bidFreshness(
-        { status: "watching", endsAt: at(now, HOUR), checkedAt: at(now, -10 * 60 * 1000) },
+        { status: "open", endsAt: at(now, HOUR), checkedAt: at(now, -10 * 60 * 1000) },
         now
       ),
       "fresh"
@@ -87,7 +101,7 @@ describe("bidFreshness", () => {
     // Same lot, checked 40 min ago: past the quarter, so it wants a refresh.
     assert.equal(
       bidFreshness(
-        { status: "watching", endsAt: at(now, HOUR), checkedAt: at(now, -40 * 60 * 1000) },
+        { status: "open", endsAt: at(now, HOUR), checkedAt: at(now, -40 * 60 * 1000) },
         now
       ),
       "stale"
@@ -96,7 +110,7 @@ describe("bidFreshness", () => {
 
   it("keeps a day-old reading on a lot that closes in a week", () => {
     assert.equal(
-      bidFreshness({ status: "watching", endsAt: at(now, 7 * DAY), checkedAt: at(now, -20 * HOUR) }, now),
+      bidFreshness({ status: "open", endsAt: at(now, 7 * DAY), checkedAt: at(now, -20 * HOUR) }, now),
       "fresh"
     );
   });
@@ -104,13 +118,13 @@ describe("bidFreshness", () => {
   it("caps the allowance at a day however long the lot runs", () => {
     // A basket running for a year would otherwise keep a three-month-old reading.
     assert.equal(
-      bidFreshness({ status: "watching", endsAt: at(now, 365 * DAY), checkedAt: at(now, -2 * DAY) }, now),
+      bidFreshness({ status: "open", endsAt: at(now, 365 * DAY), checkedAt: at(now, -2 * DAY) }, now),
       "stale"
     );
   });
 
   it("never flags a settled lot", () => {
-    for (const status of ["won", "lost", "cancelled"] as const) {
+    for (const status of ["closed", "cancelled"] as const) {
       assert.equal(
         bidFreshness({ status, endsAt: at(now, -30 * DAY), checkedAt: null }, now),
         "fresh"
@@ -125,15 +139,15 @@ describe("closingUrgency", () => {
   const now = new Date("2026-07-28T12:00:00.000Z");
 
   it("grades a live lot by how much time is left", () => {
-    assert.equal(closingUrgency({ status: "watching", endsAt: at(now, -HOUR) }, now), "past");
-    assert.equal(closingUrgency({ status: "watching", endsAt: at(now, HOUR) }, now), "imminent");
-    assert.equal(closingUrgency({ status: "watching", endsAt: at(now, 6 * HOUR) }, now), "soon");
-    assert.equal(closingUrgency({ status: "watching", endsAt: at(now, 3 * DAY) }, now), "later");
+    assert.equal(closingUrgency({ status: "open", endsAt: at(now, -HOUR) }, now), "past");
+    assert.equal(closingUrgency({ status: "open", endsAt: at(now, HOUR) }, now), "imminent");
+    assert.equal(closingUrgency({ status: "open", endsAt: at(now, 6 * HOUR) }, now), "soon");
+    assert.equal(closingUrgency({ status: "open", endsAt: at(now, 3 * DAY) }, now), "later");
   });
 
   it("leaves a settled lot alone — its date is history, not a deadline", () => {
-    assert.equal(closingUrgency({ status: "won", endsAt: at(now, -30 * DAY) }, now), "later");
-    assert.equal(closingUrgency({ status: "lost", endsAt: at(now, HOUR) }, now), "later");
+    assert.equal(closingUrgency({ status: "closed", endsAt: at(now, -30 * DAY) }, now), "later");
+    assert.equal(closingUrgency({ status: "cancelled", endsAt: at(now, HOUR) }, now), "later");
   });
 });
 

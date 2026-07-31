@@ -6,6 +6,7 @@ import {
   headroom,
   lotHasSignal,
   lotNeedsComposition,
+  lotOutcome,
   maxBidWithin,
   bidCosting,
   ceilingAllowing,
@@ -90,27 +91,43 @@ describe("headroom", () => {
 const FEES = { premiumPercent: "20", premiumFixed: "1", shippingCost: "15" };
 
 function lot(over: Partial<AuctionLotSummaryRow> = {}): AuctionLotSummaryRow {
-  return { status: "watching", currentBid: "100", catalogValue: "200", ...over };
+  return { status: "open", currentBid: "100", catalogValue: "200", ...over };
+}
+
+/** A closed lot that derives to `won`: the result came in below the collector's own maximum. */
+function wonLot(over: Partial<AuctionLotSummaryRow> = {}): AuctionLotSummaryRow {
+  return lot({ status: "closed", myBid: "500", finalPrice: "100", ...over });
+}
+
+/** A closed lot that derives to `lost`: the result went past the maximum. */
+function lostLot(over: Partial<AuctionLotSummaryRow> = {}): AuctionLotSummaryRow {
+  return lot({ status: "closed", myBid: "50", finalPrice: "100", ...over });
+}
+
+/** A closed lot nobody bid on — tracked for the price alone. */
+function observedLot(over: Partial<AuctionLotSummaryRow> = {}): AuctionLotSummaryRow {
+  return lot({ status: "closed", myBid: null, finalPrice: "100", ...over });
 }
 
 describe("summarizeAuctionSale", () => {
-  it("counts every lot by status", () => {
+  it("counts every lot by its derived outcome", () => {
     const s = summarizeAuctionSale([
       lot(),
-      lot({ status: "won" }),
-      lot({ status: "lost" }),
+      wonLot(),
+      lostLot(),
+      observedLot(),
       lot({ status: "cancelled" }),
     ]);
-    assert.equal(s.lotCount, 4);
+    assert.equal(s.lotCount, 5);
     assert.deepEqual(
-      [s.watchingCount, s.wonCount, s.lostCount, s.cancelledCount],
-      [1, 1, 1, 1]
+      [s.pendingCount, s.wonCount, s.lostCount, s.observedCount, s.cancelledCount],
+      [1, 1, 1, 1, 1]
     );
   });
 
   it("totals only the lots that cost money", () => {
     const s = summarizeAuctionSale(
-      [lot(), lot({ status: "won" }), lot({ status: "lost" }), lot({ status: "cancelled" })],
+      [lot(), wonLot(), lostLot(), observedLot(), lot({ status: "cancelled" })],
       FEES
     );
     assert.equal(s.payableCount, 2);
@@ -125,19 +142,19 @@ describe("summarizeAuctionSale", () => {
   });
 
   it("adds no shipping when nothing in the sale is payable", () => {
-    const s = summarizeAuctionSale([lot({ status: "lost" })], FEES);
+    const s = summarizeAuctionSale([lostLot()], FEES);
     assert.equal(s.payableCount, 0);
     assert.equal(s.allInTotal, "0.00");
     assert.equal(s.headroom, null);
   });
 
   it("prefers the settled price over the last observed bid", () => {
-    const s = summarizeAuctionSale([lot({ status: "won", currentBid: "100", finalPrice: "180" })]);
+    const s = summarizeAuctionSale([wonLot({ currentBid: "100", finalPrice: "180" })]);
     assert.equal(s.bidTotal, "180.00");
   });
 
-  it("falls back to the current bid when a closed lot has no final price", () => {
-    const s = summarizeAuctionSale([lot({ status: "won", currentBid: "100", finalPrice: null })]);
+  it("falls back to the current bid on an open lot with no result yet", () => {
+    const s = summarizeAuctionSale([lot({ currentBid: "100", finalPrice: null })]);
     assert.equal(s.bidTotal, "100.00");
   });
 
@@ -147,7 +164,7 @@ describe("summarizeAuctionSale", () => {
       lot({ currentBid: null }),
       lot({ catalogValue: null }),
       // A lost lot is not payable, so its gaps are nobody's business.
-      lot({ status: "lost", currentBid: null, catalogValue: null }),
+      lostLot({ currentBid: null, catalogValue: null }),
     ]);
     assert.equal(s.payableCount, 3);
     assert.equal(s.unbidCount, 1);
@@ -314,7 +331,7 @@ describe("lotHasSignal", () => {
   const fees = { premiumPercent: "10", premiumFixed: "2" };
 
   const live = (over: Partial<Parameters<typeof lotHasSignal>[1]> = {}) => ({
-    status: "watching" as const,
+    status: "open" as const,
     endsAt: later,
     fees,
     ...over,
@@ -359,10 +376,10 @@ describe("lotHasSignal", () => {
     );
   });
 
-  it("says nothing at all about a lot whose outcome is recorded", () => {
+  it("says nothing at all about a lot that has been closed", () => {
     for (const signal of LOT_SIGNALS) {
       assert.equal(
-        lotHasSignal(signal, { status: "won", endsAt: earlier, currentBid: "40", myBid: "50", fees }, now),
+        lotHasSignal(signal, { status: "closed", endsAt: earlier, currentBid: "40", myBid: "50", fees }, now),
         false
       );
     }
@@ -446,7 +463,7 @@ describe("summarizeLotComposition", () => {
 
 describe("lotNeedsComposition", () => {
   it("flags a lot with no lines, whatever became of it", () => {
-    for (const status of ["watching", "won", "lost"] as const) {
+    for (const status of ["open", "closed"] as const) {
       assert.equal(lotNeedsComposition({ status, lineCount: 0 }), true, status);
     }
   });
@@ -456,8 +473,62 @@ describe("lotNeedsComposition", () => {
   });
 
   it("says nothing once a single line is entered", () => {
-    for (const status of ["watching", "won", "lost", "cancelled"] as const) {
+    for (const status of ["open", "closed", "cancelled"] as const) {
       assert.equal(lotNeedsComposition({ status, lineCount: 1 }), false, status);
     }
+  });
+});
+
+// lotOutcome ----------------------------------------------------------------
+//
+// The rule the whole model now rests on: won/lost/observed are read off the money, never recorded.
+
+describe("lotOutcome", () => {
+  it("says nothing about a lot still in play", () => {
+    assert.equal(lotOutcome({ status: "open", myBid: "50", finalPrice: "40" }), "pending");
+  });
+
+  it("carries a cancelled lot through whatever the figures say", () => {
+    // A cancelled listing produced no result at all, so the figures on it are not a result either.
+    assert.equal(lotOutcome({ status: "cancelled", myBid: "50", finalPrice: "40" }), "cancelled");
+  });
+
+  it("calls a closed lot with no bid of your own observed", () => {
+    // The case the old vocabulary had nowhere to put: tracked purely to record what it fetched.
+    assert.equal(lotOutcome({ status: "closed", myBid: null, finalPrice: "40" }), "observed");
+    assert.equal(lotOutcome({ status: "closed", finalPrice: "40" }), "observed");
+  });
+
+  it("reads a result below your maximum as won", () => {
+    // Winning pays the runner-up's maximum plus an increment, which lands under your own.
+    assert.equal(lotOutcome({ status: "closed", myBid: "50", finalPrice: "40" }), "won");
+  });
+
+  it("reads a result above your maximum as lost", () => {
+    assert.equal(lotOutcome({ status: "closed", myBid: "50", finalPrice: "60" }), "lost");
+  });
+
+  it("lets the tie-break decide at exactly your maximum, and only there", () => {
+    const tie = { status: "closed" as const, myBid: "50", finalPrice: "50" };
+    assert.equal(lotOutcome({ ...tie, wonTie: true }), "won");
+    assert.equal(lotOutcome({ ...tie, wonTie: false }), "lost");
+    // Unanswered reads as lost rather than guessing a win: a fabricated win would go on to be
+    // settled into a purchase. The close form demands an answer, so this should not arise.
+    assert.equal(lotOutcome({ ...tie, wonTie: null }), "lost");
+    assert.equal(lotOutcome(tie), "lost");
+    // Everywhere else the flag is meaningless and must not override the arithmetic.
+    assert.equal(lotOutcome({ status: "closed", myBid: "50", finalPrice: "60", wonTie: true }), "lost");
+    assert.equal(lotOutcome({ status: "closed", myBid: "50", finalPrice: "40", wonTie: false }), "won");
+  });
+
+  it("files a bid lot with no result as lost — legacy rows only", () => {
+    // ADR-0021 §5 filed exactly this shape as "lost with no figure". Closing can no longer create
+    // it, so reading it any other way would silently restate what the old rows meant.
+    assert.equal(lotOutcome({ status: "closed", myBid: "50", finalPrice: null }), "lost");
+  });
+
+  it("treats a blank amount as absent, not as zero", () => {
+    // `Number("")` is 0, which would make an unbid lot look like a maximum of nothing.
+    assert.equal(lotOutcome({ status: "closed", myBid: "  ", finalPrice: "40" }), "observed");
   });
 });
