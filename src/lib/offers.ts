@@ -1850,8 +1850,14 @@ export interface OfferDetail {
 export interface OfferPlatformItem {
   stampId: string;
   conditionId: string;
-  /** The copy's own derived label (#379) — the catalogue number it is named by. */
+  /** The copy's own derived label (#379) — the catalogue number it is named by. Falls back to the
+   * stamp's name, so it is what the row prints when {@link catalogNumbers} is empty. */
   label: string;
+  /** Every catalogue number the stamp carries, vendor and area prefix included (`Mi·PL 865`),
+   * leading vendor first. Unlike `label` this is the *whole* set and says which catalogue each
+   * number belongs to: the row is read while cross-checking against the platform's own catalogue,
+   * where a bare number matched to the wrong vendor is the mistake worth preventing. */
+  catalogNumbers: string[];
   /** The stamp's name, where it has one; the label already carries the number. */
   stampName: string | null;
   conditionName: string;
@@ -2226,6 +2232,7 @@ function platformItemsFor(
         stampId: item.stampId,
         conditionId: item.conditionId,
         label: labeller.copy(item.stamp),
+        catalogNumbers: labeller.catalogNumbers(item.stamp),
         stampName: item.stamp.name?.trim() || null,
         conditionName: item.condition.name,
         catalogUrl: colnectStampUrl(colnectId),

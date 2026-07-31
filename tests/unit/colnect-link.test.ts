@@ -33,11 +33,11 @@ describe("colnectStampUrl", () => {
 });
 
 describe("colnectMarketUrl", () => {
-  it("builds the marketplace search for one item at one grade, priced high to low", () => {
+  it("builds the marketplace search for one item at one grade, priced low to high", () => {
     assert.equal(
       colnectMarketUrl("1133075", "mint_never_hinged"),
       "https://colnect.com/en/market/list/category/stamps/condition/mint_never_hinged" +
-        "/item/1133075/sort_order/descending/sort/by_price"
+        "/item/1133075/sort_order/ascending/sort/by_price"
     );
   });
 

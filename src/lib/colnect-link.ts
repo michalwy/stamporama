@@ -26,9 +26,9 @@ export function colnectStampUrl(colnectId: string | null | undefined): string | 
 // and the **condition**, the latter by its own slug (`mint_never_hinged`) rather than by the numeric
 // option its sale form submits — hence `ColnectGrade.marketSlug` beside `value`.
 //
-// Sorted by price, **descending**. A seller is judging their own asking price against the ones above
-// it, and the cheapest listings — often a different lot size or a damaged copy — are the least
-// informative end of the list.
+// Sorted by price, **ascending**. What a copy will actually sell for is set by the cheapest listings
+// of the same stamp in the same grade — those are the offers a buyer sees first and the price this
+// listing has to sit against, so the list opens on them rather than on the optimistic tail.
 
 const COLNECT_MARKET_BASE = "https://colnect.com/en/market/list/category/stamps";
 
@@ -47,6 +47,6 @@ export function colnectMarketUrl(
   if (!id || !slug) return null;
   return (
     `${COLNECT_MARKET_BASE}/condition/${encodeURIComponent(slug)}` +
-    `/item/${encodeURIComponent(id)}/sort_order/descending/sort/by_price`
+    `/item/${encodeURIComponent(id)}/sort_order/ascending/sort/by_price`
   );
 }

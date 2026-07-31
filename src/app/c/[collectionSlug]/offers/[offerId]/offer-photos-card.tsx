@@ -33,9 +33,10 @@ import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-pho
 // image, what it was rendered from, its number — with a per-image download and a whole-plan ZIP whose
 // files are numbered in plan order for a bulk upload.
 //
-// The card sits high on the detail screen, under the listing texts, and is **collapsed by default**:
-// it is a step you take once a listing is otherwise ready, and expanded it is the tallest thing on
-// the screen. Everything that would be missed while it is shut — the run's state, staleness, a side
+// The card sits high on the detail screen, under the listing texts, and is **collapsed by default**
+// once the listing is out of the collector's hands: it is a step you take once, and expanded it is
+// the tallest thing on the screen. While the offer is still `preparing` it opens instead — that is
+// the state in which the images are what is being worked on. Everything that would be missed while it is shut — the run's state, staleness, a side
 // that could not be rendered — is a chip in the header, so collapsing hides detail, never a signal.
 // Expanding shows the whole plan at once; there is no second toggle inside.
 //
@@ -692,6 +693,7 @@ export function OfferPhotosCard({
   photoConfig,
   photoLimits,
   platformName,
+  offerState,
 }: {
   collectionId: string;
   offerId: string;
@@ -699,14 +701,24 @@ export function OfferPhotosCard({
   photoConfig: OfferPhotoConfigInput;
   photoLimits: PlatformPhotoLimits;
   platformName: string;
+  /** Where the offer is in its lifecycle: while `preparing` the images are the work in hand, so the
+   * card opens by default instead of collapsed. */
+  offerState: string;
 }) {
   const { data: plan, isLoading, refetch } = useOfferPhotoPlan(collectionId, offerId);
   const { invalidateAll } = useInvalidateOffers();
   const [error, setError] = useState<string | undefined>();
   // Whether the card is open is remembered across visits: a collector working through a batch of
   // listings opens it on every one of them. One key for the card, not one per offer — the habit is
-  // about the step, not about the listing.
-  const [expanded, setExpanded] = usePersistentToggle("stamporama.offerPhotos.expanded", false);
+  // about the step, not about the listing — but a separate key, open by default, while the offer is
+  // still `preparing`: there the images are the work in hand rather than something consulted, and
+  // the two habits are genuinely different, so remembering them together would fight the collector
+  // on every visit.
+  const preparing = offerState === "preparing";
+  const [expanded, setExpanded] = usePersistentToggle(
+    preparing ? "stamporama.offerPhotos.expanded.preparing" : "stamporama.offerPhotos.expanded",
+    preparing
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | undefined>();
   const [attachOpen, setAttachOpen] = useState(false);

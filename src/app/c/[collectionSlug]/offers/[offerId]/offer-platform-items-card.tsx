@@ -15,9 +15,12 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //
 // Deliberately **not** the sets card in miniature. It carries no price, no value, no per-copy
 // anything: everything about *this* listing is a scroll away, and the one thing this card is for is
-// leaving the screen for the platform. Collapsed by default for the same reason the photos card is
-// (#382) — it is a step taken once, while the number in the header already says how many stamps a
-// buyer would be comparing.
+// leaving the screen for the platform. The links **lead** each row rather than trailing it, and
+// while the offer is still `preparing` the list is simply open, with no toggle at all: there the
+// card is the work in hand, and a ragged right edge behind a Show button puts two steps between the
+// collector and the one thing they came here to click. From `ready` on it collapses again, for the
+// reason the photos card does (#382) — a step taken once, with the header's count already saying how
+// many stamps a buyer would be comparing.
 //
 // A row with no links is **still listed**. An unmatched stamp (#247) or an unmapped condition (#404)
 // is a gap the collector can go and fix, and the place they are most likely to notice it is the list
@@ -80,15 +83,17 @@ function ExternalLinkIcon() {
 export function OfferPlatformItemsCard({
   items,
   platformName,
+  offerState,
 }: {
   items: OfferPlatformItem[];
   /** Named in the heading, so the card says whose catalogue these links go to. */
   platformName: string;
+  /** Where the offer is in its lifecycle: the card is the working surface only while `preparing`. */
+  offerState: string;
 }) {
-  const [expanded, setExpanded] = usePersistentToggle(
-    "stamporama.offerPlatformItems.expanded",
-    false
-  );
+  const preparing = offerState === "preparing";
+  const [shown, setShown] = usePersistentToggle("stamporama.offerPlatformItems.expanded", false);
+  const expanded = preparing || shown;
   // The platform has no module, or the offer has no copies yet: there is nothing to look up.
   if (items.length === 0) return null;
 
@@ -107,23 +112,25 @@ export function OfferPlatformItemsCard({
             <span style={MUTED}>{items.length - linkable} not matched</span>
           </Tooltip>
         )}
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          style={{
-            marginLeft: "auto",
-            padding: "0.375rem 0.875rem",
-            border: "1px solid var(--color-border-strong)",
-            borderRadius: "0.375rem",
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--color-text-primary)",
-            background: "var(--color-bg-elevated)",
-            cursor: "pointer",
-          }}
-        >
-          {expanded ? "Hide" : "Show"}
-        </button>
+        {!preparing && (
+          <button
+            type="button"
+            onClick={() => setShown(!shown)}
+            style={{
+              marginLeft: "auto",
+              padding: "0.375rem 0.875rem",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "0.375rem",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+              background: "var(--color-bg-elevated)",
+              cursor: "pointer",
+            }}
+          >
+            {shown ? "Hide" : "Show"}
+          </button>
+        )}
       </div>
 
       {expanded && (
@@ -140,6 +147,44 @@ export function OfferPlatformItemsCard({
                 borderTop: "1px solid var(--color-border)",
               }}
             >
+              {/* The links lead the row: they are what the card exists for, and left-aligned they
+                  stack into one column instead of a ragged edge chasing the longest stamp name. */}
+              <span style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+                {item.catalogUrl ? (
+                  <a href={item.catalogUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
+                    Catalog
+                    <ExternalLinkIcon />
+                  </a>
+                ) : (
+                  <Tooltip content="This stamp has no item-ID recorded for this platform yet.">
+                    <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
+                  </Tooltip>
+                )}
+                {item.marketUrl ? (
+                  <Tooltip
+                    content={`What ${item.conditionName} copies are being asked for right now, cheapest first.`}
+                  >
+                    <a href={item.marketUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
+                      Market
+                      <ExternalLinkIcon />
+                    </a>
+                  </Tooltip>
+                ) : (
+                  <Tooltip
+                    content={
+                      item.catalogUrl
+                        ? "This condition is not mapped to the platform's own grades, so a market search would ask a different question. Map it in Settings → Colnect."
+                        : "This stamp has no item-ID recorded for this platform yet."
+                    }
+                  >
+                    <span style={{ ...LINK, opacity: 0.5 }}>Market</span>
+                  </Tooltip>
+                )}
+              </span>
+              {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
+                  against the *platform's* catalogue, so which vendor a number belongs to is the
+                  thing being checked, and a stamp recorded in two is looked up in both. The bare
+                  label is left only for a stamp carrying no number at all. */}
               <span
                 style={{
                   fontSize: "0.8125rem",
@@ -148,7 +193,7 @@ export function OfferPlatformItemsCard({
                   whiteSpace: "nowrap",
                 }}
               >
-                {item.label}
+                {item.catalogNumbers.length > 0 ? item.catalogNumbers.join(" · ") : item.label}
               </span>
               {item.stampName && (
                 <span
@@ -169,38 +214,6 @@ export function OfferPlatformItemsCard({
                   <span style={MUTED}>×{item.copyCount}</span>
                 </Tooltip>
               )}
-              <span style={{ marginLeft: "auto", display: "flex", gap: "0.375rem", flexShrink: 0 }}>
-                {item.catalogUrl ? (
-                  <a href={item.catalogUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
-                    Catalog
-                    <ExternalLinkIcon />
-                  </a>
-                ) : (
-                  <Tooltip content="This stamp has no item-ID recorded for this platform yet.">
-                    <span style={{ ...LINK, opacity: 0.5 }}>Catalog</span>
-                  </Tooltip>
-                )}
-                {item.marketUrl ? (
-                  <Tooltip
-                    content={`What ${item.conditionName} copies are being asked for right now, priced high to low.`}
-                  >
-                    <a href={item.marketUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
-                      Market
-                      <ExternalLinkIcon />
-                    </a>
-                  </Tooltip>
-                ) : (
-                  <Tooltip
-                    content={
-                      item.catalogUrl
-                        ? "This condition is not mapped to the platform's own grades, so a market search would ask a different question. Map it in Settings → Colnect."
-                        : "This stamp has no item-ID recorded for this platform yet."
-                    }
-                  >
-                    <span style={{ ...LINK, opacity: 0.5 }}>Market</span>
-                  </Tooltip>
-                )}
-              </span>
             </li>
           ))}
         </ul>

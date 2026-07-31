@@ -1,6 +1,6 @@
 import "server-only";
 import { readCollectionAreas } from "./areas";
-import { buildAreaVendorMaps } from "./area-vendor";
+import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { deriveOfferLabel, deriveSetLabel } from "./offer-set-rules";
 import { compareSetItems } from "./offer-set-order";
@@ -69,6 +69,12 @@ export interface OfferLabeller {
    * bare — a copy is listed inside a set whose own label already names the catalogue (#379), so
    * repeating `Mi·PL` on every line of it says nothing. */
   copy(stamp: StampLabelRow): string;
+  /** *Every* number the stamp carries, each printed with its vendor and area prefix (`Mi·PL 865`),
+   * leading vendor first. For the lists that stand outside a set's own label and are read against
+   * someone else's catalogue (#423): there, which catalogue a number belongs to is the whole point,
+   * and a stamp the collector recorded in two is being looked up in both. Empty when it carries
+   * none. */
+  catalogNumbers(stamp: StampLabelRow): string[];
   set(set: LabelSetRow): string;
   offer(sets: readonly LabelSetRow[]): string;
 }
@@ -89,18 +95,25 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
 
-  function catalogOf(stamp: StampLabelRow): CatalogNumberGroupEntry | null {
+  /** Where a stamp's numbers are read from: its area (primary link, else the first), that area's
+   * leading vendor, and the vendor map the area's — or its issue's (#377) — prefixes come from. */
+  function vendorContext(stamp: StampLabelRow) {
     const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
     const areaId = link?.collectionAreaId ?? null;
-    const primaryVendorId = areaId ? (primaryVendorByArea.get(areaId) ?? null) : null;
+    return {
+      primaryVendorId: areaId ? (primaryVendorByArea.get(areaId) ?? null) : null,
+      vendors: vendorMapFor(areaId, stamp.issueMemberships[0]?.issueId ?? null),
+    };
+  }
+
+  function catalogOf(stamp: StampLabelRow): CatalogNumberGroupEntry | null {
+    const { primaryVendorId, vendors } = vendorContext(stamp);
     const leading =
       (primaryVendorId
         ? stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId)
         : undefined) ?? stamp.catalogNumbers[0];
     if (!leading) return null;
-    const vendor = vendorMapFor(areaId, stamp.issueMemberships[0]?.issueId ?? null).get(
-      leading.catalogVendorId
-    );
+    const vendor = vendors.get(leading.catalogVendorId);
     return {
       vendorId: leading.catalogVendorId,
       // No vendor entry for this area leaves both parts blank, which renders the bare number —
@@ -109,6 +122,17 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
       areaPrefix: vendor?.prefix ?? null,
       number: leading.number,
     };
+  }
+
+  function catalogNumbers(stamp: StampLabelRow): string[] {
+    const { primaryVendorId, vendors } = vendorContext(stamp);
+    // Leading vendor first, the rest in the order they were recorded: the same number that names
+    // the copy everywhere else opens the line here too, with the others reading as alternatives.
+    const ordered = [...stamp.catalogNumbers].sort(
+      (a, b) =>
+        Number(b.catalogVendorId === primaryVendorId) - Number(a.catalogVendorId === primaryVendorId)
+    );
+    return ordered.map((cn) => formatStampCN(cn.number, vendors.get(cn.catalogVendorId)));
   }
 
   function set(row: LabelSetRow): string {
@@ -124,6 +148,7 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
   return {
     catalogOf,
     copy: (stamp) => catalogOf(stamp)?.number ?? stamp.name ?? "Copy",
+    catalogNumbers,
     set,
     offer: (sets) => deriveOfferLabel(sets.map(set)),
   };

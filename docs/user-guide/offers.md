@@ -436,7 +436,10 @@ platform. Press **Generate** and the work happens **in the background** — you 
 and the card shows the run's state on its own (*Queued*, *Rendering 2/4*, *Ready*, or *Failed* with
 the reason). Pressing Generate while a run is already going does nothing; it will not render twice.
 
-The card starts **collapsed** — click its heading to open it. Generate, Download all and the **⚙**
+The card starts **open** while the offer is **Preparing**, since that is when the images are what you
+are working on, and **collapsed** from **Ready** onward — click its heading either way. It remembers
+the two separately, so collapsing it on a live listing does not shut it on the one you are building
+next. Generate, Download all and the **⚙**
 [photo settings](#photo-settings) sit in the header and work either way, and anything you would want to notice while it is shut (the run's state,
 *Out of date*, a side that could not be rendered) stays there as a chip.
 
@@ -612,21 +615,29 @@ and clicking through copy after copy.
 
 An offer on the platform you have named as Colnect (under
 [**Settings → Colnect**](collections.md#colnect-platform)) therefore carries an **On Colnect** card,
-between the photos and the sets. Expand it and it lists the offer's stamps — one row per
-**stamp and condition**, since that is what the marketplace pages are keyed on, with a `×3` where
-several copies of the offer share a row — each with two links that open in a new tab:
+between the photos and the sets. It lists the offer's stamps — one row per **stamp and condition**,
+since that is what the marketplace pages are keyed on, with a `×3` where several copies of the offer
+share a row. Each row *starts* with its two links, which open in a new tab:
 
 - **Catalog** — that stamp's own page in the platform's catalogue.
-- **Market** — what copies *in that condition* are being asked for right now, priced high to low. The
-  condition follows the [Colnect condition mapping](collections.md#colnect-condition-mapping), so a
-  used copy takes you to used listings rather than to everything on offer.
+- **Market** — what copies *in that condition* are being asked for right now, **cheapest first**:
+  those are the listings a buyer sees before yours, so they are the prices this one has to sit
+  against. The condition follows the
+  [Colnect condition mapping](collections.md#colnect-condition-mapping), so a used copy takes you to
+  used listings rather than to everything on offer.
+
+After the links the row names the stamp by **every catalogue number you have recorded for it**, each
+with its catalogue and area prefix (`Mi·PL 865`), the leading catalogue first. Elsewhere a number is
+printed bare, because the set around it already says which catalogue it came from; here you are
+cross-checking against somebody else's catalogue, so which one a number belongs to is the point.
 
 A row whose links are greyed out is telling you about a gap: the stamp has no Colnect item-ID
 recorded yet, or its condition is not mapped to one of Colnect's own grades. Hover for which. The row
 is still listed — this is the screen where you are most likely to notice.
 
-The card is collapsed by default and its heading counts the stamps, so a listing you are only
-composing does not pay for it.
+While the offer is still **Preparing** the card is simply open: those links are the work you are
+doing. Once it has left your hands it is a reference you consult rarely, so from **Ready** onward it
+collapses behind **Show**, with the heading counting the stamps.
 
 ## Bulk listing — posting a prepared batch
 
