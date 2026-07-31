@@ -296,6 +296,13 @@ A catalog number that **is** a Roman numeral, with no number in front of it, col
 `III` reads `I-III`. A numeral never folds into an ordinary number, so `1`, `2`, `I`, `II` reads
 `1-2,I-II`.
 
+A numeral may carry a **letter suffix**, and both parts fold. With the suffix constant the numeral
+runs and the suffix is written at both ends — `IA`, `IIA`, … `VIIIA` reads `IA-VIIIA` — because
+`I-VIIIA` would read as a plain numeral span with a stray letter on it. With the numeral constant it
+is the suffix that runs, written once as usual: `Ia`, `Ib`, `Ic` reads `Ia-c`. An **uppercase**
+suffix does not fold on that second axis (`IA` + `IB` stays `IA,IB`), and a suffix that is itself a
+Roman digit — the `C` of `IC` — is read as part of the numeral, since nothing can tell the two apart.
+
 ### Area names in titles
 
 Your area tree often mixes public territories with **internal grouping** levels — e.g. `Poland ›

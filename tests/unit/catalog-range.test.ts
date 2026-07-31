@@ -66,6 +66,29 @@ describe("formatCatalogRange", () => {
     assert.equal(formatCatalogRange("Mi·PL I", "Mi·PL III"), "Mi·PL I-III");
   });
 
+  it("folds a Roman-numeral span carrying a letter suffix (#426)", () => {
+    // The suffix is written at both ends: `I-VIIIA` would read as a bare-numeral span.
+    assert.equal(formatCatalogRange("IA", "VIIIA"), "IA-VIIIA");
+    assert.equal(formatCatalogRange("Mi·RU-BW IA", "Mi·RU-BW VIIIA"), "Mi·RU-BW IA-VIIIA");
+  });
+
+  it("writes a suffix span on one numeral once (#426)", () => {
+    assert.equal(formatCatalogRange("Ia", "Ic"), "Ia-c");
+    assert.equal(formatCatalogRange("Mi·PL IIa", "Mi·PL IIc"), "Mi·PL IIa-c");
+  });
+
+  it("leaves an uppercase suffix span written out (#426)", () => {
+    // The suffix axis runs on the sequences `parseSuffixOrdinal` knows — lowercase letters and
+    // numerals — and an uppercase `A` is neither. `IC` is a further case of the same thing: it is
+    // structurally a numeral, not `I` + suffix `C`, and nothing can tell the two apart.
+    assert.equal(formatCatalogRange("IA", "IB"), "IA-IB");
+    assert.equal(formatCatalogRange("IA", "IC"), "IA-IC");
+  });
+
+  it("writes both endpoints out when the numeral and the suffix both vary (#426)", () => {
+    assert.equal(formatCatalogRange("IA", "IIIB"), "IA-IIIB");
+  });
+
   it("writes both endpoints out when nothing is constant", () => {
     assert.equal(formatCatalogRange("1294CKB", "1296KB"), "1294CKB-1296KB");
     assert.equal(formatCatalogRange("BL31", "Ark. 3"), "BL31-Ark. 3");

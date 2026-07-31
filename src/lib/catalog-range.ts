@@ -59,20 +59,25 @@ export function formatNumericCatalogRange(
   return `${prefix}${span}${suffix}`;
 }
 
-/** Split a digit-less catalog number into the constant text in front of it and a trailing canonical
- * Roman numeral — `"I"` → `("", "I")`, `"Mi·PL VIII"` → `("Mi·PL ", "VIII")` — or null when it ends
- * in no numeral (`"Ark."`). A number that *is* a numeral (#383) has no base for the suffix fold to
- * hold constant, so the numeral itself is the sequence and the text in front is what keeps two
- * catalogues apart. The lazy prefix takes the **longest** trailing numeral, and `parseSuffixOrdinal`
- * rejects a non-canonical spelling, so `"Mi·DM"` reads as no numeral rather than as `D`. */
+/** Split a digit-less catalog number into the constant text in front of it, a canonical Roman
+ * numeral, and whatever trails it — `"I"` → `("", "I", "")`, `"Mi·PL VIII"` → `("Mi·PL ", "VIII", "")`,
+ * `"IA"` → `("", "I", "A")` — or null when it carries no numeral at all (`"Ark."`). A number that
+ * *is* a numeral (#383) has no digit run for the base/suffix split to work on, so the numeral itself
+ * is the sequence and the text in front is what keeps two catalogues apart.
+ *
+ * The trailing part is the second axis (#426): `IA`–`VIIIA` is the numeral incrementing under a
+ * constant letter, exactly as `40A`–`42A` is the base incrementing under one. Since the numeral is
+ * greedy and its own character class is uppercase-only, a trailing `X` or `V` is read as part of the
+ * numeral rather than as a suffix — which is what it is. `parseSuffixOrdinal` rejects a non-canonical
+ * spelling, so `"Mi·DM"` still reads as no numeral rather than as `D`. */
 export function parseBareRomanNumber(
   text: string
-): { prefix: string; numeral: string; value: number } | null {
-  const match = text.match(/^(.*?)([MDCLXVI]+)$/);
+): { prefix: string; numeral: string; value: number; suffix: string } | null {
+  const match = text.match(/^(.*?)([MDCLXVI]+)([^MDCLXVI]*)$/);
   if (!match) return null;
   const ordinal = parseSuffixOrdinal(match[2]);
   if (!ordinal || ordinal.kind !== "roman") return null;
-  return { prefix: match[1], numeral: match[2], value: ordinal.value };
+  return { prefix: match[1], numeral: match[2], value: ordinal.value, suffix: match[3] };
 }
 
 /**
@@ -81,7 +86,8 @@ export function parseBareRomanNumber(
  *
  * - `("1298", "1302")` → `1298-302`, `("BL31", "BL33")` → `BL31-33`, `("40A", "42A")` → `40-42A`
  * - `("128a", "128c")` → `128a-c`, `("12I", "12III")` → `12I-III`
- * - `("I", "III")` → `I-III` (a bare numeral, #383)
+ * - `("I", "III")` → `I-III` (a bare numeral, #383); `("IA", "VIIIA")` → `IA-VIIIA` and
+ *   `("IA", "IC")` → `IA-C` (a numeral carrying a letter suffix, #426)
  * - `("1294CKB", "1296KB")` → `1294CKB-1296KB` (nothing constant to write once)
  *
  * `to` may be null or blank — an open range is just its start.
@@ -113,13 +119,27 @@ export function formatCatalogRange(
     }
   }
 
-  // Bare Roman numerals (#383): no digit run to split on, so the numeral is the whole number and the
-  // constant text in front of it is what has to match.
+  // Roman numerals (#383, #426): no digit run to split on, so the numeral takes the base's place and
+  // the constant text in front of it is what has to match. Both axes again, in the same order.
   if (!a && !b) {
     const romanA = parseBareRomanNumber(start);
     const romanB = parseBareRomanNumber(end);
     if (romanA && romanB && romanA.prefix === romanB.prefix) {
-      return `${romanA.prefix}${romanA.numeral}${separator}${romanB.numeral}`;
+      // Numeral axis: one constant suffix, the numeral varying. Unlike the numeric axis's
+      // `40-42A`, the suffix is written at **both** ends — a numeral and a letter suffix are both
+      // letters, so `I-VIIIA` would read as a bare-numeral span with a stray letter hung off it.
+      if (romanA.suffix === romanB.suffix) {
+        return `${romanA.prefix}${romanA.numeral}${romanA.suffix}${separator}${romanB.numeral}${romanB.suffix}`;
+      }
+      // Suffix axis: one constant numeral, the suffix varying within one sequence — written once,
+      // exactly as `128a-c` writes its base.
+      if (romanA.numeral === romanB.numeral) {
+        const fromOrdinal = parseSuffixOrdinal(romanA.suffix);
+        const toOrdinal = parseSuffixOrdinal(romanB.suffix);
+        if (fromOrdinal && toOrdinal && fromOrdinal.kind === toOrdinal.kind) {
+          return `${romanA.prefix}${romanA.numeral}${romanA.suffix}${separator}${romanB.suffix}`;
+        }
+      }
     }
   }
 

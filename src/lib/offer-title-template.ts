@@ -289,11 +289,13 @@ function catalogHead(vendorAbbr: string, areaPrefix: string | null, flags: Reado
  *    `BL92a,BL92b` reads `BL92a-b`. The sequences are the ones an auto-generate range enumerates
  *    (`parseSuffixOrdinal`: letters `a`–`z`, Roman numerals), so `1294CKB,1296KB` still cannot fold.
  *
- * 3. **Bare Roman numerals** (#384) — a number that *is* a numeral (`I`, `II`, `III`; #383) carries
- *    no digit run, so it never reaches (1) and would list one by one. It is a sequence in its own
- *    right, so consecutive numerals fold the way (2) folds a suffix — `I,II,III` reads `I-III` — keyed
- *    on the constant text in front of them (`Mi·PL I`–`Mi·PL III` → `Mi·PL I-III`), which is what
- *    keeps two catalogues from merging where the caller passes prefixed numbers (#353).
+ * 3. **Roman numerals** (#384, #426) — a number numbered with a numeral (`I`, `II`, `III`; #383)
+ *    carries no digit run, so it never reaches (1) and would list one by one. The numeral stands
+ *    where the base does and folds on the **same two axes**, keyed on the constant text in front of
+ *    it (`Mi·PL I`–`Mi·PL III` → `Mi·PL I-III`), which is what keeps two catalogues from merging
+ *    where the caller passes prefixed numbers (#353): the numeral itself first — a constant letter
+ *    suffix riding along and written at both ends, `IA,IIA,IIIA` → `IA-IIIA` — and then the suffix
+ *    on one numeral, `IA,IB,IC` → `IA-C`.
  *
  * Entries are emitted in first-seen order, and a number without a digit run at all (e.g. `Ark.`) is
  * kept verbatim at the end, after the numeric families. All comma-joined; duplicates dropped.
@@ -406,33 +408,85 @@ export function compactCatalogNumbers(numbers: readonly string[]): string {
   }
   emitted.sort((a, b) => a.order - b.order);
 
-  // Pass 3 — fold consecutive bare Roman numerals (#384), per constant prefix. A run is written from
-  // the numerals as recorded and emitted where its earliest member stood, so the digit-less tail
-  // keeps its order and anything that isn't a numeral passes through untouched.
+  // Pass 3 — fold Roman numerals (#384, #426). A number whose numbering is a numeral carries no
+  // digit run, so it never reaches (1) or (2) and would list one by one. It folds on the **same two
+  // axes in the same order**, with the numeral standing where the base does: first consecutive
+  // numerals under a constant prefix + constant suffix (`IA,IIA,IIIA` → `IA-IIIA`), then — over what
+  // stayed single — a suffix sequence on one numeral (`IA,IB,IC` → `IA-C`). A run is written from the
+  // numerals as recorded and emitted where its earliest member stood, so the digit-less tail keeps
+  // its order and anything that isn't a numeral passes through untouched.
+  interface RomanEntry {
+    index: number;
+    prefix: string;
+    numeral: string;
+    value: number;
+    suffix: string;
+  }
   const runs = new Map<number, string>();
   const folded = new Set<number>();
-  const byPrefix = new Map<string, { index: number; numeral: string; value: number }[]>();
+  const emitRun = (members: RomanEntry[], text: string) => {
+    const at = Math.min(...members.map((m) => m.index));
+    runs.set(at, text);
+    for (const m of members) if (m.index !== at) folded.add(m.index);
+  };
+
+  // 3a — the numeral axis. A constant suffix rides along untouched, and is written at **both** ends
+  // (`IA-IIIA`) rather than once: a numeral and a letter suffix are both letters, so `I-IIIA` would
+  // read as a bare-numeral span with a stray letter hung off it.
+  const romanSingles: RomanEntry[] = [];
+  const byNumbering = new Map<string, RomanEntry[]>();
   others.forEach((o, index) => {
     if (!o.roman) return;
-    const entry = { index, numeral: o.roman.numeral, value: o.roman.value };
-    const group = byPrefix.get(o.roman.prefix);
+    const entry: RomanEntry = { index, ...o.roman };
+    const key = `${entry.prefix} ${entry.suffix}`;
+    const group = byNumbering.get(key);
     if (group) group.push(entry);
-    else byPrefix.set(o.roman.prefix, [entry]);
+    else byNumbering.set(key, [entry]);
   });
-  for (const [prefix, group] of byPrefix) {
+  for (const group of byNumbering.values()) {
     group.sort((a, b) => a.value - b.value);
     for (let i = 0; i < group.length; ) {
       let j = i;
       while (j + 1 < group.length && group[j + 1].value === group[j].value + 1) j++;
-      const members = group.slice(i, j + 1);
-      const at = Math.min(...members.map((m) => m.index));
-      runs.set(
-        at,
-        `${prefix}${group[i].numeral}${
-          i === j ? "" : `${CATALOG_RANGE_SEPARATOR}${group[j].numeral}`
-        }`
+      if (i === j) {
+        romanSingles.push(group[i]);
+      } else {
+        const { prefix, suffix } = group[i];
+        emitRun(
+          group.slice(i, j + 1),
+          `${prefix}${group[i].numeral}${suffix}${CATALOG_RANGE_SEPARATOR}${group[j].numeral}${suffix}`
+        );
+      }
+      i = j + 1;
+    }
+  }
+
+  // 3b — the suffix axis over what stayed single, keyed on one numeral. A suffix that is part of no
+  // sequence (an empty one above all, which is every bare numeral) has nothing to fold on and is left
+  // for the tail to write out as recorded.
+  const bySuffixFamily = new Map<string, { entry: RomanEntry; ordinal: number }[]>();
+  for (const single of romanSingles) {
+    const ordinal = parseSuffixOrdinal(single.suffix);
+    if (!ordinal) continue;
+    const key = `${single.prefix} ${single.numeral} ${ordinal.kind}`;
+    const group = bySuffixFamily.get(key);
+    if (group) group.push({ entry: single, ordinal: ordinal.value });
+    else bySuffixFamily.set(key, [{ entry: single, ordinal: ordinal.value }]);
+  }
+  for (const group of bySuffixFamily.values()) {
+    group.sort((a, b) => a.ordinal - b.ordinal);
+    for (let i = 0; i < group.length; ) {
+      let j = i;
+      while (j + 1 < group.length && group[j + 1].ordinal === group[j].ordinal + 1) j++;
+      if (i === j) {
+        i = j + 1;
+        continue;
+      }
+      const first = group[i].entry;
+      emitRun(
+        group.slice(i, j + 1).map((e) => e.entry),
+        `${first.prefix}${first.numeral}${first.suffix}${CATALOG_RANGE_SEPARATOR}${group[j].entry.suffix}`
       );
-      for (const m of members) if (m.index !== at) folded.add(m.index);
       i = j + 1;
     }
   }

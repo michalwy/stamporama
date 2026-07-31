@@ -283,6 +283,27 @@ describe("renderTitleTemplate — {catalog} options", () => {
     assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi I-II,V");
   });
 
+  it("collapses a Roman-numeral run under a constant letter suffix (#426)", () => {
+    const nums = ["IA", "IIA", "IIIA", "IVA", "VA", "VIA", "VIIA", "VIIIA"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi IA-VIIIA");
+  });
+
+  it("keeps two letter suffixes over one numeral run apart (#426)", () => {
+    const nums = ["IA", "IIA", "IB", "IIB"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi IA-IIA,IB-IIB");
+  });
+
+  it("folds the suffix on one numeral when the numeral stayed single (#426)", () => {
+    const nums = ["Ia", "Ib", "Ic"].map((n) =>
+      copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
+    );
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", nums), "Mi Ia-c");
+  });
+
   it("never folds a bare numeral into a digit-bearing number (#384)", () => {
     const nums = ["1", "2", "I", "II"].map((n) =>
       copy({ catalogNumbers: [cn("Mi", n, { isPrimary: true })] })
