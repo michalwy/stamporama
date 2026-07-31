@@ -6,8 +6,13 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
+  COLLAGE_GRID_MODES,
+  COLLAGE_GRID_MODE_LABELS,
   COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
+  DEFAULT_COLLAGE_GRID_MODE,
+  collageAxisLabels,
+  normalizeCollageGridMode,
   MAX_COLLAGE_AXIS,
   MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
@@ -51,6 +56,9 @@ const SECTION_LABEL: React.CSSProperties = {
 
 /** The collage fields as the form holds them — strings, so "not set yet" is simply blank. */
 interface CollageDraft {
+  /** Always set — a toggle has no blank state — which is why it is not one of the fields that decide
+   * whether the offer carries a collage at all (#413). */
+  collageGridMode: string;
   collageRows: string;
   collageColumns: string;
   collageGapPercent: string;
@@ -59,6 +67,7 @@ interface CollageDraft {
 }
 
 const EMPTY_COLLAGE: CollageDraft = {
+  collageGridMode: DEFAULT_COLLAGE_GRID_MODE,
   collageRows: "",
   collageColumns: "",
   collageGapPercent: "",
@@ -70,6 +79,7 @@ function toDraft(config: OfferPhotoConfigInput): CollageDraft {
   const c = config.collage;
   if (!c) return EMPTY_COLLAGE;
   return {
+    collageGridMode: c.collageGridMode,
     collageRows: String(c.collageRows),
     collageColumns: String(c.collageColumns),
     collageGapPercent: String(c.collageGapPercent),
@@ -186,6 +196,7 @@ export function PhotoSettingsDialog({
     const t = templates.find((row) => row.id === templateId);
     if (!t) return;
     setCollage({
+      collageGridMode: normalizeCollageGridMode(t.gridMode),
       collageRows: String(t.rows),
       collageColumns: String(t.columns),
       collageGapPercent: String(t.gapPercent),
@@ -195,7 +206,11 @@ export function PhotoSettingsDialog({
   }
 
   /** Any collage field filled in — what "Clear" acts on and what the save writes as a group. */
-  const hasCollage = Object.values(collage).some((v) => v.trim());
+  const hasCollage = Object.entries(collage).some(
+    ([field, value]) => field !== "collageGridMode" && value.trim()
+  );
+
+  const axisLabels = collageAxisLabels(normalizeCollageGridMode(collage.collageGridMode));
 
   function set(field: keyof CollageDraft, value: string) {
     setCollage((c) => ({ ...c, [field]: value }));
@@ -293,7 +308,11 @@ export function PhotoSettingsDialog({
                 </option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.rows} × {t.columns})
+                    {t.name} (
+                    {normalizeCollageGridMode(t.gridMode) === "auto"
+                      ? `auto, up to ${t.rows} × ${t.columns}`
+                      : `${t.rows} × ${t.columns}`}
+                    )
                   </option>
                 ))}
               </select>
@@ -319,10 +338,27 @@ export function PhotoSettingsDialog({
           </div>
 
           <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="offer-collage-grid-mode">Grid</LabelWithError>
+              <select
+                id="offer-collage-grid-mode"
+                name="collageGridMode"
+                value={collage.collageGridMode}
+                onChange={(e) => set("collageGridMode", normalizeCollageGridMode(e.target.value))}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                {COLLAGE_GRID_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {COLLAGE_GRID_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <NumberField
               id="offer-collage-rows"
               name="collageRows"
-              label="Rows"
+              label={axisLabels.rows}
               value={collage.collageRows}
               min={MIN_COLLAGE_AXIS}
               max={MAX_COLLAGE_AXIS}
@@ -332,7 +368,7 @@ export function PhotoSettingsDialog({
             <NumberField
               id="offer-collage-columns"
               name="collageColumns"
-              label="Columns"
+              label={axisLabels.columns}
               value={collage.collageColumns}
               min={MIN_COLLAGE_AXIS}
               max={MAX_COLLAGE_AXIS}
@@ -382,8 +418,12 @@ export function PhotoSettingsDialog({
           </div>
 
           <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.75rem 0 0" }}>
-            Rows × columns is a maximum, not a frame — fewer stamps make a smaller collage. Leave
-            every collage field blank for no collage on this offer yet.
+            {collage.collageGridMode === "auto"
+              ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
+              : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
+            Their product is how many stamps go on one image either way, and it is a maximum rather
+            than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
+            on this offer yet.
           </p>
         </DialogBody>
 

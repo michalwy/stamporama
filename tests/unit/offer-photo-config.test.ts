@@ -93,6 +93,7 @@ describe("parseOfferPhotoConfigInput", () => {
     assert.equal(result.value.photoLabelLeftTemplate, "{ref}");
     assert.equal(result.value.photoLabelRightTemplate, "{catalog}");
     assert.deepEqual(result.value.collage, {
+      collageGridMode: "fixed",
       collageRows: 5,
       collageColumns: 4,
       collageGapPercent: 5,
@@ -107,6 +108,18 @@ describe("parseOfferPhotoConfigInput", () => {
     assert.equal(result.value.collage, null);
     assert.equal(result.value.photoLabelLeftTemplate, null);
     assert.equal(result.value.photoLabelRightTemplate, null);
+  });
+
+  it("does not let the grid mode alone make a collage (#413)", () => {
+    // The toggle always carries a value, so counting it among the group's fields would make "no
+    // collage on this offer yet" unsayable.
+    const blank = parseOfferPhotoConfigInput({ ...BLANK_CONFIG, collageGridMode: "auto" });
+    assert.ok(blank.ok);
+    assert.equal(blank.value.collage, null);
+
+    const full = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageGridMode: "auto" });
+    assert.ok(full.ok);
+    assert.equal(full.value.collage?.collageGridMode, "auto");
   });
 
   it("rejects a half-filled collage group", () => {

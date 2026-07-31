@@ -400,7 +400,11 @@ listing:
   at the size the **Label strip (%)** below sets and at no other: a long label is cut with an
   ellipsis rather than shrunk. If yours come out cut, lower the strip percentage or write shorter
   templates.
-- **Collage** — **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and **Background**. Both
+- **Collage** — **Grid**, **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and
+  **Background**. **Grid** says how the two numbers are read: a **fixed grid** fills every row to the
+  column count, while **automatic** treats them as **Max rows** / **Max columns** and arranges each
+  image from the stamps it actually holds — four stamps 2 × 2, five as 3 + 2 — so one setting suits a
+  listing of any size. Both
   percentages are shares rather than pixels, so one setting reads the same whatever resolution you
   scan at: the gap is a share of the stamp's height, the label strip a share of the finished image
   (in tenths of a percent — 1–2% is the usual range),
@@ -412,7 +416,7 @@ listing:
   you like; the offer does not follow the template afterwards. **Clear** empties them, leaving the
   offer with no collage.
 
-Rows × columns is a maximum, not a frame: fewer stamps simply make a smaller image.
+Rows × columns is a maximum, not a frame in either grid: fewer stamps simply make a smaller image.
 
 Changing any of these puts images you have already generated **out of date**, so the dialog's footer
 carries **Regenerate photos after saving**, ticked by default — saving then queues the run for you

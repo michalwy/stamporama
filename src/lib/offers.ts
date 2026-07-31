@@ -67,6 +67,7 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
+import { normalizeCollageGridMode } from "./collage-template-rules";
 import type { PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
@@ -217,13 +218,21 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
   const template = platform.defaultCollageTemplateId
     ? await prisma.collageTemplate.findUnique({
         where: { id: platform.defaultCollageTemplateId },
-        select: { rows: true, columns: true, gapPercent: true, background: true, labelPercent: true },
+        select: {
+          gridMode: true,
+          rows: true,
+          columns: true,
+          gapPercent: true,
+          background: true,
+          labelPercent: true,
+        },
       })
     : null;
   return {
     photoSides: normalizePhotoSides(platform.photoSides),
     photoLabelLeftTemplate: platform.tileLabelLeftTemplate?.trim() || null,
     photoLabelRightTemplate: platform.tileLabelRightTemplate?.trim() || null,
+    collageGridMode: template ? normalizeCollageGridMode(template.gridMode) : null,
     collageRows: template?.rows ?? null,
     collageColumns: template?.columns ?? null,
     collageGapPercent: template?.gapPercent ?? null,
@@ -1847,6 +1856,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       photoSides: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
+      collageGridMode: true,
       collageRows: true,
       collageColumns: true,
       collageGapPercent: true,
@@ -2112,6 +2122,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         offer.collageBackground != null &&
         offer.collageLabelPercent != null
           ? {
+              // Null is `fixed` (#413): the mode postdates the numbers, so an offer prepared before
+              // it carries a complete collage group and no mode at all.
+              collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
               collageRows: offer.collageRows,
               collageColumns: offer.collageColumns,
               collageGapPercent: offer.collageGapPercent,
@@ -2680,6 +2693,7 @@ export async function updateOfferPhotoConfig(
       photoSides: config.photoSides,
       photoLabelLeftTemplate: config.photoLabelLeftTemplate,
       photoLabelRightTemplate: config.photoLabelRightTemplate,
+      collageGridMode: config.collage?.collageGridMode ?? null,
       collageRows: config.collage?.collageRows ?? null,
       collageColumns: config.collage?.collageColumns ?? null,
       collageGapPercent: config.collage?.collageGapPercent ?? null,

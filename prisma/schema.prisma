@@ -290,6 +290,10 @@ model StampSubtypeTranslation {
 //
 //  - **Capacity, not frame.** `rows` × `columns` is a maximum. A set of 4 copies under a 5×4
 //    template produces a one-row collage sized to its contents, not a padded 5×4 canvas (#310).
+//  - **Two ways to read that maximum** (#413). In `fixed` mode `columns` is also the shape: rows are
+//    filled to that width and the last one is short. In `auto` mode the two numbers are bounds only,
+//    and the renderer picks the width from the tiles actually on the image — so one template stops
+//    needing a hand-adjustment every time an offer holds a different number of stamps.
 //  - **Seeded, not referenced.** A template is chosen on an offer and its values are *copied* onto
 //    the offer (#308), exactly as `Contact.descriptionTemplate` seeds `Offer.description`. Editing
 //    a template therefore never retroactively changes offers that were already prepared, and no
@@ -304,9 +308,14 @@ model CollageTemplate {
   collectionId String
   name         String
   // Capacity of the collage. Both ≥ 1; a 1×1 template is the single-stamp case, which is the same
-  // rendering path as any other collage.
+  // rendering path as any other collage. In `auto` mode they are read as *max* rows and *max*
+  // columns — the product is still the capacity, so the grouping rules (#309) are unchanged.
   rows         Int
   columns      Int
+  // `fixed` | `auto` (#413). Fixed lays every row out at `columns`; auto solves the width per image
+  // from its tile count, staying inside both bounds. Defaults to fixed, which is what every template
+  // written before this existed does.
+  gridMode     String @default("fixed")
   // Spacing between tiles — one value used both between columns and between rows — as a **percent
   // of the stamp height**, resolved by the renderer against the median tile of the collage it is
   // laying out (#310, #312). Not pixels: a pixel number cannot be chosen without knowing the scan
@@ -1137,6 +1146,11 @@ model Offer {
   // render until they are set. Units follow the template: percent of the stamp height for
   // `collageGapPercent`, percent of the finished image's longest edge for `collageLabelPercent`
   // (#337, fractional), `#rrggbb` for `collageBackground`.
+  // How the two numbers above are read (#413): `fixed` lays every row out at `collageColumns`,
+  // `auto` treats them as bounds and solves each image's width from its own tile count. Null is
+  // `fixed` — both for an offer with no collage numbers at all and for every offer prepared before
+  // the mode existed, which is why it is not part of the all-or-nothing group below.
+  collageGridMode String?
   collageRows  Int?
   collageColumns Int?
   collageGapPercent Int?

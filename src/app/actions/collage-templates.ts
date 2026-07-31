@@ -27,6 +27,7 @@ function readForm(formData: FormData) {
   const str = (key: string) => ((formData.get(key) as string | null) ?? "").trim();
   return parseCollageTemplateInput({
     name: str("name"),
+    gridMode: str("gridMode"),
     rows: str("rows"),
     columns: str("columns"),
     gapPercent: str("gapPercent"),

@@ -161,6 +161,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -277,6 +278,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -342,6 +344,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 1,
         collageColumns: 1,
         collageGapPercent: 4,
@@ -399,6 +402,7 @@ describe("offer photo generation (#311)", () => {
     const frontOnly = {
       photoSides: "front" as const,
       collage: {
+        collageGridMode: "fixed" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -560,6 +564,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -635,6 +640,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -694,6 +700,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -789,6 +796,50 @@ describe("offer photo generation (#311)", () => {
     // one. The offer goes back to where the previous tests left it.
     await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.offer.update({ where: { id: offerId }, data: { state: "preparing" } });
+  });
+
+  // ── Auto grid (#413) ───────────────────────────────────────────────────────
+
+  it("shapes the collage from its tile count in auto mode", async () => {
+    const regenerate = async () => {
+      await enqueueOfferPhotoGeneration(userId, offerId);
+      assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
+      await runOfferPhotoGeneration(offerId);
+      const state = await getOfferPhotoPlanState(userId, offerId);
+      assert.equal(state.error, null);
+      return state.images[0];
+    };
+    const collage = {
+      collageRows: 3,
+      collageColumns: 3,
+      collageGapPercent: 8,
+      collageBackground: "#ffffff",
+      collageLabelPercent: 16,
+    };
+    const config = {
+      photoSides: "front" as const,
+      photoLabelLeftTemplate: null,
+      photoLabelRightTemplate: null,
+    };
+
+    // Three copies under a 3 × 3 template. The fixed grid fills the row it was given: one row of
+    // three, wider than it is tall.
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...config,
+      collage: { ...collage, collageGridMode: "fixed" },
+    });
+    const fixed = await regenerate();
+    assert.ok(fixed.width > fixed.height, "one row of three is a wide image");
+
+    // The same numbers read as bounds put the three on two rows — 2 + 1 — which is a narrower and
+    // taller image from exactly the same scans.
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...config,
+      collage: { ...collage, collageGridMode: "auto" },
+    });
+    const auto = await regenerate();
+    assert.ok(auto.width < fixed.width, "the auto grid is narrower");
+    assert.ok(auto.height > fixed.height, "and taller, because it wrapped");
   });
 
   it("leaves no files behind when the offer is deleted", async () => {

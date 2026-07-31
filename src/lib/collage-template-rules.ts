@@ -17,6 +17,51 @@
 export const MIN_COLLAGE_AXIS = 1;
 export const MAX_COLLAGE_AXIS = 20;
 
+/**
+ * How a template's two numbers are read (#413).
+ *
+ * - `fixed` — `columns` is both the bound and the shape: every row is filled to that width and the
+ *   last one is short.
+ * - `auto` — the two are *bounds only* (max rows, max columns) and the renderer solves the width
+ *   from the tiles actually on the image. The product stays the capacity either way, so what an
+ *   image holds (#309) does not depend on the mode; only its shape does.
+ *
+ * Auto exists because the collector's material decides the numbers and the offer decides the count:
+ * a template that lays nine small definitives out three across produced a 4 + 1 image for a set of
+ * five, and the fix was to edit the template between offers.
+ */
+export const COLLAGE_GRID_MODES = ["fixed", "auto"] as const;
+export type CollageGridMode = (typeof COLLAGE_GRID_MODES)[number];
+
+/** What a new template starts as. Fixed is what every template written before #413 does, and the
+ * toggle sits right beside the two numbers. */
+export const DEFAULT_COLLAGE_GRID_MODE: CollageGridMode = "fixed";
+
+export const COLLAGE_GRID_MODE_LABELS: Record<CollageGridMode, string> = {
+  fixed: "Fixed grid",
+  auto: "Automatic",
+};
+
+/**
+ * Narrows a stored or submitted value to a known mode. Null — an offer prepared before the mode
+ * existed, or a form that did not send the field — reads as `fixed`, which is what those offers
+ * have always rendered as.
+ */
+export function normalizeCollageGridMode(raw: string | null | undefined): CollageGridMode {
+  const value = (raw ?? "").trim().toLowerCase();
+  return (COLLAGE_GRID_MODES as readonly string[]).includes(value)
+    ? (value as CollageGridMode)
+    : DEFAULT_COLLAGE_GRID_MODE;
+}
+
+/** What the two numbers are called in the mode they are being read in — the same words the forms
+ * label them with, so a validation message names the field the collector is looking at. */
+export function collageAxisLabels(mode: CollageGridMode): { rows: string; columns: string } {
+  return mode === "auto"
+    ? { rows: "Max rows", columns: "Max columns" }
+    : { rows: "Rows", columns: "Columns" };
+}
+
 /** Bounds for `gapPercent`, in percent of the stamp height. 0 means no gap. */
 export const MIN_COLLAGE_PERCENT = 0;
 export const MAX_COLLAGE_PERCENT = 100;
@@ -54,6 +99,8 @@ export const DEFAULT_COLLAGE_BACKGROUND = "#000000";
 
 export interface CollageTemplateInput {
   name: string;
+  /** How `rows` / `columns` are read (#413): an exact grid, or bounds the renderer solves within. */
+  gridMode: CollageGridMode;
   rows: number;
   columns: number;
   /** Space between tiles, rows and around the collage, as a percent of the stamp height. */
@@ -125,6 +172,7 @@ export function parseBoundedDecimal(raw: string, label: string, min: number, max
  */
 export function parseCollageTemplateInput(raw: {
   name: string;
+  gridMode?: string;
   rows: string;
   columns: string;
   gapPercent: string;
@@ -134,10 +182,18 @@ export function parseCollageTemplateInput(raw: {
   const name = raw.name.trim();
   if (!name) return { ok: false, message: "Name is required." };
 
-  const rows = parseBoundedInteger(raw.rows, "Rows", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
+  const gridMode = normalizeCollageGridMode(raw.gridMode);
+  const axisLabels = collageAxisLabels(gridMode);
+
+  const rows = parseBoundedInteger(raw.rows, axisLabels.rows, MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
   if (!rows.ok) return rows;
 
-  const columns = parseBoundedInteger(raw.columns, "Columns", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
+  const columns = parseBoundedInteger(
+    raw.columns,
+    axisLabels.columns,
+    MIN_COLLAGE_AXIS,
+    MAX_COLLAGE_AXIS
+  );
   if (!columns.ok) return columns;
 
   const gapPercent = parseBoundedInteger(
@@ -165,6 +221,7 @@ export function parseCollageTemplateInput(raw: {
     ok: true,
     value: {
       name,
+      gridMode,
       rows: rows.value,
       columns: columns.value,
       gapPercent: gapPercent.value,

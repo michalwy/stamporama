@@ -15,7 +15,8 @@
  *   vertically centred within that band. A short stamp next to a tall one is not stretched.
  * - Rows hold up to `columns` tiles. `rows × columns` from the collage template is **capacity, not
  *   a frame** (#307): the canvas shrinks to the actual contents, so four tiles under a 5×4 template
- *   give a one-row image.
+ *   give a one-row image — or, in the template's `auto` mode (#413), a 2 × 2 one, because there the
+ *   two numbers are bounds and `resolveCollageColumns` picks the width from the tile count.
  * - Rows are **centred** horizontally against the widest row. Justified rows (the photo-gallery
  *   look, each row stretched to full width) are explicitly rejected — they scale each row by a
  *   different factor and would destroy the true proportions that are the point of the feature.
@@ -45,6 +46,8 @@
  *
  * A single stamp is a 1×1 collage, so this is the only layout path there is.
  */
+
+import type { CollageGridMode } from "./collage-template-rules";
 
 /** The native pixel size of one scan. */
 export interface CollageTileSize {
@@ -89,6 +92,64 @@ export function trueSizeScales(tiles: readonly CollageTileTrueSize[]): number[] 
   });
   const worst = shrink.reduce((max, r) => Math.max(max, r), 1);
   return shrink.map((r) => r / worst);
+}
+
+/** The capacity an offer carries, and how to read it (#413). */
+export interface CollageGrid {
+  gridMode: CollageGridMode;
+  /** Rows — a maximum in both modes, and only a maximum. */
+  rows: number;
+  /** Tiles per row in `fixed` mode; the widest a row may get in `auto`. */
+  columns: number;
+}
+
+/**
+ * How many tiles go on a row (#413).
+ *
+ * In `fixed` mode this is the template's `columns`, unchanged — the row is filled to that width and
+ * the last one comes up short, which is what a collector who typed an exact grid asked for.
+ *
+ * In `auto` mode the two numbers are bounds and the grid is chosen from the count actually on the
+ * image. Every width from the narrowest that fits inside the row ceiling up to `columns` is scored,
+ * and the cheapest wins:
+ *
+ *     cost = empty cells + |columns − rows|
+ *
+ * Two terms, because either one alone picks something absurd. Empty cells alone always answers "one
+ * column": a single column of five stamps wastes no cell and is a strip nobody can read. Squareness
+ * alone puts a set of ten into 3 + 3 + 3 + 1 rather than 4 + 4 + 2. Summed, they trade one against
+ * the other at parity — a ragged cell costs about as much as a step away from square — which lands
+ * on 2 × 2 for four, 3 + 2 for five and 3 × 2 for six.
+ *
+ * Ties go to the **wider** grid (a 2-wide and a 2-tall arrangement of the same six): text sits beside
+ * the image on a marketplace page, so height costs more than width.
+ *
+ * `rows` is a hard ceiling: with more tiles than `rows × columns` — which the plan's grouping never
+ * produces, since it chunks by that very product — the widest allowed row wins, because dropping
+ * tiles is not something a layout may decide.
+ */
+export function resolveCollageColumns(tileCount: number, grid: CollageGrid): number {
+  const maxColumns = Math.max(1, Math.round(grid.columns));
+  if (grid.gridMode !== "auto") return maxColumns;
+
+  const maxRows = Math.max(1, Math.round(grid.rows));
+  const count = Math.max(1, Math.round(tileCount));
+  // The narrowest row that still fits inside the row ceiling. Past capacity it would exceed
+  // `maxColumns`, and the clamp leaves the loop with the widest row allowed as its only candidate.
+  const minColumns = Math.min(maxColumns, Math.max(1, Math.ceil(count / maxRows)));
+
+  let best = minColumns;
+  let bestCost = Infinity;
+  for (let columns = minColumns; columns <= maxColumns; columns += 1) {
+    const rows = Math.ceil(count / columns);
+    const cost = columns * rows - count + Math.abs(columns - rows);
+    // `<=` is what makes a tie go to the wider grid: the loop climbs, so the last equal cost wins.
+    if (cost <= bestCost) {
+      best = columns;
+      bestCost = cost;
+    }
+  }
+  return best;
 }
 
 /** The render values an offer carries, copied from a collage template (#307). */

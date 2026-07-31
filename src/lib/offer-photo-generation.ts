@@ -14,6 +14,8 @@ import { isOfferState, isTerminalState } from "./offer-rules";
 import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
+import { resolveCollageColumns } from "./collage-layout";
+import { normalizeCollageGridMode } from "./collage-template-rules";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
 import {
@@ -430,6 +432,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       photoSides: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
+      collageGridMode: true,
       collageRows: true,
       collageColumns: true,
       collageGapPercent: true,
@@ -624,6 +627,9 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     }),
     collage: hasCollage
       ? {
+          // Null is `fixed` (#413) — an offer prepared before the mode existed renders exactly as
+          // it did, which is also why the mode is not one of the columns `hasCollage` tests.
+          collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
           collageRows: offer.collageRows!,
           collageColumns: offer.collageColumns!,
           collageGapPercent: offer.collageGapPercent!,
@@ -1301,7 +1307,18 @@ async function renderPlannedCollage(
     sources.push(await tileSource(tile.photoId, inputs.tileLabels.get(tile.itemId) ?? null, inputs));
   }
   return {
-    ...(await renderTiles(sources, inputs.collage!.collageColumns, index, inputs)),
+    // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`,
+    // in `auto` it is solved from the tiles this group actually holds.
+    ...(await renderTiles(
+      sources,
+      resolveCollageColumns(sources.length, {
+        gridMode: inputs.collage!.collageGridMode,
+        rows: inputs.collage!.collageRows,
+        columns: inputs.collage!.collageColumns,
+      }),
+      index,
+      inputs
+    )),
     token: image.token,
     source: "collage",
     side: image.side,

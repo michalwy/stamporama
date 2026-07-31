@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   layOutCollage,
+  resolveCollageColumns,
   trueSizeScales,
   type CollageTileSize,
   type CollageTileTrueSize,
@@ -232,5 +233,61 @@ describe("trueSizeScales", () => {
 
   it("returns nothing for no tiles", () => {
     assert.deepEqual(trueSizeScales([]), []);
+  });
+});
+
+describe("resolveCollageColumns", () => {
+  const auto = (rows: number, columns: number) =>
+    ({ gridMode: "auto", rows, columns }) as const;
+
+  it("hands back the template's columns unchanged in fixed mode", () => {
+    // The whole point of the fixed grid: what was typed is what every row is filled to, whatever
+    // the tile count does.
+    for (const count of [1, 2, 4, 5, 9]) {
+      assert.equal(resolveCollageColumns(count, { gridMode: "fixed", rows: 5, columns: 4 }), 4);
+    }
+  });
+
+  it("shapes the grid from the tile count in auto mode", () => {
+    // The cases the mode exists for: a template written for nine now lays four out 2 × 2 and five
+    // out 3 + 2, instead of one lopsided 4 + 1 row.
+    assert.equal(resolveCollageColumns(1, auto(3, 3)), 1);
+    assert.equal(resolveCollageColumns(2, auto(3, 3)), 2);
+    assert.equal(resolveCollageColumns(4, auto(3, 3)), 2);
+    assert.equal(resolveCollageColumns(5, auto(3, 3)), 3);
+    assert.equal(resolveCollageColumns(6, auto(3, 3)), 3);
+    assert.equal(resolveCollageColumns(9, auto(3, 3)), 3);
+  });
+
+  it("never answers a one-tile column just because it wastes no cell", () => {
+    // Empty cells alone would: a single column is always perfectly full. The distance-from-square
+    // term is what stops five stamps coming out as a strip nobody can read.
+    assert.equal(resolveCollageColumns(5, auto(20, 20)), 3);
+    assert.equal(resolveCollageColumns(7, auto(20, 20)), 3);
+  });
+
+  it("prefers a rectangle over a ragged near-square", () => {
+    // Squareness alone would answer 3 + 3 + 3 + 1 here. Ten under a 4-wide bound is 4 + 4 + 2.
+    assert.equal(resolveCollageColumns(10, auto(4, 4)), 4);
+    assert.equal(resolveCollageColumns(12, auto(20, 20)), 4);
+  });
+
+  it("breaks a tie towards the wider grid", () => {
+    // Six fits 3 × 2 and 2 × 3 equally well; text sits beside the image on a listing page, so the
+    // shorter one wins.
+    assert.equal(resolveCollageColumns(6, auto(20, 20)), 3);
+  });
+
+  it("stays inside both bounds", () => {
+    // The row ceiling forces the row wider than the shape rule would like...
+    assert.equal(resolveCollageColumns(9, auto(2, 8)), 5);
+    // ...and the column ceiling caps it, even past capacity, which the grouping rules never produce.
+    assert.equal(resolveCollageColumns(9, auto(2, 3)), 3);
+    assert.equal(resolveCollageColumns(99, auto(2, 3)), 3);
+  });
+
+  it("is total: a degenerate count or bound still names a width", () => {
+    assert.equal(resolveCollageColumns(0, auto(3, 3)), 1);
+    assert.equal(resolveCollageColumns(4, auto(0, 0)), 1);
   });
 });

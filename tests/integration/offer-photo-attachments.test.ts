@@ -160,6 +160,7 @@ describe("offer photo attachments (#313)", () => {
       photoLabelLeftTemplate: "{ref}",
       photoLabelRightTemplate: "Lot 7",
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

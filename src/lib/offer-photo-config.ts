@@ -16,6 +16,9 @@
  */
 
 import {
+  collageAxisLabels,
+  normalizeCollageGridMode,
+  type CollageGridMode,
   MAX_COLLAGE_AXIS,
   MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
@@ -116,6 +119,9 @@ export function parsePlatformPhotoLimits(raw: {
 /** The collage numbers an offer carries, copied from a collage template (#307). The two sizes are
  * percentages of the stamp height, not pixels (#312) — see `collage-template-rules.ts`. */
 export interface OfferCollageValues {
+  /** How the two numbers below are read (#413). An offer prepared before the mode existed stores
+   * null and reads as `fixed`, so this side of the group is never blank once the group is there. */
+  collageGridMode: CollageGridMode;
   collageRows: number;
   collageColumns: number;
   collageGapPercent: number;
@@ -142,6 +148,7 @@ export function parseOfferPhotoConfigInput(raw: {
   photoSides: string;
   photoLabelLeftTemplate: string;
   photoLabelRightTemplate: string;
+  collageGridMode?: string;
   collageRows: string;
   collageColumns: string;
   collageGapPercent: string;
@@ -152,6 +159,9 @@ export function parseOfferPhotoConfigInput(raw: {
   const photoLabelLeftTemplate = raw.photoLabelLeftTemplate.trim() || null;
   const photoLabelRightTemplate = raw.photoLabelRightTemplate.trim() || null;
 
+  // The mode is deliberately **not** one of the fields that decide whether a collage is configured
+  // at all: it is a toggle, so it always carries a value, and counting it would make "no collage on
+  // this offer yet" unsayable — the same reason the background travels in a hidden field.
   const collageFields = [
     raw.collageRows,
     raw.collageColumns,
@@ -166,12 +176,20 @@ export function parseOfferPhotoConfigInput(raw: {
     };
   }
 
-  const rows = parseBoundedInteger(raw.collageRows, "Rows", MIN_COLLAGE_AXIS, MAX_COLLAGE_AXIS);
+  const collageGridMode = normalizeCollageGridMode(raw.collageGridMode);
+  const axisLabels = collageAxisLabels(collageGridMode);
+
+  const rows = parseBoundedInteger(
+    raw.collageRows,
+    axisLabels.rows,
+    MIN_COLLAGE_AXIS,
+    MAX_COLLAGE_AXIS
+  );
   if (!rows.ok) return rows;
 
   const columns = parseBoundedInteger(
     raw.collageColumns,
-    "Columns",
+    axisLabels.columns,
     MIN_COLLAGE_AXIS,
     MAX_COLLAGE_AXIS
   );
@@ -205,6 +223,7 @@ export function parseOfferPhotoConfigInput(raw: {
       photoLabelLeftTemplate,
       photoLabelRightTemplate,
       collage: {
+        collageGridMode,
         collageRows: rows.value,
         collageColumns: columns.value,
         collageGapPercent: gapPercent.value,

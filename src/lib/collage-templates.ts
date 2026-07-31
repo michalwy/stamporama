@@ -27,6 +27,8 @@ async function resolveTemplateCollection(templateId: string): Promise<string> {
 export interface CollageTemplateData {
   id: string;
   name: string;
+  /** `fixed` | `auto` (#413) — how `rows` / `columns` are read. */
+  gridMode: string;
   rows: number;
   columns: number;
   gapPercent: number;
@@ -46,6 +48,7 @@ export async function getCollageTemplates(
     select: {
       id: true,
       name: true,
+      gridMode: true,
       rows: true,
       columns: true,
       gapPercent: true,

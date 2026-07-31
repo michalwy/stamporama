@@ -17,8 +17,13 @@ import {
 } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
+  COLLAGE_GRID_MODES,
+  COLLAGE_GRID_MODE_LABELS,
   COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
+  DEFAULT_COLLAGE_GRID_MODE,
+  collageAxisLabels,
+  normalizeCollageGridMode,
   MIN_COLLAGE_AXIS,
   MAX_COLLAGE_AXIS,
   MIN_COLLAGE_LABEL_PERCENT,
@@ -117,6 +122,13 @@ function CollageTemplateForm({
   template?: CollageTemplateData;
   isPending: boolean;
 }) {
+  // The one controlled field in an otherwise uncontrolled form: the mode renames the two numbers
+  // below it (#413), so what they mean has to change as the collector switches, not on save.
+  const [gridMode, setGridMode] = useState(() =>
+    template ? normalizeCollageGridMode(template.gridMode) : DEFAULT_COLLAGE_GRID_MODE
+  );
+  const axisLabels = collageAxisLabels(gridMode);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
@@ -132,11 +144,34 @@ function CollageTemplateForm({
         />
       </div>
 
+      <div>
+        <LabelWithError htmlFor="f-collage-grid-mode">Grid</LabelWithError>
+        <select
+          id="f-collage-grid-mode"
+          name="gridMode"
+          value={gridMode}
+          onChange={(e) => setGridMode(normalizeCollageGridMode(e.target.value))}
+          disabled={isPending}
+          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+        >
+          {COLLAGE_GRID_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {COLLAGE_GRID_MODE_LABELS[mode]}
+            </option>
+          ))}
+        </select>
+        <span style={HINT_STYLE}>
+          {gridMode === "auto"
+            ? "The numbers below are limits only — each collage is arranged from however many stamps it holds, so one template suits offers of any size."
+            : "Every row is filled to the number of columns below, and the last row is as short as it needs to be."}
+        </span>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <NumberField
           id="f-collage-rows"
           name="rows"
-          label="Rows"
+          label={axisLabels.rows}
           defaultValue={template?.rows ?? 3}
           min={MIN_COLLAGE_AXIS}
           max={MAX_COLLAGE_AXIS}
@@ -145,7 +180,7 @@ function CollageTemplateForm({
         <NumberField
           id="f-collage-columns"
           name="columns"
-          label="Columns"
+          label={axisLabels.columns}
           defaultValue={template?.columns ?? 3}
           min={MIN_COLLAGE_AXIS}
           max={MAX_COLLAGE_AXIS}
@@ -153,7 +188,8 @@ function CollageTemplateForm({
         />
       </div>
       <span style={{ ...HINT_STYLE, marginTop: "-0.75rem" }}>
-        A maximum, not a frame: fewer stamps produce a smaller collage rather than empty cells.
+        A maximum, not a frame: fewer stamps produce a smaller collage rather than empty cells. Their
+        product is how many stamps go on one image, in either grid.
       </span>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -340,7 +376,10 @@ export function CollageTemplatesPanel({
             </span>
 
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {template.rows} × {template.columns} · gap {template.gapPercent}% ·{" "}
+              {normalizeCollageGridMode(template.gridMode) === "auto"
+                ? `auto, up to ${template.rows} × ${template.columns}`
+                : `${template.rows} × ${template.columns}`}{" "}
+              · gap {template.gapPercent}% ·{" "}
               {template.labelPercent > 0 ? `strip ${template.labelPercent}% of image` : "no label strip"}
             </span>
 

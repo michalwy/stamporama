@@ -32,6 +32,7 @@ const base: OfferPhotoFingerprintInput = {
     ["c", "B100", "Mi 3"],
   ],
   collage: {
+    collageGridMode: "fixed",
     collageRows: 2,
     collageColumns: 2,
     collageGapPercent: 5,
@@ -154,6 +155,20 @@ describe("fingerprintOfferPhotoInputs sensitivity", () => {
     assert.ok(differs({ collage: { ...base.collage!, collageBackground: "#eeeeee" } }));
     assert.ok(differs({ collage: { ...base.collage!, collageLabelPercent: 0 } }));
     assert.ok(differs({ collage: { ...base.collage!, collageColumns: 3 } }));
+    assert.ok(differs({ collage: { ...base.collage!, collageGridMode: "auto" } }));
+  });
+
+  it("hashes the grid mode only when it is auto (#413)", () => {
+    // Fixed is what every offer rendered as before the mode existed, so an offer that never leaves
+    // it has to keep the digest it already stored — otherwise the whole collection would report
+    // itself out of date over images unchanged by a pixel.
+    const withoutMode: Partial<NonNullable<typeof base.collage>> = { ...base.collage! };
+    delete withoutMode.collageGridMode;
+    assert.equal(
+      fp({ ...base, collage: withoutMode as typeof base.collage }),
+      fp(base),
+      "an offer with no stored mode hashes exactly as a fixed one"
+    );
   });
 
   it("changes when a tile's label changes, because the label is drawn into the image", () => {

@@ -41,12 +41,37 @@ describe("parseCollageTemplateInput", () => {
     assert.ok(result.ok);
     assert.deepEqual(result.value, {
       name: "Small definitives",
+      gridMode: "fixed",
       rows: 5,
       columns: 4,
       gapPercent: 5,
       background: "#ffffff",
       labelPercent: 1.5,
     });
+  });
+
+  it("reads the grid mode, defaulting to fixed (#413)", () => {
+    const auto = parseCollageTemplateInput({ ...VALID, gridMode: "AUTO" });
+    assert.ok(auto.ok);
+    assert.equal(auto.value.gridMode, "auto");
+
+    // Absent or unknown is fixed rather than a refusal: it is a two-option toggle, so there is
+    // nothing a collector could have meant by a third value.
+    for (const gridMode of [undefined, "", "diagonal"]) {
+      const result = parseCollageTemplateInput({ ...VALID, gridMode });
+      assert.ok(result.ok);
+      assert.equal(result.value.gridMode, "fixed");
+    }
+  });
+
+  it("names the two numbers after the mode they are read in (#413)", () => {
+    const fixed = parseCollageTemplateInput({ ...VALID, rows: "0" });
+    assert.ok(!fixed.ok);
+    assert.match(fixed.message, /^Rows /);
+
+    const auto = parseCollageTemplateInput({ ...VALID, gridMode: "auto", columns: "0" });
+    assert.ok(!auto.ok);
+    assert.match(auto.message, /^Max columns /);
   });
 
   it("trims the name and rejects a blank one", () => {

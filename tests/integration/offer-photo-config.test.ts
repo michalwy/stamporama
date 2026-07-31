@@ -106,6 +106,7 @@ describe("offer photo configuration (#308)", () => {
     assert.equal(detail?.photoConfig.photoSides, "both");
     assert.equal(detail?.photoConfig.photoLabelLeftTemplate, "{catalog}");
     assert.deepEqual(detail?.photoConfig.collage, {
+      collageGridMode: "fixed",
       collageRows: 5,
       collageColumns: 4,
       collageGapPercent: 5,
@@ -178,6 +179,7 @@ describe("offer photo configuration (#308)", () => {
       photoLabelLeftTemplate: "{name}",
       photoLabelRightTemplate: null,
       collage: {
+        collageGridMode: "fixed",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

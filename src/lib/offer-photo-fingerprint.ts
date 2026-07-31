@@ -22,7 +22,7 @@
  * - the **source photo ids** per copy and side. Photo rows are immutable per id (replacing a front
  *   scan writes a new row), so an id captures the bytes;
  * - the **offer's photo configuration** (#308) — sides, the two tile label templates (#312) and the
- *   collage numbers;
+ *   collage numbers, and the grid mode that says how those numbers are read (#413);
  * - the **rendered tile labels** (#312), not just their template: the labels are drawn into the
  *   images, so editing the location ref of a copy changes the pixels exactly as replacing its scan
  *   does, and has to read as out of date for the same reason;
@@ -144,6 +144,11 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
           input.collage.collageGapPercent,
           input.collage.collageBackground,
           input.collage.collageLabelPercent,
+          // The grid mode (#413) is appended **only when it is `auto`**, for the same reason the
+          // manual features below are appended only when used: `fixed` is what every offer rendered
+          // as before the mode existed, so hashing it unconditionally would declare every already
+          // generated plan in the collection out of date over images unchanged by a pixel.
+          ...(input.collage.collageGridMode === "auto" ? ["auto"] : []),
         ]
       : null,
   ];

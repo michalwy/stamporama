@@ -313,7 +313,8 @@ Offer photos put several stamps on one image. How many fit sensibly is a propert
 
 A template holds:
 
-- **Rows** and **Columns** — the collage's capacity.
+- **Grid** — how the two numbers below are read. **Fixed grid** fills every row to the number of columns you typed and leaves the last row as short as it needs to be. **Automatic** treats them as limits only and arranges each collage from however many stamps it actually holds: under a 3 × 3 template, four stamps come out 2 × 2 and five come out 3 + 2, instead of a full row with one stamp trailing under it. Pick automatic when your offers vary in size, which is most of them — it is what saves editing the template between listings. Templates you made before this existed are on the fixed grid.
+- **Rows** and **Columns** (**Max rows** / **Max columns** on the automatic grid) — the collage's capacity. Their product is how many stamps go on one image in either grid.
 - **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.
 - **Label strip (% of image)** — the height of the strip drawn below each stamp for its labels, and with it the size of the label text. Takes tenths (`1.5`, or `1,5`), because the difference between a readable caption and one shouting over the stamps is well under a whole percent; **1–2%** is the usual range. Set it to **0** for no strip.
 - **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on. A new template starts on **black**: a scan carries its own pale margins, so on a white canvas the stamps' edges dissolve into the background and the collage reads as stamps floating in nothing. Pick any colour you like — the label text flips between white and black on its own so the captions stay readable — and a template you already made keeps the colour it was made with.

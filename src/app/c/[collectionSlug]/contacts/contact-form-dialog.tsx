@@ -23,6 +23,7 @@ import {
 } from "@/lib/description-format";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
+import { normalizeCollageGridMode } from "@/lib/collage-template-rules";
 import {
   DEFAULT_PHOTO_SIDES,
   MAX_PHOTO_COUNT_LIMIT,
@@ -673,7 +674,11 @@ export function ContactFormDialog({
                         </option>
                         {collageTemplates.map((t) => (
                           <option key={t.id} value={t.id}>
-                            {t.name} ({t.rows} × {t.columns})
+                            {t.name} (
+                            {normalizeCollageGridMode(t.gridMode) === "auto"
+                              ? `auto, up to ${t.rows} × ${t.columns}`
+                              : `${t.rows} × ${t.columns}`}
+                            )
                           </option>
                         ))}
                       </select>

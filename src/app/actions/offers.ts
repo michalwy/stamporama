@@ -363,6 +363,7 @@ export async function updateOfferPhotoConfigAction(
     photoSides: str(formData, "photoSides"),
     photoLabelLeftTemplate: str(formData, "photoLabelLeftTemplate"),
     photoLabelRightTemplate: str(formData, "photoLabelRightTemplate"),
+    collageGridMode: str(formData, "collageGridMode"),
     collageRows: str(formData, "collageRows"),
     collageColumns: str(formData, "collageColumns"),
     collageGapPercent: str(formData, "collageGapPercent"),
