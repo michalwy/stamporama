@@ -180,6 +180,15 @@ function buildAutoCreateStamps(
   return { input: { count, vendors } };
 }
 
+/** Whether the create form asked for stamps at all (#451). The ticked catalogs *are* the
+ *  decision — the form carries no separate auto-create flag any more. */
+function hasAutoCreateVendors(formData: FormData): boolean {
+  for (const key of formData.keys()) {
+    if (key.startsWith("autoCreateVendor_")) return true;
+  }
+  return false;
+}
+
 /** Flatten a generated range into duplicate-check candidates (#85). */
 function autoCreateCandidates(
   input: AutoCreateStampsInput
@@ -205,7 +214,7 @@ export async function createIssueAction(
   const catalogPrefixes = parseCatalogPrefixes(formData);
 
   let autoCreateStamps: AutoCreateStampsInput | undefined;
-  if (formData.get("autoCreateStamps") === "true") {
+  if (hasAutoCreateVendors(formData)) {
     const built = buildAutoCreateStamps(formData, catalogNumbers);
     if ("error" in built) return { status: "error", message: built.error };
     autoCreateStamps = built.input;

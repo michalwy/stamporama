@@ -74,6 +74,10 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
 
 // ── Range helpers ─────────────────────────────────────────────────────────────
 
+// Most stamps one range may generate, mirroring the server's own limit in
+// src/app/actions/issues.ts. A range over it cannot create stamps, so it never ticks a catalog.
+const AUTO_CREATE_MAX = 50;
+
 // Number of stamps a vendor's entered range spans, mirroring the auto-create
 // generation logic in src/app/actions/issues.ts. Returns null when the range is
 // unrecognizable for comparison. Handles numeric, prefixed ("BL120"–"BL123"),
@@ -166,7 +170,7 @@ function autoCreateCandidatesFromForm(
     const range = resolveCatalogRange(first, last.trim() ? last : null);
     if ("error" in range) continue;
     const count = range.span ?? 1;
-    if (count < 1 || count > 50) continue;
+    if (count < 1 || count > AUTO_CREATE_MAX) continue;
     for (const number of generateCatalogNumbers(range.scheme, count)) {
       out.push({ catalogVendorId, number });
     }
@@ -224,11 +228,14 @@ interface IssueFormProps {
   defaultCatalogPrefixes?: IssueCatalogPrefixData[];
   isPending: boolean;
   autoFocusName?: boolean;
+  /** Render the per-catalog "Assign to stamps" boxes (#451) — create mode only. There is no
+   * master switch: the ticked catalogs *are* the auto-create decision. */
   showAutoCreate?: boolean;
-  autoCreate?: boolean;
-  onAutoCreateChange?: (checked: boolean, form: HTMLFormElement | null) => void;
   vendorSelection?: Record<string, boolean>;
   onVendorToggle?: (vendorId: string, checked: boolean) => void;
+  /** A "Last" filled in on blur (#185) changes no React state, so the parent is told to re-read
+   * the form — the auto-selection (#451) is driven off those values. */
+  onRangeAutoFilled?: () => void;
   /** Notify the parent as the (uncontrolled) name input changes, so it can run the
    * duplicate-name check (#178). */
   onNameChange?: (value: string) => void;
@@ -258,10 +265,9 @@ function IssueForm({
   isPending,
   autoFocusName,
   showAutoCreate,
-  autoCreate,
-  onAutoCreateChange,
   vendorSelection,
   onVendorToggle,
+  onRangeAutoFilled,
   onNameChange,
   nameWarning,
   titleLanguages,
@@ -462,12 +468,13 @@ function IssueForm({
                               showAutoCreate && !isPrimary
                                 ? (e) => {
                                     const form = e.currentTarget.form;
-                                    if (form)
-                                      autoFillSecondaryLast(
-                                        form,
-                                        v.catalogVendorId,
-                                        primaryVendorId ?? null
-                                      );
+                                    if (!form) return;
+                                    autoFillSecondaryLast(
+                                      form,
+                                      v.catalogVendorId,
+                                      primaryVendorId ?? null
+                                    );
+                                    onRangeAutoFilled?.();
                                   }
                                 : undefined
                             }
@@ -512,6 +519,10 @@ function IssueForm({
                       style={{ ...INPUT_STYLE, flex: 1 }}
                     />
                   </div>
+                  {/* The auto-create decision itself (#451): a ticked catalog generates stamps
+                      from its range on save. It ticks itself as the range is typed, so the box is
+                      normally read rather than clicked — but it stays in the tab order, since it
+                      is the only place that decision can be overruled. */}
                   {showAutoCreate && (
                     <label
                       style={{
@@ -522,13 +533,16 @@ function IssueForm({
                         fontSize: "0.75rem",
                         color: "var(--color-text-muted)",
                         cursor: "pointer",
-                        visibility: autoCreate ? "visible" : "hidden",
                       }}
                     >
                       <input
                         type="checkbox"
-                        name={autoCreate ? `autoCreateVendor_${v.catalogVendorId}` : undefined}
-                        checked={vendorSelection?.[v.catalogVendorId] ?? isPrimary}
+                        name={
+                          vendorSelection?.[v.catalogVendorId]
+                            ? `autoCreateVendor_${v.catalogVendorId}`
+                            : undefined
+                        }
+                        checked={vendorSelection?.[v.catalogVendorId] ?? false}
                         onChange={(e) =>
                           onVendorToggle?.(v.catalogVendorId, e.target.checked)
                         }
@@ -541,31 +555,6 @@ function IssueForm({
               );
             })}
           </div>
-          {showAutoCreate && (
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                marginTop: "0.75rem",
-                paddingTop: "0.75rem",
-                borderTop: "1px solid var(--color-border)",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-secondary)",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                name="autoCreateStamps"
-                value="true"
-                checked={autoCreate}
-                onChange={(e) => onAutoCreateChange?.(e.target.checked, e.currentTarget.form)}
-                disabled={isPending}
-              />
-              Auto-create stamps from catalog number range
-            </label>
-          )}
         </div>
       )}
     </>
@@ -670,10 +659,16 @@ export function IssueDialog(props: IssueDialogProps) {
     isCreate && duplicates && duplicates.length > 0 ? (
       <DuplicateNameWarning matches={duplicates} />
     ) : null;
-  const [autoCreate, setAutoCreate] = useState(false);
-  // Per-vendor "Assign to stamps" selection. Empty until the user interacts;
-  // each checkbox falls back to "primary only" while unset.
+  // Per-vendor "Assign to stamps" selection (#451). This *is* the auto-create decision — there is
+  // no master switch — and it is maintained by the auto-selection effect below as the ranges are
+  // typed. `pinnedVendors` records the boxes the collector ticked or unticked by hand, which the
+  // effect then never touches again: a deliberate choice outlives any amount of further typing.
   const [vendorSelection, setVendorSelection] = useState<Record<string, boolean>>({});
+  const [pinnedVendors, setPinnedVendors] = useState<Record<string, boolean>>({});
+  const autoCreate = useMemo(
+    () => Object.values(vendorSelection).some(Boolean),
+    [vendorSelection]
+  );
 
   // Auto-create duplicate check (#85): the generated catalog numbers become real
   // stamps, so warn before creating when any collides. Reads the uncontrolled form
@@ -698,29 +693,41 @@ export function IssueDialog(props: IssueDialogProps) {
 
   const areaTree = useMemo(() => (isCreate ? buildAreaTree(areas) : []), [isCreate, areas]);
 
-  // On toggling auto-create on, pre-select every vendor whose entered range
-  // spans the same number of stamps as the primary catalog's range (the primary
-  // is always selected). Vendors with a mismatched or unusable range stay
-  // unchecked; the user can still adjust any of them manually.
-  function handleAutoCreateChange(checked: boolean, form: HTMLFormElement | null) {
-    setAutoCreate(checked);
-    if (!checked || !form || !primaryVendorId) return;
-    const primaryCount = rangeCountFromForm(form, primaryVendorId);
-    const next: Record<string, boolean> = {};
-    for (const v of vendors) {
-      const id = v.catalogVendorId;
-      if (id === primaryVendorId) {
-        next[id] = true;
-        continue;
+  // Tick the boxes the ranges imply (#451), re-read from the (uncontrolled) form on every edit
+  // via `formVersion`. The primary follows whether its own range can generate stamps at all;
+  // every other catalog follows the older rule — the primary is on and its range spans the same
+  // number of stamps. Pinned vendors keep whatever the collector set.
+  useEffect(() => {
+    if (!isCreate) return;
+    const form = formRef.current;
+    if (!form || !primaryVendorId) return;
+    setVendorSelection((prev) => {
+      const primaryCount = rangeCountFromForm(form, primaryVendorId);
+      const primaryOn = pinnedVendors[primaryVendorId]
+        ? (prev[primaryVendorId] ?? false)
+        : primaryCount !== null && primaryCount <= AUTO_CREATE_MAX;
+      const next: Record<string, boolean> = {};
+      for (const v of vendors) {
+        const id = v.catalogVendorId;
+        if (id === primaryVendorId) {
+          next[id] = primaryOn;
+        } else if (pinnedVendors[id]) {
+          next[id] = prev[id] ?? false;
+        } else {
+          next[id] =
+            primaryOn && primaryCount !== null && rangeCountFromForm(form, id) === primaryCount;
+        }
       }
-      const count = rangeCountFromForm(form, id);
-      next[id] = primaryCount !== null && count === primaryCount;
-    }
-    setVendorSelection(next);
-  }
+      const unchanged =
+        Object.keys(next).length === Object.keys(prev).length &&
+        Object.entries(next).every(([id, on]) => prev[id] === on);
+      return unchanged ? prev : next;
+    });
+  }, [isCreate, vendors, primaryVendorId, pinnedVendors, formVersion]);
 
   function handleVendorToggle(vendorId: string, checked: boolean) {
     setVendorSelection((prev) => ({ ...prev, [vendorId]: checked }));
+    setPinnedVendors((prev) => ({ ...prev, [vendorId]: true }));
   }
 
   useEffect(() => {
@@ -733,7 +740,7 @@ export function IssueDialog(props: IssueDialogProps) {
         return;
       }
       const selected = vendors
-        .filter((v) => vendorSelection[v.catalogVendorId] ?? v.catalogVendorId === primaryVendorId)
+        .filter((v) => vendorSelection[v.catalogVendorId])
         .map((v) => v.catalogVendorId);
       const candidates = autoCreateCandidatesFromForm(formRef.current, selected);
       if (candidates.length === 0) {
@@ -823,6 +830,7 @@ export function IssueDialog(props: IssueDialogProps) {
                 onSelectedIdChange={(id) => {
                   setSelectedAreaId(id);
                   setVendorSelection({});
+                  setPinnedVendors({});
                 }}
                 disabled={isPending}
                 onlyAssignableSelectable
@@ -842,10 +850,9 @@ export function IssueDialog(props: IssueDialogProps) {
             isPending={isPending}
             autoFocusName={isCreate}
             showAutoCreate={isCreate && vendors.length > 0}
-            autoCreate={autoCreate}
-            onAutoCreateChange={handleAutoCreateChange}
             vendorSelection={vendorSelection}
             onVendorToggle={handleVendorToggle}
+            onRangeAutoFilled={() => setFormVersion((v) => v + 1)}
             onNameChange={isCreate ? setNameValue : undefined}
             nameWarning={nameWarning}
             titleLanguages={titleLanguages}

@@ -117,6 +117,19 @@ The override is the number's real identity, not a display trick, so it follows e
 
 Clearing the box hands the issue back to its area's prefix. Moving an issue to another area **keeps** its override — an explicit choice is not undone by a move.
 
+## Generating an issue's stamps from its catalog range
+
+Most issues are a run of consecutively numbered stamps, so the **Add issue** dialog can create them for you from the range you type. Each catalog row under **Catalog numbers** carries its own **Assign to stamps** box, and a ticked box means "generate this issue's stamps with numbers from this catalog's range". There is no separate switch to turn the feature on: the ticks *are* the decision, and nothing ticked means the issue is created empty, ready for stamps added by hand.
+
+The boxes tick themselves as you type, so ordinarily you only read them:
+
+- The **primary** catalog's box ticks as soon as what you have entered is a range stamps can be generated from — a single number (`200`) counts, and so does a full `200`–`203`. It unticks again if you clear or break the range, or stretch it past the 50-stamp limit.
+- Every **other** catalog ticks once the primary is ticked and its own range spans the same number of stamps, since stamps are matched across catalogs by position. A catalog whose numbering doesn't line up one-to-one stays unticked and simply contributes no numbers.
+
+Tick or untick a box yourself and that catalog is left alone from then on — further typing will not tick it back. Use it to leave a catalog out of an otherwise matching set, or to create the issue with no stamps at all despite a complete range.
+
+Ranges may be plain numbers, share a prefix, use a letter or roman suffix sequence, or be Roman numerals in their own right (`100`, `BL120`–`BL123`, `423a`–`423c`, `12I`–`12II`, `I`–`VIII`). If a generated number would duplicate one already in the collection, a warning appears in that catalog's **First** field — see [Duplicate catalog numbers](duplicate-catalog-numbers.md). You can also [add a range later](#adding-a-stamp-range-to-an-existing-issue).
+
 ## Auto-filling a secondary catalog's range when creating an issue
 
 When you create an issue and let Stamporama **generate its stamps** from a catalog number range, you enter a **First** and **Last** for the primary catalog (for example Fischer `100`–`103`). Once that primary range is complete, entering just the **First** for another catalog fills in its **Last** automatically so it spans the same number of stamps — enter Michel `200` and the **Last** becomes `203` (four stamps, matching Fischer). The value is only filled when you left **Last** empty, and you can always overwrite it if a catalog's numbering doesn't line up one-to-one. To move on quickly, type `-` in a **First** field and the cursor jumps to that catalog's **Last** — so a range can be entered in one flow (`100`, `-`, `103`) without reaching for the mouse.
