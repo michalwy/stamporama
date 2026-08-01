@@ -16,6 +16,7 @@ import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
+import { PaidTotalDialog } from "./paid-total-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 
 const CHIP: React.CSSProperties = {
@@ -84,7 +85,8 @@ type Dialog =
   | { kind: "none" }
   | { kind: "editHeader" }
   | { kind: "addLines" }
-  | { kind: "removeLine"; lineId: string; label: string };
+  | { kind: "removeLine"; lineId: string; label: string }
+  | { kind: "paidTotal" };
 
 interface SaleDetailPanelProps {
   collectionId: string;
@@ -116,12 +118,28 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
   const packedIdx = SALE_STATUS_ORDER.indexOf("packed");
   const showPackedHint = sale.allItemsPacked && statusIdx >= 0 && statusIdx < packedIdx;
 
+  // Moving to `paid` is the moment the money is known, and #205's buyer handling is derived from
+  // it — so a sale whose buyer side has no anchor yet is asked for the total right here (#443)
+  // instead of sending the collector to the amounts card. A sale that already carries either
+  // anchor (a stored total, or a handling entered directly) has answered the question; re-asking
+  // would silently overwrite that choice, since the two are mutually exclusive.
+  const buyerSideUnanchored = sale.buyerPaidTotal == null && sale.buyerHandling == null;
+
   function applyStatus(next: string) {
     if (next === sale.status) return;
+    if (next === "paid" && buyerSideUnanchored) {
+      setError(undefined);
+      setDialog({ kind: "paidTotal" });
+      return;
+    }
+    setStatus(next);
+  }
+
+  function setStatus(next: string, onDone?: () => void) {
     run(async () => {
       const { setSaleStatusAction } = await import("@/app/actions/sales");
       return setSaleStatusAction(sale.id, next);
-    });
+    }, onDone);
   }
 
   // Base-currency equivalents for the sale-currency amounts (#208), at the sale's frozen rate. Only
@@ -563,6 +581,37 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               async () => {
                 const { addSaleLinesAction } = await import("@/app/actions/sales");
                 return addSaleLinesAction(sale.id, lines);
+              },
+              () => setDialog({ kind: "none" })
+            )
+          }
+        />
+      )}
+
+      {/* Total paid, asked for on the way to `paid` (#443). Saving the amount and the transition
+          are one run: a refused amount leaves the status alone, so the two never disagree. */}
+      {dialog.kind === "paidTotal" && (
+        <PaidTotalDialog
+          grossProceeds={sale.grossProceeds}
+          currency={sale.currency}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onSkip={() => setStatus("paid", () => setDialog({ kind: "none" }))}
+          onSubmit={(totalPaid) =>
+            run(
+              async () => {
+                const { updateSaleAmountAction, setSaleStatusAction } = await import(
+                  "@/app/actions/sales"
+                );
+                const saved = await updateSaleAmountAction(sale.id, "buyerPaidTotal", totalPaid);
+                if (saved.status !== "success") return saved;
+                return setSaleStatusAction(sale.id, "paid");
               },
               () => setDialog({ kind: "none" })
             )

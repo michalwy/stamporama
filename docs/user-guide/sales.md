@@ -141,6 +141,18 @@ of its transitions. The current status also shows as a chip on each sale's list 
 Status is independent of everything else on the sale — advancing it never changes copies or offers,
 and it can move backward (pick an earlier step) if you need to correct a mistake.
 
+**Moving to Paid asks for the money.** The moment you mark a sale **Paid** is the moment you read
+the amount off the marketplace, so if the sale doesn't have a buyer-side figure yet, a small
+**Mark as paid** prompt asks for the **total paid by buyer** — the same anchor the amounts card
+uses, with buyer handling derived from it (total − offer prices) and shown as you type. Save it and
+the sale moves to Paid in one step; **Skip** moves it without recording anything, and you can fill
+the total in later on the amounts card. A total below the offer prices is refused there and then,
+since handling can't be negative.
+
+The prompt only appears when the buyer side has **no** figure at all. A sale that already carries a
+total paid — or a buyer handling you entered directly — is not asked again: the two are alternate
+anchors for the same money, and answering would replace the one you chose.
+
 ## Packing view
 
 The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
