@@ -1,6 +1,11 @@
 "use client";
 
-import { type OfferState, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import {
+  type OfferListingType,
+  type OfferState,
+  OFFER_STATE_LABEL,
+  isAuctionListing,
+} from "@/lib/offer-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 // Shared chip presentation for an offer's lifecycle state (ADR-0012, #165), reused by the list
@@ -65,6 +70,20 @@ export function NeedsActionChip({ soldCopyCount }: { soldCopyCount: number }) {
     "Needs action",
     `${copies} in this offer sold elsewhere — remove the sold set(s) on the platform, or withdraw`
   );
+}
+
+/**
+ * How the listing is sold (#449). Shown **only** for an auction: a quick buy is what an offer
+ * ordinarily is, and a chip on every row saying so would be noise on the one screen that is a long
+ * list. It is there because the price beside it means something different — a standing bid rather
+ * than a figure the seller chose.
+ *
+ * Distinct from {@link InActiveBiddingChip}, which they sit next to: this says the listing *is* an
+ * auction, that one says somebody has bid and the collector is committed (#215).
+ */
+export function ListingTypeChip({ listingType }: { listingType: OfferListingType }) {
+  if (!isAuctionListing(listingType)) return null;
+  return tinted("info", "Auction", "Sold by bidding — the price shown is where the bidding stands");
 }
 
 /** "In active bidding" (#215): an auction bid has been placed on this offer, committing the

@@ -27,6 +27,9 @@ import {
   requiresPrice,
   hasPrice,
   CLOSED_OFFER_STATES,
+  type OfferListingType,
+  isAuctionListing,
+  normalizeListingType,
 } from "./offer-rules";
 import {
   makeOfferLabeller,
@@ -144,6 +147,12 @@ interface OfferRef {
   collectionId: string;
   platformId: string;
   state: OfferState;
+  /** How the listing is sold (#449) — what decides whether a price write is a *bid refresh* worth
+   * dating, or a seller changing their own asking price. */
+  listingType: OfferListingType;
+  /** The stored price as a 2-dp string, so a write that leaves it where it was is not dated as a
+   * fresh observation (#449). */
+  price: string;
 }
 
 async function assertOfferOwner(ownerId: string, offerId: string): Promise<OfferRef> {
@@ -153,6 +162,8 @@ async function assertOfferOwner(ownerId: string, offerId: string): Promise<Offer
       collectionId: true,
       platformId: true,
       state: true,
+      listingType: true,
+      price: true,
       collection: { select: { ownerId: true } },
     },
   });
@@ -163,6 +174,8 @@ async function assertOfferOwner(ownerId: string, offerId: string): Promise<Offer
     collectionId: offer.collectionId,
     platformId: offer.platformId,
     state: (isOfferState(offer.state) ? offer.state : "active") as OfferState,
+    listingType: normalizeListingType(offer.listingType),
+    price: offer.price.toFixed(2),
   };
 }
 
@@ -889,7 +902,16 @@ export interface OfferListItem {
   platformId: string;
   platformName: string;
   url: string | null;
+  /** How this listing is sold (#449) — a quick buy at a stated price, or an auction. The row shows
+   * it as a chip, because what its price *means* depends on it. */
+  listingType: OfferListingType;
+  /** The listing's current figure: the asking price of a quick buy, the standing bid of an auction
+   * (#449). One field for both — it is the live number every list, conversion and comparison wants. */
   price: string;
+  /** What an auction opened at (#449), null otherwise. The row does not print it — a list is scanned
+   * for what things cost *now* — but the header form is opened from here, and a field the form
+   * cannot see is a field it would silently blank on save. */
+  startingPrice: string | null;
   currency: string;
   /** The collection base currency, so the row can label `priceBase` (#208). */
   baseCurrency: string;
@@ -918,7 +940,9 @@ const OFFER_SELECT = {
   name: true,
   platformId: true,
   url: true,
+  listingType: true,
   price: true,
+  startingPrice: true,
   currency: true,
   state: true,
   inActiveBidding: true,
@@ -933,7 +957,9 @@ type OfferRow = {
   name: string | null;
   platformId: string;
   url: string | null;
+  listingType: string;
   price: Decimal;
+  startingPrice: Decimal | null;
   currency: string;
   state: string;
   inActiveBidding: boolean;
@@ -956,7 +982,9 @@ function toListItem(
     platformId: row.platformId,
     platformName: row.platform.name,
     url: row.url,
+    listingType: normalizeListingType(row.listingType),
     price: row.price.toFixed(2),
+    startingPrice: row.startingPrice?.toFixed(2) ?? null,
     currency: row.currency,
     baseCurrency,
     priceBase: null, // filled by attachBasePrices (needs the current rate)
@@ -1873,7 +1901,21 @@ export interface OfferDetail {
    * language. Seeds the compose dialog's language selector (#297). */
   platformTitleLanguage: string | null;
   url: string | null;
+  /** How this listing is sold (#449): `fixed` — a quick buy at a stated asking price — or
+   * `auction`, where the figure moves with the bidding and {@link startingPrice} says what it opened
+   * at. It decides what the price field is *called* on screen, nothing about the lifecycle. */
+  listingType: OfferListingType;
+  /** The listing's current figure: the asking price of a quick buy, the standing bid of an auction
+   * (#449). Deliberately one field for both readings — it is the live number, which is what every
+   * list, conversion, comparison and sale wants. */
   price: string;
+  /** What an auction opened at (#449), or null on a quick buy and on an auction whose opening figure
+   * was never noted. A record only: nothing is computed from it. */
+  startingPrice: string | null;
+  /** When {@link price} was last confirmed against the live listing (#449) — the auction lot's
+   * `checkedAt` (#351), stamped by the in-place price edit. Null on a price never re-checked, which
+   * is every quick buy. */
+  priceCheckedAt: Date | null;
   currency: string;
   /** The collection base currency, to label `priceBase` (#208). */
   baseCurrency: string;
@@ -1981,7 +2023,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       collectionId: true,
       platformId: true,
       url: true,
+      listingType: true,
       price: true,
+      startingPrice: true,
+      priceCheckedAt: true,
       currency: true,
       state: true,
       inActiveBidding: true,
@@ -2235,7 +2280,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformName: offer.platform.name,
     platformTitleLanguage: offer.platform.titleLanguage,
     url: offer.url,
+    listingType: normalizeListingType(offer.listingType),
     price: offer.price.toFixed(2),
+    startingPrice: offer.startingPrice?.toFixed(2) ?? null,
+    priceCheckedAt: offer.priceCheckedAt,
     currency: offer.currency,
     baseCurrency,
     priceBase,
@@ -2501,16 +2549,51 @@ export async function listComposeTargets(
 export interface OfferInput {
   platformId: string;
   url: string | null;
+  /** How the listing is sold (#449). A property of this listing, not of the platform — a marketplace
+   * running both formats carries offers of either kind. Optional, defaulting to `fixed`: a caller
+   * that says nothing is describing a quick buy, which is the only thing an offer could be before. */
+  listingType?: OfferListingType;
+  /** The listing's current figure — the asking price of a quick buy, the standing bid of an auction
+   * (#449). Same column, same meaning to everything downstream: the live number. */
   price: string;
   /** First-offer fallback currency (#196): used only to set the platform's currency when it has
    * none yet. Ignored once the platform has a currency — the offer is locked to the platform's. */
   currency: string;
+  /** What an auction opened at (#449), or null/absent — on a quick buy, and on an auction whose
+   * opening figure was not noted. Storing it on a `fixed` listing would be a figure describing a
+   * format this listing is not in, so the domain drops it there rather than keeping a contradiction. */
+  startingPrice?: string | null;
   /** The date the listing went live (#257), or null when not recorded. Stored on create + edit. */
   listingDate: Date | null;
   /** The status to create the offer in (#257): `preparing` (default), or a live `ready` / `active`
    * when the offer lists something. Ignored by {@link updateOffer} — an existing offer's lifecycle is
    * driven by its dedicated controls, not the header form. */
   state: OfferState;
+}
+
+/**
+ * The two auction-only price columns (#449), resolved from a header form's input so create and edit
+ * cannot disagree about them.
+ *
+ * A `fixed` listing clears both: the opening figure describes a format this listing is not in, and a
+ * quick buy's price is the seller's own — nothing moves it behind their back, so there is nothing to
+ * have last checked. An auction stamps `priceCheckedAt` whenever it carries a price, because the
+ * figure on the form was just read off the listing, and an undated bid is exactly what the auction
+ * lot's `checkedAt` (#351) exists to prevent.
+ */
+function auctionPriceColumns(
+  input: Pick<OfferInput, "listingType" | "startingPrice">,
+  price: string
+): { listingType: OfferListingType; startingPrice: string | null; priceCheckedAt: Date | null } {
+  const listingType = normalizeListingType(input.listingType);
+  if (!isAuctionListing(listingType)) {
+    return { listingType, startingPrice: null, priceCheckedAt: null };
+  }
+  return {
+    listingType,
+    startingPrice: input.startingPrice ?? null,
+    priceCheckedAt: hasPrice(price) ? new Date() : null,
+  };
 }
 
 /**
@@ -2611,6 +2694,12 @@ export async function createOffer(
         ...photoConfig,
         url: input.url,
         price,
+        // How the listing is sold, and the auction half of its pricing (#449). A quick buy has no
+        // opening figure to keep, so a `startingPrice` submitted alongside `fixed` is dropped rather
+        // than stored as a fact about a format this listing is not in. The figure typed at creation
+        // *was* just observed, so an auction's price is stamped as checked — a bid with no age is
+        // exactly what the whole `checkedAt` idea is against.
+        ...auctionPriceColumns(input, price),
         currency,
         listingDate: input.listingDate,
         // Set the target state directly (creation states the real-world status; the step-through
@@ -2753,6 +2842,10 @@ export async function duplicateOffer(
         ...photoConfig,
         url: input.url,
         price: input.price,
+        // The clone is a listing on another platform and is described by its own form (#449): the
+        // same composition routinely goes up as a quick buy in one place and an auction in another,
+        // so the listing type comes from the input rather than being carried over from the source.
+        ...auctionPriceColumns(input, input.price),
         currency,
         listingDate: input.listingDate,
         state: targetState,
@@ -2801,12 +2894,27 @@ export async function updateOffer(
     throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
   }
   await assertPlatform(ref.collectionId, input.platformId);
+  // The auction half (#449) — the same resolution creation uses, with one difference: a header save
+  // that leaves the price where it was is not an observation, so it keeps the date the figure was
+  // actually last checked instead of pretending it was looked at again.
+  const auction = auctionPriceColumns(input, input.price);
+  const priceMoved = input.price !== ref.price;
   await prisma.offer.update({
     where: { id: offerId },
     data: {
       platformId: input.platformId,
       url: input.url,
+      listingType: auction.listingType,
       price: input.price,
+      startingPrice: auction.startingPrice,
+      // A quick buy is left with no stamp at all — a "last checked" on a price nothing moves would
+      // read as a fact about a format the listing is not in. On an auction the stamp is only renewed
+      // when the figure actually moved; the rest of the form is not an observation of the bidding.
+      ...(isAuctionListing(auction.listingType)
+        ? priceMoved
+          ? { priceCheckedAt: auction.priceCheckedAt }
+          : {}
+        : { priceCheckedAt: null }),
       // Listing date is editable on the header form (#257); the status is not — an existing offer's
       // lifecycle is driven by its dedicated controls, so `input.state` is ignored here.
       listingDate: input.listingDate,
@@ -2818,6 +2926,9 @@ export interface OfferPatch {
   platformId?: string;
   url?: string | null;
   price?: string;
+  /** An auction's opening figure (#449); null clears it. Refused on a quick buy, which has no such
+   * figure — a listing changes format on the header form, not by a field appearing beside it. */
+  startingPrice?: string | null;
   /** The listing title (#209). Blank clears it back to null (the UI then shows the derived label).
    * Editable in every state for record-keeping, like the URL. */
   name?: string | null;
@@ -2835,7 +2946,8 @@ export interface OfferPatch {
  * in every state for record-keeping (#213, #209); a changed platform is re-validated. */
 export async function patchOffer(ownerId: string, offerId: string, patch: OfferPatch): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
-  const touchesFrozenField = patch.platformId !== undefined || patch.price !== undefined;
+  const touchesFrozenField =
+    patch.platformId !== undefined || patch.price !== undefined || patch.startingPrice !== undefined;
   if (isTerminalState(ref.state) && touchesFrozenField) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
   }
@@ -2844,15 +2956,31 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   if (patch.price !== undefined && requiresPrice(ref.state) && !hasPrice(patch.price)) {
     throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
   }
+  // An opening figure only exists on an auction (#449): offering it on a quick buy would store a
+  // fact about a format the listing is not in. Changing format is the header form's job.
+  if (patch.startingPrice !== undefined && !isAuctionListing(ref.listingType)) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      "Only an auction listing has a starting price — change the listing type on the offer form first."
+    );
+  }
   if (patch.platformId !== undefined) {
     await assertPlatform(ref.collectionId, patch.platformId);
   }
+  // Writing a *new* price onto an auction dates it (#449): the in-place edit is the bid refresh, and
+  // `priceCheckedAt` is the whole answer to what an undated figure is worth (#351). Retyping the same
+  // number is deliberately not an observation — the row is unchanged, so nothing was learned. A quick
+  // buy never carries the stamp: its price is the seller's own and nothing moves it behind their back.
+  const refreshesBid =
+    patch.price !== undefined && isAuctionListing(ref.listingType) && patch.price !== ref.price;
   await prisma.offer.update({
     where: { id: offerId },
     data: {
       ...(patch.platformId !== undefined ? { platformId: patch.platformId } : {}),
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
+      ...(patch.startingPrice !== undefined ? { startingPrice: patch.startingPrice } : {}),
+      ...(refreshesBid ? { priceCheckedAt: new Date() } : {}),
       // Writing a generated text by hand takes it off the template (#380): from here on the field is
       // the collector's, and a composition change re-renders the others around it. **Clearing** it
       // hands it back — the flag protects written wording, and an emptied field holds none; blanking

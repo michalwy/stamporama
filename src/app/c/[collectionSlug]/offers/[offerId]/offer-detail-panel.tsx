@@ -6,7 +6,12 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "../offer-badges";
+import {
+  OfferStateChip,
+  NeedsActionChip,
+  InActiveBiddingChip,
+  ListingTypeChip,
+} from "../offer-badges";
 import {
   useOfferDetail,
   useOfferCopies,
@@ -29,9 +34,11 @@ import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
   hasPrice,
+  isAuctionListing,
   isTerminalState,
   manualTransitions,
   quickAdvanceTarget,
+  priceLabel,
   requiresPrice,
   requiresSets,
   type ManualOfferTarget,
@@ -232,7 +239,10 @@ export function OfferDetailPanel({
   const needsUrlToActivate = offer.state === "ready" && !offer.url;
 
   /** Patch a single header field in place, then refresh. */
-  function patch(field: "price" | "url" | "descriptionFormat" | OfferTextField, value: string) {
+  function patch(
+    field: "price" | "startingPrice" | "url" | "descriptionFormat" | OfferTextField,
+    value: string
+  ) {
     setActionError(undefined);
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
@@ -471,6 +481,9 @@ export function OfferDetailPanel({
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
+            {/* An auction says how to read the price beside it (#449); "in bidding" (#215) says
+                somebody has actually bid. Two different facts, so two chips. */}
+            <ListingTypeChip listingType={offer.listingType} />
             {offer.inActiveBidding && <InActiveBiddingChip />}
             <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
           </span>
@@ -519,30 +532,71 @@ export function OfferDetailPanel({
             onSave={(v) => patch("url", v)}
           />
 
-          {/* Asking price + its suggestion, stacked on the right so the two read as one unit. */}
+          {/* The price + its suggestion, stacked on the right so the two read as one unit. What the
+              figure is *called* follows the listing type (#449) — an auction's is where the bidding
+              stands, not something the seller asked for — but it is one field either way, and
+              editing it in place is how a bid is refreshed (#351's pattern: committing stamps the
+              check date shown below it). */}
           <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
             <span style={{ fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-              <InlineText
-                value={offer.price === "0.00" ? "" : offer.price}
-                placeholder="Set price"
-                display={
-                  offer.price === "0.00" ? (
-                    <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
-                      No price yet
-                    </span>
-                  ) : (
-                    <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>
-                  )
-                }
-                editable={editable}
-                isPending={isPending}
-                inputType="number"
-                suffix={offer.currency}
-                // A price is retyped whole, never amended in the middle (#329).
-                selectOnEdit
-                onSave={(v) => patch("price", v)}
-              />
+              <Tooltip content={priceLabel(offer.listingType)} align="end">
+                <InlineText
+                  value={offer.price === "0.00" ? "" : offer.price}
+                  placeholder="Set price"
+                  display={
+                    offer.price === "0.00" ? (
+                      <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
+                        No price yet
+                      </span>
+                    ) : (
+                      <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>
+                    )
+                  }
+                  editable={editable}
+                  isPending={isPending}
+                  inputType="number"
+                  suffix={offer.currency}
+                  // A price is retyped whole, never amended in the middle (#329).
+                  selectOnEdit
+                  onSave={(v) => patch("price", v)}
+                />
+              </Tooltip>
             </span>
+            {/* An auction's two extra facts (#449), both muted under the live figure: what it opened
+                at — a record, nothing is computed from it — and when the figure was last confirmed
+                against the listing. Refreshing a bid is manual by decision (ADR-0021 §8), so an
+                undated one says nothing about how current it is. Auction-only: a quick buy's price
+                is the seller's own and nothing moves it behind their back. */}
+            {isAuctionListing(offer.listingType) && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", fontVariantNumeric: "tabular-nums" }}>
+                <Tooltip content="What this auction opened at" align="end">
+                  <span>
+                    <InlineText
+                      value={offer.startingPrice ?? ""}
+                      placeholder="Add starting price"
+                      display={
+                        <span style={{ cursor: "text" }}>
+                          {offer.startingPrice
+                            ? `from ${offer.startingPrice} ${offer.currency}`
+                            : "Add starting price"}
+                        </span>
+                      }
+                      editable={editable}
+                      isPending={isPending}
+                      inputType="number"
+                      suffix={offer.currency}
+                      selectOnEdit
+                      onSave={(v) => patch("startingPrice", v)}
+                    />
+                  </span>
+                </Tooltip>
+                {offer.priceCheckedAt && (
+                  <Tooltip content="When this price was last checked against the listing" align="end">
+                    <span>· checked {new Date(offer.priceCheckedAt).toISOString().slice(0, 10)}</span>
+                  </Tooltip>
+                )}
+              </span>
+            )}
             {blockedOnPrice && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
                 Set a price to {advanceTo === "active" ? "activate this offer" : "mark this offer ready"}

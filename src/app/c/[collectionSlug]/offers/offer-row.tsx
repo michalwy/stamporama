@@ -7,6 +7,7 @@ import {
   hasPrice,
   isTerminalState,
   manualTransitions,
+  priceLabel,
   quickAdvanceTarget,
   requiresPrice,
   requiresSets,
@@ -14,7 +15,12 @@ import {
 } from "@/lib/offer-rules";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
+import {
+  OfferStateChip,
+  NeedsActionChip,
+  InActiveBiddingChip,
+  ListingTypeChip,
+} from "./offer-badges";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -231,6 +237,10 @@ export function OfferRow({
             );
           })()}
           {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
+          {/* An auction (#449) — shown because the figure at the end of this line is then a standing
+              bid rather than a price the seller set. "In bidding" beside it is the other question:
+              whether anyone has actually bid (#215). */}
+          <ListingTypeChip listingType={offer.listingType} />
           {offer.inActiveBidding && <InActiveBiddingChip />}
           {offer.setCount > 1 && (
             <Tooltip content="Sets in this offer">
@@ -250,7 +260,7 @@ export function OfferRow({
               </a>
             </Tooltip>
           )}
-          <Tooltip content="Asking price" align="end" style={{ marginLeft: "auto" }}>
+          <Tooltip content={priceLabel(offer.listingType)} align="end" style={{ marginLeft: "auto" }}>
             <span
               style={{
                 fontSize: "0.875rem",

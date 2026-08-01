@@ -9,7 +9,16 @@ import {
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { OfferDetail } from "@/lib/offers";
-import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import {
+  CREATABLE_OFFER_STATES,
+  OFFER_STATE_LABEL,
+  OFFER_LISTING_TYPES,
+  OFFER_LISTING_TYPE_LABEL,
+  type OfferListingType,
+  isAuctionListing,
+  normalizeListingType,
+  priceLabel,
+} from "@/lib/offer-rules";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { useLastOfferDefaults } from "./use-last-offer-defaults";
@@ -44,7 +53,17 @@ export interface OfferFormDialogProps {
   collectionId: string;
   baseCurrency: string;
   /** The offer being edited (edit mode). Omit for create. */
-  offer?: Pick<OfferDetail, "platformId" | "platformName" | "url" | "price" | "currency" | "listingDate">;
+  offer?: Pick<
+    OfferDetail,
+    | "platformId"
+    | "platformName"
+    | "url"
+    | "price"
+    | "currency"
+    | "listingDate"
+    | "listingType"
+    | "startingPrice"
+  >;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
    * show a misleading editable picker, and its `defaultOfferPrice` (#362) seeds the asking price
@@ -126,6 +145,12 @@ export function OfferFormDialog({
     offer?.price ?? (isEdit ? "" : (initialPlatform?.defaultOfferPrice ?? ""))
   );
   const [priceTyped, setPriceTyped] = useState(false);
+  // How the listing is sold (#449). Held in state because it renames the price field and reveals the
+  // starting-price one — the two prices only make sense once you know which format you are in.
+  const [listingType, setListingType] = useState<OfferListingType>(
+    normalizeListingType(offer?.listingType)
+  );
+  const isAuction = isAuctionListing(listingType);
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
@@ -198,31 +223,29 @@ export function OfferFormDialog({
             />
           </div>
 
-          {/* Price + currency. The asking price is only asked for when the composition is known —
-              editing, or duplicating (#200). On a plain create it follows from the copies you add
-              later, so it is deferred. */}
-          <div style={{ display: "flex", gap: "0.75rem", ...(showPriceField ? FIELD_GAP : {}) }}>
-            {showPriceField && (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="offer-price">Asking price</LabelWithError>
-                <NumericInput
-                  id="offer-price"
-                  name="price"
-                  placeholder="0.00"
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                  {...(priceControlled
-                    ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
-                    : {
-                        value: uncontrolledPrice,
-                        onChange: (e) => {
-                          setUncontrolledPrice(e.target.value);
-                          setPriceTyped(true);
-                        },
-                      })}
-                />
-              </div>
-            )}
+          {/* How the listing is sold (#449), beside the currency it is priced in: both say how to
+              read the figures below rather than being figures themselves. A quick buy states one
+              price; an auction's price is where the bidding stands, and the opening figure gets its
+              own field. Available when editing too — a listing posted as one format was never
+              re-posted as the other, but a mis-set type is worth correcting. */}
+          <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="offer-listing-type">Listing type</LabelWithError>
+              <select
+                id="offer-listing-type"
+                name="listingType"
+                value={listingType}
+                onChange={(e) => setListingType(normalizeListingType(e.target.value))}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                {OFFER_LISTING_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {OFFER_LISTING_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-currency">Currency</LabelWithError>
               {lockedCurrency ? (
@@ -257,6 +280,51 @@ export function OfferFormDialog({
               )}
             </div>
           </div>
+
+          {/* The money. The price is only asked for when the composition is known — editing, or
+              duplicating (#200); on a plain create it follows from the copies you add later, so it
+              is deferred. What it is *called* follows the listing type (#449): a quick buy's asking
+              price, an auction's current one. The starting price sits beside it on an auction and is
+              optional even there — an auction picked up mid-flight may have no opening figure to
+              record, and nothing is computed from it either way. */}
+          {showPriceField && (
+            <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="offer-price">{priceLabel(listingType)}</LabelWithError>
+                <NumericInput
+                  id="offer-price"
+                  name="price"
+                  placeholder="0.00"
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                  {...(priceControlled
+                    ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
+                    : {
+                        value: uncontrolledPrice,
+                        onChange: (e) => {
+                          setUncontrolledPrice(e.target.value);
+                          setPriceTyped(true);
+                        },
+                      })}
+                />
+              </div>
+              {isAuction && (
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="offer-starting-price">
+                    Starting price (optional)
+                  </LabelWithError>
+                  <NumericInput
+                    id="offer-starting-price"
+                    name="startingPrice"
+                    placeholder="0.00"
+                    defaultValue={offer?.startingPrice ?? ""}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Listing URL — always available; a fresh offer may not have a live listing yet, so it's
               optional (#213 keeps it editable later). Never pre-filled from the last offer. Sits

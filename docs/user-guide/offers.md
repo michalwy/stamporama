@@ -83,6 +83,9 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    platform you list at one flat price needs no price typed at all; anything that suggests a price
    from the goods themselves — a lot's suggested price, or the copies' catalog value — wins over it,
    and the price is editable on the offer either way.
+   The **listing type** says how this one is sold — **Quick buy** (the default) or **Auction**; on an
+   auction the price field is relabelled **Current price** and an optional **Starting price** appears
+   beside it (see [Auction or quick buy](#auction-or-quick-buy)).
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
@@ -951,11 +954,47 @@ Either way, every set the offer still has left to sell is added at its current a
 you land on the sale's detail screen to review or adjust it. An offer with nothing left to sell (
 every set already sold) has no **Sell** action to offer.
 
+## Auction or quick buy
+
+Every offer is sold one of two ways, chosen on the offer form as its **listing type**:
+
+- **Quick buy** (the default) — you state a price and the buyer pays it.
+- **Auction** — the price moves with the bidding.
+
+It is a property of the *listing*, not of the platform: a marketplace that runs both formats carries
+offers of either kind, so listing the same copies as a quick buy in one place and an auction in
+another is just two offers with two types. An auction shows an **Auction** chip on its row and on
+its detail header, because the figure beside it means something different.
+
+That figure is the offer's one price field, and it always holds **what the listing is at now** — the
+asking price of a quick buy, the **current price** (the standing bid, or the opening price while
+nobody has bid) of an auction. Everything computed from an offer reads it: the totals in the
+toolbar, the base-currency equivalent, the comparison against the suggested price, and the price a
+[sale](sales.md) is recorded at. The field is simply relabelled — **Asking price** or **Current
+price** — so what you type is never in doubt.
+
+An auction adds two things under that figure on the detail header:
+
+- **Starting price** — what the auction opened at. Optional, even on an auction: one you started
+  tracking mid-flight may have no opening figure worth recording, and nothing is calculated from it.
+  Click it to set or change it, exactly like the price above it.
+- **Checked** — the date the current price was last confirmed against the live listing. There is no
+  live connection to any marketplace, so refreshing a bid is something you do by hand: open the
+  listing, read the standing bid, and type it into the price field. Committing a **changed** figure
+  stamps the check date; retyping the same number does not, since nothing was learned. This is the
+  same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
+
+A quick buy carries neither: its price is yours to set, and nothing moves it behind your back.
+Switching an existing auction back to **Quick buy** on the header form clears both, since a starting
+price and a check date describe a format the listing is no longer in.
+
 ## In active bidding — auction platforms
 
-On auction-style platforms (Allegro and similar), a bid commits you before the auction actually
-closes — well before a sale is recorded. Mark an **active** offer **In active bidding** (from its
-**⋮** menu) the moment it receives a bid: this flags every **other** active offer holding the same
+This is the other auction question, and a separate one from the [listing
+type](#auction-or-quick-buy) above: that says the offer *is* an auction, this says somebody has
+actually bid on it. On auction-style platforms (Allegro and similar), a bid commits you before the
+auction actually closes — well before a sale is recorded. Mark an **active** offer **In active
+bidding** (from its **⋮** menu) the moment it receives a bid: this flags every **other** active offer holding the same
 copies as **Needs action**, exactly like an actual sale collision, so you know to withdraw them
 from other marketplaces right away.
 

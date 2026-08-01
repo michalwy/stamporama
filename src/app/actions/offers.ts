@@ -52,8 +52,10 @@ import {
   isOfferState,
   isCreatableOfferState,
   parsePrice,
+  parseStartingPrice,
   parseOfferDate,
   normalizeUrl,
+  normalizeListingType,
   type OfferState,
 } from "@/lib/offer-rules";
 
@@ -107,6 +109,15 @@ async function readOfferInput(
     price = priced.value;
   }
 
+  // How the listing is sold (#449): a quick buy at a stated price, or an auction whose figure moves
+  // with the bidding. Unknown / absent reads as `fixed` — the only thing an offer could be before,
+  // and the reading that claims the least. The starting price is the auction's opening figure and is
+  // optional even there (an auction picked up mid-flight may have no recorded opening); the domain
+  // drops it on a quick buy rather than storing a figure about a format the listing is not in.
+  const listingType = normalizeListingType(str(formData, "listingType"));
+  const starting = parseStartingPrice(str(formData, "startingPrice"));
+  if (!starting.ok) return { ok: false, message: starting.message };
+
   // Currency is inherited from the platform (#196). The form only sends one as a first-offer
   // fallback (to set the platform's currency when it has none yet); a blank value is fine when the
   // platform already has a currency. The domain resolves and locks it.
@@ -133,7 +144,9 @@ async function readOfferInput(
     input: {
       platformId,
       url: normalizeUrl(str(formData, "url")),
+      listingType,
       price,
+      startingPrice: starting.value,
       currency,
       listingDate: listing.value,
       state,
@@ -325,13 +338,19 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
  * text. Currency is not editable here (#196) — it is inherited and locked from the platform. */
 export async function patchOfferAction(
   offerId: string,
-  field: "price" | "url" | "descriptionFormat" | OfferTextField,
+  field: "price" | "startingPrice" | "url" | "descriptionFormat" | OfferTextField,
   rawValue: string
 ): Promise<OfferActionState> {
   const session = await getSession();
   try {
     if (field === "descriptionFormat") {
       await patchOffer(session.user.id, offerId, { descriptionFormat: rawValue });
+    } else if (field === "startingPrice") {
+      // An auction's opening figure (#449): blank clears it, unlike the price, because an auction
+      // whose opening was never noted is an ordinary case rather than a gap to insist on.
+      const starting = parseStartingPrice(rawValue);
+      if (!starting.ok) return { status: "error", message: starting.message };
+      await patchOffer(session.user.id, offerId, { startingPrice: starting.value });
     } else if (field === "price") {
       const raw = rawValue.trim();
       let price = "0.00";

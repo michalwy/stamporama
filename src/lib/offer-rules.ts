@@ -137,6 +137,63 @@ export function parsePrice(raw: string): { ok: true; value: string } | { ok: fal
   return { ok: true, value: n.toFixed(2) };
 }
 
+/**
+ * How a listing is sold (#449): a `fixed` quick-buy at a stated asking price, or an `auction` whose
+ * figure moves with the bidding. A property of the *listing*, never of the platform — a marketplace
+ * that runs both formats carries offers of either kind.
+ *
+ * The distinction is about the **price**, not about the lifecycle: an auction offer walks the same
+ * `preparing → ready → active` states as any other, and "in active bidding" (#215) stays the
+ * separate axis it already is — an auction offer nobody has bid on yet is not in bidding.
+ */
+export type OfferListingType = "fixed" | "auction";
+
+export const OFFER_LISTING_TYPES: readonly OfferListingType[] = ["fixed", "auction"];
+
+export const OFFER_LISTING_TYPE_LABEL: Record<OfferListingType, string> = {
+  fixed: "Quick buy",
+  auction: "Auction",
+};
+
+export function isOfferListingType(value: unknown): value is OfferListingType {
+  return value === "fixed" || value === "auction";
+}
+
+/** Read a stored / submitted listing type, falling back to `fixed` — the only thing offers written
+ * before #449 could be, and the safe reading of an unknown value: a quick-buy states one price and
+ * hides nothing. */
+export function normalizeListingType(value: unknown): OfferListingType {
+  return isOfferListingType(value) ? value : "fixed";
+}
+
+export function isAuctionListing(listingType: OfferListingType): boolean {
+  return listingType === "auction";
+}
+
+/**
+ * What the offer's single price column is called on screen (#449). One helper rather than a ternary
+ * per surface, because the *field* means something different on the two listing types and every
+ * label has to say the same thing: on a quick-buy it is the price being asked, on an auction it is
+ * where the bidding currently stands.
+ */
+export function priceLabel(listingType: OfferListingType): string {
+  return isAuctionListing(listingType) ? "Current price" : "Asking price";
+}
+
+/** Validate and normalise an auction's **starting** price (#449). Blank is a legitimate answer — the
+ * opening figure is a record, not something every tracked auction remembers — so it clears back to
+ * null rather than being rejected the way {@link parsePrice} rejects an empty asking price. */
+export function parseStartingPrice(
+  raw: string
+): { ok: true; value: string | null } | { ok: false; message: string } {
+  const trimmed = normalizeDecimalInput(raw.trim());
+  if (!trimmed) return { ok: true, value: null };
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return { ok: false, message: "Starting price must be a number." };
+  if (n < 0) return { ok: false, message: "Starting price cannot be negative." };
+  return { ok: true, value: n.toFixed(2) };
+}
+
 /** Normalise a listing URL: trim, drop when blank. Not validated beyond non-empty — collectors
  * paste whatever the platform gives them. */
 export function normalizeUrl(raw: string): string | null {

@@ -1152,8 +1152,26 @@ model Offer {
   privateNoteEdited Boolean @default(false)
   // Listing URL on the platform.
   url          String?
-  // Asking price in `currency` (the offer's own transaction currency).
+  // How the listing is sold (#449): `fixed` — a quick-buy at a stated asking price — or `auction`,
+  // where the figure moves with the bidding. It is a fact about *this* listing rather than about the
+  // platform: a marketplace that offers both (Allegro, Delcampe) carries offers of either kind.
+  listingType  String   @default("fixed")
+  // The figure the listing is *currently* at, in `currency` (the offer's own transaction currency):
+  // the asking price of a fixed-price listing, the standing bid of an auction (the opening price
+  // while nobody has bid). One column for both readings on purpose (#449) — it is what the lists
+  // show, what converts to base (#208), what the suggested price (#190) is judged against and what
+  // the sale is priced from, and all of those want the live number, not the historical one.
   price        Decimal  @db.Decimal(10, 2)
+  // What an `auction` listing opened at (#449) — a record and nothing more, since every calculation
+  // is about what the lot is at now. Null on a fixed-price listing and on an auction whose opening
+  // price was never noted.
+  startingPrice Decimal? @db.Decimal(10, 2)
+  // When `price` was last confirmed against the live listing (#449), the auction lot's
+  // `currentBid`/`checkedAt` pattern (#351): refreshing a bid is manual by decision (ADR-0021 §8), so
+  // what a stored figure is worth depends on when it was last looked at. Stamped by the in-place
+  // price edit; null on a price never checked — which is every fixed-price listing, where the seller
+  // sets the number and nothing moves it.
+  priceCheckedAt DateTime?
   currency     String
   state        String   @default("preparing")
   // The date the listing went live on the platform (#257), captured at offer creation and remembered

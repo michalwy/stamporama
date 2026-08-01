@@ -14,6 +14,12 @@ import {
   normalizeUrl,
   parseOfferDate,
   isCreatableOfferState,
+  isOfferListingType,
+  isAuctionListing,
+  normalizeListingType,
+  priceLabel,
+  parseStartingPrice,
+  OFFER_LISTING_TYPES,
   OFFER_STATES,
   CLOSED_OFFER_STATES,
   CREATABLE_OFFER_STATES,
@@ -242,5 +248,50 @@ describe("isCreatableOfferState", () => {
     assert.equal(isCreatableOfferState("sold"), false);
     assert.equal(isCreatableOfferState("withdrawn"), false);
     assert.equal(isCreatableOfferState("nope"), false);
+  });
+});
+
+// Listing type — auction vs quick buy (#449) ---------------------------------
+
+describe("listing type", () => {
+  it("accepts only the two formats", () => {
+    assert.deepEqual([...OFFER_LISTING_TYPES], ["fixed", "auction"]);
+    assert.equal(isOfferListingType("fixed"), true);
+    assert.equal(isOfferListingType("auction"), true);
+    assert.equal(isOfferListingType("quick-buy"), false);
+    assert.equal(isOfferListingType(undefined), false);
+  });
+
+  it("normalises anything unknown to a quick buy", () => {
+    assert.equal(normalizeListingType("auction"), "auction");
+    assert.equal(normalizeListingType("fixed"), "fixed");
+    // The only thing an offer written before #449 could be, and the reading that claims the least.
+    assert.equal(normalizeListingType(null), "fixed");
+    assert.equal(normalizeListingType("tender"), "fixed");
+  });
+
+  it("names the price field after the format", () => {
+    assert.equal(isAuctionListing("auction"), true);
+    assert.equal(isAuctionListing("fixed"), false);
+    assert.equal(priceLabel("fixed"), "Asking price");
+    assert.equal(priceLabel("auction"), "Current price");
+  });
+});
+
+describe("parseStartingPrice", () => {
+  it("accepts a figure in either decimal notation, to 2 dp", () => {
+    assert.deepEqual(parseStartingPrice("12,50"), { ok: true, value: "12.50" });
+    assert.deepEqual(parseStartingPrice(" 9 "), { ok: true, value: "9.00" });
+  });
+
+  it("treats blank as 'not recorded' rather than as an error", () => {
+    // Unlike the asking price: an auction picked up mid-flight may have no opening figure, and
+    // nothing is computed from it.
+    assert.deepEqual(parseStartingPrice(""), { ok: true, value: null });
+    assert.deepEqual(parseStartingPrice("   "), { ok: true, value: null });
+  });
+
+  it("rejects a negative figure", () => {
+    assert.equal(parseStartingPrice("-1").ok, false);
   });
 });
