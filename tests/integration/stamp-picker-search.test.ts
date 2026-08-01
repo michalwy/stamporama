@@ -42,7 +42,11 @@ describe("searchStampsForPicker catalog recall", () => {
       data: { collectionId, name: "Michel", abbreviation: "Mi" },
     });
 
-    /** An area with a per-vendor Michel prefix, plus one stamp carrying `number` in it. */
+    /** An area with a per-vendor Michel prefix, plus one stamp carrying `number` in it.
+     * Names stay free of the run's timestamp: the picker also recalls on a name substring, and a
+     * `Date.now()` that happens to contain the queried number ("…200…") makes every fixture stamp
+     * a name hit — a flake that only fires on some runs. Uniqueness comes from the fresh
+     * collection these live in, which is what the search is scoped to. */
     async function makeArea(name: string, prefix: string, number: string): Promise<string> {
       const area = await prisma.collectionArea.create({ data: { collectionId, name } });
       await prisma.collectionAreaVendor.create({
@@ -60,9 +64,9 @@ describe("searchStampsForPicker catalog recall", () => {
       return stamp.id;
     }
 
-    polandStampId = await makeArea(`Poland-${ts}`, "PL", "200");
+    polandStampId = await makeArea("Poland", "PL", "200");
     // Filed as "IIIa" while a collector would type "IIIA": recall must ignore case here.
-    romanStampId = await makeArea(`Russia BW-${ts}`, "RU-BW", "IIIa");
+    romanStampId = await makeArea("Russia BW", "RU-BW", "IIIa");
   });
 
   after(async () => {
