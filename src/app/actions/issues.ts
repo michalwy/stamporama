@@ -35,9 +35,9 @@ import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { parseTranslationValues } from "@/lib/translations";
 import { STAMP_TRANSLATION_FIELDS } from "@/lib/stamps";
 import {
-  resolveCatalogRange,
-  generateCatalogNumbers,
-  type CatalogRangeScheme,
+  parseCatalogNumberSpec,
+  AUTO_CREATE_MAX_STAMPS,
+  type CatalogNumberSpec,
 } from "@/lib/catalog-number";
 import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
 
@@ -130,14 +130,52 @@ function prefixContext(
   return Object.fromEntries(prefixes.map((p) => [p.catalogVendorId, p.areaPrefix]));
 }
 
-/** Resolve the `autoCreateVendor_*` selection plus each vendor's First/Last range into a
- *  generated {@link AutoCreateStampsInput}, or an error message. Shared by issue creation
- *  (#70) and post-creation add-range (#219): each selected vendor generates catalog numbers
- *  from its own range (numeric, prefixed, or suffix-sequence); stamps are matched across
- *  vendors by position, so every explicit range must span the same number of stamps. */
+/**
+ * Each vendor's catalog-number spec (#452), as `issueCatalogNumbers_<vendorId>`. One field per
+ * catalog holding a comma-separated list of ranges, from which both the numbers to generate and
+ * the series range the issue declares are derived. Blank fields are left out; the first field
+ * that cannot be parsed stops the parse, since a half-understood spec must not create stamps.
+ *
+ * `updateIssueAction` still posts First/Last — on the edit dialog the pair *is* the declared
+ * range, and nothing is generated — so {@link parseCatalogNumbers} stays beside this.
+ */
+function parseCatalogNumberSpecs(
+  formData: FormData
+): { specs: { catalogVendorId: string; spec: CatalogNumberSpec }[] } | { error: string } {
+  const specs: { catalogVendorId: string; spec: CatalogNumberSpec }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("issueCatalogNumbers_")) continue;
+    const catalogVendorId = key.slice("issueCatalogNumbers_".length);
+    const raw = ((value as string) ?? "").trim();
+    if (!catalogVendorId || !raw) continue;
+    const spec = parseCatalogNumberSpec(raw);
+    if ("error" in spec) return spec;
+    specs.push({ catalogVendorId, spec });
+  }
+  return { specs };
+}
+
+/** The series range each spec declares, in the shape the issue stores (#452). Written for every
+ *  catalog with numbers typed, whether or not it was ticked to generate stamps: the declared
+ *  range is a fact about the issue, not about auto-create. */
+function declaredCatalogNumbers(
+  specs: { catalogVendorId: string; spec: CatalogNumberSpec }[]
+): { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[] {
+  return specs.map(({ catalogVendorId, spec }) => ({
+    catalogVendorId,
+    firstNumber: spec.declared.firstNumber,
+    lastNumber: spec.declared.lastNumber,
+  }));
+}
+
+/** Resolve the `autoCreateVendor_*` selection plus each vendor's spec into a generated
+ *  {@link AutoCreateStampsInput}, or an error message. Shared by issue creation (#70) and
+ *  post-creation add-range (#219): each selected vendor contributes the numbers its own spec
+ *  generates, and stamps are matched across vendors by position, so every selected catalog must
+ *  produce the same number of stamps. */
 function buildAutoCreateStamps(
   formData: FormData,
-  catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[]
+  specs: { catalogVendorId: string; spec: CatalogNumberSpec }[]
 ): { input: AutoCreateStampsInput } | { error: string } {
   const vendorIds: string[] = [];
   for (const key of formData.keys()) {
@@ -149,34 +187,25 @@ function buildAutoCreateStamps(
     return { error: "Select at least one catalog vendor." };
   }
 
-  const resolved: { catalogVendorId: string; scheme: CatalogRangeScheme }[] = [];
+  const vendors: { catalogVendorId: string; numbers: string[] }[] = [];
   let count: number | null = null;
-  for (const vendorId of vendorIds) {
-    const cn = catalogNumbers.find((c) => c.catalogVendorId === vendorId);
-    if (!cn || !cn.firstNumber) {
-      return { error: "Enter a First catalog number for each selected vendor." };
+  for (const catalogVendorId of vendorIds) {
+    const found = specs.find((s) => s.catalogVendorId === catalogVendorId);
+    if (!found) {
+      return { error: "Enter catalog numbers for each selected catalog." };
     }
-    const range = resolveCatalogRange(cn.firstNumber, cn.lastNumber ?? null);
-    if ("error" in range) {
-      return { error: range.error };
+    const numbers = found.spec.numbers;
+    if (count === null) {
+      count = numbers.length;
+    } else if (count !== numbers.length) {
+      return { error: "Selected catalogs must span the same number of stamps." };
     }
-    resolved.push({ catalogVendorId: vendorId, scheme: range.scheme });
-    if (range.span !== null) {
-      if (count === null) {
-        count = range.span;
-      } else if (count !== range.span) {
-        return { error: "Selected vendors must span the same number of stamps." };
-      }
-    }
+    vendors.push({ catalogVendorId, numbers });
   }
   if (count === null) count = 1;
-  if (count > 50) {
-    return { error: "Range cannot exceed 50 stamps." };
+  if (count > AUTO_CREATE_MAX_STAMPS) {
+    return { error: `Range cannot exceed ${AUTO_CREATE_MAX_STAMPS} stamps.` };
   }
-  const vendors = resolved.map((r) => ({
-    catalogVendorId: r.catalogVendorId,
-    numbers: generateCatalogNumbers(r.scheme, count!),
-  }));
   return { input: { count, vendors } };
 }
 
@@ -210,12 +239,16 @@ export async function createIssueAction(
   if (yearRaw && (isNaN(year!) || year! < 1840 || year! > 2100)) {
     return { status: "error", message: "Year must be a valid year (1840–2100)." };
   }
-  const catalogNumbers = parseCatalogNumbers(formData);
+  // The create dialog posts one spec per catalog (#452); the range it declares is derived
+  // from it rather than typed.
+  const parsedSpecs = parseCatalogNumberSpecs(formData);
+  if ("error" in parsedSpecs) return { status: "error", message: parsedSpecs.error };
+  const catalogNumbers = declaredCatalogNumbers(parsedSpecs.specs);
   const catalogPrefixes = parseCatalogPrefixes(formData);
 
   let autoCreateStamps: AutoCreateStampsInput | undefined;
   if (hasAutoCreateVendors(formData)) {
-    const built = buildAutoCreateStamps(formData, catalogNumbers);
+    const built = buildAutoCreateStamps(formData, parsedSpecs.specs);
     if ("error" in built) return { status: "error", message: built.error };
     autoCreateStamps = built.input;
 
@@ -510,8 +543,9 @@ export async function addStampRangeToIssueAction(
   formData: FormData
 ): Promise<IssueActionState> {
   const session = await getSession();
-  const catalogNumbers = parseCatalogNumbers(formData);
-  const built = buildAutoCreateStamps(formData, catalogNumbers);
+  const parsedSpecs = parseCatalogNumberSpecs(formData);
+  if ("error" in parsedSpecs) return { status: "error", message: parsedSpecs.error };
+  const built = buildAutoCreateStamps(formData, parsedSpecs.specs);
   if ("error" in built) return { status: "error", message: built.error };
 
   // Block-mode duplicate guard (#85): the generated numbers become real stamps, so reject

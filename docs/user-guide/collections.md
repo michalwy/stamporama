@@ -119,24 +119,45 @@ Clearing the box hands the issue back to its area's prefix. Moving an issue to a
 
 ## Generating an issue's stamps from its catalog range
 
-Most issues are a run of consecutively numbered stamps, so the **Add issue** dialog can create them for you from the range you type. Each catalog row under **Catalog numbers** carries its own **Assign to stamps** box, and a ticked box means "generate this issue's stamps with numbers from this catalog's range". There is no separate switch to turn the feature on: the ticks *are* the decision, and nothing ticked means the issue is created empty, ready for stamps added by hand.
+Most issues are a run of consecutively numbered stamps, so the **Add issue** dialog can create them for you from the numbers you type. Each catalog row under **Catalog numbers** has one field for them and its own **Assign to stamps** box, and a ticked box means "generate this issue's stamps from this catalog's numbers". There is no separate switch to turn the feature on: the ticks *are* the decision, and nothing ticked means the issue is created empty, ready for stamps added by hand.
+
+### Writing the numbers
+
+Type the numbers the way the catalog prints them: a range with a dash, several ranges separated by commas.
+
+| You type | Stamps created | Series range recorded |
+| --- | --- | --- |
+| `2820-2822` | `2820`, `2821`, `2822` | 2820–2822 |
+| `2823a, 2823b` | `2823a`, `2823b` | 2823 |
+| `2895A-2897A, 2895B-2897B` | `2895A`, `2896A`, `2897A`, `2895B`, `2896B`, `2897B` | 2895–2897 |
+| `3025-3027, BL48` | `3025`, `3026`, `3027`, `BL48` | 3025–3027 |
+
+The third row is the case a single range cannot express: one series printed in two variants, six stamps in all. The fourth is a series issued with a souvenir block. Stamps are created **in the order you typed them**.
+
+The **series range** the issue records is worked out for you, and is deliberately not the same thing as the stamps: **suffixes are dropped and the prefix is kept**, from the lowest number to the highest. That is the range you see on the issue row and search by, while the stamps keep their full numbers. A line under the field shows both, so you can check what you are about to create before you save.
+
+A range can only ever be *one* numbering, so when you mix them — an ordinary run plus a block — the range follows the **ordinary numbering** and the block still becomes a stamp; it just doesn't stretch the range. It is the same rule the app uses when it [notices an issue's stamps have outgrown its range](#keeping-an-issues-catalog-range-in-step-with-its-stamps). A catalog whose numbers are *only* blocks records a block range (`BL48-BL50`).
+
+Each range may be plain numbers, share a prefix, use a letter or roman suffix sequence, or be Roman numerals in its own right (`100`, `BL120-BL123`, `423a-423c`, `12I-12II`, `I-VIII`). No number may appear twice, and at most 50 stamps can be created at once.
+
+### The ticks
 
 The boxes tick themselves as you type, so ordinarily you only read them:
 
-- The **primary** catalog's box ticks as soon as what you have entered is a range stamps can be generated from — a single number (`200`) counts, and so does a full `200`–`203`. It unticks again if you clear or break the range, or stretch it past the 50-stamp limit.
-- Every **other** catalog ticks once the primary is ticked and its own range spans the same number of stamps, since stamps are matched across catalogs by position. A catalog whose numbering doesn't line up one-to-one stays unticked and simply contributes no numbers.
+- The **primary** catalog's box ticks as soon as what you have entered can generate stamps at all — a single number (`200`) counts. It unticks again if you clear or break what you typed, or go past the 50-stamp limit.
+- Every **other** catalog ticks once the primary is ticked and its own numbers come to the same count, since stamps are matched across catalogs by position. A catalog whose numbering doesn't line up one-to-one stays unticked and simply contributes no numbers; fill those in later on the stamps themselves.
 
-Tick or untick a box yourself and that catalog is left alone from then on — further typing will not tick it back. Use it to leave a catalog out of an otherwise matching set, or to create the issue with no stamps at all despite a complete range.
+Tick or untick a box yourself and that catalog is left alone from then on — further typing will not tick it back. Use it to leave a catalog out of an otherwise matching set, or to create the issue with no stamps at all despite a complete set of numbers.
 
-Ranges may be plain numbers, share a prefix, use a letter or roman suffix sequence, or be Roman numerals in their own right (`100`, `BL120`–`BL123`, `423a`–`423c`, `12I`–`12II`, `I`–`VIII`). If a generated number would duplicate one already in the collection, a warning appears in that catalog's **First** field — see [Duplicate catalog numbers](duplicate-catalog-numbers.md). You can also [add a range later](#adding-a-stamp-range-to-an-existing-issue).
+If a generated number would duplicate one already in the collection, a warning appears in that catalog's field — see [Duplicate catalog numbers](duplicate-catalog-numbers.md). You can also [add more numbers later](#adding-a-stamp-range-to-an-existing-issue).
 
 ## Auto-filling a secondary catalog's range when creating an issue
 
-When you create an issue and let Stamporama **generate its stamps** from a catalog number range, you enter a **First** and **Last** for the primary catalog (for example Fischer `100`–`103`). Once that primary range is complete, entering just the **First** for another catalog fills in its **Last** automatically so it spans the same number of stamps — enter Michel `200` and the **Last** becomes `203` (four stamps, matching Fischer). The value is only filled when you left **Last** empty, and you can always overwrite it if a catalog's numbering doesn't line up one-to-one. To move on quickly, type `-` in a **First** field and the cursor jumps to that catalog's **Last** — so a range can be entered in one flow (`100`, `-`, `103`) without reaching for the mouse.
+When the primary catalog spans a run of stamps — say Fischer `100-103` — entering just a **single number** for another catalog completes it to the same span when you leave the field: type Michel `200` and it becomes `200-203`, four stamps matching Fischer. It only ever fires on a lone number, so a list of ranges you composed yourself is never rewritten, and you can overwrite the result whenever a catalog's numbering doesn't line up one-to-one.
 
 ## Adding a stamp range to an existing issue
 
-You can bulk-add stamps to an issue after it was created, the same way a range is generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want, enter a **First** and optional **Last** number for each (for example `100`–`105`), and the dialog shows how many stamps will be created, with a short preview of the generated numbers. As on the create-issue form, typing `-` in a **First** field jumps to that catalog's **Last**. As with issue creation, ranges may be plain numbers, share a prefix, use a letter/roman suffix sequence, or be Roman numerals in their own right (`100`, `423a`–`423c`, `12I`–`12II`, `I`–`VIII`); when more than one catalog is selected, every explicit range must span the same number of stamps. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
+You can bulk-add stamps to an issue after it was created, the same way they are generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want and enter the numbers for each in [the same notation](#writing-the-numbers) the create dialog uses (`100-105`, or `2895A-2897A, 2895B-2897B`); the dialog shows how many stamps will be created, with a short preview. Entering a lone number for a secondary catalog completes it to the primary's span, exactly as on the create form. When more than one catalog is selected, each must come to the same number of stamps, since they are matched by position. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
 
 If a generated catalog number would duplicate one already in the collection, the dialog surfaces a warning naming the collisions. In a collection set to **block** duplicates (see [Duplicate catalog numbers](duplicate-catalog-numbers.md)) this prevents the add until you resolve it; in a collection set to **warn**, it is advisory and you can add anyway.
 

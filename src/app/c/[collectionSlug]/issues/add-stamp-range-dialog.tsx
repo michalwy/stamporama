@@ -6,8 +6,13 @@ import {
   DialogBody,
   DialogActions,
 } from "@/app/dialog-shell";
-import { resolveCatalogRange, generateCatalogNumbers } from "@/lib/catalog-number";
-import { advanceToLastOnSeparator } from "@/app/c/[collectionSlug]/shared/catalog-range-focus";
+import {
+  resolveCatalogRange,
+  formatSchemeValue,
+  parseCatalogNumberSpec,
+  AUTO_CREATE_MAX_STAMPS,
+  type CatalogNumberSpec,
+} from "@/lib/catalog-number";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type {
   CatalogDuplicateGroup,
@@ -27,27 +32,33 @@ const INPUT_STYLE: React.CSSProperties = {
   minHeight: "2.25rem",
 };
 
-// ── Range helpers ─────────────────────────────────────────────────────────────
+// ── Spec helpers (#452) ───────────────────────────────────────────────────────
 
-/** Number of stamps a vendor's First/Last range spans, or null when empty/unparseable
- *  (mirrors the auto-create generation in src/app/actions/issues.ts). */
-function rangeCount(first: string, last: string): number | null {
-  if (!first.trim()) return null;
-  const range = resolveCatalogRange(first, last.trim() ? last : null);
+// A spec that is a single number and nothing else — the shape the span fill completes.
+const LONE_NUMBER = /^[^,\-–—]+$/;
+
+/** Complete a lone number to the span the primary catalog runs to (#185): with the primary at
+ *  `100-105` and `200` typed here, this returns `200-205`. Null when either side is not the
+ *  simple shape the fill is for — a list the collector composed is never rewritten. */
+function fillSpanFromPrimary(own: string, primary: CatalogNumberSpec | null): string | null {
+  const trimmed = own.trim();
+  if (!trimmed || !LONE_NUMBER.test(trimmed)) return null;
+  if (!primary || primary.segments.length !== 1 || primary.numbers.length < 2) return null;
+  const range = resolveCatalogRange(trimmed, null);
   if ("error" in range) return null;
-  return range.span ?? 1;
+  return `${trimmed}-${formatSchemeValue(range.scheme, range.scheme.from + primary.numbers.length - 1)}`;
 }
 
-/** Generated numbers for a vendor's range, capped at `count` positions. */
-function rangeNumbers(first: string, last: string, count: number): string[] {
-  const range = resolveCatalogRange(first, last.trim() ? last : null);
-  if ("error" in range) return [];
-  return generateCatalogNumbers(range.scheme, count);
+/** A catalog's spec only once it parses — the shape the numbers can be read off. */
+function resolvedOf(
+  spec: CatalogNumberSpec | { error: string } | null | undefined
+): CatalogNumberSpec | null {
+  return spec && !("error" in spec) ? spec : null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-type VendorRow = { first: string; last: string; selected: boolean };
+type VendorRow = { numbers: string; selected: boolean };
 
 interface AddStampRangeDialogProps {
   collectionId: string;
@@ -87,7 +98,7 @@ export function AddStampRangeDialog({
     Object.fromEntries(
       vendors.map((v) => [
         v.catalogVendorId,
-        { first: "", last: "", selected: v.catalogVendorId === primaryVendorId },
+        { numbers: "", selected: v.catalogVendorId === primaryVendorId },
       ])
     )
   );
@@ -96,27 +107,35 @@ export function AddStampRangeDialog({
     setRows((prev) => ({ ...prev, [vendorId]: { ...prev[vendorId], ...patch } }));
   }
 
+  // Each catalog's spec as typed (#452): the parsed result, or null for an untouched field.
+  const specs = useMemo(() => {
+    const out: Record<string, CatalogNumberSpec | { error: string } | null> = {};
+    for (const v of vendors) {
+      const raw = rows[v.catalogVendorId]?.numbers.trim() ?? "";
+      out[v.catalogVendorId] = raw ? parseCatalogNumberSpec(raw) : null;
+    }
+    return out;
+  }, [vendors, rows]);
+
+  const resolvedSpec = (vendorId: string) => resolvedOf(specs[vendorId]);
+
   const selectedVendors = sortedVendors.filter((v) => rows[v.catalogVendorId]?.selected);
 
-  // Effective stamp count: the single span shared by every selected vendor's explicit
-  // range. Vendors with a single number (span 1) don't constrain it. `mismatch` flags
-  // two explicit ranges of different lengths — stamps are matched by position, so those
-  // can't be combined.
-  const { count, mismatch } = useMemo(() => {
-    let resolved: number | null = null;
-    let bad = false;
-    for (const v of selectedVendors) {
-      const r = rows[v.catalogVendorId];
-      const c = rangeCount(r.first, r.last);
-      if (c === null || c === 1) continue;
-      if (resolved === null) resolved = c;
-      else if (resolved !== c) bad = true;
-    }
-    return { count: resolved ?? 1, mismatch: bad };
-  }, [selectedVendors, rows]);
-
-  const anyFirstEntered = selectedVendors.some((v) => rows[v.catalogVendorId]?.first.trim());
-  const overLimit = count > 50;
+  // Stamps are matched across catalogs by position, so every selected catalog must produce the
+  // same number of them (#452 keeps #70's rule). A spec says exactly what it says — a lone number
+  // is one stamp — so a catalog that does not line up is a mismatch rather than being stretched.
+  const counts = selectedVendors
+    .map((v) => resolvedSpec(v.catalogVendorId)?.numbers.length)
+    .filter((c): c is number => c !== undefined);
+  const count = counts[0] ?? 0;
+  const mismatch = counts.some((c) => c !== count);
+  const anyError = selectedVendors.some((v) => {
+    const spec = specs[v.catalogVendorId];
+    return spec !== null && "error" in spec;
+  });
+  const missingNumbers = selectedVendors.some((v) => specs[v.catalogVendorId] === null);
+  const anyEntered = counts.length > 0;
+  const overLimit = count > AUTO_CREATE_MAX_STAMPS;
 
   // Live duplicate check (#85): the generated numbers become real stamps. Debounced; a
   // "block" collection disables Save, a "warn" collection only shows an advisory.
@@ -129,14 +148,12 @@ export function AddStampRangeDialog({
     // Debounced: keystrokes re-run this effect (via `rows`) and just reset the timer, so
     // the lookup only fires once the user pauses. State updates happen in the callback.
     const timer = setTimeout(async () => {
-      const candidates = selectedVendors.flatMap((v) => {
-        const r = rows[v.catalogVendorId];
-        if (!r?.first.trim()) return [];
-        return rangeNumbers(r.first, r.last, count).map((number) => ({
+      const candidates = selectedVendors.flatMap((v) =>
+        (resolvedOf(specs[v.catalogVendorId])?.numbers ?? []).map((number) => ({
           catalogVendorId: v.catalogVendorId,
           number,
-        }));
-      });
+        }))
+      );
       if (candidates.length === 0 || mismatch || overLimit) {
         if (!cancelled) setDup((prev) => ({ mode: prev.mode, groups: [] }));
         return;
@@ -153,26 +170,26 @@ export function AddStampRangeDialog({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [collectionId, issueId, areaId, count, mismatch, overLimit, selectedVendors, rows]);
+  }, [collectionId, issueId, areaId, count, mismatch, overLimit, selectedVendors, specs]);
 
   const dupBlocking = dup.mode === "block" && dup.groups.length > 0;
 
   const canSubmit =
     !isPending &&
     selectedVendors.length > 0 &&
-    anyFirstEntered &&
+    anyEntered &&
+    !missingNumbers &&
+    !anyError &&
     !mismatch &&
     !overLimit &&
     !dupBlocking;
 
-  const previewNumbers = useMemo(() => {
+  const previewNumbers = (() => {
     const primary =
       selectedVendors.find((v) => v.catalogVendorId === primaryVendorId) ?? selectedVendors[0];
-    if (!primary) return [];
-    const r = rows[primary.catalogVendorId];
-    if (!r?.first.trim() || mismatch || overLimit) return [];
-    return rangeNumbers(r.first, r.last, count);
-  }, [selectedVendors, primaryVendorId, rows, count, mismatch, overLimit]);
+    if (!primary || mismatch || overLimit) return [];
+    return resolvedSpec(primary.catalogVendorId)?.numbers ?? [];
+  })();
 
   return (
     <DialogShell title="Add stamp range" onClose={onClose} minHeight="24rem">
@@ -240,44 +257,65 @@ export function AddStampRangeDialog({
                     {r.selected && (
                       <input type="hidden" name={`autoCreateVendor_${v.catalogVendorId}`} value="1" />
                     )}
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <input
-                        name={`issueCatalogFirst_${v.catalogVendorId}`}
-                        type="text"
-                        value={r.first}
-                        disabled={isPending || !r.selected}
-                        placeholder="First"
-                        onChange={(e) => update(v.catalogVendorId, { first: e.target.value })}
-                        onKeyDown={(e) =>
-                          advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
-                        }
-                        style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
-                      />
-                      <input
-                        name={`issueCatalogLast_${v.catalogVendorId}`}
-                        type="text"
-                        value={r.last}
-                        disabled={isPending || !r.selected}
-                        placeholder="Last (optional)"
-                        onChange={(e) => update(v.catalogVendorId, { last: e.target.value })}
-                        style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
-                      />
-                    </div>
+                    <input
+                      name={`issueCatalogNumbers_${v.catalogVendorId}`}
+                      type="text"
+                      value={r.numbers}
+                      disabled={isPending || !r.selected}
+                      placeholder="e.g. 2820-2822, 2823a"
+                      aria-label={`${v.vendorAbbreviation} catalog numbers`}
+                      onChange={(e) => update(v.catalogVendorId, { numbers: e.target.value })}
+                      onBlur={() => {
+                        // Typing a lone number for a secondary catalog completes it to the
+                        // primary's span (#185) — the one place that fill still makes sense once
+                        // a field can hold several ranges.
+                        if (isPrimary) return;
+                        const filled = fillSpanFromPrimary(
+                          r.numbers,
+                          primaryVendorId ? resolvedSpec(primaryVendorId) : null
+                        );
+                        if (filled) update(v.catalogVendorId, { numbers: filled });
+                      }}
+                      style={{ ...INPUT_STYLE, width: "100%" }}
+                    />
+                    {(() => {
+                      const spec = specs[v.catalogVendorId];
+                      if (!spec || !("error" in spec)) return null;
+                      return (
+                        <div
+                          style={{
+                            marginTop: "0.25rem",
+                            fontSize: "0.75rem",
+                            color: "var(--color-error)",
+                          }}
+                        >
+                          {spec.error}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
 
               {/* Live summary */}
               <div style={{ marginTop: "0.25rem", fontSize: "0.8125rem" }}>
-                {mismatch ? (
+                {!anyEntered ? (
+                  <span style={{ color: "var(--color-text-muted)" }}>
+                    Enter catalog numbers to preview.
+                  </span>
+                ) : missingNumbers ? (
                   <span style={{ color: "var(--color-error)" }}>
-                    Selected vendors must span the same number of stamps.
+                    Enter catalog numbers for each selected catalog.
+                  </span>
+                ) : mismatch ? (
+                  <span style={{ color: "var(--color-error)" }}>
+                    Selected catalogs must span the same number of stamps.
                   </span>
                 ) : overLimit ? (
                   <span style={{ color: "var(--color-error)" }}>
-                    Range cannot exceed 50 stamps ({count} requested).
+                    Range cannot exceed {AUTO_CREATE_MAX_STAMPS} stamps ({count} requested).
                   </span>
-                ) : anyFirstEntered ? (
+                ) : anyError ? null : ( // the field's own message says what is wrong
                   <span style={{ color: "var(--color-text-secondary)" }}>
                     Will create <strong>{count}</strong> {count === 1 ? "stamp" : "stamps"}
                     {previewNumbers.length > 0 && (
@@ -288,10 +326,6 @@ export function AddStampRangeDialog({
                       </span>
                     )}
                     .
-                  </span>
-                ) : (
-                  <span style={{ color: "var(--color-text-muted)" }}>
-                    Enter a First catalog number to preview.
                   </span>
                 )}
               </div>

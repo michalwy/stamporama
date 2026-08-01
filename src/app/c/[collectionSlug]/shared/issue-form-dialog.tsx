@@ -20,8 +20,10 @@ import { advanceToLastOnSeparator } from "@/app/c/[collectionSlug]/shared/catalo
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import {
   resolveCatalogRange,
-  generateCatalogNumbers,
   formatSchemeValue,
+  parseCatalogNumberSpec,
+  AUTO_CREATE_MAX_STAMPS,
+  type CatalogNumberSpec,
 } from "@/lib/catalog-number";
 import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import {
@@ -72,67 +74,55 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
   marginBottom: "0.75rem",
 };
 
-// ── Range helpers ─────────────────────────────────────────────────────────────
+// ── Catalog number specs (#452) ───────────────────────────────────────────────
 
-// Most stamps one range may generate, mirroring the server's own limit in
-// src/app/actions/issues.ts. A range over it cannot create stamps, so it never ticks a catalog.
-const AUTO_CREATE_MAX = 50;
+// The create dialog holds one free-form spec per catalog — "2895A-2897A, 2895B-2897B" — from
+// which both the stamps and the issue's declared range are derived. The edit dialog keeps its
+// First/Last pair: there the pair *is* the declared range, and nothing is generated.
 
-// Number of stamps a vendor's entered range spans, mirroring the auto-create
-// generation logic in src/app/actions/issues.ts. Returns null when the range is
-// unrecognizable for comparison. Handles numeric, prefixed ("BL120"–"BL123"),
-// and suffix-sequence ("423a"–"423c", "12I"–"12II") ranges.
-function rangeCount(first: string, last: string): number | null {
-  if (!first.trim()) return null;
-  const range = resolveCatalogRange(first, last.trim() ? last : null);
-  if ("error" in range) return null;
-  return range.span ?? 1;
+/** A vendor's spec field, straight from the (uncontrolled) form DOM. */
+function numbersValueFromForm(form: HTMLFormElement, vendorId: string): string {
+  const el = form.elements.namedItem(`issueCatalogNumbers_${vendorId}`);
+  return el instanceof HTMLInputElement ? el.value : "";
 }
 
-// Reads a vendor's current range inputs straight from the form DOM (the inputs
-// are uncontrolled) and returns its stamp count.
-function rangeCountFromForm(form: HTMLFormElement, vendorId: string): number | null {
-  const firstEl = form.elements.namedItem(`issueCatalogFirst_${vendorId}`);
-  const lastEl = form.elements.namedItem(`issueCatalogLast_${vendorId}`);
-  const first = firstEl instanceof HTMLInputElement ? firstEl.value : "";
-  const last = lastEl instanceof HTMLInputElement ? lastEl.value : "";
-  return rangeCount(first, last);
+/** A vendor's parsed spec, or null when the field is blank or does not parse. */
+function specFromForm(form: HTMLFormElement, vendorId: string): CatalogNumberSpec | null {
+  const raw = numbersValueFromForm(form, vendorId).trim();
+  if (!raw) return null;
+  const spec = parseCatalogNumberSpec(raw);
+  return "error" in spec ? null : spec;
 }
 
-// Auto-fill a secondary vendor's "Last" from the primary vendor's range span (#185): given the
-// secondary's "First" and how many stamps the primary spans, the last sits `count - 1` positions
-// up the same numbering scheme (e.g. First 200 + primary span 4 → 203). Returns null when First
-// can't be parsed as a range start.
-function autoFillLastFromSpan(first: string, primaryCount: number): string | null {
-  if (!first.trim() || primaryCount < 1) return null;
-  const range = resolveCatalogRange(first, null);
-  if ("error" in range) return null;
-  return formatSchemeValue(range.scheme, range.scheme.from + primaryCount - 1);
+/** How many stamps a vendor's spec would generate, or null when there is no usable spec. */
+function specCountFromForm(form: HTMLFormElement, vendorId: string): number | null {
+  return specFromForm(form, vendorId)?.numbers.length ?? null;
 }
 
-// onBlur handler for a secondary vendor's "First" input: once the primary catalog has a full
-// from–to range, entering only "First" for another vendor auto-fills its empty "Last" to span the
-// same number of stamps (#185). Skips when the user already typed a "Last" (never fights them),
-// when the primary range is a single stamp, or when the primary from/to isn't fully set.
-function autoFillSecondaryLast(
+// A spec that is a single number and nothing else — the shape #185's auto-fill completes.
+const LONE_NUMBER = /^[^,\-–—]+$/;
+
+// onBlur handler for a secondary catalog's spec field: once the primary catalog spans a run of
+// stamps, entering a lone number for another catalog completes it to the same span (#185) —
+// primary 2820-2823 plus a typed `200` becomes `200-203`. Deliberately narrow: it only fires on
+// a lone number (never rewriting a list the collector composed themselves) and only from a
+// single-segment primary, since there is no one way to stretch a number over several runs.
+function autoFillSecondarySpan(
   form: HTMLFormElement,
   vendorId: string,
   primaryVendorId: string | null
 ): void {
   if (!primaryVendorId || vendorId === primaryVendorId) return;
-  const firstEl = form.elements.namedItem(`issueCatalogFirst_${vendorId}`);
-  const lastEl = form.elements.namedItem(`issueCatalogLast_${vendorId}`);
-  if (!(firstEl instanceof HTMLInputElement) || !(lastEl instanceof HTMLInputElement)) return;
-  if (!firstEl.value.trim() || lastEl.value.trim()) return;
-  const primFirstEl = form.elements.namedItem(`issueCatalogFirst_${primaryVendorId}`);
-  const primLastEl = form.elements.namedItem(`issueCatalogLast_${primaryVendorId}`);
-  const primFirst = primFirstEl instanceof HTMLInputElement ? primFirstEl.value : "";
-  const primLast = primLastEl instanceof HTMLInputElement ? primLastEl.value : "";
-  if (!primFirst.trim() || !primLast.trim()) return;
-  const count = rangeCount(primFirst, primLast);
-  if (!count || count < 2) return;
-  const filled = autoFillLastFromSpan(firstEl.value, count);
-  if (filled) lastEl.value = filled;
+  const el = form.elements.namedItem(`issueCatalogNumbers_${vendorId}`);
+  if (!(el instanceof HTMLInputElement)) return;
+  const own = el.value.trim();
+  if (!own || !LONE_NUMBER.test(own)) return;
+  const primary = specFromForm(form, primaryVendorId);
+  if (!primary || primary.segments.length !== 1 || primary.numbers.length < 2) return;
+  const range = resolveCatalogRange(own, null);
+  if ("error" in range) return;
+  const last = formatSchemeValue(range.scheme, range.scheme.from + primary.numbers.length - 1);
+  el.value = `${own}-${last}`;
 }
 
 // ── Per-issue prefix overrides (#377) ─────────────────────────────────────────
@@ -153,25 +143,18 @@ function prefixesFromForm(form: HTMLFormElement, vendorIds: string[]): Record<st
 // ── Auto-create duplicate-catalog candidates (#85) ────────────────────────────
 
 // Generate the catalog numbers auto-create would produce for the given vendors,
-// reading each vendor's First/Last range straight from the (uncontrolled) form.
-// Mirrors the server generation in src/app/actions/issues.ts; vendors with an
-// empty, unparseable, or over-limit range are skipped for the advisory check.
+// reading each vendor's spec straight from the (uncontrolled) form. Mirrors the
+// server generation in src/app/actions/issues.ts; vendors with an empty,
+// unparseable, or over-limit spec are skipped for the advisory check.
 function autoCreateCandidatesFromForm(
   form: HTMLFormElement,
   vendorIds: string[]
 ): DuplicateCandidate[] {
   const out: DuplicateCandidate[] = [];
   for (const catalogVendorId of vendorIds) {
-    const firstEl = form.elements.namedItem(`issueCatalogFirst_${catalogVendorId}`);
-    const lastEl = form.elements.namedItem(`issueCatalogLast_${catalogVendorId}`);
-    const first = firstEl instanceof HTMLInputElement ? firstEl.value : "";
-    const last = lastEl instanceof HTMLInputElement ? lastEl.value : "";
-    if (!first.trim()) continue;
-    const range = resolveCatalogRange(first, last.trim() ? last : null);
-    if ("error" in range) continue;
-    const count = range.span ?? 1;
-    if (count < 1 || count > AUTO_CREATE_MAX) continue;
-    for (const number of generateCatalogNumbers(range.scheme, count)) {
+    const spec = specFromForm(form, catalogVendorId);
+    if (!spec || spec.numbers.length > AUTO_CREATE_MAX_STAMPS) continue;
+    for (const number of spec.numbers) {
       out.push({ catalogVendorId, number });
     }
   }
@@ -231,6 +214,11 @@ interface IssueFormProps {
   /** Render the per-catalog "Assign to stamps" boxes (#451) — create mode only. There is no
    * master switch: the ticked catalogs *are* the auto-create decision. */
   showAutoCreate?: boolean;
+  /** One free-form spec field per catalog instead of the First/Last pair (#452). On create the
+   * numbers typed are a recipe for stamps; on edit they are the declared range itself. */
+  specMode?: boolean;
+  /** What a catalog's spec resolves to, or the error it carries — rendered under its field. */
+  specNoteFor?: (vendorId: string) => React.ReactNode;
   vendorSelection?: Record<string, boolean>;
   onVendorToggle?: (vendorId: string, checked: boolean) => void;
   /** A "Last" filled in on blur (#185) changes no React state, so the parent is told to re-read
@@ -265,6 +253,8 @@ function IssueForm({
   isPending,
   autoFocusName,
   showAutoCreate,
+  specMode,
+  specNoteFor,
   vendorSelection,
   onVendorToggle,
   onRangeAutoFilled,
@@ -452,73 +442,105 @@ function IssueForm({
                     </Tooltip>
                     {(() => {
                       const warning = catalogWarningFor?.(v.catalogVendorId);
-                      return (
-                        <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
-                          <input
-                            name={`issueCatalogFirst_${v.catalogVendorId}`}
-                            type="text"
-                            defaultValue={existing?.firstNumber ?? ""}
-                            disabled={isPending}
-                            placeholder="First"
-                            {...NO_AUTOFILL}
-                            onKeyDown={(e) =>
-                              advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
-                            }
-                            onBlur={
-                              showAutoCreate && !isPrimary
-                                ? (e) => {
-                                    const form = e.currentTarget.form;
-                                    if (!form) return;
-                                    autoFillSecondaryLast(
-                                      form,
-                                      v.catalogVendorId,
-                                      primaryVendorId ?? null
-                                    );
-                                    onRangeAutoFilled?.();
-                                  }
-                                : undefined
-                            }
-                            style={{
-                              ...INPUT_STYLE,
-                              flex: 1,
-                              paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
-                            }}
-                          />
-                          {warning && (
-                            <span
+                      const warningIcon = warning && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            right: "0.5rem",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            display: "inline-flex",
+                          }}
+                        >
+                          {warning}
+                        </span>
+                      );
+                      // One spec field when the dialog generates stamps (#452), the stored
+                      // First/Last pair when it edits the declared range instead.
+                      if (specMode) {
+                        return (
+                          <div
+                            style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
+                          >
+                            <input
+                              name={`issueCatalogNumbers_${v.catalogVendorId}`}
+                              type="text"
+                              disabled={isPending}
+                              placeholder="e.g. 2820-2822, 2823a"
+                              aria-label={`${v.vendorAbbreviation} catalog numbers`}
+                              {...NO_AUTOFILL}
+                              onBlur={
+                                isPrimary
+                                  ? undefined
+                                  : (e) => {
+                                      const form = e.currentTarget.form;
+                                      if (!form) return;
+                                      autoFillSecondarySpan(
+                                        form,
+                                        v.catalogVendorId,
+                                        primaryVendorId ?? null
+                                      );
+                                      onRangeAutoFilled?.();
+                                    }
+                              }
                               style={{
-                                position: "absolute",
-                                right: "0.5rem",
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                display: "inline-flex",
+                                ...INPUT_STYLE,
+                                flex: 1,
+                                paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
                               }}
-                            >
-                              {warning}
-                            </span>
-                          )}
-                        </div>
+                            />
+                            {warningIcon}
+                          </div>
+                        );
+                      }
+                      return (
+                        <>
+                          <div
+                            style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
+                          >
+                            <input
+                              name={`issueCatalogFirst_${v.catalogVendorId}`}
+                              type="text"
+                              defaultValue={existing?.firstNumber ?? ""}
+                              disabled={isPending}
+                              placeholder="First"
+                              {...NO_AUTOFILL}
+                              onKeyDown={(e) =>
+                                advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
+                              }
+                              style={{
+                                ...INPUT_STYLE,
+                                flex: 1,
+                                paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
+                              }}
+                            />
+                            {warningIcon}
+                          </div>
+                          <span
+                            style={{
+                              color: "var(--color-text-muted)",
+                              fontSize: "0.875rem",
+                              flexShrink: 0,
+                            }}
+                          >
+                            –
+                          </span>
+                          <input
+                            name={`issueCatalogLast_${v.catalogVendorId}`}
+                            type="text"
+                            defaultValue={existing?.lastNumber ?? ""}
+                            disabled={isPending}
+                            placeholder="Last (optional)"
+                            {...NO_AUTOFILL}
+                            style={{ ...INPUT_STYLE, flex: 1 }}
+                          />
+                        </>
                       );
                     })()}
-                    <span
-                      style={{
-                        color: "var(--color-text-muted)",
-                        fontSize: "0.875rem",
-                        flexShrink: 0,
-                      }}
-                    >
-                      –
-                    </span>
-                    <input
-                      name={`issueCatalogLast_${v.catalogVendorId}`}
-                      type="text"
-                      defaultValue={existing?.lastNumber ?? ""}
-                      disabled={isPending}
-                      placeholder="Last (optional)"
-                      {...NO_AUTOFILL}
-                      style={{ ...INPUT_STYLE, flex: 1 }}
-                    />
                   </div>
+                  {/* What the spec resolves to, or why it does not (#452). Only drawn once
+                      something is typed, so the card does not carry a blank line per catalog. */}
+                  {specMode && specNoteFor?.(v.catalogVendorId)}
                   {/* The auto-create decision itself (#451): a ticked catalog generates stamps
                       from its range on save. It ticks itself as the range is typed, so the box is
                       normally read rather than clicked — but it stays in the tab order, since it
@@ -558,6 +580,38 @@ function IssueForm({
         </div>
       )}
     </>
+  );
+}
+
+// ── SpecNote ──────────────────────────────────────────────────────────────────
+
+/** What a catalog's spec resolves to (#452), under its field: the stamps it would create and the
+ * series range it declares, or the reason it cannot be read. Renders nothing for an untouched
+ * field, so the card only grows around what is being typed. */
+function SpecNote({ result }: { result?: CatalogNumberSpec | { error: string } }) {
+  if (!result) return null;
+  const style: React.CSSProperties = { marginTop: "0.25rem", fontSize: "0.75rem" };
+  if ("error" in result) {
+    return <div style={{ ...style, color: "var(--color-error)" }}>{result.error}</div>;
+  }
+  const { numbers, declared } = result;
+  const shown = numbers.slice(0, 6).join(", ");
+  const range = declared.lastNumber
+    ? `${declared.firstNumber}–${declared.lastNumber}`
+    : declared.firstNumber;
+  return (
+    <div style={{ ...style, color: "var(--color-text-muted)" }}>
+      {numbers.length > AUTO_CREATE_MAX_STAMPS ? (
+        <span style={{ color: "var(--color-error)" }}>
+          {numbers.length} stamps — a range cannot exceed {AUTO_CREATE_MAX_STAMPS}.
+        </span>
+      ) : (
+        <>
+          {numbers.length} {numbers.length === 1 ? "stamp" : "stamps"} ({shown}
+          {numbers.length > 6 ? ", …" : ""}) · series range {range}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -702,10 +756,10 @@ export function IssueDialog(props: IssueDialogProps) {
     const form = formRef.current;
     if (!form || !primaryVendorId) return;
     setVendorSelection((prev) => {
-      const primaryCount = rangeCountFromForm(form, primaryVendorId);
+      const primaryCount = specCountFromForm(form, primaryVendorId);
       const primaryOn = pinnedVendors[primaryVendorId]
         ? (prev[primaryVendorId] ?? false)
-        : primaryCount !== null && primaryCount <= AUTO_CREATE_MAX;
+        : primaryCount !== null && primaryCount <= AUTO_CREATE_MAX_STAMPS;
       const next: Record<string, boolean> = {};
       for (const v of vendors) {
         const id = v.catalogVendorId;
@@ -715,7 +769,7 @@ export function IssueDialog(props: IssueDialogProps) {
           next[id] = prev[id] ?? false;
         } else {
           next[id] =
-            primaryOn && primaryCount !== null && rangeCountFromForm(form, id) === primaryCount;
+            primaryOn && primaryCount !== null && specCountFromForm(form, id) === primaryCount;
         }
       }
       const unchanged =
@@ -729,6 +783,38 @@ export function IssueDialog(props: IssueDialogProps) {
     setVendorSelection((prev) => ({ ...prev, [vendorId]: checked }));
     setPinnedVendors((prev) => ({ ...prev, [vendorId]: true }));
   }
+
+  // What each catalog's spec field currently holds (#452). The fields are uncontrolled, so this
+  // mirrors them out of the DOM on every edit (`formVersion`) — parsing then happens off the
+  // mirrored text, which is what the note under the field says and what blocks Save.
+  const [specInputs, setSpecInputs] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const form = formRef.current;
+    if (!isCreate || !form) return;
+    const next: Record<string, string> = {};
+    for (const v of vendors) {
+      const raw = numbersValueFromForm(form, v.catalogVendorId).trim();
+      if (raw) next[v.catalogVendorId] = raw;
+    }
+    setSpecInputs((prev) => {
+      const keys = Object.keys(next);
+      const unchanged =
+        keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k]);
+      return unchanged ? prev : next;
+    });
+  }, [isCreate, vendors, formVersion]);
+
+  const specResults = useMemo(() => {
+    const out: Record<string, CatalogNumberSpec | { error: string }> = {};
+    for (const [vendorId, raw] of Object.entries(specInputs)) {
+      out[vendorId] = parseCatalogNumberSpec(raw);
+    }
+    return out;
+  }, [specInputs]);
+
+  // A spec nobody can act on must not reach the server, whether or not its catalog generates
+  // stamps: its numbers are also the range the issue would declare.
+  const specInvalid = Object.values(specResults).some((r) => "error" in r);
 
   useEffect(() => {
     let cancelled = false;
@@ -850,6 +936,8 @@ export function IssueDialog(props: IssueDialogProps) {
             isPending={isPending}
             autoFocusName={isCreate}
             showAutoCreate={isCreate && vendors.length > 0}
+            specMode={isCreate}
+            specNoteFor={isCreate ? (vendorId) => <SpecNote result={specResults[vendorId]} /> : undefined}
             vendorSelection={vendorSelection}
             onVendorToggle={handleVendorToggle}
             onRangeAutoFilled={() => setFormVersion((v) => v + 1)}
@@ -886,7 +974,9 @@ export function IssueDialog(props: IssueDialogProps) {
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}
           onCancel={onClose}
-          disabled={isPending || (isCreate && !selectedAreaId) || autoDupBlocking}
+          disabled={
+            isPending || (isCreate && !selectedAreaId) || specInvalid || autoDupBlocking
+          }
           error={error}
         />
       </form>

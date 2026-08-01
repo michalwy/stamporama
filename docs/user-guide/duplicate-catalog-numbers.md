@@ -35,8 +35,8 @@ Duplicate handling is set per collection under **Settings → Duplicates**:
   the matching stamp.
 - **Auto-generating stamps from an issue** — as soon as a catalog is ticked for
   [stamp generation](collections.md#generating-an-issues-stamps-from-its-catalog-range) on the
-  **Add issue** dialog, the numbers it would generate are checked and any collisions are listed
-  before you create the issue.
+  **Add issue** dialog, every number it would generate is checked and any collisions are listed
+  before you create the issue. **Add stamp range…** checks the same way.
 
 ## The duplicate report
 
