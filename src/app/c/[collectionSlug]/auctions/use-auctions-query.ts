@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AuctionLotComposition } from "@/lib/auction-lines";
+import type { AtRiskLine } from "@/lib/auction-duplicates";
 import type {
   AuctionLotDetailItem,
   AuctionLotFilterCounts,
@@ -52,6 +53,8 @@ export interface AuctionLotFilters {
   signal?: LotSignal;
   /** Only lots with nothing described yet (#442). */
   undescribed?: boolean;
+  /** Only lots holding a stamp another lot being won also holds (#369). */
+  duplicate?: boolean;
   sellerId?: string;
   platformId?: string;
 }
@@ -75,6 +78,7 @@ function lotParams(filters: AuctionLotFilters): URLSearchParams {
   if (filters.closing) params.set("closing", filters.closing);
   if (filters.signal) params.set("signal", filters.signal);
   if (filters.undescribed) params.set("undescribed", "1");
+  if (filters.duplicate) params.set("duplicate", "1");
   if (filters.sellerId) params.set("sellerId", filters.sellerId);
   if (filters.platformId) params.set("platformId", filters.platformId);
   return params;
@@ -213,6 +217,26 @@ export function useAuctionLotComposition(collectionId: string, lotId: string | n
       return res.json();
     },
     enabled: !!lotId,
+  });
+}
+
+/**
+ * The lines of every lot the collector is currently winning, for the duplicate warning (#369).
+ *
+ * Fetched only while a composition editor is open, like the composition itself, and fetched **whole**
+ * — the set is what one person is bidding on at one time, so matching happens in memory and adding a
+ * line costs no request. It sits under the auctions key, so closing or losing a lot stops it warning
+ * as soon as anything else in the module is invalidated.
+ */
+export function useAtRiskLotLines(collectionId: string, enabled: boolean) {
+  return useQuery<AtRiskLine[]>({
+    queryKey: ["auctions", collectionId, "at-risk-lines"] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/auctions/lots/at-risk-lines`);
+      if (!res.ok) throw new Error("Failed to check for duplicate lots");
+      return res.json();
+    },
+    enabled,
   });
 }
 

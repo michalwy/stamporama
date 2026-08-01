@@ -136,13 +136,17 @@ export function AuctionLotsPanel({
   // it is a batch of work to sit down to, not the shape the list should keep having tomorrow.
   const undescribed = searchParams.get("undescribed") === "1" || undefined;
 
+  // "Am I about to buy the same stamp twice?" (#369) — URL-only for the same reason, and the door
+  // the notification centre's duplicate group opens.
+  const duplicate = searchParams.get("duplicate") === "1" || undefined;
+
   const [groupBySale, setGroupBySale] = usePersistedFlag(
     `stamporama:auctions:groupBySale:${collectionId}`
   );
 
   const filters: AuctionLotFilters = useMemo(
-    () => ({ outcome, closing, signal, undescribed, sellerId, platformId }),
-    [outcome, closing, signal, undescribed, sellerId, platformId]
+    () => ({ outcome, closing, signal, undescribed, duplicate, sellerId, platformId }),
+    [outcome, closing, signal, undescribed, duplicate, sellerId, platformId]
   );
 
   const updateParams = useCallback(
@@ -202,7 +206,7 @@ export function AuctionLotsPanel({
   }
 
   const hasActiveFilters =
-    !!outcome || !!closing || !!signal || !!undescribed || !!sellerId || !!platformId;
+    !!outcome || !!closing || !!signal || !!undescribed || !!duplicate || !!sellerId || !!platformId;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -296,6 +300,17 @@ export function AuctionLotsPanel({
               count={counts ? counts.undescribed : undefined}
               active={!!undescribed}
               onClick={() => updateParams({ undescribed: undescribed ? "" : "1" })}
+            />
+          </Tooltip>
+          {/* Beside it because it asks the same kind of question — what is wrong with the record
+              rather than how the bidding is going — though this one is about money: two lots you
+              are winning that hold the same stamp at the same condition and format. */}
+          <Tooltip content="Lots holding a stamp another lot you are winning also holds, at the same condition and format — you are on course to buy it twice. Only lots you are leading on, or that closed with you ahead, are compared.">
+            <FilterChip
+              label="Duplicate"
+              count={counts ? counts.duplicate : undefined}
+              active={!!duplicate}
+              onClick={() => updateParams({ duplicate: duplicate ? "" : "1" })}
             />
           </Tooltip>
           <span

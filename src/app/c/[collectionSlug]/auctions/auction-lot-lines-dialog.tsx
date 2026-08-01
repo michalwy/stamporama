@@ -13,7 +13,9 @@ import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inven
 import { AuctionLotLineDialog } from "./auction-lot-line-dialog";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import type { CollectionAreaData } from "@/lib/areas";
-import { useAuctionLotComposition, type AuctionLotView } from "./use-auctions-query";
+import { useAtRiskLotLines, useAuctionLotComposition, type AuctionLotView } from "./use-auctions-query";
+import { AuctionDuplicateWarning } from "./auction-duplicate-warning";
+import type { ComposedLine } from "@/lib/auction-duplicates";
 
 
 const NOTE: React.CSSProperties = {
@@ -126,9 +128,24 @@ export function AuctionLotLinesDialog({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
-  const lines = data?.lines ?? [];
+  // Memoized rather than defaulted inline: the duplicate check below derives from it, and a fresh
+  // `[]` every render would re-run that on every keystroke elsewhere in the dialog.
+  const lines = useMemo(() => data?.lines ?? [], [data?.lines]);
   // A settled lot's figures live on the purchase now (#28), so its composition is history.
   const editable = !lot.settled;
+  // Am I already winning any of this elsewhere? (#369) Not asked for a settled lot: the question is
+  // about what is still to be bought, and this one has been.
+  const { data: atRisk } = useAtRiskLotLines(collectionId, editable);
+  const composedLines: ComposedLine[] = useMemo(
+    () =>
+      lines.map((line) => ({
+        stampId: line.stampId,
+        conditionId: line.conditionId,
+        formatId: line.formatId,
+        certificateStatusId: line.certificateStatusId,
+      })),
+    [lines]
+  );
 
   async function reload() {
     await refetch();
@@ -176,6 +193,8 @@ export function AuctionLotLinesDialog({
             computable — and what turns a lot you lose into a usable price record.
           </p>
         )}
+
+        <AuctionDuplicateWarning lines={composedLines} atRisk={atRisk} excludeLotId={lot.id} />
 
         {lines.length > 0 && (
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.5rem", overflow: "clip" }}>

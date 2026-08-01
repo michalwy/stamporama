@@ -17,10 +17,13 @@ import type { AuctionLotLineRaw, AuctionLotRaw, AuctionSaleRaw } from "@/app/act
 import { AuctionLotLineDialog, type LineSelectionSummary } from "./auction-lot-line-dialog";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import {
+  useAtRiskLotLines,
   useAuctionSales,
   useOpenAuctionSale,
   type AuctionLotView,
 } from "./use-auctions-query";
+import { AuctionDuplicateWarning } from "./auction-duplicate-warning";
+import type { ComposedLine } from "@/lib/auction-duplicates";
 import {
   formatAmountInput,
   formatDay,
@@ -159,6 +162,23 @@ export function AuctionLotFormDialog({
   const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const { data: formats = [] } = useCollectionFormats(collectionId);
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas ?? [], collectionId);
+  // Am I already winning any of this? (#369) Fetched only while the composition section is on
+  // screen, since that section is the only thing the answer is about.
+  const { data: atRisk } = useAtRiskLotLines(collectionId, composing);
+  // A **whole-issue** pick carries no `stampId` — it fans out into members server-side — so it
+  // cannot be checked here and is simply left out rather than guessed at.
+  const composedLines: ComposedLine[] = useMemo(
+    () =>
+      lines
+        .filter((entry) => entry.raw.stampId)
+        .map((entry) => ({
+          stampId: entry.raw.stampId,
+          conditionId: entry.raw.conditionId,
+          formatId: entry.raw.formatId || null,
+          certificateStatusId: entry.raw.certificateStatusId || null,
+        })),
+    [lines]
+  );
   const nameById = (rows: { id: string; name: string }[], id: string) =>
     rows.find((r) => r.id === id)?.name ?? null;
 
@@ -643,6 +663,7 @@ export function AuctionLotFormDialog({
           {composing && (
             <div style={FIELD_GAP}>
               <LabelWithError>Contents</LabelWithError>
+              <AuctionDuplicateWarning lines={composedLines} atRisk={atRisk} />
               {lines.length > 0 && (
                 <div
                   style={{

@@ -20,6 +20,11 @@ import {
   type AuctionLotLineInput,
   type AuctionLotLineItem,
 } from "./auction-lines";
+import { collidingLotIds, type AtRiskLine } from "./auction-duplicates";
+import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { readCollectionAreas } from "./areas";
+import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
+import { loadIssuePrefixMap } from "./issue-prefix";
 import { getOrFetchRate } from "./exchange-rates";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
 import { resolvePurchaseContact } from "./contacts";
@@ -446,6 +451,11 @@ export interface AuctionLotFilters {
    * Expressible as a `where` (unlike a signal) because it asks nothing of the arithmetic: it is a
    * relation being empty, which is exactly what the badge on the row reads off `lineCount`. */
   undescribed?: boolean;
+  /** Only lots holding a stamp another lot **being won** also holds (#369). Derived like a signal
+   * and for the same reason — it is a comparison across lots' compositions, which no `where` can
+   * express — and hard matches only, so the chip means "on course to buy this twice" rather than
+   * "related to something else in the list". */
+  duplicate?: boolean;
   sellerId?: string;
   platformId?: string;
   saleId?: string;
@@ -459,11 +469,12 @@ export interface PaginatedAuctionLotsResult {
 }
 
 /** The lot list's `where`, shared by the list and its faceted counts so the two can never disagree
- * (the `offerListWhere` pattern). `signalIds` is the resolved id list for a derived filter. */
+ * (the `offerListWhere` pattern). `derivedIds` is the resolved id list for the derived filters —
+ * already **intersected** by {@link resolveDerivedIds} when more than one is selected. */
 function lotListWhere(
   collectionId: string,
   filters: AuctionLotFilters,
-  signalIds?: string[]
+  derivedIds?: string[]
 ): Prisma.AuctionLotWhereInput {
   // Every narrowing goes into one `AND` list rather than onto the object as sibling keys. Several of
   // them touch `status` — the outcome predicates and the undescribed rule both do — and as sibling
@@ -473,7 +484,7 @@ function lotListWhere(
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
 
   return {
-    ...(signalIds ? { id: { in: signalIds } } : {}),
+    ...(derivedIds ? { id: { in: derivedIds } } : {}),
     auctionSale: {
       collectionId,
       ...(filters.sellerId ? { sellerId: filters.sellerId } : {}),
@@ -588,6 +599,35 @@ async function resolveSignals(
   return out;
 }
 
+/**
+ * Every selected **derived** filter resolved to one id list, or undefined when none is selected.
+ *
+ * Two of them exist now — the signal and the duplicate chip (#369) — and both have to be walked in
+ * memory rather than expressed as a `where`. Selecting both means *both*, so the lists are
+ * intersected here: as two separate `id: { in: … }` keys they would overwrite each other and the
+ * page would quietly answer the wrong question.
+ *
+ * An empty array is a real answer — "nothing matches" — and is kept distinct from undefined, which
+ * is "this was not asked".
+ */
+async function resolveDerivedIds(
+  collectionId: string,
+  filters: AuctionLotFilters
+): Promise<string[] | undefined> {
+  const lists = await Promise.all([
+    filters.signal
+      ? resolveSignals(collectionId, filters).then((bySignal) => bySignal[filters.signal!])
+      : null,
+    filters.duplicate ? atRiskLotLines(collectionId).then(collidingLotIds) : null,
+  ]);
+  const selected = lists.filter((l): l is string[] => l !== null);
+  if (selected.length === 0) return undefined;
+  return selected.reduce((a, b) => {
+    const keep = new Set(b);
+    return a.filter((id) => keep.has(id));
+  });
+}
+
 /** `endsAt` bounds for a closing window, read against the server's clock. The client cannot supply
  * the boundary: it would then differ between two open tabs and between the list and its counts. */
 function closingWhere(window: AuctionClosingWindow | undefined): Prisma.AuctionLotWhereInput {
@@ -630,14 +670,11 @@ export async function listAuctionLots(
 
   // A derived filter is resolved to ids first and then paginated as an ordinary `where`, so a page
   // never costs more than the lots it shows.
-  let signalIds: string[] | undefined;
-  if (filters.signal) {
-    signalIds = (await resolveSignals(collectionId, filters))[filters.signal];
-    if (signalIds.length === 0) return { items: [], nextCursor: null };
-  }
+  const derivedIds = await resolveDerivedIds(collectionId, filters);
+  if (derivedIds?.length === 0) return { items: [], nextCursor: null };
 
   const rows = await prisma.auctionLot.findMany({
-    where: lotListWhere(collectionId, filters, signalIds),
+    where: lotListWhere(collectionId, filters, derivedIds),
     orderBy: lotOrderBy(filters),
     take: pageSize + 1,
     skip: offset,
@@ -668,7 +705,9 @@ export async function countAuctionLots(
   filters: Omit<AuctionLotFilters, "offset" | "pageSize" | "signal"> = {}
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.auctionLot.count({ where: lotListWhere(collectionId, filters) });
+  return prisma.auctionLot.count({
+    where: lotListWhere(collectionId, filters, await resolveDerivedIds(collectionId, filters)),
+  });
 }
 
 export interface AuctionLotFilterCounts {
@@ -685,8 +724,26 @@ export interface AuctionLotFilterCounts {
   closing: Record<AuctionClosingWindow, number>;
   /** Lots with nothing described yet (#442), under everything else selected. */
   undescribed: number;
+  /** Lots holding a stamp another lot being won also holds (#369), under everything else selected. */
+  duplicate: number;
   /** Total under the selected outcome + seller + platform — what "All" would show. */
   total: number;
+}
+
+/**
+ * The filters with the **derived** ones dropped — the signal and the duplicate chip.
+ *
+ * Neither is expressible in the `where` the facets are counted with, so rather than half-applying
+ * them every other facet is read with them ignored, which is what the signal facet has always done.
+ * The alternative is resolving both id lists for each of a dozen counts.
+ */
+function withoutDerived(
+  filters: Omit<AuctionLotFilters, "offset" | "pageSize">
+): Omit<AuctionLotFilters, "offset" | "pageSize" | "signal" | "duplicate"> {
+  const rest = { ...filters };
+  delete rest.signal;
+  delete rest.duplicate;
+  return rest;
 }
 
 /**
@@ -701,8 +758,17 @@ export async function auctionLotFilterCounts(
 ): Promise<AuctionLotFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const { outcome, sellerId, platformId, closing, signal, ...rest } = filters;
-  const [byOutcome, bySeller, byPlatform, closingCounts, signalIds, undescribed, total] = await Promise.all([
+  const { outcome, sellerId, platformId, closing, ...rest } = withoutDerived(filters);
+  const [
+    byOutcome,
+    bySeller,
+    byPlatform,
+    closingCounts,
+    signalIds,
+    undescribed,
+    duplicateCount,
+    total,
+  ] = await Promise.all([
     // One count per outcome rather than a `groupBy`: the outcome is derived, so there is no column
     // to group on — each is its own predicate over the money ({@link outcomeWhere}). Five cheap
     // indexed counts, and the alternative is loading every lot in the collection to bucket it.
@@ -739,16 +805,26 @@ export async function auctionLotFilterCounts(
         undescribed: true,
       }),
     }),
+    // Likewise ignoring its own selection. The collision set is resolved over every lot being won
+    // and then narrowed by the other chips, which is the only order that works: whether two lots
+    // hold the same stamp is not a question the seller filter has any say in.
+    (async () => {
+      const ids = collidingLotIds(await atRiskLotLines(collectionId));
+      if (ids.length === 0) return 0;
+      return prisma.auctionLot.count({
+        where: lotListWhere(
+          collectionId,
+          { ...rest, outcome, sellerId, platformId, closing },
+          ids
+        ),
+      });
+    })(),
     (async () =>
       prisma.auctionLot.count({
         where: lotListWhere(
           collectionId,
           filters,
-          signal
-            ? (await resolveSignals(collectionId, { ...rest, outcome, sellerId, platformId, closing }))[
-                signal
-              ]
-            : undefined
+          await resolveDerivedIds(collectionId, filters)
         ),
       }))(),
   ]);
@@ -769,6 +845,7 @@ export async function auctionLotFilterCounts(
       LOT_SIGNALS.map((s) => [s, signalIds[s].length])
     ) as Record<LotSignal, number>,
     undescribed,
+    duplicate: duplicateCount,
     total,
   };
 }
@@ -1916,6 +1993,190 @@ export async function getAuctionLotComposition(
     allIn: allIn(context.costed, context.fees),
     headroom: headroom(composition.catalogValue, context.costed, context.fees),
   };
+}
+
+// ── Duplicate warning (#369) ────────────────────────────────────────────────
+
+/** How far the family walk climbs or descends before giving up. A variant tree is two or three
+ * levels deep in practice; the cap is only there so a cycle cannot turn this into a loop. */
+const MAX_VARIANT_DEPTH = 8;
+
+/**
+ * Each stamp's variant family **through the umbrella** — its unknown-variant ancestors and all of
+ * its variant descendants, excluding itself and excluding its siblings (see `sameStamp`).
+ *
+ * Resolved by level rather than per stamp: the input is the handful of stamps sitting in lots the
+ * collector is currently winning, and a tree that shallow costs a couple of round trips whichever
+ * way it is walked.
+ */
+async function variantFamilies(stampIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map(stampIds.map((id) => [id, new Set<string>()]));
+  if (stampIds.length === 0) return new Map();
+
+  // Upward: a node contributes its parent only when the node itself *acts as* a variant. A child
+  // that does not is a stamp in its own right, and its parent is no umbrella over it.
+  let up = new Map(stampIds.map((id) => [id, new Set([id])]));
+  for (let depth = 0; depth < MAX_VARIANT_DEPTH && up.size > 0; depth++) {
+    const rows = await prisma.stamp.findMany({
+      where: { id: { in: [...up.keys()] } },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+    });
+    const next = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!row.parentId || !childIsVariant(row)) continue;
+      const origins = up.get(row.id)!;
+      for (const origin of origins) out.get(origin)!.add(row.parentId);
+      const carried = next.get(row.parentId) ?? new Set<string>();
+      for (const origin of origins) carried.add(origin);
+      next.set(row.parentId, carried);
+    }
+    up = next;
+  }
+
+  // Downward: every variant child, and their variant children in turn. An umbrella's descendants
+  // are the specific variants "variant unrecorded" could turn out to mean.
+  let down = new Map(stampIds.map((id) => [id, new Set([id])]));
+  for (let depth = 0; depth < MAX_VARIANT_DEPTH && down.size > 0; depth++) {
+    const rows = await prisma.stamp.findMany({
+      where: { parentId: { in: [...down.keys()] } },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+    });
+    const next = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!row.parentId || !childIsVariant(row)) continue;
+      const origins = down.get(row.parentId)!;
+      for (const origin of origins) out.get(origin)!.add(row.id);
+      const carried = next.get(row.id) ?? new Set<string>();
+      for (const origin of origins) carried.add(origin);
+      next.set(row.id, carried);
+    }
+    down = next;
+  }
+
+  return new Map([...out].map(([id, family]) => [id, [...family]]));
+}
+
+/** The rows the at-risk read needs: the signal inputs, plus enough of each line to name it. */
+const AT_RISK_SELECT = {
+  ...SIGNAL_SELECT,
+  auctionLotNo: true,
+  title: true,
+  auctionSaleId: true,
+  lines: {
+    select: {
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      formatId: true,
+      condition: { select: { name: true, abbreviation: true } },
+      certificateStatus: { select: { name: true, abbreviation: true } },
+      format: { select: { name: true, abbreviation: true } },
+      stamp: {
+        select: {
+          name: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          issueMemberships: { select: { issueId: true }, take: 1 },
+        },
+      },
+    },
+  },
+} satisfies Prisma.AuctionLotSelect;
+
+/**
+ * The lines of every lot the collector is **winning** — what the duplicate warning is checked
+ * against (#369).
+ *
+ * "Winning" is the existing `leading` signal (open, the collector's bid still covers the price) plus
+ * `won-pending` (past `endsAt`, was leading, outcome not yet confirmed), computed by the very
+ * helpers the lot list's chips use so the two can never disagree about which lots are in play.
+ * Outbid, merely watched and historical lots are deliberately absent: a lot somebody else is
+ * winning costs nothing to also bid on, and a lot lost last year means "still looking".
+ *
+ * Returned whole rather than queried per line. The set is bounded by what one person is bidding on
+ * at one time, so the dialogs fetch it once and match every keystroke against it in memory.
+ */
+export async function listAtRiskLotLines(
+  ownerId: string,
+  collectionId: string
+): Promise<AtRiskLine[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return atRiskLotLines(collectionId);
+}
+
+/** {@link listAtRiskLotLines} without the ownership check, for callers inside this module that have
+ * already made it — the lot list's duplicate filter and its facet count. */
+async function atRiskLotLines(collectionId: string): Promise<AtRiskLine[]> {
+  const rows = await prisma.auctionLot.findMany({
+    // A signal only says something about a lot still in play, hence `open` — `won-pending` is an
+    // open lot whose `endsAt` has passed, not a closed one.
+    where: { status: "open", auctionSale: { collectionId } },
+    select: AT_RISK_SELECT,
+  });
+
+  const now = new Date();
+  const winning = rows.filter((row) => {
+    const input = {
+      status: "open" as const,
+      endsAt: row.endsAt,
+      currentBid: money(row.currentBid),
+      myBid: money(row.myBid),
+      maxBid: money(row.maxBid),
+      fees: {
+        premiumPercent: money(row.auctionSale.premiumPercent),
+        premiumFixed: money(row.auctionSale.premiumFixed),
+      },
+    };
+    return lotHasSignal("leading", input, now) || lotHasSignal("won-pending", input, now);
+  });
+
+  const stampIds = [...new Set(winning.flatMap((row) => row.lines.map((l) => l.stampId)))];
+  if (stampIds.length === 0) return [];
+
+  const [families, areas, issuePrefixes] = await Promise.all([
+    variantFamilies(stampIds),
+    // Named the way every other stamp surface names them (#357/#377), so the banner and the line
+    // list the collector is looking at print the same catalog number the same way.
+    readCollectionAreas(collectionId),
+    loadIssuePrefixMap(collectionId),
+  ]);
+  const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
+
+  return winning.flatMap((row) =>
+    row.lines.map((line) => {
+      const link =
+        line.stamp.stampAreaLinks.find((l) => l.isPrimary) ?? line.stamp.stampAreaLinks[0];
+      const areaId = link?.collectionAreaId ?? null;
+      const primaryVendorId = areaId ? (primaryVendorByArea.get(areaId) ?? null) : null;
+      const leading =
+        line.stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ??
+        line.stamp.catalogNumbers[0] ??
+        null;
+      const issueId = line.stamp.issueMemberships[0]?.issueId ?? null;
+      const catalogLabel = leading
+        ? formatStampCN(leading.number, vendorMapFor(areaId, issueId).get(leading.catalogVendorId))
+        : null;
+      return {
+        lotId: row.id,
+        auctionLotNo: row.auctionLotNo,
+        saleId: row.auctionSaleId,
+        lotTitle: row.title,
+        stampId: line.stampId,
+        familyIds: families.get(line.stampId) ?? [],
+        // A stamp with neither a number nor a name is still worth warning about, so the label falls
+        // through to a dash rather than the warning falling through to silence.
+        stampLabel: catalogLabel ?? line.stamp.name ?? "—",
+        conditionId: line.conditionId,
+        conditionLabel: line.condition.abbreviation || line.condition.name,
+        formatId: line.formatId,
+        formatLabel: line.format ? line.format.abbreviation || line.format.name : null,
+        certificateStatusId: line.certificateStatusId,
+        certificateStatusLabel: line.certificateStatus
+          ? line.certificateStatus.abbreviation || line.certificateStatus.name
+          : null,
+      };
+    })
+  );
 }
 
 /** Verify the dictionary rows a line points at belong to this collection. Both FKs are `Restrict`,

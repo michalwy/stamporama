@@ -355,6 +355,12 @@ the bidding:
   down and clear the backlog of them. *Cancelled* lots are never included: describing one buys
   nothing. A **lost** lot is, though — what it held and what it went for is a price record worth
   keeping.
+- **Duplicate** — lots holding a stamp another lot you are **winning** also holds, at the same
+  condition and format, with a count. It is the standing version of the warning the contents editor
+  shows while you type, for the duplicate that came about some other way: the second lot entered last
+  week, or a bid that pulled ahead overnight. Only lots you are leading on, or that closed with you
+  ahead, are compared, and both sides of a collision are listed. The same set is what the
+  [notification centre](action-items.md) reports as *Winning the same stamp twice*.
 
 Finally:
 
@@ -363,8 +369,8 @@ Finally:
 - **Group by sale** turns the flat list into sections, off by default.
 
 Your choices are remembered per collection and are also in the address bar, so a filtered view can
-be bookmarked or shared. The three that ask a question of *today's* list — the closing windows, the
-first row, and **Not described** — live in the address bar only: they are jobs you go and do, and
+be bookmarked or shared. The ones that ask a question of *today's* list — the closing windows, the
+first row, **Not described** and **Duplicate** — live in the address bar only: they are jobs you go and do, and
 coming back tomorrow to a list still narrowed to them would hide everything actually running.
 
 ## Sales — paying for a parcel
@@ -445,6 +451,41 @@ Either way:
 This is deliberately structured rather than a free-text description. It is what makes a catalogue
 value computable at all, and it is what turns a lot you **lose** into a usable record of what the
 material fetched.
+
+### "You are already winning this"
+
+While you are describing a lot, the contents are checked against **the lots you are currently
+winning** — the ones marked *leading*, plus the ones that have closed with you in front and are
+waiting for the result to be confirmed. If the same stamp turns up in both, a note appears above the
+lines, naming the other lot so you can jump to it.
+
+There are two weights, and **neither one stops you saving**:
+
+- **The amber warning** — the same stamp, the same condition, the same format. You are on course to
+  buy this twice. If the two lots are described with **different certificates**, it still warns, and
+  says which the other one carries: an Attest changes what a copy is worth, not which stamp it is.
+- **A quiet line of text** — the same stamp at a different condition or a different format. A single
+  and a block of four are two different things to own, so this is a remark rather than an alarm.
+
+A stamp entered as a **variant not identified** matches the specific variants underneath it, and the
+other way round: *Michel 12, variant unrecorded* and *Michel 12 II* are two ways of tracking one
+thing. Two different variants — *12 I* and *12 II* — are two different stamps and never warn about
+each other.
+
+Bidding on the same stamp in two lots is a perfectly ordinary thing to do — a better copy turns up
+mid-sale, and you want whichever comes cheaper — so the warning is only ever a warning.
+
+Two things it does **not** do. It reads the **contents**, so a lot you have not described yet never
+warns, however many times you paste the same listing. And it only looks at lots you are **winning**:
+one you have been outbid on costs you nothing to bid on again, and one you lost last year means you
+are still looking.
+
+This note only speaks while you are editing contents, which is the moment a duplicate is usually
+*made*. For one that came about some other way — the second lot entered last week, a bid that pulled
+ahead overnight — the **Duplicate** chip on the lots screen holds the same set standing, and the
+[notification centre](action-items.md) reports it as *Winning the same stamp twice*. All three read
+the same rule, so they cannot disagree; only the amber-strength collisions reach the chip and the
+panel, since a standing filter cannot afford the quieter kind.
 
 ### What each line is worth
 

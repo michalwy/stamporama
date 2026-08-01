@@ -39,6 +39,13 @@ recorded. This is the one thing on the list that never fixes itself: the lot lis
 an ended lot rather than raising an alarm about it, so this is how you find the ones still to be
 closed. Closing the lot — confirming what it went for — removes it from the list.
 
+**Winning the same stamp twice** — amber. Two lots you are **winning** hold the same stamp at the
+same condition and format, so you are on course to buy it twice. Only lots you are leading on, and
+lots that closed with you ahead of the field, are compared — one you have been outbid on costs you
+nothing. Bidding on the same stamp deliberately is fine, so this is a warning and not an error:
+it goes away when one of the two is no longer yours to win, or when you correct what a lot is
+described as holding. Clicking through lands on the lot list's **Duplicate** chip.
+
 **Listing a copy sold elsewhere** — red. An active [offer](offers.md) holding a copy that has already
 sold through a different listing. The copy is gone, so the listing is stale on its platform: remove
 the dead set or withdraw the listing.

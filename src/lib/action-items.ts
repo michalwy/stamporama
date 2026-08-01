@@ -13,6 +13,8 @@ import { offersNeedingAction } from "./offers";
  *
  * - lots closing inside a day, and lots whose moment has passed with no outcome recorded, are the
  *   lot list's own `closing` windows (#351) against the server's clock;
+ * - lots about to be bought twice are the lot list's `duplicate` chip (#369), which is the same
+ *   collision rule the composition dialog warns with (`auction-duplicates.ts`);
  * - the two offer groups are the single needs-action derivation (ADR-0013 §4) split by *reason*
  *   (#167 / #215), because the two ask for different things: a sold copy has to come out of the
  *   listing, a copy under the hammer has to wait for the auction to end.
@@ -47,6 +49,7 @@ export interface ActionItem {
 export type ActionItemGroupId =
   | "auction-closing"
   | "auction-outcome"
+  | "auction-duplicate"
   | "offer-sold-elsewhere"
   | "offer-bidding-conflict";
 
@@ -140,6 +143,38 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/**
+ * Lots that hold a stamp another lot **being won** also holds (#369).
+ *
+ * The dialog's warning only speaks while a composition is being edited, which is the one moment a
+ * duplicate is *created*; this is the standing version of the same question, for the duplicate that
+ * came about some other way — the second lot entered last week, a bid that pulled ahead overnight.
+ *
+ * `warning` rather than `critical`: money is at stake, but nothing has gone wrong yet and the bid
+ * can still be pulled. Same reading as a lot closing tonight — a deadline that can still be met.
+ */
+const duplicateProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const filters = { duplicate: true as const };
+    const [page, count] = await Promise.all([
+      listAuctionLots(ownerId, collectionId, { ...filters, pageSize: limit }),
+      countAuctionLots(ownerId, collectionId, filters),
+    ]);
+    return [
+      {
+        id: "auction-duplicate" as const,
+        title: "Winning the same stamp twice",
+        severity: "warning" as const,
+        count,
+        items: page.items.map(lotItem),
+        // The lot list's own chip, so "see all" is the same set counted here rather than an
+        // approximation of it.
+        href: "auctions?duplicate=1",
+      },
+    ];
+  },
+};
+
 const auctionProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
     // Two windows over the lots still in play, each one already a filter the lots screen offers, so
@@ -218,7 +253,7 @@ const offerProvider: ActionItemProvider = {
 
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
-const PROVIDERS: ActionItemProvider[] = [auctionProvider, offerProvider];
+const PROVIDERS: ActionItemProvider[] = [auctionProvider, duplicateProvider, offerProvider];
 
 /**
  * Everything waiting on the collector in one collection.
