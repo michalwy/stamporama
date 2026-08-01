@@ -85,6 +85,7 @@ export function IssueFilterAutocomplete({
               type="button"
               onClick={handleClear}
               aria-label="Clear issue filter"
+              tabIndex={-1}
               style={{
                 background: "none",
                 border: "none",

@@ -23,6 +23,10 @@ import { Tooltip } from "./tooltip";
  * the formatted output, and a `▾` beside it also offers the raw source. A marketplace with a
  * rich-text editor wants the former, one with an HTML field wants the latter, and only the collector
  * knows which is in front of them.
+ *
+ * Both sit **out of the tab order** (#446): they are auxiliary to the field beside them, not a way
+ * of filling it in, and a copy control per text turns tabbing down a card into a slalom. They stay
+ * reachable by mouse, which is how a one-glance-one-click control is used anyway.
  */
 
 type CopyMode = "formatted" | "source";
@@ -192,6 +196,7 @@ export function CopyButton({
         disabled={isDisabled}
         onClick={() => copy("formatted")}
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
+        tabIndex={-1}
         style={{
           ...SMALL_BTN,
           cursor: isDisabled ? "not-allowed" : "pointer",
@@ -221,6 +226,7 @@ export function CopyButton({
           aria-haspopup="menu"
           aria-expanded={!!menuAt}
           aria-label={`Copy ${label} as…`}
+          tabIndex={-1}
           onClick={() => {
             if (menuAt) {
               setMenuAt(null);

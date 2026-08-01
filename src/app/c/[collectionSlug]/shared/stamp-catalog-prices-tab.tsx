@@ -426,6 +426,9 @@ export function StampCatalogPricesTab({
                                   disabled={disabled}
                                   onClick={() => onPriceChange(newestKey, formatPrice(price))}
                                   aria-label="Copy this price into the newest edition"
+                                  // Auxiliary to the grid's price inputs (#446): tabbing a price
+                                  // table should walk the figures, not the shortcuts beside them.
+                                  tabIndex={-1}
                                   style={warnBtnStyle}
                                 >
                                   ⤴

@@ -21,6 +21,8 @@ const LABEL_STYLE: React.CSSProperties = {
   letterSpacing: "0.04em",
 };
 
+// The ✕ that empties the field it sits in. Auxiliary to that input and therefore out of the tab
+// order everywhere it appears (#446) — a keyboard already clears a field it is standing in.
 const CLEAR_BTN: React.CSSProperties = {
   background: "none",
   border: "none",
@@ -152,6 +154,7 @@ export function ListToolbar({
                 type="button"
                 onClick={() => setLocalSearch("")}
                 aria-label="Clear search"
+                tabIndex={-1}
                 style={CLEAR_BTN}
               >
                 ✕
@@ -236,6 +239,7 @@ export function ListToolbar({
                 type="button"
                 onClick={() => onCatalogSearchChange("", "")}
                 aria-label="Clear catalog search"
+                tabIndex={-1}
                 style={CLEAR_BTN}
               >
                 ✕

@@ -89,6 +89,10 @@ export interface TranslationsFieldProps {
  *
  * The badge counts the languages still **missing** a translation, so it reads as "these will fall
  * back to the default text" and disappears once every language is filled in.
+ *
+ * The opener is **out of the tab order** (#446): it sits beside a form's own input and opens a
+ * dialog, so tabbing through the entity's fields would stop on it once per translatable text. It is
+ * still reachable by mouse, and everything inside the dialog it opens tabs normally.
  */
 export function TranslationsField({
   dialogTitle,
@@ -137,6 +141,7 @@ export function TranslationsField({
           onClick={() => setOpenState(true)}
           disabled={disabled}
           aria-label={ariaLabel}
+          tabIndex={-1}
           style={buttonStyle}
         >
           🌐

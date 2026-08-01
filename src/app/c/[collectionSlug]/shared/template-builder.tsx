@@ -438,11 +438,13 @@ export function TemplateBuilder({
         <input id={fieldId} type="text" {...fieldProps} />
       )}
 
-      {/* Click-to-insert token (and block) chips. */}
+      {/* Click-to-insert token (and block) chips. They are a shortcut into the field above — the
+          syntax can always be typed — so they stay out of the tab order (#446); a dozen chips per
+          template otherwise stand between one template's field and the next. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", margin: "0.5rem 0 0.75rem" }}>
         {tokens.map((t) => (
           <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}`}>
-            <button type="button" onClick={() => insert(t.token)} style={TOKEN_CHIP}>
+            <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
               {t.token}
             </button>
           </Tooltip>
@@ -451,6 +453,7 @@ export function TemplateBuilder({
           <Tooltip key={b.open} content={`${b.label} — wraps the selection`}>
             <button
               type="button"
+              tabIndex={-1}
               onClick={() => insert(b.open, b.close)}
               style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
             >

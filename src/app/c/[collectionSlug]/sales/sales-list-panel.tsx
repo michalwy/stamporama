@@ -131,6 +131,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
                 type="button"
                 onClick={() => setLocalSearch("")}
                 aria-label="Clear search"
+                tabIndex={-1}
                 style={{
                   background: "none",
                   border: "none",

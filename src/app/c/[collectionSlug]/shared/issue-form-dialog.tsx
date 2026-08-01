@@ -418,7 +418,10 @@ function IssueForm({
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                     {/* Per-issue prefix override (#377). It sits *in front of* the numbers because
                         that is exactly where it renders — `Mi·SP 200`. Blank inherits the area's
-                        prefix, which is what the placeholder shows. */}
+                        prefix, which is what the placeholder shows.
+
+                        Out of the tab order (#445): an override is the rare case, and one stop per
+                        vendor stands between the collector and the numbers they came here to type. */}
                     <Tooltip
                       content={
                         v.prefix
@@ -436,6 +439,7 @@ function IssueForm({
                         disabled={isPending}
                         placeholder={v.prefix ?? "Prefix"}
                         aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
+                        tabIndex={-1}
                         {...NO_AUTOFILL}
                         style={{ ...INPUT_STYLE, width: "5.5rem" }}
                       />
