@@ -879,8 +879,9 @@ function toSaleListItem(
 
 export interface SaleListFilters {
   platformId?: string;
-  /** Fulfillment status (#191) to narrow to, for the list's status chips (#392). */
-  status?: SaleStatus;
+  /** Fulfillment statuses (#191) to narrow to, for the list's status chips (#392). OR-matched and
+   * multi-select (#475); empty or absent means every status. */
+  statuses?: SaleStatus[];
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
   search?: string;
@@ -928,7 +929,7 @@ export async function listSalesPaginated(
     where: {
       collectionId,
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
-      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
       ...(filters.search ? saleSearchWhere(filters.search) : {}),
     },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
@@ -945,15 +946,18 @@ export async function listSalesPaginated(
   };
 }
 
-/** Distinct platforms that currently have at least one sale, for the list-screen filter. */
+/** Distinct platforms that currently have at least one sale, for the list-screen filter. Carries
+ * each platform's locked currency (#196) as the offers list's own platform read does: the Record a
+ * Sale dialog seeds its platform from the active filter (#464), and a pre-filled platform whose
+ * currency is unknown falls back to an editable picker defaulting to the base currency. */
 export async function listSalePlatforms(
   ownerId: string,
   collectionId: string
-): Promise<{ id: string; name: string }[]> {
+): Promise<{ id: string; name: string; platformCurrency: string | null }[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.sale.findMany({
     where: { collectionId },
-    select: { platform: { select: { id: true, name: true } } },
+    select: { platform: { select: { id: true, name: true, platformCurrency: true } } },
     distinct: ["platformId"],
     orderBy: { platform: { name: "asc" } },
   });

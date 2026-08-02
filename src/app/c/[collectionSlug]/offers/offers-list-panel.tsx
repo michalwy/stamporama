@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { SEARCH_INPUT_STYLE, useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { OfferListItem } from "@/lib/offers";
-import { type OfferState, type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
@@ -92,7 +93,9 @@ export function OffersListPanel({
   // picked here. Every change writes both, so clearing a filter clears the memory of it too.
   //
   // State and "needs action" share one stored value because they are one choice in the toolbar —
-  // picking either clears the other — and storing them apart would let the two disagree.
+  // picking either clears the other — and storing them apart would let the two disagree. The state
+  // half is a comma-separated set since the chips became multi-select (#475); "needs action" stays
+  // a single value, being a derived overlay rather than a state (ADR-0013 §4).
   const [storedPlatform, rememberPlatformFilter] = usePersistedCollectionValue(
     "offers-platform",
     collectionId
@@ -101,6 +104,7 @@ export function OffersListPanel({
     "offers-status",
     collectionId
   );
+  const [storedSearch, rememberSearch] = usePersistedCollectionValue("offers-search", collectionId);
 
   const statusFromUrl =
     searchParams.has("state") || searchParams.has("needsAction")
@@ -110,8 +114,10 @@ export function OffersListPanel({
       : null;
   const status = statusFromUrl ?? storedStatus ?? "";
   const needsAction = status === NEEDS_ACTION;
-  const state =
-    !needsAction && OFFER_STATES.includes(status as OfferState) ? (status as OfferState) : undefined;
+  const states = useMemo(
+    () => (needsAction ? [] : status.split(",").filter(isOfferState)),
+    [needsAction, status]
+  );
 
   // Only the *stored* platform is checked against the loaded list: one that has since been removed
   // would silently narrow the list to nothing, and unlike a link nobody typed it this time. A
@@ -137,9 +143,13 @@ export function OffersListPanel({
     `stamporama:offers:includeClosed:${collectionId}`
   );
 
+  // Search box (#465), remembered alongside the other filters and, like them, overridden by the URL
+  // whenever it carries one — so a link to a searched list still means what it says.
+  const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+
   const filters: OfferFilters = useMemo(
-    () => ({ platformId, state, needsAction, includeClosed }),
-    [platformId, state, needsAction, includeClosed]
+    () => ({ platformId, states, needsAction, includeClosed, search: search || undefined }),
+    [platformId, states, needsAction, includeClosed, search]
   );
 
   // What every row hands to the offer it opens (#429): the filters this list is showing, so the
@@ -158,6 +168,29 @@ export function OffersListPanel({
     },
     [router, collectionSlug, searchParams]
   );
+
+  // Debounced search box (#465), mirroring the sales list's (#193): settle the local input, then
+  // push it to the URL and the remembered value together, skipping the initial mount so an empty
+  // box never clears what was remembered before it is typed in.
+  const [localSearch, setLocalSearch] = useState(search);
+  const debouncedSearch = useDebouncedValue(localSearch);
+  const updateParamsRef = useRef(updateParams);
+  useEffect(() => {
+    updateParamsRef.current = updateParams;
+  });
+  const rememberSearchRef = useRef(rememberSearch);
+  useEffect(() => {
+    rememberSearchRef.current = rememberSearch;
+  });
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    rememberSearchRef.current(debouncedSearch);
+    updateParamsRef.current({ search: debouncedSearch });
+  }, [debouncedSearch]);
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useOffersInfinite(
     collectionId,
@@ -209,7 +242,7 @@ export function OffersListPanel({
     });
   }
 
-  const hasActiveFilters = !!platformId || !!state || needsAction;
+  const hasActiveFilters = !!platformId || states.length > 0 || needsAction || !!search;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -231,6 +264,48 @@ export function OffersListPanel({
         }}
       >
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Find one offer among hundreds by what is known about it (#465): its title, its own
+              number, a catalog number or filing ref of a copy in it, or the marketplace link a sale
+              notification carried. Server-side — the list is cursor-paginated, so it cannot be a
+              client facet. */}
+          <div style={{ position: "relative", flex: "0 1 18rem", minWidth: "11rem" }}>
+            <input
+              type="text"
+              placeholder="Search title, #no, link, catalog no, ref…"
+              aria-label="Search offers"
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              style={{ ...SEARCH_INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
+            />
+            {localSearch && (
+              <Tooltip
+                content="Clear search"
+                style={{
+                  position: "absolute",
+                  right: "0.375rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setLocalSearch("")}
+                  aria-label="Clear search"
+                  tabIndex={-1}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.75rem",
+                    padding: "0 0.25rem",
+                  }}
+                >
+                  ✕
+                </button>
+              </Tooltip>
+            )}
+          </div>
           <select
             aria-label="Filter by platform"
             value={platformId ?? ""}
@@ -250,8 +325,12 @@ export function OffersListPanel({
             ))}
           </select>
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
+          {/* Multi-select (#475): an offer is in exactly one state, but the question asked of the
+              list is routinely a group of them ("what is prepared but not yet live"), so a chip
+              toggles its own state in and out of the set. Picking one still clears "needs action",
+              which is an overlay rather than a state (ADR-0013 §4). */}
           {OFFER_STATES.map((value) => {
-            const active = state === value;
+            const active = states.includes(value);
             return (
               <FilterChip
                 key={value}
@@ -259,8 +338,13 @@ export function OffersListPanel({
                 count={counts ? (counts.states[value] ?? 0) : undefined}
                 active={active}
                 onClick={() => {
-                  rememberStatusFilter(active ? "" : value);
-                  updateParams({ state: active ? "" : value, needsAction: "" });
+                  // Kept in lifecycle order however they were clicked, so the stored value and a
+                  // shared link read the same for one selection whatever route reached it.
+                  const next = OFFER_STATES.filter((s) =>
+                    s === value ? !active : states.includes(s)
+                  ).join(",");
+                  rememberStatusFilter(next);
+                  updateParams({ state: next, needsAction: "" });
                 }}
               />
             );
@@ -355,9 +439,11 @@ export function OffersListPanel({
 
         {!isLoading && rows.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {needsAction
-              ? "Nothing needs action — no active offer holds a set that has sold elsewhere."
-              : hasActiveFilters
+            {search
+              ? "No offers match your search."
+              : needsAction
+                ? "Nothing needs action — no active offer holds a set that has sold elsewhere."
+                : hasActiveFilters
                 ? "No offers match this filter."
                 : "No offers yet. Create one and compose its sets from your inventory."}
           </div>

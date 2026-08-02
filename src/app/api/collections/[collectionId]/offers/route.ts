@@ -21,17 +21,20 @@ export async function GET(
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const platformId = sp.get("platformId") || undefined;
-  const stateParam = sp.get("state");
-  const state = stateParam && isOfferState(stateParam) ? stateParam : undefined;
+  // A comma-separated set since the state chips became multi-select (#475); unknown tokens are
+  // dropped rather than refused, the chips being the authority on what exists.
+  const states = (sp.get("state") || "").split(",").filter(isOfferState);
   const needsAction = sp.get("needsAction") === "1";
+  const search = sp.get("search") || undefined;
   const includeClosed = sp.get("includeClosed") === "1";
 
   try {
     const result = await listOffersPaginated(session.user.id, collectionId, {
       offset,
       platformId,
-      state,
+      states,
       needsAction,
+      search,
       includeClosed,
       pageSize: 50,
     });

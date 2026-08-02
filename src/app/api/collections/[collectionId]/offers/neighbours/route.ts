@@ -21,12 +21,15 @@ export async function GET(
   if (!offerId) {
     return NextResponse.json({ error: "offerId is required" }, { status: 400 });
   }
-  const stateParam = sp.get("state");
+  // A comma-separated set since the state chips became multi-select (#475); unknown tokens are
+  // dropped rather than refused, the chips being the authority on what exists.
+  const states = (sp.get("state") || "").split(",").filter(isOfferState);
 
   try {
     const result = await offerListNeighbours(session.user.id, collectionId, offerId, {
       platformId: sp.get("platformId") || undefined,
-      state: stateParam && isOfferState(stateParam) ? stateParam : undefined,
+      states,
+      search: sp.get("search") || undefined,
       needsAction: sp.get("needsAction") === "1",
       includeClosed: sp.get("includeClosed") === "1",
     });

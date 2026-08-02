@@ -15,12 +15,16 @@ import { isOfferState, type OfferState } from "@/lib/offer-rules";
  */
 export interface OfferListContext {
   platformId?: string;
-  state?: OfferState;
-  /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `state`. */
+  /** The state chips that were on, OR-matched — a multi-select since #475. */
+  states?: OfferState[];
+  /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `states`. */
   needsAction?: boolean;
   /** The list's remembered show-closed toggle (#245) — not a list URL param, but part of what the
    * list was showing, so the walk has to carry it. */
   includeClosed?: boolean;
+  /** What was in the search box (#465): the list an offer was found through is the list the walk
+   * steps along, and a search narrows it exactly as a filter does. */
+  search?: string;
 }
 
 const MARKER = "from";
@@ -31,8 +35,9 @@ export function offerListContextQuery(context: OfferListContext): string {
   const params = new URLSearchParams({ [MARKER]: MARKER_VALUE });
   if (context.platformId) params.set("platform", context.platformId);
   if (context.needsAction) params.set("needsAction", "1");
-  else if (context.state) params.set("state", context.state);
+  else if (context.states?.length) params.set("state", context.states.join(","));
   if (context.includeClosed) params.set("closed", "1");
+  if (context.search) params.set("search", context.search);
   return `?${params.toString()}`;
 }
 
@@ -46,13 +51,13 @@ export function parseOfferListContext(
     return Array.isArray(value) ? value[0] : value;
   };
   if (get(MARKER) !== MARKER_VALUE) return null;
-  const state = get("state");
   const needsAction = get("needsAction") === "1";
   return {
     platformId: get("platform") || undefined,
-    state: !needsAction && state && isOfferState(state) ? state : undefined,
+    states: needsAction ? [] : (get("state") || "").split(",").filter(isOfferState),
     needsAction,
     includeClosed: get("closed") === "1",
+    search: get("search") || undefined,
   };
 }
 
@@ -65,7 +70,8 @@ export function offerListHref(collectionSlug: string, context: OfferListContext 
   const params = new URLSearchParams();
   if (context.platformId) params.set("platform", context.platformId);
   if (context.needsAction) params.set("needsAction", "1");
-  else if (context.state) params.set("state", context.state);
+  else if (context.states?.length) params.set("state", context.states.join(","));
+  if (context.search) params.set("search", context.search);
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }

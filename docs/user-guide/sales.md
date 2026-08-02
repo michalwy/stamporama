@@ -17,7 +17,9 @@ add what sold on the sale's own detail screen.
 Click **Record sale** and fill in:
 
 - **Platform** — the marketplace the sale happened on. Start typing to search your platform
-  [contacts](contacts.md). A sale is single-platform.
+  [contacts](contacts.md). A sale is single-platform. When the sale list is [filtered to a
+  platform](#finding-a-sale), that platform is **pre-filled** — recording a sale while looking at
+  one marketplace is nearly always a sale on it — and you can still change it.
 - **Buyer** — who bought (optional). Search or add a buyer contact; leave it blank if the buyer
   is unknown or anonymous.
 - **Order number** — the transaction/order number from the marketplace (optional), so you can
@@ -246,13 +248,16 @@ after the platform name — type `s 7` in the sidebar's **Jump to…** box to go
 The Sales toolbar has a **search** box, a **platform** filter and a row of **status** chips.
 Search matches the buyer name, the platform name, the order number, and the **name or catalog
 number of any copy** sold on the sale — so you can find a sale by what was in it, not just who
-bought it. The platform dropdown narrows the list to a single marketplace, and a status chip to one
-[fulfillment step](#fulfillment-status) — "everything Paid but not yet Sent" is the packing queue.
-All three combine.
+bought it. The platform dropdown narrows the list to a single marketplace, and the status chips to
+particular [fulfillment steps](#fulfillment-status). All three combine.
 
-Clicking the active status chip again clears it. The chip you picked is **remembered** for this
-collection and re-applied the next time you open the screen; a status named in the URL wins over it,
-so a link you share always shows what you meant it to.
+The status chips are **multi-select**: click as many as you want and the list shows all of them
+together, so "everything Paid *or* Packed but not yet Sent" is one selection rather than three
+passes. Clicking an active chip again drops it, and clearing them all shows every status.
+
+The chips you picked are **remembered** for this collection and re-applied the next time you open
+the screen; a status named in the URL wins over them, so a link you share always shows what you
+meant it to.
 
 ## Related
 

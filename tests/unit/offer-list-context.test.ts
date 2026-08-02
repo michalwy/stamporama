@@ -16,38 +16,62 @@ describe("offer list context", () => {
   }
 
   it("round-trips a platform + state filter", () => {
-    assert.deepEqual(roundTrip({ platformId: "p1", state: "preparing" }), {
+    assert.deepEqual(roundTrip({ platformId: "p1", states: ["preparing"] }), {
       platformId: "p1",
-      state: "preparing",
+      states: ["preparing"],
       needsAction: false,
       includeClosed: false,
+      search: undefined,
+    });
+  });
+
+  it("round-trips several states at once (#475)", () => {
+    assert.deepEqual(roundTrip({ states: ["ready", "active"] }), {
+      platformId: undefined,
+      states: ["ready", "active"],
+      needsAction: false,
+      includeClosed: false,
+      search: undefined,
+    });
+  });
+
+  it("round-trips the search box, the walk stepping along the list a search narrowed (#465)", () => {
+    assert.deepEqual(roundTrip({ search: "Mi 865" }), {
+      platformId: undefined,
+      states: [],
+      needsAction: false,
+      includeClosed: false,
+      search: "Mi 865",
     });
   });
 
   it("round-trips the show-closed toggle, which the list keeps out of its own URL", () => {
-    assert.deepEqual(roundTrip({ state: "sold", includeClosed: true }), {
+    assert.deepEqual(roundTrip({ states: ["sold"], includeClosed: true }), {
       platformId: undefined,
-      state: "sold",
+      states: ["sold"],
       needsAction: false,
       includeClosed: true,
+      search: undefined,
     });
   });
 
   it("keeps needs-action and state mutually exclusive, as the toolbar does", () => {
-    assert.deepEqual(roundTrip({ needsAction: true, state: "active" }), {
+    assert.deepEqual(roundTrip({ needsAction: true, states: ["active"] }), {
       platformId: undefined,
-      state: undefined,
+      states: [],
       needsAction: true,
       includeClosed: false,
+      search: undefined,
     });
   });
 
   it("reads an unfiltered walk — the whole list — as a context", () => {
     assert.deepEqual(roundTrip({}), {
       platformId: undefined,
-      state: undefined,
+      states: [],
       needsAction: false,
       includeClosed: false,
+      search: undefined,
     });
   });
 
@@ -56,24 +80,35 @@ describe("offer list context", () => {
     assert.equal(parseOfferListContext(new URLSearchParams()), null);
   });
 
-  it("ignores a state that is not one", () => {
-    const parsed = parseOfferListContext(new URLSearchParams("from=list&state=nonsense"));
-    assert.equal(parsed?.state, undefined);
+  it("drops a state that is not one, keeping the rest of the set", () => {
+    const parsed = parseOfferListContext(
+      new URLSearchParams("from=list&state=nonsense,ready")
+    );
+    assert.deepEqual(parsed?.states, ["ready"]);
+    assert.deepEqual(
+      parseOfferListContext(new URLSearchParams("from=list&state=nonsense"))?.states,
+      []
+    );
   });
 
   it("reads a Next-style searchParams object as well as a URLSearchParams", () => {
     assert.deepEqual(parseOfferListContext({ from: "list", platform: "p1", needsAction: "1" }), {
       platformId: "p1",
-      state: undefined,
+      states: [],
       needsAction: true,
       includeClosed: false,
+      search: undefined,
     });
   });
 
   it("points the way back at the list as it was, without the remembered toggle", () => {
     assert.equal(
-      offerListHref("mine", { platformId: "p1", state: "ready", includeClosed: true }),
+      offerListHref("mine", { platformId: "p1", states: ["ready"], includeClosed: true }),
       "/c/mine/offers?platform=p1&state=ready"
+    );
+    assert.equal(
+      offerListHref("mine", { states: ["ready", "active"] }),
+      "/c/mine/offers?state=ready%2Cactive"
     );
     assert.equal(offerListHref("mine", { needsAction: true }), "/c/mine/offers?needsAction=1");
     assert.equal(offerListHref("mine", {}), "/c/mine/offers");

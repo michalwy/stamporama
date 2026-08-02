@@ -12,8 +12,10 @@ interface SalesPage {
 
 export interface SaleFilters {
   platformId?: string;
-  /** Fulfillment status (#191) the list is narrowed to (#392), or undefined for all of them. */
-  status?: SaleStatus;
+  /** Fulfillment statuses (#191) the list is narrowed to (#392), OR-matched — empty (or absent)
+   * for all of them. A multi-select (#475): the question asked of the list is routinely a group
+   * of statuses ("what is paid but not yet sent"). */
+  statuses?: SaleStatus[];
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
 }
@@ -31,7 +33,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
-      if (filters.status) params.set("status", filters.status);
+      if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch sales");
@@ -42,9 +44,10 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
   });
 }
 
-/** Platforms that currently have at least one sale, for the list filter dropdown. */
+/** Platforms that currently have at least one sale, for the list filter dropdown — and, through it,
+ * for seeding the Record a Sale dialog when the list is filtered to one (#464). */
 export function useSalePlatforms(collectionId: string) {
-  return useQuery<{ id: string; name: string }[]>({
+  return useQuery<{ id: string; name: string; platformCurrency: string | null }[]>({
     queryKey: ["sales", collectionId, "platforms"] as const,
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/sales/platforms`);

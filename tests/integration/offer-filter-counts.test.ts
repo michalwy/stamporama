@@ -119,14 +119,21 @@ describe("offer filter counts + needs-action facet", () => {
     assert.equal(withClosed.platforms[delcampeId], 3);
     assert.equal(withClosed.total, 5);
 
-    const active = await offerFilterCounts(userId, collectionId, { state: "active" });
+    const active = await offerFilterCounts(userId, collectionId, { states: ["active"] });
     assert.equal(active.platforms[delcampeId], 2);
     assert.equal(active.platforms[allegroId], 1);
     assert.equal(active.total, 3);
 
+    // Several states at once (#475): the platform facet counts their union.
+    const activeOrPreparing = await offerFilterCounts(userId, collectionId, {
+      states: ["active", "preparing"],
+    });
+    assert.equal(activeOrPreparing.platforms[allegroId], 2);
+    assert.equal(activeOrPreparing.total, 4);
+
     // The platform facet ignores the platform selection itself.
     const activeOnAllegro = await offerFilterCounts(userId, collectionId, {
-      state: "active",
+      states: ["active"],
       platformId: allegroId,
     });
     assert.deepEqual(activeOnAllegro.platforms, active.platforms);

@@ -1093,9 +1093,34 @@ set can't be deleted — withdraw it.
 
 ## Filtering
 
-The toolbar filters offers by **platform**, by **state** (Preparing / Ready / Active / Paused / Sold /
-Withdrawn), and by **Needs action** (the derived overlay above). The state filters and **Needs action** are
-mutually exclusive.
+The toolbar has a **search** box, and filters offers by **platform**, by **state** (Preparing /
+Ready / Active / Paused / Sold / Withdrawn), and by **Needs action** (the derived overlay above).
+The state chips are **multi-select** — click as many as you want and the list shows all of them
+together, "everything Ready *or* Active" being one question rather than two. Clicking an active chip
+again drops it. **Needs action** is not a state, so picking it clears the state chips and picking a
+state clears it.
+
+### Searching
+
+The search box finds one offer among hundreds by what you happen to know about it. It matches:
+
+- the **listing title**, or — for an offer you never titled — the stamp names and set titles its
+  shown label is built from;
+- the offer's **own number**, bare (`200`) or as it reads on screen (`#200`);
+- a **catalog number** of any copy in the offer, or the **filing ref** (`A234`) of where that copy
+  sits — the same ref the [inventory](inventory.md) list searches on;
+- the **listing URL** — paste the marketplace link out of a sale notification and it lands on the
+  offer, whether or not the scheme, the `www.` or the tracking query came with it. A bare listing
+  number from the marketplace works too.
+
+Matching is case-insensitive and by substring, with no fuzzy guessing: a search that quietly lands
+on the wrong listing would be worse than none. The offer number and the URL are matched *in addition
+to* the text, never instead of it — `200` is also a perfectly good catalog number, so both are
+shown.
+
+The search **combines** with the platform, state and show-closed filters rather than replacing them,
+and the counts and the summary bar describe the searched set like they do any other filter. It is
+remembered per collection with the rest of them.
 
 Your selection is **remembered per collection**, so coming back to the offer list picks up where you
 left it rather than at "all offers". A link that names a filter still wins over the remembered one,
@@ -1114,7 +1139,7 @@ Every state chip, the **Needs action** chip, and each option in the platform dro
 filter but respects the others, so with a platform selected the state chips count only that
 platform's offers, and each platform option counts only offers in the state (or **Needs action**,
 or **Show sold/withdrawn**) you currently have chosen. The **All platforms** option shows the total
-under that same choice.
+under that same choice. A **search** has no chip of its own to count, so it narrows every count.
 
 The **Needs action** chip turns **red** as soon as its count is above zero, so a stale listing is
 visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
@@ -1128,7 +1153,8 @@ opposite **← Offers** on the right, you get **‹ Previous**, the offer's posi
 the same list, in the same order, without going back to it between offers. This is what preparing a
 batch looks like: filter by platform and **Preparing**, open the first one, finish it, and step on.
 
-- **← Offers** goes back to the list **as you left it**, with the same platform and state filter.
+- **← Offers** goes back to the list **as you left it**, with the same platform and state filter and
+  the same search.
 - The position and the two steps are worked out **once, when the offer opens**, and stay put while
   you work on it. Marking the offer Ready takes it out of a **Preparing** filter, and **Next ›**
   still goes where it was going to.

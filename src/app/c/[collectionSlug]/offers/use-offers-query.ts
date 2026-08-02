@@ -26,11 +26,16 @@ interface OffersPage {
 
 export interface OfferFilters {
   platformId?: string;
-  state?: OfferState;
-  /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `state`. */
+  /** The state chips that are on, OR-matched — a multi-select since #475. */
+  states?: OfferState[];
+  /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `states`. */
   needsAction?: boolean;
   /** Show closed (sold / withdrawn) offers; off by default hides dead listings (#245). */
   includeClosed?: boolean;
+  /** Free text over the title, the offer number, the listing URL and the copies' catalog numbers
+   * and filing refs (#465). Matched server-side — the list is cursor-paginated, so it cannot be a
+   * client facet. */
+  search?: string;
 }
 
 export const offerKeys = {
@@ -51,8 +56,9 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.needsAction) params.set("needsAction", "1");
-      else if (filters.state) params.set("state", filters.state);
+      else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
+      if (filters.search) params.set("search", filters.search);
       const res = await fetch(`/api/collections/${collectionId}/offers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch offers");
       return res.json();
@@ -120,8 +126,9 @@ export function useOfferNeighbours(
       const params = new URLSearchParams({ offerId });
       if (context?.platformId) params.set("platformId", context.platformId);
       if (context?.needsAction) params.set("needsAction", "1");
-      else if (context?.state) params.set("state", context.state);
+      else if (context?.states?.length) params.set("state", context.states.join(","));
       else if (context?.includeClosed) params.set("includeClosed", "1");
+      if (context?.search) params.set("search", context.search);
       const res = await fetch(
         `/api/collections/${collectionId}/offers/neighbours?${params.toString()}`
       );
@@ -143,8 +150,9 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       const params = new URLSearchParams();
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.needsAction) params.set("needsAction", "1");
-      else if (filters.state) params.set("state", filters.state);
+      else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
+      if (filters.search) params.set("search", filters.search);
       const res = await fetch(
         `/api/collections/${collectionId}/offers/counts?${params.toString()}`
       );
@@ -164,8 +172,9 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       const params = new URLSearchParams();
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.needsAction) params.set("needsAction", "1");
-      else if (filters.state) params.set("state", filters.state);
+      else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
+      if (filters.search) params.set("search", filters.search);
       const res = await fetch(
         `/api/collections/${collectionId}/offers/summary?${params.toString()}`
       );

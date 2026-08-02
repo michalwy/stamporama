@@ -17,12 +17,15 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const stateParam = sp.get("state");
+  // A comma-separated set since the state chips became multi-select (#475); unknown tokens are
+  // dropped rather than refused, the chips being the authority on what exists.
+  const states = (sp.get("state") || "").split(",").filter(isOfferState);
 
   try {
     const summary = await offersSummary(session.user.id, collectionId, {
       platformId: sp.get("platformId") || undefined,
-      state: stateParam && isOfferState(stateParam) ? stateParam : undefined,
+      states,
+      search: sp.get("search") || undefined,
       needsAction: sp.get("needsAction") === "1",
       includeClosed: sp.get("includeClosed") === "1",
     });

@@ -20,17 +20,17 @@ export async function GET(
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const platformId = sp.get("platformId") || undefined;
-  // An unrecognised status is dropped rather than refused — a stale link narrows to nothing
-  // otherwise, and the chips are the authority on what exists.
-  const statusParam = sp.get("status") || "";
-  const status = isSaleStatus(statusParam) ? statusParam : undefined;
+  // A comma-separated set since the chips became multi-select (#475). An unrecognised status is
+  // dropped rather than refused — a stale link narrows to nothing otherwise, and the chips are the
+  // authority on what exists.
+  const statuses = (sp.get("status") || "").split(",").filter(isSaleStatus);
   const search = sp.get("search") || undefined;
 
   try {
     const result = await listSalesPaginated(session.user.id, collectionId, {
       offset,
       platformId,
-      status,
+      statuses,
       search,
       pageSize: 50,
     });

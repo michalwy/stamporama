@@ -47,6 +47,10 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   // Fulfillment-status filter (#392), remembered per collection (#325): the URL stays authoritative
   // when it names one, so a link is still shareable, and a fresh navigation falls back to the last
   // chip picked here. Every change writes both, so clearing the filter clears the memory of it too.
+  //
+  // Several chips can be on at once (#475), so the stored value and the URL param both carry a
+  // comma-separated set. Unrecognised tokens are dropped rather than refused, exactly as the route
+  // drops them: a stale link narrows to nothing otherwise.
   const [storedStatus, rememberStatusFilter] = usePersistedCollectionValue(
     "sales-status",
     collectionId
@@ -54,11 +58,20 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const statusParam = searchParams.has("status")
     ? (searchParams.get("status") ?? "")
     : (storedStatus ?? "");
-  const status = isSaleStatus(statusParam) ? statusParam : undefined;
+  const statuses = useMemo(() => statusParam.split(",").filter(isSaleStatus), [statusParam]);
 
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, status, search }),
-    [platformId, status, search]
+    () => ({ platformId, statuses, search }),
+    [platformId, statuses, search]
+  );
+
+  // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
+  // recorded while looking at one marketplace is a sale on it. Left editable — it is a pre-fill,
+  // not the quick-sell flow's locked platform (#225). Its currency travels with it, or the dialog's
+  // locked-currency field (#196) would fall back to the base currency.
+  const filterPlatform = useMemo(
+    () => platforms.find((p) => p.id === platformId),
+    [platforms, platformId]
   );
 
   const updateParams = useCallback(
@@ -161,17 +174,23 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
         </select>
 
         {/* Fulfillment status (#191/#392) — chips rather than a second select, so where a sale has
-            got to is readable without opening anything. */}
+            got to is readable without opening anything. Multi-select (#475): a sale is in exactly
+            one status, but the question asked of the list is routinely a group of them ("what is
+            paid but not yet sent"), so a chip toggles its own status in and out of the set. */}
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           {SALE_STATUS_ORDER.map((value) => {
-            const active = status === value;
+            const active = statuses.includes(value);
             return (
               <FilterChip
                 key={value}
                 label={SALE_STATUS_META[value].label}
                 active={active}
                 onClick={() => {
-                  const next = active ? "" : value;
+                  // Kept in lifecycle order however they were clicked, so the stored value and the
+                  // shared link read the same for one selection whatever route reached it.
+                  const next = SALE_STATUS_ORDER.filter((s) =>
+                    s === value ? !active : statuses.includes(s)
+                  ).join(",");
                   rememberStatusFilter(next);
                   updateParams({ status: next });
                 }}
@@ -219,8 +238,10 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {search
               ? "No sales match your search."
-              : status
-                ? `No ${SALE_STATUS_META[status].label.toLowerCase()} sales${platformId ? " on this platform" : ""}.`
+              : statuses.length > 0
+                ? `No ${statuses
+                    .map((s) => SALE_STATUS_META[s].label.toLowerCase())
+                    .join(" or ")} sales${platformId ? " on this platform" : ""}.`
                 : platformId
                   ? "No sales on this platform yet."
                   : "No sales yet. Record a sale when a listed lot sells on a marketplace."}
@@ -254,6 +275,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           collectionId={collectionId}
           baseCurrency={baseCurrency}
           today={today}
+          initialPlatform={filterPlatform}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}

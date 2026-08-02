@@ -38,6 +38,8 @@ import {
   type LabelSetItemRow,
   type OfferLabeller,
 } from "./offer-labels";
+import { parseOfferAddressSearch } from "./offer-search";
+import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
@@ -1077,13 +1079,20 @@ async function withNeedsAction(
 
 export interface OfferListFilters {
   platformId?: string;
-  state?: OfferState;
+  /** The states the list is narrowed to, OR-matched — empty or absent means every state. A
+   * multi-select since #475: an offer is in exactly one state, but the question asked of the list
+   * is routinely a group of them ("what is prepared but not yet live"). */
+  states?: OfferState[];
   /** The derived "needs action" overlay (ADR-0013 §4): active offers holding a set whose copy sold
-   * elsewhere. Takes precedence over `state`. */
+   * elsewhere. Takes precedence over `states`. */
   needsAction?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
-   * the user opts in (#245). Ignored when an explicit `state` filter is set. */
+   * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
+  /** Free text the list is narrowed to (#465): the listing title, the derived label's inputs, the
+   * offer's own number, its listing URL, or the catalog number / filing ref of a copy it holds.
+   * Composes with every other filter rather than replacing them. */
+  search?: string;
   offset?: number;
   pageSize?: number;
 }
@@ -1093,23 +1102,91 @@ export interface PaginatedOffersResult {
   nextCursor: string | null;
 }
 
+/**
+ * The `where` fragment for the offers-list search box (#465). Case-insensitive substring, over the
+ * things a collector knows an offer by:
+ *
+ * - the **stored listing title**, and — only where there is none — the inputs the shown label is
+ *   derived from (#209/#379): the set titles and the stamp names behind them. An offer that *has* a
+ *   title is matched on the title, because that is what the list is showing and what the collector
+ *   deliberately wrote;
+ * - the **offer's own number** (#416), a bare integer or behind a `#`, following `parseEntityNoSearch`
+ *   (#431) — matched *in addition to* the text, never instead of it, since `200` is also a perfectly
+ *   good catalog number;
+ * - the **catalog numbers** of the copies in its sets, exactly as the sales list searches them;
+ * - the **filing ref** of those copies (`A234`), for the same reason the inventory list searches it
+ *   (#303): where a piece sits in the album is one of the few things a collector reliably knows
+ *   about it, and an offer is findable by what is in it;
+ * - the **listing URL**, at the address's own boundaries rather than as a bare substring — see
+ *   `offer-search.ts` for why either half of that is never a plain `contains`.
+ */
+function offerSearchWhere(search: string): Prisma.OfferWhereInput {
+  const s = search.trim();
+  const text = { contains: s, mode: "insensitive" as const };
+  const stampMatch: Prisma.OfferWhereInput = {
+    sets: { some: { items: { some: { item: { stamp: { name: text } } } } } },
+  };
+  /** One of the offer's copies matching, whatever is asked of the copy. */
+  const heldCopy = (item: Prisma.ItemWhereInput): Prisma.OfferWhereInput => ({
+    sets: { some: { items: { some: { item } } } },
+  });
+
+  const or: Prisma.OfferWhereInput[] = [
+    { name: text },
+    { name: null, sets: { some: { title: text } } },
+    { name: null, ...stampMatch },
+    heldCopy({ stamp: { catalogNumbers: { some: { number: text } } } }),
+    heldCopy({ locationRef: text }),
+  ];
+
+  const offerNo = parseEntityNoSearch(s);
+  if (offerNo !== null) or.push({ offerNo });
+
+  // A pasted link is compared as an address: the stored URL has to *end* at the same place, or
+  // carry it followed by a query, a fragment or a further segment — so `…/sale/12` never matches
+  // `…/sale/1234`.
+  const { address, listingId } = parseOfferAddressSearch(s);
+  if (address) {
+    or.push(
+      { url: { endsWith: address, mode: "insensitive" } },
+      { url: { contains: `${address}/`, mode: "insensitive" } },
+      { url: { contains: `${address}?`, mode: "insensitive" } },
+      { url: { contains: `${address}#`, mode: "insensitive" } }
+    );
+  }
+  // …and a listing number is found inside an address that shares nothing else with it, at the
+  // boundaries `findCapturedLot` uses for the same job on an auction lot.
+  if (listingId) {
+    or.push(
+      { url: { endsWith: `/${listingId}` } },
+      { url: { endsWith: `-${listingId}` } },
+      { url: { contains: `/${listingId}?` } },
+      { url: { contains: `-${listingId}?` } },
+      { url: { contains: `offerId=${listingId}` } }
+    );
+  }
+
+  return { OR: or };
+}
+
 /** The offer list's `where`, shared by the paginated list and the summary bar (#317) so both read
  * exactly the same offer set. Pass `needsActionIds` for the derived overlay (ADR-0013 §4): it is
  * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice. */
 function offerListWhere(
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "state" | "includeClosed">,
+  filters: Pick<OfferListFilters, "platformId" | "states" | "includeClosed" | "search">,
   needsActionIds?: string[]
 ): Prisma.OfferWhereInput {
   return {
     collectionId,
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    ...(filters.search?.trim() ? offerSearchWhere(filters.search) : {}),
     ...(needsActionIds
       ? { id: { in: needsActionIds } }
       : // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the
         // user opted in (#245).
-        filters.state
-        ? { state: filters.state }
+        filters.states?.length
+        ? { state: { in: filters.states } }
         : filters.includeClosed
           ? {}
           : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
@@ -1197,7 +1274,7 @@ export async function offerListNeighbours(
   ownerId: string,
   collectionId: string,
   offerId: string,
-  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -1351,22 +1428,43 @@ export interface OfferFilterCounts {
  *
  * The needs-action facet can't be a DB `where` (ADR-0013 §4), so it is derived in memory from the
  * collection's `active` offers, exactly as the needs-action list page does.
+ *
+ * The search box (#465) is not a facet of its own — it has no control to count — so it narrows
+ * *every* count, which is what makes the badges describe the searched set rather than the whole
+ * collection.
  */
 export async function offerFilterCounts(
   ownerId: string,
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
 ): Promise<OfferFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
+
+  const searchWhere = filters.search?.trim() ? offerSearchWhere(filters.search) : null;
+  // A search is the one narrowing the derived facet cannot express, `needsActionRows` reading its
+  // own SQL rather than a `where` (ADR-0013 §4). So it is resolved to ids first and handed in as
+  // the scope that read already takes — no search matches means an empty scope, not an open one.
+  const searchIds = searchWhere
+    ? (
+        await prisma.offer.findMany({
+          where: { collectionId, ...searchWhere },
+          select: { id: true },
+        })
+      ).map((r) => r.id)
+    : undefined;
 
   // The needs-action facet comes back already grouped by platform, so both the chip's own count
   // (within the selected platform) and the platform facet under a needs-action selection are read
   // off the same few flagged rows — no id list travels back into a `where`.
   const [flagged, byState, byPlatform] = await Promise.all([
-    needsActionRows(collectionId),
+    needsActionRows(collectionId, searchIds),
     prisma.offer.groupBy({
       by: ["state"],
-      where: { collectionId, ...(filters.platformId ? { platformId: filters.platformId } : {}) },
+      where: {
+        collectionId,
+        ...(filters.platformId ? { platformId: filters.platformId } : {}),
+        ...(searchWhere ?? {}),
+      },
       _count: { _all: true },
     }),
     // The platform facet respects the state choice the same way the list does: an explicit state
@@ -1378,8 +1476,9 @@ export async function offerFilterCounts(
           by: ["platformId"],
           where: {
             collectionId,
-            ...(filters.state
-              ? { state: filters.state }
+            ...(searchWhere ?? {}),
+            ...(filters.states?.length
+              ? { state: { in: filters.states } }
               : filters.includeClosed
                 ? {}
                 : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
@@ -1450,7 +1549,7 @@ export interface OffersSummaryPlatform extends Omit<OfferPlatformTotal, "itemIds
 export async function offersSummary(
   ownerId: string,
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "state" | "needsAction" | "includeClosed"> = {}
+  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
 
