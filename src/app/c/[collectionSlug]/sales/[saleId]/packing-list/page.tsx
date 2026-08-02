@@ -11,6 +11,7 @@ import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
 import { buildPackingList } from "@/lib/packing-list";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "./print-button";
 import { PackingSheet } from "./packing-sheet";
@@ -25,7 +26,7 @@ export async function generateMetadata({ params }: PackingListPageProps): Promis
   if (!session) return {};
   const sale = await getSaleDetail(session.user.id, saleId);
   if (!sale) return {};
-  return { title: `Packing list — ${sale.platformName}` };
+  return { title: `Packing list ${formatEntityNo(sale.saleNo)} — ${sale.platformName}` };
 }
 
 function formatDate(d: Date): string {
@@ -96,8 +97,12 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
       {/* Sheet header — who and what this parcel is */}
       <header style={{ borderBottom: "2px solid var(--color-border-strong)", paddingBottom: "0.75rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+          {/* The sale's own number (#432) rides in the title (#474): it is this collection's name
+              for the transaction, so it identifies the sheet before anything else on it — and it is
+              the reference quoted back on paper. `Order` below is the *marketplace's* number, which
+              is a different thing and stays where it was. */}
           <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-            Packing list
+            Packing list {formatEntityNo(sale.saleNo)}
           </h1>
           <span style={{ fontSize: "1rem", color: "var(--color-text-secondary)" }}>
             {sale.platformName}
@@ -126,7 +131,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </div>
       </header>
 
-      <PackingSheet collectionId={collection.id} list={list} />
+      <PackingSheet collectionId={collection.id} itemNoPad={collection.itemNoPad} list={list} />
 
       {/* The legend closes the document — it is read once, after the last row, so it stays in the
           flow rather than repeating at the foot of every page. */}
@@ -161,7 +166,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
       >
         <span>
           <strong style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>
-            {sale.platformName}
+            {formatEntityNo(sale.saleNo)} · {sale.platformName}
             {sale.buyerName ? ` — ${sale.buyerName}` : ""}
           </strong>
           {sale.externalRef ? ` · #${sale.externalRef}` : ""} · sold {formatDate(sale.soldAt)} ·{" "}

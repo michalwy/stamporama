@@ -2,6 +2,8 @@
 
 import type { PackingListData, PackingListGroup, PackingListRow } from "@/lib/packing-list";
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { formatItemNo } from "@/lib/item-number";
+import { formatEntityNo } from "@/lib/quick-jump";
 
 // The packing sheet's body (#330): the location sections plus the screen-only column picker.
 // Which columns are printed is the collector's call — some pack by shelf ref alone, some want the
@@ -10,7 +12,12 @@ import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-pr
 
 // The enabled columns, stored as a comma-separated list of keys under one **global** key. A stored
 // empty string is a real answer ("everything off"), which is why this isn't a set of booleans.
-const PREF_KEY = "stamporama:packingList:columns";
+//
+// The key is **versioned**: a stored list names the columns that existed when it was saved, so a
+// column added later would silently never appear for anyone who had ever touched the chips. Bumping
+// the suffix reinstates the defaults once — a row of chips is a few seconds to set again, whereas a
+// number that never prints is invisible.
+const PREF_KEY = "stamporama:packingList:columns:v2";
 
 interface ColumnSpec {
   key: string;
@@ -31,12 +38,21 @@ const COLUMNS: ColumnSpec[] = [
   { key: "photo", label: "Photo", header: "", defaultOn: true, align: "center" },
   { key: "qty", label: "Qty", header: "Qty", defaultOn: true, align: "right", nowrap: true },
   { key: "ref", label: "Ref", header: "Ref", defaultOn: true, nowrap: true },
+  // The copy's own internal number (#268/#474), beside the shelf ref: both are identifiers read off
+  // the piece rather than descriptions of it, and this is the one written on the piece itself.
+  // Wrapping, unlike the other short columns: a merged row carries one number per copy behind it,
+  // and a run of five must fold rather than stretch the sheet past the page.
+  { key: "itemNo", label: "Copy no.", header: "Copy", defaultOn: true },
   { key: "catalog", label: "Catalog", header: "Catalog", defaultOn: true, nowrap: true },
   { key: "area", label: "Area", header: "Area", defaultOn: true },
   { key: "issue", label: "Series", header: "Series", defaultOn: true },
   { key: "stamp", label: "Stamp", header: "Stamp", defaultOn: true },
   { key: "condition", label: "Condition", header: "Cond.", defaultOn: true, nowrap: true },
   { key: "certificate", label: "Certificate", header: "Cert.", defaultOn: true },
+  // Which listing the line came through (#416/#474). Last, and after the piece is described: it is
+  // what the line is quoted as in correspondence with the marketplace, not something read off a
+  // shelf while packing.
+  { key: "offerNo", label: "Offer no.", header: "Offer", defaultOn: true },
 ];
 
 const DEFAULT_COLUMNS = COLUMNS.filter((c) => c.defaultOn)
@@ -78,11 +94,19 @@ const CHIP: React.CSSProperties = {
 
 const MUTED_DASH = <span style={{ color: "var(--color-text-muted)" }}>—</span>;
 
+/** Columns whose cells are figures, and therefore set in tabular figures so a column of them lines
+ * up digit under digit. */
+const NUMERIC_COLUMNS = new Set(["qty", "ref", "itemNo", "offerNo"]);
+
 export function PackingSheet({
   collectionId,
+  itemNoPad,
   list,
 }: {
   collectionId: string;
+  /** How wide this collection writes its copy numbers (#268) — the sheet prints them exactly as
+   * every other surface does, since the number is matched against the piece's own label. */
+  itemNoPad: number;
   list: PackingListData;
 }) {
   const [raw, setRaw] = usePersistentString(PREF_KEY, DEFAULT_COLUMNS);
@@ -146,7 +170,13 @@ export function PackingSheet({
       </div>
 
       {list.groups.map((group) => (
-        <LocationSection key={group.key} collectionId={collectionId} group={group} columns={enabled} />
+        <LocationSection
+          key={group.key}
+          collectionId={collectionId}
+          itemNoPad={itemNoPad}
+          group={group}
+          columns={enabled}
+        />
       ))}
     </>
   );
@@ -155,10 +185,12 @@ export function PackingSheet({
 /** One storage location as a section: its path as the heading, then its copies as tick rows. */
 function LocationSection({
   collectionId,
+  itemNoPad,
   group,
   columns,
 }: {
   collectionId: string;
+  itemNoPad: number;
   group: PackingListGroup;
   columns: ColumnSpec[];
 }) {
@@ -198,7 +230,13 @@ function LocationSection({
         </thead>
         <tbody>
           {group.rows.map((row) => (
-            <CopyRow key={row.key} collectionId={collectionId} row={row} columns={columns} />
+            <CopyRow
+              key={row.key}
+              collectionId={collectionId}
+              itemNoPad={itemNoPad}
+              row={row}
+              columns={columns}
+            />
           ))}
         </tbody>
       </table>
@@ -208,10 +246,12 @@ function LocationSection({
 
 function CopyRow({
   collectionId,
+  itemNoPad,
   row,
   columns,
 }: {
   collectionId: string;
+  itemNoPad: number;
   row: PackingListRow;
   columns: ColumnSpec[];
 }) {
@@ -241,20 +281,25 @@ function CopyRow({
           style={{
             ...TD,
             textAlign: c.align ?? "left",
-            fontVariantNumeric: c.key === "qty" || c.key === "ref" ? "tabular-nums" : undefined,
+            fontVariantNumeric: NUMERIC_COLUMNS.has(c.key) ? "tabular-nums" : undefined,
             fontWeight: c.key === "catalog" ? 600 : undefined,
             whiteSpace: c.nowrap ? "nowrap" : undefined,
           }}
           title={c.key === "condition" ? row.conditionName : undefined}
         >
-          {cell(collectionId, row, c.key)}
+          {cell(collectionId, itemNoPad, row, c.key)}
         </td>
       ))}
     </tr>
   );
 }
 
-function cell(collectionId: string, row: PackingListRow, key: string): React.ReactNode {
+function cell(
+  collectionId: string,
+  itemNoPad: number,
+  row: PackingListRow,
+  key: string
+): React.ReactNode {
   switch (key) {
     case "photo":
       // A plain <img>, not the interactive `PhotoThumb`: the sheet is a printout, so there is no
@@ -281,6 +326,14 @@ function cell(collectionId: string, row: PackingListRow, key: string): React.Rea
       return row.quantity;
     case "ref":
       return row.locationRef ?? MUTED_DASH;
+    case "itemNo":
+      // Every copy the row stands for (#474), because the number is what identifies the piece in
+      // hand — a merged row of five is five labels to check off, not one.
+      return row.itemNos.map((no) => formatItemNo(no, itemNoPad)).join(" ");
+    case "offerNo":
+      return row.offerNos.length === 0
+        ? MUTED_DASH
+        : row.offerNos.map((no) => formatEntityNo(no)).join(" ");
     case "catalog":
       return row.catalog;
     case "stamp":

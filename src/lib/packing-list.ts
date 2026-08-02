@@ -45,6 +45,14 @@ export interface PackingListRow {
    * the thumbnail column renders it. Merged copies share one thumbnail: they are the same stamp
    * in the same condition, so any of their photos identifies the piece to pull. */
   photoId: string | null;
+  /** Every copy number (#268) behind the row, ascending (#474). A merged row stands for several
+   * physical copies, and the number is written on the piece itself — so all of them are carried;
+   * one of them would name a copy the collector cannot tell from its neighbours. */
+  itemNos: number[];
+  /** The distinct offer numbers (#416) the row's copies left through, ascending. Usually one — a
+   * merged row is one stamp in one grade — but two identical copies can have been listed on two
+   * offers of the same sale. Empty when no listing is on record. */
+  offerNos: number[];
   /** How many copies this row stands for. */
   quantity: number;
   /** True when every copy behind the row is already packed (#192). */
@@ -105,6 +113,10 @@ export function buildPackingList(
     const existing = bucket.rows.get(rowKey);
     if (existing) {
       existing.quantity += 1;
+      existing.itemNos.push(copy.itemNo);
+      if (copy.offerNo != null && !existing.offerNos.includes(copy.offerNo)) {
+        existing.offerNos.push(copy.offerNo);
+      }
       // A later copy can carry the photo an earlier one lacks.
       existing.photoId ??= copy.photos[0]?.id ?? null;
       continue;
@@ -120,6 +132,8 @@ export function buildPackingList(
       certificateStatusName: copy.certificateStatusName,
       locationRef: copy.locationRef,
       photoId: copy.photos[0]?.id ?? null,
+      itemNos: [copy.itemNo],
+      offerNos: copy.offerNo == null ? [] : [copy.offerNo],
       quantity: 1,
       packed: copy.packed,
     });
@@ -128,6 +142,12 @@ export function buildPackingList(
   const groups: PackingListGroup[] = Array.from(buckets.values())
     .map((bucket) => {
       const rows = Array.from(bucket.rows.values()).sort(compareRows);
+      // The numbers a row carries read as a list on paper, so they read ascending (#474) — the copy
+      // order inside a merged row is an accident of how the sale was assembled.
+      for (const row of rows) {
+        row.itemNos.sort((a, b) => a - b);
+        row.offerNos.sort((a, b) => a - b);
+      }
       return {
         key: bucket.key,
         location: bucket.location,

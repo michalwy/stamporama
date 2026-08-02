@@ -188,8 +188,11 @@ If you'd rather pack from paper than from the screen, the header's **🖨 Packin
 a print-friendly sheet for the sale. It is a plain document — no sidebar, no controls, no filters —
 laid out as a walk through your shelves:
 
-- A **header** with the platform, buyer, order number, sale date, [status](#fulfillment-status),
-  and the copy/packed counts.
+- A **header** carrying the **sale's own number** (`Packing list #12`) — this collection's name for
+  the transaction, and the reference to quote when the sheet is talked about on paper — plus the
+  platform, buyer, order number, sale date, [status](#fulfillment-status), and the copy/packed
+  counts. The **order number** beside it is a different thing: that one is the *marketplace's*
+  number for the same sale.
 - One **section per storage [location](locations.md)**, in shelf order, with the copies filed
   nowhere in a trailing **No location** section.
 - Inside a section, one line per copy: a **tick box** plus whichever of the columns below you
@@ -204,22 +207,30 @@ laid out as a walk through your shelves:
 ### Choosing the columns
 
 Above the list, a row of **Columns** chips picks what the sheet prints. They print in this order:
-**Photo** (a thumbnail of the copy), **Qty**, **Ref**, **Catalog**, **Area** (the full path, e.g.
-`Polska › II RP`), **Series** (the issue the stamp belongs to), **Stamp**, **Condition**, and
-**Certificate**. Click a chip to turn its column on or off — the tick box always stays, since it's
-the point of the sheet. The chips themselves never print, and each column is only as wide as its
-own content needs, so turning columns off tightens the sheet instead of leaving gaps.
+**Photo** (a thumbnail of the copy), **Qty**, **Ref**, **Copy no.**, **Catalog**, **Area** (the full
+path, e.g. `Polska › II RP`), **Series** (the issue the stamp belongs to), **Stamp**, **Condition**,
+**Certificate**, and **Offer no.** Click a chip to turn its column on or off — the tick box always
+stays, since it's the point of the sheet. The chips themselves never print, and each column is only
+as wide as its own content needs, so turning columns off tightens the sheet instead of leaving gaps.
+
+**Copy no.** is each copy's [internal number](inventory.md) — the one written on the piece or its
+label — printed exactly as wide as your collection writes it. A line that stands for several merged
+copies lists **every** one of their numbers, since each is a separate piece to find. **Offer no.**
+is the [offer](offers.md) the line was sold through; it reads `—` on a line whose listing has since
+been deleted, and can name two offers where merged copies came from different ones.
 
 Your selection is remembered **globally**, across every sale and every collection: it describes how
 you like to pack, not something about one order. So set it once and every packing list you open
-comes out the same way.
+comes out the same way. (Adding the two number columns reset the remembered selection once, so that
+they actually show up — if you had customised the chips before, set them again.)
 
 Copies you already ticked as **packed** in the app print with a **✓** in the box; the rest print
 empty, for ticking by hand. The sheet is a snapshot — ticking on paper doesn't change anything in
 Stamporama, so update the packed checkboxes on the detail screen when you're back at the computer.
 
-Each printed page carries a line at its foot that identifies the sale on its own — **platform**,
-**buyer**, **order number**, **sale date**, the **copy count** and the **status** — next to
+Each printed page carries a line at its foot that identifies the sale on its own — the **sale
+number**, **platform**, **buyer**, **order number**, **sale date**, the **copy count** and the
+**status** — next to
 **Stamporama** and its version, the collection, and the date and time the sheet was **generated**.
 So a page that slips out of the stack can still be matched back to its order, two printouts of the
 same sale can be told apart, and a sheet found weeks later says where it came from. The note about

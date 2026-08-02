@@ -37,6 +37,8 @@ function copy(over: Partial<SaleCopyItem>): SaleCopyItem {
   seq += 1;
   return {
     id: `item-${seq}`,
+    itemNo: seq,
+    offerNo: 7,
     stampId: "s1",
     stampName: "Chopin",
     issueName: "Composers",
@@ -81,6 +83,31 @@ describe("buildPackingList", () => {
       [{ catalog: "Mi·PL 200", quantity: 3 }]
     );
     assert.equal(list.totalCopies, 3);
+  });
+
+  it("carries every copy number behind a merged row, ascending (#474)", () => {
+    const list = buildPackingList(
+      [copy({ itemNo: 30 }), copy({ itemNo: 10 }), copy({ itemNo: 20 })],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    assert.deepEqual(list.groups[0].rows[0].itemNos, [10, 20, 30]);
+  });
+
+  it("collects the distinct offer numbers of a row's copies, ascending (#474)", () => {
+    const list = buildPackingList(
+      [copy({ offerNo: 5 }), copy({ offerNo: 2 }), copy({ offerNo: 5 }), copy({ offerNo: null })],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    assert.deepEqual(list.groups[0].rows[0].offerNos, [2, 5]);
+  });
+
+  it("leaves the offer numbers empty when no copy of a row came through a listing (#474)", () => {
+    const list = buildPackingList([copy({ offerNo: null })], AREAS, LOCATIONS, MAPS);
+    assert.deepEqual(list.groups[0].rows[0].offerNos, []);
   });
 
   it("keeps packed and unpacked copies of the same stamp apart", () => {

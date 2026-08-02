@@ -968,6 +968,26 @@ Either way, every set the offer still has left to sell is added at its current a
 you land on the sale's detail screen to review or adjust it. An offer with nothing left to sell (
 every set already sold) has no **Sell** action to offer.
 
+### Selling a single set
+
+An offer holding several sets — a [quantity](#sets--what-an-offer-is-made-of) of the same stamp, or
+a mixed listing — is often sold a piece at a time. Each set's own **⋮** menu on the offer's detail
+screen therefore carries **Sell this set**, which opens the same dialog scoped to that one set: pick
+an existing sale on the platform or start a new one, and only that set is added, at the offer's
+current asking price. Everything else in the offer stays exactly as it was and remains for sale.
+
+The offer-level **Sell** is unchanged — it still takes *every* set the offer has left, in one go.
+Use the set's own action when you are selling part of the listing, the offer's when the whole thing
+goes to one buyer. A set that has already sold has no **Sell this set** action.
+
+### Where a sold set went
+
+A set that sold through this offer keeps a **Sold · #12** chip on its card, and the chip is a
+**link**: click it to open the [sale](sales.md) that took the set, with the number being the sale's
+own [internal number](quick-jump.md). So the sale behind a set is one click away instead of a search
+through the sale list. A set marked **Sold elsewhere** has no such link — what took it was a sale on
+a different listing, which the offer does not record.
+
 ## Auction or quick buy
 
 Every offer is sold one of two ways, chosen on the offer form as its **listing type**:

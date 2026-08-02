@@ -1972,6 +1972,10 @@ export interface OfferDetailSet {
   } | null;
   /** This set has left on a sale (sold through this offer). */
   sold: boolean;
+  /** The sale it left on (#472), or null while the set is still for sale — what the sold chip links
+   * to, so the transaction is one click away rather than a search of the sale list. `saleNo` is the
+   * collection's own sale number (#432), the same one the sale row and the quick-jump box read. */
+  sale: { id: string; saleNo: number } | null;
   /** A copy of this set has sold **elsewhere** — the set is stale and should be removed. */
   needsAction: boolean;
 }
@@ -2219,7 +2223,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
               },
             },
           },
-          saleLines: { select: { id: true }, take: 1 },
+          // The sale this set left on, where it has gone (#472) — the set is sold indivisibly, so
+          // there is at most one line and one sale to name.
+          // `id` is what the shared listing-precondition helpers (#406) read off a set; the sale
+          // itself is this screen's own.
+          saleLines: { select: { id: true, sale: { select: { id: true, saleNo: true } } }, take: 1 },
         },
       },
     },
@@ -2287,7 +2295,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
     const items = orderedItems(s.items);
     const holdings = holdingsBySet.get(s.id)!;
-    const sold = s.saleLines.length > 0;
+    const sale = s.saleLines[0]?.sale ?? null;
+    const sold = sale !== null;
     const needs =
       state === "active" &&
       !sold &&
@@ -2319,6 +2328,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                   : (Number(holdings.cost.totalCostBasis) * baseToOffer).toFixed(2),
             },
       sold,
+      sale,
       needsAction: needs,
     };
   });

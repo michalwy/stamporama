@@ -986,6 +986,9 @@ export interface SaleDetailLine {
 
 export interface SaleDetail {
   id: string;
+  /** Short per-collection sale number (#432) — the collection's own name for this transaction, as
+   * opposed to `externalRef`, which is the marketplace's. Printed on the packing list (#474). */
+  saleNo: number;
   collectionId: string;
   platformId: string;
   platformName: string;
@@ -1037,6 +1040,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     where: { id: saleId },
     select: {
       id: true,
+      saleNo: true,
       collectionId: true,
       platformId: true,
       buyerId: true,
@@ -1143,6 +1147,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
 
   return {
     id: sale.id,
+    saleNo: sale.saleNo,
     collectionId: sale.collectionId,
     platformId: sale.platformId,
     platformName: sale.platform.name,
@@ -1219,18 +1224,25 @@ export async function getSaleIssueIds(saleId: string): Promise<string[]> {
 export interface SaleCopyItem extends ItemListItem {
   /** Whether this individual copy has been packed (#192). */
   packed: boolean;
+  /** The number (#416) of the offer this copy left through, or null — a line keeps its sale when the
+   * offer is later deleted (`SetNull`), and a historical sale then has no listing to name. Printed
+   * on the packing list (#474) as the reference the marketplace correspondence is about. */
+  offerNo: number | null;
 }
 
-/** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) into a set of
- * enriched copies, preserving the enriched order. */
+/** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) and the offer
+ * number behind each copy's line into a set of enriched copies, preserving the enriched order. */
 async function withPacked(items: ItemListItem[]): Promise<SaleCopyItem[]> {
   if (items.length === 0) return [];
   const rows = await prisma.saleLineItem.findMany({
     where: { itemId: { in: items.map((i) => i.id) } },
-    select: { itemId: true, packed: true },
+    select: { itemId: true, packed: true, saleLine: { select: { offer: { select: { offerNo: true } } } } },
   });
-  const packedById = new Map(rows.map((r) => [r.itemId, r.packed]));
-  return items.map((i) => ({ ...i, packed: packedById.get(i.id) ?? false }));
+  const byId = new Map(rows.map((r) => [r.itemId, r]));
+  return items.map((i) => {
+    const row = byId.get(i.id);
+    return { ...i, packed: row?.packed ?? false, offerNo: row?.saleLine.offer?.offerNo ?? null };
+  });
 }
 
 /** The physical copies that left on one sale line, as fully-enriched copies with their packed flag.

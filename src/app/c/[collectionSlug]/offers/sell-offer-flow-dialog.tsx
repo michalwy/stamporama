@@ -56,6 +56,11 @@ export interface SellOfferFlowDialogProps {
   /** Server-computed "today" for the new-sale step's date field. */
   today: string;
   offer: SellableOfferSubject;
+  /** Sell **one set** of the offer rather than every set it still has (#473). The set is named by
+   * its `OfferSet` id and by how it reads on the offer screen; everything else about the flow — the
+   * destination picker, the price, the landing screen — is identical, because selling one set and
+   * selling all of them are the same transaction with a different number of lines. */
+  set?: { id: string; label: string };
   onClose: () => void;
 }
 
@@ -73,6 +78,7 @@ export function SellOfferFlowDialog({
   baseCurrency,
   today,
   offer,
+  set,
   onClose,
 }: SellOfferFlowDialogProps) {
   const router = useRouter();
@@ -96,15 +102,20 @@ export function SellOfferFlowDialog({
   );
 
   const matched = sellableOffers.find((o) => o.offerId === offer.id);
+  const setId = set?.id ?? null;
   const lines: SaleLineRaw[] = useMemo(
     () =>
-      (matched?.sets ?? []).map((s) => ({
-        offerId: offer.id,
-        offerSetId: s.offerSetId,
-        price: offer.price,
-        itemIds: s.itemIds,
-      })),
-    [matched, offer.id, offer.price]
+      (matched?.sets ?? [])
+        // Scoped to one set when the flow was opened from a set (#473); otherwise every set the
+        // offer still has to sell, which is what the offer-level action has always meant.
+        .filter((s) => setId === null || s.offerSetId === setId)
+        .map((s) => ({
+          offerId: offer.id,
+          offerSetId: s.offerSetId,
+          price: offer.price,
+          itemIds: s.itemIds,
+        })),
+    [matched, offer.id, offer.price, setId]
   );
 
   function addLinesTo(saleId: string): Promise<{ status: "success" } | { status: "error"; message: string }> {
@@ -173,16 +184,20 @@ export function SellOfferFlowDialog({
   const noSets = !loadingSets && lines.length === 0;
 
   return createPortal(
-    <DialogShell title="Sell" onClose={onClose} minHeight="18rem" maxWidth="30rem">
+    <DialogShell title={set ? "Sell set" : "Sell"} onClose={onClose} minHeight="18rem" maxWidth="30rem">
       <DialogBody>
         <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-          Record a sale for <strong>{offer.name ?? offer.label}</strong> — add it to an existing sale on{" "}
-          {offer.platformName}, or start a new one.
+          Record a sale for{" "}
+          <strong>{set ? set.label : (offer.name ?? offer.label)}</strong>
+          {set && <> from <strong>{offer.name ?? offer.label}</strong></>} — add it to an existing
+          sale on {offer.platformName}, or start a new one.
         </p>
 
         {noSets ? (
           <p style={{ fontSize: "0.875rem", color: MUTED }}>
-            Nothing left to sell on this offer — every set has already sold.
+            {set
+              ? "This set has already sold."
+              : "Nothing left to sell on this offer — every set has already sold."}
           </p>
         ) : (
           <>

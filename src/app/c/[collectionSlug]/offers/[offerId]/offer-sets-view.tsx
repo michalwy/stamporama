@@ -1,11 +1,13 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
 import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -622,6 +624,7 @@ const MONEY_EQUIVALENT: React.CSSProperties = {
 /** One set as a collapsible card: sticky header/** One set as a collapsible card: sticky header (caret · label · count · state) over its copies. */
 function SetCard({
   set,
+  collectionSlug,
   copies,
   expanded,
   byIssue,
@@ -636,8 +639,10 @@ function SetCard({
   onToggle,
   onRemove,
   onResetCopyOrder,
+  onSell,
 }: {
   set: OfferDetailSet;
+  collectionSlug: string;
   copies: ItemListItem[];
   expanded: boolean;
   byIssue: boolean;
@@ -654,16 +659,22 @@ function SetCard({
   onToggle: () => void;
   onRemove: () => void;
   onResetCopyOrder: () => void;
+  /** Sell this one set (#473), or undefined where the offer cannot be sold from at all. */
+  onSell?: () => void;
 }) {
   const { sentinelRef, stuck } = useStuck(0);
   // Each card owns its copy list's drag state — copies never move between sets by dragging.
   const copyDrag = useReorderList(copyDragEnabled, onReorderCopies);
   const actions: RowAction[] = [
+    // Selling one set out of the offer (#473) — the offer-level Sell in the header menu takes every
+    // remaining set at once; this takes exactly this one, which is how a multi-qty offer (#372) is
+    // actually sold down. First entry: it is the action, the others are housekeeping.
+    ...(onSell ? [{ key: "sell", label: "Sell this set", icon: "💰", onSelect: onSell } as RowAction] : []),
     // Only offered once the order was actually hand-corrected — a derived set has nothing to reset.
     ...(set.manualCopyOrder
-      ? [{ key: "reset-order", label: "Reset to catalog order", icon: "↕", onSelect: onResetCopyOrder }]
+      ? [{ key: "reset-order", label: "Reset to catalog order", icon: "↕", separatorBefore: !!onSell, onSelect: onResetCopyOrder }]
       : []),
-    { key: "remove", label: "Remove set", icon: "✕", danger: true, separatorBefore: set.manualCopyOrder, onSelect: onRemove },
+    { key: "remove", label: "Remove set", icon: "✕", danger: true, separatorBefore: set.manualCopyOrder || !!onSell, onSelect: onRemove },
   ];
   return (
     <div
@@ -709,11 +720,26 @@ function SetCard({
             {copies.length} cop{copies.length === 1 ? "y" : "ies"}
           </div>
         </div>
-        {set.sold && (
-          <Tooltip content="Sold through this offer">
-            <span style={CHIP}>Sold</span>
-          </Tooltip>
-        )}
+        {set.sold &&
+          // Where the set went (#472). The chip is the link: a sold set's one remaining question is
+          // "which sale was that", and the number beside it is the sale's own (#432), so the target
+          // is named rather than merely pointed at. A set sold before the sale record existed — or
+          // whose sale line lost its sale — still says *Sold*, just without anywhere to go.
+          (set.sale ? (
+            <Tooltip content={`Sold on sale ${formatEntityNo(set.sale.saleNo)} — open it`}>
+              <Link
+                href={`/c/${collectionSlug}/sales/${set.sale.id}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{ ...CHIP, color: "var(--color-accent)", borderColor: "var(--color-accent)", textDecoration: "none" }}
+              >
+                Sold · {formatEntityNo(set.sale.saleNo)}
+              </Link>
+            </Tooltip>
+          ) : (
+            <Tooltip content="Sold through this offer">
+              <span style={CHIP}>Sold</span>
+            </Tooltip>
+          ))}
         {set.needsAction && (
           <Tooltip content="A copy of this set sold elsewhere — remove it">
             <span style={{ ...CHIP, color: "var(--color-error)", borderColor: "var(--color-error-border, var(--color-border))" }}>
@@ -786,6 +812,8 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
 
 interface OfferSetsViewProps {
   collectionId: string;
+  /** For the link a sold set's chip carries to its sale (#472). */
+  collectionSlug: string;
   offerId: string;
   sets: OfferDetailSet[];
   /** The sets summed and averaged (#378) — the figures in the header band. */
@@ -804,6 +832,9 @@ interface OfferSetsViewProps {
   issueHeaderById: Record<string, IssueHeader>;
   baseCurrency: string;
   onRemoveSet: (set: OfferDetailSet) => void;
+  /** Sell one set on its own (#473). Undefined on an offer nothing can be sold from — a terminal
+   * state — which is exactly when the offer-level Sell is withheld too. */
+  onSellSet?: (set: OfferDetailSet) => void;
 }
 
 /** The offer's sets as the same rich, sortable copy layout as a purchase order. Group by **Set**
@@ -811,6 +842,7 @@ interface OfferSetsViewProps {
  * sub-groups copies within whichever primary is chosen. */
 export function OfferSetsView({
   collectionId,
+  collectionSlug,
   offerId,
   sets,
   setsTotals,
@@ -824,6 +856,7 @@ export function OfferSetsView({
   issueHeaderById,
   baseCurrency,
   onRemoveSet,
+  onSellSet,
 }: OfferSetsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "set");
@@ -1135,6 +1168,7 @@ export function OfferSetsView({
               {showLineAt(setDrag, index) && <InsertionLine />}
               <SetCard
                 set={set}
+                collectionSlug={collectionSlug}
                 copies={copies}
                 expanded={hydrated && expansion.isExpanded(set.id)}
                 byIssue={byIssue}
@@ -1149,6 +1183,8 @@ export function OfferSetsView({
                 onToggle={() => expansion.toggle(set.id)}
                 onRemove={() => onRemoveSet(set)}
                 onResetCopyOrder={() => resetCopyOrder(set)}
+                // A set that has already gone has nothing left to sell (#473).
+                onSell={onSellSet && !set.sold ? () => onSellSet(set) : undefined}
               />
             </Fragment>
           ))}

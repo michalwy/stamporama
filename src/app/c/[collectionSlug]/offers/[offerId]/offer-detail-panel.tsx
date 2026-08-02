@@ -163,8 +163,10 @@ export function OfferDetailPanel({
   const [composing, setComposing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   // Quick-sell (#390): the Offer list's own flow (#225), opened from here so recording a sale does
-  // not mean navigating back to the list first.
+  // not mean navigating back to the list first. The same flow sells a **single set** (#473) when it
+  // was opened from one — `sellingSet` is the set it is scoped to, null for the whole offer.
   const [selling, setSelling] = useState(false);
+  const [sellingSet, setSellingSet] = useState<OfferDetailSet | null>(null);
   // Activation asks for the listing URL when the offer has none (#399) — the bulk workspace's own
   // publish step (#322), reached from here.
   const [activating, setActivating] = useState(false);
@@ -742,6 +744,7 @@ export function OfferDetailPanel({
           nothing in particular and left the section's vertical rhythm broken. */}
       <OfferSetsView
         collectionId={collectionId}
+        collectionSlug={collectionSlug}
         offerId={offerId}
         sets={offer.sets}
         setsTotals={offer.setsTotals}
@@ -776,6 +779,9 @@ export function OfferDetailPanel({
         issueHeaderById={issueHeaderById}
         baseCurrency={baseCurrency}
         onRemoveSet={setRemoveSet}
+        // Per-set sell (#473) — offered on the same precondition as the offer-level one: a terminal
+        // offer has nothing left to sell, whichever set is asked about.
+        onSellSet={editable ? setSellingSet : undefined}
       />
 
       {actionError && <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</p>}
@@ -807,8 +813,10 @@ export function OfferDetailPanel({
         />
       )}
 
-      {/* Quick-sell (#390) — the Offer list's flow (#225), reached from the offer itself. */}
-      {selling && (
+      {/* Quick-sell (#390) — the Offer list's flow (#225), reached from the offer itself. One
+          dialog for both scopes (#473): the header's Sell takes every set the offer still has, a
+          set's own Sell takes just that one, and the transaction they record is the same. */}
+      {(selling || sellingSet) && (
         <SellOfferFlowDialog
           collectionId={collectionId}
           collectionSlug={collectionSlug}
@@ -823,7 +831,11 @@ export function OfferDetailPanel({
             price: offer.price,
             currency: offer.currency,
           }}
-          onClose={() => setSelling(false)}
+          set={sellingSet ? { id: sellingSet.id, label: sellingSet.label } : undefined}
+          onClose={() => {
+            setSelling(false);
+            setSellingSet(null);
+          }}
         />
       )}
 
