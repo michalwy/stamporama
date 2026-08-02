@@ -24,6 +24,10 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
@@ -269,6 +273,12 @@ function StampTreeNode({
                 <StampTitle node={node} />
               </span>
 
+              {/* Edit · add a variant under this stamp · add a copy of it — the three a
+                  collector repeats while filling an issue in, on hover beside the menu. */}
+              <RowQuickActions
+                actions={pickRowActions(actions, ["edit", "add-child", "add-copy"])}
+                visible={hovered}
+              />
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
               {addCopy.dialog}
               {copies.dialog}
@@ -569,6 +579,11 @@ export function IssueRow({
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
+          {/* The issue-level counterparts: edit · add a stamp to it · add a copy. */}
+          <RowQuickActions
+            actions={pickRowActions(actions, ["edit", "add-stamp", "add-copy"])}
+            visible={hovered}
+          />
           <RowActionsMenu actions={actions} ariaLabel="Issue actions" />
           {addCopy.dialog}
           {copies.dialog}

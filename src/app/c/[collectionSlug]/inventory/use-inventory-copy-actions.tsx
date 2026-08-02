@@ -103,7 +103,9 @@ export function useInventoryAddAction({
   const action: RowAction = {
     key,
     label,
-    icon: "＋",
+    // ⧉ rather than a plus: promoted onto the row (row-quick-actions.tsx) it sits beside
+    // "Add stamp"/"Add child stamp", and two identical ＋ glyphs name neither.
+    icon: "⧉",
     onSelect: () => setOpen(true),
   };
 

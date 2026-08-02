@@ -73,6 +73,13 @@ To see the copies themselves, use **View copies** in the row's **⋮** menu.
 
 Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
+A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. On the **Issues** list these are:
+
+- an issue row — **✎** Edit, **＋** Add stamp, **⧉** Add copy
+- a stamp row inside the tree — **✎** Edit, **＋** Add child stamp, **⧉** Add copy
+
+Hovering tells you what each one is. They are skipped by **Tab**, which keeps one keyboard stop per row: the **⋮** menu, where the same actions live.
+
 ## Default language
 
 **Settings → General** carries a **Default language** — the language the names and title names you
