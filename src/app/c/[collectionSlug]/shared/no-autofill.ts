@@ -7,10 +7,17 @@
  * extensions ignore it, so each one needs its own opt-out attribute.
  *
  * Spread it onto the `<input>`: `<input type="text" {...NO_AUTOFILL} … />`.
+ *
+ * The attributes stop the *filling*; LastPass paints its in-field icon on some fields anyway (#460),
+ * so `globals.css` hides that icon for anything carrying `data-lpignore` here. The two halves belong
+ * together — an input that opts out through this constant is the one an icon is suppressed on.
  */
 export const NO_AUTOFILL = {
   autoComplete: "off",
   "data-lpignore": "true",
   "data-1p-ignore": "",
   "data-bwignore": "",
+  "data-protonpass-ignore": "",
+  // Dashlane's opt-out, honoured by several others: "this field is not part of a credential form".
+  "data-form-type": "other",
 } as const;

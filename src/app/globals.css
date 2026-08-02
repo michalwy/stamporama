@@ -121,6 +121,22 @@ body {
   background: var(--color-bg-page);
 }
 
+/* Password-manager icons on fields that already opted out (#460). `data-lpignore` and its siblings
+   (`shared/no-autofill.ts`) stop the *filling*, but LastPass still paints its in-field icon on some
+   fields regardless — as a `background-image` on the input, or as an overlay div it injects next to
+   it. Both are neutralised here, scoped to inputs carrying the opt-out attribute so the sign-in and
+   sign-up forms keep their icon: those are the one place a password manager is wanted. */
+input[data-lpignore="true"] {
+  /* `!important` is load-bearing: LastPass sets the icon as an *inline* style, which a plain rule
+     would lose to. Padding is deliberately left alone — it comes from the app's own inline styles. */
+  background-image: none !important;
+}
+
+input[data-lpignore="true"] + div[data-lastpass-icon-root],
+input[data-lpignore="true"] + div[id^="__lpform_"] {
+  display: none !important;
+}
+
 /* One-shot highlight applied to a row/card right after it is added (#158), so the user can
    confirm the action landed without scanning the list. Fades from a warm tint back to the
    surface colour. Suppressed under reduced-motion, where the tint simply isn't shown. */
