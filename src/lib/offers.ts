@@ -47,6 +47,7 @@ import {
   evaluateListingPreconditions,
   type ListingBlocker,
 } from "./listing-preconditions";
+import { hasListingModule } from "./platform-modules";
 import {
   evaluatePhotoReadiness,
   type PhotoReadinessBlocker,
@@ -902,6 +903,9 @@ export async function findOfferCollisions(
 
 export interface OfferListItem {
   id: string;
+  /** The offer's short per-collection number (#416/#432) — what the row prints and the quick-jump
+   * box (#431) takes as `o 12`. */
+  offerNo: number;
   /** The stored listing title (#209), or null when never generated. */
   name: string | null;
   /** Label derived from the offer's sets — the display fallback when `name` is null. */
@@ -945,6 +949,7 @@ export interface OfferListItem {
 
 const OFFER_SELECT = {
   id: true,
+  offerNo: true,
   name: true,
   platformId: true,
   url: true,
@@ -962,6 +967,7 @@ const OFFER_SELECT = {
 
 type OfferRow = {
   id: string;
+  offerNo: number;
   name: string | null;
   platformId: string;
   url: string | null;
@@ -977,14 +983,29 @@ type OfferRow = {
   sets: OfferSetRow[];
 };
 
+/**
+ * Whether "in active bidding" (#215) is still true of an offer that has **sold** (#469).
+ *
+ * It is not: the flag says a bid has been placed and the collector is committed *before the sale is
+ * recorded*, so the sale is exactly what resolves it — a sold listing showing "In bidding" reads as
+ * an auction still running. `addSaleLines` clears the stored flag on the same transition, and
+ * this is what an offer sold before that did says; the two agree, and no surface has to remember the
+ * rule. Only `sold`: a paused or withdrawn auction may genuinely still be taking bids.
+ */
+function biddingLive(inActiveBidding: boolean, state: OfferState): boolean {
+  return inActiveBidding && state !== "sold";
+}
+
 function toListItem(
   row: OfferRow,
   baseCurrency: string,
   labeller: OfferLabeller,
   soldCopyCount = 0
 ): OfferListItem {
+  const state = (isOfferState(row.state) ? row.state : "active") as OfferState;
   return {
     id: row.id,
+    offerNo: row.offerNo,
     name: row.name,
     label: labeller.offer(row.sets),
     platformId: row.platformId,
@@ -996,12 +1017,12 @@ function toListItem(
     currency: row.currency,
     baseCurrency,
     priceBase: null, // filled by attachBasePrices (needs the current rate)
-    state: (isOfferState(row.state) ? row.state : "active") as OfferState,
+    state,
     setCount: row.sets.length,
     itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
     needsAction: soldCopyCount > 0,
     soldCopyCount,
-    inActiveBidding: row.inActiveBidding,
+    inActiveBidding: biddingLive(row.inActiveBidding, state),
     listingDate: row.listingDate,
     createdAt: row.createdAt,
   };
@@ -1616,7 +1637,9 @@ export async function listReadyOffersForListing(
   // all where no module asks for it.
   const [labeller, conditionMap] = await Promise.all([
     makeOfferLabeller(collectionId),
-    platformModule ? loadColnectConditionMap(collectionId) : new Map<string, string>(),
+    hasListingModule(platformModule)
+      ? loadColnectConditionMap(collectionId)
+      : new Map<string, string>(),
   ]);
   const items: ListingWorkspaceOffer[] = rows.map((row) => ({
     id: row.id,
@@ -1643,8 +1666,8 @@ export async function listReadyOffersForListing(
 type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SELECT }>;
 
 /**
- * The listing preconditions for one offer of the batch (#406), or **nothing** where the platform
- * names no Assistant module.
+ * The listing preconditions for one offer of the batch (#406), or **nothing** where the platform has
+ * no Assistant module that can list (#471).
  *
  * Silence rather than the `no-platform-module` blocker the evaluator would return: that is a fact
  * about the platform, not something to fix on the offer, and a *Can't list* chip on every card of
@@ -1663,7 +1686,7 @@ function listingBlockersFor(
   conditionMap: Map<string, string>,
   state: OfferState
 ): ListingBlocker[] {
-  if (!platformModule) return [];
+  if (!hasListingModule(platformModule)) return [];
   return evaluateListingPreconditions({
     platformModule,
     state,
@@ -1712,7 +1735,7 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
   const platformModule = offer.platform.platformModule;
   const [preconditions, photos] = await Promise.all([
     (async (): Promise<ListingBlocker[]> => {
-      if (!platformModule) return [];
+      if (!hasListingModule(platformModule)) return [];
       const [labeller, conditionMap] = await Promise.all([
         makeOfferLabeller(collectionId),
         loadColnectConditionMap(collectionId),
@@ -2144,7 +2167,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       offer.collectionId,
       offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
     ),
-    platformModule ? loadColnectConditionMap(offer.collectionId) : new Map<string, string>(),
+    hasListingModule(platformModule)
+      ? loadColnectConditionMap(offer.collectionId)
+      : new Map<string, string>(),
   ]);
 
   // The base → offer-currency rate, fetched **once** for the whole screen: every set's two figures
@@ -2304,7 +2329,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     priceBase,
     state,
     needsAction: sets.some((s) => s.needsAction),
-    inActiveBidding: offer.inActiveBidding,
+    inActiveBidding: biddingLive(offer.inActiveBidding, state),
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,
@@ -2365,9 +2390,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
  * The offer's stamps as the platform's catalogue knows them (#423), one row per `stamp × condition`
  * in the order the sets list them.
  *
- * Empty for a platform naming no module, exactly as the listing blockers are: this is one
- * marketplace's catalogue, not a general fact about an offer, and a Delcampe listing has no such
- * pages to link to. It is deliberately **not** gated on the preconditions, unlike the listing kit
+ * Empty for a platform with no **listing** module, exactly as the listing blockers are: every URL
+ * below is Colnect's, this is one marketplace's catalogue rather than a general fact about an offer,
+ * and a Delcampe listing has no such pages to link to. Naming *a* module is not enough (#471) — an
+ * Allegro platform (#355) was drawing a card of Colnect links for stamps nobody had matched to
+ * Colnect. It is deliberately **not** gated on the preconditions, unlike the listing kit
  * (#405): the collector is checking what the market is asking, which is a question about an offer at
  * any stage and one an unmatched stamp does not spoil — that row simply carries no links, which is
  * how the gap gets noticed.
@@ -2381,7 +2408,7 @@ function platformItemsFor(
   labeller: OfferLabeller,
   conditionMap: Map<string, string>
 ): OfferPlatformItem[] {
-  if (!platformModule) return [];
+  if (!hasListingModule(platformModule)) return [];
   const rows = new Map<string, OfferPlatformItem>();
   for (const set of sets) {
     for (const { item } of orderedItems(set.items)) {

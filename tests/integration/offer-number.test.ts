@@ -2,7 +2,12 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, duplicateOffer, deleteOffer } from "../../src/lib/offers";
+import {
+  createOffer,
+  duplicateOffer,
+  deleteOffer,
+  listOffersPaginated,
+} from "../../src/lib/offers";
 
 // The short per-collection listing number (#416) and the `{offerUrl}` address built from it (#415).
 // The number's rules are the copy number's rules (#268) — sequential from a counter, never
@@ -102,6 +107,14 @@ describe("offer number (#416)", () => {
     const first = await numberOf(await newOffer());
     const second = await numberOf(await newOffer());
     assert.equal(second, first + 1);
+  });
+
+  it("reaches the offers list, which is where it is read off (#470)", async () => {
+    const id = await newOffer();
+    const { items } = await listOffersPaginated(userId, collectionId, { pageSize: 100 });
+    const row = items.find((o) => o.id === id);
+    assert.ok(row, "the new offer should be on the list");
+    assert.equal(row.offerNo, await numberOf(id));
   });
 
   it("does not reuse the number of a deleted offer", async () => {

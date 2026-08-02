@@ -39,6 +39,9 @@ describe("marking an offer ready (#418)", () => {
   let platformId: string;
   /** A platform with no Assistant module: listed by hand, so nothing is asked of its offers. */
   let handListedId: string;
+  /** A platform whose module has no listing half (#355/#471) — Allegro's marker is about captured
+   *  auction lots, so its offers are listed by hand exactly like the one above. */
+  let allegroId: string;
   let mnhId: string;
   let usedId: string;
 
@@ -89,6 +92,17 @@ describe("marking an offer ready (#418)", () => {
     handListedId = (
       await prisma.contact.create({
         data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      })
+    ).id;
+    allegroId = (
+      await prisma.contact.create({
+        data: {
+          collectionId,
+          name: "Allegro",
+          platform: true,
+          platformModule: "allegro",
+          platformCurrency: "EUR",
+        },
       })
     ).id;
     // Only MNH is mapped: the Used case is what the unmapped-condition refusal rides on.
@@ -171,6 +185,27 @@ describe("marking an offer ready (#418)", () => {
     );
     await setOfferState(userId, offerId, "ready");
     assert.equal(await stateOf(offerId), "ready");
+  });
+
+  it("asks nothing of a platform whose module cannot list either (#471)", async () => {
+    // Allegro names a module, but nothing here posts a sale form to it — so an offer of its own is
+    // neither gated on Colnect's item-IDs nor shown a card of Colnect links.
+    const offerId = await preparingOffer(
+      [[await copy(await stamp("PL allegro", null), usedId)]],
+      allegroId
+    );
+    const detail = await getOfferDetail(userId, offerId);
+    assert.deepEqual(detail?.readyBlockers, []);
+    assert.deepEqual(detail?.platformItems, [], "no Colnect catalogue card on an Allegro offer");
+    await setOfferState(userId, offerId, "ready");
+    assert.equal(await stateOf(offerId), "ready");
+  });
+
+  it("still draws the catalogue card for the platform that is Colnect (#423)", async () => {
+    const offerId = await preparingOffer([[await copy(await stamp("PL card", "2101"))]]);
+    const detail = await getOfferDetail(userId, offerId);
+    assert.equal(detail?.platformItems.length, 1);
+    assert.ok(detail?.platformItems[0].catalogUrl, "a matched stamp keeps its catalog link");
   });
 
   it("states the reasons on the offer's own screen while it is still preparing", async () => {

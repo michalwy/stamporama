@@ -670,9 +670,17 @@ export async function addSaleLines(
       }
       // Flip an offer to `sold` only once every set has sold through it (the only stored side
       // effect; set / item sold state stays derived).
+      //
+      // The sale also **resolves the bidding** (#215, #469): "in active bidding" says a bid has been
+      // placed and the collector is committed *before the sale is recorded*, so recording it is
+      // exactly what ends that state. Left standing, a sold listing would keep an "In bidding" chip
+      // that reads as an auction still running.
       for (const offerId of offerIds) {
         if (await isOfferFullySold(tx, offerId)) {
-          await tx.offer.update({ where: { id: offerId }, data: { state: "sold" } });
+          await tx.offer.update({
+            where: { id: offerId },
+            data: { state: "sold", inActiveBidding: false },
+          });
         }
       }
     });

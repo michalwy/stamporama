@@ -13,6 +13,7 @@ import {
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
@@ -212,8 +213,12 @@ export function OfferRow({
           </span>
         </div>
 
-        {/* Line 2: platform / state / quantity / price */}
+        {/* Line 2: number / platform / state / quantity / price */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+          {/* The offer's own short number (#416/#470), leading the line as it does on a purchase or
+              a sale row: it identifies the row rather than describing it, and it is what the
+              quick-jump box (#431) and the `/o/<slug>/<no>` address are typed from. */}
+          <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
           <Tooltip content="Platform">
             <span style={CHIP}>{offer.platformName}</span>
           </Tooltip>

@@ -16,6 +16,10 @@ a copy's [internal number](inventory.md#internal-copy-number). It is never edite
 deleting offer 12 retires that number rather than handing it to the next listing, because the number
 may already be written somewhere you cannot take it back from.
 
+The number is printed on the offer's row in the [offers list](#filtering), in front of the platform,
+the way a purchase or a sale row carries its own. That is where you read it off to type it into the
+[**Jump to…** box](quick-jump.md) as `o 42`, or to build the short address below.
+
 It gives an offer a **short address**:
 
 ```
@@ -1025,6 +1029,9 @@ itself. If the auction doesn't close (no bids meet the reserve, the buyer doesn'
 active bidding** from the same menu; the "needs action" flags on the other offers clear
 immediately. When the auction does close successfully, record the sale as usual — the offer
 becomes **Sold** through the normal [sale](sales.md) flow, same as any other platform.
+
+Recording that sale also **clears the marker**: the bidding is what it was warning you about, and the
+sale is the bidding resolved. A **Sold** offer therefore never shows **In bidding**.
 
 ## Keeping platforms in sync — "needs action"
 

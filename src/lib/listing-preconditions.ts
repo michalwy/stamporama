@@ -1,4 +1,5 @@
 import { OFFER_STATE_LABEL, type OfferState } from "./offer-rules";
+import { hasListingModule } from "./platform-modules";
 
 // What has to be true before an offer can be handed to the Assistant to post (#406, part of #155) —
 // pure, no Prisma. The listing kit (#405) evaluates these over its own payload and refuses to serve
@@ -57,8 +58,9 @@ export interface PreconditionSet {
 
 export interface PreconditionInput {
   /** The Assistant platform module the offer's platform names (`platform-modules.ts`), or null when
-   *  it names none. Every other check here is that module's rule, so a platform without one has
-   *  nothing to fail — see {@link evaluateListingPreconditions}. */
+   *  it names none. Every other check here is the *listing* module's rule, so a platform without one
+   *  — including one whose module cannot list (#471) — has nothing to fail; see
+   *  {@link evaluateListingPreconditions}. */
   platformModule: string | null;
   state: OfferState;
   sets: readonly PreconditionSet[];
@@ -104,12 +106,15 @@ function distinct(values: readonly string[]): string[] {
  * this blocker, which is a fact about the platform and not about the offer.
  */
 export function evaluateListingPreconditions(input: PreconditionInput): ListingBlocker[] {
-  if (!input.platformModule) {
+  // A module with no listing half is the same answer as no module at all (#471): every check below
+  // is Colnect's rule — its item-ID, its grades — and asking them about an Allegro offer reports a
+  // fault in a form nobody is going to fill from here. See {@link hasListingModule}.
+  if (!hasListingModule(input.platformModule)) {
     return [
       {
         code: "no-platform-module",
         message:
-          "This platform has no Assistant module, so the Assistant cannot fill its listing form. Post it by hand.",
+          "This platform has no Assistant module that can fill its listing form. Post it by hand.",
         subjects: [],
         stampIds: [],
       },

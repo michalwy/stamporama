@@ -1,6 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { hasListingModule } from "@/lib/platform-modules";
 import type { AssistantHandoff } from "./assistant-handoff";
 
 // The two controls of the Assistant handoff (#407/#414), shared by the surfaces that offer it: the
@@ -15,8 +16,8 @@ import type { AssistantHandoff } from "./assistant-handoff";
  *
  * A blocked action is **disabled with its reason** rather than hidden (#273): a control that quietly
  * vanishes is unguessable, and each of these is fixed somewhere else. The button is absent entirely
- * only where the platform names no module — there is no Assistant answer to give about a marketplace
- * listed by hand. */
+ * only where the platform has no module that can *list* (#471) — there is no Assistant answer to give
+ * about a marketplace listed by hand. */
 export function assistantHint({
   blockerCount,
   present,
@@ -36,7 +37,8 @@ export function assistantHint({
 
 /**
  * **⚡ List via Assistant** — hand this offer's listing kit over, so the extension opens the
- * platform's sale form and fills it in. Renders nothing at all when the platform has no module.
+ * platform's sale form and fills it in. Renders nothing at all when the platform has no module that
+ * can list (#471).
  */
 export function ListViaAssistantButton({
   platformModule,
@@ -59,7 +61,10 @@ export function ListViaAssistantButton({
   style: React.CSSProperties;
   onStart: () => void;
 }) {
-  if (!platformModule) return null;
+  // A module with no sale form of its own is the same as no module here (#471): Allegro's marker
+  // (#355) is about captured auction lots, and a button that could only ever be refused is worse
+  // than no button.
+  if (!hasListingModule(platformModule)) return null;
   const hint = assistantHint({ blockerCount, present, busy });
   const inert = hint !== null || running;
 

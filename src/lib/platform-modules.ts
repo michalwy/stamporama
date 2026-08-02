@@ -30,3 +30,22 @@ export const COLNECT_PLATFORM_MODULE = "colnect";
  * since the platform is a `Contact` of this collection and not something Allegro knows about.
  */
 export const ALLEGRO_PLATFORM_MODULE = "allegro";
+
+/**
+ * Whether a platform's module has a **listing half** — i.e. whether anything here knows how to fill
+ * that marketplace's sale form (#471).
+ *
+ * Only Colnect's does. "Names a module" and "can be listed to" were the same question while Colnect
+ * was the only module, and everything about listing was written against the first: the preconditions
+ * (#406), the listing kit (#405), **⚡ List via Assistant** and the platform-catalogue card (#423).
+ * Allegro's marker (#355) then made them different — it names the marketplace a captured auction lot
+ * belongs to and carries no sale form — and the truthiness test quietly promoted it to a listable
+ * platform, so an Allegro offer was shown Colnect's catalog/market links and refused `ready` over
+ * missing Colnect item-IDs.
+ *
+ * So the test is a named question and not `!== null`: a module id is not a promise about listing,
+ * and a third one added for some other purpose must not inherit Colnect's rules by existing.
+ */
+export function hasListingModule(platformModule: string | null): boolean {
+  return platformModule === COLNECT_PLATFORM_MODULE;
+}

@@ -2,7 +2,14 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, addOfferSet, setOfferState, listOffersPaginated, getOfferDetail } from "../../src/lib/offers";
+import {
+  createOffer,
+  addOfferSet,
+  setOfferState,
+  setOfferInActiveBidding,
+  listOffersPaginated,
+  getOfferDetail,
+} from "../../src/lib/offers";
 import { createSale, addSaleLines, listSellableOffers, SaleActionBlockedError } from "../../src/lib/sales";
 
 // Offer-owned composition + cross-platform coordination (ADR-0013, #198). An offer owns its sets;
@@ -154,14 +161,26 @@ describe("offer-owned composition + coordination", () => {
     assert.ok(setQAy);
   });
 
-  it("flips the offer to sold once its last set sells through it", async () => {
+  it("flips the offer to sold once its last set sells through it, and resolves its bidding", async () => {
+    // A bid was placed before the sale was recorded (#215) — which is exactly the state the sale
+    // resolves (#469): a sold listing carrying "In bidding" reads as an auction still running.
+    await setOfferInActiveBidding(userId, offerQD, true);
     const saleId = await createSale(userId, collectionId, {
       platformId: delcampeId, buyerId: null, externalRef: null,
       transactionUrl: null,
       soldAt: new Date(), currency: "EUR", buyerHandling: null, buyerPaidTotal: null, commission: null,
     });
     await addSaleLines(userId, saleId, [{ offerId: offerQD, offerSetId: setQDz, price: "5.00", itemIds: [z] }]);
-    const qd = await prisma.offer.findUnique({ where: { id: offerQD }, select: { state: true } });
+    const qd = await prisma.offer.findUnique({
+      where: { id: offerQD },
+      select: { state: true, inActiveBidding: true },
+    });
     assert.equal(qd?.state, "sold", "both sets sold through this offer → sold");
+    assert.equal(qd?.inActiveBidding, false, "the sale is the bidding resolved");
+
+    const row = (
+      await listOffersPaginated(userId, collectionId, { includeClosed: true, pageSize: 100 })
+    ).items.find((o) => o.id === offerQD);
+    assert.equal(row?.inActiveBidding, false, "…so the list row carries no bidding marker");
   });
 });

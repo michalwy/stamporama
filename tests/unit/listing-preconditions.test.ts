@@ -52,6 +52,21 @@ describe("evaluateListingPreconditions", () => {
     assert.match(blockers[0].message, /by hand/);
   });
 
+  it("refuses a module with no listing half the same way (#471)", () => {
+    // Allegro's marker names the marketplace a captured auction lot belongs to (#355); nothing here
+    // posts a sale form to it, so its offers are not judged by Colnect's rules.
+    const blockers = evaluateListingPreconditions(
+      input({
+        platformModule: "allegro",
+        sets: [{ setId: "set-1", label: "A", copies: [copy({ catalogItemId: null })] }],
+      })
+    );
+    assert.deepEqual(
+      blockers.map((b) => b.code),
+      ["no-platform-module"]
+    );
+  });
+
   it("refuses anything but Ready, and says which state it is in", () => {
     const blockers = evaluateListingPreconditions(input({ state: "preparing" }));
     assert.deepEqual(
