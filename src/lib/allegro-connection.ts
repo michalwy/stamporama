@@ -521,6 +521,18 @@ async function latchNeedsReconnect(collectionId: string, message: string): Promi
 }
 
 /**
+ * Latch the needs-reconnect state from outside this module — what the background sync (#467) does
+ * with a 401. Exported rather than left to the caller's own `update` so that every unusable state
+ * still converges on the one pair of columns the settings panel reads (ADR-0023).
+ */
+export async function markAllegroConnectionRejected(
+  collectionId: string,
+  message: string
+): Promise<void> {
+  await latchNeedsReconnect(collectionId, message);
+}
+
+/**
  * A usable access token for this collection, refreshed ahead of expiry.
  *
  * The entry point for everything downstream (#467, #463): a caller either gets a token it can use

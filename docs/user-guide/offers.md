@@ -7,7 +7,9 @@ independent offers — each tracked, edited, and sold on its own.
 
 Open the **Offers** screen from the **Selling** section of the sidebar. When a batch of offers is
 prepared and ready to go live, [**Bulk listing**](#bulk-listing--posting-a-prepared-batch) on its
-toolbar is where you post them.
+toolbar is where you post them. **Sold on Allegro**, beside it, is the other end of the same job:
+what has sold there and is still waiting to be recorded here — see the
+[Allegro guide](allegro.md#sold-on-allegro).
 
 ## Offer number and short link
 

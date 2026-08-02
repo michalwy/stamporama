@@ -14,6 +14,7 @@ import {
   startAllegroDeviceFlow,
   testAllegroConnection,
 } from "@/lib/allegro-connection";
+import { runAllegroSync } from "@/lib/allegro-sync";
 
 // Settings → Allegro (#355, #476). Two things live on this tab: which platform contact is Allegro,
 // and this instance's own connection to the collector's Allegro account through the public API.
@@ -129,6 +130,37 @@ export async function testAllegroConnectionAction(
     return { status: "success", detail };
   } catch (err) {
     return failure(err, "The Allegro connection could not be checked.");
+  }
+}
+
+/**
+ * Run the sold-listing sync now (#467), without waiting for the quarter-hourly poll.
+ *
+ * It returns what the pass did rather than a bare success: "synced" with nothing new to show is the
+ * ordinary outcome on a quiet day, and a button that said only *Done* would leave the collector
+ * unable to tell that from a pass that read nothing because the connection is gone.
+ */
+export async function syncAllegroNowAction(
+  collectionId: string
+): Promise<
+  | { status: "success"; detail: string }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const outcome = await runAllegroSync(session.user.id, collectionId);
+    if (outcome.status === "failed") {
+      return { status: "error", message: outcome.message ?? "The Allegro sync failed." };
+    }
+    if (outcome.status === "skipped") {
+      return { status: "error", message: outcome.message ?? "There was nothing to sync." };
+    }
+    return {
+      status: "success",
+      detail: `Read ${outcome.ordersRead} order(s) and ${outcome.listingsSeen} active listing(s).`,
+    };
+  } catch (err) {
+    return failure(err, "The Allegro sync could not be run.");
   }
 }
 

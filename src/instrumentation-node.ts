@@ -11,11 +11,16 @@
 //   - the orphan-GC sweep for abandoned photo staging uploads (#112) — an hourly, idempotent
 //     `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion;
 //   - the offer photo generation worker (#311) — drains the render queue one job at a time and
-//     requeues anything a previous process left mid-render.
+//     requeues anything a previous process left mid-render;
+//   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
+//     which is what makes the worklist a list that fills itself rather than one that has to be
+//     asked for.
 
 import { gcStaleUploads } from "@/lib/photos";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
+import { syncAllAllegroCollections } from "@/lib/allegro-sync";
+import { SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
@@ -46,6 +51,30 @@ export async function start(): Promise<void> {
   const interval = setInterval(sweep, SWEEP_INTERVAL_MS);
   initial.unref?.();
   interval.unref?.();
+
+  // The Allegro sold-listing sync (#467). Same shape as the sweep above: once shortly after boot,
+  // then on its own interval, `unref`'d so it never holds the process up. A pass that throws is
+  // logged and nothing more — the failure is already latched onto the collection's own sync state,
+  // which is where the worklist reads it from and says so on screen.
+  const allegro = async () => {
+    try {
+      const results = await syncAllAllegroCollections();
+      const failed = results.filter((r) => r.outcome.status === "failed");
+      const written = results.reduce((sum, r) => sum + r.outcome.linesWritten, 0);
+      if (written > 0 || failed.length > 0) {
+        console.log(
+          `[allegro-sync] ${results.length} collection(s), ${written} order line(s), ${failed.length} failed`
+        );
+      }
+    } catch (err) {
+      console.error("[allegro-sync] pass failed", err);
+    }
+  };
+
+  const allegroInitial = setTimeout(allegro, 60_000);
+  const allegroInterval = setInterval(allegro, SYNC_INTERVAL_MS);
+  allegroInitial.unref?.();
+  allegroInterval.unref?.();
 
   // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.

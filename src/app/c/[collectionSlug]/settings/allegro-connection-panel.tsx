@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   disconnectAllegroAction,
@@ -88,9 +88,28 @@ const codeStyle: React.CSSProperties = {
   wordBreak: "break-all",
 };
 
-function formatWhen(iso: string | null): string {
-  if (!iso) return "never";
-  return new Date(iso).toLocaleString();
+/** Nothing to subscribe to — the "store" is *am I in the browser yet*, which changes exactly once
+ *  and is stated by the server/client snapshot pair below. Module-scope so the reference is stable
+ *  across renders. */
+const NEVER_CHANGES = () => () => {};
+
+/**
+ * A token timestamp in the collector's own zone — **after mount only**.
+ *
+ * This panel is handed its status by the server, so it renders on the server too, where the only
+ * clock is the container's. `toLocaleString()` there produced one string and a different one in the
+ * browser: the same instant, written in two time zones, which is a hydration mismatch. The date is
+ * therefore withheld until mount rather than formatted in UTC — the useful reading of "expires at"
+ * is the collector's own wall clock, and the browser is the only place that knows it.
+ */
+function useLocalTimestamp(iso: string | null): string {
+  const mounted = useSyncExternalStore(
+    NEVER_CHANGES,
+    () => true,
+    () => false
+  );
+  if (!mounted) return "…";
+  return iso ? new Date(iso).toLocaleString() : "never";
 }
 
 type Notice = { tone: "ok" | "error" | "info"; message: string } | null;
@@ -105,6 +124,9 @@ export function AllegroConnectionPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const lastRefreshedAt = useLocalTimestamp(status.lastRefreshedAt);
+  const expiresAt = useLocalTimestamp(status.expiresAt);
 
   const [clientId, setClientId] = useState(status.clientId ?? "");
   // Never seeded from the server: the secret does not cross to the browser, so a blank field means
@@ -390,7 +412,7 @@ export function AllegroConnectionPanel({
               </>
             )}
             {status.sandbox ? " (sandbox)" : ""}. Token last refreshed{" "}
-            {formatWhen(status.lastRefreshedAt)}; it expires {formatWhen(status.expiresAt)} and is
+            {lastRefreshedAt}; it expires {expiresAt} and is
             renewed automatically before then.
           </p>
         )}

@@ -13,9 +13,8 @@ the account you sell from.
 
 ## What connecting gives you
 
-Nothing yet, on its own. Connecting is the foundation the sold-listing worklist and the
-order-to-sale flow are built on — this step ends at *connected*, and reads no business data. It is
-worth doing now if you sell on Allegro, because it is the part that needs a little setup.
+The **Sold on Allegro** worklist — see below. Connecting itself ends at *connected* and reads no
+business data; the worklist is what then reads your orders and your own listings.
 
 ## Registering your own Allegro application
 
@@ -122,6 +121,77 @@ once stored, so a blank field means "keep it", not "clear it".
 **Disconnect** forgets the connection here. It does not remove the authorization on Allegro's side
 — your application stays listed under your Allegro account's connected applications until you remove
 it there. If your intent is to cut access off entirely, do both.
+
+## Sold on Allegro
+
+Once connected, **Offers → Sold on Allegro** shows what has sold and is still waiting to be written
+down. It is a worklist, not a search: rows leave it as you record the sales, and it fills itself
+again in the background.
+
+Stamporama checks Allegro every 15 minutes. **Sync now** runs a check immediately.
+
+### Sold, awaiting sale
+
+One card per Allegro order, with the lines it covers. A card carries:
+
+- whether the buyer has **paid** yet — an unpaid order is still shown, because recording the sale at
+  *ordered* is a legitimate thing to do;
+- when it was bought, and when Stamporama last saw it;
+- **who bought it** — their Allegro login, with their name or company beside it where the order
+  states one. Nothing else about the buyer is read: the email, phone number and delivery address on
+  an Allegro order stay on Allegro until you actually record the sale;
+- **what they paid in total**, at the right of the card. This is Allegro's own figure, so it
+  includes delivery — it is what changed hands, not the sum of the goods;
+- the offer here it belongs to, if it could be worked out.
+
+Four chips narrow the list: **Paid** / **Not paid**, and **Matched** / **Unmatched**. They are two
+separate questions, so you can combine them — *Paid* + *Unmatched* is the pile most worth clearing
+first. Leaving an axis untouched means it is not asking. The numbers on the chips always count the
+whole list, not what the other chips have left, so they tell you what is there to filter to.
+
+**Record sale** opens the same sell flow the offer's own screen uses. Nothing is written until you
+save it — the sync never creates a sale, a payment or a contact on its own.
+
+A card disappears once a sale exists carrying that order number as its transaction reference. That
+is also why one order can never turn into two sales.
+
+**Unmatched** means no offer in this collection could be tied to that Allegro listing. It is shown
+rather than hidden, because it tells you something: the listing was posted outside Stamporama, or
+its URL was never recorded on the offer here. Two things fix it —
+
+- paste the listing's address into the offer's **Listing URL** field, or
+- publish through the Assistant, which stores the address for you.
+
+The listing is matched on Allegro's own offer number inside that address, so any of Allegro's URL
+shapes works.
+
+### Ended without selling
+
+Listings that are no longer up on Allegro while the offer here is still live. Nothing sold, so there
+is no sale to record — what is out of date is the offer's own state, which is why these sit in their
+own section. Open the offer and withdraw it, or put it back up.
+
+### When the list cannot be trusted
+
+The header always says when the list was last refreshed. It also says, in plain words, when it is
+**not** current:
+
+- the collection is not connected to Allegro;
+- the connection needs reconnecting;
+- no platform here is marked as Allegro — nothing can be matched to an offer, so every line reads as
+  unmatched;
+- the last sync failed, with Allegro's own message and how long ago;
+- nothing has synced for over an hour.
+
+A worklist that quietly looked fresh while going stale would be worse than no worklist, so none of
+these is ever left to be noticed by their absence.
+
+### What it does not do
+
+- It never creates a sale, and never touches money.
+- It never edits your offers.
+- It never creates a contact. The buyer's login is shown, not saved as somebody to write to.
+- **Cancelled orders are left out entirely.** The sale did not happen, so there is nothing waiting.
 
 ## The sandbox
 

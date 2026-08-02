@@ -87,6 +87,10 @@ model Collection {
   assistantTokens AssistantToken[]
   assistantRegistrationCodes AssistantRegistrationCode[]
   allegroConnection AllegroConnection?
+  allegroSyncState  AllegroSyncState?
+  allegroOrders     AllegroOrder[]
+  allegroOrderLines AllegroOrderLine[]
+  allegroListings   AllegroListing[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -477,6 +481,182 @@ model AllegroConnection {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
   @@map("allegro_connection")
+}
+
+// Where the Allegro sold-listing sync has got to (#467; ADR-0024). One row per collection, beside
+// the connection rather than on it: `AllegroConnection` holds secrets and exists to hold as few as
+// possible, while this holds a cursor and an error message, which are neither sensitive nor read by
+// anything that decrypts.
+model AllegroSyncState {
+  id           String @id @default(cuid())
+  collectionId String @unique
+
+  // The last order event Allegro handed us, its own event id. A pass resumes from here, which is
+  // what makes a re-run a refresh rather than a re-import. Null before the first sync, and reset to
+  // null when Allegro no longer accepts it (the stream is retained for a limited window) — the pass
+  // then falls back to the dated window read, which is safe because every write is an upsert.
+  orderCursor    String?
+  // The instant the *lines* are current as of: the `boughtAt` floor a window read would use. Null
+  // before the first sync, which is what makes that first pass read `SYNC_WINDOW_DAYS` back.
+  ordersSyncedAt DateTime?
+  // When the seller's active listings were last swept end to end. "Ended without selling" is derived
+  // from a listing's *absence* from that sweep, so a half-finished sweep must never be read as one:
+  // this is stamped only after the last page.
+  listingsSweptAt DateTime?
+
+  // The last pass that finished, and the last one that did not. A worklist whose newest observation
+  // is hours old has to say so rather than look current, which is the whole reason both are here.
+  lastSucceededAt DateTime?
+  lastFailedAt    DateTime?
+  lastError       String?
+  // True while a pass is running, so the poll and a **Sync now** click cannot read the same events
+  // twice. Cleared on both outcomes; a stale flag from a killed process is timed out against
+  // `startedAt`, since a lock nothing can release is worse than a second pass over idempotent writes.
+  running   Boolean   @default(false)
+  startedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@map("allegro_sync_state")
+}
+
+// One Allegro order, as the API reported it (#467; ADR-0024) — an **observation**, never a financial
+// record: creating the `Sale` stays an explicit act (#463), and nothing here is written by the
+// collector.
+//
+// A header of its own rather than order columns repeated on every line: the buyer, the status and
+// the total are facts about the *order*, and one order routinely carries several of the collector's
+// listings. `orderId` is Allegro's checkout form id — what a `Sale` records as `externalRef`, which
+// is how a recorded sale takes its order back out of the worklist.
+model AllegroOrder {
+  id           String @id @default(cuid())
+  collectionId String
+  orderId      String
+
+  // Allegro's own status for the order, and the payment reading derived from it (`unpaid` | `paid` |
+  // `cancelled`). The second is what decides whether the order is waiting to be recorded at all — a
+  // cancelled one is never actioned.
+  status        String
+  paymentStatus String
+  // The earliest of its lines' purchase instants: what the order is dated by, and sorted by.
+  boughtAt      DateTime
+
+  // Who bought it — the buyer's Allegro login, and their name or company where the order carries
+  // one. **Deliberately only these two.** The order also carries an email, a phone number and a
+  // delivery address, and none of that belongs in a table whose question is "what has sold": the
+  // sale #463 writes is where a buyer becomes a `Contact`, and it reads the order again at the
+  // moment the collector confirms it.
+  buyerLogin String?
+  buyerName  String?
+
+  // What the buyer paid in total, in `currency` — Allegro's own `summary.totalToPay`, so it includes
+  // delivery. Stored rather than summed from the lines because the two are different numbers and the
+  // one worth showing is what actually changed hands (`Sale.buyerPaidTotal`'s own anchor, #205).
+  // Null where Allegro stated no summary.
+  totalPaid Decimal? @db.Decimal(10, 2)
+  currency  String?
+
+  // When the sync last saw this order, and when it first did. The first is what dates the worklist —
+  // an undated "sold" says nothing about how current the picture is (#449's `priceCheckedAt`).
+  observedAt  DateTime
+  firstSeenAt DateTime @default(now())
+
+  collection Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  lines      AllegroOrderLine[]
+
+  @@unique([collectionId, orderId])
+  @@index([collectionId, boughtAt])
+  @@map("allegro_order")
+}
+
+// One line of one Allegro order.
+//
+// Per line rather than per offer because an order line is not one-to-one with a listing: an offer
+// with stock above one sells a copy at a time, and one order can carry several of the collector's
+// offers.
+model AllegroOrderLine {
+  id           String @id @default(cuid())
+  collectionId String
+
+  // The order this belongs to, and Allegro's own id for the line within it. The pair is the identity
+  // of this observation, so a second sync updates the row instead of adding one.
+  allegroOrderId String
+  lineItemId     String
+
+  // The listing that sold. `platformOfferId` is Allegro's offer id — the same digits the capture
+  // module matches on (#355) — and `externalId` is the listing's own external id, which is the
+  // Stamporama offer number when the listing was published through the API. The second is an exact
+  // match where it exists; the first is what everything published by hand is matched on.
+  platformOfferId String
+  externalId      String?
+  title           String
+  quantity        Int
+  // What the buyer paid for this line, per unit, in `currency`. Allegro states the price per item
+  // and the quantity separately, and so does this: a total would lose which of the two moved.
+  unitPrice Decimal @db.Decimal(10, 2)
+  currency  String
+
+  // When this particular line was bought. Allegro dates the purchase per line, and so does this —
+  // the order's own `boughtAt` is the earliest of them.
+  boughtAt DateTime
+
+  // The local offer this line was matched to, and how (`external` | `url`). Null when nothing here
+  // matched: an unmatched line is **shown** rather than dropped, because that is how the collector
+  // learns a listing was posted outside Stamporama or that its URL was never recorded.
+  offerId   String?
+  matchedBy String?
+
+  observedAt DateTime
+
+  collection   Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  allegroOrder AllegroOrder @relation(fields: [allegroOrderId], references: [id], onDelete: Cascade)
+  offer        Offer?       @relation("AllegroOrderLineOffer", fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@unique([allegroOrderId, lineItemId])
+  @@index([collectionId])
+  @@index([offerId])
+  @@map("allegro_order_line")
+}
+
+// One of the seller's own listings as the sweep has seen it (#467; ADR-0024). The sweep reads the
+// account's **active** listings only — paging every listing an account has ever ended is unbounded
+// and answers a question nobody asked — and a row the newest sweep did not see is marked `ENDED`
+// rather than deleted. That absence *is* the ended-without-selling signal, and keeping the row is
+// what lets it be shown with the date it was last seen up.
+model AllegroListing {
+  id           String @id @default(cuid())
+  collectionId String
+
+  platformOfferId String
+  externalId      String?
+  title           String
+  // Allegro's publication status as the sweep last saw it (`ACTIVE`, `ACTIVATING`), or `ENDED` —
+  // which is this app's own word for a row that dropped out of a sweep, Allegro never having been
+  // asked about it. `endingAt` is when the listing was due to end, as given.
+  status    String
+  endingAt  DateTime?
+  // How many are still on sale and how many have gone. A listing still active with stock sold is
+  // exactly the case an ended-only reading would miss.
+  available Int?
+  sold      Int?
+
+  offerId   String?
+  matchedBy String?
+
+  // When the listing was last seen **up**. It is deliberately not restamped when the row is marked
+  // `ENDED`, so an ended row still says when the listing was last observed active — which is the
+  // only date the collector has for it, Allegro's sweep being the one thing that saw it.
+  observedAt DateTime
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  offer      Offer?     @relation("AllegroListingOffer", fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@unique([collectionId, platformOfferId])
+  @@index([offerId])
+  @@map("allegro_listing")
 }
 
 // Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a
@@ -1303,6 +1483,12 @@ model Offer {
   photoEntries OfferPhotoEntry[]
   photoAttachments OfferPhotoAttachment[]
   photoGeneration OfferPhotoGeneration?
+  /** What the Allegro sync has observed about this listing (#467): the order lines matched to it,
+   * and its own row in the last sweep of the account's active listings. Both `SetNull` — an
+   * observation about a marketplace listing outlives the local offer being deleted, and it is then
+   * an unmatched row, which is a state the worklist already knows how to show. */
+  allegroOrderLines AllegroOrderLine[] @relation("AllegroOrderLineOffer")
+  allegroListing    AllegroListing[]   @relation("AllegroListingOffer")
 
   // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
   // uniqueness is the guarantee that it names one listing.

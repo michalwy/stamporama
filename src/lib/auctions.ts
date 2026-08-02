@@ -21,6 +21,7 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { collidingLotIds, type AtRiskLine } from "./auction-duplicates";
+import { offerUrlMatchClauses } from "./platform-offer-url";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
@@ -1546,9 +1547,10 @@ export interface AuctionLotCaptureResult {
  *    number is unique on the marketplace, so equality is the whole test — and it is scoped to sales
  *    on *this* platform, since `lotNo` is a shared field and a house sale's `Lot 42` is a different
  *    vocabulary that must never collide with an offer number.
- *  • the `url`, at the **address's own boundaries** (`/<id>`, `-<id>`, `offerId=<id>`) and never as a
- *    bare substring: an id is a run of digits, and a plain `contains` would let a short one match the
- *    middle of an unrelated listing's number and refresh the wrong lot's bid.
+ *  • the `url`, at the **address's own boundaries** — `offerUrlMatchClauses`, shared with the sold
+ *    worklist's own matching (#467) since both are the same question about the same marketplace, and
+ *    never a bare substring: an id is a run of digits, and a plain `contains` would let a short one
+ *    match the middle of an unrelated listing's number and refresh the wrong lot's bid.
  *
  * Both, rather than the better one, because a lot added by hand carries whichever of the two the
  * collector happened to type — the number off the listing, or the link to it — and either is enough
@@ -1560,11 +1562,7 @@ async function findCapturedLot(collectionId: string, platformId: string, platfor
       auctionSale: { collectionId },
       OR: [
         { lotNo: platformOfferId, auctionSale: { collectionId, platformId } },
-        { url: { endsWith: `/${platformOfferId}` } },
-        { url: { endsWith: `-${platformOfferId}` } },
-        { url: { contains: `/${platformOfferId}?` } },
-        { url: { contains: `-${platformOfferId}?` } },
-        { url: { contains: `offerId=${platformOfferId}` } },
+        ...offerUrlMatchClauses(platformOfferId),
       ],
     },
     orderBy: { createdAt: "desc" },

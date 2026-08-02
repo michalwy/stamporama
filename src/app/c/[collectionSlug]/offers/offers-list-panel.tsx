@@ -388,6 +388,22 @@ export function OffersListPanel({
           >
             Bulk listing →
           </Link>
+          {/* The other end of the lifecycle (#467): what has sold on Allegro and is still waiting to
+              be recorded here. Beside Bulk listing because the two are the same step at opposite
+              ends — posting a batch, and clearing what came back. */}
+          <Link
+            href={`/c/${collectionSlug}/offers/allegro`}
+            title="Offers that have sold on Allegro with no sale recorded here yet"
+            style={{
+              ...FILTER_CONTROL_STYLE,
+              display: "inline-flex",
+              alignItems: "center",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            Sold on Allegro →
+          </Link>
           {/* Sell a new item end-to-end (#241): create the stamp, copy, and offer in one pass. */}
           <Tooltip content="Create the stamp, inventory copy, and offer in one flow">
             <button
