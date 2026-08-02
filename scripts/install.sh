@@ -394,6 +394,26 @@ $db_hint" "$(dflt DATABASE_URL "")"
     ;;
   esac
 
+  # --- Credential encryption key (#476) -----------------------------------
+  # Encrypts stored third-party credentials at rest — today the Allegro client secret and OAuth
+  # tokens (ADR-0023).
+  #
+  # Deliberately **not** a menu, unlike the auth secret above. Rotating this one is not a harmless
+  # hardening step: every stored marketplace connection is sealed under it, so a new key silently
+  # turns them all into "needs reconnecting". So the installer only ever *ensures* a key exists —
+  # it generates one on a fresh install and on an upgrade that predates the variable, and never
+  # touches an existing one. Rotating is an explicit edit of .env, which is the friction it
+  # deserves.
+  #
+  # Generated even for someone who will never connect Allegro: it costs nothing, and it means the
+  # feature works the day they try it instead of failing on a variable they have to read about.
+  if [ -n "$(get_env STAMPORAMA_SECRET_KEY)" ]; then
+    info "Keeping the existing credential encryption key."
+  else
+    set_env STAMPORAMA_SECRET_KEY "$(gen_secret)"
+    info "Generated a credential encryption key (STAMPORAMA_SECRET_KEY)."
+  fi
+
   ui_menu update_mode "$update_default" "Automatic updates" \
     off "Disabled — update manually" \
     on  "Enabled — Watchtower watches for new release images"
@@ -506,6 +526,11 @@ print_summary() {
     echo "Uploaded photos are stored in the 'stamporama-data' Docker volume." >/dev/tty
     echo "Back it up alongside your database — losing it loses the images." >/dev/tty
   fi
+  echo >/dev/tty
+  # Worth saying out loud, because it is the one file whose loss silently breaks something that
+  # still looks intact in a restored database (#476).
+  echo "Your .env holds STAMPORAMA_SECRET_KEY, which encrypts stored marketplace credentials." >/dev/tty
+  echo "Back it up too — a database restored without it keeps everything except those connections." >/dev/tty
 }
 
 main "$@"

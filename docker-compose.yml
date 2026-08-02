@@ -29,6 +29,18 @@ services:
       DATABASE_URL: postgresql://stamporama:${POSTGRES_PASSWORD:-stamporama}@db:5432/stamporama
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      # Encrypts stored third-party credentials at rest (#476) — the Allegro client secret and
+      # OAuth tokens. Listed here because this stack enumerates its environment explicitly, unlike
+      # the production one, which reads .env wholesale.
+      #
+      # A **fixed local default**, exactly as POSTGRES_PASSWORD above: this file only ever runs the
+      # local stack, and a dev database holds a sandbox marketplace connection at most. Without one,
+      # connecting Allegro locally would need a .env that nothing else about local dev needs.
+      #
+      # It is deliberately *not* defaulted in `secret-box.ts`: a production install that forgets the
+      # variable must fail loudly on the Settings tab rather than quietly seal its real credentials
+      # under a key published in this repository.
+      STAMPORAMA_SECRET_KEY: ${STAMPORAMA_SECRET_KEY:-stamporama-local-dev-key-not-for-production}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
     command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
     # Persist uploaded photo bytes (#112) written under STAMPORAMA_DATA_DIR (default /data)

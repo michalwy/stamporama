@@ -1,0 +1,119 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  AllegroOAuthError,
+  allegroApiBase,
+  allegroRedirectUri,
+  authorizationUrl,
+  deviceCodeUrl,
+  readTokenResponse,
+} from "../../src/lib/allegro-oauth";
+
+describe("allegroApiBase", () => {
+  it("separates sandbox from production", () => {
+    assert.equal(allegroApiBase(false), "https://api.allegro.pl");
+    assert.equal(allegroApiBase(true), "https://api.allegro.pl.allegrosandbox.pl");
+  });
+});
+
+describe("allegroRedirectUri", () => {
+  it("derives one URI from the instance's own base URL", () => {
+    assert.equal(
+      allegroRedirectUri("https://stamps.example.com"),
+      "https://stamps.example.com/api/allegro/callback"
+    );
+  });
+
+  it("tolerates a trailing slash, the URI being shown verbatim for registration", () => {
+    assert.equal(
+      allegroRedirectUri("http://localhost:3000/"),
+      "http://localhost:3000/api/allegro/callback"
+    );
+  });
+});
+
+describe("deviceCodeUrl", () => {
+  it("puts client_id in the query string", () => {
+    // The endpoint reads the query and never the body. With it in the body Allegro answers
+    // "OAuth 2.0 Parameter: client_id" — which is not a wrong id, but no id at all.
+    const url = new URL(deviceCodeUrl("abc123", false));
+    assert.equal(url.origin + url.pathname, "https://allegro.pl/auth/oauth/device");
+    assert.equal(url.searchParams.get("client_id"), "abc123");
+  });
+
+  it("asks for no scopes — they come from the application's own registration", () => {
+    assert.equal(new URL(deviceCodeUrl("abc", false)).searchParams.get("scope"), null);
+  });
+
+  it("escapes an id that needs it", () => {
+    assert.equal(new URL(deviceCodeUrl("a b&c", false)).searchParams.get("client_id"), "a b&c");
+  });
+
+  it("points the sandbox at the sandbox host", () => {
+    assert.ok(
+      deviceCodeUrl("abc", true).startsWith("https://allegro.pl.allegrosandbox.pl/auth/oauth/device?")
+    );
+  });
+});
+
+describe("authorizationUrl", () => {
+  it("carries the client, the redirect and the state", () => {
+    const url = new URL(
+      authorizationUrl({
+        clientId: "abc123",
+        sandbox: false,
+        redirectUri: "https://stamps.example.com/api/allegro/callback",
+        state: "st-1",
+      })
+    );
+    assert.equal(url.origin + url.pathname, "https://allegro.pl/auth/oauth/authorize");
+    assert.equal(url.searchParams.get("response_type"), "code");
+    assert.equal(url.searchParams.get("client_id"), "abc123");
+    assert.equal(
+      url.searchParams.get("redirect_uri"),
+      "https://stamps.example.com/api/allegro/callback"
+    );
+    assert.equal(url.searchParams.get("state"), "st-1");
+    // No scope, by the same rule the device endpoint follows: asking for one the application does
+    // not hold fails the authorization, and reports it as a client_id problem.
+    assert.equal(url.searchParams.get("scope"), null);
+  });
+
+  it("points the sandbox at the sandbox host", () => {
+    const url = authorizationUrl({
+      clientId: "abc",
+      sandbox: true,
+      redirectUri: "http://localhost:3000/api/allegro/callback",
+      state: "s",
+    });
+    assert.ok(url.startsWith("https://allegro.pl.allegrosandbox.pl/auth/oauth/authorize?"));
+  });
+});
+
+describe("readTokenResponse", () => {
+  it("turns expires_in into an instant", () => {
+    const before = Date.now();
+    const token = readTokenResponse({
+      access_token: "at",
+      refresh_token: "rt",
+      expires_in: 7200,
+    });
+    assert.equal(token.accessToken, "at");
+    assert.equal(token.refreshToken, "rt");
+    assert.ok(token.expiresAt.getTime() >= before + 7200_000);
+    assert.ok(token.expiresAt.getTime() <= Date.now() + 7200_000);
+  });
+
+  it("reads an absent refresh token as null, so the stored one stands", () => {
+    assert.equal(readTokenResponse({ access_token: "at", expires_in: 60 }).refreshToken, null);
+  });
+
+  it("defaults an unstated lifetime rather than refusing a usable grant", () => {
+    const token = readTokenResponse({ access_token: "at" });
+    assert.ok(token.expiresAt.getTime() > Date.now());
+  });
+
+  it("refuses a response with no access token", () => {
+    assert.throws(() => readTokenResponse({ refresh_token: "rt" }), AllegroOAuthError);
+  });
+});

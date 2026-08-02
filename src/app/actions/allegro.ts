@@ -4,8 +4,19 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { setAllegroPlatform } from "@/lib/allegro";
+import {
+  type AllegroDevicePrompt,
+  type AllegroDeviceResult,
+  disconnectAllegro,
+  pollAllegroDeviceFlow,
+  saveAllegroCredentials,
+  startAllegroCodeFlow,
+  startAllegroDeviceFlow,
+  testAllegroConnection,
+} from "@/lib/allegro-connection";
 
-// Settings → Allegro (#355). One setting, one action: which platform contact is Allegro.
+// Settings → Allegro (#355, #476). Two things live on this tab: which platform contact is Allegro,
+// and this instance's own connection to the collector's Allegro account through the public API.
 
 export type AllegroActionState = { status: "success" } | { status: "error"; message: string };
 
@@ -30,5 +41,105 @@ export async function setAllegroPlatformAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save the Allegro platform. Please try again." };
+  }
+}
+
+// --- The API connection (#476) -------------------------------------------------------------
+//
+// Every one of these returns a message rather than throwing: they are all driven from one settings
+// panel, and a connection failing is an ordinary thing to report there, not a crashed screen. The
+// message is the domain layer's own — a rejected refresh, an expired device code and a missing
+// encryption key each say something different and each is fixed somewhere different.
+
+function failure(err: unknown, fallback: string): { status: "error"; message: string } {
+  return { status: "error", message: err instanceof Error ? err.message : fallback };
+}
+
+/**
+ * Save the registered Allegro application. An empty `clientSecret` keeps the stored one — the
+ * browser is never sent the secret, so it cannot send it back, and re-saving the sandbox toggle
+ * must not wipe it.
+ */
+export async function saveAllegroCredentialsAction(
+  collectionId: string,
+  input: { clientId: string; clientSecret: string; sandbox: boolean }
+): Promise<AllegroActionState> {
+  const session = await getSession();
+  try {
+    await saveAllegroCredentials(session.user.id, collectionId, {
+      clientId: input.clientId,
+      clientSecret: input.clientSecret.trim() || null,
+      sandbox: input.sandbox,
+    });
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to save the Allegro application.");
+  }
+}
+
+/** Start the device flow — the default, working on any install. */
+export async function startAllegroDeviceFlowAction(
+  collectionId: string
+): Promise<{ status: "success"; prompt: AllegroDevicePrompt } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", prompt: await startAllegroDeviceFlow(session.user.id, collectionId) };
+  } catch (err) {
+    return failure(err, "Allegro refused to start the connection.");
+  }
+}
+
+/** One poll of a running device flow. `waiting` is a success: the collector simply has not confirmed
+ *  on Allegro yet, and a browser polling on a timer should not be logging a failed request a
+ *  second. */
+export async function pollAllegroDeviceFlowAction(
+  collectionId: string
+): Promise<AllegroDeviceResult> {
+  const session = await getSession();
+  try {
+    return await pollAllegroDeviceFlow(session.user.id, collectionId);
+  } catch (err) {
+    return {
+      status: "failed",
+      message: err instanceof Error ? err.message : "Allegro could not be reached.",
+    };
+  }
+}
+
+/** Begin the authorization code flow, returning the Allegro URL to send the browser to. Offered
+ *  only where the instance has a configured address; the domain layer says so when it does not. */
+export async function startAllegroCodeFlowAction(
+  collectionId: string
+): Promise<{ status: "success"; url: string } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", url: await startAllegroCodeFlow(session.user.id, collectionId) };
+  } catch (err) {
+    return failure(err, "Could not start the Allegro sign-in.");
+  }
+}
+
+/** One authenticated call end to end, which is what "connected" means here. */
+export async function testAllegroConnectionAction(
+  collectionId: string
+): Promise<{ status: "success"; detail: string } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const { detail } = await testAllegroConnection(session.user.id, collectionId);
+    return { status: "success", detail };
+  } catch (err) {
+    return failure(err, "The Allegro connection could not be checked.");
+  }
+}
+
+/** Forget the connection. Local only, by decision (ADR-0023) — the grant stays listed in the
+ *  collector's Allegro account until they remove it there. */
+export async function disconnectAllegroAction(collectionId: string): Promise<AllegroActionState> {
+  const session = await getSession();
+  try {
+    await disconnectAllegro(session.user.id, collectionId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to disconnect from Allegro.");
   }
 }

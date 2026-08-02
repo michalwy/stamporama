@@ -14,6 +14,7 @@ import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { AllegroPlatformPanel } from "./allegro-platform-panel";
+import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -27,6 +28,7 @@ import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
+import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -56,6 +58,9 @@ interface SettingsTabsProps {
   /** Which platform contact is Allegro (#355), or null when none is — the setting the Assistant's
    * lot capture rides on. */
   allegroPlatformId: string | null;
+  /** This instance's own API connection to the collector's Allegro account (#476). Secret-free by
+   *  construction — the client secret and both tokens never cross to the browser. */
+  allegroConnection: AllegroConnectionStatus;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -108,6 +113,7 @@ export function SettingsTabs({
   initialColnectConditionMappings,
   colnectPlatformId,
   allegroPlatformId,
+  allegroConnection,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -317,6 +323,15 @@ export function SettingsTabs({
             collectionId={collectionId}
             platforms={platformContacts}
             selectedId={allegroPlatformId}
+          />
+
+          {/* The instance's own API access to the collector's Allegro account (#476). Below the
+              platform picker because the picker is what names the marketplace at all, and a
+              connection to an account the collection has no platform for would land nowhere. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Allegro account</h2>
+          <AllegroConnectionPanel
+            collectionId={collectionId}
+            status={allegroConnection}
           />
         </section>
       )}

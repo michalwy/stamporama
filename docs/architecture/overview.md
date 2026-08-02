@@ -408,3 +408,4 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |
 | `STAMPORAMA_DATA_DIR` | no | Directory for uploaded photo bytes (default `/data` in prod, `./.data` in dev). Backed by the `stamporama-data` Docker volume (#112) |
 | `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS` | no | Hours a staged, unsaved photo upload survives before the orphan-GC sweep (default `3`) |
+| `STAMPORAMA_SECRET_KEY` | when connecting Allegro | Encrypts third-party credentials at rest — the Allegro client secret and OAuth tokens (#476; ADR-0023). Generate with `openssl rand -base64 32`. Changing it invalidates every stored connection |

@@ -86,6 +86,10 @@ Allegro**, one select. That is the one thing an auction page cannot tell the Ass
 knows it is Allegro, but not which of your [contacts](contacts.md) that marketplace is. Until it is
 set, the capture window says so and saves nothing.
 
+That select is about a marketplace you *buy* on, and it is all the capture needs. Connecting the
+Allegro account you *sell* from is a separate, optional step on the same tab — see
+[Allegro](allegro.md).
+
 ## Closing the window
 
 The Assistant opens in its own small window — the matching one and the capture one alike. **Escape**

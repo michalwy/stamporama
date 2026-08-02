@@ -86,6 +86,7 @@ model Collection {
   colnectConditionMappings ColnectConditionMapping[]
   assistantTokens AssistantToken[]
   assistantRegistrationCodes AssistantRegistrationCode[]
+  allegroConnection AllegroConnection?
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -420,6 +421,62 @@ model ColnectConditionMapping {
   @@unique([stampConditionId])
   @@index([collectionId])
   @@map("colnect_condition_mapping")
+}
+
+// This collection's authenticated access to the collector's Allegro account through Allegro's
+// public REST API (#476; ADR-0023). It is the foundation the sold-listing worklist (#467) and the
+// order → Sale flow (#463) read through; on its own it reads no business data.
+//
+// **Per collection**, matching the Allegro platform contact (#355) it attaches to and every other
+// platform setting here — an Allegro account belongs to a seller rather than to a collection, but
+// this app has one authorization model (`collectionId` + owner check) and an instance-level secret
+// would sit outside it. One row per collection, hence the unique.
+//
+// Self-hosting is what puts the client credentials in this table at all: no OAuth application can
+// ship in a public image, so each instance registers its own at `apps.developer.allegro.pl`. The
+// client **secret** and both tokens are therefore stored sealed (AES-256-GCM under
+// `STAMPORAMA_SECRET_KEY`, `src/lib/secret-box.ts`) — a hash would be useless for a value that is
+// replayed, and a database dump is a routinely-copied artefact in a self-hosted install. The client
+// *id* is not a secret and stays plain, so Settings can state which application is connected even
+// when the key is missing.
+model AllegroConnection {
+  id           String @id @default(cuid())
+  collectionId String @unique
+
+  // The registered application. `clientSecretSealed` is `sealSecret()` output, never plaintext.
+  clientId           String
+  clientSecretSealed String
+  // Allegro's sandbox is a property of the *connection*, not of the deployment: an application
+  // registered in the sandbox has different credentials from one registered in production.
+  sandbox            Boolean @default(false)
+
+  // The grant, absent until the collector completes a flow. Both sealed.
+  accessTokenSealed  String?
+  refreshTokenSealed String?
+  // When the access token expires, so it can be refreshed *ahead* of expiry rather than after a
+  // call has already failed.
+  expiresAt          DateTime?
+  // Which flow made the grant is deliberately **not** stored. It was, until the refresh turned out
+  // to be identical for both — same endpoint, same parameters, no redirect_uri — leaving a column
+  // nothing read.
+
+  // Who is connected, for the status line. Allegro's own account id and login.
+  accountId    String?
+  accountLogin String?
+
+  // Set when a refresh was rejected: the connection is then explicitly "needs reconnecting" rather
+  // than every later call failing on its own with a different message. Cleared by a successful
+  // refresh or a fresh connect.
+  needsReconnect  Boolean   @default(false)
+  lastError       String?
+  lastRefreshedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@map("allegro_connection")
 }
 
 // Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a
