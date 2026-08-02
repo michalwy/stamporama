@@ -63,8 +63,14 @@ import type { PlanCopy, PlanSet } from "./offer-photo-plan";
  * here, before the engine ever sees it. The unit is the **whole set**: an `OfferSet` sells together
  * and indivisibly, so a series missing one stamp is not sellable and its collage must not advertise
  * it. Because the composition is also what the fingerprint hashes, a sale marks the stored images
- * out of date by itself — no new flag, and still no implicit regeneration. Manual attachments (#313)
- * are untouched: they are not derived from a rule, so a regeneration could not reproduce them.
+ * out of date by itself — no new flag, and still no implicit regeneration.
+ *
+ * A manual attachment (#313) is not derived from a rule, so nothing here rebuilds one — but one that
+ * *names a copy from a set that has gone* goes with the set (#461). Showing it would defeat the
+ * exclusion: the collage stops advertising the stamp and the attachment beside it carries on doing
+ * exactly that. A hand-built collage (#331) loses only the tiles whose copies went, and drops
+ * entirely when that leaves it empty. The rows are kept — only the plan drops them — so a set held
+ * back by bidding brings its attachments back when it frees up.
  */
 
 /**
@@ -556,6 +562,10 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     offer.collageBackground != null &&
     offer.collageLabelPercent != null;
 
+  // The copies the offer can still sell: the members of the sets that survived the exclusion above.
+  // A manual attachment naming anything else is showing a stamp the buyer cannot get (#461).
+  const sellableItemIds = new Set(sets.flatMap((set) => set.items.map((copy) => copy.itemId)));
+
   // Attachments (#313). Their photos join the source map so the renderer can read the bytes, and a
   // `copy_photo`'s copy joins the label subjects — a copy attached on its own need not be one the
   // collages already cover.
@@ -572,13 +582,15 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
         : row.source === "manual_collage"
           ? "manual_collage"
           : "copy_photo";
-    const photos =
+    const photos = (
       source === "manual_collage"
         ? row.tiles.map((tile) => ({ photo: tile.photo, itemId: tile.itemId }))
         : row.photo
           ? [{ photo: row.photo, itemId: row.itemId }]
-          : [];
-    // A collage whose every tile lost its source scan plans nothing rather than an empty image.
+          : []
+    ).filter((t) => t.itemId == null || sellableItemIds.has(t.itemId));
+    // A collage whose every tile lost its source scan — or whose every tile named a copy that has
+    // gone (#461) — plans nothing rather than an empty image.
     if (photos.length === 0) continue;
     attachments.push({
       id: row.id,
@@ -604,10 +616,11 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
     offer.platform.titleLanguage
   );
-  // An attachment naming a copy the offer no longer holds keeps its place and renders: the plan is
-  // what the collector arranged, and the panel shows the copy as `removed` rather than dropping the
-  // image behind their back. Attaching one is guarded (`attachOfferCopyPhoto`); a copy leaving the
-  // offer afterwards is not.
+  // An attachment naming a copy the offer no longer sells leaves the plan with the copy (#461),
+  // exactly as the set it came from does (#315) — attaching one is guarded
+  // (`attachOfferCopyPhoto`), and a copy leaving the offer afterwards is now guarded here. Only the
+  // *plan* drops it: the row survives, so a set held back by bidding elsewhere brings its
+  // attachments back with it when it frees up.
 
   return {
     offerId: offer.id,

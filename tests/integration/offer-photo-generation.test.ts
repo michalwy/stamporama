@@ -10,7 +10,10 @@ import { createItem } from "../../src/lib/items";
 import { createOffer, addOfferSet, deleteOffer, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import { FULL_MAX_EDGE } from "../../src/lib/photos/process";
-import { attachOfferCopyPhoto } from "../../src/lib/offer-photo-attachments";
+import {
+  attachOfferCopyPhoto,
+  removeOfferPhotoAttachment,
+} from "../../src/lib/offer-photo-attachments";
 import { createSale, addSaleLines } from "../../src/lib/sales";
 import { inflateRawSync } from "node:zlib";
 import {
@@ -796,6 +799,83 @@ describe("offer photo generation (#311)", () => {
     // one. The offer goes back to where the previous tests left it.
     await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.offer.update({ where: { id: offerId }, data: { state: "preparing" } });
+  });
+
+  it("drops an attachment showing a copy from the sold set, without deleting its row (#461)", async () => {
+    // The previous test left one attachment behind, of a copy that survives the sale. This one adds
+    // a second, of a copy in the set about to go — the pair is the whole point: an attachment is
+    // kept or dropped on *which copy it shows*, not on being manual.
+    const soldItem = await prisma.offerSetItem.findFirstOrThrow({
+      where: { offerSetId: setIds[0] },
+      select: { itemId: true },
+    });
+    const soldPhoto = await prisma.photo.findFirstOrThrow({
+      where: { itemId: soldItem.itemId, role: "front" },
+      select: { id: true },
+    });
+    const doomed = await attachOfferCopyPhoto(userId, offerId, {
+      itemId: soldItem.itemId,
+      photoId: soldPhoto.id,
+      title: "Detail of the set that sells",
+    });
+
+    const before = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(
+      before.plan.images.filter((i) => i.attachmentId === doomed.id).length,
+      1,
+      "while the set is still for sale, its attachment is planned like any other"
+    );
+
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "active" } });
+    const saleId = await createSale(userId, collectionId, {
+      platformId,
+      buyerId: null,
+      externalRef: null,
+      transactionUrl: null,
+      soldAt: new Date(),
+      currency: "EUR",
+      buyerHandling: null,
+      buyerPaidTotal: null,
+      commission: null,
+    });
+    await addSaleLines(userId, saleId, [
+      { offerId, offerSetId: setIds[0], price: "9.00", itemIds: [soldItem.itemId] },
+    ]);
+
+    const after = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(
+      after.plan.images.filter((i) => i.attachmentId === doomed.id).length,
+      0,
+      "the attachment leaves the plan with the set whose copy it shows"
+    );
+    assert.equal(
+      after.plan.images.filter((i) => i.source === "copy_photo").length,
+      1,
+      "the attachment of a surviving copy stays"
+    );
+    assert.equal(
+      await prisma.offerPhotoAttachment.count({ where: { offerId } }),
+      2,
+      "the plan drops it; the row is kept, so a set held back elsewhere can bring it back"
+    );
+
+    // And the regeneration renders what is left, not what went.
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await claimNextOfferPhotoGeneration({ offerId }), offerId);
+    await runOfferPhotoGeneration(offerId);
+    const regenerated = await getOfferPhotoPlanState(userId, offerId);
+    assert.equal(regenerated.status, "ready");
+    assert.equal(
+      regenerated.images.filter((i) => i.itemIds.includes(soldItem.itemId)).length,
+      0,
+      "no stored image shows the sold copy any more — collage or attachment"
+    );
+
+    // Put the offer back where the previous test left it: the sale undone, the doomed attachment
+    // gone, one attachment of a surviving copy, `preparing`.
+    await prisma.sale.deleteMany({ where: { collectionId } });
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "preparing" } });
+    await removeOfferPhotoAttachment(userId, doomed.id);
   });
 
   // ── Auto grid (#413) ───────────────────────────────────────────────────────

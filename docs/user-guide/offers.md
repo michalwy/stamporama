@@ -509,6 +509,14 @@ attachments** exactly as they are — they are yours, not something a rule could
 not change either: each one comes from its own copy, so a buyer quoting a label off an image you
 already uploaded still lands on the right stamp.
 
+The one attachment that does not stay is one showing a **copy from the set that went**. It leaves the
+plan with its set, for the same reason the collage does: a photo of a stamp the buyer cannot get is
+what the exclusion exists to prevent. A collage you built by hand loses only the tiles whose copies
+went, and leaves the plan altogether if that empties it. This is not a deletion — attach the copy
+again if it comes back, and a set held back only by [active
+bidding](#in-active-bidding--auction-platforms) brings its attachments back with it when it frees up.
+An attachment you uploaded yourself shows no copy at all, so nothing here touches it.
+
 Afterwards the card keeps listing the sets that went — that is why the offer makes fewer collages
 than it holds sets — but as a plain note rather than a warning: once the stored images no longer show
 them, there is nothing left to do.
@@ -546,8 +554,8 @@ Everything else about the image — the gap, the background, the label strip —
 own collage settings, so a collage you built sits among the generated ones instead of standing out.
 
 The result is one attachment: it takes one place in the plan, carries one caption, is removed in one
-click, and a regeneration leaves it alone like every other attachment. To change what it shows,
-remove it and build it again.
+click, and a regeneration leaves it alone like every other attachment — bar any tile whose copy has
+[left the offer](#when-a-set-sells). To change what it shows, remove it and build it again.
 
 #### One photo per copy
 
