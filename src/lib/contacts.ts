@@ -105,13 +105,14 @@ export interface ContactData extends ContactRoles {
    * unset. Only meaningful for the `platform` role; drives which entity translations the title
    * tokens resolve. */
   titleLanguage: string | null;
-  /** Fallback asking price for a new offer on this platform (#362), a 2-dp string in the platform's
-   * own currency, or null when it has none. The lowest-priority suggestion — read at offer creation
-   * only, never seeded onto anything. Only meaningful for the `platform` role. */
-  defaultOfferPrice: string | null;
+  /** Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), a 2-dp
+   * string in the platform's own currency, or null. The lowest-priority suggestion — read at offer
+   * creation only, never seeded onto anything. Kept only while {@link defaultListingType} is
+   * `auction`; a quick buy has no such figure. Only meaningful for the `platform` role. */
+  defaultStartingPrice: string | null;
   /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when
    * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
-   * {@link defaultOfferPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
+   * {@link defaultStartingPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
   defaultListingType: string | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
@@ -167,7 +168,7 @@ const CONTACT_SELECT = {
   privateNoteTemplate: true,
   descriptionFormat: true,
   titleLanguage: true,
-  defaultOfferPrice: true,
+  defaultStartingPrice: true,
   defaultListingType: true,
   maxPhotos: true,
   maxPhotoEdge: true,
@@ -190,12 +191,12 @@ const CONTACT_SELECT = {
  * {@link ContactData} except that the seller defaults are still `Decimal`s. */
 type ContactRow = Omit<
   ContactData,
-  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed" | "defaultOfferPrice"
+  "defaultShippingCost" | "buyerPremiumPercent" | "buyerPremiumFixed" | "defaultStartingPrice"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
-  defaultOfferPrice: Decimal | null;
+  defaultStartingPrice: Decimal | null;
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
@@ -206,7 +207,30 @@ function toContactData(row: ContactRow): ContactData {
     defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
-    defaultOfferPrice: row.defaultOfferPrice?.toFixed(2) ?? null,
+    defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
+  };
+}
+
+/**
+ * What a new offer on this platform starts as (#449): how it is sold, and — **only** for an auction
+ * platform — the figure it opens at.
+ *
+ * The two are written together because the price is meaningless without the format. A quick-buy or
+ * preference-less platform stores no starting price at all rather than keeping one nothing reads:
+ * its price follows from the goods, which the lot's suggested price (#190) and the copies' catalog
+ * value (#230) already answer. An unknown listing type stores null — "no preference" is exactly what
+ * an unanswered question is, and it reads as `fixed` wherever it is used.
+ */
+function platformListingDefaults(
+  data: ContactCreateInput
+): { defaultListingType: string | null; defaultStartingPrice: string | null } {
+  const defaultListingType = isOfferListingType(data.defaultListingType)
+    ? data.defaultListingType
+    : null;
+  return {
+    defaultListingType,
+    defaultStartingPrice:
+      defaultListingType === "auction" ? amount(data.defaultStartingPrice) : null,
   };
 }
 
@@ -256,9 +280,10 @@ export interface ContactCreateInput {
   descriptionFormat?: string | null;
   /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
   titleLanguage?: string | null;
-  /** The platform's fallback asking price for a new offer (#362), or null. A blank or unparseable
-   * amount stores null — an unpriced platform, not a zero-price one. */
-  defaultOfferPrice?: string | null;
+  /** The platform's fallback starting price for a new auction (#362/#449), or null. A blank or
+   * unparseable amount stores null — a platform with no default, not a free one — and so does any
+   * value sent while `defaultListingType` is not `auction`. */
+  defaultStartingPrice?: string | null;
   /** How a new offer on this platform is sold by default (#449), or null for "no preference". An
    * unknown value stores null rather than being coerced: a preference nobody stated is exactly what
    * null means, and it reads as `fixed` wherever it is used. */
@@ -458,10 +483,7 @@ export async function createContact(
         privateNoteTemplate: data.privateNoteTemplate ?? null,
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
-        defaultOfferPrice: amount(data.defaultOfferPrice),
-        defaultListingType: isOfferListingType(data.defaultListingType)
-          ? data.defaultListingType
-          : null,
+        ...platformListingDefaults(data),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxDescriptionLength: data.maxDescriptionLength ?? null,
@@ -512,10 +534,7 @@ export async function updateContact(
         privateNoteTemplate: data.privateNoteTemplate ?? null,
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
-        defaultOfferPrice: amount(data.defaultOfferPrice),
-        defaultListingType: isOfferListingType(data.defaultListingType)
-          ? data.defaultListingType
-          : null,
+        ...platformListingDefaults(data),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxDescriptionLength: data.maxDescriptionLength ?? null,

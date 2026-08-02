@@ -122,12 +122,14 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     titleLanguage: bool(formData, "platform")
       ? str(formData, "titleLanguage") || null
       : null,
-    // The platform's fallback asking price for a new offer (#362), in its own currency. Same
-    // platform-only handling; blank normalises to null — no default price rather than a free one.
-    defaultOfferPrice: isPlatform ? str(formData, "defaultOfferPrice") || null : null,
-    // How a new offer on this platform is sold by default (#449) — the listing-format counterpart of
-    // the price above, and read at creation the same way. Blank is "no preference", which is not the
-    // same claim as "quick buy" even though both behave that way.
+    // The platform's fallback **starting price** for a new auction (#362, narrowed in #449), in its
+    // own currency. Same platform-only handling; blank normalises to null — no default rather than a
+    // free one — and the domain drops it entirely unless the platform's default type is `auction`,
+    // the field being hidden there.
+    defaultStartingPrice: isPlatform ? str(formData, "defaultStartingPrice") || null : null,
+    // How a new offer on this platform is sold by default (#449) — which is also what decides whether
+    // the figure above means anything. Blank is "no preference", which is not the same claim as
+    // "quick buy" even though both behave that way.
     defaultListingType: isPlatform ? str(formData, "defaultListingType") || null : null,
     // The platform's photo limits, and the defaults new offers on this platform are seeded from
     // (#308). `photoSides` normalises to the default side; the collage template is verified against

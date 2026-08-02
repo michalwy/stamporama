@@ -544,11 +544,13 @@ export function OfferDetailPanel({
               <Tooltip content={priceLabel(offer.listingType)} align="end">
                 <InlineText
                   value={offer.price === "0.00" ? "" : offer.price}
-                  placeholder="Set price"
+                  placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
                   display={
                     offer.price === "0.00" ? (
                       <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
-                        No price yet
+                        {/* An unbid auction is not *unpriced* — it is up at its opening figure with
+                            nobody having bid, which is a different and perfectly normal thing (#449). */}
+                        {isAuctionListing(offer.listingType) ? "No bids yet" : "No price yet"}
                       </span>
                     ) : (
                       <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>

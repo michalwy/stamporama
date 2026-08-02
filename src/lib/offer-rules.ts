@@ -194,31 +194,17 @@ export function requiresStartingPrice(listingType: OfferListingType, to: OfferSt
 }
 
 /**
- * What the offer's live price column holds when the collector states none (#449). On an auction it
- * is the **starting price**: an auction nobody has bid on stands exactly at its opening figure, so
- * that *is* the current price rather than a stand-in for one. It is written into `price` rather than
- * derived on read so that every reader — the list rows, the base-currency conversion, the offers
- * summary, the listing kit, the sale — keeps reading one column and needs to know nothing about
- * listing formats; the collector types over it the first time the bidding actually moves.
- *
- * A quick buy is returned unchanged: an unpriced one is unpriced, and there is nothing to fall back
- * on.
- */
-export function resolveCurrentPrice(
-  listingType: OfferListingType,
-  price: string,
-  startingPrice: string | null
-): string {
-  if (hasPrice(price)) return price;
-  if (isAuctionListing(listingType) && startingPrice && hasPrice(startingPrice)) return startingPrice;
-  return price;
-}
-
-/**
  * Whether an offer's pricing satisfies what moving to `to` requires — the asking price (#336) and,
- * on an auction, the starting price it was listed at (#449). One predicate so the quick-advance
- * button on the row and on the detail header enable themselves on exactly what the server enforces;
- * the server keeps its own checks only because each has to name the field that fixes it.
+ * on an auction, the starting price it was listed at (#449).
+ *
+ * The two are **alternatives, not a pair**. An auction's current price is an *observation* of the
+ * bidding, and one that is up with nobody bidding has none to make — so it is never required, and a
+ * listed auction quite legitimately carries no current figure at all. What the seller states is the
+ * opening price, and that is what has to be there.
+ *
+ * One predicate, so the quick-advance button on the row and on the detail header enable themselves
+ * on exactly what the server enforces; the server keeps its own checks only because each has to name
+ * the field that fixes it.
  */
 export function pricingReadyFor(
   listingType: OfferListingType,
@@ -227,10 +213,8 @@ export function pricingReadyFor(
   startingPrice: string | null
 ): boolean {
   if (!requiresPrice(to)) return true;
-  if (requiresStartingPrice(listingType, to) && !(startingPrice && hasPrice(startingPrice))) {
-    return false;
-  }
-  return hasPrice(resolveCurrentPrice(listingType, price, startingPrice));
+  if (isAuctionListing(listingType)) return !!startingPrice && hasPrice(startingPrice);
+  return hasPrice(price);
 }
 
 /** Validate and normalise an auction's **starting** price (#449). Blank is a legitimate answer here

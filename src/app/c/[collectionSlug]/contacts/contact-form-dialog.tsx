@@ -171,6 +171,11 @@ export function ContactFormDialog({
   const [descriptionFormat, setDescriptionFormat] = useState<DescriptionFormat>(
     normalizeDescriptionFormat(contact?.descriptionFormat)
   );
+  // How a new offer on this platform is sold by default (#449). Tracked rather than left
+  // uncontrolled because it decides whether the default **starting price** beside it exists at all:
+  // that figure belongs to an auction, and offering it on a quick-buy platform would ask for a
+  // number nothing would ever read.
+  const [defaultListingType, setDefaultListingType] = useState(contact?.defaultListingType ?? "");
   const [templatesOpen, setTemplatesOpen] = useState(false);
   // Which tab the collector asked for. The tab actually shown is **derived** from it against the
   // roles currently ticked, never corrected by a `setState` in an effect: unticking Platform while
@@ -488,28 +493,16 @@ export function ContactFormDialog({
                   </div>
                 </div>
 
-                {/* What a new offer on this platform starts as: its price (#362) and how it is sold
-                    (#449). Both are read at creation only — an offer already created keeps what it
-                    was given — and both are about *this* platform's habits rather than about any
-                    listing, which is why they sit together. */}
+                {/* What a new offer on this platform starts as (#449): how it is sold, and — only
+                    for an auction platform — the figure it opens at. Both are read at creation only,
+                    so an offer already created keeps what it was given, and both describe *this
+                    platform's* habits rather than any one listing.
+
+                    The order is deliberate: the format decides whether the price field means
+                    anything at all, so it is asked first and the price appears beside it. A quick
+                    buy's price follows from the goods — the lot's suggested price and the copies'
+                    catalog value already answer it — so there is nothing here to default. */}
                 <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="contact-default-offer-price">
-                      Default offer price (optional)
-                    </LabelWithError>
-                    <NumericInput
-                      id="contact-default-offer-price"
-                      name="defaultOfferPrice"
-                      defaultValue={contact?.defaultOfferPrice ?? ""}
-                      placeholder="—"
-                      disabled={isPending}
-                      style={INPUT_STYLE}
-                    />
-                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                      In the platform&apos;s currency. Pre-fills a new offer only when neither the lot nor
-                      the copies&apos; catalog value suggests a price — always editable afterwards.
-                    </p>
-                  </div>
                   {/* Blank is "no preference", not "quick buy": the two behave identically today, so
                       a platform nobody has answered for needs nothing written to it. */}
                   <div style={{ flex: 1 }}>
@@ -519,7 +512,8 @@ export function ContactFormDialog({
                     <select
                       id="contact-default-listing-type"
                       name="defaultListingType"
-                      defaultValue={contact?.defaultListingType ?? ""}
+                      value={defaultListingType}
+                      onChange={(e) => setDefaultListingType(e.target.value)}
                       disabled={isPending}
                       style={{ ...INPUT_STYLE, cursor: "pointer" }}
                     >
@@ -535,6 +529,26 @@ export function ContactFormDialog({
                       on (or never do). Changeable per offer.
                     </p>
                   </div>
+                  {defaultListingType === "auction" && (
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="contact-default-starting-price">
+                        Default starting price (optional)
+                      </LabelWithError>
+                      <NumericInput
+                        id="contact-default-starting-price"
+                        name="defaultStartingPrice"
+                        defaultValue={contact?.defaultStartingPrice ?? ""}
+                        placeholder="—"
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      />
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        In the platform&apos;s currency, for a house you always open at the same
+                        figure. Pre-fills a new auction only when neither the lot nor the copies&apos;
+                        catalog value suggests a price — always editable afterwards.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Listing templates (#210, #266, #267): what this platform's offer title, description

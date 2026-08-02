@@ -53,7 +53,7 @@ interface PurchaseContactSelectProps {
  * platform states nothing. */
 export interface PlatformOfferDefaults {
   platformCurrency: string | null;
-  defaultOfferPrice: string | null;
+  defaultStartingPrice: string | null;
   defaultListingType: string | null;
 }
 
@@ -98,7 +98,7 @@ export function PurchaseContactSelect({
     setValue(contact.name);
     onSelectionChange?.(contact.id, contact.name, {
       platformCurrency: contact.platformCurrency,
-      defaultOfferPrice: contact.defaultOfferPrice,
+      defaultStartingPrice: contact.defaultStartingPrice,
       defaultListingType: contact.defaultListingType,
     });
   }
@@ -122,7 +122,7 @@ export function PurchaseContactSelect({
             id: c.id,
             name: c.name,
             platformCurrency: c.platformCurrency,
-            defaultOfferPrice: c.defaultOfferPrice,
+            defaultStartingPrice: c.defaultStartingPrice,
             defaultListingType: c.defaultListingType,
           })
         }

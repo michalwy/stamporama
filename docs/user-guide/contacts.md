@@ -32,7 +32,7 @@ A plain address-book contact is one short form. Tick **Platform**, or **Seller**
 and the dialog grows **tabs** for what that role brings with it:
 
 - **Contact** — name, email, phone, roles and notes. Always there, and where you land.
-- **Platform** — currency, listing language, default offer price, listing templates, listing text
+- **Platform** — currency, listing language, default listing type and starting price, listing templates, listing text
   limits and offer photos. Appears with the **Platform** role.
 - **Auction defaults** — the currency and fee terms a seller trades on. Appears with **Seller** or
   **Auction house**.
@@ -49,20 +49,23 @@ so an offer and its sale can never disagree. You can set it here, or leave it un
 inline the first time you list or sell on the platform. Changing it later leaves existing offers
 and sales untouched — each keeps the currency it was created with.
 
-Ticking **Platform** also reveals a **Default offer price** — a flat asking price for a platform you
-list at one price ("everything 5 zł"), in the platform's own currency. It is the **last resort**: a
-new offer takes it only when nothing about the goods themselves suggests a price — the lot's
-suggested price and the copies' catalog value both win over it. It is read when the offer is
-created and never afterwards, so the price stays yours to edit on the offer, and changing the
-default here leaves offers already created untouched. Leave it empty for platforms you price
+Ticking **Platform** also reveals a **Default listing type** — how a new offer here is sold, for a
+marketplace you only ever auction on (or never do). It pre-selects **Quick buy** or **Auction** in
+the new-offer dialog and is changeable per listing; leave it at **no preference** and a new offer
+starts as a quick buy.
+
+Choosing **Auction** reveals a **Default starting price** beside it — the figure a house you always
+open at the same price starts at, in the platform's own currency. It is the **last resort**: a new
+auction takes it only when nothing about the goods themselves suggests a price — the lot's suggested
+price and the copies' catalog value both win over it, and those fill the same field. It never touches
+the offer's current price, which stays empty until somebody bids. Leave it empty for houses you open
 individually.
 
-Beside it sits the **Default listing type** — how a new offer here is sold, for a marketplace you
-only ever auction on (or never do). It pre-selects **Quick buy** or **Auction** in the new-offer
-dialog and is changeable per listing; leave it at **no preference** and a new offer starts as a quick
-buy, which is the same thing choosing **Quick buy** does today. Like the default price, it is read
-when the offer is created and never afterwards, so changing it here never re-describes a listing you
-have already posted.
+There is deliberately no default price for a **quick buy**: its price follows from the goods, which
+is exactly what those two suggestions already answer.
+
+Both are read when the offer is created and never afterwards, so what they filled in stays yours to
+edit on the offer, and changing either here leaves offers already created untouched.
 
 Ticking **Seller** or **Auction house** reveals **Auction sale defaults** — the **currency**,
 **shipping**, and the two **buyer's premium** parts (a percentage and a per-lot fee) this seller

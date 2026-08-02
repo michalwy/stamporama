@@ -109,7 +109,7 @@ describe("offer listing type and its prices (#449)", () => {
     assert.equal(d.listingType, "auction");
     assert.equal(d.price, "18.00", "the live figure is where the bidding stands");
     assert.equal(d.startingPrice, "5.00");
-    assert.ok(d.priceCheckedAt, "a figure typed at creation was just read off the listing");
+    assert.ok(d.priceCheckedAt, "a bid typed at creation was just read off the listing");
   });
 
   it("drops a starting price submitted alongside a quick buy", async () => {
@@ -171,9 +171,10 @@ describe("offer listing type and its prices (#449)", () => {
     );
   });
 
-  it("stands an auction with no current figure at its starting price", async () => {
-    // A listing that is up with nobody bidding does have a price — the one it opened at — so the
-    // collector states the starting figure and leaves the current one blank.
+  it("leaves an unbid auction with no current price at all", async () => {
+    // The current price is an *observation* of the bidding: an auction that is up with nobody
+    // bidding has none to make, and copying the opening figure into it would put a bid in the
+    // record that never happened.
     const offerId = await createOffer(userId, collectionId, {
       platformId,
       url: null,
@@ -186,12 +187,12 @@ describe("offer listing type and its prices (#449)", () => {
     });
 
     const d = await detail(offerId);
-    assert.equal(d.price, "5.00", "written into the one column every surface reads");
+    assert.equal(d.price, "0.00");
     assert.equal(d.startingPrice, "5.00");
-    assert.ok(d.priceCheckedAt);
+    assert.equal(d.priceCheckedAt, null, "nothing has been observed, so nothing was dated");
   });
 
-  it("carries the current price over when the starting price is set field by field", async () => {
+  it("keeps the two figures independent once the bidding starts", async () => {
     const offerId = await createOffer(userId, collectionId, {
       platformId,
       url: null,
@@ -201,16 +202,14 @@ describe("offer listing type and its prices (#449)", () => {
       listingDate: null,
       state: "preparing",
     });
-    assert.equal((await detail(offerId)).price, "0.00");
 
     await patchOffer(userId, offerId, { startingPrice: "6.00" });
-    assert.equal((await detail(offerId)).price, "6.00", "nobody has bid, so it stands at its opening");
+    assert.equal((await detail(offerId)).price, "0.00", "an opening figure is not a bid");
 
-    // Once a bid is recorded, the opening figure is history and must not overwrite it.
     await patchOffer(userId, offerId, { price: "11.00" });
     await patchOffer(userId, offerId, { startingPrice: "4.00" });
     const d = await detail(offerId);
-    assert.equal(d.price, "11.00");
+    assert.equal(d.price, "11.00", "and correcting the opening figure never touches the bid");
     assert.equal(d.startingPrice, "4.00");
   });
 
@@ -254,11 +253,11 @@ describe("offer listing type and its prices (#449)", () => {
     await setOfferState(userId, offerId, "ready");
     const d = await detail(offerId);
     assert.equal(d.state, "ready");
-    assert.equal(d.price, "5.00", "and it is listed at what it opened at");
+    assert.equal(d.price, "0.00", "and it goes live with no bid recorded on it");
   });
 
   it("takes the platform's default listing type when the form states none", async () => {
-    // The `defaultOfferPrice` rule (#362): read at creation, then owned by the offer.
+    // The `defaultStartingPrice` rule (#362): read at creation, then owned by the offer.
     const auctionOnly = (
       await prisma.contact.create({
         data: {

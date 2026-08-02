@@ -21,7 +21,6 @@ import {
   parseStartingPrice,
   pricingReadyFor,
   requiresStartingPrice,
-  resolveCurrentPrice,
   OFFER_LISTING_TYPES,
   OFFER_STATES,
   CLOSED_OFFER_STATES,
@@ -309,22 +308,14 @@ describe("an auction's two prices (#449)", () => {
     assert.equal(requiresStartingPrice("fixed", "ready"), false);
   });
 
-  it("stands an unbid auction at its opening figure", () => {
-    assert.equal(resolveCurrentPrice("auction", "0.00", "5.00"), "5.00");
-    // A stated current price is an observation and always wins.
-    assert.equal(resolveCurrentPrice("auction", "18.00", "5.00"), "18.00");
-    // Nothing to fall back on: an auction with no opening figure, and a quick buy either way.
-    assert.equal(resolveCurrentPrice("auction", "0.00", null), "0.00");
-    assert.equal(resolveCurrentPrice("fixed", "0.00", "5.00"), "0.00");
-  });
-
   it("gates going live on the figure each format actually states", () => {
     // A quick buy: its own price, and nothing else.
     assert.equal(pricingReadyFor("fixed", "ready", "9.00", null), true);
     assert.equal(pricingReadyFor("fixed", "ready", "0.00", null), false);
-    // An auction: the opening figure is enough on its own, since the current price follows from it.
+    // An auction: the opening figure alone, with **no** current price — that one is an observation
+    // of the bidding, and a listing nobody has bid on has none to make.
     assert.equal(pricingReadyFor("auction", "ready", "0.00", "5.00"), true);
-    // …and is required, so a bid recorded without one is still not a listed auction.
+    // …and it is required, so a bid recorded without one is still not a listed auction.
     assert.equal(pricingReadyFor("auction", "active", "18.00", null), false);
     // Nothing is asked of a state that does not go live.
     assert.equal(pricingReadyFor("auction", "preparing", "0.00", null), true);

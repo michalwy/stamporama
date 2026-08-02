@@ -79,15 +79,15 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    is shown locked and applies to every offer and sale there. The first time you list or sell on a
    platform that has no currency yet, you pick one inline and it is saved to the platform. That's
    all you need — you usually don't know the asking price yet (it follows from the copies you add).
-   If the platform carries a [default offer price](contacts.md), the new offer starts at it, so a
-   platform you list at one flat price needs no price typed at all; anything that suggests a price
-   from the goods themselves — a lot's suggested price, or the copies' catalog value — wins over it,
-   and the price is editable on the offer either way.
    The **listing type** says how this one is sold — **Quick buy** or **Auction**, pre-selected from
    the platform's own [default listing type](contacts.md) so a marketplace you only ever auction on
    needs no answer per listing. On an auction the price field is relabelled **Current price** and a
    required **Starting price** appears beside it (see
-   [Auction or quick buy](#auction-or-quick-buy)).
+   [Auction or quick buy](#auction-or-quick-buy)); if the platform carries a
+   [default starting price](contacts.md), that field starts filled in, so a house you always open at
+   the same figure needs no price typed at all. Anything that suggests a price from the goods
+   themselves — a lot's suggested price, or the copies' catalog value — wins over it, and every
+   figure is editable on the offer either way.
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
@@ -987,11 +987,16 @@ An auction adds two things under that figure on the detail header:
   stamps the check date; retyping the same number does not, since nothing was learned. This is the
   same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
 
-The **current price is not** required. An auction that is up with nobody bidding stands exactly at
-what it started at, so leave the field blank and Stamporama fills it in from the starting price; the
-first time the bidding actually moves, you type the new figure over it. That also works the other way
-round — set the starting price on an offer that has no price at all and the current one follows —
-until a bid has been recorded, after which the opening figure is history and never overwrites it.
+The **current price is not** required, and nothing is filled in for it. It is an *observation* of the
+bidding, and an auction that is up with nobody bidding has none to make — so leave the field blank
+and the offer reads **No bids yet** until you record the first one. The two figures stay independent
+after that: correcting the opening price never touches a bid you have recorded, and recording a bid
+never rewrites what the auction opened at.
+
+That is also why a suggested price — the copies' catalog value, a lot's price, the offer you are
+duplicating — fills the **Starting price** on an auction rather than the current one. A suggestion is
+what you would *ask* for the stamps, which on an auction is what you would open at; putting it in the
+current price would record a bid nobody placed.
 
 A quick buy carries neither extra field: its price is yours to set, and nothing moves it behind your
 back. Switching an existing auction back to **Quick buy** on the header form clears both, since a

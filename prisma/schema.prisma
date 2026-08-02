@@ -1157,20 +1157,26 @@ model Offer {
   // platform: a marketplace that offers both (Allegro, Delcampe) carries offers of either kind.
   listingType  String   @default("fixed")
   // The figure the listing is *currently* at, in `currency` (the offer's own transaction currency):
-  // the asking price of a fixed-price listing, the standing bid of an auction (the opening price
-  // while nobody has bid). One column for both readings on purpose (#449) — it is what the lists
-  // show, what converts to base (#208), what the suggested price (#190) is judged against and what
-  // the sale is priced from, and all of those want the live number, not the historical one.
+  // the asking price of a fixed-price listing, the standing bid of an auction. One column for both
+  // readings on purpose (#449) — it is what the lists show, what converts to base (#208), what the
+  // suggested price (#190) is judged against and what the sale is priced from, and all of those want
+  // the live number, not the historical one.
+  //
+  // On an auction it is an *observation*, so a listing nobody has bid on carries `0` and reads as
+  // "no bids yet": the opening figure is never copied into it, since that would record a bid that
+  // never happened. What such an auction is required to have is `startingPrice`, not this.
   price        Decimal  @db.Decimal(10, 2)
-  // What an `auction` listing opened at (#449) — a record and nothing more, since every calculation
-  // is about what the lot is at now. Null on a fixed-price listing and on an auction whose opening
-  // price was never noted.
+  // What an `auction` listing opened at (#449) — the figure the *seller states*, and so the one an
+  // auction must carry to go `ready`/`active`, in place of the asking price a quick buy needs.
+  // Nothing is calculated from it: every figure in the app is about what the lot is at now. Null on
+  // a fixed-price listing, and on an auction still being assembled.
   startingPrice Decimal? @db.Decimal(10, 2)
   // When `price` was last confirmed against the live listing (#449), the auction lot's
   // `currentBid`/`checkedAt` pattern (#351): refreshing a bid is manual by decision (ADR-0021 §8), so
   // what a stored figure is worth depends on when it was last looked at. Stamped by the in-place
   // price edit; null on a price never checked — which is every fixed-price listing, where the seller
-  // sets the number and nothing moves it.
+  // sets the number and nothing moves it, and every auction nobody has bid on, which has had nothing
+  // to observe yet.
   priceCheckedAt DateTime?
   currency     String
   state        String   @default("preparing")
@@ -1636,13 +1642,17 @@ model Contact {
   // translation is missing. The collection's language set is the distinct set of these values, so
   // entity forms only offer per-language inputs for languages actually in use.
   titleLanguage    String?
-  // Fallback asking price for a new offer on this platform (#362), in the platform's own
-  // `platformCurrency` — a platform that lists at one flat price ("everything 5 zł") should not have
-  // that figure retyped per listing. It is the **lowest-priority** suggestion: a lot's suggested
+  // Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), in the
+  // platform's own `platformCurrency` — an auction house one always opens at the same figure should
+  // not have it retyped per listing. It is the **lowest-priority** suggestion: a lot's suggested
   // price (#190) and the copies' catalog value (#230) both describe the goods and win over it, so it
-  // only fills a price nothing else could answer. Nullable — no default price is the normal case.
-  // Not seeded onto anything: it is read at creation and then belongs to the offer, freely editable.
-  defaultOfferPrice Decimal? @db.Decimal(10, 2)
+  // only fills a figure nothing else could answer. Nullable — no default is the normal case.
+  //
+  // Only meaningful, and only kept, while `defaultListingType` is `auction` (the writers clear it
+  // otherwise). A quick buy has no such figure: its price follows from the goods, which is precisely
+  // what the two suggestions above already answer, so a flat default there only ever said "5" about
+  // stamps nobody had looked at. Not seeded onto anything: read at creation, then owned by the offer.
+  defaultStartingPrice Decimal? @db.Decimal(10, 2)
   // How a new offer on this platform is sold by default (#449): `fixed` | `auction`. Read at
   // creation exactly as `defaultOfferPrice` is and then owned by the offer, which is what makes a
   // platform one only ever auctions on cost nothing per listing. Nullable — null is "no preference",

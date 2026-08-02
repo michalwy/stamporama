@@ -4,16 +4,18 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer } from "../../src/lib/offers";
 
-// A platform's default offer price (#362) is the *last* fallback: a new offer takes it only when
-// nothing was submitted, and it is resolved before the live-status checks — so an offer created
-// straight as `ready` on a flat-price platform is not rejected as unpriced.
+// A platform's default starting price (#362, narrowed to auctions in #449) is the *last* fallback:
+// a new auction takes it only when nothing was submitted, and it is resolved before the live-status
+// checks — so an auction created straight as `ready` on a house that always opens at the same figure
+// is not rejected as unpriced. An auction's current price then follows from its opening one, so the
+// default reaches `price` too, without any of it applying to a quick buy.
 
-describe("platform default offer price (#362)", () => {
+describe("platform default starting price (#362/#449)", () => {
   let userId: string;
   let collectionId: string;
-  /** Lists at one flat price. */
+  /** An auction house that always opens at the same figure. */
   let flatPlatformId: string;
-  /** Prices every listing individually. */
+  /** States no default at all. */
   let plainPlatformId: string;
   let stampId: string;
   let conditionId: string;
@@ -53,7 +55,8 @@ describe("platform default offer price (#362)", () => {
           name: "FlatMarket",
           platform: true,
           platformCurrency: "EUR",
-          defaultOfferPrice: "5.00",
+          defaultListingType: "auction",
+          defaultStartingPrice: "5.00",
         },
       })
     ).id;
@@ -81,7 +84,16 @@ describe("platform default offer price (#362)", () => {
     return offer.price.toFixed(2);
   }
 
-  it("fills an unpriced new offer from the platform's default", async () => {
+  async function startingPriceOf(offerId: string): Promise<string | null> {
+    const offer = await prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { startingPrice: true },
+    });
+    return offer.startingPrice?.toFixed(2) ?? null;
+  }
+
+  it("opens a new auction at the platform's default", async () => {
+    // The listing type comes from the same platform (#449), so a bare create is an auction here.
     const offerId = await createOffer(userId, collectionId, {
       platformId: flatPlatformId,
       url: null,
@@ -90,19 +102,38 @@ describe("platform default offer price (#362)", () => {
       listingDate: null,
       state: "preparing",
     });
-    assert.equal(await priceOf(offerId), "5.00");
+    assert.equal(await startingPriceOf(offerId), "5.00");
+    // …and nothing is invented for the current price: nobody has bid yet.
+    assert.equal(await priceOf(offerId), "0.00");
   });
 
-  it("leaves a submitted price alone — the default is the lowest priority", async () => {
+  it("leaves a submitted starting price alone — the default is the lowest priority", async () => {
     const offerId = await createOffer(userId, collectionId, {
       platformId: flatPlatformId,
       url: null,
-      price: "12.50",
+      startingPrice: "12.50",
+      price: "0.00",
       currency: "EUR",
       listingDate: null,
       state: "preparing",
     });
-    assert.equal(await priceOf(offerId), "12.50");
+    assert.equal(await startingPriceOf(offerId), "12.50");
+  });
+
+  it("never prices a quick buy from it", async () => {
+    // The narrowing of #449: a quick buy's price follows from the goods, so the platform default is
+    // not a fallback for it — and the column would not be there to read on a fixed platform anyway.
+    const offerId = await createOffer(userId, collectionId, {
+      platformId: flatPlatformId,
+      url: null,
+      listingType: "fixed",
+      price: "0.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    assert.equal(await priceOf(offerId), "0.00");
+    assert.equal(await startingPriceOf(offerId), null);
   });
 
   it("leaves an offer on a platform with no default unpriced", async () => {
@@ -133,10 +164,11 @@ describe("platform default offer price (#362)", () => {
     );
     const offer = await prisma.offer.findUniqueOrThrow({
       where: { id: offerId },
-      select: { price: true, state: true },
+      select: { price: true, startingPrice: true, state: true },
     });
     assert.equal(offer.state, "ready");
-    assert.equal(offer.price.toFixed(2), "5.00");
+    assert.equal(offer.startingPrice?.toFixed(2), "5.00");
+    assert.equal(offer.price.toFixed(2), "0.00", "which is what a listed auction with no bids is");
   });
 
   it("still refuses a ready offer when neither the form nor the platform prices it", async () => {

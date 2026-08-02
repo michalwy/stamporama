@@ -66,14 +66,14 @@ export interface OfferFormDialogProps {
   >;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
-   * show a misleading editable picker, its `defaultOfferPrice` (#362) seeds the asking price
-   * when nothing better suggests one, and its `defaultListingType` (#449) pre-selects how the
-   * listing is sold. */
+   * show a misleading editable picker, its `defaultListingType` (#449) pre-selects how the listing
+   * is sold, and its `defaultStartingPrice` (#362, narrowed in #449) seeds an auction's opening
+   * figure when nothing better suggests one. */
   initialPlatform?: {
     id: string;
     name: string;
     platformCurrency?: string | null;
-    defaultOfferPrice?: string | null;
+    defaultStartingPrice?: string | null;
     defaultListingType?: string | null;
   };
   isPending: boolean;
@@ -139,14 +139,10 @@ export function OfferFormDialog({
     ? formatListingDate(offer!.listingDate)
     : lastDefaults?.listingDate || todayIso();
   const priceControlled = priceValue !== undefined;
-  // The platform's fallback asking price (#362) — the lowest-priority suggestion, so it only fills
-  // the field while the parent has none of its own (`priceValue` unset: no lot or catalog-value
-  // figure) and the collector has not typed one. Creating only: an existing offer keeps its price.
-  // A plain create hides the price field entirely, and the server applies the same fallback there.
-  const [uncontrolledPrice, setUncontrolledPrice] = useState(
-    offer?.price ?? (isEdit ? "" : (initialPlatform?.defaultOfferPrice ?? ""))
-  );
-  const [priceTyped, setPriceTyped] = useState(false);
+  // The live price: an offer's own when editing, else whatever the parent suggests (a lot's price, a
+  // catalog value) or nothing. It has no platform-level fallback of its own — that default is now an
+  // auction's **starting** price (#449), seeded below.
+  const [uncontrolledPrice, setUncontrolledPrice] = useState(offer?.price ?? "");
   // How the listing is sold (#449). Held in state because it renames the price field and reveals the
   // starting-price one — the two prices only make sense once you know which format you are in.
   // Seeded from the platform's own default (the price fallback's rule, #362): read at creation, and
@@ -156,6 +152,18 @@ export function OfferFormDialog({
   );
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
   const isAuction = isAuctionListing(listingType);
+  // An auction's opening figure, seeded from the platform's own default on exactly the price
+  // fallback's rule (#362): lowest priority, re-seeded on a platform change, and left alone the
+  // moment the collector types one.
+  const [startingPrice, setStartingPrice] = useState(
+    offer?.startingPrice ?? (isEdit ? "" : (initialPlatform?.defaultStartingPrice ?? ""))
+  );
+  const [startingPriceTyped, setStartingPriceTyped] = useState(false);
+  // Where a parent's suggested figure lands (#449). It is what one would ask for the goods, which on
+  // an auction is what one would open at — so it fills the starting price there and leaves the
+  // current one blank, rather than recording a bid nobody placed.
+  const suggestionFillsPrice = priceControlled && !isAuction;
+  const suggestionFillsStartingPrice = priceControlled && isAuction;
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
@@ -219,16 +227,16 @@ export function OfferFormDialog({
                 // A picked platform carries its currency (null when unset); a typed name is an
                 // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
                 if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
-                // …and its fallback asking price (#362), which re-seeds the untouched field —
-                // switching platforms mid-form must not leave the previous platform's figure behind.
-                if (!isEdit && !priceControlled && !priceTyped) {
-                  setUncontrolledPrice((id && platform?.defaultOfferPrice) || "");
-                }
-                // …and how it sells by default (#449), on the same rule: re-seeded while the
-                // collector has not answered the question themselves, so switching from an auction
-                // platform to a quick-buy one does not leave the wrong format behind.
+                // …how it sells by default (#449), re-seeded while the collector has not answered
+                // the question themselves, so switching from an auction platform to a quick-buy one
+                // does not leave the wrong format behind…
                 if (!isEdit && !listingTypeTouched) {
                   setListingType(normalizeListingType(id ? platform?.defaultListingType : null));
+                }
+                // …and the opening figure that goes with it (#362/#449), on the same rule: switching
+                // platforms mid-form must not leave the previous house's starting price behind.
+                if (!isEdit && !startingPriceTyped) {
+                  setStartingPrice((id && platform?.defaultStartingPrice) || "");
                 }
               }}
             />
@@ -295,13 +303,15 @@ export function OfferFormDialog({
             </div>
           </div>
 
-          {/* The money. The price is only asked for when the composition is known — editing, or
-              duplicating (#200); on a plain create it follows from the copies you add later, so it
-              is deferred. What it is *called* follows the listing type (#449): a quick buy's asking
-              price, an auction's current one. On an auction the **starting** price is the required
-              figure — that is the number the seller actually states — while the current one may be
-              left blank: a listing that is up with nobody bidding stands exactly at its opening
-              price, and that is what the server writes in. */}
+          {/* The money. It is only asked for when the composition is known — editing, or duplicating
+              (#200); on a plain create it follows from the copies you add later, so it is deferred.
+
+              Which field the parent's **suggestion** lands in follows the listing type (#449). A
+              suggested figure — the copies' catalog value, a lot's price, the source offer's price —
+              is what one would *ask* for the goods, so on an auction it is what one would **open**
+              at, not a bid somebody has placed. It therefore fills the starting price there, and the
+              current price is left blank: an auction nobody has bid on has no current figure at all,
+              and inventing one would put a bid in the record that never happened. */}
           {showPriceField && (
             <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
               <div style={{ flex: 1 }}>
@@ -312,19 +322,16 @@ export function OfferFormDialog({
                   placeholder="0.00"
                   disabled={isPending}
                   style={INPUT_STYLE}
-                  {...(priceControlled
+                  {...(suggestionFillsPrice
                     ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
                     : {
                         value: uncontrolledPrice,
-                        onChange: (e) => {
-                          setUncontrolledPrice(e.target.value);
-                          setPriceTyped(true);
-                        },
+                        onChange: (e) => setUncontrolledPrice(e.target.value),
                       })}
                 />
                 {isAuction && (
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    Leave blank while nobody has bid — it starts at the opening price.
+                    Leave blank until somebody bids — an auction has no current price before that.
                   </p>
                 )}
               </div>
@@ -335,10 +342,18 @@ export function OfferFormDialog({
                     id="offer-starting-price"
                     name="startingPrice"
                     placeholder="0.00"
-                    defaultValue={offer?.startingPrice ?? ""}
                     disabled={isPending}
                     required
                     style={INPUT_STYLE}
+                    {...(suggestionFillsStartingPrice
+                      ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
+                      : {
+                          value: startingPrice,
+                          onChange: (e) => {
+                            setStartingPrice(e.target.value);
+                            setStartingPriceTyped(true);
+                          },
+                        })}
                   />
                 </div>
               )}

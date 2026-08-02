@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
 import {
+  isAuctionListing,
   isTerminalState,
   manualTransitions,
   priceLabel,
@@ -271,7 +272,10 @@ export function OfferRow({
               }}
             >
               {offer.price === "0.00" ? (
-                <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>No price yet</span>
+                // An unbid auction is not unpriced — it is up with nobody having bid (#449).
+                <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>
+                  {isAuctionListing(offer.listingType) ? "No bids yet" : "No price yet"}
+                </span>
               ) : (
                 <>
                   {offer.price} {offer.currency}
