@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
 import { normalizeDescriptionFormat } from "./description-format";
+import { isOfferListingType } from "./offer-rules";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -108,6 +109,10 @@ export interface ContactData extends ContactRoles {
    * own currency, or null when it has none. The lowest-priority suggestion — read at offer creation
    * only, never seeded onto anything. Only meaningful for the `platform` role. */
   defaultOfferPrice: string | null;
+  /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when
+   * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
+   * {@link defaultOfferPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
+  defaultListingType: string | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
   maxPhotos: number | null;
@@ -163,6 +168,7 @@ const CONTACT_SELECT = {
   descriptionFormat: true,
   titleLanguage: true,
   defaultOfferPrice: true,
+  defaultListingType: true,
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -253,6 +259,10 @@ export interface ContactCreateInput {
   /** The platform's fallback asking price for a new offer (#362), or null. A blank or unparseable
    * amount stores null — an unpriced platform, not a zero-price one. */
   defaultOfferPrice?: string | null;
+  /** How a new offer on this platform is sold by default (#449), or null for "no preference". An
+   * unknown value stores null rather than being coerced: a preference nobody stated is exactly what
+   * null means, and it reads as `fixed` wherever it is used. */
+  defaultListingType?: string | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -449,6 +459,9 @@ export async function createContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         defaultOfferPrice: amount(data.defaultOfferPrice),
+        defaultListingType: isOfferListingType(data.defaultListingType)
+          ? data.defaultListingType
+          : null,
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxDescriptionLength: data.maxDescriptionLength ?? null,
@@ -500,6 +513,9 @@ export async function updateContact(
         descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
         titleLanguage: normalizeLanguage(data.titleLanguage),
         defaultOfferPrice: amount(data.defaultOfferPrice),
+        defaultListingType: isOfferListingType(data.defaultListingType)
+          ? data.defaultListingType
+          : null,
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxDescriptionLength: data.maxDescriptionLength ?? null,

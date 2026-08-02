@@ -180,9 +180,63 @@ export function priceLabel(listingType: OfferListingType): string {
   return isAuctionListing(listingType) ? "Current price" : "Asking price";
 }
 
-/** Validate and normalise an auction's **starting** price (#449). Blank is a legitimate answer — the
- * opening figure is a record, not something every tracked auction remembers — so it clears back to
- * null rather than being rejected the way {@link parsePrice} rejects an empty asking price. */
+/**
+ * An auction being prepared or published needs a **starting price** (#449) — the same two states
+ * {@link requiresPrice} gates, and for the same reason: an auction with no opening figure is not
+ * assembled, and posting one is never intentional. It is the *starting* figure that is required
+ * rather than the current one, because that is the number the seller actually states; the current
+ * price is an observation, and an auction that is up with nobody bidding has none to make.
+ *
+ * A quick buy is unaffected — it has no such figure, and {@link requiresPrice} already covers it.
+ */
+export function requiresStartingPrice(listingType: OfferListingType, to: OfferState): boolean {
+  return isAuctionListing(listingType) && requiresPrice(to);
+}
+
+/**
+ * What the offer's live price column holds when the collector states none (#449). On an auction it
+ * is the **starting price**: an auction nobody has bid on stands exactly at its opening figure, so
+ * that *is* the current price rather than a stand-in for one. It is written into `price` rather than
+ * derived on read so that every reader — the list rows, the base-currency conversion, the offers
+ * summary, the listing kit, the sale — keeps reading one column and needs to know nothing about
+ * listing formats; the collector types over it the first time the bidding actually moves.
+ *
+ * A quick buy is returned unchanged: an unpriced one is unpriced, and there is nothing to fall back
+ * on.
+ */
+export function resolveCurrentPrice(
+  listingType: OfferListingType,
+  price: string,
+  startingPrice: string | null
+): string {
+  if (hasPrice(price)) return price;
+  if (isAuctionListing(listingType) && startingPrice && hasPrice(startingPrice)) return startingPrice;
+  return price;
+}
+
+/**
+ * Whether an offer's pricing satisfies what moving to `to` requires — the asking price (#336) and,
+ * on an auction, the starting price it was listed at (#449). One predicate so the quick-advance
+ * button on the row and on the detail header enable themselves on exactly what the server enforces;
+ * the server keeps its own checks only because each has to name the field that fixes it.
+ */
+export function pricingReadyFor(
+  listingType: OfferListingType,
+  to: OfferState,
+  price: string,
+  startingPrice: string | null
+): boolean {
+  if (!requiresPrice(to)) return true;
+  if (requiresStartingPrice(listingType, to) && !(startingPrice && hasPrice(startingPrice))) {
+    return false;
+  }
+  return hasPrice(resolveCurrentPrice(listingType, price, startingPrice));
+}
+
+/** Validate and normalise an auction's **starting** price (#449). Blank is a legitimate answer here
+ * — a `preparing` auction is still being assembled, and {@link requiresStartingPrice} is what asks
+ * for the figure at the point it has to exist — so it clears back to null rather than being rejected
+ * the way {@link parsePrice} rejects an empty asking price. */
 export function parseStartingPrice(
   raw: string
 ): { ok: true; value: string | null } | { ok: false; message: string } {

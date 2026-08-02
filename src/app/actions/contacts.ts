@@ -125,6 +125,10 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // The platform's fallback asking price for a new offer (#362), in its own currency. Same
     // platform-only handling; blank normalises to null — no default price rather than a free one.
     defaultOfferPrice: isPlatform ? str(formData, "defaultOfferPrice") || null : null,
+    // How a new offer on this platform is sold by default (#449) — the listing-format counterpart of
+    // the price above, and read at creation the same way. Blank is "no preference", which is not the
+    // same claim as "quick buy" even though both behave that way.
+    defaultListingType: isPlatform ? str(formData, "defaultListingType") || null : null,
     // The platform's photo limits, and the defaults new offers on this platform are seeded from
     // (#308). `photoSides` normalises to the default side; the collage template is verified against
     // the collection server-side.

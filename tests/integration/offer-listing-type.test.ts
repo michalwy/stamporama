@@ -1,7 +1,15 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { createOffer, getOfferDetail, patchOffer, updateOffer } from "../../src/lib/offers";
+import { createItem } from "../../src/lib/items";
+import {
+  addOfferSet,
+  createOffer,
+  getOfferDetail,
+  patchOffer,
+  setOfferState,
+  updateOffer,
+} from "../../src/lib/offers";
 
 // An offer is sold either as a quick buy or by auction (#449). The distinction is about the
 // **price**: `price` stays the one live figure everything downstream reads — an asking price on a
@@ -16,6 +24,8 @@ describe("offer listing type and its prices (#449)", () => {
   let userId: string;
   let collectionId: string;
   let platformId: string;
+  let stampId: string;
+  let conditionId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -42,12 +52,22 @@ describe("offer listing type and its prices (#449)", () => {
     platformId = (
       await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
     ).id;
+    stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp A" } })).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
   });
 
   after(async () => {
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
+
+  async function newItem(): Promise<string> {
+    return (await createItem(userId, collectionId, { stampId, conditionId, forSale: true })).id;
+  }
 
   const detail = async (offerId: string) => {
     const d = await getOfferDetail(userId, offerId);
@@ -149,6 +169,132 @@ describe("offer listing type and its prices (#449)", () => {
       /starting price/i,
       "changing format is the header form's job, not a field appearing beside the price"
     );
+  });
+
+  it("stands an auction with no current figure at its starting price", async () => {
+    // A listing that is up with nobody bidding does have a price — the one it opened at — so the
+    // collector states the starting figure and leaves the current one blank.
+    const offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      listingType: "auction",
+      price: "0.00",
+      startingPrice: "5.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+
+    const d = await detail(offerId);
+    assert.equal(d.price, "5.00", "written into the one column every surface reads");
+    assert.equal(d.startingPrice, "5.00");
+    assert.ok(d.priceCheckedAt);
+  });
+
+  it("carries the current price over when the starting price is set field by field", async () => {
+    const offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      listingType: "auction",
+      price: "0.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+    assert.equal((await detail(offerId)).price, "0.00");
+
+    await patchOffer(userId, offerId, { startingPrice: "6.00" });
+    assert.equal((await detail(offerId)).price, "6.00", "nobody has bid, so it stands at its opening");
+
+    // Once a bid is recorded, the opening figure is history and must not overwrite it.
+    await patchOffer(userId, offerId, { price: "11.00" });
+    await patchOffer(userId, offerId, { startingPrice: "4.00" });
+    const d = await detail(offerId);
+    assert.equal(d.price, "11.00");
+    assert.equal(d.startingPrice, "4.00");
+  });
+
+  it("refuses to list an auction with no starting price, naming that field", async () => {
+    const offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      listingType: "auction",
+      // A bid observed without ever recording what the auction opened at: priced, but not listed.
+      price: "18.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+    await addOfferSet(userId, offerId, [await newItem()]);
+
+    await assert.rejects(
+      () => setOfferState(userId, offerId, "ready"),
+      /starting price/i,
+      "the starting price is the figure the seller states"
+    );
+
+    await patchOffer(userId, offerId, { startingPrice: "5.00" });
+    await setOfferState(userId, offerId, "ready");
+    assert.equal((await detail(offerId)).state, "ready");
+  });
+
+  it("lists an auction on its starting price alone", async () => {
+    const offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      listingType: "auction",
+      price: "0.00",
+      startingPrice: "5.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+    await addOfferSet(userId, offerId, [await newItem()]);
+
+    await setOfferState(userId, offerId, "ready");
+    const d = await detail(offerId);
+    assert.equal(d.state, "ready");
+    assert.equal(d.price, "5.00", "and it is listed at what it opened at");
+  });
+
+  it("takes the platform's default listing type when the form states none", async () => {
+    // The `defaultOfferPrice` rule (#362): read at creation, then owned by the offer.
+    const auctionOnly = (
+      await prisma.contact.create({
+        data: {
+          collectionId,
+          name: `Auction house ${Date.now()}`,
+          platform: true,
+          defaultListingType: "auction",
+        },
+      })
+    ).id;
+
+    const offerId = await createOffer(userId, collectionId, {
+      platformId: auctionOnly,
+      url: null,
+      price: "0.00",
+      startingPrice: "3.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+
+    const d = await detail(offerId);
+    assert.equal(d.listingType, "auction");
+    assert.equal(d.startingPrice, "3.00");
+
+    // …and anything the form does say outranks it.
+    const stated = await createOffer(userId, collectionId, {
+      platformId: auctionOnly,
+      url: null,
+      listingType: "fixed",
+      price: "9.00",
+      currency: "PLN",
+      listingDate: null,
+      state: "preparing",
+    });
+    assert.equal((await detail(stated)).listingType, "fixed");
   });
 
   it("clears both auction figures when the listing becomes a quick buy", async () => {

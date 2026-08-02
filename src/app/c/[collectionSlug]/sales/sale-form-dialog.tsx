@@ -199,13 +199,15 @@ export function SaleFormDialog({
                 inputId="sale-platform"
                 placeholder="e.g. Delcampe, Allegro…"
                 disabled={isPending || platformLocked}
-                onSelectionChange={(id, name, pc) => {
+                onSelectionChange={(id, name, platform) => {
                   setPlatformId(id);
                   setPlatformName(name);
                   // A picked platform carries its fixed currency (null when unset); a typed name is
                   // an unknown/new platform, so its currency is prompted below (#196). Editing keeps
                   // the sale's snapshot, so the platform's currency is not tracked then.
-                  if (mode !== "edit") setPlatformCurrency(id ? pc : undefined);
+                  if (mode !== "edit") {
+                    setPlatformCurrency(id ? platform?.platformCurrency : undefined);
+                  }
                 }}
               />
               {platformLocked && (

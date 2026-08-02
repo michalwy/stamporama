@@ -83,9 +83,11 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    platform you list at one flat price needs no price typed at all; anything that suggests a price
    from the goods themselves — a lot's suggested price, or the copies' catalog value — wins over it,
    and the price is editable on the offer either way.
-   The **listing type** says how this one is sold — **Quick buy** (the default) or **Auction**; on an
-   auction the price field is relabelled **Current price** and an optional **Starting price** appears
-   beside it (see [Auction or quick buy](#auction-or-quick-buy)).
+   The **listing type** says how this one is sold — **Quick buy** or **Auction**, pre-selected from
+   the platform's own [default listing type](contacts.md) so a marketplace you only ever auction on
+   needs no answer per listing. On an auction the price field is relabelled **Current price** and a
+   required **Starting price** appears beside it (see
+   [Auction or quick buy](#auction-or-quick-buy)).
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
@@ -975,18 +977,25 @@ price** — so what you type is never in doubt.
 
 An auction adds two things under that figure on the detail header:
 
-- **Starting price** — what the auction opened at. Optional, even on an auction: one you started
-  tracking mid-flight may have no opening figure worth recording, and nothing is calculated from it.
-  Click it to set or change it, exactly like the price above it.
+- **Starting price** — what the auction opened at, and the figure an auction is actually **required**
+  to have: it is the number you stated when you listed it. An auction cannot be marked **Ready** or
+  **Active** without one, exactly as a quick buy cannot without its asking price. Click it to set or
+  change it, like the price above it.
 - **Checked** — the date the current price was last confirmed against the live listing. There is no
   live connection to any marketplace, so refreshing a bid is something you do by hand: open the
   listing, read the standing bid, and type it into the price field. Committing a **changed** figure
   stamps the check date; retyping the same number does not, since nothing was learned. This is the
   same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
 
-A quick buy carries neither: its price is yours to set, and nothing moves it behind your back.
-Switching an existing auction back to **Quick buy** on the header form clears both, since a starting
-price and a check date describe a format the listing is no longer in.
+The **current price is not** required. An auction that is up with nobody bidding stands exactly at
+what it started at, so leave the field blank and Stamporama fills it in from the starting price; the
+first time the bidding actually moves, you type the new figure over it. That also works the other way
+round — set the starting price on an offer that has no price at all and the current one follows —
+until a bid has been recorded, after which the opening figure is history and never overwrites it.
+
+A quick buy carries neither extra field: its price is yours to set, and nothing moves it behind your
+back. Switching an existing auction back to **Quick buy** on the header form clears both, since a
+starting price and a check date describe a format the listing is no longer in.
 
 ## In active bidding — auction platforms
 

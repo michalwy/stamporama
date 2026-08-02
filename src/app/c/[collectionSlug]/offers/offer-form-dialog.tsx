@@ -66,13 +66,15 @@ export interface OfferFormDialogProps {
   >;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
-   * show a misleading editable picker, and its `defaultOfferPrice` (#362) seeds the asking price
-   * when nothing better suggests one. */
+   * show a misleading editable picker, its `defaultOfferPrice` (#362) seeds the asking price
+   * when nothing better suggests one, and its `defaultListingType` (#449) pre-selects how the
+   * listing is sold. */
   initialPlatform?: {
     id: string;
     name: string;
     platformCurrency?: string | null;
     defaultOfferPrice?: string | null;
+    defaultListingType?: string | null;
   };
   isPending: boolean;
   error?: string;
@@ -147,9 +149,12 @@ export function OfferFormDialog({
   const [priceTyped, setPriceTyped] = useState(false);
   // How the listing is sold (#449). Held in state because it renames the price field and reveals the
   // starting-price one — the two prices only make sense once you know which format you are in.
+  // Seeded from the platform's own default (the price fallback's rule, #362): read at creation, and
+  // stopped re-seeding the moment the collector answers the question themselves.
   const [listingType, setListingType] = useState<OfferListingType>(
-    normalizeListingType(offer?.listingType)
+    normalizeListingType(isEdit ? offer!.listingType : initialPlatform?.defaultListingType)
   );
+  const [listingTypeTouched, setListingTypeTouched] = useState(false);
   const isAuction = isAuctionListing(listingType);
   const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
@@ -209,15 +214,21 @@ export function OfferFormDialog({
               inputId="offer-platform"
               placeholder="e.g. Delcampe, Allegro, Colnect…"
               disabled={isPending}
-              onSelectionChange={(id, _name, pc, dop) => {
+              onSelectionChange={(id, _name, platform) => {
                 setPlatformId(id);
                 // A picked platform carries its currency (null when unset); a typed name is an
                 // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
-                if (!isEdit) setPlatformCurrency(id ? pc : undefined);
+                if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
                 // …and its fallback asking price (#362), which re-seeds the untouched field —
                 // switching platforms mid-form must not leave the previous platform's figure behind.
                 if (!isEdit && !priceControlled && !priceTyped) {
-                  setUncontrolledPrice((id && dop) || "");
+                  setUncontrolledPrice((id && platform?.defaultOfferPrice) || "");
+                }
+                // …and how it sells by default (#449), on the same rule: re-seeded while the
+                // collector has not answered the question themselves, so switching from an auction
+                // platform to a quick-buy one does not leave the wrong format behind.
+                if (!isEdit && !listingTypeTouched) {
+                  setListingType(normalizeListingType(id ? platform?.defaultListingType : null));
                 }
               }}
             />
@@ -235,7 +246,10 @@ export function OfferFormDialog({
                 id="offer-listing-type"
                 name="listingType"
                 value={listingType}
-                onChange={(e) => setListingType(normalizeListingType(e.target.value))}
+                onChange={(e) => {
+                  setListingType(normalizeListingType(e.target.value));
+                  setListingTypeTouched(true);
+                }}
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, cursor: "pointer" }}
               >
@@ -284,9 +298,10 @@ export function OfferFormDialog({
           {/* The money. The price is only asked for when the composition is known — editing, or
               duplicating (#200); on a plain create it follows from the copies you add later, so it
               is deferred. What it is *called* follows the listing type (#449): a quick buy's asking
-              price, an auction's current one. The starting price sits beside it on an auction and is
-              optional even there — an auction picked up mid-flight may have no opening figure to
-              record, and nothing is computed from it either way. */}
+              price, an auction's current one. On an auction the **starting** price is the required
+              figure — that is the number the seller actually states — while the current one may be
+              left blank: a listing that is up with nobody bidding stands exactly at its opening
+              price, and that is what the server writes in. */}
           {showPriceField && (
             <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
               <div style={{ flex: 1 }}>
@@ -307,18 +322,22 @@ export function OfferFormDialog({
                         },
                       })}
                 />
+                {isAuction && (
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    Leave blank while nobody has bid — it starts at the opening price.
+                  </p>
+                )}
               </div>
               {isAuction && (
                 <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="offer-starting-price">
-                    Starting price (optional)
-                  </LabelWithError>
+                  <LabelWithError htmlFor="offer-starting-price">Starting price</LabelWithError>
                   <NumericInput
                     id="offer-starting-price"
                     name="startingPrice"
                     placeholder="0.00"
                     defaultValue={offer?.startingPrice ?? ""}
                     disabled={isPending}
+                    required
                     style={INPUT_STYLE}
                   />
                 </div>

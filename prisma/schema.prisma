@@ -1643,6 +1643,13 @@ model Contact {
   // only fills a price nothing else could answer. Nullable — no default price is the normal case.
   // Not seeded onto anything: it is read at creation and then belongs to the offer, freely editable.
   defaultOfferPrice Decimal? @db.Decimal(10, 2)
+  // How a new offer on this platform is sold by default (#449): `fixed` | `auction`. Read at
+  // creation exactly as `defaultOfferPrice` is and then owned by the offer, which is what makes a
+  // platform one only ever auctions on cost nothing per listing. Nullable — null is "no preference",
+  // which reads as `fixed`, and is deliberately distinct from a stored `fixed`: a platform that has
+  // never been asked the question and one told "quick buy" behave identically today, so nothing
+  // needs writing to leave it alone.
+  defaultListingType String?
   // ── Offer photos (#308) ────────────────────────────────────────────────────────────────────
   // Hard technical limits on what this platform physically accepts. All optional (null = no limit),
   // and **not** seeded onto offers: they describe the platform, so the renderer reads them live

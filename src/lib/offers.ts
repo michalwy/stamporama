@@ -30,6 +30,8 @@ import {
   type OfferListingType,
   isAuctionListing,
   normalizeListingType,
+  requiresStartingPrice,
+  resolveCurrentPrice,
 } from "./offer-rules";
 import {
   makeOfferLabeller,
@@ -276,6 +278,9 @@ async function assertPlatform(
       /** The platform's fallback asking price (#362), already a 2-dp string, or null when it has
        * none. Read at creation only — the lowest-priority price suggestion. */
       defaultOfferPrice: string | null;
+      /** How a new offer here is sold by default (#449), or null for "no preference" — read at
+       * creation exactly as the price above is, and outranked by anything the form states. */
+      defaultListingType: string | null;
     }
 > {
   const contact = await prisma.contact.findFirst({
@@ -283,6 +288,7 @@ async function assertPlatform(
     select: {
       platformCurrency: true,
       defaultOfferPrice: true,
+      defaultListingType: true,
       titleTemplate: true,
       descriptionTemplate: true,
       privateNoteTemplate: true,
@@ -300,6 +306,7 @@ async function assertPlatform(
   return {
     platformCurrency: contact.platformCurrency,
     defaultOfferPrice: contact.defaultOfferPrice?.toFixed(2) ?? null,
+    defaultListingType: contact.defaultListingType,
     titleTemplate: contact.titleTemplate,
     descriptionTemplate: contact.descriptionTemplate,
     privateNoteTemplate: contact.privateNoteTemplate,
@@ -1268,6 +1275,9 @@ export async function listOfferPlatforms(
     name: string;
     platformCurrency: string | null;
     defaultOfferPrice: string | null;
+    /** How a new offer here is sold by default (#449), or null for "no preference" — what the new-
+     *  offer dialog pre-selects, for the same reason it carries the default price. */
+    defaultListingType: string | null;
     /** The Assistant module that knows this platform's sale form (#406), or null where it is listed
      *  by hand. It rides with the platform because the listing workspace asks it of the platform it
      *  is posting to — whether to offer **List via Assistant** at all (#407). */
@@ -1284,6 +1294,7 @@ export async function listOfferPlatforms(
           name: true,
           platformCurrency: true,
           defaultOfferPrice: true,
+          defaultListingType: true,
           platformModule: true,
         },
       },
@@ -2572,28 +2583,60 @@ export interface OfferInput {
 }
 
 /**
- * The two auction-only price columns (#449), resolved from a header form's input so create and edit
- * cannot disagree about them.
+ * Everything a header form says about how an offer is priced (#449), resolved in one place so the
+ * create, duplicate and edit paths cannot disagree about any of it.
  *
- * A `fixed` listing clears both: the opening figure describes a format this listing is not in, and a
- * quick buy's price is the seller's own — nothing moves it behind their back, so there is nothing to
- * have last checked. An auction stamps `priceCheckedAt` whenever it carries a price, because the
- * figure on the form was just read off the listing, and an undated bid is exactly what the auction
- * lot's `checkedAt` (#351) exists to prevent.
+ * Three decisions live here:
+ *
+ * - **The format.** Taken from the form, falling back to the platform's own default (#449, the
+ *   `defaultOfferPrice` rule of #362: read at creation and then owned by the offer) and then to
+ *   `fixed`. An edit passes no platform default — switching platforms must not re-describe a
+ *   listing that already exists.
+ * - **The live price.** An auction with no figure stated stands at its opening one, so `price` is
+ *   seeded from `startingPrice`: a listing that is up with nobody bidding *does* have a current
+ *   price, and every reader keeps reading one column.
+ * - **The auction-only pair.** A `fixed` listing clears both — the opening figure describes a format
+ *   this listing is not in, and a quick buy's price is the seller's own, so nothing moves it behind
+ *   their back and there is nothing to have last checked. An auction dates its price, the figure on
+ *   the form having just been read off the listing; an undated bid is what the auction lot's
+ *   `checkedAt` (#351) exists to prevent.
  */
-function auctionPriceColumns(
+function resolveOfferPricing(
   input: Pick<OfferInput, "listingType" | "startingPrice">,
-  price: string
-): { listingType: OfferListingType; startingPrice: string | null; priceCheckedAt: Date | null } {
-  const listingType = normalizeListingType(input.listingType);
+  price: string,
+  platformDefaultListingType?: string | null
+): {
+  listingType: OfferListingType;
+  price: string;
+  startingPrice: string | null;
+  priceCheckedAt: Date | null;
+} {
+  const listingType = normalizeListingType(input.listingType ?? platformDefaultListingType);
   if (!isAuctionListing(listingType)) {
-    return { listingType, startingPrice: null, priceCheckedAt: null };
+    return { listingType, price, startingPrice: null, priceCheckedAt: null };
   }
+  const startingPrice = input.startingPrice ?? null;
+  const current = resolveCurrentPrice(listingType, price, startingPrice);
   return {
     listingType,
-    startingPrice: input.startingPrice ?? null,
-    priceCheckedAt: hasPrice(price) ? new Date() : null,
+    price: current,
+    startingPrice,
+    priceCheckedAt: hasPrice(current) ? new Date() : null,
   };
+}
+
+/** Refuse a live-bound auction with no opening figure (#449) — the starting-price counterpart of the
+ * `unpriced` guard (#336), and stated in the auction's own words so the collector is not sent to the
+ * price field to fix something the starting-price field owns. */
+function assertStartingPrice(
+  listingType: OfferListingType,
+  to: OfferState,
+  startingPrice: string | null,
+  verb: string
+): void {
+  if (!requiresStartingPrice(listingType, to)) return;
+  if (startingPrice && hasPrice(startingPrice)) return;
+  throw new OfferActionBlockedError("unpriced", `Set a starting price before ${verb}.`);
 }
 
 /**
@@ -2621,7 +2664,12 @@ export async function createOffer(
   // reach the form as a filled-in figure, so anything submitted here already outranks it. Resolved
   // before the live-status checks, so creating straight as `ready` on a flat-price platform is not
   // rejected as unpriced.
-  const price = hasPrice(input.price) ? input.price : (platform.defaultOfferPrice ?? input.price);
+  const submittedPrice = hasPrice(input.price) ? input.price : (platform.defaultOfferPrice ?? input.price);
+  // …and everything else about how this listing is priced (#449): its format, taken from the form
+  // and falling back to the platform's own default on the very same reasoning, the auction's opening
+  // figure, and the live price it implies while nobody has bid.
+  const pricing = resolveOfferPricing(input, submittedPrice, platform.defaultListingType);
+  const price = pricing.price;
 
   const targetState = input.state;
   if (isTerminalState(targetState)) {
@@ -2652,6 +2700,15 @@ export async function createOffer(
       `An offer can't start ${targetState} with no asking price — set a price first.`
     );
   }
+  // On an auction the figure that has to exist is the **starting** price (#449): the current one is
+  // an observation, and an auction that is up with nobody bidding has none to make. It is checked
+  // separately so the message names the field that fixes it.
+  assertStartingPrice(
+    pricing.listingType,
+    targetState,
+    pricing.startingPrice,
+    `creating this auction as ${targetState}`
+  );
 
   // Generate the listing texts (#209/#210, #266, #267) from the platform's configured templates over
   // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
@@ -2693,13 +2750,9 @@ export async function createOffer(
         descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
-        price,
-        // How the listing is sold, and the auction half of its pricing (#449). A quick buy has no
-        // opening figure to keep, so a `startingPrice` submitted alongside `fixed` is dropped rather
-        // than stored as a fact about a format this listing is not in. The figure typed at creation
-        // *was* just observed, so an auction's price is stamped as checked — a bid with no age is
-        // exactly what the whole `checkedAt` idea is against.
-        ...auctionPriceColumns(input, price),
+        // The whole pricing decision, resolved once above (#449): format, live price, and the
+        // auction-only opening figure + check date.
+        ...pricing,
         currency,
         listingDate: input.listingDate,
         // Set the target state directly (creation states the real-world status; the step-through
@@ -2802,14 +2855,22 @@ export async function duplicateOffer(
       `Nothing left to list — every copy has sold elsewhere, so the copy can't start ${targetState}.`
     );
   }
-  // Same price rule as a fresh creation (#336): the clone is priced for its own platform, so a
-  // blank price cannot start prepared or live either.
-  if (requiresPrice(targetState) && !hasPrice(input.price)) {
+  // Same pricing rules as a fresh creation (#336, #449): the clone is priced — and its format
+  // chosen — for its own platform, so a blank price cannot start it prepared or live either, and an
+  // auction still needs its opening figure.
+  const pricing = resolveOfferPricing(input, input.price, platform.defaultListingType);
+  if (requiresPrice(targetState) && !hasPrice(pricing.price)) {
     throw new OfferActionBlockedError(
       "unpriced",
       `An offer can't start ${targetState} with no asking price — set a price first.`
     );
   }
+  assertStartingPrice(
+    pricing.listingType,
+    targetState,
+    pricing.startingPrice,
+    `creating this auction as ${targetState}`
+  );
 
   // Generate the clone's listing texts from the *new* platform's configured templates over its kept
   // sets (#209/#210, #266, #267) — the clone is a listing on another platform, so it gets that
@@ -2841,11 +2902,11 @@ export async function duplicateOffer(
         descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
         ...photoConfig,
         url: input.url,
-        price: input.price,
         // The clone is a listing on another platform and is described by its own form (#449): the
         // same composition routinely goes up as a quick buy in one place and an auction in another,
-        // so the listing type comes from the input rather than being carried over from the source.
-        ...auctionPriceColumns(input, input.price),
+        // so the format comes from that form (or the new platform's default) rather than being
+        // carried over from the source.
+        ...pricing,
         currency,
         listingDate: input.listingDate,
         state: targetState,
@@ -2888,31 +2949,42 @@ export async function updateOffer(
   if (isTerminalState(ref.state)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
   }
-  // The same invariant the transition guard enforces (#336): a ready or active offer always has a
-  // price, so an edit cannot clear it back out from under one.
-  if (requiresPrice(ref.state) && !hasPrice(input.price)) {
+  await assertPlatform(ref.collectionId, input.platformId);
+  // The same resolution creation uses (#449), minus the platform default: switching platforms on an
+  // existing offer must not re-describe a listing that already exists. An auction with no current
+  // figure falls back to its opening one here too, so an edit can *give* a live auction its price by
+  // stating what it started at.
+  const pricing = resolveOfferPricing(input, input.price);
+  // The invariants the transition guard enforces (#336, #449): a ready or active offer always has a
+  // price — and, being an auction, a starting price — so an edit cannot clear either back out from
+  // under one.
+  if (requiresPrice(ref.state) && !hasPrice(pricing.price)) {
     throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
   }
-  await assertPlatform(ref.collectionId, input.platformId);
-  // The auction half (#449) — the same resolution creation uses, with one difference: a header save
-  // that leaves the price where it was is not an observation, so it keeps the date the figure was
-  // actually last checked instead of pretending it was looked at again.
-  const auction = auctionPriceColumns(input, input.price);
-  const priceMoved = input.price !== ref.price;
+  assertStartingPrice(
+    pricing.listingType,
+    ref.state,
+    pricing.startingPrice,
+    `saving a ${ref.state} auction`
+  );
+  // One difference from creation: a header save that leaves the price where it was is not an
+  // observation, so it keeps the date the figure was actually last checked instead of pretending it
+  // was looked at again.
+  const priceMoved = pricing.price !== ref.price;
   await prisma.offer.update({
     where: { id: offerId },
     data: {
       platformId: input.platformId,
       url: input.url,
-      listingType: auction.listingType,
-      price: input.price,
-      startingPrice: auction.startingPrice,
+      listingType: pricing.listingType,
+      price: pricing.price,
+      startingPrice: pricing.startingPrice,
       // A quick buy is left with no stamp at all — a "last checked" on a price nothing moves would
       // read as a fact about a format the listing is not in. On an auction the stamp is only renewed
       // when the figure actually moved; the rest of the form is not an observation of the bidding.
-      ...(isAuctionListing(auction.listingType)
+      ...(isAuctionListing(pricing.listingType)
         ? priceMoved
-          ? { priceCheckedAt: auction.priceCheckedAt }
+          ? { priceCheckedAt: pricing.priceCheckedAt }
           : {}
         : { priceCheckedAt: null }),
       // Listing date is editable on the header form (#257); the status is not — an existing offer's
@@ -2956,6 +3028,11 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   if (patch.price !== undefined && requiresPrice(ref.state) && !hasPrice(patch.price)) {
     throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an asking price.`);
   }
+  // A ready or active auction always has a starting price (#449) — the figure it was *listed* at —
+  // so clearing that one in place is refused on exactly the same reasoning.
+  if (patch.startingPrice !== undefined) {
+    assertStartingPrice(ref.listingType, ref.state, patch.startingPrice, `saving a ${ref.state} auction`);
+  }
   // An opening figure only exists on an auction (#449): offering it on a quick buy would store a
   // fact about a format the listing is not in. Changing format is the header form's job.
   if (patch.startingPrice !== undefined && !isAuctionListing(ref.listingType)) {
@@ -2973,6 +3050,17 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   // buy never carries the stamp: its price is the seller's own and nothing moves it behind their back.
   const refreshesBid =
     patch.price !== undefined && isAuctionListing(ref.listingType) && patch.price !== ref.price;
+  // Setting the opening figure on an auction nobody has bid on also sets what it currently stands at
+  // (#449) — the same rule creation applies, so an auction assembled field by field on the detail
+  // screen ends up priced exactly like one created in the dialog. Only while the live figure is
+  // still unset: once a bid has been recorded, the opening price is history and must not overwrite it.
+  const seedsCurrentFromStarting =
+    patch.startingPrice !== undefined &&
+    patch.price === undefined &&
+    isAuctionListing(ref.listingType) &&
+    !hasPrice(ref.price) &&
+    !!patch.startingPrice &&
+    hasPrice(patch.startingPrice);
   await prisma.offer.update({
     where: { id: offerId },
     data: {
@@ -2980,7 +3068,8 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       ...(patch.url !== undefined ? { url: patch.url } : {}),
       ...(patch.price !== undefined ? { price: patch.price } : {}),
       ...(patch.startingPrice !== undefined ? { startingPrice: patch.startingPrice } : {}),
-      ...(refreshesBid ? { priceCheckedAt: new Date() } : {}),
+      ...(seedsCurrentFromStarting ? { price: patch.startingPrice as string } : {}),
+      ...(refreshesBid || seedsCurrentFromStarting ? { priceCheckedAt: new Date() } : {}),
       // Writing a generated text by hand takes it off the template (#380): from here on the field is
       // the collector's, and a composition change re-renders the others around it. **Clearing** it
       // hands it back — the flag protects written wording, and an emptied field holds none; blanking
@@ -3189,12 +3278,31 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     }
   }
   // The same two targets also need an asking price (#336): an offer with no price is not prepared,
-  // and publishing one is never intentional.
+  // and publishing one is never intentional. On an auction the figure that has to exist is the
+  // **starting** price (#449) — the current one is an observation, and an auction that is up with
+  // nobody bidding has none to make — so that is what is asked for, in the auction's own words.
+  let seedPrice: string | null = null;
   if (requiresPrice(to)) {
-    const row = await prisma.offer.findUnique({ where: { id: offerId }, select: { price: true } });
-    if (!row || !hasPrice(row.price.toFixed(2))) {
-      const verb = to === "active" ? "activating" : "marking this offer ready";
+    const verb = to === "active" ? "activating" : "marking this offer ready";
+    const row = await prisma.offer.findUnique({
+      where: { id: offerId },
+      select: { price: true, startingPrice: true },
+    });
+    if (!row) {
       throw new OfferActionBlockedError("unpriced", `Set an asking price before ${verb}.`);
+    }
+    const startingPrice = row.startingPrice?.toFixed(2) ?? null;
+    assertStartingPrice(ref.listingType, to, startingPrice, verb);
+    const current = resolveCurrentPrice(ref.listingType, row.price.toFixed(2), startingPrice);
+    if (!hasPrice(current)) {
+      throw new OfferActionBlockedError("unpriced", `Set an asking price before ${verb}.`);
+    }
+    // An auction that reaches this point on its opening figure alone has that figure **written** as
+    // its current price, rather than the fallback being re-derived on every read: a listing that is
+    // up with nobody bidding stands at what it started at, and `price` is the one column every
+    // surface reads (#449).
+    if (current !== row.price.toFixed(2)) {
+      seedPrice = current;
     }
   }
   // Publishing (#320): `ready → active` is the moment the listing actually goes live, so it stamps
@@ -3207,7 +3315,11 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   const publishing = ref.state === "ready" && to === "active";
   await prisma.offer.update({
     where: { id: offerId },
-    data: { state: to, ...(publishing ? { listingDate: todayUtcDate() } : {}) },
+    data: {
+      state: to,
+      ...(publishing ? { listingDate: todayUtcDate() } : {}),
+      ...(seedPrice ? { price: seedPrice, priceCheckedAt: new Date() } : {}),
+    },
   });
 }
 

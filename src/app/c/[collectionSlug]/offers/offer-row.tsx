@@ -4,12 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
 import {
-  hasPrice,
   isTerminalState,
   manualTransitions,
   priceLabel,
+  pricingReadyFor,
   quickAdvanceTarget,
-  requiresPrice,
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
@@ -105,9 +104,10 @@ export function OfferRow({
   const canAdvance =
     advanceTo !== null &&
     (!requiresSets(advanceTo) || offer.setCount > 0) &&
-    // Ready / Active need an asking price too (#336) — the step is offered from the detail screen,
-    // where the price is editable, rather than as a button here that would only fail.
-    (!requiresPrice(advanceTo) || hasPrice(offer.price));
+    // Ready / Active need an asking price too (#336) — and, on an auction, the starting price it was
+    // listed at (#449). The step is offered from the detail screen, where both are editable, rather
+    // than as a button here that would only fail.
+    pricingReadyFor(offer.listingType, advanceTo, offer.price, offer.startingPrice);
 
   const stateActions: RowAction[] = manualTransitions(offer.state)
     .filter((s): s is ManualOfferTarget => s !== "sold")

@@ -35,16 +35,26 @@ interface PurchaseContactSelectProps {
   disabled?: boolean;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
    * edited to a name that has not been matched to a suggestion), the current text, and — when a
-   * suggestion was picked — that contact's fixed platform currency (#196; `null` when unset,
-   * `undefined` when no suggestion is matched). Lets a parent react live to the choice — e.g. the
-   * offer dialog's collision check (#165), the derived-currency lock (#196) and the platform's
-   * fallback asking price (#362, likewise `undefined` when no suggestion is matched). */
+   * suggestion was picked — what that contact says about *new offers on it*. Lets a parent react
+   * live to the choice: the offer dialog's collision check (#165), the derived-currency lock
+   * (#196), the fallback asking price (#362) and the default listing type (#449).
+   *
+   * The defaults arrive as one object rather than as a growing tail of positional arguments — they
+   * are one answer ("what this platform starts a listing as"), and `undefined` says the text was
+   * typed rather than picked, which is different from a platform stating none of them. */
   onSelectionChange?: (
     contactId: string,
     name: string,
-    platformCurrency?: string | null,
-    defaultOfferPrice?: string | null
+    platform?: PlatformOfferDefaults
   ) => void;
+}
+
+/** What a picked platform says a new offer on it starts as. Each member is `null` where the
+ * platform states nothing. */
+export interface PlatformOfferDefaults {
+  platformCurrency: string | null;
+  defaultOfferPrice: string | null;
+  defaultListingType: string | null;
 }
 
 /** Create-on-type contact picker for the purchase dialog, shared by the supplier and
@@ -80,18 +90,17 @@ export function PurchaseContactSelect({
     // platform currency is unknown until a suggestion is matched, so it is left undefined (#196).
     setSelectedId("");
     setValue(next);
-    onSelectionChange?.("", next, undefined, undefined);
+    onSelectionChange?.("", next, undefined);
   }
 
-  function pick(contact: {
-    id: string;
-    name: string;
-    platformCurrency: string | null;
-    defaultOfferPrice: string | null;
-  }) {
+  function pick(contact: { id: string; name: string } & PlatformOfferDefaults) {
     setSelectedId(contact.id);
     setValue(contact.name);
-    onSelectionChange?.(contact.id, contact.name, contact.platformCurrency, contact.defaultOfferPrice);
+    onSelectionChange?.(contact.id, contact.name, {
+      platformCurrency: contact.platformCurrency,
+      defaultOfferPrice: contact.defaultOfferPrice,
+      defaultListingType: contact.defaultListingType,
+    });
   }
 
   return (
@@ -114,6 +123,7 @@ export function PurchaseContactSelect({
             name: c.name,
             platformCurrency: c.platformCurrency,
             defaultOfferPrice: c.defaultOfferPrice,
+            defaultListingType: c.defaultListingType,
           })
         }
         placeholder={placeholder}

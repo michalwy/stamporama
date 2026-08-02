@@ -33,6 +33,7 @@ import {
   PHOTO_SIDES_LABELS,
 } from "@/lib/offer-photo-config";
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
+import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -487,26 +488,53 @@ export function ContactFormDialog({
                   </div>
                 </div>
 
-                {/* Default asking price (#362) — the fallback a new offer on this platform starts at when
-                    nothing about the goods themselves suggests one (a lot's suggested price, #190, and the
-                    copies' catalog value, #230, both win over it). In the platform's own currency, and
-                    read at creation only: an offer already created keeps its price. */}
-                <div style={FIELD_GAP}>
-                  <LabelWithError htmlFor="contact-default-offer-price">
-                    Default offer price (optional)
-                  </LabelWithError>
-                  <NumericInput
-                    id="contact-default-offer-price"
-                    name="defaultOfferPrice"
-                    defaultValue={contact?.defaultOfferPrice ?? ""}
-                    placeholder="—"
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  />
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    In the platform&apos;s currency. Pre-fills a new offer only when neither the lot nor
-                    the copies&apos; catalog value suggests a price — always editable afterwards.
-                  </p>
+                {/* What a new offer on this platform starts as: its price (#362) and how it is sold
+                    (#449). Both are read at creation only — an offer already created keeps what it
+                    was given — and both are about *this* platform's habits rather than about any
+                    listing, which is why they sit together. */}
+                <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                  <div style={{ flex: 1 }}>
+                    <LabelWithError htmlFor="contact-default-offer-price">
+                      Default offer price (optional)
+                    </LabelWithError>
+                    <NumericInput
+                      id="contact-default-offer-price"
+                      name="defaultOfferPrice"
+                      defaultValue={contact?.defaultOfferPrice ?? ""}
+                      placeholder="—"
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    />
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      In the platform&apos;s currency. Pre-fills a new offer only when neither the lot nor
+                      the copies&apos; catalog value suggests a price — always editable afterwards.
+                    </p>
+                  </div>
+                  {/* Blank is "no preference", not "quick buy": the two behave identically today, so
+                      a platform nobody has answered for needs nothing written to it. */}
+                  <div style={{ flex: 1 }}>
+                    <LabelWithError htmlFor="contact-default-listing-type">
+                      Default listing type (optional)
+                    </LabelWithError>
+                    <select
+                      id="contact-default-listing-type"
+                      name="defaultListingType"
+                      defaultValue={contact?.defaultListingType ?? ""}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                    >
+                      <option value="">— no preference —</option>
+                      {OFFER_LISTING_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {OFFER_LISTING_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      Pre-selects how a new offer here is sold, for a platform you only ever auction
+                      on (or never do). Changeable per offer.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Listing templates (#210, #266, #267): what this platform's offer title, description

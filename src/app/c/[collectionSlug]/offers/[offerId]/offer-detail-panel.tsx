@@ -33,13 +33,12 @@ import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
-  hasPrice,
   isAuctionListing,
   isTerminalState,
   manualTransitions,
   quickAdvanceTarget,
   priceLabel,
-  requiresPrice,
+  pricingReadyFor,
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
@@ -222,16 +221,19 @@ export function OfferDetailPanel({
   // than in the middle of a posting session. Unlike a missing set or price, each of these is fixed
   // elsewhere — another screen, or the photos card below — so the button stays put and is **disabled
   // with its reasons** (#273) instead of quietly disappearing.
+  const pricedForAdvance =
+    advanceTo === null ||
+    pricingReadyFor(offer.listingType, advanceTo, offer.price, offer.startingPrice);
   const advanceReady =
-    advanceTo !== null &&
-    (!requiresSets(advanceTo) || offer.sets.length > 0) &&
-    (!requiresPrice(advanceTo) || hasPrice(offer.price));
+    advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0) && pricedForAdvance;
   const readyBlockers = advanceReady && advanceTo === "ready" ? offer.readyBlockers : [];
   const canAdvance = advanceReady && readyBlockers.length === 0;
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
-  // instead of silently withholding the advance button.
-  const blockedOnPrice =
-    advanceTo !== null && requiresPrice(advanceTo) && !hasPrice(offer.price) && offer.sets.length > 0;
+  // instead of silently withholding the advance button. On an auction what is missing is the
+  // **starting** price (#449) — the current one follows from it while nobody has bid — so the line
+  // names that field instead.
+  const blockedOnPrice = advanceTo !== null && !pricedForAdvance && offer.sets.length > 0;
+  const missingPriceLabel = isAuctionListing(offer.listingType) ? "a starting price" : "a price";
   // Going live is a publication (#399): the platform hands back a listing URL and this is the moment
   // it is in the clipboard, so activating asks for it exactly as the bulk listing workspace does
   // (#322) — but only while the offer carries none. One that already has a URL has nothing to hand
@@ -599,7 +601,8 @@ export function OfferDetailPanel({
             )}
             {blockedOnPrice && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
-                Set a price to {advanceTo === "active" ? "activate this offer" : "mark this offer ready"}
+                Set {missingPriceLabel} to{" "}
+                {advanceTo === "active" ? "activate this offer" : "mark this offer ready"}
               </span>
             )}
             {offer.priceBase && (

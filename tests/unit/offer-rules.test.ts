@@ -19,6 +19,9 @@ import {
   normalizeListingType,
   priceLabel,
   parseStartingPrice,
+  pricingReadyFor,
+  requiresStartingPrice,
+  resolveCurrentPrice,
   OFFER_LISTING_TYPES,
   OFFER_STATES,
   CLOSED_OFFER_STATES,
@@ -293,5 +296,37 @@ describe("parseStartingPrice", () => {
 
   it("rejects a negative figure", () => {
     assert.equal(parseStartingPrice("-1").ok, false);
+  });
+});
+
+describe("an auction's two prices (#449)", () => {
+  it("requires the starting price exactly where a quick buy requires its asking price", () => {
+    assert.equal(requiresStartingPrice("auction", "ready"), true);
+    assert.equal(requiresStartingPrice("auction", "active"), true);
+    assert.equal(requiresStartingPrice("auction", "preparing"), false);
+    assert.equal(requiresStartingPrice("auction", "withdrawn"), false);
+    // A quick buy has no such figure — `requiresPrice` already covers it.
+    assert.equal(requiresStartingPrice("fixed", "ready"), false);
+  });
+
+  it("stands an unbid auction at its opening figure", () => {
+    assert.equal(resolveCurrentPrice("auction", "0.00", "5.00"), "5.00");
+    // A stated current price is an observation and always wins.
+    assert.equal(resolveCurrentPrice("auction", "18.00", "5.00"), "18.00");
+    // Nothing to fall back on: an auction with no opening figure, and a quick buy either way.
+    assert.equal(resolveCurrentPrice("auction", "0.00", null), "0.00");
+    assert.equal(resolveCurrentPrice("fixed", "0.00", "5.00"), "0.00");
+  });
+
+  it("gates going live on the figure each format actually states", () => {
+    // A quick buy: its own price, and nothing else.
+    assert.equal(pricingReadyFor("fixed", "ready", "9.00", null), true);
+    assert.equal(pricingReadyFor("fixed", "ready", "0.00", null), false);
+    // An auction: the opening figure is enough on its own, since the current price follows from it.
+    assert.equal(pricingReadyFor("auction", "ready", "0.00", "5.00"), true);
+    // …and is required, so a bid recorded without one is still not a listed auction.
+    assert.equal(pricingReadyFor("auction", "active", "18.00", null), false);
+    // Nothing is asked of a state that does not go live.
+    assert.equal(pricingReadyFor("auction", "preparing", "0.00", null), true);
   });
 });

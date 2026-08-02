@@ -57,6 +57,13 @@ created and never afterwards, so the price stays yours to edit on the offer, and
 default here leaves offers already created untouched. Leave it empty for platforms you price
 individually.
 
+Beside it sits the **Default listing type** — how a new offer here is sold, for a marketplace you
+only ever auction on (or never do). It pre-selects **Quick buy** or **Auction** in the new-offer
+dialog and is changeable per listing; leave it at **no preference** and a new offer starts as a quick
+buy, which is the same thing choosing **Quick buy** does today. Like the default price, it is read
+when the offer is created and never afterwards, so changing it here never re-describes a listing you
+have already posted.
+
 Ticking **Seller** or **Auction house** reveals **Auction sale defaults** — the **currency**,
 **shipping**, and the two **buyer's premium** parts (a percentage and a per-lot fee) this seller
 normally trades on. They are **copied onto every new [auction sale](auctions.md)** with this seller
