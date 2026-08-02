@@ -13,8 +13,11 @@ import type {
   AuctionSaleProposal,
   AuctionClosingWindow,
 } from "@/lib/auctions";
-import type { AuctionLotStatus, AuctionSaleStatus } from "@/lib/auction-rules";
+import type { AuctionSaleStatus } from "@/lib/auction-rules";
 import type { LotSignal } from "@/lib/auction-lot";
+import { lotParams, type AuctionLotFilters } from "./lot-params";
+
+export type { AuctionLotFilters };
 
 // Client queries for auction tracking (#351/#352). Everything lives under one `["auctions", id]`
 // key so a single `invalidateAll` refreshes the lot list, its facet badges, the sale list and any
@@ -45,20 +48,6 @@ export type { AuctionClosingWindow, LotSignal };
  * the platform they were last tracked on, which pre-fills the pair. */
 export type AuctionSellerDefaults = AuctionSellerDefaultsData;
 
-export interface AuctionLotFilters {
-  status?: AuctionLotStatus;
-  /** Closing-time window: already ended, or closing inside a day / a week. */
-  closing?: AuctionClosingWindow;
-  /** A derived state: still biddable, outbid, over ceiling… */
-  signal?: LotSignal;
-  /** Only lots with nothing described yet (#442). */
-  undescribed?: boolean;
-  /** Only lots holding a stamp another lot being won also holds (#369). */
-  duplicate?: boolean;
-  sellerId?: string;
-  platformId?: string;
-}
-
 interface AuctionLotsPage {
   items: AuctionLotView[];
   nextCursor: string | null;
@@ -71,18 +60,6 @@ export const auctionKeys = {
   sale: (collectionId: string, saleId: string) =>
     ["auctions", collectionId, "sale", saleId] as const,
 };
-
-function lotParams(filters: AuctionLotFilters): URLSearchParams {
-  const params = new URLSearchParams();
-  if (filters.status) params.set("status", filters.status);
-  if (filters.closing) params.set("closing", filters.closing);
-  if (filters.signal) params.set("signal", filters.signal);
-  if (filters.undescribed) params.set("undescribed", "1");
-  if (filters.duplicate) params.set("duplicate", "1");
-  if (filters.sellerId) params.set("sellerId", filters.sellerId);
-  if (filters.platformId) params.set("platformId", filters.platformId);
-  return params;
-}
 
 /** The flat list of lots across all sales — the primary auction screen. */
 export function useAuctionLotsInfinite(collectionId: string, filters: AuctionLotFilters) {
