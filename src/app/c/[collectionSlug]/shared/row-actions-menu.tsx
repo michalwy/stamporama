@@ -57,7 +57,6 @@ const menuStyle: React.CSSProperties = {
   border: "1px solid var(--color-border)",
   borderRadius: "0.5rem",
   boxShadow: "0 8px 24px rgb(0 0 0 / 0.16)",
-  zIndex: 200,
   display: "flex",
   flexDirection: "column",
   gap: "0.05rem",
@@ -93,6 +92,9 @@ interface MenuPosition {
   right: number;
 }
 
+/** Where the portaled menu ranks by default — above the app's own chrome, below a dialog. */
+const DEFAULT_MENU_Z_INDEX = 200;
+
 /** A single `⋮` trigger that opens a dropdown of row actions. The dropdown is
  * portaled to `document.body` with fixed positioning so it is never clipped by the
  * `overflow: hidden` list containers, and it flips above the trigger when there
@@ -100,9 +102,19 @@ interface MenuPosition {
 export function RowActionsMenu({
   actions,
   ariaLabel = "Row actions",
+  zIndex = DEFAULT_MENU_Z_INDEX,
+  onOpenChange,
 }: {
   actions: RowAction[];
   ariaLabel?: string;
+  /** Rank of the portaled menu. A menu on rows **inside a dialog** must be raised above that
+   * dialog's own `zIndexBase + 1`, or it opens behind the panel: invisible, with the click that
+   * should have picked an entry landing on the backdrop instead. */
+  zIndex?: number;
+  /** Raised whenever the menu opens or closes. A dialog holding these rows sets its `dismissable`
+   * from it: the menu has its own Escape listener and is not an escape layer, so one Escape would
+   * otherwise close the menu *and* the dialog under it (#361). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPosition | null>(null);
@@ -126,6 +138,7 @@ export function RowActionsMenu({
 
   useEffect(() => {
     if (open) place();
+    onOpenChange?.(open);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -198,7 +211,7 @@ export function RowActionsMenu({
           <div
             ref={menuRef}
             role="menu"
-            style={{ ...menuStyle, top: pos.top, right: pos.right }}
+            style={{ ...menuStyle, zIndex, top: pos.top, right: pos.right }}
             onClick={(e) => e.stopPropagation()}
           >
             {actions.map((a) => (

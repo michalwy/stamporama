@@ -14,6 +14,7 @@ import {
   ListingTemplatesDialog,
   type ListingTemplates,
 } from "./listing-templates-dialog";
+import { ShippingMethodsDialog } from "./shipping-methods-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
 import { NumericInput } from "../shared/numeric-input";
 import {
@@ -22,6 +23,7 @@ import {
   type DescriptionFormat,
 } from "@/lib/description-format";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
+import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import { normalizeCollageGridMode } from "@/lib/collage-template-rules";
 import {
@@ -177,6 +179,14 @@ export function ContactFormDialog({
   // number nothing would ever read.
   const [defaultListingType, setDefaultListingType] = useState(contact?.defaultListingType ?? "");
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // The platform's shipping methods (#468) are records of their own, not fields of the contact, so
+  // they save themselves as they are edited. Only the count is kept here, for the summary line —
+  // and only for a platform that already exists, since a method has to hang off a saved contact.
+  const [shippingOpen, setShippingOpen] = useState(false);
+  const [shippingMethodCount, setShippingMethodCount] = useState<number | null>(null);
+  // Controlled so the shipping-methods dialog can default a new method to the currency being
+  // configured right now, rather than the one the contact was opened with.
+  const [platformCurrency, setPlatformCurrency] = useState(contact?.platformCurrency ?? "");
   // Which tab the collector asked for. The tab actually shown is **derived** from it against the
   // roles currently ticked, never corrected by a `setState` in an effect: unticking Platform while
   // standing on its tab falls back to Contact on the same render, and re-ticking it returns.
@@ -204,6 +214,20 @@ export function ContactFormDialog({
     };
   }, [isPlatform, collectionId]);
 
+  const contactId = contact?.id;
+  useEffect(() => {
+    if (!isPlatform || !contactId) return;
+    let cancelled = false;
+    getShippingMethodsAction(contactId)
+      .then((rows) => {
+        if (!cancelled) setShippingMethodCount(rows.length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlatform, contactId]);
+
   const isAuctionSide = isSeller || isAuctionHouse;
   const tabs: { key: TabKey; label: string }[] = [
     { key: "contact", label: "Contact" },
@@ -226,7 +250,13 @@ export function ContactFormDialog({
 
   return (
     <>
-    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="42rem" dismissable={!templatesOpen}>
+    <DialogShell
+      title={title}
+      onClose={onClose}
+      minHeight="20rem"
+      maxWidth="42rem"
+      dismissable={!templatesOpen && !shippingOpen}
+    >
       {showTabs && (
         <div
           style={{
@@ -453,7 +483,8 @@ export function ContactFormDialog({
                     <select
                       id="contact-platform-currency"
                       name="platformCurrency"
-                      defaultValue={contact?.platformCurrency ?? ""}
+                      value={platformCurrency}
+                      onChange={(e) => setPlatformCurrency(e.target.value)}
                       disabled={isPending}
                       style={{ ...INPUT_STYLE, cursor: "pointer" }}
                     >
@@ -608,6 +639,55 @@ export function ContactFormDialog({
                   </p>
                 </div>
 
+                {/* Shipping methods (#468): what buyers here can choose from, and what each costs to
+                    send. Kept in its own dialog for the same reason the templates are — a price list
+                    is a list, not a field — but unlike the templates it saves itself: the rows are
+                    records of their own, so there is nothing for this form's Save to carry. That is
+                    also why it needs a platform that already exists. */}
+                <div style={FIELD_GAP}>
+                  <LabelWithError>Shipping methods</LabelWithError>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        ...INPUT_STYLE,
+                        color: shippingMethodCount
+                          ? "var(--color-text-primary)"
+                          : "var(--color-text-muted)",
+                      }}
+                    >
+                      {contact
+                        ? shippingMethodCount == null
+                          ? "…"
+                          : shippingMethodCount === 0
+                            ? "None — a sale here names its own method"
+                            : `${shippingMethodCount} method${shippingMethodCount === 1 ? "" : "s"}`
+                        : "Available once the contact is saved"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShippingOpen(true)}
+                      disabled={isPending || !contact}
+                      style={{
+                        ...INPUT_STYLE,
+                        width: "auto",
+                        fontWeight: 600,
+                        cursor: contact ? "pointer" : "not-allowed",
+                        whiteSpace: "nowrap",
+                        color: contact ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                      }}
+                    >
+                      Methods…
+                    </button>
+                  </div>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+                    The postage options buyers on this platform choose from, each with what it costs
+                    you to send. Picking one on a sale fills in my shipping cost — still editable
+                    there, and a sale can always name a one-off method instead.
+                  </p>
+                </div>
+
                 {/* Listing text limits (#403): what this platform's own form physically accepts, sitting
                     directly under the templates that generate the texts they cap. Read live — tightening
                     one shows up on every listing at once, prepared ones included — and never seeded onto
@@ -743,6 +823,17 @@ export function ContactFormDialog({
         />
       </form>
     </DialogShell>
+
+    {shippingOpen && contact && (
+      <ShippingMethodsDialog
+        collectionId={collectionId}
+        platformId={contact.id}
+        platformName={contact.name}
+        defaultCurrency={platformCurrency || COMMON_CURRENCIES[0]}
+        onClose={() => setShippingOpen(false)}
+        onCountChange={setShippingMethodCount}
+      />
+    )}
 
     {templatesOpen && (
       <ListingTemplatesDialog

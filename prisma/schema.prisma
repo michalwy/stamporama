@@ -81,6 +81,7 @@ model Collection {
   purchases       Purchase[]
   offers          Offer[]
   sales           Sale[]
+  shippingMethods ShippingMethod[]
   auctionSales    AuctionSale[]
   colnectCatalogMappings ColnectCatalogMapping[]
   colnectConditionMappings ColnectConditionMapping[]
@@ -1748,9 +1749,20 @@ model Sale {
   // derived = this − gross (sum of line prices) and recomputed as sold sets change, so `buyerHandling`
   // is null. Null when handling is entered directly.
   buyerPaidTotal Decimal? @db.Decimal(10, 2)
+  // Which shipping method the buyer chose (#468), from the platform's own dictionary. Nullable —
+  // a sale recorded before the dictionary existed, or one whose method was a one-off, carries none.
+  // `onDelete: Restrict`: a method a sale points at cannot be deleted without first detaching it
+  // (the dictionary guard the other reference lists use).
+  shippingMethodId String?
+  // What the method was **called at sale time** — always written beside the FK, and the only thing
+  // written for a one-off *Custom* method (which has no dictionary row). A snapshot on purpose: the
+  // dictionary is a live price list the collector re-prices and renames as the carriers do, and a
+  // sale must keep saying which service was actually bought. Null when no method was recorded.
+  shippingMethodName String?
   // My actual shipping/postage cost, in `shippingCurrency` (subtracts from proceeds, −). Entered in
   // any currency (#206) — converted straight to the base currency for profit, not to the sale's
-  // transaction currency.
+  // transaction currency. Pre-filled from the chosen method's cost (#468) and editable afterwards:
+  // what the method costs is what it usually costs, not what this parcel cost.
   shippingCost  Decimal? @db.Decimal(10, 2)
   // Currency `shippingCost` was paid in (#206), independent of the sale's transaction currency.
   // Null when no shipping cost is recorded; defaults to the sale currency in the UI.
@@ -1769,6 +1781,7 @@ model Sale {
   collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  shippingMethod ShippingMethod?  @relation(fields: [shippingMethodId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
   statusEvents  SaleStatusEvent[]
 
@@ -1776,7 +1789,45 @@ model Sale {
   @@index([collectionId])
   @@index([platformId])
   @@index([buyerId])
+  @@index([shippingMethodId])
   @@map("sale")
+}
+
+// One shipping service a platform's buyers can choose, with what it costs to send (#468) — a
+// per-platform price list, because postage is quoted by the marketplace the parcel was sold on:
+// "Allegro: registered letter — 12 PLN" says nothing about a Delcampe sale. It is a dictionary in
+// the sense `StampCondition` (#93) and `CertificateStatus` (#94) are — a short list the collector
+// maintains and then picks from — but it hangs off the platform rather than the collection, so it
+// is managed on the contact dialog's Platform tab beside the listing templates.
+//
+// `cost` + `currency` are the **current** price, read when a method is picked and copied onto the
+// sale from there. Nothing recalculates a sale already recorded when the carrier raises its rates.
+model ShippingMethod {
+  id           String   @id @default(cuid())
+  collectionId String
+  // The platform (a `Contact` carrying the `platform` role) this method is offered on.
+  platformId   String
+  name         String
+  // What sending by this method costs *me* — the seller-side postage, which is what the sale's
+  // `shippingCost` records. Not what the buyer is charged for it (that is `buyerHandling`).
+  cost         Decimal  @db.Decimal(10, 2)
+  // The currency the postage is paid in — usually the collector's own, which is exactly why
+  // shipping carries a currency of its own on the sale (#206) rather than the transaction's.
+  currency     String
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // A method belongs to its platform: deleting the platform takes its price list with it. (In
+  // practice a platform with sales cannot be deleted at all — `Sale.platformId` is `Restrict`.)
+  platform   Contact    @relation("PlatformShippingMethod", fields: [platformId], references: [id], onDelete: Cascade)
+  sales      Sale[]
+
+  // Names are the pick-list, so they are unique per platform — two "Courier" rows would be a
+  // select nobody could choose from.
+  @@unique([platformId, name])
+  @@index([collectionId])
+  @@index([platformId])
+  @@map("shipping_method")
 }
 
 // Append-only fulfillment-status transition log for a sale (#191). One row per status change,
@@ -1982,6 +2033,9 @@ model Contact {
   // guard as purchases).
   offers            Offer[]    @relation("OfferPlatform")
   salesPlatform     Sale[]     @relation("SalePlatform")
+  // The shipping methods this platform's buyers can choose from (#468) — a price list owned by the
+  // platform, so it goes when the platform does.
+  shippingMethods   ShippingMethod[] @relation("PlatformShippingMethod")
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")

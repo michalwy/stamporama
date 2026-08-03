@@ -34,8 +34,7 @@ Every amount field accepts either a comma or a period as the decimal separator �
 `12.50`, whichever your keyboard gives you.
 
 - **Buyer handling** and **Commission** — the amounts you know at sale time: the postage/handling
-  the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**). Your own
-  shipping cost is added later on the detail screen.
+  the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**).
   - **Buyer handling has two entry modes.** By default you enter the **total the buyer paid** and
     the handling is worked out as **total − the offer prices**; the total is remembered, so as you
     add sold sets the handling **shrinks by itself** and the total stays put. Use **Enter handling**
@@ -43,6 +42,13 @@ Every amount field accepts either a comma or a period as the decimal separator �
     offers plus handling come to). At creation no sets are picked yet, so the total equals the
     handling until you add them. A total below the offer prices — which would make handling
     negative — is flagged and can't be saved.
+
+- **Shipping method** and **My shipping** — how the buyer asked for it to be sent, and what
+  posting it costs you (**subtracts**). The method list is the platform's own: the options you set
+  up on the [contact](contacts.md#shipping-methods), each with its usual price. Picking one fills
+  in the cost and its currency for you; change either afterwards whenever this parcel cost
+  something else. **Custom…** lets you name a one-off method that isn't worth adding to the list.
+  Both stay editable on the detail screen — the real postage often turns up later than the order.
 
 **Continue** creates the sale and opens its detail screen.
 
@@ -86,6 +92,14 @@ When the sale's currency differs from your base currency, each amount also shows
 equivalent (**≈ 200 PLN**) beside it — gross, buyer handling/total, commission, and each sold unit's
 price — converted at the sale's **frozen** rate. The net proceeds are already shown in the base
 currency, and the sale list shows each sale's net in base too.
+
+**The shipping row carries the method too.** Click it and the first control is the method the
+parcel went by — the platform's list, plus **Custom…** for a one-off you name here. Picking a
+listed method re-fills the cost with its usual price, still editable. Clearing the amount leaves
+the method standing: knowing a parcel went registered is worth recording before the postage
+receipt turns up. Renaming or re-pricing a method later never rewrites a sale already recorded —
+each sale keeps the name it was sent under — and a method a sale points at can't be deleted;
+rename it instead.
 
 **My shipping can be in any currency.** Postage is often paid in your own currency, not the
 marketplace's, so the shipping row has its own currency selector (defaulting to the sale currency).

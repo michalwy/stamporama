@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
+import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
+import type { ShippingMethodData } from "@/lib/shipping-methods";
+import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -35,6 +38,13 @@ export interface SaleFormDialogInitial {
    * mode the dialog opens in. */
   buyerPaidTotal: string;
   commission: string;
+  /** The dictionary method the sale is recorded against (#468), `CUSTOM_SHIPPING_METHOD` for a
+   * one-off, or "" for none. */
+  shippingMethodId: string;
+  /** The one-off's name; ignored for a dictionary pick, whose name is read from the row. */
+  shippingMethodName: string;
+  shippingCost: string;
+  shippingCurrency: string;
 }
 
 export interface SaleFormDialogProps {
@@ -61,9 +71,10 @@ export interface SaleFormDialogProps {
   onSubmit: (raw: SaleHeaderRaw) => void;
 }
 
-/** Create or edit a sale header (ADR-0012, #166): platform, buyer, date, currency, and the two
- * sale-time shared amounts (buyer handling + commission). The sold units and my shipping cost
- * are managed on the sale's detail screen. Mirrors the purchase header form (#120). */
+/** Create or edit a sale header (ADR-0012, #166): platform, buyer, date, currency, the two
+ * sale-time shared amounts (buyer handling + commission), and how it is being shipped (#468/#206)
+ * — the method the buyer chose and what posting it costs me. The sold units are managed on the
+ * sale's detail screen, where shipping stays editable too. Mirrors the purchase header form (#120). */
 export function SaleFormDialog({
   mode,
   collectionId,
@@ -102,6 +113,73 @@ export function SaleFormDialog({
         : null;
   const [buyerHandling, setBuyerHandling] = useState(initial?.buyerHandling ?? "");
   const [commission, setCommission] = useState(initial?.commission ?? "");
+
+  // ── Shipping (#468/#206) ──────────────────────────────────────────────────
+  // How the parcel is going, picked from the platform's own price list, and what it costs me. The
+  // buyer chooses the method *when they order*, so it belongs on the header the sale starts from —
+  // and it stays editable on the detail screen, where the real postage cost turns up later.
+  // Keyed by the platform they were loaded for, so the options are *derived* against the platform
+  // currently picked rather than corrected by a setState in an effect: switching platform shows an
+  // empty list on the same render, and switching back shows the loaded one again.
+  const [loadedMethods, setLoadedMethods] = useState<{ platformId: string; rows: ShippingMethodData[] }>({
+    platformId: "",
+    rows: [],
+  });
+  const [shippingMethodId, setShippingMethodId] = useState(initial?.shippingMethodId ?? "");
+  const [shippingMethodName, setShippingMethodName] = useState(initial?.shippingMethodName ?? "");
+  const [shippingCost, setShippingCost] = useState(initial?.shippingCost ?? "");
+  // Blank until a method or the platform answers it; resolved against the sale currency on submit,
+  // since shipping is usually paid in a currency of its own (#206).
+  const [shippingCurrency, setShippingCurrency] = useState(initial?.shippingCurrency ?? "");
+
+  // The dictionary belongs to the platform, so the list is re-read whenever the platform changes —
+  // and a method picked from the *previous* platform's list is dropped, because it was never an
+  // option here. A typed (not-yet-created) platform has no list at all.
+  useEffect(() => {
+    if (!platformId) return;
+    let cancelled = false;
+    getShippingMethodsAction(platformId)
+      .then((rows) => {
+        if (!cancelled) setLoadedMethods({ platformId, rows });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [platformId]);
+
+  const methodsLoaded = loadedMethods.platformId === platformId;
+  const shippingMethods = methodsLoaded ? loadedMethods.rows : [];
+  // A method picked from *another* platform's list was never an option here, so it reads as none
+  // until the collector picks again — derived, never written back over their choice, which is what
+  // lets switching platform and switching back leave the selection intact.
+  //
+  // Only once the list has actually arrived, though: saying "no method" while it is still in flight
+  // would let a quick Save drop the method an existing sale already carries. Until then the stored
+  // pick stands, shown through the placeholder option below.
+  const effectiveShippingMethodId =
+    !methodsLoaded ||
+    shippingMethodId === CUSTOM_SHIPPING_METHOD ||
+    shippingMethods.some((m) => m.id === shippingMethodId)
+      ? shippingMethodId
+      : "";
+  /** The stored method, while the platform's list is still loading — so the select shows the name
+   * the sale carries rather than an empty box it would then save. */
+  const pendingMethodLabel =
+    !methodsLoaded && shippingMethodId && shippingMethodId !== CUSTOM_SHIPPING_METHOD
+      ? (initial?.shippingMethodName ?? "…")
+      : null;
+
+  /** Picking a method fills in what it normally costs (#468) — the figure is a default, not a
+   * reading, so it stays editable for the parcel that cost something else. */
+  function pickShippingMethod(next: string) {
+    setShippingMethodId(next);
+    const method = shippingMethods.find((m) => m.id === next);
+    if (method) {
+      setShippingCost(method.cost);
+      setShippingCurrency(method.currency);
+    }
+  }
 
   // Buyer handling can be entered directly, or derived from the total the buyer paid (#205):
   // handling = total − gross (sum of the sale's offer prices). Gross is only known once sold units
@@ -175,6 +253,14 @@ export function SaleFormDialog({
       buyerHandling,
       buyerPaidTotal: totalPaid,
       commission,
+      shipping: {
+        methodId: effectiveShippingMethodId,
+        methodName: shippingMethodName,
+        cost: shippingCost,
+        // Shipping is entered in its own currency (#206); the sale's is the sensible default when
+        // neither a method nor the collector has said otherwise.
+        currency: shippingCurrency || resolvedCurrency,
+      },
     });
   }
 
@@ -394,6 +480,87 @@ export function SaleFormDialog({
               />
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                 − platform fee
+              </p>
+            </div>
+          </div>
+
+          {/* Shipping (#468/#206). The method comes from the platform's own price list — the buyer
+              picked it when they ordered, so it is known before the parcel exists — and choosing one
+              fills in what it normally costs. The cost stays editable here and on the detail screen:
+              a method's price is what it usually costs, not what this parcel cost. */}
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="sale-shipping-method">Shipping method</LabelWithError>
+              <select
+                id="sale-shipping-method"
+                value={effectiveShippingMethodId}
+                onChange={(e) => pickShippingMethod(e.target.value)}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                <option value="">
+                  {methodsLoaded && shippingMethods.length === 0
+                    ? "— none defined for this platform —"
+                    : "— none —"}
+                </option>
+                {pendingMethodLabel && <option value={shippingMethodId}>{pendingMethodLabel}</option>}
+                {shippingMethods.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} — {m.cost} {m.currency}
+                  </option>
+                ))}
+                <option value={CUSTOM_SHIPPING_METHOD}>Custom…</option>
+              </select>
+            </div>
+            {effectiveShippingMethodId === CUSTOM_SHIPPING_METHOD && (
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="sale-shipping-method-name">Method name</LabelWithError>
+                <input
+                  id="sale-shipping-method-name"
+                  type="text"
+                  value={shippingMethodName}
+                  onChange={(e) => setShippingMethodName(e.target.value)}
+                  placeholder="e.g. Courier, one-off"
+                  disabled={isPending}
+                  {...NO_AUTOFILL}
+                  style={INPUT_STYLE}
+                />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="sale-shipping-cost">My shipping</LabelWithError>
+              <NumericInput
+                id="sale-shipping-cost"
+                placeholder="0.00"
+                value={shippingCost}
+                onChange={(e) => setShippingCost(e.target.value)}
+                disabled={isPending}
+                style={INPUT_STYLE}
+              />
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                − what posting it costs me
+              </p>
+            </div>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="sale-shipping-currency">Shipping currency</LabelWithError>
+              <select
+                id="sale-shipping-currency"
+                value={shippingCurrency || resolvedCurrency}
+                onChange={(e) => setShippingCurrency(e.target.value)}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                {COMMON_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                Postage is often paid in your own currency, not the platform&apos;s.
               </p>
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -12,6 +12,10 @@ import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetail } from "@/lib/sales";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
+import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
+import type { ShippingMethodData } from "@/lib/shipping-methods";
+import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
+import type { SaleShippingRaw } from "@/app/actions/sales";
 import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
@@ -421,6 +425,9 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             />
           )}
           <EditableShippingRow
+            platformId={sale.platformId}
+            methodId={sale.shippingMethodId}
+            methodName={sale.shippingMethodName}
             amount={sale.shippingCost}
             currency={sale.shippingCurrency ?? sale.currency}
             saleCurrency={sale.currency}
@@ -428,10 +435,10 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             baseEquivalent={sale.shippingBase}
             rateMissing={sale.shippingRateMissing}
             disabled={isPending}
-            onSave={(amount, ccy) =>
+            onSave={(shipping) =>
               run(async () => {
                 const { updateSaleShippingAction } = await import("@/app/actions/sales");
-                return updateSaleShippingAction(sale.id, amount, ccy);
+                return updateSaleShippingAction(sale.id, shipping);
               })
             }
           />
@@ -537,6 +544,12 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
             buyerHandling: sale.buyerPaidTotal != null ? "" : (sale.buyerHandling ?? ""),
             buyerPaidTotal: sale.buyerPaidTotal ?? "",
             commission: sale.commission ?? "",
+            // A stored method id means a dictionary row; a name without one is the one-off (#468).
+            shippingMethodId:
+              sale.shippingMethodId ?? (sale.shippingMethodName ? CUSTOM_SHIPPING_METHOD : ""),
+            shippingMethodName: sale.shippingMethodName ?? "",
+            shippingCost: sale.shippingCost ?? "",
+            shippingCurrency: sale.shippingCurrency ?? sale.currency,
           }}
           platformLocked={sale.lines.length > 0}
           grossProceeds={sale.grossProceeds}
@@ -798,12 +811,19 @@ const SHIP_ICON_BTN: React.CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
-/** The "− My shipping" row (#206): editable amount **plus a currency selector**, since shipping can
- * be paid in a currency other than the sale's. Read-only it shows the entered amount and — when the
- * currency differs from base — its base-currency equivalent (or a "no rate" flag when unconvertible).
- * Editing commits amount + currency together via explicit ✓/✕ (a currency `select` can't share the
- * blur-to-commit trick the single-value rows use). */
+/** The "− My shipping" row (#206/#468): the **method** the parcel went by, its cost, and the
+ * currency that cost was paid in — shipping can be paid in a currency other than the sale's.
+ * Read-only it shows the method name beside the amount and — when the currency differs from base —
+ * the base-currency equivalent (or a "no rate" flag when unconvertible). Editing commits all of it
+ * together via explicit ✓/✕ (a `select` can't share the blur-to-commit trick the single-value rows
+ * use).
+ *
+ * Picking a method from the platform's dictionary re-fills the cost with what that method normally
+ * costs, exactly as the header form does — the figure is a default, not a reading. */
 function EditableShippingRow({
+  platformId,
+  methodId,
+  methodName,
   amount,
   currency,
   saleCurrency,
@@ -813,6 +833,9 @@ function EditableShippingRow({
   disabled,
   onSave,
 }: {
+  platformId: string;
+  methodId: string | null;
+  methodName: string | null;
   amount: string | null;
   currency: string;
   saleCurrency: string;
@@ -820,24 +843,68 @@ function EditableShippingRow({
   baseEquivalent: string | null;
   rateMissing: boolean;
   disabled: boolean;
-  onSave: (amount: string, currency: string) => void;
+  onSave: (shipping: SaleShippingRaw) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [draftAmount, setDraftAmount] = useState("");
   const [draftCcy, setDraftCcy] = useState(saleCurrency);
+  const [draftMethod, setDraftMethod] = useState("");
+  const [draftMethodName, setDraftMethodName] = useState("");
+  const [methods, setMethods] = useState<ShippingMethodData[]>([]);
+
+  /** The stored method as the select's value: a dictionary id, the custom token when only a name
+   * was kept, or "" for a sale that says nothing about how it went. */
+  const storedMethodValue = methodId ?? (methodName ? CUSTOM_SHIPPING_METHOD : "");
+
+  // The dictionary is loaded when the row is opened, not with the screen: most visits to a sale
+  // never touch shipping, and the list is only ever needed inside this editor.
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    getShippingMethodsAction(platformId)
+      .then((rows) => {
+        if (!cancelled) setMethods(rows);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, platformId]);
 
   function open() {
     if (disabled) return;
     setDraftAmount(amount ?? "");
     setDraftCcy(currency || saleCurrency);
+    setDraftMethod(storedMethodValue);
+    setDraftMethodName(methodName ?? "");
     setEditing(true);
+  }
+  function pickMethod(next: string) {
+    setDraftMethod(next);
+    const method = methods.find((m) => m.id === next);
+    if (method) {
+      setDraftAmount(method.cost);
+      setDraftCcy(method.currency);
+    }
   }
   function commit() {
     setEditing(false);
-    // Skip a no-op write (compare against the shown amount + currency).
-    if (draftAmount.trim() === (amount ?? "") && draftCcy === (currency || saleCurrency)) return;
-    onSave(draftAmount, draftCcy);
+    // Skip a no-op write (compare against everything the row is showing).
+    if (
+      draftAmount.trim() === (amount ?? "") &&
+      draftCcy === (currency || saleCurrency) &&
+      draftMethod === storedMethodValue &&
+      draftMethodName.trim() === (methodName ?? "")
+    ) {
+      return;
+    }
+    onSave({
+      methodId: draftMethod,
+      methodName: draftMethodName,
+      cost: draftAmount,
+      currency: draftCcy,
+    });
   }
 
   return (
@@ -845,7 +912,32 @@ function EditableShippingRow({
       <div style={ROW_LABEL}>− My shipping</div>
       <div style={ORIG_CELL}>
         {editing ? (
-          <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
+          <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+            {/* The method leads: picking one answers the two fields after it. */}
+            <select
+              aria-label="Shipping method"
+              value={draftMethod}
+              onChange={(e) => pickMethod(e.target.value)}
+              style={{ ...INPUT_STYLE, width: "11rem", padding: "0.125rem 0.375rem", cursor: "pointer" }}
+            >
+              <option value="">— no method —</option>
+              {methods.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — {m.cost} {m.currency}
+                </option>
+              ))}
+              <option value={CUSTOM_SHIPPING_METHOD}>Custom…</option>
+            </select>
+            {draftMethod === CUSTOM_SHIPPING_METHOD && (
+              <input
+                type="text"
+                aria-label="Custom method name"
+                placeholder="Method name"
+                value={draftMethodName}
+                onChange={(e) => setDraftMethodName(e.target.value)}
+                style={{ ...INPUT_STYLE, width: "9rem", padding: "0.125rem 0.375rem" }}
+              />
+            )}
             <NumericInput
               placeholder="0.00"
               autoFocus
@@ -909,7 +1001,13 @@ function EditableShippingRow({
               <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
                 ✎
               </span>
-              <span>{amount ? `${amount} ${currency}` : "Set"}</span>
+              {/* The method is the fact the row leads with once there is one — the cost answers
+                  "how much", the method answers "how it went", and a sale often has the second
+                  before the postage receipt turns up. */}
+              {methodName && (
+                <span style={{ color: "var(--color-text-secondary)" }}>{methodName}</span>
+              )}
+              <span>{amount ? `${amount} ${currency}` : methodName ? "" : "Set"}</span>
             </button>
           </Tooltip>
         )}

@@ -8,6 +8,7 @@ import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
 import { allocateEntityNumber, listItemsPaginated, type ItemListItem } from "./items";
+import { resolveShippingMethodForPlatform } from "./shipping-methods";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -303,6 +304,27 @@ export interface SaleHeaderInput {
    * with `buyerHandling` — at most one is non-null; the other is stored null. */
   buyerPaidTotal: string | null;
   commission: string | null;
+  /** How it was sent and what that cost (#468/#206), when the caller asked. Omitted (or null)
+   * leaves a sale's existing shipping exactly as it is — which is what an edit that never showed
+   * the fields must do, and the state a sale recorded by a sync (#467) starts in. */
+  shipping?: SaleShippingInput | null;
+}
+
+/** The shipping side of a sale as a form submits it (#468): which method, and what it cost me.
+ *
+ * The two halves are independent. A method with no cost is a legitimate record — it says how the
+ * parcel went even before the postage receipt turns up — and a cost with no method is exactly what
+ * every sale recorded before the dictionary existed carries. */
+export interface SaleShippingInput {
+  /** A row from the platform's dictionary, or null for a one-off *Custom* method (or none at all). */
+  methodId: string | null;
+  /** The one-off method's name. Ignored when `methodId` is set: a dictionary method's snapshot is
+   * taken from the row itself, so the client cannot write a name the platform never offered. */
+  methodName: string | null;
+  /** My postage cost. Null (a blank field) clears the money fields; the method, if any, stays. */
+  cost: string | null;
+  /** Currency the postage was paid in (#206) — independent of the sale's transaction currency. */
+  currency: string;
 }
 
 export interface SaleLineDraft {
@@ -329,6 +351,61 @@ async function freezeFxRate(
   } catch {
     return null;
   }
+}
+
+/** The four shipping columns a write sets together (#468/#206). */
+interface SaleShippingData {
+  shippingMethodId: string | null;
+  shippingMethodName: string | null;
+  shippingCost: string | null;
+  shippingCurrency: string | null;
+  shippingFxRateToBase: Prisma.Decimal | null;
+}
+
+/**
+ * Turn what a form submitted about shipping into the columns to write (#468).
+ *
+ * A dictionary method is re-read here rather than trusted from the client: it must belong to *this
+ * sale's platform* (the price list is the platform's), and its **current** name is what gets
+ * snapshotted onto the sale. A custom one-off keeps the typed name and has no row behind it.
+ *
+ * The cost is a separate fact from the method. A blank one clears the money fields — including the
+ * frozen rate, which describes a cost that no longer exists — and leaves the method standing, since
+ * how a parcel went is worth recording before the postage receipt turns up.
+ */
+async function resolveSaleShipping(
+  collectionId: string,
+  platformId: string,
+  baseCurrency: string,
+  input: SaleShippingInput
+): Promise<SaleShippingData> {
+  let methodId: string | null = null;
+  let methodName: string | null = null;
+  if (input.methodId) {
+    const method = await resolveShippingMethodForPlatform(platformId, input.methodId);
+    methodId = method.id;
+    methodName = method.name;
+  } else if (input.methodName?.trim()) {
+    methodName = input.methodName.trim();
+  }
+
+  if (input.cost == null) {
+    return {
+      shippingMethodId: methodId,
+      shippingMethodName: methodName,
+      shippingCost: null,
+      shippingCurrency: null,
+      shippingFxRateToBase: null,
+    };
+  }
+  const currency = input.currency.trim() || baseCurrency;
+  return {
+    shippingMethodId: methodId,
+    shippingMethodName: methodName,
+    shippingCost: input.cost,
+    shippingCurrency: currency,
+    shippingFxRateToBase: await freezeFxRate(collectionId, currency, baseCurrency),
+  };
 }
 
 /** Whether every set of an offer has now sold **through this offer** — read inside the sale
@@ -394,6 +471,11 @@ export async function createSale(
   const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
 
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
+  // How it is being sent, when the form asked (#468). Recorded at creation because the buyer picks
+  // the method *when they order* — it is known before the parcel, let alone the receipt, exists.
+  const shipping = input.shipping
+    ? await resolveSaleShipping(collectionId, input.platformId, baseCurrency, input.shipping)
+    : null;
   // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
   // row it belongs to stand or fall together.
   const sale = await prisma.$transaction(async (tx) =>
@@ -411,6 +493,7 @@ export async function createSale(
         buyerHandling: input.buyerHandling,
         buyerPaidTotal: input.buyerPaidTotal,
         commission: input.commission,
+        ...shipping,
         // Seed the transition log with the initial `ordered` event (#191), so every sale has a
         // non-empty status timeline from the moment it is recorded.
         statusEvents: { create: { status: "ordered" } },
@@ -466,8 +549,10 @@ export async function setSaleLineItemPacked(
 /** Edit a sale header (platform / buyer / date / handling / commission). The currency is a fixed
  * snapshot (#196): inherited from the platform at creation and never rewritten by an edit, so the
  * FX rate is re-frozen against the sale's own currency. The platform cannot change once the sale
- * has sold sets — a sale is single-platform and its lines reference offers on that platform. My
- * shipping cost is not touched here. */
+ * has sold sets — a sale is single-platform and its lines reference offers on that platform.
+ *
+ * Shipping (#468/#206) is rewritten only when the form submitted it; a caller that never showed the
+ * fields passes `shipping: null` and the sale keeps what it had. */
 export async function updateSaleHeader(
   ownerId: string,
   saleId: string,
@@ -486,6 +571,11 @@ export async function updateSaleHeader(
     }
   }
   const fxRateToBase = await freezeFxRate(ref.collectionId, ref.currency, ref.baseCurrency);
+  // Resolved against the platform the sale is *moving to*, so a method can never outlive the
+  // platform whose price list it came from.
+  const shipping = input.shipping
+    ? await resolveSaleShipping(ref.collectionId, input.platformId, ref.baseCurrency, input.shipping)
+    : null;
   await prisma.sale.update({
     where: { id: saleId },
     data: {
@@ -498,6 +588,14 @@ export async function updateSaleHeader(
       buyerHandling: input.buyerHandling,
       buyerPaidTotal: input.buyerPaidTotal,
       commission: input.commission,
+      ...(shipping ?? {}),
+      // A method belongs to a platform's price list, so moving the sale to another platform drops
+      // it — the *name* stays, because that is a snapshot of how the parcel actually went and no
+      // change of platform makes it untrue. Only when the form did not submit shipping itself; when
+      // it did, the resolver above already validated the method against the new platform.
+      ...(shipping == null && input.platformId !== ref.platformId
+        ? { shippingMethodId: null }
+        : {}),
     },
   });
 }
@@ -535,28 +633,18 @@ export async function updateSaleTransactionUrl(
   await prisma.sale.update({ where: { id: saleId }, data: { transactionUrl: url } });
 }
 
-/** Set (or clear) my shipping cost in any currency (#206). Freezes the shipping currency's base
- * rate at save time — independent of the sale's transaction currency — so profit is computed in the
- * base currency. A blank amount clears all three shipping fields. */
+/** Set (or clear) how a sale was shipped and what it cost me (#206/#468), from the detail screen's
+ * shipping row. Freezes the shipping currency's base rate at save time — independent of the sale's
+ * transaction currency — so profit is computed in the base currency. The method is resolved against
+ * the sale's own platform; a blank amount clears the cost, its currency and the frozen rate. */
 export async function updateSaleShipping(
   ownerId: string,
   saleId: string,
-  amount: string | null,
-  currency: string
+  input: SaleShippingInput
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
-  if (amount == null) {
-    await prisma.sale.update({
-      where: { id: saleId },
-      data: { shippingCost: null, shippingCurrency: null, shippingFxRateToBase: null },
-    });
-    return;
-  }
-  const shippingFxRateToBase = await freezeFxRate(ref.collectionId, currency, ref.baseCurrency);
-  await prisma.sale.update({
-    where: { id: saleId },
-    data: { shippingCost: amount, shippingCurrency: currency, shippingFxRateToBase },
-  });
+  const data = await resolveSaleShipping(ref.collectionId, ref.platformId, ref.baseCurrency, input);
+  await prisma.sale.update({ where: { id: saleId }, data });
 }
 
 /** Resolve the effective buyer handling (the number fed to net + allocation) from a sale's two
@@ -1010,6 +1098,11 @@ export interface SaleDetail {
   /** True when total-anchored and the total is below the offer prices — handling would be negative,
    * so it is clamped to 0 and this flags the error state. */
   totalBelowGross: boolean;
+  /** The dictionary method this sale was sent by (#468), or null for a one-off / none. */
+  shippingMethodId: string | null;
+  /** What the method was called at sale time — the snapshot, so a renamed or deleted dictionary
+   * row never rewrites what this sale says. Null when no method was recorded. */
+  shippingMethodName: string | null;
   /** My shipping cost as originally entered, in `shippingCurrency` (#206). */
   shippingCost: string | null;
   /** Currency the shipping cost was paid in; defaults to the sale currency for new entries. Null
@@ -1051,6 +1144,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       fxRateToBase: true,
       buyerHandling: true,
       buyerPaidTotal: true,
+      shippingMethodId: true,
+      shippingMethodName: true,
       shippingCost: true,
       shippingCurrency: true,
       shippingFxRateToBase: true,
@@ -1163,6 +1258,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     buyerHandling: sale.buyerPaidTotal != null ? effHandling.toFixed(2) : money(sale.buyerHandling),
     buyerPaidTotal: money(sale.buyerPaidTotal),
     totalBelowGross,
+    shippingMethodId: sale.shippingMethodId,
+    shippingMethodName: sale.shippingMethodName,
     shippingCost: money(sale.shippingCost),
     shippingCurrency: sale.shippingCurrency,
     shippingBase: sale.shippingCost == null ? null : shippingBase.toFixed(2),

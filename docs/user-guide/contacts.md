@@ -355,6 +355,33 @@ it blank** to fall back to Stamporama's plain catalog/copy label. Generated titl
 starting point — you can always edit an offer's title by hand afterwards (see
 [Offers → Listing title](offers.md#listing-title)).
 
+### Shipping methods
+
+Ticking **Platform** also reveals a **Shipping methods** row with a **Methods…** button. This is the
+platform's own postage price list — the services buyers here can choose from, each with what sending
+by it costs *you*:
+
+| Method | Cost | Currency |
+| --- | --- | --- |
+| Registered letter | 12.00 | PLN |
+| Courier | 25.00 | PLN |
+
+Add a row by filling in the three fields at the bottom and pressing **+**. Each row's **⋮** menu
+edits or deletes it; a delete confirms on the row itself. Names are unique per platform, so two
+"Courier" rows can't shadow one another — but two different platforms can each have their own
+Courier at their own price. The list is available once the contact has been saved: a method has to
+hang off a platform that exists.
+
+Unlike everything else in this dialog, these rows **save as you edit them** — they are records of
+their own, not fields of the contact, so nothing here waits for the contact's **Save**.
+
+Picking a method on a [sale](sales.md) fills in **my shipping** with the cost above, still editable
+there — a method's price is what it usually costs, not what a particular parcel cost. Re-pricing or
+renaming a method never touches a sale already recorded: each sale keeps the name it was sent under.
+That is also why a method a sale points at can't be deleted — rename it instead. A sale can always
+name a **one-off** method without one being listed here, so the list is for what you actually post
+with regularly.
+
 ### Listing text limits
 
 Under the templates sits **Listing text limits** — **Max description (characters)** and **Max private

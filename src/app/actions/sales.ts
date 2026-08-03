@@ -18,10 +18,16 @@ import {
   isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
+  type SaleShippingInput,
   type SaleStatus,
 } from "@/lib/sales";
 import { resolvePurchaseContact } from "@/lib/contacts";
-import { parsePrice, parseAmount, parseSaleDate } from "@/lib/sale-rules";
+import {
+  parsePrice,
+  parseAmount,
+  parseSaleDate,
+  CUSTOM_SHIPPING_METHOD,
+} from "@/lib/sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
@@ -69,6 +75,47 @@ export interface SaleHeaderRaw {
   buyerHandling: string;
   buyerPaidTotal: string;
   commission: string;
+  /** How the parcel is going and what it costs me (#468/#206), as the form's shipping block
+   * submitted it. Absent when the form did not ask, which leaves an existing sale's shipping
+   * untouched. */
+  shipping?: SaleShippingRaw;
+}
+
+/** The shipping block of the sale form (#468). `methodId` is a dictionary row's id, or `CUSTOM_
+ * SHIPPING_METHOD` for a one-off named in `methodName`; blank is no method at all. */
+export interface SaleShippingRaw {
+  methodId: string;
+  methodName: string;
+  cost: string;
+  currency: string;
+}
+
+/** Parse the form's shipping block into the domain's input (#468). A one-off carries its typed
+ * name; a dictionary pick carries only the id, since the domain re-reads the row for the name. */
+function resolveShipping(
+  raw: SaleShippingRaw | undefined
+): { ok: true; value: SaleShippingInput | null } | { ok: false; message: string } {
+  if (!raw) return { ok: true, value: null };
+  const cost = parseAmount(raw.cost, "Shipping cost");
+  if (!cost.ok) return { ok: false, message: cost.message };
+  const custom = raw.methodId === CUSTOM_SHIPPING_METHOD;
+  const methodName = raw.methodName.trim();
+  if (custom && !methodName) {
+    return { ok: false, message: "Name the shipping method, or pick one from the list." };
+  }
+  const currency = raw.currency.trim().toUpperCase();
+  if (cost.value != null && !currency) {
+    return { ok: false, message: "Choose the currency the shipping was paid in." };
+  }
+  return {
+    ok: true,
+    value: {
+      methodId: custom ? null : raw.methodId.trim() || null,
+      methodName: custom ? methodName : null,
+      cost: cost.value,
+      currency,
+    },
+  };
 }
 
 async function resolveHeader(
@@ -86,6 +133,7 @@ async function resolveHeader(
       buyerHandling: string | null;
       buyerPaidTotal: string | null;
       commission: string | null;
+      shipping: SaleShippingInput | null;
     }
   | { ok: false; message: string }
 > {
@@ -105,6 +153,8 @@ async function resolveHeader(
   if (!buyerPaidTotal.ok) return { ok: false, message: buyerPaidTotal.message };
   const commission = parseAmount(raw.commission, "Commission");
   if (!commission.ok) return { ok: false, message: commission.message };
+  const shipping = resolveShipping(raw.shipping);
+  if (!shipping.ok) return { ok: false, message: shipping.message };
 
   const platformId = await resolvePurchaseContact(collectionId, {
     id: raw.platformId,
@@ -131,6 +181,7 @@ async function resolveHeader(
     buyerHandling: raw.handlingMode === "total" ? null : buyerHandling.value,
     buyerPaidTotal: raw.handlingMode === "total" ? buyerPaidTotal.value : null,
     commission: commission.value,
+    shipping: shipping.value,
   };
 }
 
@@ -152,6 +203,7 @@ export async function createSaleAction(
       buyerHandling: header.buyerHandling,
       buyerPaidTotal: header.buyerPaidTotal,
       commission: header.commission,
+      shipping: header.shipping,
     });
     return { status: "success", id };
   } catch (e) {
@@ -178,6 +230,7 @@ export async function updateSaleHeaderAction(
       buyerHandling: header.buyerHandling,
       buyerPaidTotal: header.buyerPaidTotal,
       commission: header.commission,
+      shipping: header.shipping,
     });
     return { status: "success" };
   } catch (e) {
@@ -224,22 +277,18 @@ export async function updateSaleAmountAction(
   }
 }
 
-/** Set (or clear) my shipping cost in any currency (#206). The rate to base is frozen server-side.
- * A blank amount clears the shipping cost regardless of the currency passed. */
+/** Set (or clear) how the sale was shipped and what it cost me (#206/#468), in place from the
+ * detail screen. The rate to base is frozen server-side; a blank amount clears the cost and leaves
+ * the method standing. */
 export async function updateSaleShippingAction(
   saleId: string,
-  rawAmount: string,
-  currency: string
+  raw: SaleShippingRaw
 ): Promise<SaleActionState> {
   const session = await getSession();
-  const parsed = parseAmount(rawAmount, "Shipping cost");
-  if (!parsed.ok) return { status: "error", message: parsed.message };
-  const ccy = currency.trim().toUpperCase();
-  if (parsed.value != null && !ccy) {
-    return { status: "error", message: "Choose the currency the shipping was paid in." };
-  }
+  const shipping = resolveShipping(raw);
+  if (!shipping.ok) return { status: "error", message: shipping.message };
   try {
-    await updateSaleShipping(session.user.id, saleId, parsed.value, ccy);
+    await updateSaleShipping(session.user.id, saleId, shipping.value!);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the shipping cost.");
