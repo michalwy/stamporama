@@ -45,8 +45,10 @@ Alternatively, photos can be stored in **Google Cloud Storage** — the installe
 There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse. It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
 If you sell on **Allegro**, the instance can also talk to Allegro's own API using an application you
-register yourself — see [Allegro](docs/user-guide/allegro.md). It needs one extra environment
-variable, `STAMPORAMA_SECRET_KEY`, which encrypts the stored credentials at rest.
+register yourself — see [Allegro](docs/user-guide/allegro.md): it keeps a worklist of what has sold
+and is still to be written down, and marks your auctions as in active bidding within minutes of the
+first bid. It needs one extra environment variable, `STAMPORAMA_SECRET_KEY`, which encrypts the
+stored credentials at rest.
 
 ## Development
 

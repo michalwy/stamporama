@@ -843,6 +843,81 @@ export async function offersNeedingAction(
   return { "sold-elsewhere": resolve(sold), "bidding-conflict": resolve(bidding) };
 }
 
+/** One auction a connected platform reported a bid on (#481), as the notification centre lists it. */
+export interface OfferWithObservedBid {
+  offerId: string;
+  label: string;
+  platformName: string;
+  /** How many have bid, as the sync last read it. */
+  bidderCount: number;
+  /** The standing bid and its currency — the figure the sync wrote. */
+  price: string;
+  currency: string;
+  /** When that figure was last confirmed against the platform. Null where the bid itself could not
+   * be written (a listing quoted in another currency), the count having been the only observation. */
+  checkedAt: Date | null;
+}
+
+/**
+ * The auctions **the app itself** marked in active bidding (#481).
+ *
+ * The condition on automating that flag was that the collector can see the app did it, rather than
+ * discovering it through a filter behaving oddly — so this is the visible half, and it is a plain
+ * read of the two facts the sync wrote: the flag, and a bidder count only a sync can have put there.
+ *
+ * Live offers only. A sold or withdrawn listing is not something to be told about again, and the
+ * flag on it has already done its work.
+ */
+export async function offersWithObservedBidding(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: OfferWithObservedBid[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const where = {
+    collectionId,
+    state: "active",
+    inActiveBidding: true,
+    bidderCount: { gt: 0 },
+  } as const;
+
+  const [total, rows] = await Promise.all([
+    prisma.offer.count({ where }),
+    prisma.offer.findMany({
+      where,
+      // Most recently confirmed first: the bid that moved last is the one worth a look.
+      orderBy: [{ priceCheckedAt: "desc" }, { offerNo: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        currency: true,
+        bidderCount: true,
+        priceCheckedAt: true,
+        platform: { select: { name: true } },
+        sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+      },
+    }),
+  ]);
+
+  const labeller = rows.some((row) => !row.name) ? await makeOfferLabeller(collectionId) : null;
+
+  return {
+    total,
+    offers: rows.map((row) => ({
+      offerId: row.id,
+      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      platformName: row.platform.name,
+      bidderCount: row.bidderCount ?? 0,
+      price: row.price.toFixed(2),
+      currency: row.currency,
+      checkedAt: row.priceCheckedAt,
+    })),
+  };
+}
+
 // ── Collision lookup (non-blocking warning) ─────────────────────────────────
 
 export interface OfferCollision {
@@ -1086,6 +1161,10 @@ export interface OfferListFilters {
   /** The derived "needs action" overlay (ADR-0013 §4): active offers holding a set whose copy sold
    * elsewhere. Takes precedence over `states`. */
   needsAction?: boolean;
+  /** Only offers **in active bidding** (#215). A plain column rather than a derivation, and it
+   * composes with everything else — it is what the notification centre's "bidding started" group
+   * (#481) links to, so that "see all" lands on exactly the rows it was counting. */
+  bidding?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
    * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
@@ -1174,12 +1253,13 @@ function offerSearchWhere(search: string): Prisma.OfferWhereInput {
  * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice. */
 function offerListWhere(
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "states" | "includeClosed" | "search">,
+  filters: Pick<OfferListFilters, "platformId" | "states" | "includeClosed" | "search" | "bidding">,
   needsActionIds?: string[]
 ): Prisma.OfferWhereInput {
   return {
     collectionId,
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    ...(filters.bidding ? { inActiveBidding: true } : {}),
     ...(filters.search?.trim() ? offerSearchWhere(filters.search) : {}),
     ...(needsActionIds
       ? { id: { in: needsActionIds } }
@@ -1274,7 +1354,10 @@ export async function offerListNeighbours(
   ownerId: string,
   collectionId: string,
   offerId: string,
-  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
+  filters: Pick<
+    OfferListFilters,
+    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+  > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -1436,7 +1519,10 @@ export interface OfferFilterCounts {
 export async function offerFilterCounts(
   ownerId: string,
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
+  filters: Pick<
+    OfferListFilters,
+    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+  > = {}
 ): Promise<OfferFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -1549,7 +1635,10 @@ export interface OffersSummaryPlatform extends Omit<OfferPlatformTotal, "itemIds
 export async function offersSummary(
   ownerId: string,
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "states" | "needsAction" | "includeClosed" | "search"> = {}
+  filters: Pick<
+    OfferListFilters,
+    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+  > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
 
@@ -2054,9 +2143,14 @@ export interface OfferDetail {
    * computed from it. */
   startingPrice: string | null;
   /** When {@link price} was last confirmed against the live listing (#449) — the auction lot's
-   * `checkedAt` (#351), stamped by the in-place price edit. Null on a price never re-checked, which
-   * is every quick buy. */
+   * `checkedAt` (#351), stamped by the in-place price edit and by a connected platform's sync
+   * (#481). Null on a price never re-checked, which is every quick buy. */
   priceCheckedAt: Date | null;
+  /** How many bidders the connected platform reported, as of {@link priceCheckedAt} (#481). Written
+   * by a sync and never by hand, so its presence is what says the figure beside it — and the
+   * in-active-bidding flag — came from the marketplace rather than from the collector. Null on
+   * everything no sync has read. */
+  bidderCount: number | null;
   currency: string;
   /** The collection base currency, to label `priceBase` (#208). */
   baseCurrency: string;
@@ -2168,6 +2262,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       price: true,
       startingPrice: true,
       priceCheckedAt: true,
+      bidderCount: true,
       currency: true,
       state: true,
       inActiveBidding: true,
@@ -2433,6 +2528,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     price: offer.price.toFixed(2),
     startingPrice: offer.startingPrice?.toFixed(2) ?? null,
     priceCheckedAt: offer.priceCheckedAt,
+    bidderCount: offer.bidderCount,
     currency: offer.currency,
     baseCurrency,
     priceBase,

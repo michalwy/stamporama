@@ -19,6 +19,9 @@ export interface OfferListContext {
   states?: OfferState[];
   /** The derived "needs action" overlay (ADR-0013 §4); mutually exclusive with `states`. */
   needsAction?: boolean;
+  /** Only offers in active bidding (#215/#481) — a plain narrowing, so it stands beside the state
+   * chips rather than replacing them. */
+  bidding?: boolean;
   /** The list's remembered show-closed toggle (#245) — not a list URL param, but part of what the
    * list was showing, so the walk has to carry it. */
   includeClosed?: boolean;
@@ -34,6 +37,7 @@ const MARKER_VALUE = "list";
 export function offerListContextQuery(context: OfferListContext): string {
   const params = new URLSearchParams({ [MARKER]: MARKER_VALUE });
   if (context.platformId) params.set("platform", context.platformId);
+  if (context.bidding) params.set("bidding", "1");
   if (context.needsAction) params.set("needsAction", "1");
   else if (context.states?.length) params.set("state", context.states.join(","));
   if (context.includeClosed) params.set("closed", "1");
@@ -56,6 +60,7 @@ export function parseOfferListContext(
     platformId: get("platform") || undefined,
     states: needsAction ? [] : (get("state") || "").split(",").filter(isOfferState),
     needsAction,
+    bidding: get("bidding") === "1",
     includeClosed: get("closed") === "1",
     search: get("search") || undefined,
   };
@@ -69,6 +74,7 @@ export function offerListHref(collectionSlug: string, context: OfferListContext 
   if (!context) return base;
   const params = new URLSearchParams();
   if (context.platformId) params.set("platform", context.platformId);
+  if (context.bidding) params.set("bidding", "1");
   if (context.needsAction) params.set("needsAction", "1");
   else if (context.states?.length) params.set("state", context.states.join(","));
   if (context.search) params.set("search", context.search);

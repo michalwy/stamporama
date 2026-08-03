@@ -7,14 +7,17 @@
  * writes, and it makes no judgement of its own.
  */
 
+import { CLOSED_OFFER_STATES, isAuctionListing, normalizeListingType } from "./offer-rules";
 import { urlNamesPlatformOffer } from "./platform-offer-url";
 
 /** How far back the *first* sync reads. Later passes follow the event stream instead, so this is
  *  only ever the depth of the initial import — and of the fallback when a cursor has aged out. */
 export const SYNC_WINDOW_DAYS = 30;
 
-/** How often the background poll runs (#467). Comfortably inside Allegro's rate limits, and close
- *  enough that a worklist opened at any moment is describing the last quarter of an hour. */
+/** How often the **full** pass runs (#467) — the one that reads the account end to end, and so the
+ *  only one that can derive "ended without selling" from a listing's absence. Comfortably inside
+ *  Allegro's rate limits. New orders and new bids do not wait for it: they arrive through the event
+ *  poll below, every {@link EVENT_POLL_INTERVAL_MS}. */
 export const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 
 /** Past this without a successful pass, the worklist says so rather than looking current: a stale
@@ -126,6 +129,133 @@ export function matchListingToOffer(
   const byUrl = offers.filter((offer) => urlNamesPlatformOffer(offer.url, listing.platformOfferId));
   if (byUrl.length === 1) return { offerId: byUrl[0].id, matchedBy: "url" };
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Bidding (#481)
+// ---------------------------------------------------------------------------
+
+/** Allegro's own word for an auction, in `sellingMode.format`. The other two — `BUY_NOW`,
+ *  `ADVERTISEMENT` — have no bidding to observe. */
+export const AUCTION_FORMAT = "AUCTION";
+
+/**
+ * How often the event poll runs (#481) — the fast path over **both** of Allegro's event streams.
+ *
+ * Two minutes, and it can be that because it is **event-driven**: it asks what changed, so a poll on
+ * a quiet account costs two requests answering with empty pages. Re-reading the account this often
+ * to discover that nothing had happened is exactly what the streams exist to avoid.
+ *
+ * The number is the collector's own answer to "how quickly must I know": a bid commits them to
+ * pulling the copies from every other marketplace, and that is a decision measured in minutes. An
+ * order rides the same timer because it costs one more request to do so — the reason it used to wait
+ * a quarter of an hour was the sweep's cost, and the stream does not have it.
+ */
+export const EVENT_POLL_INTERVAL_MS = 2 * 60 * 1000;
+
+/**
+ * The offer events the poll follows.
+ *
+ * Both directions, because both move the count: a bid landing is the whole point, and a bid
+ * cancelled is the case where the standing figure on screen would otherwise be a bid that no longer
+ * exists. Neither ever clears the flag — {@link bidWriteFor} is what decides that, and it does not.
+ *
+ * Everything else Allegro publishes here — a listing activated, ended, restocked, retitled — is the
+ * full sweep's business (#467). Asking for it would turn a poll that is usually an empty page into
+ * a poll that re-reads offers on every price edit the collector makes themselves.
+ */
+export const BID_EVENT_TYPES = ["OFFER_BID_PLACED", "OFFER_BID_CANCELED"] as const;
+
+/** How many offers are asked for in one `GET /sale/offers` read by id. Allegro takes the parameter
+ *  repeated; a page of fifty keeps one refused request cheap to repeat. */
+export const BID_DETAIL_BATCH = 50;
+
+/** A ceiling on one poll's walk of the event stream, so a long-idle instance cannot spend an
+ *  unbounded stretch inside a two-minute timer. The cursor advances as it goes, so the next poll
+ *  carries straight on. */
+export const MAX_BID_EVENT_PAGES = 20;
+
+/** What the sweep saw of one listing's bidding — the narrowest shape the rule needs. */
+export interface ObservedBidding {
+  /** Allegro's selling mode, or null where it stated none. */
+  format: string | null;
+  /** How many have bid. Null is Allegro not having said, which is **not** zero. */
+  biddersCount: number | null;
+  /** The standing bid and the currency it is quoted in; both null together. */
+  currentPrice: string | null;
+  currentCurrency: string | null;
+}
+
+/** The local offer a bid observation would be written onto. */
+export interface BiddableOffer {
+  listingType: string;
+  state: string;
+  currency: string;
+  inActiveBidding: boolean;
+  bidderCount: number | null;
+}
+
+/** What to write onto the offer — only the fields that should actually change. */
+export interface BidWrite {
+  inActiveBidding?: true;
+  price?: string;
+  priceCheckedAt?: Date;
+  bidderCount?: number;
+}
+
+/**
+ * What a sweep's sight of an auction means for the offer behind it (#481).
+ *
+ * Pure, and deliberately the only place the judgements live:
+ *
+ *  • **Both sides must call it an auction.** Allegro's `sellingMode.format` says what is actually
+ *    running; the local `listingType` says what the collector recorded. Acting on Allegro's word
+ *    alone would write a standing bid over the asking price of an offer recorded as a quick buy, and
+ *    correcting a mis-recorded listing type is a different claim than this makes.
+ *  • **A bid sets the flag, and nothing ever clears it.** Not an auction that ended unsold, not a
+ *    withdrawn listing, not a bid the bidder retracted: the collector has pulled those copies from
+ *    every other marketplace on the strength of this flag, and a silent un-commit in the background
+ *    is worse than a row to look at (#215). A count that falls back to zero — a bid retracted — is
+ *    still recorded as the observation it is, and that disagreement between a standing flag and a
+ *    bidderless auction *is* the row to look at.
+ *  • **No bids keeps a zero bid.** The opening figure is never copied into `price` — that is what
+ *    `startingPrice` is for, and a bid that never happened must not be recorded as one. The count is
+ *    still written, because "looked at, unbid" and "never looked at" are different facts.
+ *  • **A bid is only written in the offer's own currency.** An offer is priced in one currency by
+ *    decision (#196); converting a marketplace figure into it silently would invent a number. The
+ *    flag still goes on — *that* somebody has bid does not depend on the currency it was bid in.
+ *  • **A closed offer is left alone.** Sold or withdrawn, there is nothing here to commit and
+ *    nothing left to price.
+ *
+ * `null` means "write nothing" — including the case where every field already says this. `now` is
+ * passed in rather than read, so the rule stays pure and one pass stamps one instant.
+ */
+export function bidWriteFor(
+  listing: ObservedBidding,
+  offer: BiddableOffer,
+  now: Date
+): BidWrite | null {
+  if ((listing.format ?? "").toUpperCase() !== AUCTION_FORMAT) return null;
+  if (!isAuctionListing(normalizeListingType(offer.listingType))) return null;
+  if ((CLOSED_OFFER_STATES as readonly string[]).includes(offer.state)) return null;
+
+  const bidders = listing.biddersCount;
+  if (bidders === null || bidders < 0) return null;
+
+  const write: BidWrite = {};
+  if (offer.bidderCount !== bidders) write.bidderCount = bidders;
+
+  if (bidders > 0) {
+    if (!offer.inActiveBidding) write.inActiveBidding = true;
+    if (listing.currentPrice && listing.currentCurrency === offer.currency) {
+      write.price = listing.currentPrice;
+      // Restamped on every pass that saw a bid, even where the figure has not moved: the date says
+      // when the number was last *confirmed*, which is the whole of what it is worth.
+      write.priceCheckedAt = now;
+    }
+  }
+
+  return Object.keys(write).length > 0 ? write : null;
 }
 
 /** The floor a window read starts at: {@link SYNC_WINDOW_DAYS} back from now on a first sync, and

@@ -25,6 +25,7 @@ export async function GET(
   // dropped rather than refused, the chips being the authority on what exists.
   const states = (sp.get("state") || "").split(",").filter(isOfferState);
   const needsAction = sp.get("needsAction") === "1";
+  const bidding = sp.get("bidding") === "1";
   const search = sp.get("search") || undefined;
   const includeClosed = sp.get("includeClosed") === "1";
 
@@ -34,6 +35,7 @@ export async function GET(
       platformId,
       states,
       needsAction,
+      bidding,
       search,
       includeClosed,
       pageSize: 50,

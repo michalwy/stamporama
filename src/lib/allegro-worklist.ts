@@ -114,6 +114,12 @@ export interface AllegroWorklist {
     running: boolean;
     listingsSweptAt: string | null;
     freshness: SyncFreshness;
+    /** The event poll's own date and error (#481). Separate from the pass above because it runs on
+     *  its own two-minute cadence over both of Allegro's event streams: "when did we last look for
+     *  something new" and "when did we last read the account end to end" are two questions, and one
+     *  date answering both would be wrong about one of them. */
+    eventPolledAt: string | null;
+    eventPollError: string | null;
   };
   orders: WorklistOrder[];
   ended: WorklistEndedListing[];
@@ -204,6 +210,8 @@ export async function getAllegroWorklist(
     lastError: state?.lastError ?? null,
     running: state?.running ?? false,
     listingsSweptAt: state?.listingsSweptAt?.toISOString() ?? null,
+    eventPolledAt: state?.eventPolledAt?.toISOString() ?? null,
+    eventPollError: state?.eventPollError ?? null,
     freshness: syncFreshness(
       { lastSucceededAt: state?.lastSucceededAt ?? null, lastError: state?.lastError ?? null },
       now

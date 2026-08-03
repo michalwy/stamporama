@@ -420,6 +420,59 @@ export async function listAllegroOrders(opts: {
   });
 }
 
+// --- The offer event stream the bidding poll follows (#481) ------------------------------------
+
+/** One entry of Allegro's **offer** event stream. Same shape of contract as the order stream: the
+ *  event id is the cursor, and the event names an offer without carrying its detail. */
+export interface AllegroOfferEvent {
+  id: string;
+  type: string;
+  occurredAt: string | null;
+  /** The seller's own listing the event is about, by Allegro's offer id. */
+  offerId: string | null;
+}
+
+/**
+ * A page of the offer event stream, from `after` (exclusive) onwards.
+ *
+ * Retained for **24 hours**, which is shorter than the order stream's window and is why a refused
+ * cursor here is so ordinary: an instance that was down overnight comes back to a cursor Allegro no
+ * longer holds, and the honest answer is to seek to the end and let the full sweep restate every
+ * listing's bidding. Nothing is lost by that — the sweep reads the same fields.
+ *
+ * `types` is what makes this cheap: asked for the two bid events, a quiet account answers with an
+ * empty page, and that one request is the whole cost of a poll where nothing happened.
+ */
+export async function listAllegroOfferEvents(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  after?: string | null;
+  limit?: number;
+  types?: string[];
+  signal?: AbortSignal;
+}): Promise<AllegroOfferEvent[]> {
+  const body = await allegroGet<{ offerEvents?: unknown }>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    path: "/sale/offer-events",
+    query: {
+      from: opts.after ?? undefined,
+      limit: opts.limit ?? 100,
+      type: opts.types,
+    },
+    signal: opts.signal,
+  });
+  const events = Array.isArray(body.offerEvents) ? body.offerEvents : [];
+  return events.flatMap((raw) => {
+    const event = raw as { id?: unknown; type?: unknown; occurredAt?: unknown; offer?: unknown };
+    const id = str(event.id);
+    const type = str(event.type);
+    if (!id || !type) return [];
+    const offer = event.offer as { id?: unknown } | undefined;
+    return [{ id, type, occurredAt: str(event.occurredAt), offerId: str(offer?.id) }];
+  });
+}
+
 /** One of the seller's own listings, narrowed to what the sweep records. */
 export interface AllegroSellerOffer {
   id: string;
@@ -429,19 +482,39 @@ export interface AllegroSellerOffer {
   endingAt: string | null;
   available: number | null;
   sold: number | null;
+  /** Allegro's selling mode — `AUCTION`, `BUY_NOW` or `ADVERTISEMENT`. The three fields below only
+   *  mean anything on an auction, and this is what says whether it is one. Null where Allegro stated
+   *  none, which reads as "not known to be an auction" and so as nothing to observe. */
+  format: string | null;
+  /** How many people have bid (#481). `0` is a live auction nobody has bid on — a fact — while null
+   *  is Allegro not having said, which is not the same thing and must never be read as no bids. */
+  biddersCount: number | null;
+  /** The standing bid, as a string so the decimal never goes through a float, with the currency
+   *  Allegro quoted it in. Both null together, a price without a currency being no price. */
+  currentPrice: string | null;
+  currentCurrency: string | null;
 }
 
 /**
- * A page of the seller's own listings at one publication status.
+ * A page of the seller's own listings — every active one, or exactly the ones named.
  *
  * The sweep asks for the **active** ones, deliberately: paging every listing the account has ever
  * ended is unbounded and answers a question nobody asked, while a live offer here whose listing is
  * no longer among these is exactly the signal the worklist's second section is about.
+ *
+ * The bidding poll asks by **id** instead (#481). It already knows which offers were bid on, and
+ * reading those few is what lets it run every couple of minutes without re-reading the account.
  */
 export async function listAllegroSellerOffers(opts: {
   sandbox: boolean;
   accessToken: string;
-  publicationStatus: string[];
+  /** The publication statuses to sweep. Omitted when `offerIds` names the listings outright — a bid
+   *  that landed on an auction ending seconds later is exactly the one worth reading, and filtering
+   *  it out by status would lose it. */
+  publicationStatus?: string[];
+  /** Specific listings, by Allegro's own offer id (`offer.id`, repeatable). This is what the bidding
+   *  poll (#481) reads: the event stream says *which* offers changed, and only those are fetched. */
+  offerIds?: string[];
   limit?: number;
   offset?: number;
   signal?: AbortSignal;
@@ -452,6 +525,7 @@ export async function listAllegroSellerOffers(opts: {
     path: "/sale/offers",
     query: {
       "publication.status": opts.publicationStatus,
+      "offer.id": opts.offerIds,
       limit: opts.limit ?? 100,
       offset: opts.offset ?? 0,
     },
@@ -465,9 +539,12 @@ export async function listAllegroSellerOffers(opts: {
       external?: { id?: unknown };
       publication?: { status?: unknown; endingAt?: unknown };
       stock?: { available?: unknown; sold?: unknown };
+      sellingMode?: { format?: unknown };
+      saleInfo?: { currentPrice?: { amount?: unknown; currency?: unknown }; biddersCount?: unknown };
     };
     const id = str(offer.id);
     if (!id) return [];
+    const currentPrice = str(offer.saleInfo?.currentPrice?.amount);
     return [
       {
         id,
@@ -477,6 +554,12 @@ export async function listAllegroSellerOffers(opts: {
         endingAt: str(offer.publication?.endingAt),
         available: num(offer.stock?.available),
         sold: num(offer.stock?.sold),
+        format: str(offer.sellingMode?.format),
+        biddersCount: num(offer.saleInfo?.biddersCount),
+        currentPrice,
+        // Only beside an amount, exactly as an order's total is: a currency on its own describes
+        // nothing, and a half-read price is the one thing a bid observation must never be.
+        currentCurrency: currentPrice ? str(offer.saleInfo?.currentPrice?.currency) : null,
       },
     ];
   });

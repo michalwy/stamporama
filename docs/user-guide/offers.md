@@ -1015,11 +1015,14 @@ An auction adds two things under that figure on the detail header:
   to have: it is the number you stated when you listed it. An auction cannot be marked **Ready** or
   **Active** without one, exactly as a quick buy cannot without its asking price. Click it to set or
   change it, like the price above it.
-- **Checked** — the date the current price was last confirmed against the live listing. There is no
-  live connection to any marketplace, so refreshing a bid is something you do by hand: open the
-  listing, read the standing bid, and type it into the price field. Committing a **changed** figure
-  stamps the check date; retyping the same number does not, since nothing was learned. This is the
-  same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
+- **Checked** — the date the current price was last confirmed against the live listing, with the
+  number of bidders beside it where a marketplace reported one. On a **connected** platform
+  ([Allegro](allegro.md#bids-on-your-auctions)) both are filled in for you every couple of minutes,
+  and the bidder count is how you can tell the figure came from the marketplace rather than from
+  you — nothing types one in. Everywhere else, refreshing a bid is something you do by hand: open
+  the listing, read the standing bid, and type it into the price field. Committing a **changed**
+  figure stamps the check date; retyping the same number does not, since nothing was learned. This
+  is the same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
 
 The **current price is not** required, and nothing is filled in for it. It is an *observation* of the
 bidding, and an auction that is up with nobody bidding has none to make — so leave the field blank
@@ -1045,6 +1048,11 @@ auction actually closes — well before a sale is recorded. Mark an **active** o
 bidding** (from its **⋮** menu) the moment it receives a bid: this flags every **other** active offer holding the same
 copies as **Needs action**, exactly like an actual sale collision, so you know to withdraw them
 from other marketplaces right away.
+
+On a **connected** platform you do not have to: Allegro's own auctions are marked for you within a
+couple of minutes of the first bid, and the notification bell lists them under **Bidding started on
+Allegro** — see [bids on your auctions](allegro.md#bids-on-your-auctions). Clearing the marker stays
+yours either way; nothing ever clears it in the background.
 
 **In active bidding** is independent of the offer's state — it never marks the offer **Sold** by
 itself. If the auction doesn't close (no bids meet the reserve, the buyer doesn't pay), **Clear

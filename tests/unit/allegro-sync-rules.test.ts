@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  bidWriteFor,
   lineAwaitsSale,
   matchListingToOffer,
   paymentStatusFor,
@@ -147,5 +148,116 @@ describe("syncFreshness", () => {
     assert.equal(syncFreshness({ lastSucceededAt: old, lastError: null }, now), "stale");
     const recent = new Date(now.getTime() - 60_000);
     assert.equal(syncFreshness({ lastSucceededAt: recent, lastError: null }, now), "fresh");
+  });
+});
+
+describe("bidWriteFor", () => {
+  const now = new Date("2026-08-03T12:00:00Z");
+  const auction = {
+    format: "AUCTION",
+    biddersCount: 0,
+    currentPrice: null as string | null,
+    currentCurrency: null as string | null,
+  };
+  const offer = {
+    listingType: "auction",
+    state: "active",
+    currency: "PLN",
+    inActiveBidding: false,
+    bidderCount: null as number | null,
+  };
+
+  it("flags an auction the moment somebody bids, and records the standing bid", () => {
+    const write = bidWriteFor(
+      { ...auction, biddersCount: 2, currentPrice: "42.00", currentCurrency: "PLN" },
+      offer,
+      now
+    );
+    assert.deepEqual(write, {
+      bidderCount: 2,
+      inActiveBidding: true,
+      price: "42.00",
+      priceCheckedAt: now,
+    });
+  });
+
+  it("keeps a zero bid on an auction nobody has bid on, and never stamps a check", () => {
+    // The opening figure is `startingPrice`'s to state — copying it into `price` would record a bid
+    // that never happened (#449).
+    const write = bidWriteFor(
+      { ...auction, biddersCount: 0, currentPrice: "10.00", currentCurrency: "PLN" },
+      offer,
+      now
+    );
+    assert.deepEqual(write, { bidderCount: 0 });
+  });
+
+  it("writes nothing when the count has not moved and the auction is still unbid", () => {
+    assert.equal(bidWriteFor(auction, { ...offer, bidderCount: 0 }, now), null);
+  });
+
+  it("never clears the flag — not on an auction that has ended unsold, not on a retracted bid", () => {
+    const flagged = { ...offer, inActiveBidding: true, bidderCount: 1 };
+    // An auction back to nobody bidding still records the count — the honest observation, and the
+    // row the collector then looks at — and leaves the flag exactly where it is.
+    assert.deepEqual(bidWriteFor({ ...auction, biddersCount: 0 }, flagged, now), {
+      bidderCount: 0,
+    });
+    assert.equal(
+      bidWriteFor({ ...auction, biddersCount: 0 }, { ...flagged, bidderCount: 0 }, now),
+      null
+    );
+  });
+
+  it("refreshes the bid of an already flagged auction without re-reporting the flag", () => {
+    const write = bidWriteFor(
+      { ...auction, biddersCount: 3, currentPrice: "51.00", currentCurrency: "PLN" },
+      { ...offer, inActiveBidding: true, bidderCount: 3 },
+      now
+    );
+    assert.deepEqual(write, { price: "51.00", priceCheckedAt: now });
+  });
+
+  it("leaves a fixed-price listing alone on either side's word", () => {
+    // Both sides have to call it an auction: Allegro's format says what is running, the local type
+    // says what was recorded, and a bid written over an asking price is unrecoverable.
+    assert.equal(
+      bidWriteFor({ ...auction, format: "BUY_NOW", biddersCount: 2 }, offer, now),
+      null
+    );
+    assert.equal(
+      bidWriteFor(
+        { ...auction, biddersCount: 2, currentPrice: "42.00", currentCurrency: "PLN" },
+        { ...offer, listingType: "fixed" },
+        now
+      ),
+      null
+    );
+  });
+
+  it("flags on a bid in another currency but refuses to write the figure", () => {
+    const write = bidWriteFor(
+      { ...auction, biddersCount: 1, currentPrice: "42.00", currentCurrency: "EUR" },
+      offer,
+      now
+    );
+    assert.deepEqual(write, { bidderCount: 1, inActiveBidding: true });
+  });
+
+  it("reads a count Allegro did not state as unknown rather than as no bids", () => {
+    assert.equal(bidWriteFor({ ...auction, biddersCount: null }, offer, now), null);
+  });
+
+  it("leaves a closed offer alone — there is nothing left to commit or to price", () => {
+    for (const state of ["sold", "withdrawn"]) {
+      assert.equal(
+        bidWriteFor(
+          { ...auction, biddersCount: 2, currentPrice: "42.00", currentCurrency: "PLN" },
+          { ...offer, state },
+          now
+        ),
+        null
+      );
+    }
   });
 });

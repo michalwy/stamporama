@@ -54,7 +54,15 @@ the dead set or withdraw the listing.
 listings currently has *in active bidding*. Two of your own listings are competing for one piece of
 stock, and the auction is the one that cannot be taken back.
 
-The last two are the same **needs action** flag the offers list shows, split by *why* it fired,
+**Bidding started on Allegro** — blue. An auction of yours that Stamporama itself marked **in active
+bidding**, because Allegro reported a bidder ([how that works](allegro.md#bids-on-your-auctions)).
+Nothing here is wrong — somebody bidding is the listing working — so it is blue: this is the app
+telling you what it did on your behalf, and what the marketplace said when it did. What *is* urgent
+about it, the same copies sitting in another live listing, is the red group above. The row stays
+until the auction is sold or the listing is no longer live. Clicking through lands on the offers list
+narrowed to your offers in bidding.
+
+The two red groups are the same **needs action** flag the offers list shows, split by *why* it fired,
 because the two ask for different things: a sold copy has to come out of the listing, while a copy
 under the hammer is waiting on someone else's clock. Clicking through to see the rest lands on the
 offers list's **Needs action** filter, which holds both.

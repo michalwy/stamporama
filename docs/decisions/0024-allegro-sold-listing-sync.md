@@ -134,13 +134,61 @@ A 401 does not land in `lastError`: it latches `AllegroConnection.needsReconnect
 single convergence point for every unusable grant. Being *not connected* is likewise not a failed
 sync — the pass reports `skipped`, and the settings panel already says what to do.
 
-### 8. Background poll every 15 minutes, plus **Sync now**
+### 8. A full pass every 15 minutes, plus **Sync now** — and a two-minute event poll beside it
 
 In the existing in-process periodic-job pattern (`src/instrumentation-node.ts`, beside the photo GC
 sweep and the render worker; ADR-0018) rather than a new service. A pass claims its collection
 (`running` + `startedAt`) so the poll and a button press cannot read one stream twice, and the claim
 times out — a lock nothing can release would end the sync permanently, while a duplicated pass over
 idempotent writes costs a few requests.
+
+**Two cadences, split by what each can only answer.** The quarter of an hour is the price of the
+*sweep*: "ended without selling" is a listing's absence from a complete read of the account (§2), and
+that read is the expensive thing here. Everything else Allegro will simply tell us about — so the
+event poll (§8a) runs every **two minutes** over both streams, `/sale/offer-events` and
+`/order/events`, fetching only what they name, and a poll on a quiet account costs two requests. New
+orders therefore reach the worklist as fast as new bids reach an offer; they used to wait a quarter
+of an hour only because they were carried by the pass that sweeps.
+
+The poll deliberately does none of the pass's other work: no sweep, no dated window import, no
+re-match. A missing or aged-out order cursor is left for the full pass rather than answered with a
+month of history on a two-minute timer.
+
+### 8a. Automatic "in active bidding" — the one thing here that writes (#481)
+
+Everything above is an observation the collector then acts on. The bidding poll is the exception,
+and it is deliberate: when somebody bids on the collector's own auction they are committed *now* —
+the copies have to come out of every other marketplace long before the auction closes — so
+`Offer.inActiveBidding` (#215) is set by the app the moment Allegro reports a bidder, and the
+standing bid is written into `Offer.price` with `priceCheckedAt` beside it. No confirmation step: a
+flag waiting to be confirmed is no faster than the click it replaces.
+
+Three rules bound that write.
+
+- **It never clears the flag.** Not on an auction that ended unsold, not on a withdrawn listing, not
+  on a cancelled bid. Having pulled stock on this signal, a silent un-commit in the background is
+  worse than a row to look at; clearing stays the collector's own act, exactly as #215 says. A
+  bidder count that falls back to zero is still recorded — that disagreement *is* the row to look at.
+- **Both sides must call it an auction**: Allegro's `sellingMode.format` and the local
+  `Offer.listingType`. Acting on Allegro's word alone would write a standing bid over the asking
+  price of an offer recorded as a quick buy. The bid is likewise only written when the listing's
+  currency is the offer's, an offer being priced in one currency by decision (#196); the flag still
+  goes on, since *that* somebody bid does not depend on the currency.
+- **It is visible.** A cascade (ADR-0013 §4 flags every other offer holding the same copies) that
+  fires from a background job has to be announced: the notification centre gains a `bidding started`
+  group, the offer states the bidder count the sync reported, and **Sync now** says what it flagged.
+  `Offer.bidderCount` is written only ever by a sync, so its presence is the provenance of both the
+  figure and the flag.
+
+**How it gets there in minutes.** Through §8's event poll, which reads Allegro's **offer** stream
+(`GET /sale/offer-events`, asked for `OFFER_BID_PLACED` and `OFFER_BID_CANCELED`) and fetches details
+(`GET /sale/offers?offer.id=…`) only for the offers those events name — the same trick, on a second
+stream, that lets the orders ride the same two-minute timer. The poll keeps its own cursor, date and
+error: a failing bid check must not make the sold worklist read as stale, or the reverse.
+
+The stream is retained for **24 hours**, which is short enough that a refused cursor is ordinary
+rather than exceptional: the poll then seeks to the end of the stream and applies nothing, because
+the full sweep reads every listing's bidding anyway and has either just run or is minutes away.
 
 ### 9. The buyer is read down to *who*, never *how to reach them*
 

@@ -326,6 +326,18 @@ There is no scraping and no scheduled bid refreshing. Both are fragile dependenc
 terms of service we do not control, and they would be a separate architectural decision, not a
 detail of this one.
 
+**Amended by #481 — for the selling side only.** A bid is refreshed **automatically** where the
+instance holds an API grant for the marketplace *and the listing is the collector's own*: Allegro's
+own feed states the standing bid and the bidder count on the seller's offers, so a figure typed by
+hand there is a worse figure. That is the sold-side sync's business and is decided in ADR-0024 §8a
+(`Offer.price` / `priceCheckedAt` / `bidderCount`, off `GET /sale/offer-events`).
+
+The decision above stands unchanged for **tracked lots** — everything this ADR is about. Those are
+other sellers' listings, they are not in `GET /sale/offers`, and no grant this instance holds says
+anything about them; `AuctionLot.currentBid` / `checkedAt` stay manual, refreshed by hand or by the
+Assistant's re-capture. What changed is not the principle but the evidence available: an
+authoritative feed of one's *own* listings did not exist when this was written.
+
 ### 9. The flat list of lots is the primary screen; the sale is a grouping
 
 The **Auction sales** nav page leads with a flat list of lots across all sales — status / platform /

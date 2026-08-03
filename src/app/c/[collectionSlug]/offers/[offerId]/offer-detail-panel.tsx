@@ -596,6 +596,20 @@ export function OfferDetailPanel({
                     />
                   </span>
                 </Tooltip>
+                {/* What the platform's own sync reported (#481). It is the only way a bidder count
+                    can get here — nothing types one in — so this line is also what says the figure
+                    beside it, and the "In bidding" chip above, came from the marketplace rather
+                    than from the collector. A flagged auction Allegro now reports no bidders on
+                    still says so: that disagreement is the collector's to settle, by hand. */}
+                {offer.bidderCount !== null && (
+                  <Tooltip content="Reported by the platform's own sync" align="end">
+                    <span>
+                      · {offer.bidderCount === 0
+                        ? "no bidders"
+                        : `${offer.bidderCount} bidder${offer.bidderCount === 1 ? "" : "s"}`}
+                    </span>
+                  </Tooltip>
+                )}
                 {offer.priceCheckedAt && (
                   <Tooltip content="When this price was last checked against the listing" align="end">
                     <span>· checked {new Date(offer.priceCheckedAt).toISOString().slice(0, 10)}</span>

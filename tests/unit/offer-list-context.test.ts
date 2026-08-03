@@ -20,6 +20,7 @@ describe("offer list context", () => {
       platformId: "p1",
       states: ["preparing"],
       needsAction: false,
+      bidding: false,
       includeClosed: false,
       search: undefined,
     });
@@ -30,6 +31,7 @@ describe("offer list context", () => {
       platformId: undefined,
       states: ["ready", "active"],
       needsAction: false,
+      bidding: false,
       includeClosed: false,
       search: undefined,
     });
@@ -40,6 +42,7 @@ describe("offer list context", () => {
       platformId: undefined,
       states: [],
       needsAction: false,
+      bidding: false,
       includeClosed: false,
       search: "Mi 865",
     });
@@ -50,6 +53,7 @@ describe("offer list context", () => {
       platformId: undefined,
       states: ["sold"],
       needsAction: false,
+      bidding: false,
       includeClosed: true,
       search: undefined,
     });
@@ -60,6 +64,7 @@ describe("offer list context", () => {
       platformId: undefined,
       states: [],
       needsAction: true,
+      bidding: false,
       includeClosed: false,
       search: undefined,
     });
@@ -70,9 +75,22 @@ describe("offer list context", () => {
       platformId: undefined,
       states: [],
       needsAction: false,
+      bidding: false,
       includeClosed: false,
       search: undefined,
     });
+  });
+
+  it("carries the in-bidding narrowing, which stands beside the state chips (#481)", () => {
+    assert.deepEqual(roundTrip({ bidding: true, states: ["active"] }), {
+      platformId: undefined,
+      states: ["active"],
+      needsAction: false,
+      bidding: true,
+      includeClosed: false,
+      search: undefined,
+    });
+    assert.equal(offerListHref("mine", { bidding: true }), "/c/mine/offers?bidding=1");
   });
 
   it("has no context without the marker: a deep link is not a walk", () => {
@@ -96,6 +114,7 @@ describe("offer list context", () => {
       platformId: "p1",
       states: [],
       needsAction: true,
+      bidding: false,
       includeClosed: false,
       search: undefined,
     });

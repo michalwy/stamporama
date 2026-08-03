@@ -14,13 +14,17 @@
 //     requeues anything a previous process left mid-render;
 //   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
 //     which is what makes the worklist a list that fills itself rather than one that has to be
-//     asked for.
+//     asked for;
+//   - the Allegro event poll (#481) — a two-minute poll over both of Allegro's event streams, which
+//     is what makes a bid on one of your auctions, and an order landing, visible within minutes.
+//     Its own timer rather than a faster sync: it reads what *changed* and so costs two requests
+//     when nothing did, where a sync re-reads the whole account.
 
 import { gcStaleUploads } from "@/lib/photos";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
-import { syncAllAllegroCollections } from "@/lib/allegro-sync";
-import { SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
+import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
+import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
@@ -77,6 +81,33 @@ export async function start(): Promise<void> {
   const allegroInterval = setInterval(allegro, SYNC_INTERVAL_MS);
   allegroInitial.unref?.();
   allegroInterval.unref?.();
+
+  // The Allegro event poll (#481). Quiet by design: it logs only when something actually moved, so
+  // a poll that read two empty event pages leaves no trace at all — at thirty polls an hour,
+  // anything else would bury the lines that matter.
+  const events = async () => {
+    try {
+      const results = await pollAllAllegroEvents();
+      const failed = results.filter((r) => r.outcome.status === "failed");
+      const flagged = results.reduce((sum, r) => sum + r.outcome.biddingFlagged, 0);
+      const refreshed = results.reduce((sum, r) => sum + r.outcome.bidsRefreshed, 0);
+      const written = results.reduce((sum, r) => sum + r.outcome.linesWritten, 0);
+      if (flagged > 0 || refreshed > 0 || written > 0 || failed.length > 0) {
+        console.log(
+          `[allegro-events] ${flagged} auction(s) marked in bidding, ` +
+            `${refreshed} bid(s) refreshed, ${written} order line(s), ${failed.length} failed`
+        );
+      }
+    } catch (err) {
+      console.error("[allegro-events] poll failed", err);
+    }
+  };
+
+  // Offset from the sync's own first run so a boot does not fire both at once.
+  const eventsInitial = setTimeout(events, 90_000);
+  const eventsInterval = setInterval(events, EVENT_POLL_INTERVAL_MS);
+  eventsInitial.unref?.();
+  eventsInterval.unref?.();
 
   // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.

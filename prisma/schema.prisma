@@ -505,6 +505,21 @@ model AllegroSyncState {
   // this is stamped only after the last page.
   listingsSweptAt DateTime?
 
+  // ── The bidding poll (#481) ────────────────────────────────────────────────────────────────
+  // Its own cursor, its own dates and its own error, because it is its own cadence: a bid has to be
+  // acted on in minutes, and re-sweeping every listing that often to discover that nothing happened
+  // would spend the account's quota to learn nothing. It follows Allegro's **offer** event stream
+  // (`GET /sale/offer-events`) instead and reads details only for the offers that were bid on.
+  //
+  // The stream is retained for 24 hours, so a cursor older than that is refused and reset to null —
+  // the poll then seeks to the end of the stream and leaves the state itself to the full sweep,
+  // which reads every listing's bidding anyway.
+  offerEventCursor  String?
+  eventPolledAt   DateTime?
+  // Kept apart from `lastError` on purpose: a failing bid poll must not make the sold-listing
+  // worklist read as stale, and the other way round. Two questions, two answers.
+  eventPollError      String?
+
   // The last pass that finished, and the last one that did not. A worklist whose newest observation
   // is hours old has to say so rather than look current, which is the whole reason both are here.
   lastSucceededAt DateTime?
@@ -643,6 +658,24 @@ model AllegroListing {
   // exactly the case an ended-only reading would miss.
   available Int?
   sold      Int?
+
+  // What the sweep saw of the **bidding** (#481). Allegro states all three on the same page the rest
+  // of this row comes from, so they cost no extra request.
+  //
+  // `format` is Allegro's own selling mode (`AUCTION` | `BUY_NOW` | `ADVERTISEMENT`): it is what
+  // decides whether the two figures below mean anything at all, and it is deliberately recorded
+  // rather than inferred from the local offer, which can disagree. `biddersCount` is how many people
+  // have bid — `0` being "up, nobody has bid", not "unknown". `currentPrice` is the standing bid,
+  // with its own currency beside it because the marketplace's currency is the marketplace's and a
+  // figure without one is not a price.
+  //
+  // The same observation is copied onto the matched `Offer` (its `price` / `priceCheckedAt` /
+  // `bidderCount`), which is what the collector's own screens read. This row keeps the platform's
+  // side of it: what Allegro said, and when it said it.
+  format          String?
+  biddersCount    Int?
+  currentPrice    Decimal? @db.Decimal(10, 2)
+  currentCurrency String?
 
   offerId   String?
   matchedBy String?
@@ -1410,12 +1443,19 @@ model Offer {
   // a fixed-price listing, and on an auction still being assembled.
   startingPrice Decimal? @db.Decimal(10, 2)
   // When `price` was last confirmed against the live listing (#449), the auction lot's
-  // `currentBid`/`checkedAt` pattern (#351): refreshing a bid is manual by decision (ADR-0021 §8), so
-  // what a stored figure is worth depends on when it was last looked at. Stamped by the in-place
-  // price edit; null on a price never checked — which is every fixed-price listing, where the seller
-  // sets the number and nothing moves it, and every auction nobody has bid on, which has had nothing
-  // to observe yet.
+  // `currentBid`/`checkedAt` pattern (#351): what a stored figure is worth depends on when it was
+  // last looked at. Stamped by the in-place price edit, and by the sync of a **connected selling
+  // platform** (#481, ADR-0021 §8 as amended) — on a marketplace this instance holds a grant for,
+  // its own feed is fresher than anything typed here. Null on a price never checked — which is every
+  // fixed-price listing, where the seller sets the number and nothing moves it, and every auction
+  // nobody has bid on, which has had nothing to observe yet.
   priceCheckedAt DateTime?
+  // How many bidders the connected platform reported on this auction, as of `priceCheckedAt` (#481).
+  // Written **only** by a platform sync and never editable by hand, which is what makes its presence
+  // the provenance of the figure beside it: a bid this app observed, rather than one typed in.
+  // Null on a fixed-price listing and on any auction no sync has read; `0` is an auction the sync has
+  // looked at and found unbid, which is a different thing from never having looked.
+  bidderCount    Int?
   currency     String
   state        String   @default("preparing")
   // The date the listing went live on the platform (#257), captured at offer creation and remembered
@@ -1426,6 +1466,11 @@ model Offer {
   // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely
   // revertible if the auction doesn't close. Setting it flags every other active offer holding the
   // same copies as needing action, same as an actual sale collision (ADR-0013 §4).
+  //
+  // Set by hand, and **automatically** by the sync of a connected selling platform the moment that
+  // platform reports a bidder (#481). Never cleared automatically, on any signal: having pulled the
+  // copies from every other marketplace on this flag, a silent un-commit in the background is worse
+  // than a row to look at, so clearing stays the collector's own act exactly as #215 specifies.
   inActiveBidding Boolean @default(false)
   // ── Photo configuration (#308) ─────────────────────────────────────────────────────────────
   // What *this listing's* photos should look like, seeded at creation from the platform's defaults

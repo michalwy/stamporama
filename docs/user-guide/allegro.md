@@ -13,8 +13,10 @@ the account you sell from.
 
 ## What connecting gives you
 
-The **Sold on Allegro** worklist — see below. Connecting itself ends at *connected* and reads no
-business data; the worklist is what then reads your orders and your own listings.
+Two things. The **Sold on Allegro** worklist — see below — and **automatic bid tracking**: an
+auction of yours that somebody bids on is marked **In active bidding** by Stamporama itself, within
+a couple of minutes, with the standing bid kept current. Connecting itself ends at *connected* and
+reads no business data.
 
 ## Registering your own Allegro application
 
@@ -128,7 +130,9 @@ Once connected, **Offers → Sold on Allegro** shows what has sold and is still 
 down. It is a worklist, not a search: rows leave it as you record the sales, and it fills itself
 again in the background.
 
-Stamporama checks Allegro every 15 minutes. **Sync now** runs a check immediately.
+Stamporama checks for **new orders and new bids every two minutes**, and reads your whole account
+every 15 minutes — the second is what notices a listing that has quietly ended, since that can only
+be told from a complete read. **Sync now** runs the full check immediately.
 
 ### Sold, awaiting sale
 
@@ -189,7 +193,8 @@ product page carrying `?offerId=`. The number is in the row itself, as the **off
 
 **You do not have to re-import anything afterwards.** Every pass gives the rows that matched nothing
 another go against your offers as they are now, so filling the URL in takes effect on the next sync
-— within 15 minutes, or immediately with **Sync now**, which then says how many rows it matched.
+— within a couple of minutes, or immediately with **Sync now**, which then says how many rows it
+matched.
 
 A row that matched the *wrong* offer is a different situation, and the sync will not change its mind
 about it — a match already made is something you may have acted on. Correct the offer, and record
@@ -216,10 +221,42 @@ The header always says when the list was last refreshed. It also says, in plain 
 A worklist that quietly looked fresh while going stale would be worse than no worklist, so none of
 these is ever left to be noticed by their absence.
 
+## Bids on your auctions
+
+An auction listed on Allegro is checked for bids **every two minutes** — the same check that brings
+in new orders — and it is the one thing here that changes something on your side.
+
+The moment Allegro reports a bidder, Stamporama:
+
+- marks the offer **In active bidding** — which flags every other active offer holding the same
+  copies as **Needs action**, exactly as it does when you mark it yourself (see
+  [offers](offers.md#in-active-bidding--auction-platforms)), so you know to pull those listings now;
+- writes the **standing bid** into the offer's current price and stamps the **checked** date;
+- records how many people have bid, shown beside the price as *"3 bidders"*.
+
+It does this without asking. A bid commits you whether or not you have seen it, and a marker waiting
+for your confirmation would be no faster than clicking it yourself. So that you always know it
+happened, the auction appears in the notification bell under **Bidding started on Allegro**, and the
+offer's own header says what Allegro reported and when.
+
+Three things it will not do:
+
+- **It never clears the marker.** Not when the auction ends unsold, not when a bid is cancelled, not
+  when the listing is withdrawn. You pulled stock on the strength of that flag, so un-committing is
+  yours to do: **Clear active bidding** from the offer's **⋮** menu. If a bid is cancelled, the
+  offer simply says *"no bidders"* beside a marker that is still on — that disagreement is your cue.
+- **It never copies the opening price into the bid.** An auction nobody has bid on keeps **No bids
+  yet**; what it opened at is the starting price, which is yours.
+- **It leaves quick-buy listings alone**, and any auction whose listing is quoted in a different
+  currency than the offer keeps its typed figure — the marker still goes on, but Stamporama will not
+  convert a price for you.
+
+The worklist header says when bids were last checked, and says so plainly if that check is failing.
+
 ### What it does not do
 
 - It never creates a sale, and never touches money.
-- It never edits your offers.
+- It never edits your offers, beyond the bid marker and the standing bid described above.
 - It never creates a contact. The buyer's login is shown, not saved as somebody to write to.
 - **Cancelled orders are left out entirely.** The sale did not happen, so there is nothing waiting.
 

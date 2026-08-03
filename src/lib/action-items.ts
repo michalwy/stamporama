@@ -1,6 +1,6 @@
 import "server-only";
 import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
-import { offersNeedingAction } from "./offers";
+import { offersNeedingAction, offersWithObservedBidding } from "./offers";
 
 /**
  * The **action items** the notification centre reports (#367) — the states already tracked
@@ -51,7 +51,8 @@ export type ActionItemGroupId =
   | "auction-outcome"
   | "auction-duplicate"
   | "offer-sold-elsewhere"
-  | "offer-bidding-conflict";
+  | "offer-bidding-conflict"
+  | "offer-bidding-started";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -66,7 +67,10 @@ export type ActionItemGroupId =
  * - `warning` — a **deadline set by someone else** that can still be met: a lot closing within the
  *   day. Nothing is broken; something will be missed if it is left. Amber.
  * - `info` — **bookkeeping that never fixes itself**: an ended lot whose outcome was never
- *   recorded. Nothing is at risk, but nothing will remind you again either. Blue.
+ *   recorded. Nothing is at risk, but nothing will remind you again either. Blue. Also where the
+ *   app reports **something it did on its own** — an auction it marked in active bidding (#481):
+ *   the conflict that flag creates is already reported as `critical` beside it, and saying the same
+ *   thing twice in red would be the alarm meaning less.
  *
  * This is the same rule the lot list already follows — colour means *act now*, and an ended lot is
  * muted rather than reddened — applied across sources.
@@ -251,9 +255,51 @@ const offerProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * Auctions the **sync itself** marked in active bidding (#481).
+ *
+ * Automating that flag was only ever acceptable while the collector can see the app did it — the
+ * flag pulls copies out of every other listing (ADR-0013 §4), and a cascade discovered through a
+ * filter behaving oddly is the failure mode the whole thing is against. This is that visibility: the
+ * bell says which auctions were flagged and what the platform reported, and the row leads to the
+ * offer, where the flag is cleared by hand if the collector disagrees.
+ *
+ * `info`, not `critical`: nothing here is wrong. Somebody bidding on your auction is the listing
+ * working. What *is* critical — the same copies sitting in another live listing — is already the
+ * `offer-bidding-conflict` group, computed off this very flag.
+ */
+const biddingStartedProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const { total, offers } = await offersWithObservedBidding(ownerId, collectionId, limit);
+    return [
+      {
+        id: "offer-bidding-started" as const,
+        title: "Bidding started on Allegro",
+        severity: "info" as const,
+        count: total,
+        items: offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          detail: `${offer.platformName} · ${plural(offer.bidderCount, "bidder", "bidders")} · ${offer.price} ${offer.currency}`,
+          // When the bid was last confirmed, formatted client-side like every other date here.
+          at: offer.checkedAt?.toISOString() ?? null,
+          href: `offers/${offer.offerId}`,
+        })),
+        // The offers list' own in-bidding filter, so "see all" is the set counted here.
+        href: "offers?bidding=1",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
-const PROVIDERS: ActionItemProvider[] = [auctionProvider, duplicateProvider, offerProvider];
+const PROVIDERS: ActionItemProvider[] = [
+  auctionProvider,
+  duplicateProvider,
+  offerProvider,
+  biddingStartedProvider,
+];
 
 /**
  * Everything waiting on the collector in one collection.

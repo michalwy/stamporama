@@ -147,9 +147,15 @@ export function OffersListPanel({
   // whenever it carries one — so a link to a searched list still means what it says.
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
 
+  // Narrowed to the offers under the hammer (#215) when a link says so — the notification centre's
+  // "bidding started" group (#481) is the one that does. URL-only and never remembered: it is where
+  // a link landed the collector, not a filter they chose here, and a remembered one would go on
+  // narrowing the list long after they had forgotten following it.
+  const bidding = searchParams.get("bidding") === "1";
+
   const filters: OfferFilters = useMemo(
-    () => ({ platformId, states, needsAction, includeClosed, search: search || undefined }),
-    [platformId, states, needsAction, includeClosed, search]
+    () => ({ platformId, states, needsAction, bidding, includeClosed, search: search || undefined }),
+    [platformId, states, needsAction, bidding, includeClosed, search]
   );
 
   // What every row hands to the offer it opens (#429): the filters this list is showing, so the
@@ -242,7 +248,8 @@ export function OffersListPanel({
     });
   }
 
-  const hasActiveFilters = !!platformId || states.length > 0 || needsAction || !!search;
+  const hasActiveFilters =
+    !!platformId || states.length > 0 || needsAction || bidding || !!search;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -363,6 +370,12 @@ export function OffersListPanel({
               updateParams({ needsAction: needsAction ? "" : "1", state: "" });
             }}
           />
+          {/* Only while a link has narrowed the list to the offers under the hammer (#481). It is
+              shown *because* it is on: a filter arrived at by following a link and with no way back
+              off it is a list quietly lying about what it holds. */}
+          {bidding && (
+            <FilterChip label="In bidding" active onClick={() => updateParams({ bidding: "" })} />
+          )}
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
           {/* Remembered toggle (#245): closed (sold / withdrawn) offers are hidden by default. */}
           <FilterChip

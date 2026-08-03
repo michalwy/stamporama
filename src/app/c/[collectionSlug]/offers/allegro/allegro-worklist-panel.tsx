@@ -632,6 +632,18 @@ function SyncHeader({
           ) : (
             <span>Not synced yet</span>
           )}
+          {/* The event poll runs on its own two-minute cadence (#481), so it has its own date, and
+              it is the one that actually answers "would I know by now": new orders and new bids
+              both arrive through it. The line above is the last *full* pass, which is what the
+              ended-without-selling section below depends on. */}
+          {sync.eventPolledAt && (
+            <span
+              title={`New orders and bids are checked every couple of minutes; last checked ${formatInstant(sync.eventPolledAt)}`}
+            >
+              {" · new orders and bids checked "}
+              {formatRelative(sync.eventPolledAt, now)}
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -682,6 +694,16 @@ function SyncHeader({
           {sync.lastSucceededAt
             ? " Everything below is what the last successful pass saw."
             : " Nothing below has been synced yet."}
+        </Notice>
+      )}
+
+      {/* Its own notice rather than a line in the one above: an event poll failing while the full
+          pass succeeds means orders and bids are arriving without this app noticing them until the
+          next quarter-hourly pass, which is a different thing to be told than a stale list (#481). */}
+      {sync.eventPollError && (
+        <Notice tone="error">
+          The two-minute check for new orders and bids failed: {sync.eventPollError} Until it
+          succeeds again, both only arrive with the full sync below.
         </Notice>
       )}
 

@@ -160,9 +160,18 @@ export async function syncAllegroNowAction(
     // it take?", and reporting a zero on every ordinary pass would bury it.
     const rematched =
       outcome.rematched > 0 ? ` Matched ${outcome.rematched} previously unmatched row(s).` : "";
+    // Same rule for the bidding (#481), and for a stronger reason: this is the pass reporting
+    // something it *changed* on the collector's own offers, so it is said outright wherever it
+    // happened — and stays silent on the ordinary pass where nothing did.
+    const flagged =
+      outcome.biddingFlagged > 0
+        ? ` Marked ${outcome.biddingFlagged} auction(s) in active bidding.`
+        : "";
+    const bids =
+      outcome.bidsRefreshed > 0 ? ` Refreshed ${outcome.bidsRefreshed} standing bid(s).` : "";
     return {
       status: "success",
-      detail: `Read ${outcome.ordersRead} order(s) and ${outcome.listingsSeen} active listing(s).${rematched}`,
+      detail: `Read ${outcome.ordersRead} order(s) and ${outcome.listingsSeen} active listing(s).${rematched}${flagged}${bids}`,
     };
   } catch (err) {
     return failure(err, "The Allegro sync could not be run.");
