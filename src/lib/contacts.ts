@@ -83,6 +83,10 @@ export interface ContactData extends ContactRoles {
   collectionId: string;
   name: string;
   notes: string | null;
+  /** The legal name, where it differs from the name the contact is filed under (#463) — a
+   * marketplace buyer is filed under their login, and the parcel carries the name on the order.
+   * Null on nearly every contact. */
+  fullName: string | null;
   email: string | null;
   phone: string | null;
   /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
@@ -154,6 +158,7 @@ const CONTACT_SELECT = {
   collectionId: true,
   name: true,
   notes: true,
+  fullName: true,
   email: true,
   phone: true,
   buyer: true,
@@ -259,6 +264,8 @@ function sellerDefaults(data: ContactCreateInput): {
 export interface ContactCreateInput {
   name: string;
   notes?: string | null;
+  /** The legal name beside the filed-under name (#463); blank clears it. */
+  fullName?: string | null;
   email?: string | null;
   phone?: string | null;
   buyer?: boolean;
@@ -340,10 +347,12 @@ export async function listContacts(
   }));
 }
 
-/** Case-insensitive name search, capped at 20 rows, for the acquisition-source
- * autocomplete (#103b). An empty query returns the first 20 contacts by name. An optional
- * `role` narrows to contacts carrying that role flag (e.g. `platform` for the purchase
- * platform picker, #120), so people don't show up where only platforms belong. */
+/** Case-insensitive search over the name **and the full name** (#463), capped at 20 rows, for the
+ * acquisition-source autocomplete (#103b). Both, because a marketplace buyer is filed under their
+ * login and looked for by the name you remember — typing "Bronisław" has to find `bronek_1980`, or
+ * the full name is a field that only ever gets written. An empty query returns the first 20 contacts
+ * by name. An optional `role` narrows to contacts carrying that role flag (e.g. `platform` for the
+ * purchase platform picker, #120), so people don't show up where only platforms belong. */
 export async function searchContacts(
   ownerId: string,
   collectionId: string,
@@ -354,7 +363,10 @@ export async function searchContacts(
   const rows = await prisma.contact.findMany({
     where: {
       collectionId,
-      name: { contains: query, mode: "insensitive" },
+      OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        { fullName: { contains: query, mode: "insensitive" } },
+      ],
       ...(role ? { [role]: true } : {}),
     },
     select: CONTACT_SELECT,
@@ -469,6 +481,7 @@ export async function createContact(
         ...photos,
         ...sellerDefaults(data),
         notes: data.notes ?? null,
+        fullName: data.fullName ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
         buyer: data.buyer ?? false,
@@ -520,6 +533,7 @@ export async function updateContact(
         ...photos,
         ...sellerDefaults(data),
         notes: data.notes ?? null,
+        fullName: data.fullName ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
         buyer: data.buyer ?? false,

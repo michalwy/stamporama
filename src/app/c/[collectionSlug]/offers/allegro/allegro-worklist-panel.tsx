@@ -13,6 +13,7 @@ import {
 } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { SellOfferFlowDialog, type SellableOfferSubject } from "../sell-offer-flow-dialog";
 import { LinkSaleDialog } from "./link-sale-dialog";
+import { RecordOrderSaleDialog } from "./record-order-sale-dialog";
 
 /**
  * The Allegro sold-listing worklist (#467).
@@ -124,8 +125,9 @@ function useAllegroWorklist(collectionId: string) {
 }
 
 /** The subject the existing sell flow takes (#225/#390). Reused rather than re-implemented, so a row
- *  here records a sale exactly as the offer's own screen does — #463 is what will pre-fill it from
- *  the order itself. */
+ *  here records a sale exactly as the offer's own screen does. It stays beside the order-level flow
+ *  (#463) rather than being replaced by it: a line the order flow will not guess at — an ambiguous
+ *  quantity, an offer that has sold since — is recorded here, by hand, one line at a time. */
 function subjectOf(offer: WorklistOffer): SellableOfferSubject {
   return {
     id: offer.id,
@@ -158,6 +160,7 @@ export function AllegroWorklistPanel({
   >(null);
   const [selling, setSelling] = useState<WorklistOffer | null>(null);
   const [linking, setLinking] = useState<WorklistOrder | null>(null);
+  const [recording, setRecording] = useState<WorklistOrder | null>(null);
   const [payment, setPayment] = useState<PaymentFilter[]>([]);
   const [match, setMatch] = useState<MatchFilter[]>([]);
   const now = new Date();
@@ -327,6 +330,17 @@ export function AllegroWorklistPanel({
                   label={order.paymentStatus === "paid" ? "Paid" : "Not paid yet"}
                   tone={order.paymentStatus === "paid" ? "good" : "warn"}
                 />
+                {/* A partly recorded order stays here (#463): some of it is on a sale, the rest is
+                    still the collector's. The chip is what stops that reading as "not done yet". */}
+                {order.recordedSale && (
+                  <Link
+                    href={`/c/${collectionSlug}/sales/${order.recordedSale.id}`}
+                    style={{ textDecoration: "none" }}
+                    title="Part of this order is already recorded on this sale. Open it."
+                  >
+                    <Chip label={`Partly on sale #${order.recordedSale.saleNo}`} tone="good" />
+                  </Link>
+                )}
                 <span
                   style={{ fontSize: "0.75rem", color: MUTED }}
                   title={formatInstant(order.boughtAt)}
@@ -367,6 +381,26 @@ export function AllegroWorklistPanel({
                 ) : (
                   "Buyer not stated by Allegro"
                 )}
+                {/* The order-level flow (#463): the whole order becomes one sale, pre-filled from
+                    what Allegro says about it. It sits beside the per-line **Record sale** rather
+                    than replacing it — the per-line one is the way to record what this cannot say
+                    for certain, and it is the same destination either way. */}
+                <button
+                  type="button"
+                  onClick={() => setRecording(order)}
+                  title="Open the sell flow pre-filled from this order — buyer, amounts, order number, delivery"
+                  style={{
+                    ...BUTTON,
+                    padding: "0.125rem 0.5rem",
+                    marginLeft: "0.5rem",
+                    fontSize: "0.75rem",
+                    color: "var(--color-accent)",
+                    borderColor: "var(--color-accent)",
+                    background: "var(--color-accent-soft)",
+                  }}
+                >
+                  {order.recordedSale ? "Record the rest" : "Record sale from order"}
+                </button>
                 {/* The other way an order leaves this list (#479): not by recording a sale, but by
                     recognising the one already recorded. Sits on the order rather than on a line,
                     because `externalRef` names the whole order.
@@ -374,7 +408,9 @@ export function AllegroWorklistPanel({
                     click and the picker becomes the way to overrule it — but it is still a click,
                     since an inferred link that emptied the row on its own would take the signal
                     away exactly when the inference was wrong. */}
-                {order.suggestedSale ? (
+                {/* Nothing to link on an order a sale already claims — the link exists, and the
+                    domain layer refuses a second one by name. */}
+                {order.recordedSale ? null : order.suggestedSale ? (
                   <>
                     <button
                       type="button"
@@ -475,14 +511,20 @@ export function AllegroWorklistPanel({
                         >
                           #{offer.offerNo} {offer.label}
                         </Link>
-                        <button
-                          type="button"
-                          style={BUTTON}
-                          onClick={() => setSelling(offer)}
-                          disabled={offer.state === "sold"}
-                        >
-                          Record sale
-                        </button>
+                        {line.recorded ? (
+                          // Already on the sale claiming this order — the line is shown so the card
+                          // still reads as the whole order, but there is nothing left to do to it.
+                          <Chip label="Recorded" tone="good" />
+                        ) : (
+                          <button
+                            type="button"
+                            style={BUTTON}
+                            onClick={() => setSelling(offer)}
+                            disabled={offer.state === "sold"}
+                          >
+                            Record sale
+                          </button>
+                        )}
                       </>
                     ) : (
                       // Reported, never dropped: an unmatched line is how the collector learns a
@@ -549,6 +591,20 @@ export function AllegroWorklistPanel({
           ))
         )}
       </section>
+
+      {recording && (
+        <RecordOrderSaleDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          today={today}
+          order={recording}
+          onClose={() => {
+            setRecording(null);
+            void queryClient.invalidateQueries({ queryKey: ["allegro-worklist", collectionId] });
+          }}
+        />
+      )}
 
       {linking && (
         <LinkSaleDialog

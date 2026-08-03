@@ -30,7 +30,7 @@ interface ContactRowProps {
 }
 
 /** A single contact as a stacked card row (mirrors `PurchaseRow`): name + role badges on
- * top, then a meta line of email / phone. Delete is disabled in the menu when the contact
+ * top, then a meta line of full name / email / phone. Delete is disabled in the menu when the contact
  * is still referenced by purchases (`referenceCount > 0`), matching the server guard. */
 export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowProps) {
   const [hovered, setHovered] = useState(false);
@@ -85,9 +85,12 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
           <RowActionsMenu actions={menuActions} ariaLabel="Contact actions" />
         </div>
 
-        {/* Line 2: email · phone (only when present) */}
-        {(c.email || c.phone) && (
+        {/* Line 2: full name · email · phone (only when present). The full name leads because it
+            says *who* the row is — a buyer filed under their marketplace login (#463) is otherwise
+            a handle with no person attached. */}
+        {(c.fullName || c.email || c.phone) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.3rem" }}>
+            {c.fullName && <span style={META_INLINE}>{c.fullName}</span>}
             {c.email && <span style={META_INLINE}>{c.email}</span>}
             {c.phone && <span style={META_INLINE}>{c.phone}</span>}
           </div>

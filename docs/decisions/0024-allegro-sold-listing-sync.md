@@ -120,8 +120,27 @@ one offer to another. Correcting a *wrong* match is a different act, and the syn
 
 It is reported nowhere because there is nothing waiting. Offering to record a sale for an order the
 buyer withdrew is the app making a financial suggestion on the strength of a transaction that did
-not happen. Whether a cancellation should reach back into a `Sale` already recorded is #463's open
-question, deliberately not answered here.
+not happen. Whether a cancellation should reach back into a `Sale` already recorded is still not
+answered: #463 left it out of scope deliberately, and it wants its own issue. Whatever it turns out
+to be, it will be a *report* rather than a write — nothing in this cluster changes a financial
+record because a sync ran.
+
+### 6a. An order is dropped only when the sale covers all of it (#463)
+
+The worklist drops an order once a `Sale` carries its id as `externalRef`. That is exactly right for
+an order recorded whole and wrong for one recorded in part — a two-line order whose second offer was
+never matched would vanish the moment the first line went on a sale, taking the only signal that the
+second is still outstanding.
+
+So coverage is derived rather than assumed: the order's matched offers against `SaleLine.offerId`,
+which is the only thing the two sides share. Every line covered drops the order; anything less keeps
+it, marked with the sale that claims it and with the covered lines shown as recorded. No second key
+and no schema change — `externalRef` still means "this order is that sale", it just no longer means
+"and there is nothing left to do about it".
+
+A claimed sale whose lines name **no** offer at all (every one detached by an offer deletion,
+`SetNull`) cannot be compared line by line. It counts as recorded: it is a real sale for that order,
+and re-offering the whole of it would be worse than saying nothing.
 
 ### 7. Every failure is visible where the list is read
 
@@ -214,6 +233,21 @@ and those are deliberately left unread: they are what the *sale* needs, and #463
 by id at the moment the collector confirms it — one call, at confirmation time, rather than a
 background job keeping a table of personal data fresh for a feature that may never be used on that
 order.
+
+That call reads two of the three: the buyer's **email**, which fills in a blank field on the contact
+the sale goes to, and the **delivery method**, which is matched by name against the platform's own
+shipping dictionary (#468).
+
+The buyer becomes a contact under their **login**, not the name on the order. A marketplace buyer is
+known by their login — it is what the collector recognises across a dozen orders and how the buyers
+already in the address book are named — and `resolvePurchaseContact` matches on `Contact.name`, so
+filing them under the legal name would miss the contact already there and make a second one for the
+same person, every order. The order's name is kept beside it in `Contact.fullName` (#463), which is
+the name the parcel has to carry; an existing contact is looked for both ways. The phone number and the address stay unread even then — the sale has
+nowhere to put them, and reading a buyer's address in order to discard it is not a thing to do.
+When that call fails the sale is still pre-filled, from the stored row, minus those two fields and
+saying so: degrading to manual entry is the required behaviour, and a flow that refused to open
+because a marketplace was briefly unreachable would be a worse one.
 
 The total is **stored, not summed from the lines**. `totalToPay` includes delivery, so it is what
 actually changed hands — `Sale.buyerPaidTotal`'s own anchor (#205) — while a sum of line prices is a

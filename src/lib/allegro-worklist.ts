@@ -57,6 +57,9 @@ export interface WorklistLine {
   currency: string;
   offer: WorklistOffer | null;
   matchedBy: AllegroMatchBasis | null;
+  /** Whether this line's offer is already on the sale claiming the order (#463). A partially
+   *  recorded order stays on the worklist, and this is what says which of it is done. */
+  recorded: boolean;
 }
 
 export interface WorklistOrder {
@@ -78,6 +81,10 @@ export interface WorklistOrder {
   /** The sale this order almost certainly *is* (#480), derived rather than searched for — see
    *  {@link deriveSuggestedSales}. Null wherever the data says anything but one thing. */
   suggestedSale: SuggestedSale | null;
+  /** The sale that already carries this order number, on an order that is **partly** recorded
+   *  (#463). A fully recorded order is gone from the list altogether, so this is never set on one:
+   *  it means "this much is done, the rest is still yours". */
+  recordedSale: { id: string; saleNo: number } | null;
 }
 
 /** A sale the app worked out on its own, offered for one click. */
@@ -247,42 +254,64 @@ export async function getAllegroWorklist(
     },
   });
 
-  // Which of those orders is already a sale here. `externalRef` is the marketplace's own order
-  // number by the schema's own definition, so this is the same key #463 writes — one order can
-  // therefore never produce two sales, and a row leaves the worklist the moment one exists.
-  const recorded = new Set(
-    (
-      await prisma.sale.findMany({
-        where: { collectionId, externalRef: { in: orderRows.map((row) => row.orderId) } },
-        select: { externalRef: true },
-      })
-    ).flatMap((sale) => (sale.externalRef ? [sale.externalRef] : []))
+  // Which of those orders is already a sale here, and **how much of it**. `externalRef` is the
+  // marketplace's own order number by the schema's own definition, so this is the same key #463
+  // writes — one order can therefore never produce two sales.
+  //
+  // A claimed order is not automatically a finished one (#463). Where the sale covers only some of
+  // the order's lines — a multi-item order whose second offer could not be matched, or one recorded
+  // a line at a time — the order **stays here**, marked, with the rest still offered. The two sides
+  // are compared on the offer, which is the only thing they share: `SaleLine.offerId` against the
+  // offer each ordered line matched.
+  const claims = await prisma.sale.findMany({
+    where: { collectionId, externalRef: { in: orderRows.map((row) => row.orderId) } },
+    select: { id: true, saleNo: true, externalRef: true, lines: { select: { offerId: true } } },
+  });
+  const claimByOrder = new Map(
+    claims.flatMap((sale) => (sale.externalRef ? [[sale.externalRef, sale] as const] : []))
   );
 
-  const orders: WorklistOrder[] = orderRows
-    .filter((row) => !recorded.has(row.orderId))
-    .map((row) => ({
-      orderId: row.orderId,
-      boughtAt: row.boughtAt.toISOString(),
-      paymentStatus: row.paymentStatus as AllegroPaymentStatus,
-      orderStatus: row.status,
-      buyerLogin: row.buyerLogin,
-      buyerName: row.buyerName,
-      totalPaid: row.totalPaid?.toString() ?? null,
-      currency: row.currency,
-      observedAt: row.observedAt.toISOString(),
-      lines: row.lines.map((line) => ({
-        id: line.id,
-        platformOfferId: line.platformOfferId,
-        title: line.title,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice.toString(),
-        currency: line.currency,
-        offer: line.offer ? toWorklistOffer(line.offer) : null,
-        matchedBy: (line.matchedBy as AllegroMatchBasis | null) ?? null,
-      })),
-      suggestedSale: null,
+  const orders: WorklistOrder[] = orderRows.flatMap((row) => {
+    const claim = claimByOrder.get(row.orderId) ?? null;
+    const covered = new Set(
+      (claim?.lines ?? []).flatMap((line) => (line.offerId ? [line.offerId] : []))
+    );
+    // A claimed sale whose lines name no offer at all — every one of them detached by an offer
+    // deletion (`SetNull`) — cannot be compared line by line. It is still a real sale for this
+    // order, so the order counts as recorded rather than being re-offered wholesale.
+    const uncomparable = claim !== null && claim.lines.length > 0 && covered.size === 0;
+
+    const lines = row.lines.map((line) => ({
+      id: line.id,
+      platformOfferId: line.platformOfferId,
+      title: line.title,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice.toString(),
+      currency: line.currency,
+      offer: line.offer ? toWorklistOffer(line.offer) : null,
+      matchedBy: (line.matchedBy as AllegroMatchBasis | null) ?? null,
+      recorded: Boolean(line.offer && covered.has(line.offer.id)),
     }));
+
+    if (claim && (uncomparable || lines.every((line) => line.recorded))) return [];
+
+    return [
+      {
+        orderId: row.orderId,
+        boughtAt: row.boughtAt.toISOString(),
+        paymentStatus: row.paymentStatus as AllegroPaymentStatus,
+        orderStatus: row.status,
+        buyerLogin: row.buyerLogin,
+        buyerName: row.buyerName,
+        totalPaid: row.totalPaid?.toString() ?? null,
+        currency: row.currency,
+        observedAt: row.observedAt.toISOString(),
+        lines,
+        suggestedSale: null,
+        recordedSale: claim ? { id: claim.id, saleNo: claim.saleNo } : null,
+      },
+    ];
+  });
 
   await attachSuggestedSales(collectionId, orders);
 
@@ -390,6 +419,10 @@ async function attachSuggestedSales(
   }
 
   for (const order of orders) {
+    // An order already claimed by a sale (the partially recorded case, #463) proposes nothing: the
+    // link exists, and offering a *different* sale for it would be offering something the domain
+    // layer refuses by name.
+    if (order.recordedSale) continue;
     const candidates = new Map<string, (typeof sales)[number]>();
     for (const line of order.lines) {
       if (!line.offer) continue;

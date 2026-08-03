@@ -16,6 +16,13 @@ import {
 } from "@/lib/allegro-connection";
 import { runAllegroSync } from "@/lib/allegro-sync";
 import { linkAllegroOrderToSale } from "@/lib/allegro-worklist";
+import {
+  fillBuyerDetailsFromOrder,
+  recordAllegroOrderSale,
+  type AllegroSaleLineInput,
+} from "@/lib/allegro-sale";
+import { resolveSaleHeader, type SaleHeaderRaw } from "@/lib/sale-header-input";
+import { parsePrice } from "@/lib/sale-rules";
 
 // Settings → Allegro (#355, #476). Two things live on this tab: which platform contact is Allegro,
 // and this instance's own connection to the collector's Allegro account through the public API.
@@ -200,6 +207,64 @@ export async function linkAllegroOrderToSaleAction(
     return { status: "success" };
   } catch (err) {
     return failure(err, "The order could not be linked to that sale.");
+  }
+}
+
+/**
+ * Record the sale the collector has just reviewed for one synced order (#463).
+ *
+ * The **only** write of this whole flow, and it happens because somebody pressed Save on a form
+ * they were looking at — never because a sync ran. The header comes back through the same parser
+ * the sale form's own action uses, so a sale recorded here and one recorded by hand are the same
+ * record made two ways.
+ */
+export async function recordAllegroOrderSaleAction(
+  collectionId: string,
+  orderId: string,
+  raw: SaleHeaderRaw,
+  lines: AllegroSaleLineInput[],
+  /** What the order says about the buyer beyond their name — their email and the name on the
+   *  paperwork. Each filled in on the contact only where it has none. */
+  buyerDetails: { email: string | null; fullName: string | null }
+): Promise<
+  | { status: "success"; saleId: string; saleNo: number; created: boolean; linesError: string | null }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  const header = await resolveSaleHeader(collectionId, raw);
+  if (!header.ok) return { status: "error", message: header.message };
+  // The same parse the sale's own line-add applies (#166). The prices come from Allegro by way of
+  // the browser, so they are checked here rather than trusted the whole way down to a Decimal
+  // column — and a refusal reads as a sentence instead of a database error.
+  const priced: AllegroSaleLineInput[] = [];
+  for (const line of lines) {
+    const price = parsePrice(line.price);
+    if (!price.ok) return { status: "error", message: price.message };
+    if (!line.offerId || !line.offerSetId || line.itemIds.length === 0) {
+      return { status: "error", message: "Each sold set needs an offer and its copies." };
+    }
+    priced.push({ ...line, price: price.value });
+  }
+  try {
+    const result = await recordAllegroOrderSale(
+      session.user.id,
+      collectionId,
+      orderId,
+      header,
+      priced
+    );
+    // After the sale, and never at its expense: a detail that cannot be saved is not a reason to
+    // report a recorded sale as failed.
+    if (header.buyerId && (buyerDetails.email || buyerDetails.fullName)) {
+      try {
+        await fillBuyerDetailsFromOrder(session.user.id, collectionId, header.buyerId, buyerDetails);
+      } catch {
+        // Left as they were. The collector can add them on the contact.
+      }
+    }
+    return { status: "success", ...result };
+  } catch (err) {
+    return failure(err, "The sale could not be recorded from this order.");
   }
 }
 

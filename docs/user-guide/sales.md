@@ -12,6 +12,12 @@ Open the **Sales** screen from the **Selling** section of the sidebar.
 Recording a sale works like [purchases](purchases.md): you create a short **header** first, then
 add what sold on the sale's own detail screen.
 
+If the sale happened on **Allegro** and your account is connected, you do not have to type any of
+it: **Offers → Sold on Allegro** lists the orders waiting to be recorded, and **Record sale from
+order** opens this same form pre-filled from the order — buyer, order number, what was paid,
+delivery method and the sold sets. You still review and save it yourself. See the
+[Allegro guide](allegro.md#recording-the-sale-from-the-order).
+
 ### Step 1 — the header
 
 Click **Record sale** and fill in:

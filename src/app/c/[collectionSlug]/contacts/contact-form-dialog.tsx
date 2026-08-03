@@ -317,6 +317,22 @@ export function ContactFormDialog({
                 />
               </div>
 
+              {/* The name on the paperwork, where it is not the name above (#463). A marketplace
+                  buyer is filed under their login — that is who they are here — while the parcel
+                  has to carry the name their order states. Blank on nearly every contact. */}
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="contact-full-name">Full name (optional)</LabelWithError>
+                <input
+                  id="contact-full-name"
+                  name="fullName"
+                  type="text"
+                  defaultValue={contact?.fullName ?? ""}
+                  placeholder="The name on the parcel, if it differs from above"
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                />
+              </div>
+
               <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="contact-email">Email</LabelWithError>

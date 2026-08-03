@@ -1,0 +1,12 @@
+-- The legal name of a contact, beside the name they are filed under (#463).
+--
+-- A marketplace buyer is known by their **login**: it is what the collector recognises them by,
+-- what a message to them is addressed to, and how their contact here is already named. The order,
+-- meanwhile, states the name the parcel has to carry. Those are two different facts about one
+-- person, and folding them into `name` would either rename every buyer or lose the one that goes
+-- on the label.
+--
+-- So: `name` stays the identity — unique per collection, the thing every picker searches — and
+-- `fullName` is the paperwork. Nullable, and blank on nearly every contact: only a marketplace
+-- order has ever stated one.
+ALTER TABLE "contact" ADD COLUMN "fullName" TEXT;

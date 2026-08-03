@@ -276,13 +276,26 @@ export interface AllegroOrderLineItem {
   boughtAt: string | null;
 }
 
+/** How the buyer chose to have it sent, as the order states it (#463). The **name** is what matters
+ *  here rather than Allegro's method id: it is matched against the platform's own shipping
+ *  dictionary (#468), which is the collector's list of services and not Allegro's. */
+export interface AllegroOrderDelivery {
+  methodName: string | null;
+  /** What the buyer paid for delivery, as a string. Not the collector's postage cost — it is part of
+   *  what changed hands, and so already inside `totalPaid`. */
+  cost: string | null;
+  currency: string | null;
+}
+
 /**
- * An order, narrowed to what the worklist is about.
+ * An order, narrowed to what the worklist and the sale are about.
  *
- * The buyer is read down to **who they are**, not how to reach them: the login and the name or
- * company on the order. Allegro also states an email, a phone number and a delivery address, and
- * those are deliberately left unread — they belong to the sale #463 writes, which fetches the order
- * again at the moment the collector confirms it, rather than to a list answering "what has sold".
+ * The worklist's half is read down to **who bought it**, not how to reach them: the login and the
+ * name or company on the order. The two fields below it — the buyer's email and the delivery method
+ * — are the **sale's** (#463), which is why the sync stores neither: it fetches the order again by
+ * id at the moment the collector confirms the sale, rather than keeping contact details in a table
+ * answering "what has sold". The phone number and the delivery address stay unread altogether: the
+ * sale has nowhere to put them, and reading a buyer's address to discard it is not a thing to do.
  */
 export interface AllegroOrder {
   id: string;
@@ -295,10 +308,16 @@ export interface AllegroOrder {
   /** The buyer's own name, or the company's where the order is a company's. Null on an order that
    *  states neither, which the delivery-less ones routinely do. */
   buyerName: string | null;
+  /** The buyer's email, where the order states one — what a `Contact` created from this order
+   *  carries (#463). Read at confirmation time only; never stored by the sync. */
+  buyerEmail: string | null;
   /** `summary.totalToPay` — what actually changed hands, delivery included, as a string so the
    *  decimal never goes through a float. */
   totalPaid: string | null;
   currency: string | null;
+  /** Null where the order carries no delivery at all — Allegro's own "collect in person" and the
+   *  digital-only forms both do. */
+  delivery: AllegroOrderDelivery | null;
   lineItems: AllegroOrderLineItem[];
 }
 
@@ -315,14 +334,40 @@ function buyerNameOf(buyer: {
   return person.length > 0 ? person : null;
 }
 
+/** The delivery block, or null where the order has none. A method with no name is no method: the
+ *  name is the whole of what the sale matches on, so a cost on its own would be a shipping line the
+ *  collector could not identify. */
+function parseDelivery(raw: unknown): AllegroOrderDelivery | null {
+  const delivery = raw as
+    | { method?: { name?: unknown }; cost?: { amount?: unknown; currency?: unknown } }
+    | undefined;
+  if (!delivery) return null;
+  const methodName = str(delivery.method?.name);
+  const cost = str(delivery.cost?.amount);
+  if (!methodName && !cost) return null;
+  return {
+    methodName,
+    cost,
+    // Only beside an amount, as everywhere else in this module.
+    currency: cost ? str(delivery.cost?.currency) : null,
+  };
+}
+
 function parseOrder(raw: unknown): AllegroOrder | null {
   const order = raw as {
     id?: unknown;
     status?: unknown;
     updatedAt?: unknown;
     payment?: { finishedAt?: unknown };
-    buyer?: { login?: unknown; firstName?: unknown; lastName?: unknown; companyName?: unknown };
+    buyer?: {
+      login?: unknown;
+      email?: unknown;
+      firstName?: unknown;
+      lastName?: unknown;
+      companyName?: unknown;
+    };
     summary?: { totalToPay?: { amount?: unknown; currency?: unknown } };
+    delivery?: unknown;
     lineItems?: unknown;
   };
   const id = str(order.id);
@@ -364,9 +409,11 @@ function parseOrder(raw: unknown): AllegroOrder | null {
     updatedAt: str(order.updatedAt),
     buyerLogin: str(order.buyer?.login),
     buyerName: order.buyer ? buyerNameOf(order.buyer) : null,
+    buyerEmail: str(order.buyer?.email),
     totalPaid: str(order.summary?.totalToPay?.amount),
     // Only meaningful beside an amount — a currency on its own describes nothing.
     currency: str(order.summary?.totalToPay?.amount) ? str(order.summary?.totalToPay?.currency) : null,
+    delivery: parseDelivery(order.delivery),
     lineItems,
   };
 }

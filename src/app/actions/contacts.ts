@@ -85,6 +85,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
   return {
     name,
     notes: str(formData, "notes") || null,
+    // The legal name beside the filed-under one (#463) — blank clears it, like every other optional
+    // free-text field here.
+    fullName: str(formData, "fullName") || null,
     email: str(formData, "email") || null,
     phone: str(formData, "phone") || null,
     buyer: bool(formData, "buyer"),

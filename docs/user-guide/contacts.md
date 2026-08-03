@@ -23,15 +23,21 @@ and tick the ones that apply.
 
 ## Adding and editing
 
-Click **Add contact** and fill in the **name** (required), optional **email**, **phone**,
-**notes**, and the **roles**. Names must be unique within the collection.
+Click **Add contact** and fill in the **name** (required), optional **full name**, **email**,
+**phone**, **notes**, and the **roles**. Names must be unique within the collection.
+
+**Name** is who they are *to you* — what you file them under and what every picker searches.
+**Full name** is the name on the paperwork, and only needs filling in when it differs. That is the
+ordinary case for a marketplace buyer: you know them as `bronek_1980`, and the parcel has to say
+*Bronisław Włoch*. Recording a sale from an [Allegro order](allegro.md) fills it in for you, on a
+contact that has none.
 
 ### Tabs follow the roles
 
 A plain address-book contact is one short form. Tick **Platform**, or **Seller** / **Auction house**,
 and the dialog grows **tabs** for what that role brings with it:
 
-- **Contact** — name, email, phone, roles and notes. Always there, and where you land.
+- **Contact** — name, full name, email, phone, roles and notes. Always there, and where you land.
 - **Platform** — currency, listing language, default listing type and starting price, listing templates, listing text
   limits and offer photos. Appears with the **Platform** role.
 - **Auction defaults** — the currency and fee terms a seller trades on. Appears with **Seller** or
@@ -431,6 +437,9 @@ details and roles with whatever the dialog shows when you save.
 Use the **search box** to filter by name, and the **role chips** to show only contacts of
 a given role. The two combine — e.g. search "Jan" with the **Seller** chip active shows
 only sellers whose name contains "Jan".
+
+The search reads the **full name** as well as the name, so a buyer filed under their marketplace
+login is still found by the name you remember them by.
 
 ## Deleting
 

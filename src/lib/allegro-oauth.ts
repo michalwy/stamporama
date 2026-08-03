@@ -48,6 +48,13 @@ export function allegroApiBase(sandbox: boolean): string {
   return allegroHosts(sandbox).api;
 }
 
+/** Where an order is read on Allegro itself — what a sale created from one records as its
+ *  transaction link (#292/#463). The seller's own order view, not the buyer's: the collector is the
+ *  one who will follow it. */
+export function allegroOrderPageUrl(sandbox: boolean, orderId: string): string {
+  return `${allegroHosts(sandbox).auth}/moje-allegro/sprzedaz/zamowienia/${encodeURIComponent(orderId)}`;
+}
+
 /** The redirect URI a code-flow connection uses, derived from the instance's own configured base
  *  URL rather than being a second setting that could disagree with it. The collector registers this
  *  exact string with their Allegro application, which is why it is shown to them verbatim. */

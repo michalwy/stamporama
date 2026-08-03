@@ -1951,6 +1951,12 @@ model Contact {
   collectionId     String
   name             String
   notes            String?
+  // The person's or company's **legal** name, where it differs from what they are filed under
+  // (#463). A marketplace buyer is known by their login — that is what the collector writes down
+  // and what a message to them is addressed to — while the parcel has to carry the name on the
+  // order. Two different things, so two fields: `name` is the identity here, this is the name on
+  // the paperwork. Nullable, and blank on nearly every contact.
+  fullName         String?
   email            String?
   phone            String?
   // Roles are independent, combinable boolean flags (a contact can be several at

@@ -13,7 +13,8 @@ the account you sell from.
 
 ## What connecting gives you
 
-Two things. The **Sold on Allegro** worklist — see below — and **automatic bid tracking**: an
+Two things. The **Sold on Allegro** worklist — see below, where an order can be turned into a sale
+in one reviewed step, buyer, amounts and delivery included — and **automatic bid tracking**: an
 auction of yours that somebody bids on is marked **In active bidding** by Stamporama itself, within
 a couple of minutes, with the standing bid kept current. Connecting itself ends at *connected* and
 reads no business data.
@@ -153,11 +154,57 @@ separate questions, so you can combine them — *Paid* + *Unmatched* is the pile
 first. Leaving an axis untouched means it is not asking. The numbers on the chips always count the
 whole list, not what the other chips have left, so they tell you what is there to filter to.
 
-**Record sale** opens the same sell flow the offer's own screen uses. Nothing is written until you
-save it — the sync never creates a sale, a payment or a contact on its own.
+### Recording the sale from the order
 
-A card disappears once a sale exists carrying that order number as its transaction reference. That
-is also why one order can never turn into two sales.
+**Record sale from order** turns the whole order into one sale, filled in from what Allegro says
+about it. It is the fast path, and it is the reason the connection is worth having: an order carries
+things a listing page never showed you.
+
+It opens on a **review**, before anything is written, saying exactly what it is about to record:
+
+- **the buyer**, filed under their **Allegro login** — which is how buyers are named here, and how
+  the ones already in your address book are named. The name on the order is not thrown away: it goes
+  to the contact's **Full name**, which is what the parcel has to carry. An existing contact is
+  looked for both ways, under the login and under the full name, so a buyer you wrote down by hand
+  years ago is still recognised rather than duplicated. Where there is none, the sale form offers to
+  add one — which happens when *you* save, and not before. The full name and the email are filled in
+  on the contact only where it has neither: Stamporama never overwrites something you typed with
+  something a marketplace said.
+- **what they paid in total**, delivery included, as the sale's *Total paid by buyer* — so your
+  handling is derived from it rather than typed twice.
+- **the delivery method** the buyer chose, matched by name against this platform's own shipping
+  methods. Matched, it brings that method's usual cost with it; unmatched, it is recorded as a
+  one-off carrying Allegro's wording, with no cost filled in. What the buyer paid for delivery is
+  *not* put in your shipping cost — that column is what posting the parcel costs you, and the
+  buyer's postage is already inside the total above.
+- **the order number and a link to the order**, as the sale's transaction reference and link.
+- **every line**, and the sets each one will record as sold — by name, because these are the copies
+  that leave your collection.
+
+A line the app is **not sure about** is named and left out rather than guessed at. It says which and
+why: no offer here, nothing left to sell on that offer, already on the sale, or *needs you* — which
+means the quantity bought does not say which of the offer's remaining sets went. A wrong composition
+is worse than none, so those are yours to record from the offer's own screen, which is what the
+per-line **Record sale** button beside them is for.
+
+From the review, **Review sale details** opens the ordinary sale form, pre-filled. Nothing at all is
+written until you save it there. If Allegro says the order is paid, the sale is recorded at *paid*
+rather than *ordered*.
+
+If Allegro cannot be reached at that moment the review still opens — the delivery method and the
+email are simply missing, and it says so. A pre-fill is a head start, never a precondition.
+
+A card disappears once a sale exists carrying that order number as its transaction reference, and
+that sale covers every line of the order. That is also why one order can never turn into two sales.
+
+**A partly recorded order stays here**, marked *Partly on sale #12*. That happens when only some of
+its lines could be recorded — the second offer was never matched, say. The lines already done are
+marked *Recorded* and the button becomes **Record the rest**, which adds the remaining sets to that
+same sale. Nothing else about it is touched: its buyer, amounts and existing lines are your record,
+not the sync's.
+
+The per-line **Record sale** stays where it was, opening the same sell flow the offer's own screen
+uses. It is the way to record what the order flow will not guess at.
 
 Where the order's offer is **already on a sale**, the card says so directly — *Looks like sale #12 —
 link* — and one click connects them. Stamporama works that out rather than searching for it: the
