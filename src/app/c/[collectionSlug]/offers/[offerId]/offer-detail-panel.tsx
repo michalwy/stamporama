@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -183,6 +183,25 @@ export function OfferDetailPanel({
   // Submitting the filled form is what takes this offer live (#412) — the header then shows a
   // different state, a listing date and a URL, so the screen is re-read exactly as it is after its
   // own Activate. The report strip stays: it is the record of what just happened.
+  // Arriving here **is** the acknowledgement of the app's own "I marked this in active bidding"
+  // notice (#481): the notification centre pointed at this screen, so asking for a further click to
+  // confirm having read it would be a click for nothing. Fired once per offer — the ref guards a
+  // re-render or a refetch from repeating it — and outside the pending transition, since it is not
+  // an edit the collector is waiting on and must not grey the screen out.
+  const acknowledged = useRef<string | null>(null);
+  const pendingBiddingNotice = offer?.biddingNoticeAt ?? null;
+  useEffect(() => {
+    if (!pendingBiddingNotice || acknowledged.current === offerId) return;
+    acknowledged.current = offerId;
+    void (async () => {
+      const { acknowledgeOfferBiddingNoticeAction } = await import("@/app/actions/offers");
+      const result = await acknowledgeOfferBiddingNoticeAction(offerId);
+      // Silent on failure by design: the notice is still there, the next visit tries again, and an
+      // error banner about a notification would be noise on a screen the collector opened to work.
+      if (result.status === "success") invalidateAll(collectionId);
+    })();
+  }, [pendingBiddingNotice, offerId, collectionId, invalidateAll]);
+
   const onListingActivated = useCallback(() => invalidateAll(collectionId), [collectionId, invalidateAll]);
   const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } = useAssistantHandoff(
     collectionId,

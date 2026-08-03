@@ -1050,9 +1050,10 @@ copies as **Needs action**, exactly like an actual sale collision, so you know t
 from other marketplaces right away.
 
 On a **connected** platform you do not have to: Allegro's own auctions are marked for you within a
-couple of minutes of the first bid, and the notification bell lists them under **Bidding started on
-Allegro** — see [bids on your auctions](allegro.md#bids-on-your-auctions). Clearing the marker stays
-yours either way; nothing ever clears it in the background.
+couple of minutes of the first bid, and the notification bell announces each one once under
+**Bidding started on Allegro** — see [bids on your auctions](allegro.md#bids-on-your-auctions).
+Clearing the marker stays yours either way; nothing ever clears it in the background, and if the bid
+is cancelled the bell says so rather than quietly dropping the subject.
 
 **In active bidding** is independent of the offer's state — it never marks the offer **Sold** by
 itself. If the auction doesn't close (no bids meet the reserve, the buyer doesn't pay), **Clear

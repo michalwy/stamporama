@@ -1,0 +1,14 @@
+-- The "we flagged this for you" notice (#481).
+--
+-- The first cut of the notification group asked a question about *state* — every active auction with
+-- a bid on it — which meant a hundred running auctions were a hundred rows on the bell for as long
+-- as they ran. The panel is for things waiting on a decision, and a bid you already know about waits
+-- on nothing: the decision it creates (the same copies live in another listing) is already reported
+-- as its own critical group, derived from the very same flag.
+--
+-- So the notice is an event, and this column is its whole life: stamped by the sync when it sets
+-- `inActiveBidding` itself, cleared when the collector has seen it. No window, no expiry rule — a
+-- notice nobody has read is still news, and one that has been read is not.
+--
+-- Null on every offer flagged **by hand**, which is not news to the person who flagged it.
+ALTER TABLE "offer" ADD COLUMN "biddingNoticeAt" TIMESTAMP(3);

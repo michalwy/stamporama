@@ -58,9 +58,20 @@ stock, and the auction is the one that cannot be taken back.
 bidding**, because Allegro reported a bidder ([how that works](allegro.md#bids-on-your-auctions)).
 Nothing here is wrong — somebody bidding is the listing working — so it is blue: this is the app
 telling you what it did on your behalf, and what the marketplace said when it did. What *is* urgent
-about it, the same copies sitting in another live listing, is the red group above. The row stays
-until the auction is sold or the listing is no longer live. Clicking through lands on the offers list
-narrowed to your offers in bidding.
+about it, the same copies sitting in another live listing, is the red group above.
+
+It is a **notice, not a running tally**: the row is there until you have seen it, and **opening the
+offer is how you see it**. Twenty auctions being bid on all week are not twenty rows all week — each
+one is announced once. Clicking through therefore does two things at once: it takes you to the offer
+and clears the row. The list of everything currently under the hammer, read or unread, is the offers
+list's **In bidding** filter, which is where the group's own link goes.
+
+**Bid withdrawn, still marked in bidding** — amber, and this one does **not** go away on its own. The
+offer is still marked in active bidding while Allegro now reports nobody bidding on it — a bid was
+cancelled. That matters because the marker is holding those copies out of every other listing for a
+bid that no longer exists. Stamporama never clears the marker by itself, so this waits for you:
+open the offer and either leave it (the auction may yet be bid on again) or **Clear active
+bidding**.
 
 The two red groups are the same **needs action** flag the offers list shows, split by *why* it fired,
 because the two ask for different things: a sold copy has to come out of the listing, while a copy

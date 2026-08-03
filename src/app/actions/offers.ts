@@ -8,6 +8,7 @@ import {
   duplicateOffer,
   updateOffer,
   setOfferState,
+  acknowledgeOfferBiddingNotice,
   setOfferInActiveBidding,
   publishOffer,
   deleteOffer,
@@ -681,6 +682,25 @@ export async function setOfferInActiveBiddingAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the offer's bidding state.");
+  }
+}
+
+/**
+ * Mark the "we marked this in active bidding for you" notice as read (#481).
+ *
+ * Fired by the offer screen when it opens on an offer carrying one: the notification pointed here,
+ * and arriving *is* the acknowledgement. It is idempotent and touches nothing else, so a second tab
+ * doing the same is a no-op rather than a conflict.
+ */
+export async function acknowledgeOfferBiddingNoticeAction(
+  offerId: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await acknowledgeOfferBiddingNotice(session.user.id, offerId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to acknowledge the bidding notice.");
   }
 }
 

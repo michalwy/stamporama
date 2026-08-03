@@ -236,15 +236,20 @@ The moment Allegro reports a bidder, Stamporama:
 
 It does this without asking. A bid commits you whether or not you have seen it, and a marker waiting
 for your confirmation would be no faster than clicking it yourself. So that you always know it
-happened, the auction appears in the notification bell under **Bidding started on Allegro**, and the
-offer's own header says what Allegro reported and when.
+happened, the auction appears in the notification bell under **Bidding started on Allegro** — once,
+as a notice: it stays there until you have seen it, and opening the offer is what marks it seen.
+Auctions that are simply running with bids on them do not pile up in the bell; the offers list's
+**In bidding** filter is where you see all of those. The offer's own header always says what Allegro
+reported and when.
 
 Three things it will not do:
 
 - **It never clears the marker.** Not when the auction ends unsold, not when a bid is cancelled, not
   when the listing is withdrawn. You pulled stock on the strength of that flag, so un-committing is
-  yours to do: **Clear active bidding** from the offer's **⋮** menu. If a bid is cancelled, the
-  offer simply says *"no bidders"* beside a marker that is still on — that disagreement is your cue.
+  yours to do: **Clear active bidding** from the offer's **⋮** menu. A cancelled bid is not left for
+  you to spot, though: the offer says *"no bidders"* beside a marker that is still on, and the
+  notification bell raises **Bid withdrawn, still marked in bidding**, which stays until you settle
+  it.
 - **It never copies the opening price into the bid.** An auction nobody has bid on keeps **No bids
   yet**; what it opened at is the starting price, which is yours.
 - **It leaves quick-buy listings alone**, and any auction whose listing is quoted in a different

@@ -15,9 +15,12 @@ import { offersNeedingAction, offersWithObservedBidding } from "./offers";
  *   lot list's own `closing` windows (#351) against the server's clock;
  * - lots about to be bought twice are the lot list's `duplicate` chip (#369), which is the same
  *   collision rule the composition dialog warns with (`auction-duplicates.ts`);
- * - the two offer groups are the single needs-action derivation (ADR-0013 §4) split by *reason*
+ * - the two needs-action groups are the single derivation (ADR-0013 §4) split by *reason*
  *   (#167 / #215), because the two ask for different things: a sold copy has to come out of the
- *   listing, a copy under the hammer has to wait for the auction to end.
+ *   listing, a copy under the hammer has to wait for the auction to end;
+ * - the two bidding groups are what the Allegro sync did on its own (#481) — the notice that it
+ *   flagged an auction, which lasts until it is read, and the flag left standing over a bid that has
+ *   since been withdrawn, which lasts until the collector settles it.
  *
  * **Providers, not sources**, is the extension point: a provider returns one *or more* groups, so
  * two groups that come out of one read (the offers pair) stay one read. Adding a source is one
@@ -52,7 +55,8 @@ export type ActionItemGroupId =
   | "auction-duplicate"
   | "offer-sold-elsewhere"
   | "offer-bidding-conflict"
-  | "offer-bidding-started";
+  | "offer-bidding-started"
+  | "offer-bid-withdrawn";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -70,7 +74,9 @@ export type ActionItemGroupId =
  *   recorded. Nothing is at risk, but nothing will remind you again either. Blue. Also where the
  *   app reports **something it did on its own** — an auction it marked in active bidding (#481):
  *   the conflict that flag creates is already reported as `critical` beside it, and saying the same
- *   thing twice in red would be the alarm meaning less.
+ *   thing twice in red would be the alarm meaning less. A flag left standing over a *withdrawn* bid
+ *   is not this: it is stock held back for nothing, and grades `warning` like any other deadline
+ *   that can still be met.
  *
  * This is the same rule the lot list already follows — colour means *act now*, and an ended lot is
  * muted rather than reddened — applied across sources.
@@ -256,36 +262,63 @@ const offerProvider: ActionItemProvider = {
 };
 
 /**
- * Auctions the **sync itself** marked in active bidding (#481).
+ * The two things worth saying about an auction the **sync itself** marked in active bidding (#481).
  *
  * Automating that flag was only ever acceptable while the collector can see the app did it — the
  * flag pulls copies out of every other listing (ADR-0013 §4), and a cascade discovered through a
- * filter behaving oddly is the failure mode the whole thing is against. This is that visibility: the
- * bell says which auctions were flagged and what the platform reported, and the row leads to the
- * offer, where the flag is cleared by hand if the collector disagrees.
+ * filter behaving oddly is the failure mode the whole thing is against.
  *
- * `info`, not `critical`: nothing here is wrong. Somebody bidding on your auction is the listing
- * working. What *is* critical — the same copies sitting in another live listing — is already the
- * `offer-bidding-conflict` group, computed off this very flag.
+ * But visibility is an **event**, not a standing state. A hundred auctions being bid on is a hundred
+ * things already known and nothing waiting on a decision; listing them until they closed would make
+ * the badge a number nobody reads. So:
+ *
+ * - **Bidding started** is the notice, and it lasts until it has been read — opening the offer is
+ *   the acknowledgement (`Offer.biddingNoticeAt`). `info`, because nothing is wrong: somebody
+ *   bidding on your auction is the listing working. What *is* critical, the same copies sitting in
+ *   another live listing, is already `offer-bidding-conflict`, computed off this very flag.
+ * - **Bid withdrawn** never expires, because it is the one case where the flag is genuinely waiting
+ *   on somebody: stock is being held out of every other listing for a bid that no longer exists, and
+ *   only the collector can clear that (#215 — nothing here ever clears it in the background).
+ *   `warning`: money is at stake and the situation can still be put right, which is exactly how a
+ *   lot closing tonight is graded.
  */
-const biddingStartedProvider: ActionItemProvider = {
+const biddingProviders: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    const { total, offers } = await offersWithObservedBidding(ownerId, collectionId, limit);
+    const [started, withdrawn] = await Promise.all([
+      offersWithObservedBidding(ownerId, collectionId, "notice", limit),
+      offersWithObservedBidding(ownerId, collectionId, "withdrawn", limit),
+    ]);
+
     return [
       {
         id: "offer-bidding-started" as const,
         title: "Bidding started on Allegro",
         severity: "info" as const,
-        count: total,
-        items: offers.map((offer) => ({
+        count: started.total,
+        items: started.offers.map((offer) => ({
           key: offer.offerId,
           label: offer.label,
           detail: `${offer.platformName} · ${plural(offer.bidderCount, "bidder", "bidders")} · ${offer.price} ${offer.currency}`,
-          // When the bid was last confirmed, formatted client-side like every other date here.
+          // When the app flagged it, formatted client-side like every other date here.
           at: offer.checkedAt?.toISOString() ?? null,
           href: `offers/${offer.offerId}`,
         })),
-        // The offers list' own in-bidding filter, so "see all" is the set counted here.
+        // The offers list' own in-bidding filter. Wider than the group — it holds every offer under
+        // the hammer, read or unread — which is the honest place for "and what else is running".
+        href: "offers?bidding=1",
+      },
+      {
+        id: "offer-bid-withdrawn" as const,
+        title: "Bid withdrawn, still marked in bidding",
+        severity: "warning" as const,
+        count: withdrawn.total,
+        items: withdrawn.offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          detail: `${offer.platformName} · no bidders · marked in bidding`,
+          at: offer.checkedAt?.toISOString() ?? null,
+          href: `offers/${offer.offerId}`,
+        })),
         href: "offers?bidding=1",
       },
     ];
@@ -298,7 +331,7 @@ const PROVIDERS: ActionItemProvider[] = [
   auctionProvider,
   duplicateProvider,
   offerProvider,
-  biddingStartedProvider,
+  biddingProviders,
 ];
 
 /**

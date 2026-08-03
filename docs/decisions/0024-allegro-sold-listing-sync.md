@@ -174,11 +174,23 @@ Three rules bound that write.
   price of an offer recorded as a quick buy. The bid is likewise only written when the listing's
   currency is the offer's, an offer being priced in one currency by decision (#196); the flag still
   goes on, since *that* somebody bid does not depend on the currency.
-- **It is visible.** A cascade (ADR-0013 §4 flags every other offer holding the same copies) that
-  fires from a background job has to be announced: the notification centre gains a `bidding started`
-  group, the offer states the bidder count the sync reported, and **Sync now** says what it flagged.
-  `Offer.bidderCount` is written only ever by a sync, so its presence is the provenance of both the
-  figure and the flag.
+- **It is visible, once.** A cascade (ADR-0013 §4 flags every other offer holding the same copies)
+  that fires from a background job has to be announced — but as an **event, not a state**. The first
+  cut asked the notification centre for every active auction with a bid on it, which meant a hundred
+  running auctions were a hundred rows for as long as they ran, and a badge nobody reads. So the sync
+  raises `Offer.biddingNoticeAt` in the same write that raises the flag, never on a later refresh of
+  a bid already flagged, and **opening the offer clears it**: the notification points at that screen,
+  so arriving is the acknowledgement, and a further click to confirm having read it would be a click
+  for nothing. The standing view of everything under the hammer is the offers list's own `bidding`
+  filter, which is what the group links to. Beside it, the offer states the bidder count the sync
+  reported and **Sync now** says what it flagged. `Offer.bidderCount` is written only ever by a sync,
+  so its presence is the provenance of both the figure and the flag.
+- **A withdrawn bid is the one thing that does not expire.** An offer still flagged while the
+  platform reports no bidders gets its own group (`offer-bid-withdrawn`, `warning`) which stays until
+  the collector settles it. It is the only case where the flag is genuinely waiting on somebody:
+  stock is held out of every other listing for a bid that no longer exists, and this ADR will not
+  clear it for them. Graded `warning` for the same reason a lot closing tonight is — money is at
+  stake and it can still be put right.
 
 **How it gets there in minutes.** Through §8's event poll, which reads Allegro's **offer** stream
 (`GET /sale/offer-events`, asked for `OFFER_BID_PLACED` and `OFFER_BID_CANCELED`) and fetches details

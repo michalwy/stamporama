@@ -1450,6 +1450,16 @@ model Offer {
   // fixed-price listing, where the seller sets the number and nothing moves it, and every auction
   // nobody has bid on, which has had nothing to observe yet.
   priceCheckedAt DateTime?
+  // The unacknowledged **notice** that the app set `inActiveBidding` itself (#481): stamped by the
+  // sync at the moment it flags an auction, cleared when the collector has seen it — opening the
+  // offer is that acknowledgement — and cleared again if they clear the flag by hand.
+  //
+  // A notice rather than a "when was it flagged" date, because the question the notification centre
+  // asks is "is there anything here you have not seen yet", not "how long has this been bid on". A
+  // date would have to be paired with a window, and a window is a guess about how long a hundred
+  // live auctions should keep shouting; this simply stops when it has been read. Null on everything
+  // flagged by hand, which is not news to the person who did it.
+  biddingNoticeAt DateTime?
   // How many bidders the connected platform reported on this auction, as of `priceCheckedAt` (#481).
   // Written **only** by a platform sync and never editable by hand, which is what makes its presence
   // the provenance of the figure beside it: a bid this app observed, rather than one typed in.

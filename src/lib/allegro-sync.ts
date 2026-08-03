@@ -928,7 +928,16 @@ async function applyBidding(
   const write = bidWriteFor(listing, offer, now);
   if (!write) return none;
 
-  await prisma.offer.update({ where: { id: offer.id }, data: write });
+  await prisma.offer.update({
+    where: { id: offer.id },
+    data: {
+      ...write,
+      // Flagging it *is* the news, so the notice is raised in the same write that raises the flag —
+      // never on a refresh of a bid already flagged, which would put an auction back on the bell
+      // every time somebody outbid somebody else. Cleared when the collector opens the offer.
+      ...(write.inActiveBidding ? { biddingNoticeAt: now } : {}),
+    },
+  });
 
   // The loaded row is the pass's own copy, so it is brought up to date rather than left stating what
   // was true before this write — two listings resolving to one offer must not both report a flag.

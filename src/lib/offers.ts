@@ -843,7 +843,7 @@ export async function offersNeedingAction(
   return { "sold-elsewhere": resolve(sold), "bidding-conflict": resolve(bidding) };
 }
 
-/** One auction a connected platform reported a bid on (#481), as the notification centre lists it. */
+/** One auction a connected platform reported on (#481), as the notification centre lists it. */
 export interface OfferWithObservedBid {
   offerId: string;
   label: string;
@@ -859,18 +859,28 @@ export interface OfferWithObservedBid {
 }
 
 /**
- * The auctions **the app itself** marked in active bidding (#481).
+ * The two things the notification centre asks about an auction the app flagged itself (#481).
  *
- * The condition on automating that flag was that the collector can see the app did it, rather than
- * discovering it through a filter behaving oddly — so this is the visible half, and it is a plain
- * read of the two facts the sync wrote: the flag, and a bidder count only a sync can have put there.
+ * - `notice` — **the app just did this**, and the collector has not seen it yet. An event, not a
+ *   state: a hundred running auctions with bids on them are a hundred things already known, and a
+ *   panel that listed them all until they closed would say nothing at all. The row leaves when the
+ *   notice is acknowledged (opening the offer is that), or when the offer stops being live.
+ * - `withdrawn` — the flag stands on an auction the platform now reports **no bidders** on, a bid
+ *   having been cancelled. This one does not expire, because it is the one case where the flag is
+ *   genuinely waiting on a decision: stock is being held out of every other listing for a bid that
+ *   no longer exists, and only the collector can clear it (#215).
+ *
+ * The two never overlap: a fresh notice is raised with a bidder on the listing.
  *
  * Live offers only. A sold or withdrawn listing is not something to be told about again, and the
  * flag on it has already done its work.
  */
+export type BiddingNoticeKind = "notice" | "withdrawn";
+
 export async function offersWithObservedBidding(
   ownerId: string,
   collectionId: string,
+  kind: BiddingNoticeKind,
   limit: number
 ): Promise<{ total: number; offers: OfferWithObservedBid[] }> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -879,15 +889,23 @@ export async function offersWithObservedBidding(
     collectionId,
     state: "active",
     inActiveBidding: true,
-    bidderCount: { gt: 0 },
+    ...(kind === "notice"
+      ? { biddingNoticeAt: { not: null } }
+      : // Only ever a *sync-observed* zero: `bidderCount` is null on everything no sync has read,
+        // so an offer flagged by hand on a platform with no connection is never claimed to have
+        // lost a bid it was never known to have.
+        { bidderCount: 0 }),
   } as const;
 
   const [total, rows] = await Promise.all([
     prisma.offer.count({ where }),
     prisma.offer.findMany({
       where,
-      // Most recently confirmed first: the bid that moved last is the one worth a look.
-      orderBy: [{ priceCheckedAt: "desc" }, { offerNo: "desc" }],
+      // Newest first — the notice raised last, or the withdrawal seen last.
+      orderBy: [
+        kind === "notice" ? { biddingNoticeAt: "desc" } : { priceCheckedAt: "desc" },
+        { offerNo: "desc" },
+      ],
       take: limit,
       select: {
         id: true,
@@ -896,6 +914,7 @@ export async function offersWithObservedBidding(
         currency: true,
         bidderCount: true,
         priceCheckedAt: true,
+        biddingNoticeAt: true,
         platform: { select: { name: true } },
         sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
       },
@@ -913,7 +932,9 @@ export async function offersWithObservedBidding(
       bidderCount: row.bidderCount ?? 0,
       price: row.price.toFixed(2),
       currency: row.currency,
-      checkedAt: row.priceCheckedAt,
+      // The date the row is *about*: when the app raised the notice, or when it last confirmed the
+      // bidding on an auction whose bid has gone.
+      checkedAt: kind === "notice" ? (row.biddingNoticeAt ?? row.priceCheckedAt) : row.priceCheckedAt,
     })),
   };
 }
@@ -2151,6 +2172,10 @@ export interface OfferDetail {
    * in-active-bidding flag — came from the marketplace rather than from the collector. Null on
    * everything no sync has read. */
   bidderCount: number | null;
+  /** Set while the app's own "I marked this in active bidding" notice is still unread (#481). The
+   * screen clears it on open — arriving here is the acknowledgement the notification asked for — so
+   * it is only ever non-null on the first visit after a bid landed. */
+  biddingNoticeAt: Date | null;
   currency: string;
   /** The collection base currency, to label `priceBase` (#208). */
   baseCurrency: string;
@@ -2263,6 +2288,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       startingPrice: true,
       priceCheckedAt: true,
       bidderCount: true,
+      biddingNoticeAt: true,
       currency: true,
       state: true,
       inActiveBidding: true,
@@ -2529,6 +2555,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     startingPrice: offer.startingPrice?.toFixed(2) ?? null,
     priceCheckedAt: offer.priceCheckedAt,
     bidderCount: offer.bidderCount,
+    biddingNoticeAt: offer.biddingNoticeAt,
     currency: offer.currency,
     baseCurrency,
     priceBase,
@@ -3573,7 +3600,33 @@ export async function setOfferInActiveBidding(
       "Only an active offer can be marked in active bidding."
     );
   }
-  await prisma.offer.update({ where: { id: offerId }, data: { inActiveBidding: value } });
+  await prisma.offer.update({
+    where: { id: offerId },
+    // Clearing the flag clears any unread notice with it (#481): the collector is answering the very
+    // thing it was raised to tell them, and a notice outliving its subject is a row about nothing.
+    // Marking it by hand raises none — it is not news to the person who just did it.
+    data: { inActiveBidding: value, biddingNoticeAt: null },
+  });
+}
+
+/**
+ * Mark the "we flagged this for you" notice as seen (#481).
+ *
+ * Opening the offer *is* the acknowledgement — the notification points at exactly this screen, and
+ * asking for a second click to confirm having read it would be a second click for nothing. Nothing
+ * else changes: the flag, the bid and the bidder count stay exactly as the sync left them.
+ */
+export async function acknowledgeOfferBiddingNotice(
+  ownerId: string,
+  offerId: string
+): Promise<void> {
+  await assertOfferOwner(ownerId, offerId);
+  await prisma.offer.updateMany({
+    // `updateMany` so that acknowledging one that is already read is a no-op rather than a write:
+    // the screen fires this on open, and two tabs open on one offer must not be two updates.
+    where: { id: offerId, biddingNoticeAt: { not: null } },
+    data: { biddingNoticeAt: null },
+  });
 }
 
 /** Delete an offer and all its sets (the underlying copies are untouched). Blocked when any set
