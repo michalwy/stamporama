@@ -155,7 +155,18 @@ save it — the sync never creates a sale, a payment or a contact on its own.
 A card disappears once a sale exists carrying that order number as its transaction reference. That
 is also why one order can never turn into two sales.
 
-**Link to existing sale**, on the card, is for the sale you already recorded — before the sync
+Where the order's offer is **already on a sale**, the card says so directly — *Looks like sale #12 —
+link* — and one click connects them. Stamporama works that out rather than searching for it: the
+line matched an offer, and that sale's lines name the same offer. It only offers this when exactly
+one sale fits and that sale has no order number of its own; an offer sitting on two sales, or an
+order pointing at two different ones, proposes nothing, because there the data says two things and
+the choice is yours.
+
+It is always a click. Nothing is linked on your behalf: a guess that emptied the row by itself would
+take the signal away exactly when the guess was wrong.
+
+**Link to existing sale** — *choose another*, where a proposal is showing — is for the sale you
+already recorded — before the sync
 existed, or because you write sales down as you pack. It offers the sales near this order's date
 that carry **no order number yet**, showing the date, the total and the buyer so two similar ones can
 be told apart, and writes the order number onto the one you pick. Nothing else about that sale is

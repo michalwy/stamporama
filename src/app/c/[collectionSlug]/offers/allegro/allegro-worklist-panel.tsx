@@ -5,8 +5,12 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AllegroWorklist, WorklistOffer, WorklistOrder } from "@/lib/allegro-worklist";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
-import { syncAllegroNowAction } from "@/app/actions/allegro";
-import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
+import { linkAllegroOrderToSaleAction, syncAllegroNowAction } from "@/app/actions/allegro";
+import {
+  formatDay,
+  formatInstant,
+  formatRelative,
+} from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { SellOfferFlowDialog, type SellableOfferSubject } from "../sell-offer-flow-dialog";
 import { LinkSaleDialog } from "./link-sale-dialog";
 
@@ -148,6 +152,7 @@ export function AllegroWorklistPanel({
   const { data, isLoading, error } = useAllegroWorklist(collectionId);
   const queryClient = useQueryClient();
   const [isSyncing, startSync] = useTransition();
+  const [isLinking, startLink] = useTransition();
   const [syncMessage, setSyncMessage] = useState<
     { tone: "ok" | "error"; text: string } | null
   >(null);
@@ -175,6 +180,23 @@ export function AllegroWorklistPanel({
   function toggle<T>(values: T[], value: T, set: (next: T[]) => void) {
     set(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
   }
+
+  /** Take the derived proposal (#480). The refusals the domain layer states — an order another sale
+   *  already claims — surface on the same line the sync's own messages use, because they are the
+   *  same kind of thing: something that did not happen, and why. */
+  const linkSuggested = (order: WorklistOrder) => {
+    const sale = order.suggestedSale;
+    if (!sale) return;
+    setSyncMessage(null);
+    startLink(async () => {
+      const result = await linkAllegroOrderToSaleAction(collectionId, order.orderId, sale.id);
+      if (result.status === "error") {
+        setSyncMessage({ tone: "error", text: result.message });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["allegro-worklist", collectionId] });
+    });
+  };
 
   const runSync = () => {
     setSyncMessage(null);
@@ -347,23 +369,65 @@ export function AllegroWorklistPanel({
                 )}
                 {/* The other way an order leaves this list (#479): not by recording a sale, but by
                     recognising the one already recorded. Sits on the order rather than on a line,
-                    because `externalRef` names the whole order. */}
-                <button
-                  type="button"
-                  onClick={() => setLinking(order)}
-                  title="This order is already recorded as a sale — point it at that sale"
-                  style={{
-                    ...BUTTON,
-                    border: "none",
-                    background: "none",
-                    padding: "0 0 0 0.5rem",
-                    color: "var(--color-accent)",
-                    fontWeight: 400,
-                    fontSize: "0.75rem",
-                  }}
-                >
-                  Link to existing sale
-                </button>
+                    because `externalRef` names the whole order.
+                    Where the app worked the sale out on its own (#480) that recognition is one
+                    click and the picker becomes the way to overrule it — but it is still a click,
+                    since an inferred link that emptied the row on its own would take the signal
+                    away exactly when the inference was wrong. */}
+                {order.suggestedSale ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => linkSuggested(order)}
+                      disabled={isLinking}
+                      title={`This order's offer is already on sale #${order.suggestedSale.saleNo} (${order.suggestedSale.total} ${order.suggestedSale.currency}, ${formatDay(order.suggestedSale.soldAt)}). Link them.`}
+                      style={{
+                        ...BUTTON,
+                        padding: "0.125rem 0.5rem",
+                        marginLeft: "0.5rem",
+                        fontSize: "0.75rem",
+                        color: "var(--color-accent)",
+                        borderColor: "var(--color-accent)",
+                        background: "var(--color-accent-soft)",
+                        opacity: isLinking ? 0.6 : 1,
+                      }}
+                    >
+                      Looks like sale #{order.suggestedSale.saleNo} — link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLinking(order)}
+                      style={{
+                        ...BUTTON,
+                        border: "none",
+                        background: "none",
+                        padding: "0 0 0 0.5rem",
+                        color: MUTED,
+                        fontWeight: 400,
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      choose another
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLinking(order)}
+                    title="This order is already recorded as a sale — point it at that sale"
+                    style={{
+                      ...BUTTON,
+                      border: "none",
+                      background: "none",
+                      padding: "0 0 0 0.5rem",
+                      color: "var(--color-accent)",
+                      fontWeight: 400,
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    Link to existing sale
+                  </button>
+                )}
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

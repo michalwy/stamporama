@@ -75,6 +75,18 @@ export interface WorklistOrder {
   /** When the sync last saw this order. An undated "sold" says nothing about how current it is. */
   observedAt: string;
   lines: WorklistLine[];
+  /** The sale this order almost certainly *is* (#480), derived rather than searched for — see
+   *  {@link deriveSuggestedSales}. Null wherever the data says anything but one thing. */
+  suggestedSale: SuggestedSale | null;
+}
+
+/** A sale the app worked out on its own, offered for one click. */
+export interface SuggestedSale {
+  id: string;
+  saleNo: number;
+  soldAt: string;
+  currency: string;
+  total: string;
 }
 
 export interface WorklistEndedListing {
@@ -261,7 +273,10 @@ export async function getAllegroWorklist(
         offer: line.offer ? toWorklistOffer(line.offer) : null,
         matchedBy: (line.matchedBy as AllegroMatchBasis | null) ?? null,
       })),
+      suggestedSale: null,
     }));
+
+  await attachSuggestedSales(collectionId, orders);
 
   // An offer already sitting in the sold section is not also reported as having ended: the listing
   // is gone from Allegro because it sold, which is the first section's business.
@@ -310,6 +325,86 @@ export async function getAllegroWorklist(
     orders,
     ended,
   };
+}
+
+/**
+ * The sale each order almost certainly **is** (#480), worked out rather than searched for.
+ *
+ * #479's picker judges candidates by date and total, which asks the collector to recognise something
+ * the data already states: a line matched an offer (#467), and `SaleLine.offerId` points at that
+ * same offer from the sale's side. Where those two meet on exactly one sale, there is nothing to
+ * recognise.
+ *
+ * **Exactly one, and unclaimed.** Several is not a failure to be broken by picking the nearest date:
+ * an offer can sit on several sales (#473 sells one set at a time) and a multi-line order can point
+ * at different ones, so where the data says two things the collector decides. A sale already naming
+ * another order is spoken for and is not a candidate at all.
+ *
+ * It is a **proposal**. Nothing here writes, and the sync never writes `externalRef` on its own: an
+ * inferred link that silently emptied a row would take the signal away exactly when the inference
+ * was wrong.
+ *
+ * One query for the whole page — the offers are already on the rows.
+ */
+async function attachSuggestedSales(
+  collectionId: string,
+  orders: WorklistOrder[]
+): Promise<void> {
+  const offerIds = [
+    ...new Set(
+      orders.flatMap((order) => order.lines.flatMap((line) => (line.offer ? [line.offer.id] : [])))
+    ),
+  ];
+  if (offerIds.length === 0) return;
+
+  const sales = await prisma.sale.findMany({
+    where: { collectionId, lines: { some: { offerId: { in: offerIds } } } },
+    select: {
+      id: true,
+      saleNo: true,
+      soldAt: true,
+      currency: true,
+      externalRef: true,
+      lines: { select: { offerId: true, price: true } },
+    },
+  });
+
+  // Which sales each offer appears on, so an order is answered from its own offers rather than by
+  // scanning every sale again per order.
+  const salesByOffer = new Map<string, typeof sales>();
+  for (const sale of sales) {
+    for (const line of sale.lines) {
+      if (!line.offerId) continue;
+      const list = salesByOffer.get(line.offerId);
+      if (list) list.push(sale);
+      else salesByOffer.set(line.offerId, [sale]);
+    }
+  }
+
+  for (const order of orders) {
+    const candidates = new Map<string, (typeof sales)[number]>();
+    for (const line of order.lines) {
+      if (!line.offer) continue;
+      for (const sale of salesByOffer.get(line.offer.id) ?? []) {
+        // A sale that already names an order is spoken for — including one naming *this* order,
+        // which cannot happen here (such an order has already left the list) but which the rule
+        // states anyway rather than relying on that.
+        if (sale.externalRef) continue;
+        candidates.set(sale.id, sale);
+      }
+    }
+    if (candidates.size !== 1) continue;
+    const [sale] = [...candidates.values()];
+    order.suggestedSale = {
+      id: sale.id,
+      saleNo: sale.saleNo,
+      soldAt: sale.soldAt.toISOString(),
+      currency: sale.currency,
+      total: sale.lines
+        .reduce((sum, line) => sum.add(line.price), new Prisma.Decimal(0))
+        .toFixed(2),
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
