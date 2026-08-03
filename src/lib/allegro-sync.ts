@@ -60,6 +60,8 @@ export interface AllegroSyncOutcome {
   linesWritten: number;
   listingsSeen: number;
   listingsEnded: number;
+  /** Rows that had matched nothing and now do — the collector having fixed an offer's URL since. */
+  rematched: number;
 }
 
 const EMPTY: Omit<AllegroSyncOutcome, "status" | "message"> = {
@@ -67,6 +69,7 @@ const EMPTY: Omit<AllegroSyncOutcome, "status" | "message"> = {
   linesWritten: 0,
   listingsSeen: 0,
   listingsEnded: 0,
+  rematched: 0,
 };
 
 /** Allegro's page size for both reads. Its own ceilings are far higher; a hundred keeps one failed
@@ -148,6 +151,7 @@ export async function runAllegroSync(
 
     const orders = await syncOrders(collectionId, token, state ?? null, offers, now);
     const listings = await sweepListings(collectionId, token, offers, now);
+    const rematched = await rematchUnmatched(collectionId, offers);
 
     await prisma.allegroSyncState.update({
       where: { collectionId },
@@ -158,7 +162,7 @@ export async function runAllegroSync(
         lastError: null,
       },
     });
-    return { status: "ok", message: null, ...orders, ...listings };
+    return { status: "ok", message: null, ...orders, ...listings, rematched };
   } catch (err) {
     const message = describeSyncError(err);
     // A 401 during a background pass is the grant having been withdrawn, and the fix is the same
@@ -399,6 +403,68 @@ async function writeOrder(
     });
   }
   return order.lineItems.length;
+}
+
+// ---------------------------------------------------------------------------
+// Re-matching
+// ---------------------------------------------------------------------------
+
+/**
+ * Give every row that matched nothing another go, against the offers as they are **now**.
+ *
+ * Without this, fixing an offer's listing URL did not fix the worklist. A match is worked out when a
+ * row is written, and a pass following the event stream only rewrites orders that have *changed* —
+ * so an order imported last week with no URL to recognise it by stayed unmatched for ever, however
+ * carefully the collector then filled the field in. The only way out was to clear the cursor and
+ * re-import a month of orders to recompute one boolean.
+ *
+ * It costs one query and no request to Allegro: the candidate offers are already loaded once for the
+ * whole pass, and the match itself is pure.
+ *
+ * **Only rows that matched nothing.** A match already made is a fact the collector may have acted
+ * on, and re-deciding it every quarter of an hour would let an edited URL silently move a recorded
+ * observation from one offer to another. Correcting a *wrong* match is a different act, and one this
+ * does not claim to do.
+ */
+async function rematchUnmatched(collectionId: string, offers: MatchableOffer[]): Promise<number> {
+  if (offers.length === 0) return 0;
+
+  const [lines, listings] = await Promise.all([
+    prisma.allegroOrderLine.findMany({
+      where: { collectionId, offerId: null },
+      select: { id: true, platformOfferId: true, externalId: true },
+    }),
+    // The listing sweep re-matches everything it sees, so only the rows it no longer sees — the
+    // ended ones — can be stranded here.
+    prisma.allegroListing.findMany({
+      where: { collectionId, offerId: null, status: "ENDED" },
+      select: { id: true, platformOfferId: true, externalId: true },
+    }),
+  ]);
+
+  let rematched = 0;
+
+  for (const line of lines) {
+    const match = matchListingToOffer(offers, line);
+    if (!match) continue;
+    await prisma.allegroOrderLine.update({
+      where: { id: line.id },
+      data: { offerId: match.offerId, matchedBy: match.matchedBy },
+    });
+    rematched++;
+  }
+
+  for (const listing of listings) {
+    const match = matchListingToOffer(offers, listing);
+    if (!match) continue;
+    await prisma.allegroListing.update({
+      where: { id: listing.id },
+      data: { offerId: match.offerId, matchedBy: match.matchedBy },
+    });
+    rematched++;
+  }
+
+  return rematched;
 }
 
 // ---------------------------------------------------------------------------

@@ -61,9 +61,11 @@ export async function start(): Promise<void> {
       const results = await syncAllAllegroCollections();
       const failed = results.filter((r) => r.outcome.status === "failed");
       const written = results.reduce((sum, r) => sum + r.outcome.linesWritten, 0);
-      if (written > 0 || failed.length > 0) {
+      const rematched = results.reduce((sum, r) => sum + r.outcome.rematched, 0);
+      if (written > 0 || rematched > 0 || failed.length > 0) {
         console.log(
-          `[allegro-sync] ${results.length} collection(s), ${written} order line(s), ${failed.length} failed`
+          `[allegro-sync] ${results.length} collection(s), ${written} order line(s), ` +
+            `${rematched} rematched, ${failed.length} failed`
         );
       }
     } catch (err) {

@@ -155,9 +155,13 @@ export async function syncAllegroNowAction(
     if (outcome.status === "skipped") {
       return { status: "error", message: outcome.message ?? "There was nothing to sync." };
     }
+    // The re-match count is named only when there is one: it is the answer to "I fixed the URL, did
+    // it take?", and reporting a zero on every ordinary pass would bury it.
+    const rematched =
+      outcome.rematched > 0 ? ` Matched ${outcome.rematched} previously unmatched row(s).` : "";
     return {
       status: "success",
-      detail: `Read ${outcome.ordersRead} order(s) and ${outcome.listingsSeen} active listing(s).`,
+      detail: `Read ${outcome.ordersRead} order(s) and ${outcome.listingsSeen} active listing(s).${rematched}`,
     };
   } catch (err) {
     return failure(err, "The Allegro sync could not be run.");

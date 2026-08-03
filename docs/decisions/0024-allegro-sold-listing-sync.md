@@ -105,6 +105,17 @@ Two offers claiming one listing is a **refusal**, not a coin toss: picking one w
 against a listing nobody checked. The line is shown unmatched, which is a state the screen already
 has a shape for.
 
+**Every pass re-matches the rows that matched nothing**, against the offers as they are then. A match
+is otherwise worked out only when a row is written, and a pass following the event stream rewrites
+only orders that have *changed* — so an order imported before its offer had a URL stayed unmatched
+for ever, however carefully the field was then filled in, and the only way out was to clear the
+cursor and re-import a month of orders to recompute one column. It costs one query and no request to
+Allegro, the candidate offers being loaded once per pass already.
+
+Only the unmatched ones. A match already made is a fact the collector may have acted on, and
+re-deciding it every quarter of an hour would let an edited URL silently move an observation from
+one offer to another. Correcting a *wrong* match is a different act, and the sync does not claim it.
+
 ### 6. A cancelled order appears in neither section
 
 It is reported nowhere because there is nothing waiting. Offering to record a sale for an order the

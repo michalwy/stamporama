@@ -163,7 +163,16 @@ its URL was never recorded on the offer here. Two things fix it —
 - publish through the Assistant, which stores the address for you.
 
 The listing is matched on Allegro's own offer number inside that address, so any of Allegro's URL
-shapes works.
+shapes works — the canonical `allegro.pl/oferta/<number>`, one with the listing's name in it, or a
+product page carrying `?offerId=`. The number is in the row itself, as the **offer …** link.
+
+**You do not have to re-import anything afterwards.** Every pass gives the rows that matched nothing
+another go against your offers as they are now, so filling the URL in takes effect on the next sync
+— within 15 minutes, or immediately with **Sync now**, which then says how many rows it matched.
+
+A row that matched the *wrong* offer is a different situation, and the sync will not change its mind
+about it — a match already made is something you may have acted on. Correct the offer, and record
+the sale from the offer's own screen.
 
 ### Ended without selling
 
