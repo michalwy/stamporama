@@ -45,6 +45,11 @@ icons, and `build.mjs --release` leaves the manifest bare for the store to ident
 dev build and the store build therefore remain two extensions with two IDs, installable side by
 side, with separate `chrome.storage.local` — a dev profile cannot reach a production collection.
 An uploaded package must *not* carry `key`, which the release flavour satisfies by construction.
+The **mark the extension draws inside somebody else's page** (#417, #466) follows the same split: it
+is picked off a `__DEV_BUILD__` define in `core/mark.ts`, so a link an unpacked build writes into a
+Colnect note or an Allegro row is amber like its toolbar. The colour is how a collector running both
+copies knows which extension is telling them something, and it is worth nothing if only the toolbar
+wears it.
 
 **CI publishes on release tags.** `publish-extension` builds the ZIP with the release version
 stamped in, exchanges the refresh token for an access token, then calls `:upload` and `:publish` on

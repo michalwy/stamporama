@@ -135,6 +135,13 @@ Stamporama checks for **new orders and new bids every two minutes**, and reads y
 every 15 minutes — the second is what notices a listing that has quietly ended, since that can only
 be told from a complete read. **Sync now** runs the full check immediately.
 
+### From the listing page instead
+
+The worklist is the sweep. When you are already looking at your listings on Allegro, the
+[Assistant](assistant.md#your-own-listings-on-allegro) names the offer each one is here — a card in
+the corner of a listing page, a small link per row in **Mój asortyment** — and one click opens it.
+Connecting the API makes that recognition exact: it uses the same matching this sync does.
+
 ### Sold, awaiting sale
 
 One card per Allegro order, with the lines it covers. A card carries:

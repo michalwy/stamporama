@@ -5,3 +5,7 @@ declare module "*.png" {
   const dataUrl: string;
   export default dataUrl;
 }
+
+/** Which build flavour this bundle is, replaced by esbuild's `define` (see `build.mjs`). Read only
+ *  through `core/mark.ts`, so "which extension is this" is answered in one place. */
+declare const __DEV_BUILD__: boolean;

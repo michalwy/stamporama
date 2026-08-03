@@ -12,6 +12,15 @@
       "matches": ["*://*.colnect.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.allegro.pl/oferta/*",
+        "*://*.allegro.pl/produkt/*",
+        "*://*.allegro.pl/moje-allegro/sprzedaz/obsluga-ofert/moj-asortyment*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

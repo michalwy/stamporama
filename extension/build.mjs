@@ -77,6 +77,9 @@ const options = {
   // the extension's id. At 355 bytes for the 16px icon, inlining is cheaper than that trade, and
   // the icon file stays the single source of truth rather than being copied into a TS constant.
   loader: { ".png": "dataurl" },
+  // Which flavour this bundle is, for `core/mark.ts`: a mark drawn into a page follows the toolbar,
+  // and the dev build's toolbar is amber so the two extensions can be told apart in one browser.
+  define: { __DEV_BUILD__: JSON.stringify(!release) },
 };
 
 await rm(outdir, { recursive: true, force: true });

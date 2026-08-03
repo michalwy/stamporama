@@ -3,6 +3,7 @@ import type { ListingFillOutcome, ListingTask } from "../platform/listing";
 import type { CapturedLot, CaptureRefusal } from "../platform/capture";
 import type { BackfillProposal, MatchResult } from "./decisions";
 import type { CaptureOutcome } from "./capture";
+import type { OfferMarkerTarget } from "./offer-marker";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -77,6 +78,26 @@ export interface CaptureSaveRequest {
 }
 export type CaptureSaveResponse =
   | { ok: true; result: CaptureOutcome }
+  | { ok: false; error: string };
+
+// content script (on a marketplace page) → background service worker: "which of these listings are
+// offers of mine?" (#466). It goes through the worker for the same reason every other instance call
+// does — a cross-site fetch is only exempt from CORS there — and because the profile and its token
+// live there, which a script running inside somebody else's page must never hold.
+//
+// **Many ids at once**, because the seller's own assortment page is a list: asking per row would be
+// a request per row. A single listing page is the batch of one.
+//
+// The answer is what the page needs to draw its links and nothing else: a finished address, the
+// offer's number, its title and its state, keyed by the marketplace id each answers for. An id that
+// matched nothing is simply absent — most listings are somebody else's, which is not an error.
+export interface OfferLookupRequest {
+  type: "offer-lookup";
+  /** The marketplace's own listing ids, read from the addresses by the page's own module. */
+  platformOfferIds: string[];
+}
+export type OfferLookupResponse =
+  | { ok: true; matches: Record<string, OfferMarkerTarget> }
   | { ok: false; error: string };
 
 // popup → background service worker
@@ -219,6 +240,7 @@ export interface MatchedNotice {
 export type BackgroundMessage =
   | BackgroundRequest
   | CaptureSaveRequest
+  | OfferLookupRequest
   | ListRequest
   | ListingSubmittedNotice
   | DetectedNotice

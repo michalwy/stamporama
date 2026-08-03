@@ -97,6 +97,16 @@ host). Manual token generation stays for callers that cannot register.
   holds before the popup is opened. That detection is entirely local — no instance call is made for
   it — and the popup still injects on demand as well, covering tabs opened before an extension
   reload. Per the #249 ToS note this only ever touches pages the user themselves opened.
+- It also runs declaratively on Allegro's **offer pages and the seller's own assortment list** —
+  `/oferta/*`, `/produkt/*`, `…/obsluga-ofert/moj-asortyment*`, not the site (#466) — to draw the
+  link from a listing back to the offer it is here. #355 deliberately scripted none of Allegro, a
+  capture being started by the toolbar click that also grants access to the page; an in-page link
+  cannot wait for a click, so the narrowest match that still covers the pages a collector reads their
+  own listings on is what is registered instead. The page asks the instance one read-only question —
+  **batched**, keyed on the listing ids the modules read off the addresses on the page — and draws
+  nothing at all unless an answer names an offer, which is the case on the collector's own listings
+  and no others. A client-rendered list is watched rather than read once, and every anchor records
+  *which* listing it was answered for, because paging such a table reuses its row elements.
 - The extension holds **several connection profiles** (#251), each one instance + one collection +
   its token, with the active one persisted and switchable from both Options and the Assistant
   window's header. The target is an explicit choice, never inferred, because dev and production are

@@ -73,6 +73,20 @@ export interface PlatformCapture {
    *  parts of one site, and a module may handle only one of them. */
   isListingUrl(url: string): boolean;
   /**
+   * The marketplace's own id for the listing `url` names, from the address alone — the same value
+   * {@link CapturedLot.platformOfferId} carries, read without the page.
+   *
+   * It is its own method rather than a by-product of {@link PlatformCapture.capture} because the
+   * two are asked at different moments: the capture reads a page the collector clicked the toolbar
+   * on, while "which listing is this?" is asked *as the page loads*, before anything has been
+   * clicked and whatever the page turns out to be. A fixed-price offer — which capture refuses, and
+   * which is exactly what the collector's own listings usually are (#466) — still has an id.
+   *
+   * Null when the address states none, which is not an error: a listing reached through a form post
+   * or a shortened link is simply not identifiable from its URL.
+   */
+  listingId(url: string): string | null;
+  /**
    * Read the listing in `doc`, or say why there is none to read.
    *
    * A refusal is a normal outcome, not an error: a fixed-price offer is a perfectly good page that

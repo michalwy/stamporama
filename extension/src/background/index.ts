@@ -9,12 +9,14 @@ import type {
   DetectedNotice,
   MatchedNotice,
   MatchResponse,
+  OfferLookupResponse,
   OpenMatchResponse,
   OverwriteNumberResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
+import { callOfferLookup } from "./offer-lookup-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
 import { captureListedUrl, listingSubmitted, listingTabClosed, runListingTask } from "./listing";
@@ -126,6 +128,19 @@ async function captureLot(
   return callCapture(profile, lot, dryRun);
 }
 
+/**
+ * Answer a marketplace page's "which of these listings are mine?" (#466).
+ *
+ * No active profile is an **empty answer** rather than an error: an extension installed but not yet
+ * connected must leave every page it runs on exactly as it found it, and the page has nothing to do
+ * with an error either way.
+ */
+async function lookupOffers(platformOfferIds: string[]): Promise<OfferLookupResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) return { ok: true, matches: {} };
+  return callOfferLookup(profile, platformOfferIds);
+}
+
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
   // Fire-and-forget page report from a content script: show what's there, then refine the badge
   // into "work to do" once the dry-run comes back. No response expected.
@@ -172,6 +187,21 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         } satisfies CaptureSaveResponse)
+      );
+    return true;
+  }
+
+  // "Which of these listings are offers of mine?" (#466), asked by a marketplace page as it loads.
+  // Answered here for the same reason the capture is: it needs the active profile, and the token
+  // that goes with it must never reach a script running inside somebody else's page.
+  if (msg?.type === "offer-lookup") {
+    lookupOffers(msg.platformOfferIds)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies OfferLookupResponse)
       );
     return true;
   }

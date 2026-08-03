@@ -39,6 +39,7 @@ import {
   type OfferLabeller,
 } from "./offer-labels";
 import { parseOfferAddressSearch } from "./offer-search";
+import { urlNamesPlatformOffer } from "./platform-offer-url";
 import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
@@ -1464,6 +1465,144 @@ export async function listOffersForTarget(
   });
   const items = await withNeedsAction(rows, collectionId, baseCurrency);
   return items.sort((a, b) => ITEM_OFFER_RANK[a.state] - ITEM_OFFER_RANK[b.state]);
+}
+
+// ── The offer behind a marketplace listing (#466) ────────────────────────────
+
+/** The offer a marketplace listing turned out to be, as the Assistant names it on the page it is
+ * standing on. Deliberately small: this answers "is this mine, and where is it here", and every
+ * further question is the offer's own screen. */
+export interface OfferListingMatch {
+  /** The marketplace's own id this answers for, so a batch answer needs no positional matching. */
+  platformOfferId: string;
+  offerId: string;
+  offerNo: number;
+  /** What the offer is called — its stored title (#209), or the derived label while it has none. */
+  title: string;
+  state: OfferState;
+  /** The offer's screen, **relative** to the instance. The caller is the extension, which holds a
+   * base URL of its own — the one it authenticated against — so a path is both shorter and safer
+   * than an absolute URL built from a `BETTER_AUTH_URL` this request never went through. */
+  path: string;
+  /** Which of the three threads found it, for the answer to be honest about how sure it is:
+   * `listing` / `order` are Allegro's own synced ids (#467), `url` is the id recognised inside a
+   * stored address. */
+  matchedBy: "listing" | "order" | "url";
+}
+
+/** How many listings one lookup answers for. A page of the seller's own assortment asks about every
+ * row it draws, and the collector can set that page to 1000 — so the cap is the endpoint's, not the
+ * caller's, and what it drops is simply not annotated. */
+export const OFFER_LISTING_LOOKUP_LIMIT = 200;
+
+/**
+ * The collection's own offers for a batch of marketplace listings, keyed on the marketplace's offer
+ * ids. Unmatched ids are absent from the answer rather than present as nulls.
+ *
+ * Three threads, exact ones first. The sync (#467) records Allegro's id against the offer it
+ * matched — on the seller's own listing (`AllegroListing`, one row per offer id) and on an order
+ * line that sold it — and where either exists, the answer is Allegro's own rather than derived.
+ * Everything published by hand has only `Offer.url` (#412), matched at the **address's own
+ * boundaries** and never as a bare substring: an id is a run of digits, and `8795065609` sits inside
+ * `18795065609`.
+ *
+ * That last thread is resolved **in memory** (`urlNamesPlatformOffer`) over the collection's stored
+ * addresses rather than as an `OR` per id: a batch of 200 ids would otherwise be a thousand `LIKE`
+ * arms, while the addresses themselves are two small columns and are read once however many
+ * listings are asked about.
+ *
+ * Not scoped to the collection's Allegro platform (#355's setting): an offer's stored address names
+ * the listing whether or not the collector has ever pointed a platform at the module, and a lookup
+ * that answered nothing until a Settings tab was filled in would look broken rather than empty.
+ */
+export async function findOffersForListings(
+  ownerId: string,
+  collectionId: string,
+  platformOfferIds: string[]
+): Promise<OfferListingMatch[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const ids = [...new Set(platformOfferIds.filter((id) => /^\d+$/.test(id)))].slice(
+    0,
+    OFFER_LISTING_LOOKUP_LIMIT
+  );
+  if (ids.length === 0) return [];
+
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { slug: true },
+  });
+  if (!collection) return [];
+
+  const [listings, orderLines, addressed] = await Promise.all([
+    prisma.allegroListing.findMany({
+      where: { collectionId, platformOfferId: { in: ids }, offerId: { not: null } },
+      select: { platformOfferId: true, offerId: true },
+    }),
+    prisma.allegroOrderLine.findMany({
+      where: { collectionId, platformOfferId: { in: ids }, offerId: { not: null } },
+      orderBy: { boughtAt: "desc" },
+      select: { platformOfferId: true, offerId: true },
+    }),
+    // Newest first, so a relisted piece that left an older offer carrying an address ending the same
+    // way lands on the current listing.
+    prisma.offer.findMany({
+      where: { collectionId, url: { not: null } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, url: true },
+    }),
+  ]);
+
+  /** Which offer each asked-about id resolved to, and by which thread. First writer wins, so the
+   *  order these are folded in is the order of preference. */
+  const resolved = new Map<string, { offerId: string; matchedBy: OfferListingMatch["matchedBy"] }>();
+  for (const row of listings) {
+    if (row.offerId) resolved.set(row.platformOfferId, { offerId: row.offerId, matchedBy: "listing" });
+  }
+  for (const row of orderLines) {
+    if (row.offerId && !resolved.has(row.platformOfferId)) {
+      resolved.set(row.platformOfferId, { offerId: row.offerId, matchedBy: "order" });
+    }
+  }
+  for (const id of ids) {
+    if (resolved.has(id)) continue;
+    const hit = addressed.find((offer) => urlNamesPlatformOffer(offer.url, id));
+    if (hit) resolved.set(id, { offerId: hit.id, matchedBy: "url" });
+  }
+  if (resolved.size === 0) return [];
+
+  const offers = await prisma.offer.findMany({
+    where: { collectionId, id: { in: [...new Set([...resolved.values()].map((r) => r.offerId))] } },
+    select: {
+      id: true,
+      offerNo: true,
+      name: true,
+      state: true,
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const byId = new Map(offers.map((offer) => [offer.id, offer]));
+
+  // The labeller is built once for the whole batch, and only when some offer actually needs it: a
+  // collection whose offers all carry a stored title (#380) pays nothing for it.
+  const labeller = offers.some((offer) => offer.name === null)
+    ? await makeOfferLabeller(collectionId)
+    : null;
+
+  const matches: OfferListingMatch[] = [];
+  for (const [platformOfferId, { offerId, matchedBy }] of resolved) {
+    const offer = byId.get(offerId);
+    if (!offer) continue;
+    matches.push({
+      platformOfferId,
+      offerId: offer.id,
+      offerNo: offer.offerNo,
+      title: offer.name ?? labeller?.offer(offer.sets) ?? "Untitled listing",
+      state: offer.state as OfferState,
+      path: `/c/${encodeURIComponent(collection.slug)}/offers/${offer.id}`,
+      matchedBy,
+    });
+  }
+  return matches;
 }
 
 /** Distinct platforms that currently have at least one offer, for the list-screen filter and the

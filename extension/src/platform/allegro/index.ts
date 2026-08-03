@@ -1,5 +1,5 @@
 import type { PlatformModule } from "../module";
-import { captureAllegroLot, matchesAllegroListingUrl } from "./parse";
+import { allegroOfferId, captureAllegroLot, matchesAllegroListingUrl } from "./parse";
 
 // The Allegro platform module (#355) — the first to carry the **capture** half, and the first to
 // carry only one half at all.
@@ -9,11 +9,16 @@ import { captureAllegroLot, matchesAllegroListingUrl } from "./parse";
 // has no listing half either — nothing here posts a sale to Allegro. What it is for is the other
 // direction: one auction the collector is bidding on, read off its page so that watching it does not
 // mean retyping four fields.
+//
+// The capture half also answers what a listing *is* from its address alone (`listingId`, #466),
+// which is how a page the collector is **selling** on gets its link back to the offer here: the same
+// id, asked of the instance instead of written into a lot.
 export const allegroModule: PlatformModule = {
   id: "allegro",
   name: "Allegro",
   capture: {
     isListingUrl: matchesAllegroListingUrl,
+    listingId: allegroOfferId,
     capture: captureAllegroLot,
   },
 };

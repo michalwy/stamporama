@@ -212,6 +212,30 @@ one older notes carry are recognised, so notes you posted before this existed wo
 Nothing to configure, and nothing changes on Colnect's side — the link is drawn in your browser
 only, and only for you, since the private note is yours alone to see.
 
+## Your own listings on Allegro
+
+Open one of your own Allegro listings — from a sale notification, or just to check on it — and the
+Assistant shows a small card in the bottom-right corner naming the offer it is here: **Offer #42**,
+its state, and its title. Clicking it opens that offer in a new tab, so the listing you were reading
+keeps its place.
+
+On **Allegro → Moje Allegro → Sprzedaż → Mój asortyment** — your list of active listings — the same
+answer appears once per row, as a plain **Offer #42** link right after Allegro's own `nr:` line. That
+is where the row already says which listing it is, so it is where it also says which offer that is.
+Filtering, sorting and paging the table redraw it, and the links follow. Hovering one tells you the
+offer's title and state before you follow it.
+
+Links appear **only** for listings your collection has an offer for. On everybody else's auctions —
+the ones you are bidding on — nothing is drawn and nothing changes, and the toolbar icon still means
+what it always did there: [capture the lot](#capturing-an-allegro-lot) for your watchlist.
+
+How the listing is recognised: by Allegro's own offer number. If you have [connected the Allegro
+API](allegro.md), the sync already knows which of your listings is which offer, and the answer is
+exact. Otherwise it is found in the **listing URL** stored on the offer — which is filled in for you
+when you post through the Assistant, and which you can paste in by hand on the offer's screen. An
+offer with neither is not recognised, and the fix is to put the listing's address on it — a row of
+the assortment list with no **Offer #…** link beside it is exactly that offer telling you so.
+
 ## Keeping it up to date
 
 Nothing to do — Chrome updates it from the store. Each Stamporama release publishes a matching
