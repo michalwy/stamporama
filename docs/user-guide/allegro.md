@@ -155,6 +155,16 @@ save it — the sync never creates a sale, a payment or a contact on its own.
 A card disappears once a sale exists carrying that order number as its transaction reference. That
 is also why one order can never turn into two sales.
 
+**Link to existing sale**, on the card, is for the sale you already recorded — before the sync
+existed, or because you write sales down as you pack. It offers the sales near this order's date
+that carry **no order number yet**, showing the date, the total and the buyer so two similar ones can
+be told apart, and writes the order number onto the one you pick. Nothing else about that sale is
+touched: not the amounts, not the buyer, not the lines. A sale that already names an order is never
+offered and never overwritten, and an order some other sale has already claimed is refused by name.
+
+It is the same key either way, so you can still do it by hand — open the sale and paste the number
+into **Order number** — and the row leaves the list just the same.
+
 **Unmatched** means no offer in this collection could be tied to that Allegro listing. It is shown
 rather than hidden, because it tells you something: the listing was posted outside Stamporama, or
 its URL was never recorded on the offer here. Two things fix it —

@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
@@ -109,6 +110,15 @@ export interface AllegroWorklist {
 /** The states an offer can be in and still be waiting to be sold or corrected. A terminal offer is
  *  already resolved, whatever the marketplace has since done with the listing. */
 const LIVE_OFFER_STATES = ["preparing", "ready", "active", "paused"];
+
+/** How far either side of the order's own date a candidate sale is looked for (#479). Wide, because
+ *  a collector who records sales in batches may be weeks behind the marketplace — but not unbounded,
+ *  since a picker of every sale ever made is not a picker. */
+const LINK_WINDOW_DAYS = 90;
+
+/** How many candidates the picker offers. Ordered by how close their date is to the order's, so the
+ *  cut falls on the least likely ones. */
+const LINK_CANDIDATE_LIMIT = 25;
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const collection = await prisma.collection.findFirst({
@@ -300,4 +310,154 @@ export async function getAllegroWorklist(
     orders,
     ended,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Linking an order to a sale already recorded by hand (#479)
+// ---------------------------------------------------------------------------
+//
+// The worklist drops an order the moment a `Sale` carries its id as `externalRef`. That works
+// perfectly for a sale recorded *from* this screen and not at all for one recorded before the sync
+// existed — the two are the same transaction and neither knows about the other. This is the second
+// direction of the same one key: point the order at the sale that is already there.
+//
+// It writes **only** `externalRef`. The collector recorded that sale deliberately, with its own
+// amounts, buyer and lines, and a sync has no business correcting any of it.
+
+/** One sale the picker can offer for an order. */
+export interface LinkableSale {
+  id: string;
+  saleNo: number;
+  soldAt: string;
+  currency: string;
+  /** The sale's gross, so two sales a day apart can be told apart by the figure rather than by
+   *  opening both. Summed from the lines, which is what the sales list shows. */
+  total: string;
+  buyerName: string | null;
+  platformName: string;
+  lineCount: number;
+}
+
+/**
+ * Sales that could be this order, nearest date first.
+ *
+ * **Only sales with no order number.** One that already names an order is spoken for, and offering
+ * it would be offering to overwrite a link somebody made — which this never does.
+ *
+ * Scoped to the platform marked as Allegro where one is set. With none set the scope is the whole
+ * collection: the collector has not told us which platform this is, and refusing to help on that
+ * basis would be pedantry when the date and the total are right there to judge by.
+ */
+export async function listSalesLinkableToAllegroOrder(
+  ownerId: string,
+  collectionId: string,
+  orderId: string
+): Promise<LinkableSale[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const order = await prisma.allegroOrder.findUnique({
+    where: { collectionId_orderId: { collectionId, orderId } },
+    select: { boughtAt: true },
+  });
+  if (!order) return [];
+
+  const platform = await getModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE);
+  const window = LINK_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+  const sales = await prisma.sale.findMany({
+    where: {
+      collectionId,
+      externalRef: null,
+      ...(platform ? { platformId: platform.id } : {}),
+      soldAt: {
+        gte: new Date(order.boughtAt.getTime() - window),
+        lte: new Date(order.boughtAt.getTime() + window),
+      },
+    },
+    select: {
+      id: true,
+      saleNo: true,
+      soldAt: true,
+      currency: true,
+      buyer: { select: { name: true } },
+      platform: { select: { name: true } },
+      lines: { select: { price: true } },
+    },
+  });
+
+  // Sorted here rather than in the query: the ordering is by *distance* from the order's own date,
+  // which is not a column and which Postgres would need an expression index to answer.
+  return sales
+    .sort(
+      (a, b) =>
+        Math.abs(a.soldAt.getTime() - order.boughtAt.getTime()) -
+        Math.abs(b.soldAt.getTime() - order.boughtAt.getTime())
+    )
+    .slice(0, LINK_CANDIDATE_LIMIT)
+    .map((sale) => ({
+      id: sale.id,
+      saleNo: sale.saleNo,
+      soldAt: sale.soldAt.toISOString(),
+      currency: sale.currency,
+      total: sale.lines
+        .reduce((sum, line) => sum.add(line.price), new Prisma.Decimal(0))
+        .toFixed(2),
+      buyerName: sale.buyer?.name ?? null,
+      platformName: sale.platform.name,
+      lineCount: sale.lines.length,
+    }));
+}
+
+/** Raised for the two ways a link is refused, so the caller can say which. */
+export class AllegroLinkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AllegroLinkError";
+  }
+}
+
+/**
+ * Point an order at a sale, by writing the order id into the sale's `externalRef`.
+ *
+ * Refuses rather than duplicates. Two sales claiming one order would put the same money in the books
+ * twice and leave the worklist unable to say which of them is the record — so an order already
+ * claimed is an error naming the sale that holds it, and a sale that already names some *other*
+ * order is never quietly rewritten.
+ */
+export async function linkAllegroOrderToSale(
+  ownerId: string,
+  collectionId: string,
+  orderId: string,
+  saleId: string
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const order = await prisma.allegroOrder.findUnique({
+    where: { collectionId_orderId: { collectionId, orderId } },
+    select: { id: true },
+  });
+  if (!order) throw new AllegroLinkError("That Allegro order is not in this collection.");
+
+  const claimed = await prisma.sale.findFirst({
+    where: { collectionId, externalRef: orderId },
+    select: { saleNo: true },
+  });
+  if (claimed) {
+    throw new AllegroLinkError(
+      `Sale #${claimed.saleNo} already carries that order number. One order cannot be two sales.`
+    );
+  }
+
+  const sale = await prisma.sale.findFirst({
+    where: { id: saleId, collectionId },
+    select: { externalRef: true, saleNo: true },
+  });
+  if (!sale) throw new AllegroLinkError("That sale is not in this collection.");
+  if (sale.externalRef) {
+    throw new AllegroLinkError(
+      `Sale #${sale.saleNo} already carries order number ${sale.externalRef}. Clear it on the sale first if it is wrong.`
+    );
+  }
+
+  await prisma.sale.update({ where: { id: saleId }, data: { externalRef: orderId } });
 }

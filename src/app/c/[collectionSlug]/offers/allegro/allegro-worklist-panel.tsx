@@ -8,6 +8,7 @@ import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { syncAllegroNowAction } from "@/app/actions/allegro";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { SellOfferFlowDialog, type SellableOfferSubject } from "../sell-offer-flow-dialog";
+import { LinkSaleDialog } from "./link-sale-dialog";
 
 /**
  * The Allegro sold-listing worklist (#467).
@@ -151,6 +152,7 @@ export function AllegroWorklistPanel({
     { tone: "ok" | "error"; text: string } | null
   >(null);
   const [selling, setSelling] = useState<WorklistOffer | null>(null);
+  const [linking, setLinking] = useState<WorklistOrder | null>(null);
   const [payment, setPayment] = useState<PaymentFilter[]>([]);
   const [match, setMatch] = useState<MatchFilter[]>([]);
   const now = new Date();
@@ -343,6 +345,25 @@ export function AllegroWorklistPanel({
                 ) : (
                   "Buyer not stated by Allegro"
                 )}
+                {/* The other way an order leaves this list (#479): not by recording a sale, but by
+                    recognising the one already recorded. Sits on the order rather than on a line,
+                    because `externalRef` names the whole order. */}
+                <button
+                  type="button"
+                  onClick={() => setLinking(order)}
+                  title="This order is already recorded as a sale — point it at that sale"
+                  style={{
+                    ...BUTTON,
+                    border: "none",
+                    background: "none",
+                    padding: "0 0 0 0.5rem",
+                    color: "var(--color-accent)",
+                    fontWeight: 400,
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  Link to existing sale
+                </button>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -464,6 +485,17 @@ export function AllegroWorklistPanel({
           ))
         )}
       </section>
+
+      {linking && (
+        <LinkSaleDialog
+          collectionId={collectionId}
+          order={linking}
+          onClose={() => setLinking(null)}
+          onLinked={() =>
+            queryClient.invalidateQueries({ queryKey: ["allegro-worklist", collectionId] })
+          }
+        />
+      )}
 
       {selling && (
         <SellOfferFlowDialog

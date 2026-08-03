@@ -15,6 +15,7 @@ import {
   testAllegroConnection,
 } from "@/lib/allegro-connection";
 import { runAllegroSync } from "@/lib/allegro-sync";
+import { linkAllegroOrderToSale } from "@/lib/allegro-worklist";
 
 // Settings → Allegro (#355, #476). Two things live on this tab: which platform contact is Allegro,
 // and this instance's own connection to the collector's Allegro account through the public API.
@@ -165,6 +166,31 @@ export async function syncAllegroNowAction(
     };
   } catch (err) {
     return failure(err, "The Allegro sync could not be run.");
+  }
+}
+
+/**
+ * Point a synced order at a sale that already exists (#479).
+ *
+ * The counterpart of the worklist's own rule rather than a second one: it writes the order id into
+ * `Sale.externalRef`, which is the single key the list drops an order on, so a sale recorded by hand
+ * months ago and one recorded from this screen leave the worklist for exactly the same reason.
+ *
+ * Only `externalRef` is written. The refusals — an order already claimed, a sale already naming a
+ * different order — come back as their own sentences, because "this is already recorded, as sale
+ * #12" is an answer and "failed" is not.
+ */
+export async function linkAllegroOrderToSaleAction(
+  collectionId: string,
+  orderId: string,
+  saleId: string
+): Promise<AllegroActionState> {
+  const session = await getSession();
+  try {
+    await linkAllegroOrderToSale(session.user.id, collectionId, orderId, saleId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "The order could not be linked to that sale.");
   }
 }
 
