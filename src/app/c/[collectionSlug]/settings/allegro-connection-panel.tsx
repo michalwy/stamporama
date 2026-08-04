@@ -88,6 +88,29 @@ const codeStyle: React.CSSProperties = {
   wordBreak: "break-all",
 };
 
+/**
+ * What Allegro's scope strings mean, in the collector's own words (#485).
+ *
+ * A label per scope this app has a reason to name, and the raw string for everything else: an
+ * application registered for something Stamporama never asks about is a perfectly ordinary thing,
+ * and hiding it would make the list disagree with what the collector ticked on Allegro.
+ */
+const SCOPE_LABELS: Record<string, string> = {
+  "allegro:api:sale:offers:read": "Read your offers",
+  "allegro:api:sale:offers:write": "Create and edit your offers",
+  "allegro:api:orders:read": "Read your orders",
+  "allegro:api:profile:read": "Read your account profile",
+  "allegro:api:sale:settings:read": "Read your sale settings",
+  "allegro:api:sale:settings:write": "Change your sale settings",
+  "allegro:api:billing:read": "Read your billing",
+  "allegro:api:payments:read": "Read your payments",
+  "allegro:api:payments:write": "Issue refunds",
+  "allegro:api:disputes": "Handle disputes",
+  "allegro:api:ratings": "Handle ratings",
+  "allegro:api:bids": "Bid on offers",
+  "allegro:api:messaging": "Read and send Allegro messages",
+};
+
 /** Nothing to subscribe to — the "store" is *am I in the browser yet*, which changes exactly once
  *  and is stated by the server/client snapshot pair below. Module-scope so the reference is stable
  *  across renders. */
@@ -447,6 +470,75 @@ export function AllegroConnectionPanel({
           <p style={{ ...helpTextStyle, marginBottom: "0.75rem" }}>
             Not connected yet.
           </p>
+        )}
+
+        {/* --- What this connection is permitted to do (#485) --------------------------- */}
+        {status.connected && (
+          <div
+            style={{
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.5rem",
+              padding: "0.75rem",
+              marginBottom: "0.75rem",
+            }}
+          >
+            <p
+              style={{
+                ...helpTextStyle,
+                margin: "0 0 0.5rem",
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              Permissions granted to this application
+            </p>
+
+            {status.scopes ? (
+              <ul style={{ ...helpTextStyle, margin: "0 0 0.5rem", paddingLeft: "1.1rem" }}>
+                {status.scopes.map((scope) => (
+                  <li key={scope}>
+                    {SCOPE_LABELS[scope] ?? <code style={codeStyle}>{scope}</code>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              // Not the same as "none": the token could not be read this way, and saying the
+              // application grants nothing on that basis would be a claim with nothing behind it.
+              <p style={{ ...helpTextStyle, margin: "0 0 0.5rem" }}>
+                Stamporama cannot tell which permissions this connection carries. That is not a
+                fault — it only means the list below cannot be checked for you.
+              </p>
+            )}
+
+            <p style={{ ...helpTextStyle, margin: 0 }}>
+              {status.canPublishOffers === true ? (
+                <>
+                  Publishing offers from here is <strong>allowed</strong> by this application.
+                </>
+              ) : (
+                <>
+                  {status.canPublishOffers === false && (
+                    <>
+                      <strong>Publishing offers from here is not allowed yet.</strong>{" "}
+                    </>
+                  )}
+                  Creating a listing on Allegro needs your application to grant write access to your
+                  offers. Stamporama asks for no permissions of its own, so this can only be changed
+                  where the application is registered: tick it at{" "}
+                  <a
+                    href="https://apps.developer.allegro.pl"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "var(--color-accent)" }}
+                  >
+                    apps.developer.allegro.pl
+                  </a>{" "}
+                  and then <strong>reconnect here</strong> — an existing connection keeps the
+                  permissions it was granted with.
+                </>
+              )}
+            </p>
+          </div>
         )}
 
         {device && (

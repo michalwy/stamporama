@@ -37,9 +37,14 @@ instance uses an application you register yourself. It is free and takes a few m
    - If your Stamporama **does** have a public HTTPS address, you may instead register a web
      application and give it the redirect URI shown on the Settings → Allegro tab. It must match
      exactly, character for character.
-4. Grant it read access to your offers and orders. Profile access is **optional**: without it
-   everything works, Stamporama just cannot show which Allegro account is connected — the tab then
-   says "Connected" without a name.
+4. Grant it access:
+   - **Read access to your offers and orders** — required. The sold-listing worklist and the bid
+     tracking are both reads, and neither works without it.
+   - **Write access to your offers** — only if you want to *publish* listings to Allegro from
+     Stamporama. Reading works perfectly well without it; a connection granted read access alone
+     simply refuses to create a listing, and says so.
+   - **Profile access** — optional. Without it everything works, Stamporama just cannot show which
+     Allegro account is connected — the tab then says "Connected" without a name.
 
    What you tick here is exactly what the connection can do — Stamporama asks for no permissions of
    its own, so the access you grant is the access it gets, and nothing else. Grant narrowly; you can
@@ -124,6 +129,28 @@ restart — you connect once.
 - **Needs reconnecting** appears when Allegro has refused to renew the connection — typically
   because you revoked it in your Allegro account, or the application's secret changed. Press
   **Reconnect with a code** and go through the short flow again.
+
+### Permissions
+
+Under the connection status the tab lists **what your application is actually permitted to do** —
+read from the connection itself, not from what you meant to tick. It is the quickest way to answer
+"why did that refuse?".
+
+Publishing a listing needs your application to have **write access to your offers**. If it does not,
+the tab says so plainly, and any attempt to publish is refused with the same reason rather than with
+a general failure.
+
+Two things about changing it:
+
+- **You change permissions on Allegro, not here.** Stamporama asks for no permissions of its own —
+  by design, because asking for one your application does not hold fails the whole sign-in with a
+  message about something else entirely. What you granted at
+  [apps.developer.allegro.pl](https://apps.developer.allegro.pl) is exactly what the connection can
+  do.
+- **A connection keeps the permissions it was made with.** Adding write access to the application
+  does not widen a connection that already exists — press **Reconnect with a code** and go through
+  the short flow again. Until you do, the tab will keep saying publishing is not allowed, and it
+  will be right.
 
 ### Changing the application
 

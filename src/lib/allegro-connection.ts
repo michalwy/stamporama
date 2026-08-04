@@ -11,6 +11,8 @@ import {
   allegroUserAgent,
   authorizationUrl,
   exchangeAuthorizationCode,
+  grantsOfferPublishing,
+  readTokenScopes,
   pollDeviceToken,
   refreshAccessToken,
   requestDeviceCode,
@@ -114,6 +116,13 @@ export interface AllegroConnectionStatus {
   /** The redirect URI to register with Allegro, or null when the instance has no configured base
    *  URL — which is exactly when the code flow is not available and the device flow is the answer. */
   redirectUri: string | null;
+  /** What the connected application is actually permitted to do (#485), read off the access token.
+   *  **Null is not an empty list**: it is a token whose scopes could not be read, and the panel says
+   *  so rather than claiming the application grants nothing. */
+  scopes: string[] | null;
+  /** Whether those scopes include the sale-offer write access publishing needs. Null where the
+   *  scopes are unknown, so "cannot publish" is never asserted without a basis. */
+  canPublishOffers: boolean | null;
 }
 
 function toStatus(
@@ -128,7 +137,9 @@ function toStatus(
     needsReconnect: boolean;
     lastError: string | null;
     lastRefreshedAt: Date | null;
-  } | null
+  } | null,
+  /** Read by the caller, which is the only thing that may open a sealed token. */
+  scopes: string[] | null = null
 ): AllegroConnectionStatus {
   const base = appBaseUrl();
   const redirectUri = base ? allegroRedirectUri(base) : null;
@@ -147,6 +158,8 @@ function toStatus(
       lastError: null,
       secretKeyConfigured: secretKeyConfigured(),
       redirectUri,
+      scopes: null,
+      canPublishOffers: null,
     };
   }
   return {
@@ -163,17 +176,35 @@ function toStatus(
     lastError: row.lastError,
     secretKeyConfigured: secretKeyConfigured(),
     redirectUri,
+    scopes,
+    canPublishOffers: grantsOfferPublishing(scopes),
   };
 }
 
-/** The connection's status for Settings. */
+/**
+ * The connection's status for Settings.
+ *
+ * The permissions (#485) are read off the stored access token, which is why this is the one status
+ * read that opens a secret: the scopes themselves are not one — they are a list of what the
+ * collector's own application may do — but they arrive inside something that is. An unreadable token
+ * reads as *unknown permissions*, never as none: `needsReconnect` is what says the connection is
+ * broken, and this line must not say it a second time in different words.
+ */
 export async function getAllegroConnectionStatus(
   ownerId: string,
   collectionId: string
 ): Promise<AllegroConnectionStatus> {
   await assertCollectionOwner(ownerId, collectionId);
   const row = await prisma.allegroConnection.findUnique({ where: { collectionId } });
-  return toStatus(row);
+  let scopes: string[] | null = null;
+  if (row?.accessTokenSealed) {
+    try {
+      scopes = readTokenScopes(openSecret(row.accessTokenSealed));
+    } catch {
+      scopes = null;
+    }
+  }
+  return toStatus(row, scopes);
 }
 
 /**

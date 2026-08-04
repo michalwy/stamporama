@@ -12,7 +12,8 @@
 
 import { allegroApiBase } from "./allegro-oauth";
 
-/** Allegro versions its API through the `Accept` header rather than the path. */
+/** Allegro versions its API through the `Accept` header rather than the path — and takes the same
+ *  media type as the `Content-Type` of a JSON write (#485), which is why one constant serves both. */
 const ACCEPT = "application/vnd.allegro.public.v1+json";
 
 /** How many times a call is retried. Only rate limits and server faults are retried — a 4xx is the
@@ -32,12 +33,20 @@ export class AllegroApiError extends Error {
   /** True when the token was rejected: the caller's cue to mark the connection as needing a
    *  reconnection rather than reporting a one-off failure. */
   readonly unauthorized: boolean;
+  /** True when Allegro accepted the token and refused the *permission* (#485) — the application the
+   *  collector registered does not carry the scope this call needs. Deliberately not `unauthorized`:
+   *  reconnecting the same application changes nothing, and the fix is to widen the registration and
+   *  only then reconnect. */
+  readonly insufficientScope: boolean;
 
-  constructor(message: string, status: number | null) {
+  constructor(message: string, status: number | null, insufficientScope = false) {
     super(message);
     this.name = "AllegroApiError";
     this.status = status;
-    this.unauthorized = status === 401;
+    this.insufficientScope = insufficientScope;
+    // A scope refusal that arrives as a 401 must not latch "needs reconnecting": it is the one 401
+    // reconnecting does not fix.
+    this.unauthorized = status === 401 && !insufficientScope;
   }
 }
 
@@ -65,6 +74,30 @@ async function describeFailure(res: Response): Promise<string> {
   return `Allegro returned HTTP ${res.status}.`;
 }
 
+/** OAuth's own way of saying *the token is fine, the permission is not*: a `WWW-Authenticate` header
+ *  naming `insufficient_scope`. It is the one signal that separates "this application was never
+ *  registered for that" from every other refusal, and Allegro's own error body does not carry it —
+ *  a missing scope arrives as an ordinary access-denied message. */
+function isInsufficientScope(res: Response): boolean {
+  const header = res.headers.get("www-authenticate");
+  return header !== null && header.toLowerCase().includes("insufficient_scope");
+}
+
+/** The error one refusal becomes. A scope refusal is **named as one** (#485): the collector's next
+ *  step is to widen the application's registration and reconnect, and "Access is denied" sends them
+ *  looking at the token instead. */
+async function failureFrom(res: Response): Promise<AllegroApiError> {
+  const detail = await describeFailure(res);
+  if (isInsufficientScope(res)) {
+    return new AllegroApiError(
+      `The connected Allegro application does not have permission for this (${detail}). Add the access it needs to your application at apps.developer.allegro.pl, then reconnect under Settings → Allegro.`,
+      res.status,
+      true
+    );
+  }
+  return new AllegroApiError(detail, res.status);
+}
+
 /** How long to wait before the next attempt. Allegro's own `Retry-After` wins where it stated one —
  *  guessing against a rate limiter is how a caller earns a longer ban — capped at {@link MAX_WAIT_MS}. */
 function retryDelayMs(res: Response, attempt: number): number {
@@ -75,6 +108,108 @@ function retryDelayMs(res: Response, attempt: number): number {
   }
   return Math.min(BACKOFF_MS * 2 ** attempt, MAX_WAIT_MS);
 }
+
+/** Query parameters, in the one shape every caller here uses. */
+type AllegroQuery = Record<string, string | number | string[] | undefined>;
+
+function buildUrl(sandbox: boolean, path: string, query?: AllegroQuery): URL {
+  const url = new URL(`${allegroApiBase(sandbox)}${path}`);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const one of value) url.searchParams.append(key, one);
+    } else {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url;
+}
+
+/**
+ * One authenticated request, retried according to the policy the caller states.
+ *
+ * The **policy is the caller's** and not this function's, because it is not the same conversation on
+ * a read and on a write — see {@link RETRY_READS} and {@link RETRY_WRITES} below. Everything else —
+ * the bearer, the versioned accept header, the identifying `User-Agent`, the backoff, and what a
+ * refusal becomes — is shared, which is the whole reason this module exists.
+ */
+async function send(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  path: string;
+  query?: AllegroQuery;
+  method: string;
+  body?: BodyInit;
+  /** Omitted on a multipart body, where `fetch` writes the header itself with the boundary in it. */
+  contentType?: string;
+  /** Which *answered* failures are worth repeating. */
+  retryOn: (res: Response) => boolean;
+  /** Whether a failure with no answer at all — a dropped connection, a restarting proxy — is
+   *  repeated. False on a write, where a request that never answered may still have been carried
+   *  out. */
+  retryNetworkFailure: boolean;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const url = buildUrl(opts.sandbox, opts.path, opts.query);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${opts.accessToken}`,
+    Accept: ACCEPT,
+    "User-Agent": opts.userAgent,
+  };
+  if (opts.contentType) headers["Content-Type"] = opts.contentType;
+
+  let lastError: AllegroApiError | null = null;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: opts.method,
+        headers,
+        body: opts.body,
+        signal: opts.signal,
+        cache: "no-store",
+      });
+    } catch (err) {
+      lastError = new AllegroApiError(
+        err instanceof Error ? err.message : "Could not reach Allegro.",
+        null
+      );
+      if (opts.retryNetworkFailure && attempt < MAX_ATTEMPTS - 1) {
+        await sleep(retryDelayMs(new Response(null), attempt));
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (res.ok) return res;
+
+    const retryable = opts.retryOn(res);
+    lastError = await failureFrom(res);
+    if (!retryable || attempt === MAX_ATTEMPTS - 1) throw lastError;
+    await sleep(retryDelayMs(res, attempt));
+  }
+
+  throw lastError ?? new AllegroApiError("Could not reach Allegro.", null);
+}
+
+/** A read repeats a rate limit and a server fault alike: re-running a GET costs nothing but the
+ *  request, and a restarting proxy looks exactly like a dropped connection — which is why a read
+ *  repeats those too. */
+const RETRY_READS = (res: Response): boolean => res.status === 429 || res.status >= 500;
+
+/**
+ * A write repeats a **rate limit and nothing else** (#485).
+ *
+ * A 429 is Allegro refusing the request *before* it does anything with it — it is rejected, not
+ * half-done — so repeating it cannot create a second listing. A 5xx is the opposite: Allegro may
+ * well have created the offer and then failed to say so, and `POST /sale/product-offers` carries no
+ * idempotency key to make that safe. Repeating it would put two listings on a live selling account
+ * for one press of Publish, which is far worse than a failure the collector can see and repeat by
+ * hand. A request that never answered at all is the same case and is not repeated either.
+ */
+const RETRY_WRITES = (res: Response): boolean => res.status === 429;
 
 /**
  * One authenticated GET against Allegro's API, parsed as JSON.
@@ -93,58 +228,139 @@ export async function allegroGet<T>(opts: {
   /** An array value is repeated rather than joined — Allegro's own convention for the parameters
    *  that take several values (`type`, `publication.status`), and a comma-joined one is read as a
    *  single unknown value rather than as a list. */
-  query?: Record<string, string | number | string[] | undefined>;
+  query?: AllegroQuery;
   signal?: AbortSignal;
 }): Promise<T> {
-  const url = new URL(`${allegroApiBase(opts.sandbox)}${opts.path}`);
-  for (const [key, value] of Object.entries(opts.query ?? {})) {
-    if (value === undefined) continue;
-    if (Array.isArray(value)) {
-      for (const one of value) url.searchParams.append(key, one);
-    } else {
-      url.searchParams.set(key, String(value));
-    }
+  const res = await send({
+    ...opts,
+    method: "GET",
+    retryOn: RETRY_READS,
+    retryNetworkFailure: true,
+  });
+  return (await res.json()) as T;
+}
+
+// --- The write half (#485) ---------------------------------------------------------------------
+//
+// Same base URL, same accept header, same bearer, same identifying header, same error parsing — and
+// a retry policy of its own, stated above. What is written is #477's, #486's and #487's; this module
+// ends at "the request can be made and its answer can be told apart from a different one".
+
+/**
+ * What a write answered.
+ *
+ * The interesting member is {@link accepted}. Allegro answers a create with **201 or 202**, and the
+ * two are not the same thing: 201 is the listing existing, while 202 is the work having been
+ * *accepted* — an operation still running, which the caller polls at {@link location} before it may
+ * claim anything was published. Collapsing the two into "created" is how an offer that Allegro later
+ * refused ends up recorded here as live.
+ */
+export interface AllegroWriteResult<T> {
+  /** Allegro's own status, for a caller that cares which of 200/201/202/204 it was. */
+  status: number;
+  /** True on a 202 only: accepted, not finished. */
+  accepted: boolean;
+  /** The parsed body, or null where there was none — a 204, or an answer that is not JSON. */
+  body: T | null;
+  /** Where the accepted work is followed up: the `Location` header, or the `location` a body states.
+   *  Null when Allegro named nowhere, which a caller reports rather than silently polls for. */
+  location: string | null;
+}
+
+async function writeResult<T>(res: Response): Promise<AllegroWriteResult<T>> {
+  let body: T | null = null;
+  try {
+    const text = await res.text();
+    body = text.length > 0 ? (JSON.parse(text) as T) : null;
+  } catch {
+    // A 2xx that is not JSON is still a success — the status is what the caller acted on, and a
+    // parse failure here would turn a published listing into a reported error.
+    body = null;
   }
+  const stated = (body as { location?: unknown } | null)?.location;
+  return {
+    status: res.status,
+    accepted: res.status === 202,
+    body,
+    location: res.headers.get("location") ?? (typeof stated === "string" ? stated : null),
+  };
+}
 
-  let lastError: AllegroApiError | null = null;
+/** One authenticated JSON POST. Retries a rate limit and nothing else — see {@link RETRY_WRITES}. */
+export async function allegroPost<T>(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  path: string;
+  query?: AllegroQuery;
+  /** Serialised here rather than by the caller, so that the one content type this client sends is
+   *  stated in one place. */
+  json: unknown;
+  signal?: AbortSignal;
+}): Promise<AllegroWriteResult<T>> {
+  const res = await send({
+    ...opts,
+    method: "POST",
+    body: JSON.stringify(opts.json),
+    contentType: ACCEPT,
+    retryOn: RETRY_WRITES,
+    retryNetworkFailure: false,
+  });
+  return writeResult<T>(res);
+}
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${opts.accessToken}`,
-          Accept: ACCEPT,
-          "User-Agent": opts.userAgent,
-        },
-        signal: opts.signal,
-        cache: "no-store",
-      });
-    } catch (err) {
-      // A network failure is worth one more try for the same reason a 5xx is — a restarting proxy
-      // looks exactly like this — but it carries no status, so it can never be mistaken for a
-      // refusal the collector should act on.
-      lastError = new AllegroApiError(
-        err instanceof Error ? err.message : "Could not reach Allegro.",
-        null
-      );
-      if (attempt < MAX_ATTEMPTS - 1) {
-        await sleep(retryDelayMs(new Response(null), attempt));
-        continue;
-      }
-      throw lastError;
-    }
+/** One authenticated JSON PATCH — Allegro's shape for editing a listing already published. Same
+ *  policy as the POST beside it: a PATCH is idempotent in HTTP's own terms, but one repeated over a
+ *  5xx would still be a second edit of a live listing decided by this app rather than by the
+ *  collector, and one policy for every write is one thing to reason about. */
+export async function allegroPatch<T>(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  path: string;
+  query?: AllegroQuery;
+  json: unknown;
+  signal?: AbortSignal;
+}): Promise<AllegroWriteResult<T>> {
+  const res = await send({
+    ...opts,
+    method: "PATCH",
+    body: JSON.stringify(opts.json),
+    contentType: ACCEPT,
+    retryOn: RETRY_WRITES,
+    retryNetworkFailure: false,
+  });
+  return writeResult<T>(res);
+}
 
-    if (res.ok) return (await res.json()) as T;
-
-    const retryable = res.status === 429 || res.status >= 500;
-    const message = await describeFailure(res);
-    lastError = new AllegroApiError(message, res.status);
-    if (!retryable || attempt === MAX_ATTEMPTS - 1) throw lastError;
-    await sleep(retryDelayMs(res, attempt));
-  }
-
-  throw lastError ?? new AllegroApiError("Could not reach Allegro.", null);
+/**
+ * One authenticated `multipart/form-data` POST — the image upload #487 is the only caller of.
+ *
+ * It shares the authorization and the retry policy and none of the body handling, which is why it is
+ * a member of its own rather than a flag on {@link allegroPost}. The `Content-Type` is deliberately
+ * **not** set: `fetch` writes it itself from the `FormData`, boundary included, and a hand-written
+ * one is a body Allegro cannot parse.
+ */
+export async function allegroUpload<T>(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  path: string;
+  form: FormData;
+  signal?: AbortSignal;
+}): Promise<AllegroWriteResult<T>> {
+  const res = await send({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: opts.path,
+    method: "POST",
+    body: opts.form,
+    retryOn: RETRY_WRITES,
+    retryNetworkFailure: false,
+    signal: opts.signal,
+  });
+  return writeResult<T>(res);
 }
 
 /** Who the token belongs to — Allegro's `GET /me`. This is the whoami call #476 is *done when* it

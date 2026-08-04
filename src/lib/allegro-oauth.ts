@@ -355,6 +355,65 @@ export async function refreshAccessToken(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Scopes (#485)
+// ---------------------------------------------------------------------------
+//
+// Nothing here *requests* a scope — see the note at the top of this file. What these do is read back
+// which permissions the application the collector registered actually carries, so that "publishing
+// needs the sale-offer write access" can be answered on the settings tab rather than as a 403 three
+// screens later.
+//
+// The source is the access token itself: Allegro issues a JWT whose payload carries a `scope` array.
+// It is read **for display only** and never verified — this app is not the token's audience and has
+// no key to verify it with, and nothing is authorized on the strength of what it says. Allegro is
+// still the only thing that decides what a call may do; this only decides what the panel says.
+
+/** Creating and updating one's own offers, and uploading the images they carry. The one permission
+ *  publishing (#477, #487) cannot be done without. */
+export const ALLEGRO_SALE_OFFERS_WRITE_SCOPE = "allegro:api:sale:offers:write";
+
+/** Reading one's own offers — what the sold-listing sweep (#467) and the bidding poll (#481) use. */
+export const ALLEGRO_SALE_OFFERS_READ_SCOPE = "allegro:api:sale:offers:read";
+
+/**
+ * The scopes an access token carries, or **null** when they cannot be read.
+ *
+ * Null is not "none": a token that is not a JWT, or one whose payload states no scope, is a token
+ * this app cannot describe — and rendering that as an empty permission list would tell the collector
+ * their application grants nothing, which is a claim it has no basis for. The two states are
+ * therefore kept apart all the way to the screen.
+ */
+export function readTokenScopes(accessToken: string | null): string[] | null {
+  if (!accessToken) return null;
+  const parts = accessToken.split(".");
+  if (parts.length !== 3) return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  const scope = (payload as { scope?: unknown })?.scope;
+  // An array is what Allegro sends; the space-delimited string is OAuth's own form, accepted so that
+  // a change of shape reads as fewer permissions rather than as none at all.
+  const values = Array.isArray(scope)
+    ? scope
+    : typeof scope === "string"
+      ? scope.split(/\s+/)
+      : null;
+  if (!values) return null;
+  const scopes = values.filter((one): one is string => typeof one === "string" && one.length > 0);
+  return scopes.length > 0 ? scopes : null;
+}
+
+/** Whether a token's scopes allow publishing. Null in, null out — "not known" is not "no", and the
+ *  panel says so rather than warning about a permission it could not read. */
+export function grantsOfferPublishing(scopes: string[] | null): boolean | null {
+  if (!scopes) return null;
+  return scopes.includes(ALLEGRO_SALE_OFFERS_WRITE_SCOPE);
+}
+
+// ---------------------------------------------------------------------------
 // Token response
 // ---------------------------------------------------------------------------
 

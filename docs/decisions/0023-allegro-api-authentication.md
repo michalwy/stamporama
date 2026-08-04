@@ -128,6 +128,51 @@ credentials because an application registered in the sandbox has different crede
 registered in production. Nothing about orders or sales should first be exercised against a live
 selling account.
 
+### 6. A write retries a rate limit and nothing else (#485)
+
+The client's write half — `allegroPost`, `allegroPatch` and the multipart `allegroUpload` — shares
+everything transport-shaped with `allegroGet` and **not** its retry policy, because retrying is not
+the same conversation on a write.
+
+A read repeats a 429, a 5xx and a dropped connection alike: re-running a GET costs the request and
+nothing else. A write repeats **only a 429**. A rate limit is Allegro refusing the request before it
+does anything with it — rejected, not half-done — so repeating it cannot create a second listing. A
+5xx is the opposite: Allegro may well have created the offer and then failed to say so, and
+`POST /sale/product-offers` carries no idempotency key that would make a second attempt safe. Two
+listings on a live selling account for one press of Publish is far worse than a failure the
+collector can see and repeat by hand. A request that never answered at all is the same case and is
+not repeated either. `PATCH` follows the same rule despite being idempotent in HTTP's own terms: a
+repeat decided by this app is still a second edit of a live listing that the collector did not ask
+for, and one policy for every write is one thing to reason about.
+
+**A 202 is not a 201.** Allegro answers a create with either, and they say different things: 201 is
+the listing existing, while 202 is the work having been accepted and still running. The client
+returns `AllegroWriteResult` — `status`, `accepted`, `body`, `location` — so a caller polls the
+operation rather than recording as published something Allegro may yet refuse.
+
+### 7. Permissions are read back, not requested (#485)
+
+Scopes are never requested — §1's reason, unchanged: they come from the application's own
+registration and asking for one it lacks fails the whole authorization under a misleading message.
+What #485 adds is the other direction. Allegro's access token is a JWT carrying a `scope` array, so
+`readTokenScopes` (pure, in `allegro-oauth.ts`) reads back **what the connected application is
+actually permitted to do** and Settings → Allegro states it, along with whether publishing is among
+it and the fact that widening the registration needs a **reconnection** — a grant keeps the scopes it
+was issued with. The token is decoded for display only and never verified: this app is not its
+audience, holds no key, and authorizes nothing on the strength of what it says. Allegro remains the
+only thing that decides what a call may do.
+
+Unknown is kept apart from none. A token that is not a JWT, or one stating no scope, reads as
+*permissions could not be read* rather than as an empty list, which would tell the collector their
+application grants nothing on no basis at all.
+
+A refusal that **is** a missing scope is reported as one. `WWW-Authenticate: …insufficient_scope` is
+the only signal that separates it from every other 403 — Allegro's own error body says nothing but
+"access is denied" — so `AllegroApiError.insufficientScope` carries it and the message names the fix
+(widen the application, then reconnect). It deliberately does **not** set `unauthorized`: that flag
+latches the needs-reconnect state, and reconnecting the same application is precisely what does not
+fix a permission it was never registered with.
+
 ### Every request identifies the application (`User-Agent`)
 
 Allegro requires a `User-Agent` on **every** request — mandatory from the end of June 2026 — in the
@@ -167,5 +212,8 @@ already passed around whole, so no caller downstream had to learn that any of th
 - Every call to Allegro now names the application. A collector who registered theirs under a
   different name says so in Settings → Allegro; leaving it blank is supported and still identifies
   the software.
+- Publishing needs an application registered with **write access to offers**, which a connection
+  made for the read-only features does not carry. Settings says so and the user guide documents it;
+  adding the access requires reconnecting, not re-registering.
 - The buying side is unaffected. Auction lots the collector bids on (#351/#352/#449) are other
   sellers' offers, outside `GET /sale/offers`, and stay with the Assistant's capture.

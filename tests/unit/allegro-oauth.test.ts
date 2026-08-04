@@ -1,13 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ALLEGRO_SALE_OFFERS_WRITE_SCOPE,
   AllegroOAuthError,
   allegroApiBase,
   allegroRedirectUri,
   allegroUserAgent,
   authorizationUrl,
   deviceCodeUrl,
+  grantsOfferPublishing,
   readTokenResponse,
+  readTokenScopes,
 } from "../../src/lib/allegro-oauth";
 
 describe("allegroApiBase", () => {
@@ -140,5 +143,44 @@ describe("allegroUserAgent", () => {
 
   it("carries the dev version an unbuilt instance reports", () => {
     assert.match(allegroUserAgent("App", ""), /^App\/dev /);
+  });
+});
+
+describe("readTokenScopes", () => {
+  function token(payload: unknown): string {
+    const part = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+    return `header.${part}.signature`;
+  }
+
+  it("reads the scope array Allegro's own access token carries", () => {
+    assert.deepEqual(
+      readTokenScopes(token({ scope: ["allegro:api:orders:read", ALLEGRO_SALE_OFFERS_WRITE_SCOPE] })),
+      ["allegro:api:orders:read", ALLEGRO_SALE_OFFERS_WRITE_SCOPE]
+    );
+  });
+
+  it("accepts OAuth's space-delimited form too", () => {
+    assert.deepEqual(readTokenScopes(token({ scope: "a b" })), ["a", "b"]);
+  });
+
+  it("answers null — not an empty list — for anything it cannot read", () => {
+    // Null is "unknown permissions" and drives a different sentence on the settings tab from "this
+    // application grants nothing", which is a claim an unreadable token gives no basis for.
+    assert.equal(readTokenScopes(null), null);
+    assert.equal(readTokenScopes("not-a-jwt"), null);
+    assert.equal(readTokenScopes("a.!!!.c"), null);
+    assert.equal(readTokenScopes(token({ sub: "someone" })), null);
+    assert.equal(readTokenScopes(token({ scope: [] })), null);
+  });
+});
+
+describe("grantsOfferPublishing", () => {
+  it("is the sale-offer write scope being present, and nothing else", () => {
+    assert.equal(grantsOfferPublishing([ALLEGRO_SALE_OFFERS_WRITE_SCOPE]), true);
+    assert.equal(grantsOfferPublishing(["allegro:api:sale:offers:read"]), false);
+  });
+
+  it("stays null where the scopes are unknown, rather than warning without a basis", () => {
+    assert.equal(grantsOfferPublishing(null), null);
   });
 });
