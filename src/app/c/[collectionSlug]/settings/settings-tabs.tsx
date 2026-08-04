@@ -15,6 +15,7 @@ import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { AllegroPlatformPanel } from "./allegro-platform-panel";
 import { AllegroConnectionPanel } from "./allegro-connection-panel";
+import { AllegroProfilesPanel } from "./allegro-profiles-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -29,6 +30,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
+import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -61,6 +63,9 @@ interface SettingsTabsProps {
   /** This instance's own API connection to the collector's Allegro account (#476). Secret-free by
    *  construction — the client secret and both tokens never cross to the browser. */
   allegroConnection: AllegroConnectionStatus;
+  /** The Allegro platform's listing profiles (#486) and which of them it publishes with by
+   *  default — empty, with a null platform, until one of the collection's platforms is Allegro. */
+  allegroListingProfiles: AllegroListingProfileList;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -114,6 +119,7 @@ export function SettingsTabs({
   colnectPlatformId,
   allegroPlatformId,
   allegroConnection,
+  allegroListingProfiles,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -332,6 +338,17 @@ export function SettingsTabs({
           <AllegroConnectionPanel
             collectionId={collectionId}
             status={allegroConnection}
+          />
+
+          {/* What a listing is published *with* (#486). Last on the tab because it is built from
+              dictionaries only a connected account can be asked for — the order here is the order
+              the setup actually happens in: name the platform, connect the account, then say what
+              its listings carry. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Listing profiles</h2>
+          <AllegroProfilesPanel
+            collectionId={collectionId}
+            list={allegroListingProfiles}
+            connected={allegroConnection.connected && !allegroConnection.needsReconnect}
           />
         </section>
       )}

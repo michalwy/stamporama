@@ -62,9 +62,67 @@ export function allegroRedirectUri(appBase: string): string {
   return `${appBase.replace(/\/+$/, "")}/api/allegro/callback`;
 }
 
+/** Where the `User-Agent` below points. One URL for every install, because what it documents is the
+ *  software rather than one collector's instance — and an instance's own address is usually private
+ *  anyway, which is the whole reason the device flow exists. */
+const USER_AGENT_URL = "https://github.com/michalwy/stamporama";
+
+/** The fallback application name: what an instance identifies as before the collector has said what
+ *  they called their own registered application. */
+const DEFAULT_APPLICATION_NAME = "Stamporama";
+
+/** A header value is ASCII and has no spaces in the product token, so the collector's own name is
+ *  narrowed to what can appear there: spaces become `-`, everything outside a conservative set is
+ *  dropped, and a name that survives as nothing falls back. A rejected header would fail every call
+ *  with an error about nothing the collector could see. */
+function sanitizeProductToken(name: string): string {
+  const cleaned = name
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9._-]/g, "");
+  return cleaned.length > 0 ? cleaned : DEFAULT_APPLICATION_NAME;
+}
+
+/**
+ * The `User-Agent` every request to Allegro carries — **required on every call** from the end of
+ * June 2026, and stated in Allegro's own shape: `ApplicationName/Version (+DocumentationURL)`.
+ *
+ * The name is meant to be the application registered at `apps.developer.allegro.pl`, which in a
+ * self-hosted install is one the collector registered themselves and named whatever they liked — so
+ * it is a setting (`AllegroConnection.applicationName`) rather than a constant, and this app's own
+ * name is what it falls back to. That fallback is deliberate and not a failure state: Allegro's
+ * reason for wanting the header is being able to reach whoever is generating the traffic, and
+ * "Stamporama" plus a repository URL answers that even when the field is blank.
+ *
+ * Pure, so the shape is unit-tested rather than trusted — the same reason `deviceCodeUrl` is
+ * exported.
+ */
+export function allegroUserAgent(applicationName: string | null, version: string): string {
+  const name = sanitizeProductToken(applicationName ?? "");
+  const productVersion = sanitizeProductToken(version || "dev");
+  return `${name}/${productVersion} (+${USER_AGENT_URL})`;
+}
+
 /** HTTP Basic, the client authentication every one of these endpoints takes. */
 function basicAuth(clientId: string, clientSecret: string): string {
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`, "utf8").toString("base64")}`;
+}
+
+/** The headers all four exchanges share. The `User-Agent` is on the token endpoints too, not only on
+ *  the API: Allegro asks for it on **every** request, and an application that identifies itself while
+ *  reading orders but not while refreshing its token is exactly the half-identified caller the
+ *  requirement exists to prevent. */
+function oauthHeaders(opts: {
+  clientId: string;
+  clientSecret: string;
+  userAgent: string;
+}): Record<string, string> {
+  return {
+    Authorization: basicAuth(opts.clientId, opts.clientSecret),
+    "Content-Type": "application/x-www-form-urlencoded",
+    Accept: "application/json",
+    "User-Agent": opts.userAgent,
+  };
 }
 
 /** Raised when Allegro refuses an exchange. Carries Allegro's own `error` code where there is one,
@@ -149,15 +207,13 @@ export function deviceCodeUrl(clientId: string, sandbox: boolean): string {
 export async function requestDeviceCode(opts: {
   clientId: string;
   clientSecret: string;
+  /** The identifying `User-Agent`, built by {@link allegroUserAgent}. */
+  userAgent: string;
   sandbox: boolean;
 }): Promise<AllegroDeviceCode> {
   const res = await fetch(deviceCodeUrl(opts.clientId, opts.sandbox), {
     method: "POST",
-    headers: {
-      Authorization: basicAuth(opts.clientId, opts.clientSecret),
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
+    headers: oauthHeaders(opts),
   });
   const body = await readJson(res);
   if (!res.ok) throw oauthError(res, body);
@@ -192,16 +248,14 @@ export type AllegroDevicePoll =
 export async function pollDeviceToken(opts: {
   clientId: string;
   clientSecret: string;
+  /** The identifying `User-Agent`, built by {@link allegroUserAgent}. */
+  userAgent: string;
   sandbox: boolean;
   deviceCode: string;
 }): Promise<AllegroDevicePoll> {
   const res = await fetch(`${allegroHosts(opts.sandbox).auth}/auth/oauth/token`, {
     method: "POST",
-    headers: {
-      Authorization: basicAuth(opts.clientId, opts.clientSecret),
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
+    headers: oauthHeaders(opts),
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       device_code: opts.deviceCode,
@@ -245,17 +299,15 @@ export function authorizationUrl(opts: {
 export async function exchangeAuthorizationCode(opts: {
   clientId: string;
   clientSecret: string;
+  /** The identifying `User-Agent`, built by {@link allegroUserAgent}. */
+  userAgent: string;
   sandbox: boolean;
   code: string;
   redirectUri: string;
 }): Promise<AllegroTokenResponse> {
   const res = await fetch(`${allegroHosts(opts.sandbox).auth}/auth/oauth/token`, {
     method: "POST",
-    headers: {
-      Authorization: basicAuth(opts.clientId, opts.clientSecret),
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
+    headers: oauthHeaders(opts),
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code: opts.code,
@@ -282,6 +334,8 @@ export async function exchangeAuthorizationCode(opts: {
 export async function refreshAccessToken(opts: {
   clientId: string;
   clientSecret: string;
+  /** The identifying `User-Agent`, built by {@link allegroUserAgent}. */
+  userAgent: string;
   sandbox: boolean;
   refreshToken: string;
 }): Promise<AllegroTokenResponse> {
@@ -292,11 +346,7 @@ export async function refreshAccessToken(opts: {
 
   const res = await fetch(`${allegroHosts(opts.sandbox).auth}/auth/oauth/token`, {
     method: "POST",
-    headers: {
-      Authorization: basicAuth(opts.clientId, opts.clientSecret),
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
+    headers: oauthHeaders(opts),
     body: params,
   });
   const body = await readJson(res);

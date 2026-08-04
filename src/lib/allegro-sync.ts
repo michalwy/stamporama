@@ -12,6 +12,7 @@ import {
   type AllegroSellerOffer,
 } from "./allegro-api";
 import {
+  type AllegroCallCredentials,
   AllegroNotConnectedError,
   getAllegroAccessToken,
   markAllegroConnectionRejected,
@@ -146,7 +147,7 @@ export async function runAllegroSync(
 ): Promise<AllegroSyncOutcome> {
   const now = new Date();
 
-  let token: { accessToken: string; sandbox: boolean };
+  let token: AllegroCallCredentials;
   try {
     token = await getAllegroAccessToken(ownerId, collectionId);
   } catch (err) {
@@ -300,7 +301,7 @@ export async function runAllegroEventPoll(
 ): Promise<AllegroEventPollOutcome> {
   const now = new Date();
 
-  let token: { accessToken: string; sandbox: boolean };
+  let token: AllegroCallCredentials;
   try {
     token = await getAllegroAccessToken(ownerId, collectionId);
   } catch (err) {
@@ -410,7 +411,7 @@ export async function runAllegroEventPoll(
  * cursor, does the window read it is built for, and mints a fresh one.
  */
 async function followOrderEventsSafely(
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   cursor: string
 ): Promise<{ orders: AllegroOrder[]; cursor: string | null; eventsRead: number }> {
   try {
@@ -434,7 +435,7 @@ async function followOrderEventsSafely(
  * position rather than from the beginning of the stream every two minutes.
  */
 async function followOfferEvents(
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   cursor: string | null
 ): Promise<{ offerIds: string[]; eventsRead: number; cursor: string | null }> {
   const seeking = cursor === null;
@@ -564,7 +565,7 @@ async function loadMatchableOffers(collectionId: string): Promise<SyncOffer[]> {
 
 async function syncOrders(
   collectionId: string,
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   state: { orderCursor: string | null; ordersSyncedAt: Date | null } | null,
   offers: MatchableOffer[],
   now: Date
@@ -616,7 +617,7 @@ async function syncOrders(
 
 /** Follow the event stream from the cursor, and fetch each order it names exactly once. */
 async function followEvents(
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   cursor: string
 ): Promise<{ orders: AllegroOrder[]; cursor: string; eventsRead: number }> {
   const orderIds: string[] = [];
@@ -654,7 +655,7 @@ async function followEvents(
 
 /** The dated read: every order bought since the floor, paged to the end. */
 async function readWindow(
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   boughtAtGte: Date
 ): Promise<AllegroOrder[]> {
   const orders: AllegroOrder[] = [];
@@ -798,7 +799,7 @@ async function rematchUnmatched(collectionId: string, offers: MatchableOffer[]):
 
 async function sweepListings(
   collectionId: string,
-  token: { accessToken: string; sandbox: boolean },
+  token: AllegroCallCredentials,
   offers: SyncOffer[],
   now: Date
 ): Promise<{

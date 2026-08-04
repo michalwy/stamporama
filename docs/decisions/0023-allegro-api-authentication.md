@@ -128,6 +128,32 @@ credentials because an application registered in the sandbox has different crede
 registered in production. Nothing about orders or sales should first be exercised against a live
 selling account.
 
+### Every request identifies the application (`User-Agent`)
+
+Allegro requires a `User-Agent` on **every** request — mandatory from the end of June 2026 — in the
+shape `ApplicationName/Version (+DocumentationURL)`, so that they can contact whoever is generating
+traffic instead of blocking an application outright. Node's `fetch` sends its own runtime string
+otherwise, which identifies nothing.
+
+The name is meant to be the application registered at `apps.developer.allegro.pl` — which in a
+self-hosted install the collector registered themselves and named whatever they liked. So it is a
+setting, `AllegroConnection.applicationName`, beside the client id it describes, and **not** a
+credential: blank means "no name" and falls back to `Stamporama`, rather than "keep the stored one"
+the way the client secret's blank field does. The fallback is a working state and not a degraded
+one — `Stamporama/0.60.0 (+https://github.com/michalwy/stamporama)` answers Allegro's question about
+who to contact just as well.
+
+`allegroUserAgent` (pure, in `allegro-oauth.ts`, unit-tested like `deviceCodeUrl`) builds it and
+narrows the collector's name to what a header can carry: spaces become `-`, anything outside
+`[A-Za-z0-9._-]` is dropped, and a name that survives as nothing falls back. A header value Allegro
+refuses would fail every call with an error about a field nobody would think to look at.
+
+It is carried by the **token endpoints too**, not only the API: an application that identifies itself
+while reading orders but not while refreshing its token is exactly the half-identified caller the
+requirement exists to prevent. The header therefore travels with the token — `getAllegroAccessToken`
+returns `AllegroCallCredentials` (`accessToken`, `sandbox`, `userAgent`), which is what the sync
+already passed around whole, so no caller downstream had to learn that any of this exists.
+
 ## Consequences
 
 - A new required setup step for anyone using this: registering an application at
@@ -138,5 +164,8 @@ selling account.
   rather than just a session.
 - A failed refresh puts the connection into an explicit `needs_reconnect` state, surfaced in
   Settings, rather than letting every later call fail on its own with a different message.
+- Every call to Allegro now names the application. A collector who registered theirs under a
+  different name says so in Settings → Allegro; leaving it blank is supported and still identifies
+  the software.
 - The buying side is unaffected. Auction lots the collector bids on (#351/#352/#449) are other
   sellers' offers, outside `GET /sale/offers`, and stay with the Assistant's capture.

@@ -129,6 +129,7 @@ export function AllegroConnectionPanel({
   const expiresAt = useLocalTimestamp(status.expiresAt);
 
   const [clientId, setClientId] = useState(status.clientId ?? "");
+  const [applicationName, setApplicationName] = useState(status.applicationName ?? "");
   // Never seeded from the server: the secret does not cross to the browser, so a blank field means
   // "keep what is stored" rather than "clear it".
   const [clientSecret, setClientSecret] = useState("");
@@ -201,6 +202,7 @@ export function AllegroConnectionPanel({
         clientId,
         clientSecret,
         sandbox,
+        applicationName,
       });
       if (result.status === "error") setNotice({ tone: "error", message: result.message });
       else {
@@ -332,6 +334,24 @@ export function AllegroConnectionPanel({
               style={INPUT_STYLE}
               {...NO_AUTOFILL}
             />
+          </div>
+          <div>
+            <label htmlFor="allegro-application-name" style={labelStyle}>
+              Application name
+            </label>
+            <input
+              id="allegro-application-name"
+              value={applicationName}
+              onChange={(e) => setApplicationName(e.target.value)}
+              placeholder="Stamporama"
+              style={INPUT_STYLE}
+              {...NO_AUTOFILL}
+            />
+            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
+              What you called this application on Allegro. Every request identifies itself with it —
+              Allegro requires that, so they can reach you rather than simply cutting an application
+              off. Leave it blank and requests say <code style={codeStyle}>Stamporama</code>.
+            </p>
           </div>
           <div>
             <label htmlFor="allegro-client-secret" style={labelStyle}>

@@ -3,10 +3,12 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "./db";
 import { appBaseUrl } from "./app-url";
 import { AllegroApiError, allegroWhoAmI } from "./allegro-api";
+import { getAppVersion } from "./version";
 import {
   AllegroOAuthError,
   type AllegroTokenResponse,
   allegroRedirectUri,
+  allegroUserAgent,
   authorizationUrl,
   exchangeAuthorizationCode,
   pollDeviceToken,
@@ -91,6 +93,9 @@ export interface AllegroConnectionStatus {
   /** Whether an application has been configured at all. */
   configured: boolean;
   clientId: string | null;
+  /** The name of the registered application, as it goes into the `User-Agent` Allegro requires.
+   *  Null when unset, which the panel renders as the `Stamporama` fallback rather than as blank. */
+  applicationName: string | null;
   /** Whether a client secret is stored. Never the value: it is write-only from the browser's side. */
   hasClientSecret: boolean;
   sandbox: boolean;
@@ -114,6 +119,7 @@ export interface AllegroConnectionStatus {
 function toStatus(
   row: {
     clientId: string;
+    applicationName: string | null;
     clientSecretSealed: string;
     sandbox: boolean;
     refreshTokenSealed: string | null;
@@ -130,6 +136,7 @@ function toStatus(
     return {
       configured: false,
       clientId: null,
+      applicationName: null,
       hasClientSecret: false,
       sandbox: false,
       connected: false,
@@ -145,6 +152,7 @@ function toStatus(
   return {
     configured: true,
     clientId: row.clientId,
+    applicationName: row.applicationName,
     hasClientSecret: row.clientSecretSealed.length > 0,
     sandbox: row.sandbox,
     connected: row.refreshTokenSealed !== null,
@@ -180,7 +188,14 @@ export async function getAllegroConnectionStatus(
 export async function saveAllegroCredentials(
   ownerId: string,
   collectionId: string,
-  input: { clientId: string; clientSecret: string | null; sandbox: boolean }
+  input: {
+    clientId: string;
+    clientSecret: string | null;
+    sandbox: boolean;
+    /** What the application is called on Allegro. Blank clears it back to the fallback name — it is
+     *  a label, not a credential, so "leave blank to keep" would be the wrong rule here. */
+    applicationName: string | null;
+  }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -219,11 +234,13 @@ export async function saveAllegroCredentials(
     create: {
       collectionId,
       clientId,
+      applicationName: input.applicationName?.trim() || null,
       clientSecretSealed: sealedSecret,
       sandbox: input.sandbox,
     },
     update: {
       clientId,
+      applicationName: input.applicationName?.trim() || null,
       clientSecretSealed: sealedSecret,
       sandbox: input.sandbox,
       ...grantReset,
@@ -252,6 +269,9 @@ interface OpenedCredentials {
   clientId: string;
   clientSecret: string;
   sandbox: boolean;
+  /** The identifying header every call to Allegro carries, built once from the stored application
+   *  name so that no caller downstream has to know it exists. */
+  userAgent: string;
 }
 
 async function openCredentials(collectionId: string): Promise<OpenedCredentials> {
@@ -261,6 +281,7 @@ async function openCredentials(collectionId: string): Promise<OpenedCredentials>
     clientId: row.clientId,
     clientSecret: openSecret(row.clientSecretSealed),
     sandbox: row.sandbox,
+    userAgent: allegroUserAgent(row.applicationName, getAppVersion()),
   };
 }
 
@@ -297,6 +318,7 @@ async function storeGrant(
     const account = await allegroWhoAmI({
       sandbox: credentials.sandbox,
       accessToken: token.accessToken,
+      userAgent: credentials.userAgent,
     });
     await prisma.allegroConnection.update({
       where: { collectionId },
@@ -504,6 +526,17 @@ export async function completeAllegroCodeFlow(
 // Using the connection
 // ---------------------------------------------------------------------------
 
+/**
+ * What one authenticated call needs: the token, which environment it is for, and how this instance
+ * identifies itself. Exported because the sync passes it around whole (`{ ...token }`) and annotates
+ * it in half a dozen places — one type so a fourth field lands in all of them at once.
+ */
+export interface AllegroCallCredentials {
+  accessToken: string;
+  sandbox: boolean;
+  userAgent: string;
+}
+
 /** Raised when there is no usable grant. Distinct from an API failure, because the fix is a
  *  reconnection in Settings rather than a retry. */
 export class AllegroNotConnectedError extends Error {
@@ -542,7 +575,7 @@ export async function markAllegroConnectionRejected(
 export async function getAllegroAccessToken(
   ownerId: string,
   collectionId: string
-): Promise<{ accessToken: string; sandbox: boolean }> {
+): Promise<AllegroCallCredentials> {
   await assertCollectionOwner(ownerId, collectionId);
   const row = await prisma.allegroConnection.findUnique({ where: { collectionId } });
   if (!row || !row.refreshTokenSealed) {
@@ -577,7 +610,8 @@ export async function getAllegroAccessToken(
     accessToken !== null &&
     row.expiresAt !== null &&
     row.expiresAt.getTime() - REFRESH_LEEWAY_MS > Date.now();
-  if (stillFresh) return { accessToken: accessToken!, sandbox: row.sandbox };
+  const userAgent = allegroUserAgent(row.applicationName, getAppVersion());
+  if (stillFresh) return { accessToken: accessToken!, sandbox: row.sandbox, userAgent };
 
   let refreshed: AllegroTokenResponse;
   try {
@@ -586,6 +620,7 @@ export async function getAllegroAccessToken(
       clientSecret,
       sandbox: row.sandbox,
       refreshToken,
+      userAgent,
     });
   } catch (err) {
     const message = describeError(err);
@@ -605,7 +640,7 @@ export async function getAllegroAccessToken(
     },
   });
 
-  return { accessToken: refreshed.accessToken, sandbox: row.sandbox };
+  return { accessToken: refreshed.accessToken, sandbox: row.sandbox, userAgent };
 }
 
 /** One authenticated call, end to end — the check Settings offers and the shape #467 and #463 will
@@ -615,9 +650,9 @@ export async function testAllegroConnection(
   ownerId: string,
   collectionId: string
 ): Promise<{ accountLogin: string | null; detail: string }> {
-  const { accessToken, sandbox } = await getAllegroAccessToken(ownerId, collectionId);
+  const { accessToken, sandbox, userAgent } = await getAllegroAccessToken(ownerId, collectionId);
   try {
-    const account = await allegroWhoAmI({ sandbox, accessToken });
+    const account = await allegroWhoAmI({ sandbox, accessToken, userAgent });
     await prisma.allegroConnection.update({
       where: { collectionId },
       data: { accountId: account.id, accountLogin: account.login },

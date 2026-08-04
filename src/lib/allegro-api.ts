@@ -85,6 +85,9 @@ function retryDelayMs(res: Response, attempt: number): number {
 export async function allegroGet<T>(opts: {
   sandbox: boolean;
   accessToken: string;
+  /** How this instance identifies itself, built by `allegroUserAgent` — required by Allegro on
+   *  every request, and carried by every call in this module for that reason. */
+  userAgent: string;
   /** Path with a leading slash, e.g. `/me`. */
   path: string;
   /** An array value is repeated rather than joined — Allegro's own convention for the parameters
@@ -112,6 +115,7 @@ export async function allegroGet<T>(opts: {
         headers: {
           Authorization: `Bearer ${opts.accessToken}`,
           Accept: ACCEPT,
+          "User-Agent": opts.userAgent,
         },
         signal: opts.signal,
         cache: "no-store",
@@ -153,10 +157,12 @@ export interface AllegroAccount {
 export async function allegroWhoAmI(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
 }): Promise<AllegroAccount> {
   const me = await allegroGet<{ id?: unknown; login?: unknown }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/me",
   });
   return {
@@ -208,6 +214,7 @@ export interface AllegroOrderEvent {
 export async function listAllegroOrderEvents(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   /** Event id to resume after. Omitted on a stream read that starts wherever Allegro starts it. */
   after?: string | null;
   limit?: number;
@@ -218,6 +225,7 @@ export async function listAllegroOrderEvents(opts: {
   const body = await allegroGet<{ events?: unknown }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/order/events",
     query: {
       from: opts.after ?? undefined,
@@ -249,11 +257,13 @@ export async function listAllegroOrderEvents(opts: {
 export async function getAllegroLatestOrderEventId(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   signal?: AbortSignal;
 }): Promise<string | null> {
   const body = await allegroGet<{ latestEvent?: { id?: unknown } }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/order/event-stats",
     signal: opts.signal,
   });
@@ -423,12 +433,14 @@ function parseOrder(raw: unknown): AllegroOrder | null {
 export async function getAllegroOrder(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   orderId: string;
   signal?: AbortSignal;
 }): Promise<AllegroOrder | null> {
   const body = await allegroGet<unknown>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: `/order/checkout-forms/${encodeURIComponent(opts.orderId)}`,
     signal: opts.signal,
   });
@@ -443,6 +455,7 @@ export async function getAllegroOrder(opts: {
 export async function listAllegroOrders(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   boughtAtGte: Date;
   limit?: number;
   offset?: number;
@@ -451,6 +464,7 @@ export async function listAllegroOrders(opts: {
   const body = await allegroGet<{ checkoutForms?: unknown }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/order/checkout-forms",
     query: {
       "lineItems.boughtAt.gte": opts.boughtAtGte.toISOString(),
@@ -465,6 +479,88 @@ export async function listAllegroOrders(opts: {
     const parsed = parseOrder(form);
     return parsed ? [parsed] : [];
   });
+}
+
+// --- The seller's own dictionaries a listing profile is built from (#486) ----------------------
+//
+// Three reads of the same shape: a named thing defined in the collector's Allegro account, which a
+// profile then points at by id. None of them can be *created* from here — a shipping rate set is a
+// table of carriers and prices, a return policy is a legal document — so the honest answer for an
+// account with none is to say so and point at Allegro, which is what the settings panel does.
+//
+// They are read live whenever the editor is opened rather than cached: a rate set added five minutes
+// ago should be selectable, and a list this app remembers is a list that is wrong the first time the
+// collector changes anything on Allegro.
+
+/** One entry of a seller dictionary — the id a listing is published with, and what it is called. */
+export interface AllegroNamedOption {
+  id: string;
+  name: string;
+}
+
+/** The shared parse: every one of these answers `{ <key>: [{ id, name }] }`. An entry missing either
+ *  half is dropped — an option with no id cannot be published with, and one with no name is
+ *  something the collector cannot recognise in a select. */
+async function listNamedOptions(
+  opts: { sandbox: boolean; accessToken: string; userAgent: string; signal?: AbortSignal },
+  path: string,
+  key: string
+): Promise<AllegroNamedOption[]> {
+  const body = await allegroGet<Record<string, unknown>>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path,
+    signal: opts.signal,
+  });
+  const rows = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
+  return rows.flatMap((raw) => {
+    const row = raw as { id?: unknown; name?: unknown };
+    const id = str(row.id);
+    const name = str(row.name);
+    if (!id || !name) return [];
+    return [{ id, name }];
+  });
+}
+
+/** The account's shipping rate sets — Allegro's own table of what a listing offers its buyers, and
+ *  the one dictionary a listing cannot be published without. */
+export async function listAllegroShippingRates(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  signal?: AbortSignal;
+}): Promise<AllegroNamedOption[]> {
+  return listNamedOptions(opts, "/sale/shipping-rates", "shippingRates");
+}
+
+/** The account's return policies. Empty on a private account that has defined none, which is a
+ *  legitimate state rather than a failure. */
+export async function listAllegroReturnPolicies(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  signal?: AbortSignal;
+}): Promise<AllegroNamedOption[]> {
+  return listNamedOptions(
+    opts,
+    "/after-sales-service-conditions/return-policies",
+    "returnPolicies"
+  );
+}
+
+/** The account's implied-warranty conditions. Same reading as the return policies above. */
+export async function listAllegroImpliedWarranties(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  signal?: AbortSignal;
+}): Promise<AllegroNamedOption[]> {
+  return listNamedOptions(
+    opts,
+    "/after-sales-service-conditions/implied-warranties",
+    "impliedWarranties"
+  );
 }
 
 // --- The offer event stream the bidding poll follows (#481) ------------------------------------
@@ -493,6 +589,7 @@ export interface AllegroOfferEvent {
 export async function listAllegroOfferEvents(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   after?: string | null;
   limit?: number;
   types?: string[];
@@ -501,6 +598,7 @@ export async function listAllegroOfferEvents(opts: {
   const body = await allegroGet<{ offerEvents?: unknown }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/sale/offer-events",
     query: {
       from: opts.after ?? undefined,
@@ -555,6 +653,7 @@ export interface AllegroSellerOffer {
 export async function listAllegroSellerOffers(opts: {
   sandbox: boolean;
   accessToken: string;
+  userAgent: string;
   /** The publication statuses to sweep. Omitted when `offerIds` names the listings outright — a bid
    *  that landed on an auction ending seconds later is exactly the one worth reading, and filtering
    *  it out by status would lose it. */
@@ -569,6 +668,7 @@ export async function listAllegroSellerOffers(opts: {
   const body = await allegroGet<{ offers?: unknown; totalCount?: unknown }>({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
     path: "/sale/offers",
     query: {
       "publication.status": opts.publicationStatus,

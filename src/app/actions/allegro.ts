@@ -71,7 +71,7 @@ function failure(err: unknown, fallback: string): { status: "error"; message: st
  */
 export async function saveAllegroCredentialsAction(
   collectionId: string,
-  input: { clientId: string; clientSecret: string; sandbox: boolean }
+  input: { clientId: string; clientSecret: string; sandbox: boolean; applicationName: string }
 ): Promise<AllegroActionState> {
   const session = await getSession();
   try {
@@ -79,6 +79,9 @@ export async function saveAllegroCredentialsAction(
       clientId: input.clientId,
       clientSecret: input.clientSecret.trim() || null,
       sandbox: input.sandbox,
+      // A label rather than a credential: blank means "no name", which falls back to `Stamporama`
+      // in the `User-Agent`, not "keep the previous one".
+      applicationName: input.applicationName.trim() || null,
     });
     return { status: "success" };
   } catch (err) {

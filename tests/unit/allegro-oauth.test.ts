@@ -4,6 +4,7 @@ import {
   AllegroOAuthError,
   allegroApiBase,
   allegroRedirectUri,
+  allegroUserAgent,
   authorizationUrl,
   deviceCodeUrl,
   readTokenResponse,
@@ -115,5 +116,29 @@ describe("readTokenResponse", () => {
 
   it("refuses a response with no access token", () => {
     assert.throws(() => readTokenResponse({ refresh_token: "rt" }), AllegroOAuthError);
+  });
+});
+
+describe("allegroUserAgent", () => {
+  it("states Allegro's own shape: name, version and a documentation URL", () => {
+    assert.equal(
+      allegroUserAgent("StampSeller", "0.60.0"),
+      "StampSeller/0.60.0 (+https://github.com/michalwy/stamporama)"
+    );
+  });
+
+  it("falls back to this app's name when the collector has not named their application", () => {
+    assert.match(allegroUserAgent(null, "0.60.0"), /^Stamporama\/0\.60\.0 \(\+/);
+    assert.match(allegroUserAgent("   ", "0.60.0"), /^Stamporama\//);
+  });
+
+  it("narrows a name to what a header can carry, rather than sending a value Allegro would refuse", () => {
+    assert.match(allegroUserAgent("My Stamp Shop", "1.0.0"), /^My-Stamp-Shop\/1\.0\.0 /);
+    // A name of nothing but unusable characters is a name of nothing.
+    assert.match(allegroUserAgent("Żółć/\\", "1.0.0"), /^Stamporama\//);
+  });
+
+  it("carries the dev version an unbuilt instance reports", () => {
+    assert.match(allegroUserAgent("App", ""), /^App\/dev /);
   });
 });

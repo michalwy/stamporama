@@ -44,7 +44,8 @@ instance uses an application you register yourself. It is free and takes a few m
    What you tick here is exactly what the connection can do — Stamporama asks for no permissions of
    its own, so the access you grant is the access it gets, and nothing else. Grant narrowly; you can
    widen it later and reconnect.
-5. Copy the **Client ID** and **Client secret**.
+5. Copy the **Client ID** and **Client secret**, and note the **name** you gave the application —
+   Stamporama asks for it too (see below).
 
 ### Before you paste them in: the encryption key
 
@@ -73,8 +74,21 @@ Two things worth knowing:
 
 ## Connecting
 
-Open **Settings → Allegro**, fill in the client ID and secret, tick **Use Allegro's sandbox** if you
-registered a sandbox application, and press **Save application**.
+Open **Settings → Allegro**, fill in the client ID, the application name and the secret, tick **Use
+Allegro's sandbox** if you registered a sandbox application, and press **Save application**.
+
+### Application name
+
+Allegro asks every program talking to its API to say what it is, on every request — this becomes
+mandatory at the end of June 2026. The point is contact, not gatekeeping: if something starts
+misbehaving, Allegro would rather reach the owner than cut the application off.
+
+So put in the name you gave your application on `apps.developer.allegro.pl`. Requests then identify
+themselves as, for example, `StampSeller/0.60.0 (+https://github.com/michalwy/stamporama)`.
+
+Leaving it blank is fine — requests then say `Stamporama` and the version, which still tells Allegro
+what software is calling. Unlike the client secret, a blank field here means *no name*, not "keep the
+one already saved": it is a label, not a credential.
 
 Then choose how to sign in.
 
@@ -124,6 +138,57 @@ once stored, so a blank field means "keep it", not "clear it".
 **Disconnect** forgets the connection here. It does not remove the authorization on Allegro's side
 — your application stays listed under your Allegro account's connected applications until you remove
 it there. If your intent is to cut access off entirely, do both.
+
+## Listing profiles
+
+A listing on Allegro carries a lot that has nothing to do with the stamp on it: which of your
+**shipping rate sets** buyers pick from, how quickly you send, your return policy and implied
+warranty, where the parcel is sent from, and whether you issue an invoice. All of it is the same for
+a 1918 Polish issue and a modern block — it changes when you move house or add a courier, not when
+you list something else.
+
+So it is held once, as a named **listing profile** under Settings → Allegro, and every listing
+published from here is published with one. Publishing (coming with the offer-publishing feature)
+needs a profile; without one there is nothing to send Allegro as the delivery and returns half of a
+listing.
+
+### What is in one
+
+- **Shipping rate set** — one of the delivery price lists defined in your Allegro account. This is
+  not the same thing as the platform's **shipping methods** you pick from when recording a sale:
+  that one records what the buyer actually paid, this one is Allegro's own table of what a listing
+  offers.
+- **Handling time** — how long after payment you send.
+- **Return policy** and **implied warranty** — from your Allegro account's own after-sales service
+  conditions. Allegro fills these in by itself only for business accounts, so as a private seller you
+  name them here. Either may be left unset if you have none defined.
+- **City, post code and country** the parcel is sent from.
+- **Invoice** — no invoice, a VAT invoice, or an invoice without VAT.
+
+### Where the choices come from
+
+The shipping rate sets and the two after-sales services are defined **in your Allegro account and
+only there** — Stamporama reads them and lets you pick, and cannot create them. If a list is empty,
+set it up on Allegro (Sales settings → Delivery price lists, and the after-sales conditions beside
+it) and press **Refresh from Allegro** in the editor.
+
+Nothing is remembered between openings: the lists are read from your account every time the editor
+opens, so a rate set you added a minute ago is there. What is saved is *which one you picked*. That
+choice is checked against Allegro when a listing is actually published — not when you save the
+profile, so a profile can be edited while the connection happens to be down, and a rate set deleted
+on Allegro is caught at the one moment it matters.
+
+### The default, and per-offer overrides
+
+One profile is the platform's **default**: what every listing goes out with. The first profile you
+create becomes it automatically; **Make default** on any other moves it. An individual offer can
+name a different profile — for a heavier package wanting a different rate set, or a run posted while
+you are away from home — and an offer that names nothing simply uses the default.
+
+Deleting a profile is never blocked. Offers that named it fall back to the default, and listings
+already published are unaffected: Allegro holds their settings from the moment they went out, and
+editing a profile here never changes a live listing. If you delete the *default*, the platform is
+left without one until you set another — and publishing needs one.
 
 ## Sold on Allegro
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/colnect";
 import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
+import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
@@ -55,6 +56,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     colnectPlatform,
     allegroPlatform,
     allegroConnection,
+    allegroListingProfiles,
     platformContacts,
     assistantTokens,
     photoStorageBytes,
@@ -74,6 +76,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getColnectPlatform(session.user.id, collection.id),
     getAllegroPlatform(session.user.id, collection.id),
     getAllegroConnectionStatus(session.user.id, collection.id),
+    listAllegroListingProfiles(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -105,6 +108,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           colnectPlatformId={colnectPlatform?.id ?? null}
           allegroPlatformId={allegroPlatform?.id ?? null}
           allegroConnection={allegroConnection}
+          allegroListingProfiles={allegroListingProfiles}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}

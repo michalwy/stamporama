@@ -92,6 +92,7 @@ model Collection {
   allegroOrders     AllegroOrder[]
   allegroOrderLines AllegroOrderLine[]
   allegroListings   AllegroListing[]
+  allegroListingProfiles AllegroListingProfile[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -451,6 +452,12 @@ model AllegroConnection {
   // The registered application. `clientSecretSealed` is `sealSecret()` output, never plaintext.
   clientId           String
   clientSecretSealed String
+  // What the collector called that application on `apps.developer.allegro.pl`. Allegro requires a
+  // `User-Agent` on every request (mandatory from the end of June 2026) and wants it to name the
+  // registered application, so that they can reach whoever is generating the traffic — which in a
+  // self-hosted install is a name only the collector knows. Null falls back to `Stamporama`, which
+  // still answers Allegro's question; `allegroUserAgent` in `allegro-oauth.ts` builds the header.
+  applicationName    String?
   // Allegro's sandbox is a property of the *connection*, not of the deployment: an application
   // registered in the sandbox has different credentials from one registered in production.
   sandbox            Boolean @default(false)
@@ -691,6 +698,95 @@ model AllegroListing {
   @@unique([collectionId, platformOfferId])
   @@index([offerId])
   @@map("allegro_listing")
+}
+
+// The seller-side settings every published Allegro listing needs and no offer has any notion of
+// (#486; ADR-0025) — delivery, after-sales services and where the parcel is sent from — held as a
+// **named profile** on the Allegro platform contact.
+//
+// `POST /sale/product-offers` demands all of it beyond what an offer holds, and every field of it is
+// the collector's *account configuration* rather than anything about a stamp: it is identical for a
+// 1918 Polish issue and a modern block, and it changes when the collector moves house or adds a
+// courier — never when they list something else. Hence one profile, a default per platform, and an
+// offer that may point at another when a heavier package wants a different rate set.
+//
+// The category and its parameters are deliberately **not** here. Those *are* about the stamp, they
+// differ per listing, and they are learned from what was published before rather than configured —
+// that is #488's, and it is where they live.
+//
+// The three dictionary references below are **Allegro's own ids**, not rows of this database: they
+// name things defined in the collector's Allegro account, which is the only place they can be
+// created. The `*Name` beside each is a **snapshot for display**, written when the profile was saved
+// from what the account then said, so a screen can name a rate set without a live call and can say
+// what a profile points at when Allegro cannot be reached. The id is the truth; the name is a label.
+// Nothing re-validates them on save (ADR-0025 §3) — the editor reads the account live, and #477's
+// publish is where a rate set deleted on Allegro actually matters.
+model AllegroListingProfile {
+  id           String @id @default(cuid())
+  collectionId String
+  // The platform (a `Contact` carrying the `platform` role, and the one this collection calls
+  // Allegro) whose listings are published with this. Owned by it, exactly as the shipping-method
+  // price list is (#468).
+  platformId   String
+  // What the collector calls it — "Home, letter rates", "Away, courier". The pick-list, so unique
+  // per platform.
+  name         String
+
+  // ── Delivery ──────────────────────────────────────────────────────────────────────────────
+  // Allegro's own **shipping rate set** (`GET /sale/shipping-rates`), by its id. Not our
+  // `ShippingMethod` (#468), which is a name and a cost recorded when a sale is made: that one
+  // describes what the buyer paid, this one is Allegro's table of what a listing *offers*.
+  shippingRatesId   String
+  shippingRatesName String?
+  // How long the collector takes to send, as the ISO-8601 duration Allegro states it in (`PT24H`,
+  // `P3D`). A string rather than a number of days because Allegro's vocabulary includes `PT0S` and
+  // hour-scale values, and re-deriving its wording from an integer is a translation with nothing to
+  // gain.
+  handlingTime String @default("PT24H")
+
+  // ── After-sales services ──────────────────────────────────────────────────────────────────
+  // The return policy and implied warranty from the account's own dictionaries
+  // (`GET /after-sales-service-conditions/*`). Nullable: Allegro defaults these for business
+  // accounts, so a private collector's account may legitimately have none defined — and a profile
+  // that cannot name one is still a profile worth having. #477 is what says whether a listing can
+  // go out without them.
+  returnPolicyId      String?
+  returnPolicyName    String?
+  impliedWarrantyId   String?
+  impliedWarrantyName String?
+
+  // ── Location ──────────────────────────────────────────────────────────────────────────────
+  // Where the parcel is sent from — nowhere else in the model, because nothing else here cares.
+  // Free text as Allegro takes it, with the country as an ISO 3166-1 alpha-2 code.
+  locationCountryCode String @default("PL")
+  locationCity        String
+  locationPostCode    String
+
+  // ── Payments ──────────────────────────────────────────────────────────────────────────────
+  // What the listing promises about invoicing (`payments.invoice`). A private collector sells
+  // without one, which is the default here; the vocabulary is Allegro's and is validated in
+  // `src/lib/allegro-listing-profile.ts` rather than by an enum, so a value Allegro adds is a
+  // one-line change and not a migration.
+  invoiceType String @default("NO_INVOICE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // A profile belongs to its platform: deleting the platform takes its profiles with it, exactly as
+  // it takes its shipping methods.
+  platform   Contact    @relation("PlatformAllegroListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
+  // The back-references of the two `SetNull` pointers at this row: the platform that publishes with
+  // it by default, and the offers that named it in place of that default.
+  defaultForPlatforms Contact[] @relation("PlatformDefaultAllegroListingProfile")
+  offers              Offer[]   @relation("OfferAllegroListingProfile")
+
+  // The names *are* the pick-list, so they are unique per platform — the shipping-method rule, for
+  // the shipping-method reason.
+  @@unique([platformId, name])
+  @@index([collectionId])
+  @@index([platformId])
+  @@map("allegro_listing_profile")
 }
 
 // Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a
@@ -1528,9 +1624,21 @@ model Offer {
   // upload set. They take no upload number, are absent from the plan's ZIP, and do not count toward
   // the platform's photo limit, so hiding one can let a truncated image back in.
   photoPlanUnpublished String[] @default([])
+  // Which Allegro listing profile (#486) this listing is published with — the seller-side settings
+  // no offer has any notion of: the shipping rate set, the after-sales services, where the parcel is
+  // sent from. Null is the ordinary case and means *the platform's default*, which is what almost
+  // every listing wants; naming one here is the escape hatch for the listing that does not — a
+  // heavier package wanting a different rate set, a run posted while away from home.
+  //
+  // `onDelete: SetNull`, not `Restrict`: deleting a profile must never be blocked by a listing that
+  // merely preferred it, and falling back to the platform's default is a defined state rather than a
+  // gap. Nothing here is read until #477 publishes, and nothing about an already-published listing
+  // changes when it is edited — Allegro holds the published values from then on.
+  allegroListingProfileId String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  allegroListingProfile AllegroListingProfile? @relation("OfferAllegroListingProfile", fields: [allegroListingProfileId], references: [id], onDelete: SetNull)
   sets       OfferSet[]
   saleLines  SaleLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
@@ -1551,6 +1659,7 @@ model Offer {
   @@unique([collectionId, offerNo])
   @@index([collectionId])
   @@index([platformId])
+  @@index([allegroListingProfileId])
   @@map("offer")
 }
 
@@ -2078,6 +2187,12 @@ model Contact {
   // remembered value rather than a setting, so nothing in the contact form edits it, and
   // `onDelete: SetNull` — deleting the platform must forget the memory, never block the delete.
   defaultAuctionPlatformId String?
+  // The Allegro listing profile (#486) every listing on this platform is published with unless the
+  // offer names another. Null on a platform that is not Allegro — which is most of them — and on an
+  // Allegro platform whose profiles have not been set up yet, which is what #477 refuses to publish
+  // from. `onDelete: SetNull`: deleting the default profile leaves the platform without one rather
+  // than blocking the delete, and "no default" is a state the settings tab states plainly.
+  defaultAllegroListingProfileId String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -2097,6 +2212,12 @@ model Contact {
   // The shipping methods this platform's buyers can choose from (#468) — a price list owned by the
   // platform, so it goes when the platform does.
   shippingMethods   ShippingMethod[] @relation("PlatformShippingMethod")
+  // The Allegro listing profiles owned by this platform (#486), and the one of them it publishes
+  // with by default. Two relations to the same model, the second being a single reference back —
+  // the `defaultCollageTemplateId` shape (#308), for the same reason: a default is one row of the
+  // list, not a flag on every row that something has to keep exclusive.
+  allegroListingProfiles AllegroListingProfile[] @relation("PlatformAllegroListingProfile")
+  defaultAllegroListingProfile AllegroListingProfile? @relation("PlatformDefaultAllegroListingProfile", fields: [defaultAllegroListingProfileId], references: [id], onDelete: SetNull)
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")
@@ -2114,6 +2235,7 @@ model Contact {
   @@index([collectionId])
   @@index([defaultCollageTemplateId])
   @@index([defaultAuctionPlatformId])
+  @@index([defaultAllegroListingProfileId])
   @@map("contact")
 }
 

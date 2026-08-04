@@ -1,0 +1,11 @@
+-- The name of the Allegro application this instance identifies itself as.
+--
+-- Allegro requires a `User-Agent` on every request — mandatory from the end of June 2026 — in the
+-- shape `ApplicationName/Version (+DocumentationURL)`, and wants the name to be the application
+-- registered at `apps.developer.allegro.pl` so that they can reach whoever is generating the
+-- traffic. In a self-hosted install that application is one the collector registered themselves and
+-- named whatever they liked, so it is a setting rather than a constant.
+--
+-- Null on every existing connection, and null is a working state rather than a gap: the header then
+-- names `Stamporama` and the repository URL, which still answers Allegro's question.
+ALTER TABLE "allegro_connection" ADD COLUMN "applicationName" TEXT;
