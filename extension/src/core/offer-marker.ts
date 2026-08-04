@@ -160,6 +160,35 @@ export function offerAnchors(doc: Document): HTMLAnchorElement[] {
   return Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"));
 }
 
+/**
+ * True when this anchor is a **row of a list** — the only place the inline link belongs.
+ *
+ * A page links to a listing in more places than a list of them: the search box above *Mój
+ * asortyment* drops a panel of matching offers as you type, a listing page links to the seller's
+ * other auctions. Writing into those is wrong twice over. It answers a question nobody asked —
+ * a suggestion panel is a thing being *typed into*, not a list being worked through — and it writes
+ * into markup the site rebuilds on every keystroke, so the link is torn out and redrawn again and
+ * again, moving the page under the collector's hands each time.
+ *
+ * A table row is the test because a table row is what a list of listings is made of, and because it
+ * is a fact about structure rather than about a class name (every class here is hashed per build).
+ * A listing page has no such row and needs none: it gets the corner chip instead.
+ */
+export function anchorIsListRow(anchor: Element): boolean {
+  return anchor.closest("tr") !== null;
+}
+
+/** True for markup this module drew — the chip, an inline link, or anything inside one.
+ *
+ *  The caller watches the page for changes so its links survive a redraw, and its own writing is a
+ *  change like any other. Without this the first link drawn schedules the scan that draws the next,
+ *  and a page the site is also rebuilding never settles. */
+export function isAssistantNode(node: Node): boolean {
+  const element =
+    node.nodeType === 1 ? (node as Element) : (node.parentElement as Element | null) ?? null;
+  return element?.closest(`[${MARKER_ATTR}], [${LINK_ATTR}]`) != null;
+}
+
 /** True when this anchor has not been answered for *this* listing yet — either never, or for the
  *  listing it pointed at before a re-render moved it to another one. */
 export function anchorNeedsLink(anchor: Element, platformOfferId: string): boolean {

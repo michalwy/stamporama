@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import {
+  anchorIsListRow,
   anchorNeedsLink,
+  isAssistantNode,
   offerAnchors,
   removeOfferMarker,
   renderInlineOfferLink,
@@ -202,5 +204,45 @@ describe("offerAnchors", () => {
     ).document as unknown as Document;
 
     assert.equal(offerAnchors(doc).length, 2);
+  });
+});
+
+describe("anchorIsListRow", () => {
+  it("accepts a row of the assortment table", () => {
+    const doc = rowDoc(`https://allegro.pl/oferta/polska-1966-${LISTING}`);
+    assert.equal(anchorIsListRow(anchorOf(doc)), true);
+  });
+
+  it("refuses a listing suggested by the search box above it", () => {
+    // What the search field drops as you type: the same listing addresses, in a panel the site
+    // rebuilds on every keystroke. Writing a link in there moves the page under the collector.
+    const doc = parseHTML(
+      `<html><body><div><input /><div><a href="https://allegro.pl/oferta/polska-1966-${LISTING}">Polska, 1966</a></div></div></body></html>`
+    ).document as unknown as Document;
+
+    assert.equal(anchorIsListRow(anchorOf(doc)), false);
+  });
+});
+
+describe("isAssistantNode", () => {
+  it("knows the chip, an inline link, and their contents from the page's own markup", () => {
+    const doc = rowDoc(`https://allegro.pl/oferta/polska-1966-${LISTING}`);
+    const chip = renderOfferMarker(doc, TARGET, "data:image/png;base64,AAAA")!;
+    const link = renderInlineOfferLink(anchorOf(doc), LISTING, TARGET, null)!;
+
+    assert.equal(isAssistantNode(chip), true);
+    assert.equal(isAssistantNode(chip.querySelector("img")!), true);
+    assert.equal(isAssistantNode(link), true);
+    assert.equal(isAssistantNode(link.firstChild!), true);
+    assert.equal(isAssistantNode(anchorOf(doc)), false);
+    assert.equal(isAssistantNode(doc.querySelector("tr")!), false);
+  });
+
+  it("still knows a link that has been taken out of the page", () => {
+    const doc = rowDoc(`https://allegro.pl/oferta/polska-1966-${LISTING}`);
+    const link = renderInlineOfferLink(anchorOf(doc), LISTING, TARGET, null)!;
+    link.remove();
+
+    assert.equal(isAssistantNode(link), true);
   });
 });

@@ -225,6 +225,11 @@ is where the row already says which listing it is, so it is where it also says w
 Filtering, sorting and paging the table redraw it, and the links follow. Hovering one tells you the
 offer's title and state before you follow it.
 
+The links are drawn in the **rows of that list** and nowhere else on the page. In particular the
+search box above the table, which suggests your listings as you type, is left exactly as Allegro
+draws it: what is being typed into is not a list being worked through, and a panel rebuilt on every
+keystroke is no place for an answer.
+
 Links appear **only** for listings your collection has an offer for. On everybody else's auctions —
 the ones you are bidding on — nothing is drawn and nothing changes, and the toolbar icon still means
 what it always did there: [capture the lot](#capturing-an-allegro-lot) for your watchlist.

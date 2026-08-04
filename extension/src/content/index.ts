@@ -2,7 +2,9 @@ import { findCaptureModuleForUrl, findModuleForUrl } from "../platform/modules";
 import { attachListingPhotos, fillListing } from "../platform/listing-run";
 import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
 import {
+  anchorIsListRow,
   anchorNeedsLink,
+  isAssistantNode,
   offerAnchors,
   renderInlineOfferLink,
   renderOfferMarker,
@@ -213,10 +215,15 @@ function anchorListingId(anchor: HTMLAnchorElement): string | null {
  * Silent on every listing that is somebody else's, which is nearly all of them, and silent when
  * there is no profile, no instance, or no answer. A marker that appeared on a stranger's auction
  * would be worse than none.
+ *
+ * Only anchors that are **rows of a list** are answered inline. A page links to listings elsewhere
+ * too — the search box above the assortment table suggests them as you type — and those are neither
+ * a place the question is being asked nor markup that stays still long enough to answer it.
  */
 async function markOwnListings(): Promise<void> {
   const pending: { anchor: HTMLAnchorElement; id: string }[] = [];
   for (const anchor of offerAnchors(document)) {
+    if (!anchorIsListRow(anchor)) continue;
     const id = anchorListingId(anchor);
     if (id && anchorNeedsLink(anchor, id)) pending.push({ anchor, id });
   }
@@ -250,10 +257,20 @@ const RESCAN_DELAY_MS = 300;
  * without a navigation, taking our links with them. So the page is watched rather than read once —
  * and because every anchor we have answered for is marked, a re-scan of an untouched table finds
  * nothing to do and costs one `querySelectorAll`.
+ *
+ * **Our own writing is not a change worth reacting to.** Drawing a link is a DOM change like any
+ * other, so a watcher that does not exclude it schedules a scan for every link it draws, and a page
+ * that also redraws itself never settles — which is the page moving under the collector's hands.
  */
 function watchForNewListings(): void {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver((records) => {
+    const theirs = records.some((record) => {
+      if (isAssistantNode(record.target)) return false;
+      const touched = [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)];
+      return touched.length === 0 || touched.some((node) => !isAssistantNode(node));
+    });
+    if (!theirs) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
