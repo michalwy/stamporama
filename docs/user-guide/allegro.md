@@ -217,6 +217,56 @@ already published are unaffected: Allegro holds their settings from the moment t
 editing a profile here never changes a live listing. If you delete the *default*, the platform is
 left without one until you set another — and publishing needs one.
 
+## Learned categories
+
+A listing also needs a **category** — and whatever parameters that category asks for. Unlike the
+profile above, this is not a setting: it is about the stamp. A 1935 Polish used definitive belongs
+somewhere quite different from a modern souvenir sheet, and the two categories ask different
+questions.
+
+Nothing is filled in up front, and there is no list to configure. **Publishing a listing is what
+teaches it.** When a listing goes out and Allegro accepts it, Stamporama records two things:
+
+1. What the stamp's **area, year, condition and subtype** were listed as.
+2. What that category's **parameters** were answered with.
+
+The second offer of the same kind then opens with its category and parameters already filled in.
+
+### When nothing matches exactly
+
+A near miss is matched by widening the question rather than by giving up. In order: the same area,
+condition and subtype in **any year**; then in any **subtype**; then the same three questions one
+level **up your area tree**, and so on to the top. The condition is never widened — used and mint
+belong in different categories far more often than not.
+
+If nothing is found at all, Allegro's own suggestion from the listing title is offered instead, and
+failing that you pick from the category tree yourself.
+
+Whatever the source, the suggestion always says what it was matched on — "Learned from Poland · 1935
+· used, used 7 times", or "no exact match, so the year was widened" — and can always be changed
+before anything is sent. Nothing is ever published on a guess you have not seen.
+
+### A bundle of different things
+
+An offer can hold copies that span years, conditions or areas. Each of the four facts is taken
+separately, and only where the copies **agree**: a bundle of 1935 and 1938 Polish used definitives
+still asks about its area, condition and subtype — it just does not ask about a year.
+
+### Correcting one
+
+Settings → Allegro → **Learned categories** lists everything the collection has learned, with how
+often each association has been used and when it was last confirmed.
+
+- **Change category** re-points a row at another category, chosen from Allegro's tree. Its count
+  starts again from that one choice, since the new category has never actually been published into.
+- **Forget** removes the row. The next offer of that kind asks again.
+
+Remembered parameter answers are listed below, and can be forgotten one by one — the next listing in
+that category then asks for the value again.
+
+Listings already published are never affected by either: Allegro holds their category from the
+moment they went out.
+
 ## Sold on Allegro
 
 Once connected, **Offers → Sold on Allegro** shows what has sold and is still waiting to be written

@@ -93,6 +93,8 @@ model Collection {
   allegroOrderLines AllegroOrderLine[]
   allegroListings   AllegroListing[]
   allegroListingProfiles AllegroListingProfile[]
+  allegroCategoryLessons AllegroCategoryLesson[]
+  allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -112,6 +114,7 @@ model StampCondition {
   formatFactors StampFormatFactor[]
   auctionLotLines AuctionLotLine[]
   colnectMapping ColnectConditionMapping?
+  allegroCategoryLessons AllegroCategoryLesson[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -276,6 +279,7 @@ model StampSubtype {
   collection   Collection                @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampSubtypeTranslation[]
+  allegroCategoryLessons AllegroCategoryLesson[]
 
   @@index([collectionId])
   // Exactly-one-default is enforced by a partial unique index written by hand in
@@ -789,6 +793,111 @@ model AllegroListingProfile {
   @@map("allegro_listing_profile")
 }
 
+// What was published for a kind of stamp — the **key → category** register (#488; ADR-0026).
+//
+// An Allegro listing needs a `category.id`, and unlike the profile above it is a property of *this
+// stamp* rather than of the account: a 1935 Polish used definitive and a modern German souvenir sheet
+// belong in different categories. Nothing in the offer model says which — but the collection already
+// knows what a stamp is, so the association worth recording is between those four facts and the
+// category that was actually used. Learned, never configured: a row appears only when a listing
+// Allegro accepted went out with it (#477), and a refused publish teaches nothing.
+//
+// Every part of the key is nullable, and null means **absent from this key** rather than "no value"
+// (ADR-0026 §2) — an offer whose copies disagree about their year asks a question that is not about a
+// year, exactly as a stamp with no year does. Lookup relaxes in one fixed order (§3): the exact key,
+// then without the year, then without the subtype, then one level up the area tree and again. The
+// condition is never dropped.
+model AllegroCategoryLesson {
+  id           String @id @default(cuid())
+  collectionId String
+  // The platform this collection calls Allegro, which owns what is known about Allegro's taxonomy —
+  // the `AllegroListingProfile` ownership, for the same reason (ADR-0026 §5).
+  platformId   String
+
+  // ── The key ───────────────────────────────────────────────────────────────────────────────
+  // A node of the area tree; lookup walks upwards from the offer's own node and a tier matches this
+  // node **or any of its descendants**, which is what makes a lesson learned on one branch reach a
+  // sibling one.
+  areaId      String?
+  issuedYear  Int?
+  conditionId String?
+  subtypeId   String?
+
+  // ── What was published ────────────────────────────────────────────────────────────────────
+  // Allegro's own category id, with the name and the breadcrumb beside it as **display snapshots**
+  // (the ADR-0025 §3 rule): the id is the truth, and a screen can name a category without a live
+  // call. A category restructured on Allegro leaves this pointing at nothing, which the publish is
+  // what turns into a refusal and the settings panel is where it is deleted.
+  categoryId   String
+  categoryName String?
+  categoryPath String?
+
+  // How well backed this row is (ADR-0026 §4). The count is what breaks a tie between two rows one
+  // relaxed tier both matches, and what lets a suggestion say "used 7 times" rather than quoting a
+  // single publish.
+  timesUsed  Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  collection Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  platform   Contact         @relation("PlatformAllegroCategoryLesson", fields: [platformId], references: [id], onDelete: Cascade)
+  // All three key references cascade: a learned association is derived knowledge about data that has
+  // gone, not something the collector would want left behind pointing at an id that no longer names
+  // anything.
+  area       CollectionArea? @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  condition  StampCondition? @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  subtype    StampSubtype?   @relation(fields: [subtypeId], references: [id], onDelete: Cascade)
+
+  // One row per key per platform. The key parts are nullable and a null is a *value* of the key here,
+  // so the unique index is created `NULLS NOT DISTINCT` by hand in the migration (ADR-0006) — Prisma
+  // cannot express it, and without it every mixed offer would add a new row instead of bumping one:
+  //     CREATE UNIQUE INDEX "allegro_category_lesson_key"
+  //         ON "allegro_category_lesson"("platformId", "areaId", "issuedYear", "conditionId", "subtypeId")
+  //         NULLS NOT DISTINCT;
+  @@index([collectionId])
+  @@index([platformId])
+  @@index([areaId])
+  @@index([conditionId])
+  @@index([subtypeId])
+  @@map("allegro_category_lesson")
+}
+
+// What was answered for a category's parameters — the **category → parameter values** register
+// (#488; ADR-0026 §1).
+//
+// The second register, and separate from the first on purpose: this is what makes a *new* key still
+// cheap to publish once its category has been picked by hand, while the first is what makes an old
+// key free. One row **per parameter** rather than one per category holding all of them, so a category
+// that gains a parameter does not invalidate what is known about the others.
+model AllegroCategoryParameterMemory {
+  id           String @id @default(cuid())
+  collectionId String
+  platformId   String
+
+  // Allegro's category and parameter ids, with the parameter's name as a display snapshot.
+  categoryId    String
+  parameterId   String
+  parameterName String?
+
+  // The value as Allegro takes it in `parameters[]` — `{ valuesIds?, values?, rangeValue? }`. Held as
+  // JSON rather than as columns because the shape is the parameter's type's: a dictionary parameter
+  // answers with ids, a float with a number, a range with two. Splitting that into nullable columns
+  // would be this app deciding it knows Allegro's parameter types, which it has no reason to.
+  value Json
+
+  timesUsed  Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  platform   Contact    @relation("PlatformAllegroCategoryParameterMemory", fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@unique([platformId, categoryId, parameterId])
+  @@index([collectionId])
+  @@index([platformId, categoryId])
+  @@map("allegro_category_parameter_memory")
+}
+
 // Bearer token letting the Stamporama Assistant browser extension (#253, part of #155) call a
 // collection's Colnect matcher endpoints. An extension running on colnect.com reaches our origin
 // cross-site, where Better Auth's session cookie is not sent, so a token is needed. A token
@@ -886,6 +995,7 @@ model CollectionArea {
   collectionAreaVendors  CollectionAreaVendor[]
   issues                 Issue[]
   formatFactors          StampFormatFactor[]
+  allegroCategoryLessons AllegroCategoryLesson[]
 
   @@map("collection_area")
 }
@@ -2217,6 +2327,8 @@ model Contact {
   // the `defaultCollageTemplateId` shape (#308), for the same reason: a default is one row of the
   // list, not a flag on every row that something has to keep exclusive.
   allegroListingProfiles AllegroListingProfile[] @relation("PlatformAllegroListingProfile")
+  allegroCategoryLessons AllegroCategoryLesson[] @relation("PlatformAllegroCategoryLesson")
+  allegroCategoryParameterMemories AllegroCategoryParameterMemory[] @relation("PlatformAllegroCategoryParameterMemory")
   defaultAllegroListingProfile AllegroListingProfile? @relation("PlatformDefaultAllegroListingProfile", fields: [defaultAllegroListingProfileId], references: [id], onDelete: SetNull)
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).

@@ -16,6 +16,7 @@ import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { AllegroPlatformPanel } from "./allegro-platform-panel";
 import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { AllegroProfilesPanel } from "./allegro-profiles-panel";
+import { AllegroCategoriesPanel } from "./allegro-categories-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -31,6 +32,7 @@ import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
+import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
 
 interface SettingsTabsProps {
   collectionId: string;
@@ -66,6 +68,9 @@ interface SettingsTabsProps {
   /** The Allegro platform's listing profiles (#486) and which of them it publishes with by
    *  default — empty, with a null platform, until one of the collection's platforms is Allegro. */
   allegroListingProfiles: AllegroListingProfileList;
+  /** What the collection has learned about Allegro's categories (#488) — both registers, empty with
+   *  a null platform until one of the collection's platforms is Allegro. */
+  allegroLearnedCategories: AllegroLearnedCategoryList;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -120,6 +125,7 @@ export function SettingsTabs({
   allegroPlatformId,
   allegroConnection,
   allegroListingProfiles,
+  allegroLearnedCategories,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -348,6 +354,16 @@ export function SettingsTabs({
           <AllegroProfilesPanel
             collectionId={collectionId}
             list={allegroListingProfiles}
+            connected={allegroConnection.connected && !allegroConnection.needsReconnect}
+          />
+
+          {/* What the app has *learned* rather than what the collector configured (#488). Last,
+              because it fills itself in from publishing and is read here only to be corrected —
+              a wrong association must never need a wrong listing to fix it. */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Learned categories</h2>
+          <AllegroCategoriesPanel
+            collectionId={collectionId}
+            list={allegroLearnedCategories}
             connected={allegroConnection.connected && !allegroConnection.needsReconnect}
           />
         </section>

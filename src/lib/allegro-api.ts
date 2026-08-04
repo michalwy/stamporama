@@ -963,3 +963,223 @@ export async function listAllegroSellerOffers(opts: {
   });
   return { offers, totalCount: num(body.totalCount) };
 }
+
+// --- The category tree and its parameters a listing is published into (#488) --------------------
+//
+// Same register as the dictionaries above: transport plus the narrowest honest parse. What any of it
+// *means* — which category a kind of stamp belongs in, which value a parameter was last answered
+// with — is `allegro-category.ts`'s, and the register it learns into is ADR-0026's.
+//
+// Nothing here is cached. Allegro's taxonomy changes rarely but it does change, and a tree this app
+// remembered would be a tree that is wrong the first time a branch is restructured — with the
+// failure landing on a publish rather than on a browse, where it is far more expensive.
+
+/** One node of Allegro's category tree, narrowed to what browsing and publishing need. */
+export interface AllegroCategory {
+  id: string;
+  name: string;
+  /** The node above, or null at the top of the tree. */
+  parentId: string | null;
+  /** Whether a listing can be published into this node. Allegro refuses a non-leaf, so the picker
+   *  keeps walking until this is true. */
+  leaf: boolean;
+}
+
+function parseCategory(raw: unknown): AllegroCategory | null {
+  const row = raw as { id?: unknown; name?: unknown; parent?: { id?: unknown }; leaf?: unknown };
+  const id = str(row.id);
+  const name = str(row.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    parentId: str(row.parent?.id),
+    // A node Allegro did not describe is treated as **not** a leaf: walking one level further is a
+    // click, while publishing into a branch is a refusal at the worst possible moment.
+    leaf: row.leaf === true,
+  };
+}
+
+/**
+ * The children of one category, or the top of the tree when `parentId` is null.
+ *
+ * `GET /sale/categories` with no `parent.id` answers the roots, which is exactly what a picker opens
+ * with — there is no separate endpoint for it and none is needed.
+ */
+export async function listAllegroCategories(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  parentId?: string | null;
+  signal?: AbortSignal;
+}): Promise<AllegroCategory[]> {
+  const body = await allegroGet<{ categories?: unknown }>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: "/sale/categories",
+    query: opts.parentId ? { "parent.id": opts.parentId } : undefined,
+    signal: opts.signal,
+  });
+  const rows = Array.isArray(body.categories) ? body.categories : [];
+  return rows.flatMap((raw) => {
+    const category = parseCategory(raw);
+    return category ? [category] : [];
+  });
+}
+
+/** One category by id — what a stored `categoryId` is resolved through when a screen needs to name
+ *  it for real rather than from the snapshot beside it. */
+export async function getAllegroCategory(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  categoryId: string;
+  signal?: AbortSignal;
+}): Promise<AllegroCategory | null> {
+  const body = await allegroGet<unknown>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: `/sale/categories/${encodeURIComponent(opts.categoryId)}`,
+    signal: opts.signal,
+  });
+  return parseCategory(body);
+}
+
+/**
+ * Allegro's own guess at a category from a listing title (`GET /sale/matching-categories`).
+ *
+ * The fallback under the whole of ADR-0026's register: a key nothing has been learned for still
+ * arrives with a suggestion, and the collector still sees where it came from before anything is
+ * sent. Ordered as Allegro ordered it — its first answer is its best one.
+ */
+export async function matchAllegroCategories(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  /** The listing title, which is all Allegro takes. */
+  name: string;
+  signal?: AbortSignal;
+}): Promise<AllegroCategory[]> {
+  const body = await allegroGet<{ matchingCategories?: unknown }>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: "/sale/matching-categories",
+    query: { name: opts.name },
+    signal: opts.signal,
+  });
+  const rows = Array.isArray(body.matchingCategories) ? body.matchingCategories : [];
+  return rows.flatMap((raw) => {
+    const category = parseCategory(raw);
+    return category ? [category] : [];
+  });
+}
+
+/** One option of a dictionary parameter — the id a listing is published with, and its wording. */
+export interface AllegroParameterOption {
+  id: string;
+  value: string;
+}
+
+/**
+ * One parameter of a category, as the form that fills it in needs it.
+ *
+ * `type` is Allegro's own word — `dictionary`, `integer`, `float`, `string` — and is deliberately
+ * carried as a string rather than narrowed to a union: a type Allegro adds should render as an
+ * unhandled parameter the collector is told about, not crash a parse of the other nine.
+ */
+export interface AllegroCategoryParameter {
+  id: string;
+  name: string;
+  type: string;
+  required: boolean;
+  /** Whether the parameter takes more than one value at once. */
+  multipleChoices: boolean;
+  /** Whether it is answered as a `from`/`to` pair rather than a value. */
+  range: boolean;
+  /** The unit Allegro states beside the field, where there is one — "mm", "g". */
+  unit: string | null;
+  /** The options of a `dictionary` parameter. Empty for every other type. */
+  dictionary: AllegroParameterOption[];
+  /** Numeric bounds, where Allegro stated them, so the form can refuse before the publish does. */
+  min: number | null;
+  max: number | null;
+  minLength: number | null;
+  maxLength: number | null;
+}
+
+/**
+ * A category's parameters, in Allegro's own order.
+ *
+ * Read live whenever a category is chosen, never stored: what a category *asks* is Allegro's, and
+ * the only thing worth remembering is what the collector **answered** (ADR-0026 §1), which is the
+ * second register and is keyed by parameter id so a category gaining a field costs one blank rather
+ * than a stale form.
+ */
+export async function listAllegroCategoryParameters(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  categoryId: string;
+  signal?: AbortSignal;
+}): Promise<AllegroCategoryParameter[]> {
+  const body = await allegroGet<{ parameters?: unknown }>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: `/sale/categories/${encodeURIComponent(opts.categoryId)}/parameters`,
+    signal: opts.signal,
+  });
+  const rows = Array.isArray(body.parameters) ? body.parameters : [];
+  return rows.flatMap((raw) => {
+    const row = raw as {
+      id?: unknown;
+      name?: unknown;
+      type?: unknown;
+      required?: unknown;
+      unit?: unknown;
+      dictionary?: unknown;
+      restrictions?: {
+        multipleChoices?: unknown;
+        range?: unknown;
+        min?: unknown;
+        max?: unknown;
+        minLength?: unknown;
+        maxLength?: unknown;
+      };
+    };
+    const id = str(row.id);
+    const name = str(row.name);
+    const type = str(row.type);
+    if (!id || !name || !type) return [];
+
+    const dictionaryRows = Array.isArray(row.dictionary) ? row.dictionary : [];
+    const dictionary = dictionaryRows.flatMap((entry) => {
+      const option = entry as { id?: unknown; value?: unknown };
+      const optionId = str(option.id);
+      const value = str(option.value);
+      // An option missing either half cannot be published with or recognised in a list — the same
+      // rule the seller dictionaries above apply.
+      return optionId && value ? [{ id: optionId, value }] : [];
+    });
+
+    return [
+      {
+        id,
+        name,
+        type,
+        required: row.required === true,
+        multipleChoices: row.restrictions?.multipleChoices === true,
+        range: row.restrictions?.range === true,
+        unit: str(row.unit),
+        dictionary,
+        min: num(row.restrictions?.min),
+        max: num(row.restrictions?.max),
+        minLength: num(row.restrictions?.minLength),
+        maxLength: num(row.restrictions?.maxLength),
+      },
+    ];
+  });
+}

@@ -19,6 +19,7 @@ import {
 import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
+import { listAllegroLearnedCategories } from "@/lib/allegro-category";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
@@ -57,6 +58,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     allegroPlatform,
     allegroConnection,
     allegroListingProfiles,
+    allegroLearnedCategories,
     platformContacts,
     assistantTokens,
     photoStorageBytes,
@@ -77,6 +79,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getAllegroPlatform(session.user.id, collection.id),
     getAllegroConnectionStatus(session.user.id, collection.id),
     listAllegroListingProfiles(session.user.id, collection.id),
+    listAllegroLearnedCategories(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
@@ -109,6 +112,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           allegroPlatformId={allegroPlatform?.id ?? null}
           allegroConnection={allegroConnection}
           allegroListingProfiles={allegroListingProfiles}
+          allegroLearnedCategories={allegroLearnedCategories}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
