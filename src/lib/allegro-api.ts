@@ -38,12 +38,23 @@ export class AllegroApiError extends Error {
    *  reconnecting the same application changes nothing, and the fix is to widen the registration and
    *  only then reconnect. */
   readonly insufficientScope: boolean;
+  /** Allegro's own `errors[]`, one entry per thing it objected to, with the field each names. Empty
+   *  where the refusal was not a structured one — a gateway, a network failure. Carried as data
+   *  beside the flattened {@link message} so a caller can render one line per fault, which is what a
+   *  validation failure actually is: the message is a sentence, and these are the faults. */
+  readonly details: AllegroErrorDetail[];
 
-  constructor(message: string, status: number | null, insufficientScope = false) {
+  constructor(
+    message: string,
+    status: number | null,
+    insufficientScope = false,
+    details: AllegroErrorDetail[] = []
+  ) {
     super(message);
     this.name = "AllegroApiError";
     this.status = status;
     this.insufficientScope = insufficientScope;
+    this.details = details;
     // A scope refusal that arrives as a 401 must not latch "needs reconnecting": it is the one 401
     // reconnecting does not fix.
     this.unauthorized = status === 401 && !insufficientScope;
@@ -54,24 +65,130 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Allegro's error bodies are `{ errors: [{ userMessage, message, code }] }`; a gateway in front of
- *  it answers with something else entirely, hence the status fallback. */
-async function describeFailure(res: Response): Promise<string> {
+/** One entry of Allegro's `errors[]`. **Both** wordings are kept — see {@link readErrorDetails}. */
+export interface AllegroErrorDetail {
+  /** Which field Allegro is complaining about — `parameters[0].valuesIds`, `location.postCode`.
+   *  Null where it named none, which is every error that is about the request as a whole. */
+  path: string | null;
+  /** Allegro's developer-facing wording. Often the HTTP status phrase and nothing more. */
+  message: string | null;
+  /** Allegro's user-facing wording. Often the generic *"Request contains invalid data"*, and often
+   *  the only place the actual complaint appears. */
+  userMessage: string | null;
+  code: string | null;
+  /** The better of the two for a human to read — see {@link informativeMessage}. Never empty. */
+  text: string;
+}
+
+/** The wordings Allegro uses when the entry's information is in the *other* field. Matched on the
+ *  start of the string, because it continues with advice that varies. */
+const GENERIC_MESSAGES = [
+  "request contains invalid data",
+  "unprocessable entity",
+  "bad request",
+  "internal server error",
+  "conflict",
+  "forbidden",
+];
+
+function isGeneric(message: string): boolean {
+  const text = message.toLowerCase();
+  return GENERIC_MESSAGES.some((generic) => text.startsWith(generic));
+}
+
+/**
+ * Which of an entry's two wordings actually says something.
+ *
+ * Allegro is not consistent about where it puts the complaint, and picking one field is wrong half
+ * the time. A validation failure carries `message: "Unprocessable Entity"` with the real sentence in
+ * `userMessage` — *"Parameter `9525:Klej` should not be specified as in section `offer`"*, and
+ * *"You cannot use the Public API method when selling with a Regular Account"* — while other refusals
+ * put the specific wording in `message` and the boilerplate *"Request contains invalid data"* in
+ * `userMessage`.
+ *
+ * So neither leads. The **generic** one is discarded and the other kept; where both look specific
+ * they are shown together, because two sentences are cheap and a discarded one is not recoverable.
+ */
+function informativeMessage(message: string | null, userMessage: string | null): string | null {
+  const specific = [message, userMessage].filter(
+    (one): one is string => one !== null && !isGeneric(one)
+  );
+  const unique = [...new Set(specific)];
+  if (unique.length > 0) return unique.join(" — ");
+  // Everything was boilerplate. Saying it once is still better than saying nothing.
+  return message ?? userMessage;
+}
+
+/** How many field-level complaints go into one message. A validation failure on a create can carry a
+ *  dozen; the first few name the shape of the problem and the rest are read from the log. */
+const MAX_REPORTED_ERRORS = 6;
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Allegro's `errors[]`, read for what each entry actually says — **one entry per thing it objected
+ * to**, and both of its wordings kept.
+ *
+ * Reading only the first entry's `userMessage`, which this originally did, turns a precise per-field
+ * refusal into one generic sentence naming nothing. Reading only `message`, which the fix then did,
+ * turns Allegro's most informative refusals into *"Unprocessable Entity"* — because that is exactly
+ * where Allegro puts the HTTP phrase while the sentence sits in `userMessage`. Neither field can be
+ * trusted to be the one carrying the information, so both are carried and
+ * {@link informativeMessage} decides.
+ */
+function readErrorDetails(body: unknown): AllegroErrorDetail[] {
+  const errors = (body as { errors?: unknown })?.errors;
+  if (!Array.isArray(errors)) return [];
+  return errors.flatMap((raw) => {
+    const entry = (raw ?? {}) as Record<string, unknown>;
+    const message = text(entry.message);
+    const userMessage = text(entry.userMessage);
+    const combined = informativeMessage(message, userMessage);
+    if (!combined) return [];
+    return [
+      { path: text(entry.path), message, userMessage, code: text(entry.code), text: combined },
+    ];
+  });
+}
+
+/** The details as one sentence — `location.postCode: must match …; parameters[0]: …`. Deduplicated,
+ *  because Allegro repeats an identical complaint per offending value and a message that says the
+ *  same thing four times reads as noise rather than as four faults. */
+function describeDetails(details: readonly AllegroErrorDetail[]): string | null {
+  const lines = [...new Set(details.map((d) => (d.path ? `${d.path}: ${d.text}` : d.text)))];
+  if (lines.length === 0) return null;
+  const shown = lines.slice(0, MAX_REPORTED_ERRORS).join("; ");
+  const rest = lines.length - MAX_REPORTED_ERRORS;
+  return rest > 0 ? `${shown} (and ${rest} more)` : shown;
+}
+
+/** Allegro's error bodies are `{ errors: [{ userMessage, message, code, path }] }`; a gateway in
+ *  front of it answers with something else entirely, hence the status fallback. */
+async function describeFailure(
+  res: Response
+): Promise<{ message: string; details: AllegroErrorDetail[]; raw: string | null }> {
+  let raw: string;
+  try {
+    raw = await res.text();
+  } catch {
+    return { message: `Allegro returned HTTP ${res.status}.`, details: [], raw: null };
+  }
+
   let body: unknown;
   try {
-    body = await res.json();
+    body = JSON.parse(raw) as unknown;
   } catch {
-    return `Allegro returned HTTP ${res.status}.`;
+    return { message: `Allegro returned HTTP ${res.status}.`, details: [], raw };
   }
-  const errors = (body as { errors?: unknown })?.errors;
-  if (Array.isArray(errors) && errors.length > 0) {
-    const first = errors[0] as { userMessage?: unknown; message?: unknown };
-    const text = typeof first.userMessage === "string" ? first.userMessage : first.message;
-    if (typeof text === "string" && text.length > 0) return text;
-  }
-  const message = (body as { message?: unknown })?.message;
-  if (typeof message === "string" && message.length > 0) return message;
-  return `Allegro returned HTTP ${res.status}.`;
+
+  const details = readErrorDetails(body);
+  const described = describeDetails(details);
+  if (described) return { message: described, details, raw };
+
+  const message = text((body as { message?: unknown })?.message);
+  return { message: message ?? `Allegro returned HTTP ${res.status}.`, details, raw };
 }
 
 /** OAuth's own way of saying *the token is fine, the permission is not*: a `WWW-Authenticate` header
@@ -86,16 +203,45 @@ function isInsufficientScope(res: Response): boolean {
 /** The error one refusal becomes. A scope refusal is **named as one** (#485): the collector's next
  *  step is to widen the application's registration and reconnect, and "Access is denied" sends them
  *  looking at the token instead. */
-async function failureFrom(res: Response): Promise<AllegroApiError> {
-  const detail = await describeFailure(res);
+async function failureFrom(res: Response, request: DebugRequest): Promise<AllegroApiError> {
+  const { message, details, raw } = await describeFailure(res);
+  logAllegroFailure(request, res.status, raw);
   if (isInsufficientScope(res)) {
     return new AllegroApiError(
-      `The connected Allegro application does not have permission for this (${detail}). Add the access it needs to your application at apps.developer.allegro.pl, then reconnect under Settings → Allegro.`,
+      `The connected Allegro application does not have permission for this (${message}). Add the access it needs to your application at apps.developer.allegro.pl, then reconnect under Settings → Allegro.`,
       res.status,
-      true
+      true,
+      details
     );
   }
-  return new AllegroApiError(detail, res.status);
+  return new AllegroApiError(message, res.status, false, details);
+}
+
+/** What the debug log says a call was, with nothing authenticating it. */
+interface DebugRequest {
+  method: string;
+  url: string;
+  body?: BodyInit;
+}
+
+/**
+ * Log a refused call in full, when the instance asked to be told.
+ *
+ * Off by default and gated on `STAMPORAMA_ALLEGRO_DEBUG`, because it prints the **request body** —
+ * which on a publish is the whole listing — and a self-hosted instance's logs are not the place for
+ * that unless somebody is looking. It is the answer to the one question the error message cannot
+ * carry: Allegro names the field it disliked, and this is what says what was in it.
+ *
+ * The bearer is never logged: the log is built from what was sent as a body and where, and the
+ * headers are not part of it.
+ */
+function logAllegroFailure(request: DebugRequest, status: number, raw: string | null): void {
+  if (process.env.STAMPORAMA_ALLEGRO_DEBUG?.trim() !== "1") return;
+  console.warn(
+    `[allegro] ${request.method} ${request.url} → HTTP ${status}\n` +
+      `[allegro] request: ${typeof request.body === "string" ? request.body : `<${request.body ? "binary" : "no"} body>`}\n` +
+      `[allegro] response: ${raw ?? "<unreadable>"}`
+  );
 }
 
 /** How long to wait before the next attempt. Allegro's own `Retry-After` wins where it stated one —
@@ -165,6 +311,7 @@ async function send(opts: {
   };
   if (opts.contentType) headers["Content-Type"] = opts.contentType;
 
+  const debug: DebugRequest = { method: opts.method, url: url.toString(), body: opts.body };
   let lastError: AllegroApiError | null = null;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -192,7 +339,7 @@ async function send(opts: {
     if (res.ok) return res;
 
     const retryable = opts.retryOn(res);
-    lastError = await failureFrom(res);
+    lastError = await failureFrom(res, debug);
     if (!retryable || attempt === MAX_ATTEMPTS - 1) throw lastError;
     await sleep(retryDelayMs(res, attempt));
   }
@@ -1099,6 +1246,17 @@ export interface AllegroCategoryParameter {
   multipleChoices: boolean;
   /** Whether it is answered as a `from`/`to` pair rather than a value. */
   range: boolean;
+  /**
+   * Whether this parameter describes the **product** rather than the offer.
+   *
+   * Allegro splits a category's parameters into two sections, and `POST /sale/product-offers`
+   * refuses a product parameter sent among the offer's own with a `ParameterCategoryException`
+   * naming it — *"`9525:Klej` should not be specified as in section `offer`"*. A product parameter
+   * belongs inside `productSet[].product.parameters`, which is the catalog path, and matching stamps
+   * to Allegro's product catalog is deliberately not something this app does (ADR-0026, #477's
+   * non-goals). So these are read in order to be **left out**.
+   */
+  describesProduct: boolean;
   /** The unit Allegro states beside the field, where there is one — "mm", "g". */
   unit: string | null;
   /** The options of a `dictionary` parameter. Empty for every other type. */
@@ -1141,6 +1299,7 @@ export async function listAllegroCategoryParameters(opts: {
       required?: unknown;
       unit?: unknown;
       dictionary?: unknown;
+      options?: { describesProduct?: unknown };
       restrictions?: {
         multipleChoices?: unknown;
         range?: unknown;
@@ -1173,6 +1332,7 @@ export async function listAllegroCategoryParameters(opts: {
         required: row.required === true,
         multipleChoices: row.restrictions?.multipleChoices === true,
         range: row.restrictions?.range === true,
+        describesProduct: row.options?.describesProduct === true,
         unit: str(row.unit),
         dictionary,
         min: num(row.restrictions?.min),
@@ -1181,5 +1341,83 @@ export async function listAllegroCategoryParameters(opts: {
         maxLength: num(row.restrictions?.maxLength),
       },
     ];
+  });
+}
+
+// --- Publishing a listing (#477) ---------------------------------------------------------------
+
+/**
+ * Create one listing — `POST /sale/product-offers`.
+ *
+ * The body is assembled by `allegro-publish-rules.ts` and this call makes no judgement about it: it
+ * exists so the endpoint, its write policy and its two success statuses are stated once. The answer
+ * comes back as the raw {@link AllegroWriteResult} on purpose — a **201** is the listing existing and
+ * a **202** is Allegro having accepted the work, and only the caller's own polling can tell what
+ * became of the second (see `readCreatedOffer` / `readOperationStatus`).
+ */
+export async function createAllegroProductOffer(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  offer: Record<string, unknown>;
+  signal?: AbortSignal;
+}): Promise<AllegroWriteResult<Record<string, unknown>>> {
+  return allegroPost<Record<string, unknown>>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: "/sale/product-offers",
+    json: opts.offer,
+    signal: opts.signal,
+  });
+}
+
+/**
+ * One poll of the asynchronous validation a 202 started —
+ * `GET /sale/product-offers/{offerId}/operations/{operationId}`.
+ *
+ * A **read**, and so on the read retry policy: repeating it costs a request and cannot create
+ * anything. It answers Allegro's own operation record, which the pure half turns into succeeded /
+ * failed / still running.
+ */
+export async function getAllegroOfferOperation(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  offerId: string;
+  operationId: string;
+  signal?: AbortSignal;
+}): Promise<Record<string, unknown>> {
+  return allegroGet<Record<string, unknown>>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: `/sale/product-offers/${encodeURIComponent(opts.offerId)}/operations/${encodeURIComponent(opts.operationId)}`,
+    signal: opts.signal,
+  });
+}
+
+/**
+ * Change a published listing's publication status — the second half of the draft path (#477).
+ *
+ * A `PATCH` of nothing but `publication.status`, because that is the whole of what activating a draft
+ * changes: everything else about the listing is what was published, and re-sending it would be this
+ * app deciding to overwrite values the collector may have corrected on Allegro since.
+ */
+export async function setAllegroOfferPublication(opts: {
+  sandbox: boolean;
+  accessToken: string;
+  userAgent: string;
+  offerId: string;
+  status: "ACTIVE" | "ENDED";
+  signal?: AbortSignal;
+}): Promise<AllegroWriteResult<Record<string, unknown>>> {
+  return allegroPatch<Record<string, unknown>>({
+    sandbox: opts.sandbox,
+    accessToken: opts.accessToken,
+    userAgent: opts.userAgent,
+    path: `/sale/product-offers/${encodeURIComponent(opts.offerId)}`,
+    json: { publication: { status: opts.status } },
+    signal: opts.signal,
   });
 }

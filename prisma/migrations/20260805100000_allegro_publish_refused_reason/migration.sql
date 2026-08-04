@@ -1,0 +1,12 @@
+-- Why this Allegro account cannot publish through the API, in Allegro's own words (#477).
+--
+-- Allegro's selling endpoints are open to **business accounts only**. A private seller's grant is
+-- issued, refreshed and used for reading orders and bids without complaint; the refusal arrives only
+-- when a listing is actually published, and it is a permanent property of the account rather than a
+-- fault in the request. There is no way to ask in advance, so it is recorded the first time Allegro
+-- says it — otherwise the collector re-discovers it once per offer.
+--
+-- Deliberately not folded into `needsReconnect`: reconnecting changes nothing, and the connection is
+-- not unusable — everything it was connected for still works. Cleared when a fresh grant is stored
+-- or the application is re-saved.
+ALTER TABLE "allegro_connection" ADD COLUMN "publishRefusedReason" TEXT;

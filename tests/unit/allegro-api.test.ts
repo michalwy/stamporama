@@ -221,3 +221,89 @@ describe("allegroGet", () => {
     assert.equal(new URL(requests[0].url).searchParams.getAll("offer.id").join(","), "1,2");
   });
 });
+
+describe("reading Allegro's errors[]", () => {
+  // Allegro is not consistent about which of `message` / `userMessage` carries the complaint, and
+  // picking one field is wrong half the time. Both of these shapes are real, observed answers.
+
+  it("takes the sentence out of userMessage when message is the HTTP phrase", async () => {
+    stubFetch([
+      {
+        status: 422,
+        body: {
+          errors: [
+            {
+              code: "ParameterCategoryException",
+              message: "Unprocessable Entity",
+              path: "parameters",
+              userMessage: "Parameter `9525:Klej` should not be specified as in section `offer`.",
+            },
+          ],
+        },
+      },
+    ]);
+    const err = await allegroPost({ ...CALL, path: "/sale/product-offers", json: {} }).catch(
+      (e: unknown) => e as AllegroApiError
+    );
+    assert.ok(err instanceof AllegroApiError);
+    assert.match(err.message, /9525:Klej/);
+    assert.match(err.message, /^parameters: /);
+    assert.doesNotMatch(err.message, /Unprocessable Entity/);
+  });
+
+  it("takes it out of message when userMessage is the boilerplate", async () => {
+    stubFetch([
+      {
+        status: 422,
+        body: {
+          errors: [
+            {
+              message: "Message is not readable.",
+              path: "images[0]",
+              userMessage: "Request contains invalid data. Contact the application author.",
+            },
+          ],
+        },
+      },
+    ]);
+    const err = await allegroPost({ ...CALL, path: "/sale/product-offers", json: {} }).catch(
+      (e: unknown) => e as AllegroApiError
+    );
+    assert.ok(err instanceof AllegroApiError);
+    assert.equal(err.message, "images[0]: Message is not readable.");
+  });
+
+  it("reports one line per field, which is what a validation failure is", async () => {
+    stubFetch([
+      {
+        status: 422,
+        body: {
+          errors: [
+            { message: "Unprocessable Entity", path: "location.postCode", userMessage: "Wrong." },
+            { message: "Unprocessable Entity", path: "stock.available", userMessage: "Too many." },
+          ],
+        },
+      },
+    ]);
+    const err = await allegroPost({ ...CALL, path: "/sale/product-offers", json: {} }).catch(
+      (e: unknown) => e as AllegroApiError
+    );
+    assert.ok(err instanceof AllegroApiError);
+    assert.equal(err.message, "location.postCode: Wrong.; stock.available: Too many.");
+    assert.equal(err.details.length, 2);
+  });
+
+  it("keeps both wordings on the detail, and both are non-generic when they differ", async () => {
+    stubFetch([
+      {
+        status: 422,
+        body: { errors: [{ message: "Value too long.", userMessage: "Tytuł jest za długi." }] },
+      },
+    ]);
+    const err = await allegroPost({ ...CALL, path: "/sale/product-offers", json: {} }).catch(
+      (e: unknown) => e as AllegroApiError
+    );
+    assert.ok(err instanceof AllegroApiError);
+    assert.equal(err.details[0].text, "Value too long. — Tytuł jest za długi.");
+  });
+});

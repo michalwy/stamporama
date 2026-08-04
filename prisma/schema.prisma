@@ -486,6 +486,21 @@ model AllegroConnection {
   needsReconnect  Boolean   @default(false)
   lastError       String?
   lastRefreshedAt DateTime?
+  // Why this account cannot publish a listing through the API, in **Allegro's own words**, latched
+  // the first time Allegro said so (#477).
+  //
+  // It exists because the answer cannot be asked for in advance. Allegro's selling endpoints are
+  // open to **business accounts only**, and a private seller's grant is issued, refreshed and used
+  // for reading orders and bids perfectly happily — the refusal arrives only when something is
+  // actually published, and it is a permanent property of the account rather than a fault in the
+  // request. Without recording it, the collector re-discovers it once per offer.
+  //
+  // Deliberately **not** `needsReconnect` (ADR-0023's single unusable state): reconnecting changes
+  // nothing here, and this connection is not unusable — everything it was connected for still works.
+  // It is a text rather than a flag because the sentence is Allegro's and this app has no business
+  // paraphrasing a rule about somebody's account status. Cleared when a fresh grant is stored or the
+  // application is re-saved, which are the two moments the answer could have changed.
+  publishRefusedReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1745,6 +1760,53 @@ model Offer {
   // gap. Nothing here is read until #477 publishes, and nothing about an already-published listing
   // changes when it is edited — Allegro holds the published values from then on.
   allegroListingProfileId String?
+  // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
+  // A listing needs a category and that category's parameters, and unlike the profile above they are
+  // a property of *these stamps* rather than of the account. They live here — on the offer, beside
+  // the profile — rather than being worked out at publish time, because there are two ways a listing
+  // reaches Allegro (the API, #477; the Assistant's sale form, #493) and a value each path resolved
+  // for itself is a value the two would eventually disagree about.
+  //
+  // Filled in **automatically when the offer gains its first copy**, from the learned register and
+  // then from Allegro's own guess at the title (`backfillAllegroCategory`) — the `syncGeneratedTexts`
+  // shape (#365/#380), except that this is a *backfill and never a refresh*: a category is a decision
+  // about what the goods are, and re-deriving it under a collector who has corrected it would undo
+  // that silently. Re-matching is an explicit ↻ on the offer's Allegro card.
+  //
+  // Nothing here is a gate. Whatever was matched is what publishes, and every value is correctable
+  // in place; `allegroCategorySource` (`learned` | `allegro` | `manual`) and `allegroCategoryMatchedOn`
+  // exist so the card can say where a value came from, which is the difference between a suggestion
+  // and a number nobody can account for.
+  allegroCategoryId        String?
+  allegroCategoryName      String?
+  allegroCategoryPath      String?
+  allegroCategorySource    String?
+  allegroCategoryMatchedOn String?
+  // The parameter answers this listing goes out with, as Allegro takes them:
+  // `[{ parameterId, parameterName, value }]`, where `value` is `{ valuesIds } | { values } |
+  // { rangeValue }`. Seeded from what the register recalls and then owned by the offer — the
+  // register learns from a listing that went live, and this is what it learns from.
+  //
+  // Only *offer*-section parameters are ever held here: Allegro splits a category's parameters into
+  // an offer half and a product half, and a product parameter sent among the offer's own is refused
+  // by name (ADR-0027 §2).
+  allegroCategoryParameters Json?
+  // The Allegro offer this listing was published as (#477), and the publication state this app last
+  // knew it in. Written only by a publish Allegro accepted, and never by hand.
+  //
+  // The id is kept even though #467 matches a synced listing on `external.id` (the offer number) and
+  // on `url`: those are how an *observation* finds its way back to an offer, while this is the
+  // address every later write goes to — activating a draft above all. A draft has no public page, so
+  // there is no URL to carry it, and re-deriving it from the address bar is exactly what publishing
+  // through the API exists to stop doing.
+  //
+  // `allegroPublishStatus` is what came back: `INACTIVE` for a draft left in the account for a last
+  // look, `ACTIVE` for a listing that went straight up, `PENDING` for a create Allegro accepted
+  // (202) whose validation had not concluded before the request gave up waiting. The third is the
+  // reason this is a column and not a boolean — a draft and an unfinished validation are both a
+  // `ready` offer carrying an Allegro offer id, and only one of them can be activated.
+  allegroOfferId      String?
+  allegroPublishStatus String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)

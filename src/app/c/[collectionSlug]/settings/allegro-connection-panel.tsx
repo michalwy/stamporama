@@ -538,6 +538,30 @@ export function AllegroConnectionPanel({
                 </>
               )}
             </p>
+
+            {/* The account's own eligibility, which is a different question from the application's
+                permissions and is why it sits under them rather than in place of them (#477).
+                Allegro's selling endpoints are open to business accounts only, and nothing about
+                that is visible until a listing is actually published — so this appears the first
+                time Allegro says it, in Allegro's own words. It is deliberately not a broken
+                connection: everything else here keeps working. */}
+            {status.publishRefusedReason && (
+              <p
+                style={{
+                  ...helpTextStyle,
+                  margin: "0.5rem 0 0",
+                  paddingTop: "0.5rem",
+                  borderTop: "1px solid var(--color-border)",
+                }}
+              >
+                <strong style={{ color: "var(--color-text-secondary)" }}>
+                  Allegro will not publish listings from this account through the API.
+                </strong>{" "}
+                It said: &ldquo;{status.publishRefusedReason}&rdquo; Reading your orders and bids is
+                unaffected — only creating a listing from here is. Post those on Allegro yourself.
+                This is re-checked whenever you reconnect or change the application.
+              </p>
+            )}
           </div>
         )}
 

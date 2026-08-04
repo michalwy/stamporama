@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import type { AllegroCategory, AllegroCategoryParameter } from "@/lib/allegro-api";
 import type { AllegroParameterValue } from "@/lib/allegro-category-rules";
@@ -44,9 +44,19 @@ export interface AllegroCategoryChoice {
   categoryId: string;
   categoryName: string | null;
   categoryPath: string | null;
-  /** The parameters as they were answered, blank ones dropped. #477 sends these and hands the same
-   *  list to `recordAllegroCategoryLesson`. */
-  parameters: { parameterId: string; parameterName: string | null; value: AllegroParameterValue }[];
+  /** The parameters as they were answered, blank ones dropped.
+   *
+   *  `describesProduct` rides along because the two listing paths need different subsets of them
+   *  (ADR-0027 §2): Allegro's own sale form asks for both sections and the collector answers both,
+   *  while `POST /sale/product-offers` refuses a product parameter among the offer's own. Carrying
+   *  the flag with the answer is what lets that be decided where the request is built rather than by
+   *  narrowing what is asked. */
+  parameters: {
+    parameterId: string;
+    parameterName: string | null;
+    describesProduct: boolean;
+    value: AllegroParameterValue;
+  }[];
 }
 
 type Crumb = { id: string | null; name: string };
@@ -55,13 +65,26 @@ type Crumb = { id: string | null; name: string };
  *  back and what Allegro takes for everything but a dictionary's ids. */
 type Draft = { valuesIds: string[]; values: string[]; from: string; to: string };
 
-function draftFrom(prefill: AllegroCategoryParameterPrefill): Draft {
-  const recalled = prefill.recalled;
+/**
+ * What a parameter's field opens with.
+ *
+ * `answered` — the value this subject already carries, where there is one — **wins over the
+ * register's recollection**. They are two different claims: the register says what was answered for
+ * this category *last time anywhere*, while an answer already stored on the offer is what somebody
+ * decided for *this listing*, quite possibly by correcting the recollection. Opening the picker on
+ * the recalled value would silently offer to undo that correction, and closing it would apply the
+ * undo — which is what re-opening **Change category or answers** used to do.
+ */
+function draftFrom(
+  prefill: AllegroCategoryParameterPrefill,
+  answered?: AllegroParameterValue
+): Draft {
+  const value = answered ?? prefill.recalled;
   return {
-    valuesIds: recalled?.valuesIds ?? [],
-    values: recalled?.values ?? [],
-    from: recalled?.rangeValue?.from ?? "",
-    to: recalled?.rangeValue?.to ?? "",
+    valuesIds: value?.valuesIds ?? [],
+    values: value?.values ?? [],
+    from: value?.rangeValue?.from ?? "",
+    to: value?.rangeValue?.to ?? "",
   };
 }
 
@@ -92,12 +115,18 @@ export function AllegroCategoryPicker({
   collectionId,
   title,
   initialCategoryId,
+  initialAnswers,
   onClose,
   onChosen,
 }: {
   collectionId: string;
   title: string;
   initialCategoryId?: string | null;
+  /** The answers this subject already holds, which the fields open with in place of whatever the
+   *  register recalls. Applied **only** while the picker is showing `initialCategoryId`: browse to a
+   *  different category and these answers are about a form that is no longer on screen, so the
+   *  register's own recollection is the better opening value there. */
+  initialAnswers?: readonly { parameterId: string; value: AllegroParameterValue }[];
   onClose: () => void;
   onChosen: (choice: AllegroCategoryChoice) => void;
 }) {
@@ -110,6 +139,10 @@ export function AllegroCategoryPicker({
     parameters: AllegroCategoryParameterPrefill[];
   } | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  // Held in a ref and read once: the picker is a modal opened on the values as they stood, and
+  // keeping the array out of `applyForm`'s dependencies is what stops a fresh prop identity from
+  // re-firing the opening read against Allegro.
+  const initialAnswersRef = useRef(initialAnswers);
   // Starts loading: the dialog opens on either the tree or a category's form, and both are a read.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,20 +150,32 @@ export function AllegroCategoryPicker({
   type FormResult = Awaited<ReturnType<typeof getAllegroCategoryFormAction>>;
   type BrowseResult = Awaited<ReturnType<typeof browseAllegroCategoriesAction>>;
 
-  const applyForm = useCallback((result: FormResult) => {
-    if (result.status === "error") {
-      setError(result.message);
-      return;
-    }
-    setError(null);
-    setChosen({
-      categoryId: result.form.categoryId,
-      categoryName: result.form.categoryName,
-      categoryPath: result.form.categoryPath,
-      parameters: result.form.parameters,
-    });
-    setDrafts(Object.fromEntries(result.form.parameters.map((p) => [p.parameter.id, draftFrom(p)])));
-  }, []);
+  const applyForm = useCallback(
+    (result: FormResult) => {
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setError(null);
+      setChosen({
+        categoryId: result.form.categoryId,
+        categoryName: result.form.categoryName,
+        categoryPath: result.form.categoryPath,
+        parameters: result.form.parameters,
+      });
+      // The subject's own answers only apply to the category they were given for.
+      const held =
+        result.form.categoryId === initialCategoryId
+          ? new Map((initialAnswersRef.current ?? []).map((a) => [a.parameterId, a.value]))
+          : new Map<string, AllegroParameterValue>();
+      setDrafts(
+        Object.fromEntries(
+          result.form.parameters.map((p) => [p.parameter.id, draftFrom(p, held.get(p.parameter.id))])
+        )
+      );
+    },
+    [initialCategoryId]
+  );
 
   const applyChildren = useCallback((result: BrowseResult) => {
     if (result.status === "error") {
@@ -212,7 +257,14 @@ export function AllegroCategoryPicker({
       parameters: chosen.parameters.flatMap((p) => {
         const value = valueFrom(p.parameter, drafts[p.parameter.id] ?? draftFrom(p));
         return value
-          ? [{ parameterId: p.parameter.id, parameterName: p.parameter.name, value }]
+          ? [
+              {
+                parameterId: p.parameter.id,
+                parameterName: p.parameter.name,
+                describesProduct: p.parameter.describesProduct,
+                value,
+              },
+            ]
           : [];
       }),
     });
@@ -221,7 +273,22 @@ export function AllegroCategoryPicker({
   return (
     <DialogShell title={title} onClose={onClose} maxWidth="42rem" minHeight="28rem">
       <DialogBody>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+          // Enter confirms, from any of the parameter fields. Handled on the container rather than
+          // per field because a category's form is an arbitrary number of inputs of four different
+          // shapes, and a key handler repeated per shape is one that is missing from the fifth.
+          // Buttons keep their own Enter — pressing one is what the key already means there — and
+          // `confirm` refuses on its own while a required answer is missing, so this can never post
+          // something the button would not.
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            const target = event.target as HTMLElement;
+            if (target.tagName === "BUTTON" || target.tagName === "TEXTAREA") return;
+            event.preventDefault();
+            confirm();
+          }}
+        >
           {error && <p style={{ ...helpTextStyle, color: "var(--color-error)" }}>{error}</p>}
 
           {chosen ? (

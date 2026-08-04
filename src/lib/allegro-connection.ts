@@ -123,6 +123,13 @@ export interface AllegroConnectionStatus {
   /** Whether those scopes include the sale-offer write access publishing needs. Null where the
    *  scopes are unknown, so "cannot publish" is never asserted without a basis. */
   canPublishOffers: boolean | null;
+  /** Why Allegro refuses to publish from this account **whatever** the application may do (#477) —
+   *  its own sentence, latched the first time it said so, or null. A private seller's account is the
+   *  case: Allegro's selling endpoints are open to business accounts only, and nothing about that is
+   *  visible until a listing is actually published. It is not a broken connection — everything the
+   *  connection is otherwise for keeps working — which is why it is its own line and not
+   *  {@link needsReconnect}. */
+  publishRefusedReason: string | null;
 }
 
 function toStatus(
@@ -137,6 +144,7 @@ function toStatus(
     needsReconnect: boolean;
     lastError: string | null;
     lastRefreshedAt: Date | null;
+    publishRefusedReason: string | null;
   } | null,
   /** Read by the caller, which is the only thing that may open a sealed token. */
   scopes: string[] | null = null
@@ -160,6 +168,7 @@ function toStatus(
       redirectUri,
       scopes: null,
       canPublishOffers: null,
+      publishRefusedReason: null,
     };
   }
   return {
@@ -178,6 +187,7 @@ function toStatus(
     redirectUri,
     scopes,
     canPublishOffers: grantsOfferPublishing(scopes),
+    publishRefusedReason: row.publishRefusedReason,
   };
 }
 
@@ -257,6 +267,10 @@ export async function saveAllegroCredentials(
         needsReconnect: false,
         lastError: null,
         lastRefreshedAt: null,
+        // A different application may well be registered to a different account (#477): a sandbox
+        // one above all, where a business account is free. Carrying the old account's refusal over
+        // would refuse the new one on the strength of what the old one was told.
+        publishRefusedReason: null,
       }
     : {};
 
@@ -338,6 +352,10 @@ async function storeGrant(
       needsReconnect: false,
       lastError: null,
       lastRefreshedAt: new Date(),
+      // A fresh grant is one of the two moments the account's own eligibility could have changed —
+      // the collector may have registered the business account in between. Asking again costs one
+      // refused publish; never asking again costs a permanent refusal that has stopped being true.
+      publishRefusedReason: null,
     },
   });
 
@@ -594,6 +612,24 @@ export async function markAllegroConnectionRejected(
   message: string
 ): Promise<void> {
   await latchNeedsReconnect(collectionId, message);
+}
+
+/**
+ * Record that Allegro refuses to publish from this account at all (#477), in its own words.
+ *
+ * Deliberately **not** `latchNeedsReconnect`: ADR-0023 converges every *unusable* state on that pair
+ * of columns, and this is not one — the grant is fine, the refresh works, and the sold worklist and
+ * bid tracking carry on. Reconnecting fixes nothing here, so saying "needs reconnecting" would send
+ * the collector round a loop that cannot end.
+ */
+export async function markAllegroPublishRefused(
+  collectionId: string,
+  reason: string
+): Promise<void> {
+  await prisma.allegroConnection.update({
+    where: { collectionId },
+    data: { publishRefusedReason: reason },
+  });
 }
 
 /**

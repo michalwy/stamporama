@@ -24,9 +24,11 @@ import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
+import { PublishToAllegroButton } from "../allegro/publish-to-allegro";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferPlatformItemsCard } from "./offer-platform-items-card";
+import { OfferAllegroCard } from "./offer-allegro-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
@@ -501,6 +503,22 @@ export function OfferDetailPanel({
                 }}
               />
             )}
+            {/* The API path (#477), which is the same step for a marketplace this instance holds a
+                grant for: no form to find and no URL to paste back. It renders only where the
+                platform is the one marked as Allegro, and it is the same control before and after —
+                a draft published for a last look is activated from here too. */}
+            <PublishToAllegroButton
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              offerId={offerId}
+              offerLabel={offer.name ?? offer.label}
+              platformModule={offer.platformModule}
+              state={offer.state}
+              publication={offer.allegroPublication}
+              disabled={isPending}
+              style={ASSISTANT_BTN}
+              onDone={() => invalidateAll(collectionId)}
+            />
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
@@ -771,6 +789,21 @@ export function OfferDetailPanel({
         copies={copies}
         areas={areas}
       />
+
+      {/* What this offer is published as on Allegro (#494) — the category, its parameter answers and
+          the listing profile — beside the platform-catalogue card, for the same reason that one sits
+          here: it is what is consulted while a listing is being prepared. Both listing paths read
+          it, so the values are settled once, here, rather than inside whichever dialog happens to
+          post. Null (and so absent) on every platform that is not Allegro. */}
+      {offer.allegroListing && (
+        <OfferAllegroCard
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          offerId={offerId}
+          config={offer.allegroListing}
+          onChanged={() => invalidateAll(collectionId)}
+        />
+      )}
 
       {/* Sets. The heading and Add set are handed to the view, which lays them out in one band with
           its own controls and the listing's figures (#378) — two separately-rendered rows aligned to

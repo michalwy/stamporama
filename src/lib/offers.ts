@@ -52,6 +52,12 @@ import {
 } from "./listing-preconditions";
 import { hasListingModule } from "./platform-modules";
 import {
+  backfillAllegroCategory,
+  getAllegroOfferListingConfig,
+  learnAllegroCategoryFromReadyOffer,
+  type AllegroOfferListingConfig,
+} from "./allegro-offer-listing";
+import {
   evaluatePhotoReadiness,
   type PhotoReadinessBlocker,
   type ReadyBlocker,
@@ -2363,6 +2369,23 @@ export interface OfferDetail {
   /** The offer's stamps as the platform's own catalogue knows them (#423), empty for a platform with
    * no module. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
+  /** The Allegro listing this offer was published as through the API (#477), where there is one, and
+   * the publication state this app last knew it in. Null on every offer published by hand and on
+   * every platform that is not Allegro.
+   *
+   * The header reads it to decide which of the two acts it offers: an offer with none is one to
+   * **publish**, and a `INACTIVE` one is a draft sitting in the collector's Allegro account waiting
+   * to be **activated** — the second half of the draft path, and the only reason a
+   * published-but-inactive offer is not a dead end. */
+  allegroPublication: { offerId: string; status: string } | null;
+  /** What this offer is configured to be listed as on Allegro (#494) — the category, its parameter
+   * answers and the listing profile — or null on every offer that is not on the Allegro platform.
+   *
+   * It lives on the offer rather than inside the publish dialog because two paths post to Allegro
+   * (the API, #477; the Assistant's sale form, #493) and a value each of them worked out for itself
+   * is a value the two would eventually disagree about. The offer's own screen is where it is seen
+   * and corrected. */
+  allegroListing: AllegroOfferListingConfig | null;
   createdAt: Date;
 }
 
@@ -2433,6 +2456,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       inActiveBidding: true,
       listingDate: true,
       createdAt: true,
+      // What publishing through Allegro's API left behind (#477), which is what decides whether the
+      // header offers **Publish to Allegro** or **Activate on Allegro**.
+      allegroOfferId: true,
+      allegroPublishStatus: true,
       photoSides: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
@@ -2753,6 +2780,14 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           ]
         : [],
     platformItems: platformItemsFor(offer.sets, platformModule, labeller, conditionMap),
+    allegroPublication:
+      offer.allegroOfferId && offer.allegroPublishStatus
+        ? { offerId: offer.allegroOfferId, status: offer.allegroPublishStatus }
+        : null,
+    // Null for every platform that is not Allegro, and cheap for one that is: the read is gated
+    // inside `getAllegroOfferListingConfig` on the platform's own module marker, so a Colnect offer
+    // pays nothing for a card it will never draw.
+    allegroListing: await getAllegroOfferListingConfig(ownerId, offerId),
     createdAt: offer.createdAt,
   };
 }
@@ -3177,6 +3212,10 @@ export async function createOffer(
     return offer.id;
   });
   await syncOfferContextTexts(ownerId, offerId, platform);
+  // An offer created **with** copies never passes through `addOfferSet`, so the category backfill
+  // (#494) is repeated here for the same reason the texts are: the composition exists from the first
+  // moment and the offer would otherwise sit with a blank Allegro card until something was added.
+  await backfillAllegroCategory(ownerId, offerId);
   return offerId;
 }
 
@@ -3709,6 +3748,25 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     where: { id: offerId },
     data: { state: to, ...(publishing ? { listingDate: todayUtcDate() } : {}) },
   });
+
+  // What the Allegro category register learns from is an offer **finished being prepared** (#494),
+  // not one already listed.
+  //
+  // ADR-0026 §5 originally said "on a successful publish", and #477 read that literally. It is the
+  // wrong moment for the way a collection is actually worked: offers are prepared in a run of ten or
+  // twenty and published later, sometimes days later, so a register that only learns at publication
+  // asks the same question twenty times and answers it the day after it stopped mattering. `ready` is
+  // the point the collector has said what these stamps are, which is the only claim a lesson makes.
+  //
+  // It is still learning from a **decision, never from a draft**: an offer left in `preparing` teaches
+  // nothing, and a category corrected on a `ready` offer is re-taught the next time it passes through
+  // here — or corrected directly in Settings → Allegro, which exists so that a wrong lesson never
+  // needs a wrong listing to fix it.
+  //
+  // Recorded on the transition rather than in each listing path for the reason that has not changed:
+  // the API publish (#477), the Assistant's write-back (#412) and a URL pasted in by hand all reach
+  // their state through here, and a lesson recorded per path is one a new path forgets.
+  if (to === "ready") await learnAllegroCategoryFromReadyOffer(offerId);
 }
 
 /** "an asking price" / "a starting price" — the article a missing-figure message needs. */
@@ -3868,6 +3926,10 @@ export async function addOfferSet(
   // The composition changed — re-render the texts still following the platform's templates (#380),
   // which is also what gives an offer created empty the title it could not be generated with (#365).
   await syncGeneratedTexts(ownerId, offerId);
+  // …and, on an Allegro offer, work out what it is being listed as (#494). A backfill, never a
+  // refresh: it writes only while the offer has no category, so a correction is never undone by
+  // adding a set. It cannot fail this mutation — see `backfillAllegroCategory`.
+  await backfillAllegroCategory(ownerId, offerId);
   return set.id;
 }
 
@@ -3912,6 +3974,7 @@ export async function addOfferSetsPerCopy(
     }
   });
   await syncGeneratedTexts(ownerId, offerId); // #380/#365, as in addOfferSet
+  await backfillAllegroCategory(ownerId, offerId); // #494, as in addOfferSet
   return ids;
 }
 
@@ -3954,6 +4017,7 @@ export async function addItemsToOfferSet(
     )
   );
   await syncGeneratedTexts(ownerId, ref.offerId); // #380/#365, as in addOfferSet
+  await backfillAllegroCategory(ownerId, ref.offerId); // #494, as in addOfferSet
   return addable.length;
 }
 

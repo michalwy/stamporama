@@ -519,6 +519,18 @@ export async function getAllegroCategoryForm(
     categoryId,
     categoryName: named.name,
     categoryPath: named.path,
+    // **Every** parameter, offer-section and product-section alike, each carrying its own
+    // `describesProduct` flag.
+    //
+    // The two sections are not the same question and are not filtered here. Allegro's own sale form —
+    // which the Assistant fills (#493) — asks for both, and the collector answers both; it is only
+    // `POST /sale/product-offers` that refuses a product parameter among the offer's own
+    // (`ParameterCategoryException`), because there it belongs inside `productSet[].product.parameters`
+    // and matching a stamp to Allegro's product catalog is not something this app does.
+    //
+    // So the restriction belongs to the **request that has it**, and is applied when the API body is
+    // assembled (ADR-0027 §2). Filtering at this read instead — which is what an earlier pass did —
+    // silently stopped the collector being asked for values the other listing path needs.
     parameters: parameters.map((parameter) => {
       const row = memory.get(parameter.id);
       const recalled = row ? readParameterValue(row.value) : null;

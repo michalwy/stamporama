@@ -41,6 +41,17 @@ services:
       # variable must fail loudly on the Settings tab rather than quietly seal its real credentials
       # under a key published in this repository.
       STAMPORAMA_SECRET_KEY: ${STAMPORAMA_SECRET_KEY:-stamporama-local-dev-key-not-for-production}
+      # Log every refused Allegro call in full — the request body and Allegro's raw answer (#477).
+      # **On by default here**, and only here: a refusal from `POST /sale/product-offers` names the
+      # field it disliked and nothing about what was in it, so the one thing worth having while
+      # developing against Allegro is the request beside the answer. The reasons it is off everywhere
+      # else do not apply to this file — a publish body is the whole listing, but a local stack's logs
+      # are the developer's own terminal, and the bearer is never part of the log either way.
+      #
+      # Overridable (`STAMPORAMA_ALLEGRO_DEBUG=0` in the environment) rather than hard-coded, since a
+      # quiet log is occasionally what a local session actually wants. Production reads it from .env,
+      # where it ships commented out.
+      STAMPORAMA_ALLEGRO_DEBUG: ${STAMPORAMA_ALLEGRO_DEBUG:-1}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
     command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
     # Persist uploaded photo bytes (#112) written under STAMPORAMA_DATA_DIR (default /data)

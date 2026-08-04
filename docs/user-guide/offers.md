@@ -147,6 +147,10 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    mapped, the sets interchangeable — before it can be marked ready. For the same reason you cannot clear the price of an offer that is already **Ready**
    or **Active**; step it back to **Preparing** first. You can step a **Ready** offer back to
    **Preparing** at any time (from the **⋮** menu) to keep editing.
+   On the platform named as **Allegro**, a Ready offer can skip all of this and be posted through
+   Allegro's own API instead: **🛒 Publish to Allegro** in the header creates the listing — as a draft
+   or live, your choice — and records its address and the activation for you. See
+   [Publishing an offer](allegro.md#publishing-an-offer).
 
 Next to the asking price the header shows a **suggested price** — the **average catalog value per
 set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.

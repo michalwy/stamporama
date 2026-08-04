@@ -267,6 +267,133 @@ that category then asks for the value again.
 Listings already published are never affected by either: Allegro holds their category from the
 moment they went out.
 
+## The offer's Allegro card
+
+An offer on your Allegro platform carries an **On Allegro** card on its own screen, next to the
+photos and the sets. It holds the three things a listing needs that are not already on the offer:
+
+- **Category.** Worked out by itself the moment the offer gains its first copy — first from what you
+  have listed before, then from Allegro's own guess at the title — with a line saying which of those
+  it was. Nothing waits for your approval: whatever it matched is what gets listed. **Change category
+  or answers** opens Allegro's tree, and **↻ Match again** re-runs the match from scratch, which is
+  the way back after a correction, or after the offer has changed enough that the first match no
+  longer describes it. It never re-matches on its own — a category you corrected stays corrected.
+- **Parameters.** What that category asks for, with the answers you gave last time already filled in.
+  Required ones with no answer are marked. Some are marked *product*: those describe the stamp rather
+  than the offer, Allegro takes them on its own sale form rather than through the API, and they are
+  kept here for listing by hand.
+- **Listing profile.** Which delivery, returns and sending address this listing goes out with —
+  the platform's default unless you pick another for this one offer.
+
+All three are read by whichever way you list: publishing through the API uses them, and so will
+listing through the Assistant. They are set here, once, rather than in whichever dialog happens to
+post.
+
+Marking an offer **Ready** is what teaches Stamporama the category — not publishing it. That is
+deliberate: you prepare a batch of offers and post them later, and the point of remembering is that
+the *second* offer of a kind already knows the answer while you are still preparing. An offer left in
+Preparing teaches nothing.
+
+## Publishing an offer
+
+> **Allegro's API only sells from a business account.** If you sell as a private person (a *Regular
+> Account*), Allegro refuses to create a listing through the API — and there is no way to find that
+> out except by trying, so Stamporama tries once, records what Allegro said, and shows it under
+> **Settings → Allegro** instead of offering a button that fails. Everything else on this page keeps
+> working: the sold worklist, recording sales and bid tracking are all reads, and they are unaffected.
+> Post your listings on Allegro yourself. The rest of this section applies to a business account, and
+> to the sandbox.
+
+Once the collection is connected and has a listing profile, a Ready offer on your Allegro platform
+carries **🛒 Publish to Allegro** in its header, beside the other actions. It posts the listing
+through Allegro's API — there is no form to fill and no link to paste back.
+
+The dialog is a review rather than a form. Everything in it was decided somewhere you already own:
+
+- the **title**, **price** and **quantity** come from the offer (the quantity is how many
+  interchangeable sets it holds);
+- the **photos** are the offer's upload set, in the order you put them in — the first one is the
+  listing's thumbnail;
+- the **category**, its **parameters** and the **listing profile** come from the offer's own
+  **On Allegro** card (below).
+
+Below that is the one real choice.
+
+### Draft or live
+
+**Draft** is the default. Allegro creates the listing in your account without showing it to buyers,
+and the offer stays **Ready** here. It is the safe order of events: you can open the listing on
+Allegro, look at it as a buyer would, and only then take it up.
+
+**Live** publishes it at once. The offer becomes **Active**, today becomes its listing date, and the
+listing's address is recorded on the offer.
+
+### Activating a draft
+
+An offer holding a draft shows **🛒 Activate on Allegro** in the same place. That takes the listing
+live and marks the offer Active. Nothing else about the listing changes — it goes up exactly as it
+was published.
+
+### The offer number goes with it
+
+Every listing published this way carries the offer's own number as its identifier on Allegro. That is
+what lets **Sold on Allegro** below match an order back to the right offer exactly, instead of
+working it out from the listing's address.
+
+### If something is missing
+
+The dialog lists every reason a listing cannot go out *before* it sends anything — one line per
+reason, since each is fixed in a different place: a price on the offer's own header, a profile under
+Settings, the images on the Photos card. It will not shorten an over-long title for you either:
+Allegro takes 75 characters, and a title cut by the app is not the title you wrote.
+
+### If Allegro takes its time
+
+Allegro sometimes accepts a listing and validates it afterwards, and that validation can still refuse
+it — most often for a duplicate. Stamporama waits for the answer:
+
+- refused, and it says so in Allegro's own words, and the offer is left exactly as it was;
+- still being checked when the wait runs out, and it says that instead. **Do not publish again** —
+  the listing exists, and a second attempt would create a second one. Check the offer in your Allegro
+  account.
+
+### If Allegro refuses it
+
+Allegro validates the listing and refuses it field by field, and Stamporama shows exactly what it
+said — one line per complaint, each naming the field it is about (`location.postCode`,
+`parameters[0]`, and so on). The generic *"Request contains invalid data"* on its own is never the
+whole answer, and it is no longer all you get.
+
+If you need to see what was actually sent — the whole request body and Allegro's raw reply — set
+`STAMPORAMA_ALLEGRO_DEBUG=1` in the instance's `.env` and restart it. Every refused Allegro call is
+then written to the app's log. It is off by default on a self-hosted install because a publish
+request contains the entire listing; your access token is never logged either way. The local
+development stack has it on already.
+
+Your description is rewritten on the way out: Allegro accepts only paragraphs, two heading levels,
+bulleted and numbered lists and bold, with no styling of any kind. Anything else — a link, italics,
+a colour — is turned into its plain words. Nothing you typed is lost; only markup Allegro would have
+rejected is.
+
+### If Allegro says the account cannot sell through the API
+
+You will see something like *"You cannot use the Public API method when selling with a Regular
+Account (not registered as a Business Account)."* That is Allegro's rule about your account, not a
+fault in the offer, and nothing you change here will get past it.
+
+Stamporama remembers it, so it stops sending listings that are going to be refused. From then on it
+is shown under **Settings → Allegro**, under the application's permissions, and every publish is
+refused up front with the same sentence. It is checked again whenever you reconnect or change the
+registered application — so if you do register a business account, or point the instance at a sandbox
+application, connecting again is all that is needed.
+
+### What it does not do
+
+- It does not edit a listing already published. Allegro holds those values from the moment they went
+  out.
+- It does not end or withdraw a listing.
+- It does not publish a batch. The bulk listing workspace is for the by-hand path.
+
 ## Sold on Allegro
 
 Once connected, **Offers → Sold on Allegro** shows what has sold and is still waiting to be written

@@ -74,7 +74,7 @@ export interface PreconditionInput {
  * Where either is missing the local id stands in, so a set is never silently judged interchangeable
  * with another on the strength of two nulls being equal; the missing value has its own blocker.
  */
-function setIdentity(set: PreconditionSet): string {
+export function setIdentity(set: PreconditionSet): string {
   return set.copies
     .map((c) => {
       const item = c.catalogItemId ?? `stamp:${c.stampId}`;
@@ -83,6 +83,22 @@ function setIdentity(set: PreconditionSet): string {
     })
     .sort()
     .join("|");
+}
+
+/**
+ * The sets that are **not** interchangeable with the first one — the rule behind `mixed-sets`,
+ * exported because it is asked in two vocabularies and must have one answer.
+ *
+ * Colnect asks it about a quantity field, Allegro about `stock.available` (#477); both are one
+ * number claiming "N of the same thing", and both are only truthful over sets holding the same
+ * goods. {@link setIdentity}'s fallback to the local ids is what makes it answerable on a platform
+ * that has no catalog item-ID and no grade of its own to compare by.
+ */
+export function differingSets(sets: readonly PreconditionSet[]): PreconditionSet[] {
+  const listed = sets.filter((s) => s.copies.length > 0);
+  if (listed.length < 2) return [];
+  const reference = setIdentity(listed[0]);
+  return listed.slice(1).filter((s) => setIdentity(s) !== reference);
 }
 
 /** Distinct values in first-seen order — subjects are read, so a name repeated once per copy is
@@ -171,8 +187,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
 
   // Homogeneity (#406): the quantity says "N of the same thing", so it is only truthful when every
   // set holds the same goods. The first set is the reference because it is the one the kit describes.
-  const reference = setIdentity(sets[0]);
-  const differing = sets.slice(1).filter((s) => setIdentity(s) !== reference);
+  const differing = differingSets(sets);
   if (differing.length > 0) {
     const subjects = distinct(differing.map((s) => s.label));
     blockers.push({
