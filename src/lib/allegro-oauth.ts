@@ -24,16 +24,22 @@ interface AllegroHosts {
   auth: string;
   /** Where the REST API lives. */
   api: string;
+  /** Where image bytes are uploaded (#487). Allegro's own separate host, and not a convenience:
+   *  `POST /sale/images` sent to the API host is not the same endpoint, so this is a fact about the
+   *  API rather than a deployment choice. */
+  upload: string;
 }
 
 const PRODUCTION: AllegroHosts = {
   auth: "https://allegro.pl",
   api: "https://api.allegro.pl",
+  upload: "https://upload.allegro.pl",
 };
 
 const SANDBOX: AllegroHosts = {
   auth: "https://allegro.pl.allegrosandbox.pl",
   api: "https://api.allegro.pl.allegrosandbox.pl",
+  upload: "https://upload.allegro.pl.allegrosandbox.pl",
 };
 
 /** The pair of hosts one connection talks to. Sandbox is a property of the *connection*, not of the
@@ -46,6 +52,12 @@ export function allegroHosts(sandbox: boolean): AllegroHosts {
 /** The API base URL for a connection — the one fact `allegro-api.ts` needs from here. */
 export function allegroApiBase(sandbox: boolean): string {
   return allegroHosts(sandbox).api;
+}
+
+/** Where image bytes go (#487) — Allegro uploads images through a host of its own, so this is the
+ *  second fact `allegro-api.ts` needs from here. */
+export function allegroUploadBase(sandbox: boolean): string {
+  return allegroHosts(sandbox).upload;
 }
 
 /** Where an order is read on Allegro itself — what a sale created from one records as its

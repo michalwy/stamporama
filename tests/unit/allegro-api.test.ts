@@ -5,7 +5,7 @@ import {
   allegroGet,
   allegroPatch,
   allegroPost,
-  allegroUpload,
+  allegroUploadImage,
 } from "../../src/lib/allegro-api";
 
 // The write half's retry policy (#485) is the thing worth pinning down here: a repeated POST after a
@@ -155,17 +155,52 @@ describe("allegroPatch", () => {
   });
 });
 
-describe("allegroUpload", () => {
-  it("lets fetch write the multipart content type, boundary included", async () => {
-    const { requests } = stubFetch([{ status: 201, body: { location: "https://img/1.jpg" } }]);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array([1, 2, 3])]), "one.jpg");
-    const result = await allegroUpload({ ...CALL, path: "/sale/images", form });
+describe("allegroUploadImage", () => {
+  const BYTES = new Uint8Array([1, 2, 3]);
+
+  it("posts the raw image to the upload host under its own content type", async () => {
+    const { requests } = stubFetch([
+      { status: 201, body: { location: "https://img/1.jpg", expiresAt: "2026-08-05T00:00:00Z" } },
+    ]);
+    const result = await allegroUploadImage({
+      ...CALL,
+      bytes: BYTES,
+      contentType: "image/jpeg",
+    });
+    // The image store is a host of Allegro's own — the API base answers this path with nothing.
+    assert.equal(requests[0].url, "https://upload.allegro.pl/sale/images");
     const headers = requests[0].init.headers as Record<string, string>;
-    assert.equal(headers["Content-Type"], undefined);
-    assert.ok(requests[0].init.body instanceof FormData);
-    // A body that states where the picture landed is followed up the same way a header would be.
-    assert.equal(result.location, "https://img/1.jpg");
+    assert.equal(headers["Content-Type"], "image/jpeg");
+    assert.equal(headers.Accept, "application/vnd.allegro.public.v1+json");
+    // The picture itself is the body — a form would be answered with a 415.
+    assert.deepEqual(new Uint8Array(requests[0].init.body as Uint8Array), BYTES);
+    assert.equal(result.body?.location, "https://img/1.jpg");
+    assert.equal(result.body?.expiresAt, "2026-08-05T00:00:00Z");
+  });
+
+  it("uploads to the sandbox store when the connection is a sandbox one", async () => {
+    const { requests } = stubFetch([{ status: 201, body: { location: "https://img/1.jpg" } }]);
+    await allegroUploadImage({ ...CALL, sandbox: true, bytes: BYTES, contentType: "image/png" });
+    assert.equal(requests[0].url, "https://upload.allegro.pl.allegrosandbox.pl/sale/images");
+  });
+
+  it("does not repeat an image the store failed on — an accepted-then-unreported picture is an orphan", async () => {
+    const { requests } = stubFetch([{ status: 500 }]);
+    await assert.rejects(
+      () => allegroUploadImage({ ...CALL, bytes: BYTES, contentType: "image/jpeg" }),
+      AllegroApiError
+    );
+    assert.equal(requests.length, 1);
+  });
+
+  it("repeats a rate limit, which is the store refusing before it read anything", async () => {
+    const { requests } = stubFetch([
+      { status: 429, headers: { "retry-after": "0" } },
+      { status: 201, body: { location: "https://img/1.jpg" } },
+    ]);
+    const result = await allegroUploadImage({ ...CALL, bytes: BYTES, contentType: "image/jpeg" });
+    assert.equal(requests.length, 2);
+    assert.equal(result.body?.location, "https://img/1.jpg");
   });
 });
 

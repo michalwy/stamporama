@@ -10,7 +10,7 @@
 // keeps the two from being a cycle, and it also means the retry/backoff rules are testable without
 // a database.
 
-import { allegroApiBase } from "./allegro-oauth";
+import { allegroApiBase, allegroUploadBase } from "./allegro-oauth";
 
 /** Allegro versions its API through the `Accept` header rather than the path — and takes the same
  *  media type as the `Content-Type` of a JSON write (#485), which is why one constant serves both. */
@@ -112,8 +112,8 @@ function retryDelayMs(res: Response, attempt: number): number {
 /** Query parameters, in the one shape every caller here uses. */
 type AllegroQuery = Record<string, string | number | string[] | undefined>;
 
-function buildUrl(sandbox: boolean, path: string, query?: AllegroQuery): URL {
-  const url = new URL(`${allegroApiBase(sandbox)}${path}`);
+function buildUrl(base: string, path: string, query?: AllegroQuery): URL {
+  const url = new URL(`${base}${path}`);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value === undefined) continue;
     if (Array.isArray(value)) {
@@ -141,8 +141,12 @@ async function send(opts: {
   query?: AllegroQuery;
   method: string;
   body?: BodyInit;
-  /** Omitted on a multipart body, where `fetch` writes the header itself with the boundary in it. */
+  /** The image's own media type on an upload (#487), the versioned Allegro one on a JSON write, and
+   *  omitted on a read. */
   contentType?: string;
+  /** Which Allegro host this call belongs to. The API's, unless the endpoint lives on the upload
+   *  host — which `POST /sale/images` does, and nothing else here does. */
+  host?: "api" | "upload";
   /** Which *answered* failures are worth repeating. */
   retryOn: (res: Response) => boolean;
   /** Whether a failure with no answer at all — a dropped connection, a restarting proxy — is
@@ -151,7 +155,9 @@ async function send(opts: {
   retryNetworkFailure: boolean;
   signal?: AbortSignal;
 }): Promise<Response> {
-  const url = buildUrl(opts.sandbox, opts.path, opts.query);
+  const base =
+    opts.host === "upload" ? allegroUploadBase(opts.sandbox) : allegroApiBase(opts.sandbox);
+  const url = buildUrl(base, opts.path, opts.query);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${opts.accessToken}`,
     Accept: ACCEPT,
@@ -333,34 +339,63 @@ export async function allegroPatch<T>(opts: {
   return writeResult<T>(res);
 }
 
+/** What `POST /sale/images` answers with (#487): where the image now lives, and when Allegro will
+ *  remove it again if no listing has used it by then. */
+export interface AllegroUploadedImage {
+  location: string;
+  /** Allegro's own expiry, as it stated it. Null where it stated none — which is reported rather
+   *  than replaced with a guess, an invented expiry being worse than no expiry at all. */
+  expiresAt: string | null;
+}
+
 /**
- * One authenticated `multipart/form-data` POST — the image upload #487 is the only caller of.
+ * Upload one image's **bytes** to Allegro's image store (#487).
  *
- * It shares the authorization and the retry policy and none of the body handling, which is why it is
- * a member of its own rather than a flag on {@link allegroPost}. The `Content-Type` is deliberately
- * **not** set: `fetch` writes it itself from the `FormData`, boundary included, and a hand-written
- * one is a body Allegro cannot parse.
+ * Three things about this endpoint are not like every other call in this module, and all three come
+ * from Allegro's own specification rather than from a choice made here:
+ *
+ * - It lives on a **separate host** (`upload.allegro.pl`), so it is the one call that does not go to
+ *   the API base.
+ * - The body is the **raw image**, not a form: the `Content-Type` is the picture's own media type,
+ *   one of `image/jpeg`, `image/png` and `image/webp`. #485 built this as a `multipart/form-data`
+ *   POST, which Allegro answers with a 415 — it was corrected here, before it had a caller.
+ * - Its refusals are per-image and specific: **413** the picture is too large, **415** the format is
+ *   not one of the three, **422** Allegro's image server could not process it. The caller names the
+ *   image rather than reporting a failed publication, which is what `allegro-images.ts` does with
+ *   the {@link AllegroApiError} this throws.
+ *
+ * The retry policy is the write half's, unchanged: a 429 only. A picture is small and re-uploading
+ * one after a 5xx would be harmless in itself, but an image the store did accept and then failed to
+ * report is an orphan on Allegro's servers, and the honest answer is the failure the collector can
+ * repeat.
  */
-export async function allegroUpload<T>(opts: {
+export async function allegroUploadImage(opts: {
   sandbox: boolean;
   accessToken: string;
   userAgent: string;
-  path: string;
-  form: FormData;
+  /** The picture, whole. Images here are bounded by the platform's own per-file limit (#308), so
+   *  they are held in memory exactly as the plan's ZIP holds them. */
+  bytes: Uint8Array;
+  /** The image's media type, which is this request's `Content-Type`. */
+  contentType: string;
   signal?: AbortSignal;
-}): Promise<AllegroWriteResult<T>> {
+}): Promise<AllegroWriteResult<AllegroUploadedImage>> {
   const res = await send({
     sandbox: opts.sandbox,
     accessToken: opts.accessToken,
     userAgent: opts.userAgent,
-    path: opts.path,
+    host: "upload",
+    path: "/sale/images",
     method: "POST",
-    body: opts.form,
+    // Copied into an array of its own, never handed over as `.buffer`: a small `Buffer` is a window
+    // into a pooled allocation, whose underlying `ArrayBuffer` holds other pictures' bytes too.
+    body: new Uint8Array(opts.bytes),
+    contentType: opts.contentType,
     retryOn: RETRY_WRITES,
     retryNetworkFailure: false,
     signal: opts.signal,
   });
-  return writeResult<T>(res);
+  return writeResult<AllegroUploadedImage>(res);
 }
 
 /** Who the token belongs to — Allegro's `GET /me`. This is the whoami call #476 is *done when* it

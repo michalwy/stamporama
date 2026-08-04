@@ -979,7 +979,7 @@ export async function buildOfferPhotoArchive(
 ): Promise<{ fileName: string; bytes: Buffer }> {
   const one = await readOfferUploadSet(ownerId, offerId);
   if ("reason" in one) throw new OfferPhotoGenerationError(one.reason);
-  return { fileName: `${one.slug}-photos.zip`, bytes: zip(one.files) };
+  return { fileName: `${one.slug}-photos.zip`, bytes: zip(one.images.map(zipEntryOf)) };
 }
 
 /**
@@ -1027,7 +1027,10 @@ export async function buildOffersPhotoArchive(
     // readable in the common case and unambiguous in the rare one.
     const folder = taken === undefined ? set.slug : `${set.slug}-${offerId.slice(-6)}`;
     offerCount += 1;
-    for (const file of set.files) entries.push({ ...file, name: `${folder}/${file.name}` });
+    for (const image of set.images) {
+      const file = zipEntryOf(image);
+      entries.push({ ...file, name: `${folder}/${file.name}` });
+    }
   });
 
   if (entries.length === 0) {
@@ -1045,15 +1048,35 @@ export async function buildOffersPhotoArchive(
   };
 }
 
+/** An upload-set image as the archive stores it. The name is the plan's own, so a file in a ZIP and
+ *  a file sent to a marketplace are the same file under the same name. */
+function zipEntryOf(image: OfferUploadImage): ZipEntry {
+  return { name: image.fileName, contents: image.bytes };
+}
+
+/** One image of the upload run, with the bytes: what a ZIP entry is built from, and what an upload
+ *  to a marketplace's image store sends (#487). */
+export interface OfferUploadImage {
+  photoId: string;
+  /** The name it takes on upload — `<offer>-01.jpg`… in plan order (#314/#326). */
+  fileName: string;
+  mime: string;
+  bytes: Buffer;
+}
+
 /**
  * One offer's upload set as named files, or the reason it has none. Owner-checked (through the read
  * model), and the single source both archives are built from — so a file unpacked from the bulk ZIP
  * is byte-identical to, and named exactly as, the same file taken from the offer on its own.
+ *
+ * Since #487 it is what an **API upload** reads too, which is why the mime and the photo id travel
+ * beside the bytes: an image a marketplace refuses has to be reported as the image it was, and a
+ * ZIP entry's name alone cannot say which photo that is.
  */
 async function readOfferUploadSet(
   ownerId: string,
   offerId: string
-): Promise<{ slug: string; files: ZipEntry[] } | { reason: string }> {
+): Promise<{ slug: string; images: OfferUploadImage[] } | { reason: string }> {
   const state = await getOfferPhotoPlanState(ownerId, offerId);
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { name: true } });
 
@@ -1075,14 +1098,37 @@ async function readOfferUploadSet(
   });
   const byId = new Map(photos.map((photo) => [photo.id, photo]));
 
-  const files = await Promise.all(
-    uploaded.map(async (image) => ({
-      name: image.fileName,
-      contents: await readFullBytes(byId.get(image.photoId)!),
-    }))
+  const images = await Promise.all(
+    uploaded.map(async (image): Promise<OfferUploadImage> => {
+      const photo = byId.get(image.photoId)!;
+      return {
+        photoId: image.photoId,
+        fileName: image.fileName,
+        mime: photo.mime,
+        bytes: await readFullBytes(photo),
+      };
+    })
   );
 
-  return { slug: offerFileSlug(offer?.name, offerId), files };
+  return { slug: offerFileSlug(offer?.name, offerId), images };
+}
+
+/**
+ * The offer's upload set — the images that are actually going up, in plan order, with their bytes.
+ * Owner-checked. This is the ZIP's own read (#314) exposed for a caller that uploads them through an
+ * API instead of handing the collector a file (#487), so the two can never disagree about which
+ * images a listing gets or what they are called.
+ *
+ * @throws {OfferPhotoGenerationError} when the offer has nothing to upload — the same sentence the
+ * ZIP refuses with, because it is the same situation.
+ */
+export async function readOfferUploadImages(
+  ownerId: string,
+  offerId: string
+): Promise<OfferUploadImage[]> {
+  const one = await readOfferUploadSet(ownerId, offerId);
+  if ("reason" in one) throw new OfferPhotoGenerationError(one.reason);
+  return one.images;
 }
 
 /**

@@ -130,7 +130,7 @@ selling account.
 
 ### 6. A write retries a rate limit and nothing else (#485)
 
-The client's write half — `allegroPost`, `allegroPatch` and the multipart `allegroUpload` — shares
+The client's write half — `allegroPost`, `allegroPatch` and `allegroUploadImage` — shares
 everything transport-shaped with `allegroGet` and **not** its retry policy, because retrying is not
 the same conversation on a write.
 
@@ -149,6 +149,17 @@ for, and one policy for every write is one thing to reason about.
 the listing existing, while 202 is the work having been accepted and still running. The client
 returns `AllegroWriteResult` — `status`, `accepted`, `body`, `location` — so a caller polls the
 operation rather than recording as published something Allegro may yet refuse.
+
+**Images are a binary POST to a host of their own** (#487, correcting what #485 assumed). `POST
+/sale/images` is not a form upload: Allegro's specification takes the picture as a **raw body** whose
+`Content-Type` is the image's own media type — `image/jpeg`, `image/png` or `image/webp` — and it
+lives on `upload.allegro.pl` (`upload.allegro.pl.allegrosandbox.pl` for the sandbox) rather than on
+the API host. #485 built it as a `multipart/form-data` POST against the API base, which is a 415 on
+one count and a wrong address on the other; it had no caller yet, so #487 replaced it with
+`allegroUploadImage` rather than adding a second primitive beside a broken one. Everything else is
+the write half unchanged: the bearer, the versioned `Accept`, the `User-Agent`, the error parsing and
+the 429-only retry. `allegroHosts` gained a third member for it, because which host an endpoint
+lives on is a fact about Allegro and belongs where the other two are.
 
 ### 7. Permissions are read back, not requested (#485)
 
@@ -172,6 +183,37 @@ the only signal that separates it from every other 403 — Allegro's own error b
 (widen the application, then reconnect). It deliberately does **not** set `unauthorized`: that flag
 latches the needs-reconnect state, and reconnecting the same application is precisely what does not
 fix a permission it was never registered with.
+
+### 8. An offer's images are uploaded per publication and never cached (#487)
+
+An Allegro offer carries `images[]` as **URLs**. Ours cannot be linked: they are private bytes behind
+the Assistant token (#253), an instance on `localhost` has no address Allegro could fetch from, and
+one on a VPS should not publish an authenticated route to a marketplace. So the server uploads the
+bytes itself (`src/lib/allegro-images.ts`), which it is well placed to do — unlike the Assistant path
+(#411), it already has the file.
+
+**The set and its order are the plan's, read and not re-derived.** `getOfferPhotoPlanState`
+(#311/#313) already drops what the collector marked do-not-publish and what falls past the platform's
+photo limit, and the order it returns is theirs to set. `readOfferUploadImages` is that same read the
+ZIP is built from, so a picture uploaded through the API and one unpacked from the archive are the
+same bytes under the same name. First image first: the first is the listing's thumbnail.
+
+**Nothing is stored on the photo row.** Allegro states an `expiresAt` and removes an image no listing
+has used, so a URL kept here is a value that goes stale on its own with nothing to observe it going —
+and the fallout of using an expired one is a published listing pointing at nothing. A re-publish
+re-uploads. The cost is one request per image on a path that already makes one per image; the
+alternative is an expiry column plus an invalidation on every regeneration, for a set the collector
+publishes once. It also means a failed publication leaves nothing behind here — the orphaned uploads
+expire on Allegro's side by themselves.
+
+**Sequential, and a refusal names the picture.** Sixteen parallel multiparts against a rate-limited
+API is how an account earns a 429 mid-publication, and there is nothing to win by racing a handful of
+files. The store's failures are per-image and specific — 413 too large, 415 an unacceptable format,
+422 its own image server — so `AllegroImageUploadError` carries the photo, its plan name and its
+1-based position, and the pure `allegro-image-rules.ts` turns each status into the collector's next
+step. The first failure stops the run: a listing published with fewer pictures than were prepared is
+exactly what this must not produce. A dead token or a missing scope is re-raised as the
+`AllegroApiError` it arrived as, being about the connection rather than about a photo.
 
 ### Every request identifies the application (`User-Agent`)
 
