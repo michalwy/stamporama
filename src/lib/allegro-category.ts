@@ -431,7 +431,20 @@ async function withParameters(
   if (!suggestion.categoryId) return suggestion;
   try {
     const form = await getAllegroCategoryForm(ownerId, collectionId, suggestion.categoryId);
-    return { ...suggestion, parameters: form.parameters };
+    return {
+      ...suggestion,
+      // The breadcrumb, where the suggestion arrived without one — which is every guess, since
+      // `GET /sale/matching-categories` answers an id and a **leaf name**. On Allegro's stamp tree a
+      // leaf is routinely called `2011 - 2020`, which says nothing at all on its own: the path is
+      // what makes it a category rather than a decade. It costs nothing here, this read having
+      // walked the tree for its own breadcrumb already.
+      //
+      // Only where it is missing: a *learned* row carries the snapshot recorded when it was taught,
+      // and that snapshot is deliberately what the screen shows (ADR-0026 §1).
+      categoryName: suggestion.categoryName ?? form.categoryName,
+      categoryPath: suggestion.categoryPath ?? form.categoryPath,
+      parameters: form.parameters,
+    };
   } catch (err) {
     return {
       ...suggestion,

@@ -81,7 +81,13 @@ const SOURCE_LABEL: Record<string, string> = {
  *  changes nothing the category key can see, so a read keyed on the category alone went on showing
  *  the old answer until the page was reloaded. */
 type ParameterRead = { key: string } & (
-  | { parameters: AllegroOfferParameterView[] }
+  | {
+      parameters: AllegroOfferParameterView[];
+      /** What the tree says the category is called today — the fallback for an offer matched before
+       *  the breadcrumb was recorded, which would otherwise show a bare leaf name until ↻. */
+      categoryName: string | null;
+      categoryPath: string | null;
+    }
   | { error: string }
 );
 
@@ -123,7 +129,12 @@ export function OfferAllegroCard({
       setRead(
         answer.status === "error"
           ? { key: readKey, error: answer.message }
-          : { key: readKey, parameters: answer.parameters }
+          : {
+              key: readKey,
+              parameters: answer.parameters,
+              categoryName: answer.categoryName ?? null,
+              categoryPath: answer.categoryPath ?? null,
+            }
       );
     })();
     return () => {
@@ -134,6 +145,11 @@ export function OfferAllegroCard({
   const current = read?.key === readKey ? read : null;
   const parameters = current && "parameters" in current ? current.parameters : null;
   const parametersError = current && "error" in current ? current.error : null;
+  // Stored leads; the live read stands in where the offer was matched before the path was recorded.
+  const categoryPath =
+    config.categoryPath ?? (current && "parameters" in current ? current.categoryPath : null);
+  const categoryName =
+    config.categoryName ?? (current && "parameters" in current ? current.categoryName : null);
 
   const apply = useCallback(
     (
@@ -195,15 +211,18 @@ export function OfferAllegroCard({
         </p>
         {config.categoryId ? (
           <>
+            {/* The **path**, not the leaf name. Allegro's stamp tree names its leaves things like
+                `2011 - 2020`, which on its own is a decade rather than a category — the breadcrumb is
+                what says which decade of what. It already ends in the leaf, so the name is not shown
+                twice; it only stands in where no path was recorded. */}
             <p style={{ margin: 0, fontSize: "0.875rem" }}>
-              {config.categoryName ?? config.categoryId}
+              <CategoryPath path={categoryPath} name={categoryName ?? config.categoryId} />
               {config.source && (
                 <span style={{ ...helpText, marginLeft: "0.5rem" }}>
                   · {SOURCE_LABEL[config.source] ?? config.source}
                 </span>
               )}
             </p>
-            {config.categoryPath && <p style={{ ...helpText, margin: "0.125rem 0 0" }}>{config.categoryPath}</p>}
             {config.matchedOn && <p style={{ ...helpText, margin: "0.125rem 0 0" }}>{config.matchedOn}</p>}
           </>
         ) : (
@@ -329,6 +348,23 @@ export function OfferAllegroCard({
         />
       )}
     </div>
+  );
+}
+
+/** A category as one readable line: the ancestors muted, the leaf in full strength, so the path can
+ *  be scanned without the last segment — which is the part that identifies it — being lost in it. */
+function CategoryPath({ path, name }: { path: string | null; name: string }) {
+  const segments = path?.split(" > ").filter((segment) => segment.trim()) ?? [];
+  if (segments.length === 0) return <span>{name}</span>;
+  const leaf = segments[segments.length - 1];
+  const ancestors = segments.slice(0, -1);
+  return (
+    <span>
+      {ancestors.length > 0 && (
+        <span style={{ color: "var(--color-text-muted)" }}>{ancestors.join(" › ")} › </span>
+      )}
+      <span>{leaf}</span>
+    </span>
   );
 }
 

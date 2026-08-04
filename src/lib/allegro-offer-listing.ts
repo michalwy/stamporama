@@ -353,7 +353,11 @@ export async function describeAllegroOfferParameters(
   ownerId: string,
   collectionId: string,
   offerId: string
-): Promise<{ parameters: AllegroOfferParameterView[] } | { error: string } | null> {
+): Promise<
+  | { parameters: AllegroOfferParameterView[]; categoryName: string | null; categoryPath: string | null }
+  | { error: string }
+  | null
+> {
   const offer = await allegroOfferRef(offerId);
   if (!offer?.allegroCategoryId) return null;
 
@@ -364,6 +368,11 @@ export async function describeAllegroOfferParameters(
   try {
     const form = await getAllegroCategoryForm(ownerId, collectionId, offer.allegroCategoryId);
     return {
+      // The breadcrumb comes back with them, so a category matched before the path was recorded gets
+      // one without a re-match. The stored value still leads where there is one — it is the snapshot
+      // of what this offer was categorised as, and this is a live read of what the tree says today.
+      categoryName: form.categoryName,
+      categoryPath: form.categoryPath,
       parameters: form.parameters.map((prefill) => ({
         parameterId: prefill.parameter.id,
         name: prefill.parameter.name,

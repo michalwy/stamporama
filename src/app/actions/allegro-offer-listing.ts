@@ -39,7 +39,14 @@ export async function getAllegroOfferParametersAction(
   collectionId: string,
   offerId: string
 ): Promise<
-  | { status: "success"; parameters: AllegroOfferParameterView[] }
+  | {
+      status: "success";
+      parameters: AllegroOfferParameterView[];
+      /** The category's breadcrumb as Allegro states it today, so a category matched before the path
+       *  was recorded still reads as a path rather than as a bare leaf name. */
+      categoryPath?: string | null;
+      categoryName?: string | null;
+    }
   | { status: "error"; message: string }
 > {
   const session = await getSession();
@@ -47,7 +54,12 @@ export async function getAllegroOfferParametersAction(
     const answer = await describeAllegroOfferParameters(session.user.id, collectionId, offerId);
     if (answer === null) return { status: "success", parameters: [] };
     if ("error" in answer) return { status: "error", message: answer.error };
-    return { status: "success", parameters: answer.parameters };
+    return {
+      status: "success",
+      parameters: answer.parameters,
+      categoryName: answer.categoryName,
+      categoryPath: answer.categoryPath,
+    };
   } catch (err) {
     return failed(err, "This category's parameters could not be read.");
   }
