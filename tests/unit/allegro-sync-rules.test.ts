@@ -5,6 +5,7 @@ import {
   lineAwaitsSale,
   matchListingToOffer,
   paymentStatusFor,
+  supersededOrders,
   syncFreshness,
   windowFloor,
   SYNC_WINDOW_DAYS,
@@ -259,5 +260,65 @@ describe("bidWriteFor", () => {
         null
       );
     }
+  });
+});
+
+describe("supersededOrders", () => {
+  const seen = (iso: string) => new Date(iso);
+
+  it("marks the pre-merge orders a combined one took over", () => {
+    // The live shape of #495: two unpaid single-item forms, and the paid form Allegro issued when the
+    // buyer paid for both at once — carrying their line item ids verbatim.
+    const verdict = supersededOrders([
+      { orderId: "merged", lineItemIds: ["a", "b"], observedAt: seen("2026-08-05T02:54:00Z") },
+      { orderId: "first", lineItemIds: ["a"], observedAt: seen("2026-08-02T23:47:58Z") },
+      { orderId: "second", lineItemIds: ["b"], observedAt: seen("2026-08-02T23:47:58Z") },
+    ]);
+    assert.equal(verdict.get("first"), "merged");
+    assert.equal(verdict.get("second"), "merged");
+    assert.equal(verdict.get("merged"), null);
+  });
+
+  it("leaves an order carrying a line item of its own alone", () => {
+    // A partial merge: the buyer combined two of three purchases, and the third is still real work.
+    const verdict = supersededOrders([
+      { orderId: "merged", lineItemIds: ["a", "b"], observedAt: seen("2026-08-05T02:00:00Z") },
+      { orderId: "outside", lineItemIds: ["b", "c"], observedAt: seen("2026-08-02T10:00:00Z") },
+    ]);
+    assert.equal(verdict.get("outside"), null);
+  });
+
+  it("takes an equally sized order over only where the other was seen later", () => {
+    const later = supersededOrders([
+      { orderId: "old", lineItemIds: ["a"], observedAt: seen("2026-08-02T10:00:00Z") },
+      { orderId: "new", lineItemIds: ["a"], observedAt: seen("2026-08-05T10:00:00Z") },
+    ]);
+    assert.equal(later.get("old"), "new");
+    assert.equal(later.get("new"), null);
+
+    // Same lines, same instant: nothing says which came second, and guessing would hide a real order.
+    const tied = supersededOrders([
+      { orderId: "one", lineItemIds: ["a"], observedAt: seen("2026-08-02T10:00:00Z") },
+      { orderId: "two", lineItemIds: ["a"], observedAt: seen("2026-08-02T10:00:00Z") },
+    ]);
+    assert.equal(tied.get("one"), null);
+    assert.equal(tied.get("two"), null);
+  });
+
+  it("names the biggest taker, so the verdict does not move between passes", () => {
+    const verdict = supersededOrders([
+      { orderId: "small", lineItemIds: ["a"], observedAt: seen("2026-08-02T10:00:00Z") },
+      { orderId: "pair", lineItemIds: ["a", "b"], observedAt: seen("2026-08-05T10:00:00Z") },
+      { orderId: "triple", lineItemIds: ["a", "b", "c"], observedAt: seen("2026-08-03T10:00:00Z") },
+    ]);
+    assert.equal(verdict.get("small"), "triple");
+  });
+
+  it("supersedes nothing on an order whose lines the sync has yet to write", () => {
+    const verdict = supersededOrders([
+      { orderId: "empty", lineItemIds: [], observedAt: seen("2026-08-02T10:00:00Z") },
+      { orderId: "other", lineItemIds: ["a"], observedAt: seen("2026-08-05T10:00:00Z") },
+    ]);
+    assert.equal(verdict.get("empty"), null);
   });
 });

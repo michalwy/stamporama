@@ -111,7 +111,7 @@ describe("recording an Allegro order as a sale (#463)", () => {
   async function syncedOrder(
     orderId: string,
     offers: { offerId: string }[],
-    opts: { paymentStatus?: string } = {}
+    opts: { paymentStatus?: string; supersededByOrderId?: string } = {}
   ): Promise<void> {
     const now = new Date();
     const order = await prisma.allegroOrder.create({
@@ -126,6 +126,7 @@ describe("recording an Allegro order as a sale (#463)", () => {
         totalPaid: "27.00",
         currency: "PLN",
         observedAt: now,
+        supersededByOrderId: opts.supersededByOrderId ?? null,
       },
       select: { id: true },
     });
@@ -223,6 +224,29 @@ describe("recording an Allegro order as a sale (#463)", () => {
     );
     // Nothing else is proposed for an order a sale already claims.
     assert.equal(order.suggestedSale, null);
+  });
+
+  it("keeps an order a merged one took over off the worklist, and refuses to record it", async () => {
+    // #495: the pre-merge form Allegro abandoned when the buyer paid for several purchases at once.
+    const a = await offerWithOneSet("Superseded A");
+    await syncedOrder("ORDER-PRE-MERGE", [a], {
+      paymentStatus: "unpaid",
+      supersededByOrderId: "ORDER-MERGED",
+    });
+
+    const worklist = await getAllegroWorklist(userId, collectionId);
+    assert.equal(
+      worklist.orders.find((row) => row.orderId === "ORDER-PRE-MERGE"),
+      undefined
+    );
+
+    // And a screen left open before the merge cannot record it behind the worklist's back.
+    await assert.rejects(
+      recordAllegroOrderSale(userId, collectionId, "ORDER-PRE-MERGE", header(), [
+        { offerId: a.offerId, offerSetId: a.setId, price: "10.00", itemIds: a.itemIds },
+      ]),
+      /ORDER-MERGED/
+    );
   });
 
   it("adds the rest to the same sale rather than making a second one", async () => {

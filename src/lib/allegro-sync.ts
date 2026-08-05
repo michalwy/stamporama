@@ -29,6 +29,7 @@ import {
   ORDER_EVENT_TYPES,
   paymentStatusFor,
   SYNC_LOCK_TIMEOUT_MS,
+  supersededOrders,
   SYNC_MAX_ORDERS_PER_PASS,
   SYNC_WINDOW_DAYS,
   windowFloor,
@@ -360,6 +361,10 @@ export async function runAllegroEventPoll(
       for (const order of orders.orders) {
         linesWritten += await writeOrder(collectionId, order, offers, now);
       }
+
+      // The merged order lands here as an ordinary `BOUGHT` event, so the poll is exactly where the
+      // orders it took over stop being current (#495).
+      await markSupersededOrders(collectionId);
     }
 
     await prisma.allegroSyncState.update({
@@ -607,6 +612,8 @@ async function syncOrders(
     linesWritten += await writeOrder(collectionId, order, offers, now);
   }
 
+  await markSupersededOrders(collectionId);
+
   await prisma.allegroSyncState.update({
     where: { collectionId },
     data: { orderCursor: cursor, ordersSyncedAt: now },
@@ -729,6 +736,53 @@ async function writeOrder(
     });
   }
   return order.lineItems.length;
+}
+
+/**
+ * Work out which orders a merged one has taken over, and record it (#495).
+ *
+ * Over the collection's orders **as a whole**, not just the ones this pass wrote: the order that gets
+ * superseded is precisely the one Allegro has stopped talking about, so it is never in the batch, and
+ * a pass that only looked at what it had just read would never mark anything. It is also what repairs
+ * a collection whose leftovers predate this rule, with no re-import — the next pass simply sees them.
+ *
+ * Recomputed from scratch rather than accumulated, so a verdict can also be **withdrawn**: a line
+ * item leaving the merged order (Allegro's own split) puts the original back on the worklist, which
+ * is the right answer and not one a one-way flag could give.
+ *
+ * One query and a write per change. The rule itself is pure — `supersededOrders`.
+ */
+async function markSupersededOrders(collectionId: string): Promise<number> {
+  const rows = await prisma.allegroOrder.findMany({
+    where: { collectionId },
+    select: {
+      id: true,
+      orderId: true,
+      observedAt: true,
+      supersededByOrderId: true,
+      lines: { select: { lineItemId: true } },
+    },
+  });
+
+  const verdict = supersededOrders(
+    rows.map((row) => ({
+      orderId: row.orderId,
+      lineItemIds: row.lines.map((line) => line.lineItemId),
+      observedAt: row.observedAt,
+    }))
+  );
+
+  let changed = 0;
+  for (const row of rows) {
+    const supersededByOrderId = verdict.get(row.orderId) ?? null;
+    if (supersededByOrderId === row.supersededByOrderId) continue;
+    await prisma.allegroOrder.update({
+      where: { id: row.id },
+      data: { supersededByOrderId },
+    });
+    changed++;
+  }
+  return changed;
 }
 
 // ---------------------------------------------------------------------------

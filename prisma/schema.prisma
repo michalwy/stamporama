@@ -606,6 +606,17 @@ model AllegroOrder {
   observedAt  DateTime
   firstSeenAt DateTime @default(now())
 
+  // Allegro's order id of the checkout form that **took this one over** (#495), or null on an order
+  // still standing in its own right — which is all the worklist shows.
+  //
+  // A buyer who wins several auctions has one checkout form per purchase until they pay; paying for
+  // several at once makes Allegro issue a *new* form carrying the same `lineItemId`s and abandon the
+  // originals, unpaid and never updated again. Nothing in the API then says so — no event, no status
+  // change — so the leftovers would ask for ever to be recorded as sales that the merged order has
+  // already accounted for. The shared line item ids are what gives it away, and the sync works it out
+  // from rows it already holds rather than by asking Allegro anything.
+  supersededByOrderId String?
+
   collection Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   lines      AllegroOrderLine[]
 

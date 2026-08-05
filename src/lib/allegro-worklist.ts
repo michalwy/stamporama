@@ -27,6 +27,8 @@ import {
  *
  * A **cancelled** order appears in neither. The sale did not happen, and putting it in a worklist
  * would be this app suggesting a financial record on the strength of an order the buyer withdrew.
+ * Nor does an order a **merged one has taken over** (#495): its purchases are all on the order that
+ * absorbed them, and showing both would ask for the same sale twice.
  *
  * Nothing here writes. Whether the sale gets made is the collector's, through the sell flow each row
  * reaches (#166, and #463 once it can pre-fill that flow from the order).
@@ -226,7 +228,10 @@ export async function getAllegroWorklist(
   };
 
   const orderRows = await prisma.allegroOrder.findMany({
-    where: { collectionId, paymentStatus: { not: "cancelled" } },
+    // An order a merged one has taken over is gone from here altogether (#495). Its purchases have
+    // not disappeared — they are on the order that absorbed them, which is the one shown — so leaving
+    // the original standing would be the worklist asking twice for the same sale.
+    where: { collectionId, paymentStatus: { not: "cancelled" }, supersededByOrderId: null },
     orderBy: { boughtAt: "desc" },
     select: {
       orderId: true,

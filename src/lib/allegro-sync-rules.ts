@@ -88,6 +88,77 @@ export function lineAwaitsSale(paymentStatus: AllegroPaymentStatus): boolean {
   return paymentStatus !== "cancelled";
 }
 
+/** One order as the supersession rule reads it: its Allegro id, the line items it carries, and when
+ *  the sync last saw it. */
+export interface SupersedableOrder {
+  orderId: string;
+  lineItemIds: readonly string[];
+  observedAt: Date;
+}
+
+/**
+ * Which orders have been **taken over by a merged one** (#495), keyed by order id.
+ *
+ * A buyer who wins several auctions gets a checkout form per purchase, and paying for several at once
+ * makes Allegro issue a new form carrying all of them — reusing each purchase's own `lineItemId` and
+ * abandoning the original forms, unpaid, with no event and no status change to say what happened. The
+ * shared line item ids are the whole of the evidence, and they are enough: a line item is one
+ * purchase, so an order whose every line item is also carried elsewhere has nothing left of its own.
+ *
+ * The taking-over order has to be the **later statement** of that purchase, which is what keeps the
+ * relation one-way: a strictly bigger order, or an equally big one seen more recently. Two orders
+ * with the same lines and the same `observedAt` supersede neither — the pair says nothing about which
+ * came second, and guessing would hide a real order.
+ *
+ * Where several orders qualify, the biggest wins, then the most recently seen, then the id: the
+ * verdict is a stored column, and one that moved between passes over unchanged data would be a
+ * worklist that flickers.
+ *
+ * Pure, and computed over rows the sync already holds — it asks Allegro nothing.
+ */
+export function supersededOrders(
+  orders: readonly SupersedableOrder[]
+): Map<string, string | null> {
+  const verdict = new Map<string, string | null>();
+
+  for (const order of orders) {
+    verdict.set(order.orderId, null);
+    // An order with no lines is not "contained" by anything: every other order would trivially carry
+    // all nothing of it, and a header the sync has yet to fill in is not a leftover.
+    if (order.lineItemIds.length === 0) continue;
+
+    let winner: SupersedableOrder | null = null;
+    for (const other of orders) {
+      if (other.orderId === order.orderId) continue;
+      const later =
+        other.lineItemIds.length > order.lineItemIds.length ||
+        (other.lineItemIds.length === order.lineItemIds.length &&
+          other.observedAt.getTime() > order.observedAt.getTime());
+      if (!later) continue;
+      const carriesAll = order.lineItemIds.every((lineItemId) =>
+        other.lineItemIds.includes(lineItemId)
+      );
+      if (!carriesAll) continue;
+      if (!winner || compareTakeover(other, winner) < 0) winner = other;
+    }
+
+    if (winner) verdict.set(order.orderId, winner.orderId);
+  }
+
+  return verdict;
+}
+
+/** Orders the candidates for a takeover, best first: most lines, then most recently seen, then id. */
+function compareTakeover(a: SupersedableOrder, b: SupersedableOrder): number {
+  if (a.lineItemIds.length !== b.lineItemIds.length) {
+    return b.lineItemIds.length - a.lineItemIds.length;
+  }
+  if (a.observedAt.getTime() !== b.observedAt.getTime()) {
+    return b.observedAt.getTime() - a.observedAt.getTime();
+  }
+  return a.orderId.localeCompare(b.orderId);
+}
+
 /** How a line or a listing was tied to a local offer. */
 export type AllegroMatchBasis = "external" | "url";
 

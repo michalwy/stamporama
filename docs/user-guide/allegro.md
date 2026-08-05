@@ -473,6 +473,12 @@ email are simply missing, and it says so. A pre-fill is a head start, never a pr
 A card disappears once a sale exists carrying that order number as its transaction reference, and
 that sale covers every line of the order. That is also why one order can never turn into two sales.
 
+**Orders Allegro merges are shown once.** A buyer who wins several auctions gets a separate order for
+each one until they pay; paying for several at once makes Allegro combine them into a single new
+order and abandon the originals — unpaid, and never updated again. Stamporama recognises them by the
+purchases they carry and shows only the combined order, so the same sale is never asked for twice.
+The originals disappear from this list at the next sync, within a couple of minutes of the payment.
+
 **A partly recorded order stays here**, marked *Partly on sale #12*. That happens when only some of
 its lines could be recorded — the second offer was never matched, say. The lines already done are
 marked *Recorded* and the button becomes **Record the rest**, which adds the remaining sets to that

@@ -393,9 +393,17 @@ export async function recordAllegroOrderSale(
 
   const order = await prisma.allegroOrder.findUnique({
     where: { collectionId_orderId: { collectionId, orderId } },
-    select: { paymentStatus: true },
+    select: { paymentStatus: true, supersededByOrderId: true },
   });
   if (!order) throw new AllegroSaleError("That Allegro order is not in this collection.");
+  // The order was merged into another one while this screen was open (#495). Recording it would put
+  // a sale against a checkout form Allegro has abandoned, and the same purchases are still offered —
+  // on the order that took them over.
+  if (order.supersededByOrderId) {
+    throw new AllegroSaleError(
+      `Allegro merged this order into order ${order.supersededByOrderId}. Record that one instead.`
+    );
+  }
   if (lines.length === 0) {
     throw new AllegroSaleError(
       "Nothing on this order can be recorded automatically. Record it from the offer's own screen."

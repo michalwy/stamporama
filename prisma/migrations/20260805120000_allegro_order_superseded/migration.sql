@@ -1,0 +1,14 @@
+-- An Allegro order can be taken over by a merged one (#495).
+--
+-- A buyer who wins several auctions has one checkout form per purchase until they pay. Paying for
+-- several at once makes Allegro issue a *new* form carrying the same line items and abandon the
+-- originals — unpaid, and never updated again. Nothing in the API says so, so the leftovers sat on
+-- the worklist for ever, asking for sales the merged order had already accounted for.
+--
+-- This column names the checkout form that took the order over, and null is an order still standing
+-- in its own right — which is all the worklist shows.
+--
+-- Left null on every existing row on purpose: the verdict is computed by the sync from the line item
+-- ids it already holds (`markSupersededOrders`), so the next pass fills it in for the whole
+-- collection. Backfilling it here would duplicate that rule in SQL, where it could then disagree.
+ALTER TABLE "allegro_order" ADD COLUMN "supersededByOrderId" TEXT;
