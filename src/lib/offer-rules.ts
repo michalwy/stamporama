@@ -19,6 +19,17 @@ export const OFFER_STATES: readonly OfferState[] = [
 /** Terminal / "closed" states — dead listings the offers list hides by default (#245). */
 export const CLOSED_OFFER_STATES: readonly OfferState[] = ["sold", "withdrawn"];
 
+/** The complement: every state a listing is still *something* in. Not the same question as
+ * {@link isLiveState}, which asks whether an offer holds a live claim on its copies — a `preparing`
+ * offer is not competing for anything, but it has not been resolved either, which is what the Allegro
+ * worklist and the unrecorded-sale flag (#499) are asking about. */
+export const OPEN_OFFER_STATES: readonly OfferState[] = [
+  "preparing",
+  "ready",
+  "active",
+  "paused",
+];
+
 export function isOfferState(value: unknown): value is OfferState {
   return (
     value === "preparing" ||

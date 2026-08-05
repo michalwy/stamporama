@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   bidWriteFor,
+  claimCovers,
   lineAwaitsSale,
   matchListingToOffer,
   paymentStatusFor,
@@ -355,5 +356,35 @@ describe("supersededOrders", () => {
       { orderId: "other", lineItemIds: ["a"], observedAt: seen("2026-08-05T10:00:00Z") },
     ]);
     assert.equal(verdict.get("empty"), null);
+  });
+});
+
+// What a sale claiming an order accounts for (#463, #499) ---------------------
+
+describe("claimCovers", () => {
+  it("covers the lines whose offer the claiming sale names, and no others", () => {
+    assert.equal(claimCovers(["offer-1"], "offer-1"), true);
+    assert.equal(claimCovers(["offer-1"], "offer-2"), false);
+    // A multi-item order recorded a line at a time stays outstanding for the rest of it.
+    assert.equal(claimCovers(["offer-1", "offer-2"], "offer-2"), true);
+  });
+
+  it("says nothing is covered when no sale claims the order", () => {
+    assert.equal(claimCovers(null, "offer-1"), false);
+    // A claim with no lines at all cannot account for anything either.
+    assert.equal(claimCovers([], "offer-1"), false);
+  });
+
+  it("covers the whole order when the claim's lines name no offer at all", () => {
+    // Every line detached by an offer deletion (`SetNull`). It is still a real sale for this order,
+    // so it is not offered up again as if nothing had been recorded.
+    assert.equal(claimCovers([null, null], "offer-1"), true);
+    assert.equal(claimCovers([null], null), true);
+  });
+
+  it("never covers an unmatched line on a comparable claim", () => {
+    // A line that matched no local offer has nothing to compare, so it stays outstanding — which is
+    // exactly the row that tells the collector a listing was posted outside the app.
+    assert.equal(claimCovers(["offer-1"], null), false);
   });
 });

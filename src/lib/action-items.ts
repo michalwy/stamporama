@@ -4,6 +4,7 @@ import {
   offersNeedingAction,
   offersWithEndedAuction,
   offersWithObservedBidding,
+  offersWithPlatformSale,
 } from "./offers";
 
 /**
@@ -19,9 +20,10 @@ import {
  *   lot list's own `closing` windows (#351) against the server's clock;
  * - lots about to be bought twice are the lot list's `duplicate` chip (#369), which is the same
  *   collision rule the composition dialog warns with (`auction-duplicates.ts`);
- * - the two needs-action groups are the single derivation (ADR-0013 §4) split by *reason*
- *   (#167 / #215), because the two ask for different things: a sold copy has to come out of the
- *   listing, a copy under the hammer has to wait for the auction to end;
+ * - the three needs-action groups are the single derivation (ADR-0013 §4) split by *reason*
+ *   (#167 / #215 / #499), because each asks for something different: a sold copy has to come out of
+ *   the listing, a copy under the hammer has to wait for the auction to end, and one sold on a
+ *   marketplace has to be recorded before the listing beside it takes an order too;
  * - the two bidding groups are what the Allegro sync did on its own (#481) — the notice that it
  *   flagged an auction, which lasts until it is read, and the flag left standing over a bid that has
  *   since been withdrawn, which lasts until the collector settles it.
@@ -61,7 +63,9 @@ export type ActionItemGroupId =
   | "offer-bidding-conflict"
   | "offer-bidding-started"
   | "offer-bid-withdrawn"
-  | "offer-auction-ended";
+  | "offer-auction-ended"
+  | "offer-platform-sale"
+  | "offer-platform-sale-conflict";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -242,11 +246,17 @@ const offerProvider: ActionItemProvider = {
     // does not have would be a link to the wrong rows.
     const href = "offers?needsAction=1";
 
-    // Both are `critical`: each one is a piece of stock committed in two places at once, which is a
-    // double sale waiting to happen. One has already lost the copy, the other is about to.
+    // All three are `critical`: each one is a piece of stock committed in two places at once, which
+    // is a double sale waiting to happen. One has already lost the copy, one is about to, and the
+    // third has lost it to a marketplace order the books do not know about yet (#499).
     const groups = [
       { id: "offer-sold-elsewhere", title: "Listing a copy sold elsewhere", reason: "sold-elsewhere" },
       { id: "offer-bidding-conflict", title: "Conflicting with a live auction", reason: "bidding-conflict" },
+      {
+        id: "offer-platform-sale-conflict",
+        title: "Conflicting with a sale on Allegro",
+        reason: "platform-sale-conflict",
+      },
     ] as const;
 
     return groups.map(({ id, title, reason }) => ({
@@ -366,6 +376,46 @@ const endedAuctionProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * Listings that have **sold on Allegro** with no sale recorded here yet (#499).
+ *
+ * The order is the sync's observation (#467) and the *Sold on Allegro* worklist is where it is
+ * worked through; what this group adds is that the collector is told at all without going to look.
+ * A listing that has sold reads *Active* everywhere else until the sale is recorded, and the copies
+ * in it are still in every other listing they are in.
+ *
+ * `warning`: it is a deadline set by someone else that can still be met — the buyer is waiting, and
+ * on an unpaid order so is the money. The double sale it can turn into is reported beside it as
+ * `offer-platform-sale-conflict`, in red, which is where the two are graded apart.
+ *
+ * The row says which order it is and whether Allegro reports it paid, because those ask for
+ * different things: an unpaid order may still fall through, a paid one is only waiting on the books.
+ */
+const platformSaleProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const sold = await offersWithPlatformSale(ownerId, collectionId, limit);
+    return [
+      {
+        id: "offer-platform-sale" as const,
+        title: "Sold on Allegro, no sale recorded",
+        severity: "warning" as const,
+        count: sold.total,
+        items: sold.offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          detail: `${offer.platformName} · order ${offer.orderId} · ${offer.paymentStatus === "paid" ? "paid" : "not paid"}`,
+          // When it was bought — what the row is about, and what the panel ages.
+          at: offer.boughtAt.toISOString(),
+          href: `offers/${offer.offerId}`,
+        })),
+        // The offers list' own chip, so "see all" is the same set counted here. The worklist is
+        // where the sale is actually recorded, and each row links to its own offer on the way.
+        href: "offers?platformSale=1",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
 const PROVIDERS: ActionItemProvider[] = [
@@ -374,6 +424,7 @@ const PROVIDERS: ActionItemProvider[] = [
   offerProvider,
   biddingProviders,
   endedAuctionProvider,
+  platformSaleProvider,
 ];
 
 /**

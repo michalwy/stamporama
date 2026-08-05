@@ -492,6 +492,14 @@ One card per Allegro order, with the lines it covers. A card carries:
   includes delivery — it is what changed hands, not the sum of the goods;
 - the offer here it belongs to, if it could be worked out.
 
+The same fact reaches the screens you actually work from, so an order does not have to be gone
+looking for here: an offer whose listing is on one of these cards carries a **Sold on Allegro · not
+paid** chip on the offers list, is counted by its **Sold, not recorded** filter, and is reported by
+the notification bell — while every *other* listing holding those copies is flagged **Needs action**,
+since the stock is committed the moment the order exists (see [sold on a
+platform](offers.md#sold-on-a-platform-not-recorded-here)). All of it is this list, read from
+elsewhere: a row leaves both the moment the sale is recorded.
+
 Four chips narrow the list: **Paid** / **Not paid**, and **Matched** / **Unmatched**. They are two
 separate questions, so you can combine them — *Paid* + *Unmatched* is the pile most worth clearing
 first. Leaving an axis untouched means it is not asking. The numbers on the chips always count the

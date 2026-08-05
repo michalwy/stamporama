@@ -2,8 +2,10 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
+import { OPEN_OFFER_STATES } from "./offer-rules";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
+  claimCovers,
   syncFreshness,
   type AllegroMatchBasis,
   type AllegroPaymentStatus,
@@ -134,9 +136,9 @@ export interface AllegroWorklist {
   ended: WorklistEndedListing[];
 }
 
-/** The states an offer can be in and still be waiting to be sold or corrected. A terminal offer is
- *  already resolved, whatever the marketplace has since done with the listing. */
-const LIVE_OFFER_STATES = ["preparing", "ready", "active", "paused"];
+/** The states an offer can be in and still be waiting to be sold or corrected (`OPEN_OFFER_STATES`).
+ *  A terminal offer is already resolved, whatever the marketplace has since done with the listing. */
+const LIVE_OFFER_STATES = [...OPEN_OFFER_STATES];
 
 /** How far either side of the order's own date a candidate sale is looked for (#479). Wide, because
  *  a collector who records sales in batches may be weeks behind the marketplace — but not unbounded,
@@ -278,13 +280,10 @@ export async function getAllegroWorklist(
 
   const orders: WorklistOrder[] = orderRows.flatMap((row) => {
     const claim = claimByOrder.get(row.orderId) ?? null;
-    const covered = new Set(
-      (claim?.lines ?? []).flatMap((line) => (line.offerId ? [line.offerId] : []))
-    );
-    // A claimed sale whose lines name no offer at all — every one of them detached by an offer
-    // deletion (`SetNull`) — cannot be compared line by line. It is still a real sale for this
-    // order, so the order counts as recorded rather than being re-offered wholesale.
-    const uncomparable = claim !== null && claim.lines.length > 0 && covered.size === 0;
+    // What the claiming sale accounts for, decided by the shared predicate (`claimCovers`) rather
+    // than here — the offer list's own flag (#499) reads the same rule, and a second spelling of it
+    // is how that flag and this screen would come to disagree about what is outstanding.
+    const claimedOfferIds = claim ? claim.lines.map((line) => line.offerId) : null;
 
     const lines = row.lines.map((line) => ({
       id: line.id,
@@ -295,10 +294,11 @@ export async function getAllegroWorklist(
       currency: line.currency,
       offer: line.offer ? toWorklistOffer(line.offer) : null,
       matchedBy: (line.matchedBy as AllegroMatchBasis | null) ?? null,
-      recorded: Boolean(line.offer && covered.has(line.offer.id)),
+      recorded: claimCovers(claimedOfferIds, line.offer?.id ?? null),
     }));
 
-    if (claim && (uncomparable || lines.every((line) => line.recorded))) return [];
+    // Nothing of it left to record — including the uncomparable claim above, which covers every line.
+    if (claim && lines.every((line) => line.recorded)) return [];
 
     return [
       {

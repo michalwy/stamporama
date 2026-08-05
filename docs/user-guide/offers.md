@@ -1071,6 +1071,29 @@ Three things have to be true, and each one is there to keep the flag honest:
 - the listing is **still open** — a **Sold** or **Withdrawn** offer has already been resolved, which
   is what those states mean.
 
+## Sold on a platform, not recorded here
+
+A listing that has **sold on Allegro** goes on reading **Active** here until you record the sale —
+recording it is what makes an offer **Sold**, and the sync deliberately never moves a listing's state
+on its own. But the order exists, the buyer is waiting, and the copies in that listing are still
+sitting in every other listing they are in.
+
+So the offer row says so: **Sold on Allegro · not paid** (or *· paid*), with the order number in the
+tooltip. The toolbar's **Sold, not recorded** chip counts them and narrows the list to exactly those,
+and the [notification centre](action-items.md) reports the same set as *Sold on Allegro, no sale
+recorded*, longest-waiting first. The payment status is on the chip because the two ask for different
+things: an **unpaid** order may still fall through, while a **paid** one is waiting only on your
+books.
+
+Every **other** active listing holding one of those copies is flagged **Needs action** at the same
+time — the same cascade a live auction bid triggers. That is the part that matters: the sale is
+already made on one marketplace, and the second one taking an order for the same stamp is exactly
+what this prevents.
+
+The flag clears when the sale is recorded — from the **Sold on Allegro** worklist, which is where
+the order can be turned into a sale in one step, or by [linking the order](allegro.md) to a sale you
+recorded by hand. A **cancelled** order raises nothing at all: the sale did not happen.
+
 ## In active bidding — auction platforms
 
 This is the other auction question, and a separate one from the [listing
@@ -1101,9 +1124,10 @@ sale is the bidding resolved. A **Sold** offer therefore never shows **In biddin
 Because a copy can be listed on several platforms, selling it in one place — or, on an auction
 platform, just placing a bid (see [In active bidding](#in-active-bidding--auction-platforms)
 above) — leaves the other listings stale. Stamporama surfaces this automatically: an **active**
-offer holding a **set whose copy has sold, or is in active bidding, elsewhere** is flagged **Needs
-action** — a red badge on the offer row and on the affected set, plus a **Needs action** filter in
-the toolbar.
+offer holding a **set whose copy has sold, is in active bidding, or has been sold on a connected
+platform without the sale being recorded yet** ([above](#sold-on-a-platform-not-recorded-here)) is
+flagged **Needs action** — a red badge on the offer row and on the affected set, plus a **Needs
+action** filter in the toolbar.
 
 To resolve one, open the offer and:
 
@@ -1163,11 +1187,12 @@ together, "everything Ready *or* Active" being one question rather than two. Cli
 again drops it. **Needs action** is not a state, so picking it clears the state chips and picking a
 state clears it.
 
-Beside it is **Ended auctions** — auctions that closed with a bid and have not been resolved (see
-[Ended auctions](#ended-auctions--waiting-on-you)). Like **Needs action** it is an overlay rather
-than a state, so it narrows whatever the chips beside it are showing, and it reddens as soon as its
-count is above zero. It is not remembered between visits: it is a batch of work you sit down to and
-finish, not the shape the list should still have tomorrow.
+Beside it are two more overlays, both of which narrow whatever the chips beside them are showing and
+redden as soon as their count is above zero: **Ended auctions** — auctions that closed with a bid and
+have not been resolved (see [Ended auctions](#ended-auctions--waiting-on-you)) — and **Sold, not
+recorded** — listings a connected platform has already sold (see [Sold on a
+platform](#sold-on-a-platform-not-recorded-here)). Neither is remembered between visits: each is a
+batch of work you sit down to and finish, not the shape the list should still have tomorrow.
 
 ### Searching
 
@@ -1203,16 +1228,16 @@ offers regardless of the toggle.
 
 ### Counts on the filters
 
-Every state chip, the **Needs action** and **Ended auctions** chips, and each option in the platform dropdown carries the
+Every state chip, the **Needs action**, **Ended auctions** and **Sold, not recorded** chips, and each option in the platform dropdown carries the
 **number of offers you would see by picking it**. The counts are *faceted*: a count ignores its own
 filter but respects the others, so with a platform selected the state chips count only that
 platform's offers, and each platform option counts only offers in the state (or **Needs action**,
 or **Show sold/withdrawn**) you currently have chosen. The **All platforms** option shows the total
 under that same choice. A **search** has no chip of its own to count, so it narrows every count.
 
-The **Needs action** and **Ended auctions** chips turn **red** as soon as their count is above zero,
-so a stale listing — or an auction that closed with a buyer waiting — is visible from the toolbar
-without clicking anything. The **Show sold/withdrawn** toggle carries no
+The **Needs action**, **Ended auctions** and **Sold, not recorded** chips turn **red** as soon as
+their count is above zero, so a stale listing — or an auction that closed, or a sale the books have
+not caught up with — is visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
 count — it widens the list rather than selecting a slice of it.
 
 ### Stepping through the filtered list

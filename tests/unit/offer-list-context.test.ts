@@ -22,6 +22,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -34,6 +35,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -46,6 +48,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: "Mi 865",
     });
@@ -58,6 +61,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: true,
       search: undefined,
     });
@@ -70,6 +74,7 @@ describe("offer list context", () => {
       needsAction: true,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -82,6 +87,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -94,6 +100,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: true,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -107,6 +114,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: true,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });
@@ -139,6 +147,7 @@ describe("offer list context", () => {
       needsAction: true,
       bidding: false,
       endedAuction: false,
+      platformSale: false,
       includeClosed: false,
       search: undefined,
     });

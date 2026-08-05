@@ -28,6 +28,8 @@ export async function GET(
   const bidding = sp.get("bidding") === "1";
   // Ended auctions with a bid on them, waiting to be resolved (#490).
   const endedAuction = sp.get("endedAuction") === "1";
+  // Listings sold on a connected platform with no sale recorded here yet (#499).
+  const platformSale = sp.get("platformSale") === "1";
   const search = sp.get("search") || undefined;
   const includeClosed = sp.get("includeClosed") === "1";
 
@@ -39,6 +41,7 @@ export async function GET(
       needsAction,
       bidding,
       endedAuction,
+      platformSale,
       search,
       includeClosed,
       pageSize: 50,

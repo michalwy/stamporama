@@ -28,6 +28,7 @@ import {
   hasPrice,
   auctionNeedsResolution,
   CLOSED_OFFER_STATES,
+  OPEN_OFFER_STATES,
   type OfferListingType,
   isAuctionListing,
   normalizeListingType,
@@ -39,6 +40,7 @@ import {
   type LabelSetItemRow,
   type OfferLabeller,
 } from "./offer-labels";
+import { claimCovers, type AllegroPaymentStatus } from "./allegro-sync-rules";
 import { parseOfferAddressSearch } from "./offer-search";
 import { urlNamesPlatformOffer } from "./platform-offer-url";
 import { parseEntityNoSearch } from "./quick-jump";
@@ -683,6 +685,10 @@ interface NeedsActionRow {
   soldCount: number;
   /** Copies another active offer currently has in active bidding (#215). */
   biddingCount: number;
+  /** Copies another active offer has already **sold on a connected platform** (#499), the sale not
+   * being recorded here yet — so `sale_line_item` says nothing about them and the two sources above
+   * cannot see it. */
+  platformSaleCount: number;
 }
 
 /**
@@ -714,15 +720,40 @@ interface NeedsActionRow {
  */
 async function needsActionRows(
   collectionId: string,
-  offerIds?: string[]
+  offerIds?: string[],
+  /** The offers with an unrecorded platform sale (#499), where the caller has already resolved them
+   * — one request must not ask that comparison for twice. */
+  platformSoldIds?: string[]
 ): Promise<NeedsActionRow[]> {
   if (offerIds && offerIds.length === 0) return [];
   const scope = offerIds
     ? Prisma.sql`AND o."id" IN (${Prisma.join(offerIds)})`
     : Prisma.empty;
 
+  // Which offers have sold on a platform without the sale being recorded (#499) is decided in one
+  // place — `unrecordedPlatformSales`, which compares an order against the sale claiming it — and
+  // handed to the query as ids. Restating that comparison in SQL would be a second definition of
+  // "recorded", which is the one thing this and the Allegro worklist must never have.
+  const platformSold =
+    platformSoldIds ?? [...(await unrecordedPlatformSales(collectionId)).keys()];
+  const platformSoldItems = platformSold.length
+    ? Prisma.sql`
+      SELECT li4."itemId",
+             MIN(o4."id") AS "offerId",
+             COUNT(DISTINCT o4."id") AS "offerCount"
+      FROM "offer" o4
+      JOIN "offer_set" s4 ON s4."offerId" = o4."id"
+      JOIN "offer_set_item" li4 ON li4."offerSetId" = s4."id"
+      WHERE o4."id" IN (${Prisma.join(platformSold)})
+        AND o4."state" = 'active'
+      GROUP BY li4."itemId"`
+    : // No outstanding sale anywhere: an empty relation of the right shape, so the query below needs
+      // no second spelling.
+      Prisma.sql`SELECT NULL::text AS "itemId", NULL::text AS "offerId", 0::bigint AS "offerCount" WHERE FALSE`;
+
   return prisma.$queryRaw<NeedsActionRow[]>`
-    WITH bidding_items AS MATERIALIZED (
+    WITH platform_sold_items AS MATERIALIZED (${platformSoldItems}),
+    bidding_items AS MATERIALIZED (
       SELECT li2."itemId",
              MIN(o2."id") AS "offerId",
              COUNT(DISTINCT o2."id") AS "offerCount"
@@ -740,19 +771,24 @@ async function needsActionRows(
            )::int AS "soldCount",
            COUNT(*) FILTER (
              WHERE b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id")
-           )::int AS "biddingCount"
+           )::int AS "biddingCount",
+           COUNT(*) FILTER (
+             WHERE p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id")
+           )::int AS "platformSaleCount"
     FROM "offer" o
     JOIN "offer_set" s ON s."offerId" = o."id"
     JOIN "offer_set_item" li ON li."offerSetId" = s."id"
     LEFT JOIN "sale_line_item" sli ON sli."itemId" = li."itemId"
     LEFT JOIN "sale_line" sl ON sl."id" = sli."saleLineId"
     LEFT JOIN bidding_items b ON b."itemId" = li."itemId"
+    LEFT JOIN platform_sold_items p ON p."itemId" = li."itemId"
     WHERE o."collectionId" = ${collectionId}
       AND o."state" = 'active'
       ${scope}
       AND (
         (sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id")
         OR (b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id"))
+        OR (p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id"))
       )
     GROUP BY o."id", o."platformId"
   `;
@@ -761,14 +797,15 @@ async function needsActionRows(
 /** The flagged offers as the list rows want them: offer id → dead-copy count. */
 async function needsActionCounts(
   collectionId: string,
-  offerIds?: string[]
+  offerIds?: string[],
+  platformSoldIds?: string[]
 ): Promise<Map<string, number>> {
-  const rows = await needsActionRows(collectionId, offerIds);
+  const rows = await needsActionRows(collectionId, offerIds, platformSoldIds);
   return new Map(rows.map((r) => [r.offerId, r.deadCount]));
 }
 
 /** Which of the two collisions flagged an offer (#367) — see {@link NeedsActionRow}. */
-export type OfferActionReason = "sold-elsewhere" | "bidding-conflict";
+export type OfferActionReason = "sold-elsewhere" | "bidding-conflict" | "platform-sale-conflict";
 
 /** One flagged offer as the notification centre lists it: what to call it, where it is listed, and
  * how many of its copies this reason accounts for. */
@@ -817,8 +854,11 @@ export async function offersNeedingAction(
 
   const sold = bucket((r) => r.soldCount);
   const bidding = bucket((r) => r.biddingCount);
+  const platformSale = bucket((r) => r.platformSaleCount);
 
-  const ids = [...new Set([...sold.head, ...bidding.head].map((r) => r.offerId))];
+  const ids = [
+    ...new Set([...sold.head, ...bidding.head, ...platformSale.head].map((r) => r.offerId)),
+  ];
   const offers = ids.length
     ? await prisma.offer.findMany({
         where: { id: { in: ids } },
@@ -852,7 +892,11 @@ export async function offersNeedingAction(
     };
   }
 
-  return { "sold-elsewhere": resolve(sold), "bidding-conflict": resolve(bidding) };
+  return {
+    "sold-elsewhere": resolve(sold),
+    "bidding-conflict": resolve(bidding),
+    "platform-sale-conflict": resolve(platformSale),
+  };
 }
 
 /** One auction a connected platform reported on (#481), as the notification centre lists it. */
@@ -948,6 +992,142 @@ export async function offersWithObservedBidding(
       // bidding on an auction whose bid has gone.
       checkedAt: kind === "notice" ? (row.biddingNoticeAt ?? row.priceCheckedAt) : row.priceCheckedAt,
     })),
+  };
+}
+
+/** A listing that has **sold on a connected platform** with no sale recorded here yet (#499). */
+export interface UnrecordedPlatformSale {
+  /** The marketplace's own order number — what the worklist is keyed on, and what a sale recorded
+   * from it carries as its `externalRef`. */
+  orderId: string;
+  /** What the platform says about the money: `paid`, or `unpaid` while the buyer has not settled.
+   * Never `cancelled` — a withdrawn order is not a sale waiting to be recorded. */
+  paymentStatus: Exclude<AllegroPaymentStatus, "cancelled">;
+  boughtAt: Date;
+}
+
+/**
+ * Which offers have sold on Allegro without the sale having been recorded here (#499).
+ *
+ * The observation is the sync's (#467) and the definition of *recorded* is the worklist's — shared
+ * through `claimCovers`, so this flag and that screen can never disagree about what is outstanding.
+ * What is added here is only where it is **shown**: the offer list is the screen the collector works
+ * from, and until now a listing that had sold went on reading *Active* there with its copies still
+ * in every other listing they are in.
+ *
+ * Deliberately scoped to **live** offers. Orders accumulate without bound — in time there are more
+ * of them than there are listings — while what can still be flagged is bounded by what is up for
+ * sale, so the read is bounded by the smaller of the two. A `sold` offer is the sale recorded, which
+ * is the thing this is waiting for; a withdrawn one is a decision already taken.
+ *
+ * Where an offer has more than one outstanding order against it — a quantity listing bought by two
+ * people — the **earliest** is reported: it is the one that has been waiting longest, and the row
+ * has space for one.
+ */
+export async function unrecordedPlatformSales(
+  collectionId: string
+): Promise<Map<string, UnrecordedPlatformSale>> {
+  const lines = await prisma.allegroOrderLine.findMany({
+    where: {
+      collectionId,
+      offerId: { not: null },
+      offer: { state: { in: [...OPEN_OFFER_STATES] } },
+      allegroOrder: {
+        // A cancelled order is not a sale (`lineAwaitsSale`), and one a merged order has taken over
+        // (#495) is asked for on the order that absorbed it, never twice.
+        paymentStatus: { not: "cancelled" },
+        supersededByOrderId: null,
+      },
+    },
+    orderBy: { boughtAt: "asc" },
+    select: {
+      offerId: true,
+      allegroOrder: { select: { orderId: true, paymentStatus: true, boughtAt: true } },
+    },
+  });
+  if (lines.length === 0) return new Map();
+
+  const claims = await prisma.sale.findMany({
+    where: { collectionId, externalRef: { in: [...new Set(lines.map((l) => l.allegroOrder.orderId))] } },
+    select: { externalRef: true, lines: { select: { offerId: true } } },
+  });
+  const claimByOrder = new Map(
+    claims.flatMap((sale) =>
+      sale.externalRef ? [[sale.externalRef, sale.lines.map((line) => line.offerId)] as const] : []
+    )
+  );
+
+  const out = new Map<string, UnrecordedPlatformSale>();
+  for (const line of lines) {
+    const { orderId, paymentStatus, boughtAt } = line.allegroOrder;
+    if (claimCovers(claimByOrder.get(orderId) ?? null, line.offerId)) continue;
+    // Earliest first from the query, so the first one seen for an offer is the one to report.
+    if (!line.offerId || out.has(line.offerId)) continue;
+    out.set(line.offerId, {
+      orderId,
+      paymentStatus: paymentStatus === "paid" ? "paid" : "unpaid",
+      boughtAt,
+    });
+  }
+  return out;
+}
+
+/** One listing sold on a connected platform, as the notification centre lists it (#499). */
+export interface PlatformSaleOffer {
+  offerId: string;
+  label: string;
+  platformName: string;
+  orderId: string;
+  paymentStatus: Exclude<AllegroPaymentStatus, "cancelled">;
+  boughtAt: Date;
+}
+
+/**
+ * Listings sold on a connected platform with no sale recorded here (#499), for the bell.
+ *
+ * The same set the offer list's own chip shows — {@link unrecordedPlatformSales} — read
+ * **longest-waiting first**: an order from last week with the copies still listed elsewhere is worse
+ * than one from this morning, and nothing else will bring it up again on its own.
+ */
+export async function offersWithPlatformSale(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: PlatformSaleOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const sales = [...(await unrecordedPlatformSales(collectionId)).entries()].sort(
+    ([, a], [, b]) => a.boughtAt.getTime() - b.boughtAt.getTime()
+  );
+  if (sales.length === 0) return { total: 0, offers: [] };
+
+  const head = sales.slice(0, limit);
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: head.map(([offerId]) => offerId) } },
+    select: {
+      id: true,
+      name: true,
+      platform: { select: { name: true } },
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const labeller = rows.some((row) => !row.name) ? await makeOfferLabeller(collectionId) : null;
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  return {
+    total: sales.length,
+    offers: head.flatMap(([offerId, sale]) => {
+      const row = byId.get(offerId);
+      return row
+        ? [
+            {
+              offerId,
+              label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+              platformName: row.platform.name,
+              ...sale,
+            },
+          ]
+        : [];
+    }),
   };
 }
 
@@ -1120,6 +1300,10 @@ export interface OfferListItem {
   inActiveBidding: boolean;
   /** When an auction closes (#490); null on a quick buy and where no closing time is known. */
   endsAt: Date | null;
+  /** The order this listing sold on, where a connected platform has reported one and no sale has
+   * been recorded for it yet (#499). Null on everything else — including a listing whose sale *is*
+   * recorded, which is what clears it. */
+  platformSale: UnrecordedPlatformSale | null;
   /** Derived (#490): this auction has ended with a bid on it and nothing has resolved it — the row
    * carries a flag, because only the collector can say whether it sold or has to be relisted. */
   needsResolution: boolean;
@@ -1185,7 +1369,8 @@ function toListItem(
   row: OfferRow,
   baseCurrency: string,
   labeller: OfferLabeller,
-  soldCopyCount = 0
+  soldCopyCount = 0,
+  platformSale: UnrecordedPlatformSale | null = null
 ): OfferListItem {
   const state = (isOfferState(row.state) ? row.state : "active") as OfferState;
   const listingType = normalizeListingType(row.listingType);
@@ -1224,6 +1409,7 @@ function toListItem(
       },
       new Date()
     ),
+    platformSale,
     listingDate: row.listingDate,
     createdAt: row.createdAt,
   };
@@ -1262,16 +1448,33 @@ async function attachBasePrices(
 async function withNeedsAction(
   rows: OfferRow[],
   collectionId: string,
-  baseCurrency: string
+  baseCurrency: string,
+  /** Already-resolved overlays, where the caller had to resolve them to filter by one — asking for
+   * the same comparison twice in one request is the whole reason this argument exists. */
+  resolved: {
+    counts?: Map<string, number>;
+    platformSales?: Map<string, UnrecordedPlatformSale>;
+  } = {}
 ): Promise<OfferListItem[]> {
+  // Whole-collection, like the needs-action comparison below: what an order says about a listing
+  // does not depend on which page that listing is on. Bounded by the live offers (#499). Resolved
+  // first because the needs-action pass reads it too — the sibling cascade is computed off exactly
+  // this set — and one request must not ask for the same comparison twice.
+  const platformSales = resolved.platformSales ?? (await unrecordedPlatformSales(collectionId));
+  const platformSoldIds = [...platformSales.keys()];
+
   const [counts, labeller] = await Promise.all([
-    needsActionCounts(
-      collectionId,
-      rows.filter((r) => r.state === "active").map((r) => r.id)
-    ),
+    resolved.counts ??
+      needsActionCounts(
+        collectionId,
+        rows.filter((r) => r.state === "active").map((r) => r.id),
+        platformSoldIds
+      ),
     makeOfferLabeller(collectionId),
   ]);
-  const items = rows.map((r) => toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0));
+  const items = rows.map((r) =>
+    toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0, platformSales.get(r.id) ?? null)
+  );
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
 }
@@ -1293,6 +1496,10 @@ export interface OfferListFilters {
    * The stored side of {@link auctionNeedsResolution} — every part of that rule is a column, so it
    * narrows, counts and paginates like any other filter rather than being resolved to ids. */
   endedAuction?: boolean;
+  /** Only offers whose listing has **sold on a connected platform** with no sale recorded here yet
+   * (#499). Derived like `needsAction` — what counts as recorded is a comparison between an order
+   * and a sale — so it is resolved to ids rather than expressed as a `where`. */
+  platformSale?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
    * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
@@ -1455,26 +1662,16 @@ export async function listOffersPaginated(
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
 
-  if (filters.needsAction) {
-    const counts = await needsActionCounts(collectionId);
-    if (counts.size === 0) return { items: [], nextCursor: null };
-    const rows = await prisma.offer.findMany({
-      where: offerListWhere(collectionId, filters, [...counts.keys()]),
-      orderBy: OFFER_LIST_ORDER_BY,
-      take: pageSize + 1,
-      skip: offset,
-      select: OFFER_SELECT,
-    });
-    const hasMore = rows.length > pageSize;
-    const page = hasMore ? rows.slice(0, pageSize) : rows;
-    const labeller = await makeOfferLabeller(collectionId);
-    const items = page.map((r) => toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0));
-    await attachBasePrices(collectionId, baseCurrency, items);
-    return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
-  }
+  // Both overlays are comparisons across tables that no `where` can express — the needs-action flag
+  // (ADR-0013 §4) and the unrecorded platform sale (#499) — so each is resolved to ids first and
+  // then paginated as an ordinary `where`, which is what keeps a page costing only the offers it
+  // shows. Selecting both means *both*, so the two id lists are intersected rather than being two
+  // `id: { in: … }` keys that would overwrite each other.
+  const overlays = await resolveOfferOverlays(collectionId, filters);
+  if (overlays.ids?.length === 0) return { items: [], nextCursor: null };
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters),
+    where: offerListWhere(collectionId, filters, overlays.ids),
     orderBy: OFFER_LIST_ORDER_BY,
     take: pageSize + 1,
     skip: offset,
@@ -1484,8 +1681,47 @@ export async function listOffersPaginated(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   return {
-    items: await withNeedsAction(page, collectionId, baseCurrency),
+    items: await withNeedsAction(page, collectionId, baseCurrency, overlays.resolved),
     nextCursor: hasMore ? String(offset + pageSize) : null,
+  };
+}
+
+/**
+ * The derived overlays a filter selection asks for, resolved once (#499).
+ *
+ * `ids` is what the page is narrowed to — undefined when neither overlay is selected, an **empty
+ * array** when one is selected and matches nothing, which is a real answer and not the same as "not
+ * asked". `resolved` hands the maps on so the rows can be labelled and flagged without asking for
+ * the same comparison a second time.
+ */
+async function resolveOfferOverlays(
+  collectionId: string,
+  filters: Pick<OfferListFilters, "needsAction" | "platformSale">
+): Promise<{
+  ids?: string[];
+  resolved: { counts?: Map<string, number>; platformSales?: Map<string, UnrecordedPlatformSale> };
+}> {
+  // The platform-sale set first, because the needs-action pass reads it as well (the sibling
+  // cascade), and handing it on is what keeps one request to one comparison.
+  const platformSales = filters.platformSale ? await unrecordedPlatformSales(collectionId) : null;
+  const counts = filters.needsAction
+    ? await needsActionCounts(
+        collectionId,
+        undefined,
+        platformSales ? [...platformSales.keys()] : undefined
+      )
+    : null;
+  const lists = [counts, platformSales].flatMap((m) => (m ? [[...m.keys()]] : []));
+  const ids =
+    lists.length === 0
+      ? undefined
+      : lists.reduce((a, b) => {
+          const keep = new Set(b);
+          return a.filter((id) => keep.has(id));
+        });
+  return {
+    ids,
+    resolved: { counts: counts ?? undefined, platformSales: platformSales ?? undefined },
   };
 }
 
@@ -1517,23 +1753,27 @@ export async function offerListNeighbours(
   offerId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding" | "endedAuction"
+    | "platformId"
+    | "states"
+    | "needsAction"
+    | "includeClosed"
+    | "search"
+    | "bidding"
+    | "endedAuction"
+    | "platformSale"
   > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  // The needs-action overlay is derived, not a column (ADR-0013 §4), so it resolves to ids first —
+  // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first —
   // exactly as the list page and the summary bar do.
-  let needsActionIds: string[] | undefined;
-  if (filters.needsAction) {
-    needsActionIds = [...(await needsActionCounts(collectionId)).keys()];
-    if (needsActionIds.length === 0) {
-      return { previousId: null, nextId: null, position: null, total: 0 };
-    }
+  const { ids } = await resolveOfferOverlays(collectionId, filters);
+  if (ids?.length === 0) {
+    return { previousId: null, nextId: null, position: null, total: 0 };
   }
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, needsActionIds),
+    where: offerListWhere(collectionId, filters, ids),
     orderBy: OFFER_LIST_ORDER_BY,
     select: { id: true },
   });
@@ -1800,6 +2040,9 @@ export interface OfferFilterCounts {
    * platform. Like `needsAction` it is an overlay rather than a state, so it ignores the state
    * chips' selection and its own. */
   endedAuction: number;
+  /** Listings sold on a connected platform with no sale recorded here (#499), within the selected
+   * platform. An overlay too, so counted on the same terms. */
+  platformSale: number;
   /** Offers per platform, under the selected state / needs-action / show-closed choice. */
   platforms: Record<string, number>;
   /** Total across platforms — the "All platforms" option. */
@@ -1831,6 +2074,7 @@ export async function offerFilterCounts(
     | "search"
     | "bidding"
     | "endedAuction"
+    | "platformSale"
   > = {}
 ): Promise<OfferFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -1851,7 +2095,7 @@ export async function offerFilterCounts(
   // The needs-action facet comes back already grouped by platform, so both the chip's own count
   // (within the selected platform) and the platform facet under a needs-action selection are read
   // off the same few flagged rows — no id list travels back into a `where`.
-  const [flagged, byState, byPlatform, endedAuction] = await Promise.all([
+  const [flagged, byState, byPlatform, endedAuction, platformSales] = await Promise.all([
     needsActionRows(collectionId, searchIds),
     prisma.offer.groupBy({
       by: ["state"],
@@ -1890,7 +2134,23 @@ export async function offerFilterCounts(
         AND: endedAuctionWhere(new Date()),
       },
     }),
+    // …and the sold-on-platform chip's (#499), which is a resolved id set rather than a `where`, so
+    // it is narrowed here by the platform and the search the same way every other facet is.
+    unrecordedPlatformSales(collectionId),
   ]);
+
+  const platformSaleIds = [...platformSales.keys()];
+  const platformSale =
+    platformSaleIds.length === 0
+      ? 0
+      : await prisma.offer.count({
+          where: {
+            collectionId,
+            id: { in: platformSaleIds },
+            ...(filters.platformId ? { platformId: filters.platformId } : {}),
+            ...(searchWhere ?? {}),
+          },
+        });
 
   const states: Partial<Record<OfferState, number>> = {};
   for (const row of byState) {
@@ -1917,6 +2177,7 @@ export async function offerFilterCounts(
       ? flagged.filter((r) => r.platformId === filters.platformId).length
       : flagged.length,
     endedAuction,
+    platformSale,
     platforms,
     total,
   };
@@ -1957,27 +2218,31 @@ export async function offersSummary(
   collectionId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding" | "endedAuction"
+    | "platformId"
+    | "states"
+    | "needsAction"
+    | "includeClosed"
+    | "search"
+    | "bidding"
+    | "endedAuction"
+    | "platformSale"
   > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
 
-  // The needs-action overlay is derived, not a column (ADR-0013 §4), so it resolves to ids first —
-  // exactly as the list page does. No flagged offers means an empty slice, not an unfiltered one.
-  let needsActionIds: string[] | undefined;
-  if (filters.needsAction) {
-    needsActionIds = [...(await needsActionCounts(collectionId)).keys()];
-    if (needsActionIds.length === 0) {
-      return {
-        ...aggregateOfferAsking([], baseCurrency, new Map()),
-        holdings: await getHoldingsValuationForItems(collectionId, []),
-        platforms: [],
-      };
-    }
+  // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first — exactly
+  // as the list page does. Nothing matching means an empty slice, not an unfiltered one.
+  const { ids } = await resolveOfferOverlays(collectionId, filters);
+  if (ids?.length === 0) {
+    return {
+      ...aggregateOfferAsking([], baseCurrency, new Map()),
+      holdings: await getHoldingsValuationForItems(collectionId, []),
+      platforms: [],
+    };
   }
 
   const offers = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, needsActionIds),
+    where: offerListWhere(collectionId, filters, ids),
     select: {
       platformId: true,
       price: true,

@@ -104,6 +104,34 @@ export function AuctionEndedChip() {
   );
 }
 
+/**
+ * The listing has **sold on a connected platform** and no sale has been recorded here yet (#499).
+ *
+ * The strongest of the three commitments an offer can carry: an auction bid may still be outbid and
+ * an ended auction may still turn out to have fallen through, but this one is an order the
+ * marketplace has taken. Until the sale is recorded, the copies in it are still listed everywhere
+ * else they are listed — which is why every other offer holding them is flagged *Needs action* at
+ * the same time.
+ *
+ * The payment status rides along because the two ask for different things: an unpaid order is still
+ * waiting on the buyer, a paid one is waiting only on the books.
+ */
+export function PlatformSaleChip({
+  paymentStatus,
+  orderId,
+  platformName,
+}: {
+  paymentStatus: "paid" | "unpaid";
+  orderId: string;
+  platformName: string;
+}) {
+  return tinted(
+    "error",
+    `Sold on ${platformName} · ${paymentStatus === "paid" ? "paid" : "not paid"}`,
+    `Order ${orderId} on ${platformName}${paymentStatus === "paid" ? " is paid for" : " has not been paid for yet"} and no sale is recorded here — record it, and take these copies off every other listing`
+  );
+}
+
 /** "In active bidding" (#215): an auction bid has been placed on this offer, committing the
  * collector before the sale is actually recorded. */
 export function InActiveBiddingChip() {

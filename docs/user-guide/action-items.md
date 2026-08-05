@@ -54,6 +54,19 @@ the dead set or withdraw the listing.
 listings currently has *in active bidding*. Two of your own listings are competing for one piece of
 stock, and the auction is the one that cannot be taken back.
 
+**Sold on Allegro, no sale recorded** — amber. A listing a connected platform has already sold, with
+no [sale](sales.md) on the books here yet. The row names the order and says whether Allegro reports
+it **paid** or **not paid**, and ages from when it was bought; longest-waiting first, because
+nothing else will bring an old one up again. Recording the sale — from the *Sold on Allegro*
+worklist, which is where it can be done in one step — is what clears it. The listing itself stays
+**Active** until then: recording the sale is what makes an offer sold, and the sync never moves a
+listing's state on its own.
+
+**Conflicting with a sale on Allegro** — red. The other half of the same fact: another of your active
+listings holds a copy that has just been sold on a connected platform. That stock is committed, the
+second listing is still up, and a marketplace taking an order for it is the double sale this is
+warning about.
+
 **Bidding started on Allegro** — blue. An auction of yours that Stamporama itself marked **in active
 bidding**, because Allegro reported a bidder ([how that works](allegro.md#bids-on-your-auctions)).
 Nothing here is wrong — somebody bidding is the listing working — so it is blue: this is the app
@@ -82,10 +95,11 @@ bid that no longer exists. Stamporama never clears the marker by itself, so this
 open the offer and either leave it (the auction may yet be bid on again) or **Clear active
 bidding**.
 
-The two red groups are the same **needs action** flag the offers list shows, split by *why* it fired,
-because the two ask for different things: a sold copy has to come out of the listing, while a copy
-under the hammer is waiting on someone else's clock. Clicking through to see the rest lands on the
-offers list's **Needs action** filter, which holds both.
+The three red groups are the same **needs action** flag the offers list shows, split by *why* it
+fired, because each asks for something different: a sold copy has to come out of the listing, a copy
+under the hammer is waiting on someone else's clock, and one sold on a marketplace is waiting on you
+to record it before the listing beside it takes an order too. Clicking through to see the rest lands
+on the offers list's **Needs action** filter, which holds all three.
 
 ## Reading the panel
 

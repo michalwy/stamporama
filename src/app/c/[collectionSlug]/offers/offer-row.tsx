@@ -20,6 +20,7 @@ import {
   OfferStateChip,
   AuctionEndedChip,
   NeedsActionChip,
+  PlatformSaleChip,
   InActiveBiddingChip,
   ListingTypeChip,
 } from "./offer-badges";
@@ -252,6 +253,16 @@ export function OfferRow({
           {/* …and whether that bidding is over with nobody having settled it (#490): the auction's
               moment has passed, somebody bid, and only the collector can say what became of it. */}
           {offer.needsResolution && <AuctionEndedChip />}
+          {/* …and the end of that road: the marketplace has taken an order for this listing and no
+              sale is recorded here yet (#499). It sits after the auction chips because it is what
+              they turn into, and because it is the one that is no longer a question. */}
+          {offer.platformSale && (
+            <PlatformSaleChip
+              paymentStatus={offer.platformSale.paymentStatus}
+              orderId={offer.platformSale.orderId}
+              platformName={offer.platformName}
+            />
+          )}
           {offer.setCount > 1 && (
             <Tooltip content="Sets in this offer">
               <span style={CHIP}>{offer.setCount}×</span>

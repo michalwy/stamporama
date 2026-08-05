@@ -158,6 +158,10 @@ export function OffersListPanel({
   // the list should still have tomorrow.
   const endedAuction = searchParams.get("endedAuction") === "1";
 
+  // Listings the marketplace has already sold with no sale recorded here (#499). URL-only for the
+  // same reason: it is a list that empties as it is worked through.
+  const platformSale = searchParams.get("platformSale") === "1";
+
   const filters: OfferFilters = useMemo(
     () => ({
       platformId,
@@ -165,10 +169,11 @@ export function OffersListPanel({
       needsAction,
       bidding,
       endedAuction,
+      platformSale,
       includeClosed,
       search: search || undefined,
     }),
-    [platformId, states, needsAction, bidding, endedAuction, includeClosed, search]
+    [platformId, states, needsAction, bidding, endedAuction, platformSale, includeClosed, search]
   );
 
   // What every row hands to the offer it opens (#429): the filters this list is showing, so the
@@ -262,7 +267,13 @@ export function OffersListPanel({
   }
 
   const hasActiveFilters =
-    !!platformId || states.length > 0 || needsAction || bidding || endedAuction || !!search;
+    !!platformId ||
+    states.length > 0 ||
+    needsAction ||
+    bidding ||
+    endedAuction ||
+    platformSale ||
+    !!search;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -394,6 +405,19 @@ export function OffersListPanel({
               alarm={!!counts && counts.endedAuction > 0}
               active={endedAuction}
               onClick={() => updateParams({ endedAuction: endedAuction ? "" : "1" })}
+            />
+          </Tooltip>
+          {/* The end of the same road (#499): the marketplace has taken an order and the sale is not
+              on the books here, so the copies are committed while every other listing holding them
+              is still up. Beside the two above because it is the same kind of overlay, and the most
+              committed of the three. */}
+          <Tooltip content="Listings sold on a connected platform with no sale recorded here yet — record the sale, and take these copies off every other listing">
+            <FilterChip
+              label="Sold, not recorded"
+              count={counts?.platformSale}
+              alarm={!!counts && counts.platformSale > 0}
+              active={platformSale}
+              onClick={() => updateParams({ platformSale: platformSale ? "" : "1" })}
             />
           </Tooltip>
           {/* Only while a link has narrowed the list to the offers under the hammer (#481). It is

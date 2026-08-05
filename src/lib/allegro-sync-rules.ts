@@ -88,6 +88,34 @@ export function lineAwaitsSale(paymentStatus: AllegroPaymentStatus): boolean {
   return paymentStatus !== "cancelled";
 }
 
+/**
+ * Whether the sale claiming an order already accounts for one of its lines (#463, #499).
+ *
+ * An order and a sale share exactly one thing — the **offer** each line names — so that is what the
+ * two are compared on: `Sale.externalRef` is Allegro's own order number, and a claiming sale covers
+ * a line when one of its own lines names the same offer. A partly recorded order therefore stays
+ * outstanding for the rest of it, which is what lets a multi-item order be recorded a line at a time.
+ *
+ * One exception, and it is a real case rather than a defensive one: a claiming sale whose lines name
+ * **no offer at all** — every one of them detached by an offer deletion (`SetNull`) — cannot be
+ * compared line by line, and it is still a real sale for this order. So it covers the whole of it,
+ * rather than the order being offered up again as if nothing had been recorded.
+ *
+ * Pure, and the **single** statement of "recorded": the *Sold on Allegro* worklist and the offer
+ * list's own flag (#499) both read it, and two spellings of this rule is precisely how the two
+ * screens would come to disagree about what is still outstanding.
+ */
+export function claimCovers(
+  /** The offers named by the claiming sale's lines, or null where no sale claims the order. */
+  claimedOfferIds: readonly (string | null)[] | null,
+  offerId: string | null
+): boolean {
+  if (!claimedOfferIds) return false;
+  if (claimedOfferIds.length === 0) return false;
+  if (claimedOfferIds.every((id) => id === null)) return true;
+  return offerId !== null && claimedOfferIds.includes(offerId);
+}
+
 /** One order as the supersession rule reads it: its Allegro id, the line items it carries, and when
  *  the sync last saw it. */
 export interface SupersedableOrder {
