@@ -78,11 +78,28 @@ function report(
   else el.removeAttribute(LISTING_REPORT_ATTRIBUTE);
 }
 
+/**
+ * The payload text each pump last looked at.
+ *
+ * The observer below fires on **every** mutation of a React screen — a tooltip opening, a row
+ * re-rendering, a query settling — and the handoff element holds the offer's whole listing kit once
+ * one has been handed over. Without this, every one of those mutations re-parses a multi-kilobyte
+ * JSON twice, on the main thread, for ever after the first listing: the screen goes sticky exactly
+ * where it was fine a moment before, and a click can land while the row under it is being re-rendered.
+ *
+ * The text is the whole of what a pump reads, so a text that has not changed cannot mean anything new.
+ */
+let lastListingPayload: string | null = null;
+let lastMatchPayload: string | null = null;
+
 /** Read the element; hand a task the extension has not seen before to the worker. */
 async function pump(): Promise<void> {
   const el = handoffElement();
   if (!el) return;
-  const handoff = parseListingHandoff(el.textContent);
+  const raw = el.textContent;
+  if (raw === lastListingPayload) return;
+  lastListingPayload = raw;
+  const handoff = parseListingHandoff(raw);
   if (!handoff || handled.has(handoff.requestId)) return;
   handled.add(handoff.requestId);
 
@@ -140,7 +157,10 @@ function reportMatch(requestId: string, state: MatchHandoffState, message: strin
 async function pumpMatch(): Promise<void> {
   const el = matchElement();
   if (!el) return;
-  const handoff = parseMatchHandoff(el.textContent);
+  const raw = el.textContent;
+  if (raw === lastMatchPayload) return;
+  lastMatchPayload = raw;
+  const handoff = parseMatchHandoff(raw);
   if (!handoff || matchesHandled.has(handoff.requestId)) return;
   matchesHandled.add(handoff.requestId);
 
@@ -240,12 +260,25 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
   void pumpMatch();
 
   // The elements are written by a click inside a client-rendered screen, so they appear (and are
-  // rewritten for the next offer) long after load. Watching the whole document is the cheap,
-  // obvious thing: the observer fires on the page's own renders and both pumps exit on the first
-  // line whenever there is nothing new.
+  // rewritten for the next offer) long after load. Watching the whole document is the cheap, obvious
+  // thing — but only because both pumps stop at a payload they have already read (`lastListingPayload`)
+  // and because a burst of mutations is **coalesced into one pass**.
+  //
+  // Both matter on the screen this runs on. React re-renders a row, opens a tooltip and settles a
+  // query in tens of mutations at a time, and a listing workspace holds forty of those rows; a pump
+  // per mutation is a JSON parse per mutation, which is how a screen that was fine before the first
+  // listing turns sticky after it.
+  let scheduled = false;
   new MutationObserver(() => {
-    void pump();
-    void pumpMatch();
+    if (scheduled) return;
+    scheduled = true;
+    // A microtask, not a frame: the answer should still be immediate to the collector, and this only
+    // has to outlast the burst that React is in the middle of.
+    void Promise.resolve().then(() => {
+      scheduled = false;
+      void pump();
+      void pumpMatch();
+    });
   }).observe(document.documentElement, {
     childList: true,
     subtree: true,
