@@ -68,7 +68,9 @@ type DialogState =
   // One entry point, one or many copies (#373): a row's own action passes `[item]`, the bulk bar
   // passes the whole selection.
   | { kind: "addToOffer"; items: ItemListItem[] }
-  | { kind: "addToNewOffer"; items: ItemListItem[] }
+  // Straight into offer creation, packaging already decided (#277, #497) — so the picker and the
+  // "Add as" control are both skipped. `packaging` is what the two quick bulk buttons carry.
+  | { kind: "addToNewOffer"; items: ItemListItem[]; packaging?: "per-copy" | "one-set" }
   | { kind: "viewOffers"; item: ItemListItem }
   // The disposal axis (#394/#395). Marking needs a reason and a note, so it is a form; reversing
   // it is one fact with nothing to fill in, so it is a confirmation.
@@ -76,6 +78,34 @@ type DialogState =
   | { kind: "restore"; item: ItemListItem }
   | { kind: "quickPrice"; item: ItemListItem };
 
+
+/** The bulk bar's new-offer shortcuts (#497), for a selection of `count` copies. One copy has no
+ * packaging to decide, so it gets a single button; several get one per composition. */
+function newOfferShortcuts(
+  count: number
+): { packaging: "one-set" | "per-copy"; label: string; hint: string }[] {
+  if (count === 1) {
+    return [
+      {
+        packaging: "one-set",
+        label: "＋ New offer",
+        hint: "Create a new offer from this copy, skipping the picker.",
+      },
+    ];
+  }
+  return [
+    {
+      packaging: "one-set",
+      label: "＋ New offer · one set",
+      hint: "Create a new offer holding all of them as one set — a series or a lot sold together.",
+    },
+    {
+      packaging: "per-copy",
+      label: `＋ New offer · ${count} sets`,
+      hint: "Create a new offer with each copy as its own single-copy set — a quantity of interchangeable singles.",
+    },
+  ];
+}
 
 const DISPOSITION_FILTERS = [
   { key: "inCollection", label: "In collection" },
@@ -644,22 +674,51 @@ export function InventoryListPanel({
                   >
                     Clear
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDialog({ kind: "addToOffer", items: selectedCopies })}
-                    style={{
-                      ...CONTROL_STYLE,
-                      marginLeft: "auto",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      color: "#fff",
-                      background: "var(--color-action-primary)",
-                      border: "none",
-                      padding: "0.375rem 0.875rem",
-                    }}
+                  {/* The picker flow, and beside it the shortcuts that skip it (#497): a new offer
+                      is the common quick start, so the only decision left — one set or one each —
+                      is made by which button is pressed. Secondary next to the primary, since they
+                      are narrower paths through the same flow. With a single copy there is no
+                      packaging to choose, so the pair collapses into one ＋ New offer button. */}
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                   >
-                    🏷 Add selected to offer
-                  </button>
+                    {newOfferShortcuts(selectedCopies.length).map(({ packaging, label, hint }) => (
+                      <Tooltip key={packaging} content={hint}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDialog({ kind: "addToNewOffer", items: selectedCopies, packaging })
+                          }
+                          style={{
+                            ...CONTROL_STYLE,
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            color: "var(--color-accent)",
+                            borderColor: "var(--color-accent)",
+                            background: "var(--color-bg-elevated)",
+                            padding: "0.375rem 0.75rem",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      </Tooltip>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ kind: "addToOffer", items: selectedCopies })}
+                      style={{
+                        ...CONTROL_STYLE,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        color: "#fff",
+                        background: "var(--color-action-primary)",
+                        border: "none",
+                        padding: "0.375rem 0.875rem",
+                      }}
+                    >
+                      🏷 Add selected to offer
+                    </button>
+                  </div>
                 </div>
               ) : undefined
             }
@@ -1220,6 +1279,7 @@ export function InventoryListPanel({
           initialPlatform={preferredPlatform}
           onPlatformUsed={rememberPlatform}
           startInCreate={dialog.kind === "addToNewOffer"}
+          initialPackaging={dialog.kind === "addToNewOffer" ? dialog.packaging : undefined}
           onClose={closeDialog}
           onDone={handleSuccess}
         />

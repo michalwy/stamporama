@@ -560,7 +560,8 @@ same offer. A copy that has already **sold** elsewhere can't be added at all.
 ## Adding several copies to an offer at once
 
 Every copy you can list carries a **checkbox** on the left of its row. Tick a few and a bar appears
-under the toolbar saying how many are picked, with **Clear** and **🏷 Add selected to offer**.
+under the toolbar saying how many are picked, with **Clear**, the [new-offer
+shortcuts](#the-new-offer-shortcuts) and **🏷 Add selected to offer**.
 
 Only copies you can actually list get a checkbox: **For sale** and **delivered** (in hand). A copy
 that fails either shows none — its disposition and delivery chips on the row already say why.
@@ -583,6 +584,22 @@ the row says so (*"3 of 10 already listed here, and left out"*). Only an offer t
 
 The selection survives scrolling further down the list. Changing a filter clears it — what was picked
 is no longer on screen.
+
+### The new-offer shortcuts
+
+A brand-new offer is the common quick start, so it has its own buttons in the bar, beside **Add
+selected to offer**:
+
+- **＋ New offer · one set** — creates a new offer holding all the picked copies as a single set.
+- **＋ New offer · N sets** — creates a new offer with each picked copy as its own single-copy set.
+
+They skip the picker and the **Add as** control and open the [create form](#adding-a-copy-to-an-offer)
+straight away, with the packaging already decided by the button you pressed — so a fresh listing is
+one click instead of three. Cancelling the form closes the dialog, the same as **Add to new offer**
+on a single copy's **⋮** menu.
+
+With a **single** copy ticked there is no packaging to decide, so the pair collapses into one
+**＋ New offer** button that does the same thing.
 
 The same checkboxes are on the copies inside an expanded [duplicate group](#grouping-duplicates), and
 a group row can tick all of its copies at once — see [Listing a group's
@@ -666,7 +683,9 @@ blocks and one plain single, the single is the exception, not the blocks.
 
 From there it is the ordinary bar: **🏷 Add selected to offer**, whose **Add as** control decides
 between **one single-copy set each** (a quantity of duplicates — what platforms that allow one
-listing per stamp and condition expect) and **one set holding all** of them.
+listing per stamp and condition expect) and **one set holding all** of them. When the destination is a
+new offer anyway, the [new-offer shortcuts](#the-new-offer-shortcuts) in the same bar make that
+choice by themselves.
 
 Which copies are still free to list **on a given platform** is what the **Not offered on…** filter
 answers — set it first and the whole screen becomes that platform's worklist, and the platform is
