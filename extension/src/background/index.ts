@@ -19,7 +19,13 @@ import { callCapture } from "./capture-client";
 import { callOfferLookup } from "./offer-lookup-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
-import { captureListedUrl, listingSubmitted, listingTabClosed, runListingTask } from "./listing";
+import {
+  captureListedUrl,
+  listedUrlReported,
+  listingSubmitted,
+  listingTabClosed,
+  runListingTask,
+} from "./listing";
 import { handleRegistrationClick } from "./registration";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
@@ -158,6 +164,16 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // closed without a recognised entry page can be told apart from a listing simply abandoned.
   if (msg?.type === "listing-submitted") {
     void listingSubmitted(sender.tab?.id);
+    return false;
+  }
+
+  // The page the form was filled into says the listing exists and names it (#493). The other half of
+  // the write-back above: a marketplace that confirms **in place** never navigates, so the address
+  // bar this worker watches never changes and the page is the only thing that can say what was
+  // posted. The URL arrives already narrowed by the module, and is delivered exactly as one read off
+  // a navigation is.
+  if (msg?.type === "listed-here") {
+    void listedUrlReported(sender.tab?.id, msg.url);
     return false;
   }
 

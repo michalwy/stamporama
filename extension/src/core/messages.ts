@@ -170,6 +170,20 @@ export interface ListingSubmittedNotice {
   type: "listing-submitted";
 }
 
+// content script (on the sale form) → background: "the listing exists, and **this page says its
+// address**" (#412/#493). Fire-and-forget, no response.
+//
+// The second way a listed URL is found, and the only one on a marketplace that confirms **in place**:
+// Allegro answers a submitted form by re-rendering the same document into a thank-you page carrying
+// the offer's link, so the address bar never changes and there is no navigation to read. The
+// background treats it exactly as it treats one read off a navigation — same pending record, same
+// write-back, same "activate this offer" — because it is the same fact arriving by another road.
+export interface ListedHereNotice {
+  type: "listed-here";
+  /** The listing's own URL, already narrowed by the module that filled the form. */
+  url: string;
+}
+
 // background → instance content script: "the sale was posted" (#412), carried back to the page that
 // handed the offer over. The reply says whether the page **took** it: the answer arrives minutes
 // after the fill, by which time the collector may have dismissed the strip or handed the next offer
@@ -243,6 +257,7 @@ export type BackgroundMessage =
   | OfferLookupRequest
   | ListRequest
   | ListingSubmittedNotice
+  | ListedHereNotice
   | DetectedNotice
   | OpenMatchRequest
   | CachedResultsRequest;

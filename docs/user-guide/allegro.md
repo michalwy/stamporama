@@ -186,6 +186,12 @@ listing.
   that one records what the buyer actually paid, this one is Allegro's own table of what a listing
   offers.
 - **Handling time** — how long after payment you send.
+- **Listing duration** and **re-list automatically** — how long the offer runs and whether Allegro
+  puts it back up when that runs out. Both are used only when the
+  [Assistant](#listing-through-the-assistant) fills the sale form; publishing through the API takes
+  Allegro's own default instead. The duration list holds only the lengths that both a quick buy and
+  an auction offer, since one profile serves whichever the offer turns out to be — leave it on
+  *leave as the form has it* to decide per listing.
 - **Return policy** and **implied warranty** — from your Allegro account's own after-sales service
   conditions. Allegro fills these in by itself only for business accounts, so as a private seller you
   name them here. Either may be left unset if you have none defined.
@@ -301,8 +307,9 @@ Preparing teaches nothing.
 > out except by trying, so Stamporama tries once, records what Allegro said, and shows it under
 > **Settings → Allegro** instead of offering a button that fails. Everything else on this page keeps
 > working: the sold worklist, recording sales and bid tracking are all reads, and they are unaffected.
-> Post your listings on Allegro yourself. The rest of this section applies to a business account, and
-> to the sandbox.
+> **The Assistant fills Allegro's own sale form for you instead** — see [Listing through the
+> Assistant](#listing-through-the-assistant) below. The rest of this section applies to a business
+> account, and to the sandbox.
 
 Once the collection is connected and has a listing profile, a Ready offer on your Allegro platform
 carries **🛒 Publish to Allegro** in its header, beside the other actions. It posts the listing
@@ -393,6 +400,66 @@ application, connecting again is all that is needed.
   out.
 - It does not end or withdraw a listing.
 - It does not publish a batch. The bulk listing workspace is for the by-hand path.
+
+## Listing through the Assistant
+
+The other way to put an offer on Allegro is the [Assistant](assistant.md#filling-a-sale-form-for-you)
+filling Allegro's **own sale form**, which works from any account — private included. A Ready offer
+on your Allegro platform carries **⚡ List via Assistant** beside 🛒 Publish to Allegro, and the two
+are alternatives rather than steps: the API is fewer clicks where Allegro allows it, and the form is
+what you have if it does not.
+
+It uses exactly what the **On Allegro** card shows — the same category, the same parameter answers
+and the same listing profile the API path would have sent — so the two can never post the same offer
+differently.
+
+What happens when you press it:
+
+1. Allegro's sale form opens in a new tab. If Allegro shows you its newer step-by-step form, the
+   Assistant follows the *"dotychczasowy formularz"* link on it, gets past the product catalogue —
+   your stamps are not in it, and nothing is ever filed against a catalogue product — and types the
+   offer's **category number** into Allegro's own *Nr kategorii* field. That is what opens the form
+   in the right category.
+2. The form is **unfolded** where it needs to be: the rest of the category's parameters come out from
+   behind *więcej parametrów*, the description editor is woken up (Allegro does not create it until
+   something clicks into it), and an auction offer gets *licytacja* ticked, which is what grows the
+   opening-price field.
+3. Then it is filled: the title, every category parameter the offer has an answer for, the
+   description, the price (or the starting price on an auction), the number of sets, and the delivery
+   price list, handling time, listing duration, automatic re-listing and returns from the listing
+   profile.
+4. It stops there. You check it and press Allegro's own **wystaw** yourself, and the offer then goes
+   **Ready → Active** with the listing's address recorded, exactly as it does on Colnect.
+
+Two things it leaves to you, and says so in the report:
+
+- **the sending address** — Allegro takes it from your account rather than from the form, so the
+  Assistant states what the profile says it should read and you check the line the form already
+  shows;
+- **a parameter Allegro could not be asked about** — the answers are stored as Allegro's own value
+  ids and the form wants their labels, so if Allegro is unreachable when the offer is handed over,
+  that parameter is named rather than guessed at.
+
+**When you post it, the offer goes live here by itself.** Allegro does not open the listing after
+*wystaw* — it turns the form into *Oferta jest przygotowana*, with the offer's address as a link and
+the same address still in the browser bar. The Assistant watches that page, takes the address from
+it, and Stamporama moves the offer **Ready → Active** with the listing date and the URL recorded. The
+offer is still awaiting Allegro's own review at that point, which is Allegro's normal course: the
+listing exists and that is where it will be.
+
+**The "AI" watermark question is answered for you, with nothing ticked.** Allegro asks, as the
+pictures go in, which of them should be marked as generated or altered by AI. Your offer's pictures
+are photographs of your stamps, so the honest answer is none — the Assistant confirms Allegro's own
+default and never ticks a box on your behalf. The report says so.
+
+**Opening the form creates a draft on Allegro.** That is Allegro's own doing — its form is
+draft-backed from the moment a category is chosen, exactly as when you open it by hand — so a listing
+you start and abandon leaves one behind. They are listed under *Kontynuuj wystawianie* the next time
+the form opens, with **Usuń** beside each.
+
+It refuses the same things the API path refuses — no category, no listing profile, no price, no
+pictures, an over-long title — because those are facts about the listing rather than about the API.
+What it does not need is the connection: nothing about ⚡ asks Allegro for permission to sell.
 
 ## Sold on Allegro
 

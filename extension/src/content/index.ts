@@ -1,5 +1,10 @@
 import { findCaptureModuleForUrl, findModuleForUrl } from "../platform/modules";
-import { attachListingPhotos, fillListing } from "../platform/listing-run";
+import {
+  attachListingPhotos,
+  fillListing,
+  prepareListing,
+  resolveListedUrlInDocument,
+} from "../platform/listing-run";
 import { linkifyInstanceUrls, registeredOrigins } from "../core/instance-links";
 import {
   anchorIsListRow,
@@ -23,11 +28,12 @@ import type {
   ExtractResponse,
   FillRequest,
   FillResponse,
+  ListedHereNotice,
   ListingSubmittedNotice,
   OfferLookupRequest,
   OfferLookupResponse,
 } from "../core/messages";
-import type { ListingPhotoFile } from "../platform/listing";
+import type { ListingPhotoFile, ListingTask } from "../platform/listing";
 
 // Content script. It runs two ways, both guarded so only one instance is ever live per page:
 //   • declaratively (manifest `content_scripts`) on Colnect — so the toolbar badge can show how many
@@ -109,6 +115,40 @@ function extractHere(withImages: boolean) {
 }
 
 /**
+ * Make this page ready and then fill it from `task` (#493).
+ *
+ * **Prepare first, always.** A marketplace may answer the sale form's address with a page on the way
+ * to it, and it may serve the form itself with fields folded away behind its own controls; both are
+ * asynchronous and neither is a fill. Running it unconditionally is what makes those one step rather
+ * than two rules — and it costs nothing for a module without a `prepare`, which is every module but
+ * Allegro's.
+ *
+ * If preparing ended by navigating, the fill that follows lands on a dying document and reports
+ * `retry`; the shell's own answer to that is already **wait for the next load and ask again** (#419),
+ * which starts a fresh attempt on the page that arrives.
+ *
+ * A failing `prepare` replaces the fill's own error, because it is the more specific of the two: "no
+ * category, so there is no form to open" says what to do, where "the form has not loaded" does not.
+ */
+async function fillHere(task: ListingTask): Promise<FillResponse> {
+  const prepared = await prepareListing(task, document, location.href);
+  if (!prepared.ok) return { ok: false, error: prepared.error };
+  const result = fillListing(task, document, location.href);
+  if (result.ok) {
+    watchForSubmit();
+    watchForListedUrl(result.moduleId);
+  }
+  return result.ok
+    ? {
+        ok: true,
+        moduleId: result.moduleId,
+        moduleName: result.moduleName,
+        outcome: result.outcome,
+      }
+    : { ok: false, error: result.error, retry: result.retry };
+}
+
+/**
  * Note the moment the collector submits the form the Assistant filled (#412).
  *
  * Filling stops before Save, so what happens afterwards is the collector's own doing — and the two
@@ -116,9 +156,10 @@ function extractHere(withImages: boolean) {
  * reporting, because the listing exists and the offer does not know; a form simply abandoned is worth
  * nothing at all, and reporting it would raise an alarm about an offer nothing happened to.
  *
- * The page is the sale form (the fill refused otherwise), so any submit on it is that listing. A form
- * a site posts through script raises no `submit` event and is therefore missed — which costs only the
- * distinction, never the capture: the entry page is read from the navigation either way.
+ * The page is the sale form (the fill refused otherwise), so any submit on it is that listing. **A
+ * form the site posts through script raises no `submit` event** and is therefore missed — which is
+ * why nothing that matters hangs off this: the listing's own URL is watched for separately (see
+ * {@link watchForListedUrl}), and this only decides which of two reports a closed tab produces.
  */
 function watchForSubmit(): void {
   document.addEventListener(
@@ -130,6 +171,50 @@ function watchForSubmit(): void {
     },
     { capture: true, once: true }
   );
+}
+
+/** How long a filled form is watched for its own confirmation. Long, because it is the collector's
+ *  own time being waited on: they review the form, they press the marketplace's button, and only
+ *  then does the page have anything to say. */
+const CONFIRMATION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Watch this page for the confirmation that says **what was listed** (#412/#493).
+ *
+ * Started the moment the form is filled, and deliberately **not** gated on `submit`: Allegro posts
+ * its form through script, so no `submit` event is raised and a watch that waited for one never
+ * starts. Nothing is lost by watching early either — a thank-you page can only appear after the form
+ * has been posted, so its presence *is* the submission.
+ *
+ * A `MutationObserver` rather than a poll, because the page only changes once and the wait is long:
+ * it costs nothing while nothing happens, and the check it runs is one `getElementById`.
+ *
+ * The background reads a listed URL off the tab's navigations as well (#412), which is the whole
+ * answer on a marketplace that navigates to the new entry. Allegro never navigates — the address bar
+ * stays on the form — so without this every Allegro listing ends as "submitted, URL unread", with the
+ * listing existing and the offer never learning its address.
+ */
+function watchForListedUrl(moduleId: string): void {
+  const report = (): boolean => {
+    const url = resolveListedUrlInDocument(moduleId, document);
+    if (!url) return false;
+    // Said out loud, unlike anything else this script does: it happens once per listing, it is the
+    // moment the offer here goes live, and when it does *not* happen there is otherwise nothing
+    // anywhere to look at.
+    console.info("[assistant] the listing was posted:", url);
+    void chrome.runtime
+      .sendMessage({ type: "listed-here", url } satisfies ListedHereNotice)
+      .catch(() => {});
+    return true;
+  };
+  // The page may already be showing it — a re-fill on a form that was posted a moment ago.
+  if (report()) return;
+
+  const observer = new MutationObserver(() => {
+    if (report()) observer.disconnect();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  window.setTimeout(() => observer.disconnect(), CONFIRMATION_TIMEOUT_MS);
 }
 
 /**
@@ -289,18 +374,10 @@ if (!window.__stamporamaAssistantLoaded) {
   chrome.runtime.onMessage.addListener(
     (msg: FillRequest, _sender, sendResponse: (r: FillResponse) => void) => {
       if (msg?.type !== "fill") return;
-      const result = fillListing(msg.task, document, location.href);
-      if (result.ok) watchForSubmit();
-      sendResponse(
-        result.ok
-          ? {
-              ok: true,
-              moduleId: result.moduleId,
-              moduleName: result.moduleName,
-              outcome: result.outcome,
-            }
-          : { ok: false, error: result.error, retry: result.retry }
-      );
+      void fillHere(msg.task).then(sendResponse);
+      // Answered asynchronously: a marketplace whose form is reached through its own entry pages is
+      // walked there first (#493), and that is a wait on the site rather than a DOM pass.
+      return true;
     }
   );
 
@@ -310,17 +387,14 @@ if (!window.__stamporamaAssistantLoaded) {
   chrome.runtime.onMessage.addListener(
     (msg: AttachPhotosRequest, _sender, sendResponse: (r: AttachPhotosResponse) => void) => {
       if (msg?.type !== "attach-photos") return;
-      try {
-        const result = attachListingPhotos(
-          msg.moduleId,
-          document,
-          location.href,
-          msg.photos.map(toFile)
+      void attachListingPhotos(msg.moduleId, document, location.href, msg.photos.map(toFile))
+        .then(sendResponse)
+        .catch((e: unknown) =>
+          sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
         );
-        sendResponse(result);
-      } catch (e) {
-        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
-      }
+      // Answered asynchronously: a marketplace may ask something about the pictures the moment it
+      // takes them, and the uploader is not done until that is answered (#493).
+      return true;
     }
   );
 

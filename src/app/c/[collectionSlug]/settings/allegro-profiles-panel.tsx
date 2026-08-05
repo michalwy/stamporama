@@ -18,6 +18,7 @@ import type {
 import {
   ALLEGRO_HANDLING_TIMES,
   ALLEGRO_INVOICE_TYPES,
+  ALLEGRO_LISTING_DURATIONS,
 } from "@/lib/allegro-listing-profile-vocabulary";
 import {
   createAllegroListingProfileAction,
@@ -80,6 +81,12 @@ type Notice = { tone: "ok" | "error"; message: string } | null;
  *  since renamed — a profile saved under an older vocabulary still reads as *something*. */
 function handlingTimeLabel(value: string): string {
   return ALLEGRO_HANDLING_TIMES.find((h) => h.value === value)?.label ?? value;
+}
+
+/** The label for a stored duration, falling back to the raw one for the same reason the handling
+ *  time does. */
+function durationLabel(value: string): string {
+  return ALLEGRO_LISTING_DURATIONS.find((d) => d.value === value)?.label ?? value;
 }
 
 function invoiceTypeLabel(value: string): string {
@@ -239,7 +246,9 @@ export function AllegroProfilesPanel({
                 </div>
                 <p style={{ ...helpTextStyle, margin: "0.25rem 0 0" }}>
                   {profile.shippingRatesName ?? "Shipping rates"} ·{" "}
-                  {handlingTimeLabel(profile.handlingTime)} · {profile.locationCity}{" "}
+                  {handlingTimeLabel(profile.handlingTime)} ·{" "}
+                  {profile.durationLimit ? `${durationLabel(profile.durationLimit)} · ` : ""}
+                  {profile.locationCity}{" "}
                   {profile.locationPostCode}, {profile.locationCountryCode}
                 </p>
                 <p style={{ ...helpTextStyle, margin: "0.125rem 0 0" }}>
@@ -363,6 +372,8 @@ function AllegroProfileDialog({
   const [name, setName] = useState(profile?.name ?? "");
   const [shippingRatesId, setShippingRatesId] = useState(profile?.shippingRatesId ?? "");
   const [handlingTime, setHandlingTime] = useState(profile?.handlingTime ?? "PT24H");
+  const [durationLimit, setDurationLimit] = useState(profile?.durationLimit ?? "");
+  const [autoRepublish, setAutoRepublish] = useState(profile?.autoRepublish ?? false);
   const [returnPolicyId, setReturnPolicyId] = useState(profile?.returnPolicyId ?? "");
   const [impliedWarrantyId, setImpliedWarrantyId] = useState(profile?.impliedWarrantyId ?? "");
   const [countryCode, setCountryCode] = useState(profile?.locationCountryCode ?? "PL");
@@ -434,6 +445,8 @@ function AllegroProfileDialog({
       shippingRatesId,
       shippingRatesName: nameOf(shippingRates, shippingRatesId),
       handlingTime,
+      durationLimit: durationLimit || null,
+      autoRepublish,
       returnPolicyId: returnPolicyId || null,
       returnPolicyName: returnPolicyId ? nameOf(returnPolicies, returnPolicyId) : null,
       impliedWarrantyId: impliedWarrantyId || null,
@@ -530,6 +543,52 @@ function AllegroProfileDialog({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <LabelWithError htmlFor="profile-duration">Listing duration</LabelWithError>
+            <select
+              id="profile-duration"
+              value={durationLimit}
+              onChange={(e) => setDurationLimit(e.target.value)}
+              disabled={isPending}
+              style={{ ...INPUT_STYLE, cursor: "pointer" }}
+            >
+              <option value="">— leave as the form has it —</option>
+              {ALLEGRO_LISTING_DURATIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p style={helpTextStyle}>
+              How long a listing runs. Used when the Assistant fills Allegro&rsquo;s sale form
+              (&#9889; List via Assistant) — publishing through the API takes Allegro&rsquo;s own
+              default instead. Only the durations both a quick buy and an auction offer are listed.
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="profile-auto-republish"
+              style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}
+            >
+              <input
+                id="profile-auto-republish"
+                type="checkbox"
+                checked={autoRepublish}
+                onChange={(e) => setAutoRepublish(e.target.checked)}
+                disabled={isPending}
+                style={{ marginTop: "0.2rem", cursor: "pointer" }}
+              />
+              <span>
+                Re-list automatically when the duration runs out
+                <span style={{ ...helpTextStyle, display: "block" }}>
+                  Allegro puts the offer back up with a full set of items and charges for it again.
+                  Assistant path only, like the duration above.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>

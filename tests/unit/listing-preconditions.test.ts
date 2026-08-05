@@ -53,11 +53,11 @@ describe("evaluateListingPreconditions", () => {
   });
 
   it("refuses a module with no listing half the same way (#471)", () => {
-    // Allegro's marker names the marketplace a captured auction lot belongs to (#355); nothing here
-    // posts a sale form to it, so its offers are not judged by Colnect's rules.
+    // A module carrying capture alone (#355) posts no sale form, so its offers are not judged by
+    // anyone's listing rules.
     const blockers = evaluateListingPreconditions(
       input({
-        platformModule: "allegro",
+        platformModule: "captures-only",
         sets: [{ setId: "set-1", label: "A", copies: [copy({ catalogItemId: null })] }],
       })
     );
@@ -65,6 +65,15 @@ describe("evaluateListingPreconditions", () => {
       blockers.map((b) => b.code),
       ["no-platform-module"]
     );
+  });
+
+  it("names the screen its own module maps grades on", () => {
+    const blockers = evaluateListingPreconditions(
+      input({
+        sets: [{ setId: "set-1", label: "A", copies: [copy({ platformCondition: null })] }],
+      })
+    );
+    assert.match(blockers[0].message, /Settings → Colnect/);
   });
 
   it("refuses anything but Ready, and says which state it is in", () => {
@@ -120,6 +129,34 @@ describe("evaluateListingPreconditions", () => {
     );
     assert.deepEqual(blockers[0].subjects, ["Used"]);
     assert.deepEqual(blockers[0].stampIds, []);
+  });
+
+  it("asks an Allegro offer none of Colnect's questions, and still asks its own (#493)", () => {
+    // Nothing on an Allegro listing points at a Colnect item-ID or carries a Colnect grade, so an
+    // offer with neither is perfectly listable there — while the sets still have to be
+    // interchangeable, that being a fact about the offer rather than about anyone's form.
+    const bare = () => copy({ catalogItemId: null, platformCondition: null });
+    assert.deepEqual(
+      codes(
+        input({
+          platformModule: "allegro",
+          sets: [{ setId: "set-1", label: "A", copies: [bare(), bare()] }],
+        })
+      ),
+      []
+    );
+    assert.deepEqual(
+      codes(
+        input({
+          platformModule: "allegro",
+          sets: [
+            { setId: "set-1", label: "A", copies: [copy({ catalogItemId: null })] },
+            { setId: "set-2", label: "B", copies: [copy({ catalogItemId: null }), copy()] },
+          ],
+        })
+      ),
+      ["mixed-sets"]
+    );
   });
 
   it("accepts sets holding the same goods in a different order — a quantity still describes them", () => {

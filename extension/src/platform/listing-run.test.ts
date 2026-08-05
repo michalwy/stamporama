@@ -297,8 +297,8 @@ test("one image larger than the whole budget still goes, rather than nothing goi
   );
 });
 
-test("pictures are attached through the module that filled the form", () => {
-  const result = attachListingPhotos("fake-market", noDoc, "https://fake.test/sell?offer=o1", [
+test("pictures are attached through the module that filled the form", async () => {
+  const result = await attachListingPhotos("fake-market", noDoc, "https://fake.test/sell?offer=o1", [
     photoFile("o-01.jpg"),
     photoFile("o-02.jpg"),
   ]);
@@ -308,22 +308,22 @@ test("pictures are attached through the module that filled the form", () => {
   });
 });
 
-test("pictures never go to a page that is not the sale form", () => {
-  const result = attachListingPhotos("fake-market", noDoc, "https://fake.test/account/login", [
+test("pictures never go to a page that is not the sale form", async () => {
+  const result = await attachListingPhotos("fake-market", noDoc, "https://fake.test/account/login", [
     photoFile("o-01.jpg"),
   ]);
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /not FakeMarket's listing form/);
 });
 
-test("a module with no uploader answers with an empty report, not a refusal", () => {
-  const result = attachListingPhotos("no-pictures-market", noDoc, "https://no-pictures.test/sell", [
+test("a module with no uploader answers with an empty report, not a refusal", async () => {
+  const result = await attachListingPhotos("no-pictures-market", noDoc, "https://no-pictures.test/sell", [
     photoFile("o-01.jpg"),
   ]);
   assert.deepEqual(result, { ok: true, outcome: { filled: [], skipped: [] } });
 });
 
-test("a module throwing while attaching leaves the filled form standing", () => {
+test("a module throwing while attaching leaves the filled form standing", async () => {
   registerPlatformModule({
     id: "broken-pictures-market",
     name: "BrokenPicturesMarket",
@@ -339,7 +339,7 @@ test("a module throwing while attaching leaves the filled form standing", () => 
       },
     },
   });
-  const result = attachListingPhotos(
+  const result = await attachListingPhotos(
     "broken-pictures-market",
     noDoc,
     "https://broken-pictures.test/sell",

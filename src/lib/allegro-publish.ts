@@ -13,7 +13,6 @@ import {
   getAllegroConnectionStatus,
   type AllegroCallCredentials,
 } from "./allegro-connection";
-import { getAllegroCategoryForm } from "./allegro-category";
 import { uploadOfferPhotosToAllegro } from "./allegro-images";
 import { readAllegroListingInputs } from "./allegro-offer-listing";
 import {
@@ -21,7 +20,7 @@ import {
   ALLEGRO_OPERATION_TIMEOUT_MS,
   allegroOfferUrl,
   buildAllegroOfferRequest,
-  evaluateAllegroPublishBlockers,
+  evaluateAllegroApiBlockers,
   namesIneligibleAccount,
   readCreatedOffer,
   readOperationStatus,
@@ -31,9 +30,8 @@ import {
   type AllegroPublishState,
 } from "./allegro-publish-rules";
 import { getOfferListingKit } from "./listing-kit";
-import { differingSets } from "./listing-preconditions";
-import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
-import { normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
+import { STAMP_LABEL_SELECT } from "./offer-labels";
+import { normalizeListingType, type OfferListingType } from "./offer-rules";
 import { publishOffer } from "./offers";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 
@@ -43,10 +41,11 @@ import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 // It is the counterpart of the Assistant listing path (#407/#408) rather than a replacement for it:
 // a marketplace with no API is driven through its own sale form, and a marketplace with one is not.
 // What both paths share is the **listing kit** (#405) — the neutral statement of what an offer holds
-// — which is read here directly rather than through its endpoint, because the kit's own `blockers`
-// are Colnect's rules (#406/#471) and Allegro's are its own. The three that are not about Colnect's
-// vocabulary are asked again here in Allegro's words, through the same pure `differingSets`, so the
-// two paths cannot come to disagree about what "one quantity describes these sets" means.
+// — which is read here directly rather than through its endpoint. Since #493 it also carries the
+// **Allegro section** and that section's own refusals, evaluated by rules both paths call
+// (`allegro-listing-rules.ts`), so what is left for this file to decide is the connection: whether
+// *this account, through the API* may publish at all. Two evaluations of one listing is how the two
+// paths would come to disagree about it.
 //
 // The order of operations is deliberate and is the reason a failure leaves nothing half-done:
 // refusals first, then the pictures (which expire on Allegro's side by themselves if nothing uses
@@ -190,74 +189,32 @@ export async function getAllegroPublishPlan(
   const offer = await readOffer(collectionId, offerId);
   if (!offer) return null;
 
-  const [connection, config, labeller] = await Promise.all([
+  const [connection, config] = await Promise.all([
     getAllegroConnectionStatus(ownerId, collectionId),
     readListingConfig(offerId),
-    makeOfferLabeller(collectionId),
   ]);
   const profile = config.profile;
-
-  // Which of the category's **required offer-section** parameters this offer has no answer for. Read
-  // live, because what a category asks is Allegro's and changes when Allegro changes it (ADR-0026 §1)
-  // — and a read that fails names nothing rather than refusing: Allegro being unreachable is not this
-  // offer being wrong, and the publish itself would have failed on the same connection anyway.
-  //
-  // The product half is deliberately not asked about here. This request cannot carry it whether it is
-  // answered or not, so refusing over it would block a listing on a field that has no bearing on it.
-  const unansweredParameters = await unansweredRequiredParameters(
-    ownerId,
-    collectionId,
-    config.categoryId,
-    config.parameters.map((p) => p.parameterId)
-  );
-
-
-  // Allegro has no catalog item-ID and no grade of its own here, so two sets are compared by what
-  // they *are* — the local stamp and condition, which is what `setIdentity` falls back to.
-  const differing = differingSets(
-    offer.sets.map((set) => ({
-      setId: set.id,
-      label: labeller.set({ title: set.title, items: orderedLabelItems(set.items) }),
-      copies: set.items.map(({ itemId, item }) => ({
-        itemId,
-        label: labeller.copy(item.stamp),
-        stampId: item.stampId,
-        catalogItemId: null,
-        conditionId: item.conditionId,
-        conditionName: "",
-        platformCondition: null,
-      })),
-    }))
-  );
 
   const listingType = normalizeListingType(offer.listingType);
   const startingPrice = offer.startingPrice?.toFixed(2) ?? null;
   const publishState = readPublishState(offer.allegroPublishStatus);
 
-  const blockers = evaluateAllegroPublishBlockers({
+  // The connection's own refusals, then the **listing's** — which the kit has already evaluated for
+  // this very offer (#493), through the same rules and from the same values. Asked of it rather than
+  // computed again: a second evaluation is a second answer waiting to disagree, and the category's
+  // parameters would be read from Allegro twice to produce it.
+  const api = evaluateAllegroApiBlockers({
     isAllegroPlatform: offer.platform.platformModule === ALLEGRO_PLATFORM_MODULE,
     connected: connection.connected,
     needsReconnect: connection.needsReconnect,
     canPublish: connection.canPublishOffers,
     publishRefusedReason: connection.publishRefusedReason,
-    state: kit.state as OfferState,
-    listingType,
-    title: kit.title,
-    price: kit.price,
-    startingPrice,
-    quantity: kit.quantity,
-    setsInterchangeable: differing.length === 0,
-    differingSetLabels: differing.map((s) => s.label),
-    profile,
-    photosReady: kit.photos.status === "ready",
-    photoCount: kit.photos.images.length,
     publishedAs:
       offer.allegroOfferId && publishState
         ? { offerId: offer.allegroOfferId, status: publishState }
         : null,
-    categoryId: config.categoryId,
-    unansweredParameters,
   });
+  const blockers = api.length > 0 ? api : (kit.allegro?.blockers ?? []);
 
   return {
     offerId: kit.offerId,
@@ -289,30 +246,6 @@ export async function getAllegroPublishPlan(
  *  state this app knows how to act on. */
 function readPublishState(raw: string | null): AllegroPublishState | null {
   return raw === "ACTIVE" || raw === "INACTIVE" || raw === "PENDING" ? raw : null;
-}
-
-/** The required **offer-section** parameters of the stored category this offer answers nothing for.
- *  Empty on a category that could not be read — see the call site. */
-async function unansweredRequiredParameters(
-  ownerId: string,
-  collectionId: string,
-  categoryId: string | null,
-  answered: readonly string[]
-): Promise<string[]> {
-  if (!categoryId) return [];
-  try {
-    const form = await getAllegroCategoryForm(ownerId, collectionId, categoryId);
-    return form.parameters
-      .filter(
-        (p) =>
-          p.parameter.required &&
-          !p.parameter.describesProduct &&
-          !answered.includes(p.parameter.id)
-      )
-      .map((p) => p.parameter.name);
-  } catch {
-    return [];
-  }
 }
 
 /**

@@ -185,6 +185,43 @@ export function fillListing(task: ListingTask, doc: Document, url: string): List
   }
 }
 
+export type ListingPrepareResult =
+  | { ok: true; advanced: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Make this page ready to be filled (#493) — run **before** every fill, and a no-op for every module
+ * that has nothing to do here.
+ *
+ * Two jobs, and they are the same job at two distances from the form. A page that is at the sale
+ * form's address but is *not* the form is walked one step closer to it (Allegro answers one address
+ * with three different pages). A page that **is** the form may still be hiding fields this task
+ * needs behind a control of its own, and revealing them is asynchronous, which is exactly why it
+ * cannot be part of {@link fillListing}.
+ *
+ * `advanced: false` is a module with no `prepare` — every module but Allegro's — and the shell then
+ * behaves precisely as it did before this existed.
+ */
+export async function prepareListing(
+  task: ListingTask,
+  doc: Document,
+  url: string
+): Promise<ListingPrepareResult> {
+  const module = resolveListingModule(task);
+  if (!module.ok) return module;
+  const { listing } = module.module;
+  if (!listing.isFormUrl(url)) {
+    return { ok: false, error: `This page is not ${module.module.name}'s listing form.` };
+  }
+  if (!listing.prepare) return { ok: true, advanced: false };
+  try {
+    await listing.prepare(doc, task);
+    return { ok: true, advanced: true };
+  } catch (e) {
+    return { ok: false, error: messageOf(e) };
+  }
+}
+
 export type ListingPhotoResult =
   | { ok: true; outcome: ListingFillOutcome }
   | { ok: false; error: string };
@@ -202,13 +239,16 @@ export type ListingPhotoResult =
  *
  * A module with no uploader answers with an **empty report** rather than a refusal — {@link
  * selectListingPhotos} has already fetched nothing for it, and there is nothing to say.
+ *
+ * Awaits the module, since a marketplace may not be finished with the pictures when it has taken
+ * them: Allegro asks a question about them in a dialog of its own (#493).
  */
-export function attachListingPhotos(
+export async function attachListingPhotos(
   moduleId: string,
   doc: Document,
   url: string,
   photos: readonly ListingPhotoFile[]
-): ListingPhotoResult {
+): Promise<ListingPhotoResult> {
   const module = findModuleById(moduleId);
   if (!module || !canList(module)) {
     return { ok: false, error: `This Assistant has no module "${moduleId}" to attach pictures with.` };
@@ -221,7 +261,7 @@ export function attachListingPhotos(
     return { ok: true, outcome: { filled: [], skipped: [] } };
   }
   try {
-    return { ok: true, outcome: listing.attachPhotos(doc, photos) };
+    return { ok: true, outcome: await listing.attachPhotos(doc, photos) };
   } catch (e) {
     // The form itself is filled and stays filled — this is the one step whose failure the collector
     // answers by dragging the offer's ZIP in, so it is reported as a skip rather than as a refusal.
@@ -238,6 +278,24 @@ export function attachListingPhotos(
  * tab and the module that owns it, never the whole payload. An unknown or read-only module is null
  * too — a page nobody claims is not a listing that went live.
  */
+/**
+ * The listed entry's URL as the **page in front of the collector** states it (#493) — for a
+ * marketplace that confirms a submitted form without navigating, and null for everyone else.
+ *
+ * Keyed on a module id for {@link resolveListedUrl}'s reason: the question is asked long after the
+ * fill, and what is remembered in the meantime is the tab and the module that owns it.
+ */
+export function resolveListedUrlInDocument(moduleId: string, doc: Document): string | null {
+  const module = findModuleById(moduleId);
+  if (!module || !canList(module) || !module.listing.listedUrlInDocument) return null;
+  try {
+    return module.listing.listedUrlInDocument(doc);
+  } catch {
+    // A module refusing to read a page is not an outcome worth reporting, exactly as above.
+    return null;
+  }
+}
+
 export function resolveListedUrl(moduleId: string, url: string): string | null {
   const module = findModuleById(moduleId);
   if (!module || !canList(module)) return null;

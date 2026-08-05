@@ -147,10 +147,29 @@ The Assistant also works the other way round: **⚡ List via Assistant** on a re
 platform's sale form in a new tab and fills it in — the items being sold, each copy's condition in the
 platform's own grades, the price, the number of sets and the two texts.
 
+On Allegro it also fills the **category's own parameters** and the delivery, handling time and
+returns from the offer's [listing profile](allegro.md#listing-profiles) — everything the **On
+Allegro** card on the offer shows.
+
 It **never submits**. The form is filled and left in front of you to check and post yourself. When it
 is done, the offer's card in Stamporama lists what was filled and what was skipped, so a field it
 couldn't answer — a condition with no grade on that platform, a text over the platform's limit — is
 something you learn there rather than after posting.
+
+### Allegro's form is a longer walk
+
+Colnect's sale form is at an address, and opening it is the whole of getting there. Allegro's is not:
+it answers that address with its newer step-by-step form, whose *"dotychczasowy formularz"* link
+leads to a product search that has to be run before Allegro will offer to continue without a
+catalogue product — and only then does it ask for the category.
+
+The Assistant walks all of that itself, and the one thing it types on the way is the offer's own
+**category number**, which is what opens the form in the right category. You do not choose a product
+from Allegro's catalogue at any point: your stamps are not in it, and a listing filed against
+somebody else's product is not what the offer says it is.
+
+What it fills once it is there, and the three things it leaves to you, are in the
+[Allegro guide](allegro.md#listing-through-the-assistant).
 
 Colnect sometimes answers the sale form's own address with a short **"checking your browser"** page
 that reloads itself into the real form a moment later. The Assistant waits that page out: it fills the

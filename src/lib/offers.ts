@@ -51,7 +51,11 @@ import {
   evaluateListingPreconditions,
   type ListingBlocker,
 } from "./listing-preconditions";
-import { hasListingModule } from "./platform-modules";
+import {
+  hasListingModule,
+  usesPlatformCatalogue,
+  usesPlatformConditions,
+} from "./platform-modules";
 import {
   backfillAllegroCategory,
   getAllegroOfferListingConfig,
@@ -2141,7 +2145,7 @@ export async function listReadyOffersForListing(
   // all where no module asks for it.
   const [labeller, conditionMap] = await Promise.all([
     makeOfferLabeller(collectionId),
-    hasListingModule(platformModule)
+    usesPlatformConditions(platformModule)
       ? loadColnectConditionMap(collectionId)
       : new Map<string, string>(),
   ]);
@@ -2242,7 +2246,9 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
       if (!hasListingModule(platformModule)) return [];
       const [labeller, conditionMap] = await Promise.all([
         makeOfferLabeller(collectionId),
-        loadColnectConditionMap(collectionId),
+        usesPlatformConditions(platformModule)
+          ? loadColnectConditionMap(collectionId)
+          : new Map<string, string>(),
       ]);
       return listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, "ready");
     })(),
@@ -2715,7 +2721,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       offer.collectionId,
       offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
     ),
-    hasListingModule(platformModule)
+    usesPlatformConditions(platformModule)
       ? loadColnectConditionMap(offer.collectionId)
       : new Map<string, string>(),
   ]);
@@ -2951,11 +2957,12 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
  * The offer's stamps as the platform's catalogue knows them (#423), one row per `stamp × condition`
  * in the order the sets list them.
  *
- * Empty for a platform with no **listing** module, exactly as the listing blockers are: every URL
- * below is Colnect's, this is one marketplace's catalogue rather than a general fact about an offer,
- * and a Delcampe listing has no such pages to link to. Naming *a* module is not enough (#471) — an
- * Allegro platform (#355) was drawing a card of Colnect links for stamps nobody had matched to
- * Colnect. It is deliberately **not** gated on the preconditions, unlike the listing kit
+ * Empty for a platform whose module does not list against a **catalogue of its own** (#493): every
+ * URL below is Colnect's, this is one marketplace's catalogue rather than a general fact about an
+ * offer, and a Delcampe listing has no such pages to link to. Naming *a* module is not enough
+ * (#471), and neither is having a sale form: an Allegro listing is filed under a category (#488),
+ * so there is no catalogue page for a stamp and no market page at a grade. It is deliberately
+ * **not** gated on the preconditions, unlike the listing kit
  * (#405): the collector is checking what the market is asking, which is a question about an offer at
  * any stage and one an unmatched stamp does not spoil — that row simply carries no links, which is
  * how the gap gets noticed.
@@ -2969,7 +2976,7 @@ function platformItemsFor(
   labeller: OfferLabeller,
   conditionMap: Map<string, string>
 ): OfferPlatformItem[] {
-  if (!hasListingModule(platformModule)) return [];
+  if (!usesPlatformCatalogue(platformModule)) return [];
   const rows = new Map<string, OfferPlatformItem>();
   for (const set of sets) {
     for (const { item } of orderedItems(set.items)) {

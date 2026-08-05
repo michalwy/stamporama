@@ -1,5 +1,5 @@
 import { OFFER_STATE_LABEL, type OfferState } from "./offer-rules";
-import { hasListingModule } from "./platform-modules";
+import { listingModuleRules } from "./platform-modules";
 
 // What has to be true before an offer can be handed to the Assistant to post (#406, part of #155) —
 // pure, no Prisma. The listing kit (#405) evaluates these over its own payload and refuses to serve
@@ -11,6 +11,11 @@ import { hasListingModule } from "./platform-modules";
 // quantity over sets that are not interchangeable claims N of something that does not exist. A text
 // that overruns the platform's cap is deliberately **not** here (#403) — that is a paste the
 // platform's own field will visibly refuse, not a false claim about the stamps.
+//
+// **Which checks apply is the module's own answer** (#493). The first two are one module's rules —
+// Colnect's catalogue and Colnect's grades — and a second listable marketplace does not inherit them
+// by gaining a sale form; `listingModuleRules` is where each module states what its form asks for.
+// What is left over is shell-wide, being about the offer rather than about anyone's form.
 
 export type ListingBlockerCode =
   | "no-platform-module"
@@ -58,8 +63,9 @@ export interface PreconditionSet {
 
 export interface PreconditionInput {
   /** The Assistant platform module the offer's platform names (`platform-modules.ts`), or null when
-   *  it names none. Every other check here is the *listing* module's rule, so a platform without one
-   *  — including one whose module cannot list (#471) — has nothing to fail; see
+   *  it names none. It decides **which** checks below are asked as well as whether any are: a
+   *  platform with no listing half (#471) has nothing to fail, and one that lists by category rather
+   *  than against a catalogue is not asked for item-IDs it has no use for (#493). See
    *  {@link evaluateListingPreconditions}. */
   platformModule: string | null;
   state: OfferState;
@@ -111,10 +117,14 @@ function distinct(values: readonly string[]): string[] {
  * Every reason this offer cannot be handed over, in the order they are worth fixing. An empty array
  * means the listing kit is servable.
  *
- * `no-platform-module`, `not-ready` and `no-sets` are checked first and each stands **alone**: every
- * other check is one module's rule, with no sets there is no composition to say anything else about,
- * and repeating "no catalog item-ID" under an offer that simply is not finished buries the one thing
- * to do about it.
+ * `no-platform-module`, `not-ready` and `no-sets` are checked first and each stands **alone**: there
+ * is no form to fill, with no sets there is no composition to say anything else about, and repeating
+ * "no catalog item-ID" under an offer that simply is not finished buries the one thing to do about
+ * it.
+ *
+ * Of what follows, the first two are the **module's** rules and are asked only where its own entry
+ * claims them (#493); the homogeneity of the sets is asked of every module, being a fact about the
+ * offer.
  *
  * `no-platform-module` is a refusal, not a fault to fix: a marketplace the Assistant cannot post to
  * is a perfectly good marketplace, listed by hand. A surface that only ever asks "what do I fix"
@@ -122,10 +132,10 @@ function distinct(values: readonly string[]): string[] {
  * this blocker, which is a fact about the platform and not about the offer.
  */
 export function evaluateListingPreconditions(input: PreconditionInput): ListingBlocker[] {
-  // A module with no listing half is the same answer as no module at all (#471): every check below
-  // is Colnect's rule — its item-ID, its grades — and asking them about an Allegro offer reports a
-  // fault in a form nobody is going to fill from here. See {@link hasListingModule}.
-  if (!hasListingModule(input.platformModule)) {
+  // A module with no listing half is the same answer as no module at all (#471): there is no form to
+  // fill, so there is nothing this offer could be wrong for. See {@link listingModuleRules}.
+  const rules = listingModuleRules(input.platformModule);
+  if (!rules) {
     return [
       {
         code: "no-platform-module",
@@ -163,7 +173,7 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
   const blockers: ListingBlocker[] = [];
   const copies = sets.flatMap((s) => s.copies);
 
-  const unmatched = copies.filter((c) => c.catalogItemId === null);
+  const unmatched = rules.requiresCatalogItemId ? copies.filter((c) => c.catalogItemId === null) : [];
   if (unmatched.length > 0) {
     const subjects = distinct(unmatched.map((c) => c.label));
     blockers.push({
@@ -174,12 +184,14 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     });
   }
 
-  const unmapped = copies.filter((c) => c.platformCondition === null);
+  const unmapped = rules.requiresPlatformCondition
+    ? copies.filter((c) => c.platformCondition === null)
+    : [];
   if (unmapped.length > 0) {
     const subjects = distinct(unmapped.map((c) => c.conditionName));
     blockers.push({
       code: "unmapped-condition",
-      message: `${subjects.length === 1 ? "One condition has" : `${subjects.length} conditions have`} no grade mapped for this platform: ${subjects.join(", ")}. Map them under Settings → Colnect — a wrong grade on a published listing is worse than a blank.`,
+      message: `${subjects.length === 1 ? "One condition has" : `${subjects.length} conditions have`} no grade mapped for this platform: ${subjects.join(", ")}. Map them under ${rules.conditionMappingLocation} — a wrong grade on a published listing is worse than a blank.`,
       subjects,
       stampIds: [],
     });

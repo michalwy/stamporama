@@ -10,6 +10,7 @@ import {
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
   isAllegroHandlingTime,
+  isAllegroListingDuration,
   isAllegroInvoiceType,
 } from "./allegro-listing-profile-vocabulary";
 
@@ -36,6 +37,10 @@ export interface AllegroListingProfileData {
   shippingRatesId: string;
   shippingRatesName: string | null;
   handlingTime: string;
+  /** How long the listing runs (#493) — null leaves Allegro's sale form as it was served. */
+  durationLimit: string | null;
+  /** Whether Allegro re-lists it when that runs out (#493). */
+  autoRepublish: boolean;
   returnPolicyId: string | null;
   returnPolicyName: string | null;
   impliedWarrantyId: string | null;
@@ -106,6 +111,8 @@ function toData(
     shippingRatesId: string;
     shippingRatesName: string | null;
     handlingTime: string;
+    durationLimit: string | null;
+    autoRepublish: boolean;
     returnPolicyId: string | null;
     returnPolicyName: string | null;
     impliedWarrantyId: string | null;
@@ -127,6 +134,8 @@ const PROFILE_SELECT = {
   shippingRatesId: true,
   shippingRatesName: true,
   handlingTime: true,
+  durationLimit: true,
+  autoRepublish: true,
   returnPolicyId: true,
   returnPolicyName: true,
   impliedWarrantyId: true,
@@ -208,6 +217,10 @@ export interface AllegroListingProfileInput {
   shippingRatesId: string;
   shippingRatesName: string | null;
   handlingTime: string;
+  /** How long the listing runs (#493), or null to leave the form as Allegro served it. */
+  durationLimit: string | null;
+  /** Whether Allegro re-lists it when that runs out (#493). */
+  autoRepublish: boolean;
   returnPolicyId: string | null;
   returnPolicyName: string | null;
   impliedWarrantyId: string | null;
@@ -247,6 +260,13 @@ function cleanInput(input: AllegroListingProfileInput): AllegroListingProfileInp
     throw new Error("That is not a handling time Allegro accepts.");
   }
 
+  // Null is a state, not a gap: a profile that says nothing about duration leaves the sale form's own
+  // choice standing, which is what every profile written before #493 says.
+  const durationLimit = input.durationLimit?.trim() || null;
+  if (durationLimit && !isAllegroListingDuration(durationLimit)) {
+    throw new Error("That is not a listing duration Allegro's sale form offers.");
+  }
+
   const invoiceType = input.invoiceType.trim();
   if (!isAllegroInvoiceType(invoiceType)) {
     throw new Error("That is not an invoice type Allegro accepts.");
@@ -273,6 +293,8 @@ function cleanInput(input: AllegroListingProfileInput): AllegroListingProfileInp
     shippingRatesId,
     shippingRatesName: trimmedOrNull(input.shippingRatesName),
     handlingTime,
+    durationLimit,
+    autoRepublish: input.autoRepublish,
     returnPolicyId,
     // A name without its id names nothing, so the pair travels together or not at all.
     returnPolicyName: returnPolicyId ? trimmedOrNull(input.returnPolicyName) : null,

@@ -8,6 +8,15 @@ import {
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
 import { evaluateListingPreconditions, type ListingBlocker } from "./listing-preconditions";
+import {
+  ALLEGRO_PLATFORM_MODULE,
+  usesPlatformCatalogue,
+  usesPlatformConditions,
+} from "./platform-modules";
+import {
+  readAllegroListingSection,
+  type AllegroListingSection,
+} from "./allegro-listing-task";
 import type { OfferState } from "./offer-rules";
 import type { DescriptionFormat } from "./description-format";
 
@@ -22,12 +31,12 @@ import type { DescriptionFormat } from "./description-format";
 // extension (#408/#410).
 //
 // Which module a platform belongs to is `Contact.platformModule` (#406); a platform naming none is
-// refused outright, because there is nobody to fill its form from here. One Colnect-shaped
-// assumption is unavoidable today and is deliberately confined here: the grade vocabulary comes from
-// the collection's Colnect condition mapping (#404), which is per collection rather than per
-// platform because Colnect's list is fixed and global (#402). A second marketplace bringing its own
-// vocabulary is what would turn `platformCondition` into a per-platform lookup — nothing else in
-// this shape would move.
+// refused outright, because there is nobody to fill its form from here. **What a module asks for is
+// its own** (#493, `listingModuleRules`): the two platform-side values below are Colnect's — its
+// item-ID (#247) and its grade vocabulary (#404, per collection rather than per platform because
+// Colnect's list is fixed and global, #402) — and a marketplace that lists by category rather than
+// against a catalogue is served neither, both being null rather than a value from a catalogue it is
+// not in. Nothing else in this shape moves for such a platform.
 
 /** One copy of the listing, with the two platform-side values a form needs for it. Both are
  *  nullable, and both being non-null on every copy is exactly what the preconditions check. */
@@ -38,7 +47,8 @@ export interface ListingKitItem {
   stampId: string;
   /** The copy's label — its leading catalog number (#379). */
   label: string;
-  /** The platform's catalog item-ID (Colnect's item-ID, #247), or null when the stamp has none. */
+  /** The platform's catalog item-ID (Colnect's item-ID, #247) — null when the stamp has none, and
+   *  null throughout for a module that lists against no catalogue of its own (#493). */
   catalogItemId: string | null;
   condition: ListingKitCondition;
 }
@@ -115,6 +125,11 @@ export interface OfferListingKit {
   /** Empty on a servable kit. Populated, this is why the offer cannot be listed (#406) — the same
    *  list the workspace card shows, so the two can never disagree. */
   blockers: ListingBlocker[];
+  /** The Allegro sale form's own half of the task (#493), for an offer on the Allegro platform and
+   *  null for every other one — a **named section** rather than Allegro-shaped fields above, since
+   *  a category and a delivery profile mean nothing on another marketplace. It carries refusals of
+   *  its own; the endpoint serves neither list non-empty. */
+  allegro: AllegroListingSection | null;
 }
 
 const KIT_ITEM_SELECT = {
@@ -172,10 +187,14 @@ export async function getOfferListingKit(
 
   // Both lookups are per collection and loaded **once per offer** (#404): a komplet is dozens of
   // copies over a handful of conditions, and the labeller's area tree is one read for the whole kit.
+  const platformModule = offer.platform.platformModule;
   const [labeller, conditionMap] = await Promise.all([
     makeOfferLabeller(collectionId),
-    loadColnectConditionMap(collectionId),
+    usesPlatformConditions(platformModule)
+      ? loadColnectConditionMap(collectionId)
+      : new Map<string, string>(),
   ]);
+  const catalogued = usesPlatformCatalogue(platformModule);
 
   const sets = offer.sets.map((set) => {
     const items = orderedLabelItems(set.items);
@@ -189,7 +208,7 @@ export async function getOfferListingKit(
           itemNo: item.itemNo,
           stampId: item.stampId,
           label: labeller.copy(item.stamp),
-          catalogItemId: item.stamp.colnectId?.trim() || null,
+          catalogItemId: catalogued ? item.stamp.colnectId?.trim() || null : null,
           condition: {
             id: item.conditionId,
             name: item.condition.name,
@@ -202,8 +221,9 @@ export async function getOfferListingKit(
     };
   });
 
+  const quantity = sets.filter((s) => s.copies.length > 0).length;
   const blockers = evaluateListingPreconditions({
-    platformModule: offer.platform.platformModule,
+    platformModule,
     state: offer.state as OfferState,
     sets: sets.map((s) => ({
       setId: s.setId,
@@ -220,6 +240,10 @@ export async function getOfferListingKit(
     })),
   });
 
+  const title =
+    offer.name ?? labeller.offer(offer.sets.map((s) => ({ title: s.title, items: s.items })));
+  const photos = await uploadPhotos(ownerId, collectionId, offerId);
+
   return {
     offerId: offer.id,
     collectionId: offer.collectionId,
@@ -229,16 +253,31 @@ export async function getOfferListingKit(
       name: offer.platform.name,
       module: offer.platform.platformModule,
     },
-    title: offer.name ?? labeller.offer(offer.sets.map((s) => ({ title: s.title, items: s.items }))),
+    title,
     description: offer.description,
     privateNote: offer.privateNote,
     descriptionFormat: offer.descriptionFormat as DescriptionFormat,
     price: offer.price.toFixed(2),
     currency: offer.currency,
-    quantity: sets.filter((s) => s.copies.length > 0).length,
+    quantity,
     items: sets.find((s) => s.copies.length > 0)?.copies ?? [],
-    photos: await uploadPhotos(ownerId, collectionId, offerId),
+    photos,
     blockers,
+    allegro:
+      platformModule === ALLEGRO_PLATFORM_MODULE
+        ? await readAllegroListingSection(ownerId, collectionId, {
+            offerId: offer.id,
+            state: offer.state as OfferState,
+            title,
+            price: offer.price.toFixed(2),
+            quantity,
+            photosReady: photos.status === "ready",
+            photoCount: photos.images.length,
+            // Both read off the evaluation already made over this very kit, never computed twice.
+            setsInterchangeable: !blockers.some((b) => b.code === "mixed-sets"),
+            differingSetLabels: blockers.find((b) => b.code === "mixed-sets")?.subjects ?? [],
+          })
+        : null,
   };
 }
 

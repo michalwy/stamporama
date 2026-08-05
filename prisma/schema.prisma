@@ -773,6 +773,22 @@ model AllegroListingProfile {
   // hour-scale values, and re-deriving its wording from an integer is a translation with nothing to
   // gain.
   handlingTime String @default("PT24H")
+  // How long a listing runs, as the ISO-8601 duration Allegro's **sale form** offers (#493). Null is
+  // "leave it as the form was served", which is what every profile written before this existed says.
+  //
+  // It is here rather than on the offer because it is a way of selling rather than a fact about the
+  // stamps — the same reasoning that puts the handling time and the returns policy here. Read by the
+  // Assistant path only: `POST /sale/product-offers` (#477) does not send one and takes Allegro's own
+  // default, and this app has not established what that endpoint would do with a duration, so it is
+  // not sent there rather than sent untested to a live selling account.
+  durationLimit String?
+  // Whether Allegro re-lists the offer with a full set of items when its duration runs out (#493) —
+  // the sale form's *automatyczne wznawianie oferty*. A boolean and not a nullable one: it is a way
+  // of selling that the profile decides either way, so "unticked" is an answer rather than a gap,
+  // and the form is set to what the profile says in both directions.
+  //
+  // Read by the Assistant path only, for {@link durationLimit}'s reason.
+  autoRepublish Boolean @default(false)
 
   // ── After-sales services ──────────────────────────────────────────────────────────────────
   // The return policy and implied warranty from the account's own dictionaries

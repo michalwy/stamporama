@@ -3,9 +3,12 @@
  *
  * Nothing here reaches a database or the network. Two jobs:
  *
- *  • **the refusals** — every reason a listing cannot go out, named before a request is spent on it.
- *    A publish is the one act in this app that writes to somebody else's live selling account, so
- *    "why not" has to be answerable without asking Allegro.
+ *  • **the refusals** — every reason a listing cannot go out *through the API*, named before a
+ *    request is spent on it. A publish is the one act in this app that writes to somebody else's live
+ *    selling account, so "why not" has to be answerable without asking Allegro. The reasons that are
+ *    about the **listing** rather than about the API live in `allegro-listing-rules.ts` (#493), since
+ *    the Assistant path refuses on the very same ones; this file adds the API's own group in front of
+ *    them.
  *  • **the request** — one `POST /sale/product-offers` body assembled from the three sources that
  *    each own their half: the listing kit (#405, what the offer holds), the listing profile (#486,
  *    what the account sells under) and the category with its parameters (#488, what the stamp is).
@@ -15,13 +18,18 @@
  */
 
 import { toAllegroDescriptionHtml } from "./allegro-description";
+import {
+  evaluateAllegroListingBlockers,
+  type AllegroListingBlocker,
+  type AllegroListingBlockerCode,
+  type AllegroListingReadiness,
+  type AllegroProfileForPublish,
+} from "./allegro-listing-rules";
 import { descriptionToUnsafeHtml, type DescriptionFormat } from "./description-format";
-import { isAuctionListing, type OfferListingType, type OfferState } from "./offer-rules";
+import { isAuctionListing, type OfferListingType } from "./offer-rules";
 
-/** Allegro's own cap on a listing title. The listing kit does not enforce one — a title is a text
- *  about the goods and every platform caps it differently — so it is checked here, where the
- *  platform is known. */
-export const ALLEGRO_TITLE_MAX_LENGTH = 75;
+export { ALLEGRO_TITLE_MAX_LENGTH } from "./allegro-listing-rules";
+export type { AllegroProfileForPublish } from "./allegro-listing-rules";
 
 /** How long the publish waits on a 202's operation before it stops and says so. Allegro's async
  *  validation is normally a second or two; past this the honest answer is "still being validated",
@@ -39,37 +47,29 @@ export type AllegroPublicationStatus = "INACTIVE" | "ACTIVE";
  *  create Allegro accepted (202) whose validation had not concluded while we waited. */
 export type AllegroPublishState = AllegroPublicationStatus | "PENDING";
 
+/** The API's own refusals, plus every listing-side one (#493) — the dialog renders them as one list
+ *  and nothing downstream cares which group a code came from. */
 export type AllegroPublishBlockerCode =
+  | AllegroApiBlockerCode
+  | AllegroListingBlockerCode;
+
+/** The reasons that are about **this connection**, and about nothing a listing could be corrected
+ *  into passing: they exist only because the API is the path. */
+export type AllegroApiBlockerCode =
   | "not-connected"
   | "needs-reconnect"
   | "missing-write-scope"
   | "account-not-eligible"
   | "not-allegro-platform"
-  | "not-ready"
-  | "no-sets"
-  | "mixed-sets"
-  | "no-price"
-  | "no-starting-price"
-  | "no-title"
-  | "title-too-long"
-  | "no-profile"
-  | "incomplete-profile"
-  | "photos-not-ready"
-  | "no-photos"
-  | "no-category"
-  | "missing-category-parameters"
   | "already-published";
 
 /** One reason this offer cannot be published, ready to show verbatim. Shaped like #406's blocker so
  *  the two read alike wherever they are rendered side by side. */
-export interface AllegroPublishBlocker {
-  code: AllegroPublishBlockerCode;
-  message: string;
-}
+export type AllegroPublishBlocker = AllegroListingBlocker<AllegroPublishBlockerCode>;
 
-/** Everything the refusals are decided from — the offer, the connection and the profile, each as
- *  narrow as the rule needs it. */
-export interface AllegroPublishReadiness {
+/** The connection's own half — everything {@link evaluateAllegroApiBlockers} decides from, and
+ *  nothing a listing could be corrected into passing. */
+export interface AllegroApiReadiness {
   /** Whether the offer's platform is the one this collection calls Allegro (#355's marker). A listing
    *  cannot be published to an account that is not the marketplace the offer is on. */
   isAllegroPlatform: boolean;
@@ -83,68 +83,44 @@ export interface AllegroPublishReadiness {
   /** Why Allegro said this account cannot publish through the API at all, in its own words, or null
    *  where it has never said so. See {@link namesIneligibleAccount}. */
   publishRefusedReason: string | null;
-  state: OfferState;
-  listingType: OfferListingType;
-  title: string | null;
-  /** The current figure, as the kit states it. `0` on an auction nobody has bid on (#449). */
-  price: string;
-  startingPrice: string | null;
-  /** How many interchangeable sets there are — `stock.available`. */
-  quantity: number;
-  /** Whether every set holds the same goods (#406's homogeneity, asked again here because what it
-   *  guarantees on Allegro is the truthfulness of `stock.available`). */
-  setsInterchangeable: boolean;
-  /** The set labels that differ from the first one, for the sentence. */
-  differingSetLabels: readonly string[];
-  profile: AllegroProfileForPublish | null;
-  /** The photo generation's state, and how many pictures the upload set holds. */
-  photosReady: boolean;
-  photoCount: number;
   /** The listing already published from here, where there is one. */
   publishedAs: { offerId: string; status: AllegroPublishState } | null;
-  /** The category this offer is configured to be listed in (#494) — stored on the offer, not worked
-   *  out here. Null when nothing has been matched, which is a refusal pointing at the offer's own
-   *  Allegro card rather than a question asked in the publish dialog. */
-  categoryId: string | null;
-  /** The **required** parameters of that category that this offer has no answer for. Allegro refuses
-   *  a listing missing one, and it refuses it by a name the collector never saw — so they are named
-   *  here, before the request. Empty where the category's parameters could not be read at all, which
-   *  is not a refusal: Allegro being unreachable is not this offer being wrong. */
-  unansweredParameters: readonly string[];
 }
 
-/** The profile's own half of the request — the account-side settings a listing goes out with. */
-export interface AllegroProfileForPublish {
-  id: string;
-  name: string;
-  shippingRatesId: string;
-  handlingTime: string;
-  returnPolicyId: string | null;
-  impliedWarrantyId: string | null;
-  locationCountryCode: string;
-  locationCity: string;
-  locationPostCode: string;
-  invoiceType: string;
-}
+/**
+ * Everything a publish's refusals are decided from: the connection's half and the listing's
+ * ({@link AllegroListingReadiness}) — the latter being the same half the Assistant path evaluates,
+ * and why it is extended rather than restated.
+ */
+export interface AllegroPublishReadiness extends AllegroApiReadiness, AllegroListingReadiness {}
 
-function blocker(code: AllegroPublishBlockerCode, message: string): AllegroPublishBlocker {
+function blocker(code: AllegroApiBlockerCode, message: string): AllegroPublishBlocker {
   return { code, message };
 }
 
 /**
- * Every reason this offer cannot be published, in the order they are worth fixing.
+ * Every reason this offer cannot be published **through the API**, in the order they are worth
+ * fixing: the connection's own group, then the listing's (#493), which is the group the Assistant
+ * path evaluates on its own.
  *
  * The connection comes first and stands **alone**: with no usable grant nothing else can be acted on
- * anyway, and listing five faults under "not connected" buries the one thing to do. `not-ready` and
- * `no-sets` stand alone for #406's reason — an offer that is not finished has nothing else worth
- * saying about it.
- *
- * Everything after that is reported together, because each is fixed somewhere different: the price
- * on the header, the profile in Settings, the photos on the card below.
+ * anyway, and listing five faults under "not connected" buries the one thing to do.
  */
 export function evaluateAllegroPublishBlockers(
   input: AllegroPublishReadiness
 ): AllegroPublishBlocker[] {
+  const api = evaluateAllegroApiBlockers(input);
+  return api.length > 0 ? api : evaluateAllegroListingBlockers(input);
+}
+
+/**
+ * The refusals that are the **API's alone** — each standing alone, since none of them is a fault in
+ * this offer and no offer can be corrected into passing one.
+ *
+ * Empty means nothing about the connection stops a publish; what the *listing* still lacks is
+ * {@link evaluateAllegroListingBlockers}, and the Assistant path asks only that one.
+ */
+export function evaluateAllegroApiBlockers(input: AllegroApiReadiness): AllegroPublishBlocker[] {
   if (!input.isAllegroPlatform) {
     return [
       blocker(
@@ -184,7 +160,8 @@ export function evaluateAllegroPublishBlockers(
   // the offer's own faults because it is not about this offer and no offer can be fixed into passing
   // it — and it stands alone for that reason. Allegro's sentence is repeated verbatim: this is a rule
   // about somebody's account status, and paraphrasing it would be this app inventing an account
-  // policy it does not administer.
+  // policy it does not administer. It is also exactly the refusal the Assistant path exists for
+  // (#493), which is why it names that path rather than only stating the rule.
   if (input.publishRefusedReason) {
     return [
       blocker(
@@ -212,108 +189,7 @@ export function evaluateAllegroPublishBlockers(
     ];
   }
 
-  if (input.state !== "ready") {
-    return [
-      blocker(
-        "not-ready",
-        `This offer is ${input.state}, not Ready — only a Ready offer can be published to Allegro.`
-      ),
-    ];
-  }
-  if (input.quantity === 0) {
-    return [blocker("no-sets", "This offer holds no copies — there is nothing to publish.")];
-  }
-
-  const blockers: AllegroPublishBlocker[] = [];
-
-  if (!input.setsInterchangeable) {
-    blockers.push(
-      blocker(
-        "mixed-sets",
-        `The sets are not interchangeable, so one stock figure cannot describe them: ${input.differingSetLabels.join(", ")} ${input.differingSetLabels.length === 1 ? "differs" : "differ"} from the first. List them separately, or make the sets match.`
-      )
-    );
-  }
-
-  const title = input.title?.trim() ?? "";
-  if (!title) {
-    blockers.push(
-      blocker("no-title", "This listing has no title, and Allegro will not take an offer without one.")
-    );
-  } else if (title.length > ALLEGRO_TITLE_MAX_LENGTH) {
-    // Neither written nor truncated, exactly as an over-long Colnect text is (#405): shortening
-    // mangles wording the collector chose, and sending it would be refused by Allegro anyway.
-    blockers.push(
-      blocker(
-        "title-too-long",
-        `The listing title is ${title.length} characters and Allegro takes ${ALLEGRO_TITLE_MAX_LENGTH}. Shorten it — it is not truncated here, because a title cut by the app is not the title that was written.`
-      )
-    );
-  }
-
-  // Which figure is required is the format's own question (#449): a seller states an opening price on
-  // an auction and an asking price on a quick buy, and the other one is an observation.
-  if (isAuctionListing(input.listingType)) {
-    if (!hasAmount(input.startingPrice)) {
-      blockers.push(
-        blocker("no-starting-price", "This auction has no starting price, which is what it opens at.")
-      );
-    }
-  } else if (!hasAmount(input.price)) {
-    blockers.push(blocker("no-price", "This listing has no asking price."));
-  }
-
-  if (!input.profile) {
-    blockers.push(
-      blocker(
-        "no-profile",
-        "There is no Allegro listing profile to publish with — a listing needs delivery, returns and a sending address. Create one under Settings → Allegro and mark it the default."
-      )
-    );
-  } else {
-    const missing = incompleteProfileFields(input.profile);
-    if (missing.length > 0) {
-      blockers.push(
-        blocker(
-          "incomplete-profile",
-          `The listing profile "${input.profile.name}" is missing ${missing.join(", ")}. Complete it under Settings → Allegro.`
-        )
-      );
-    }
-  }
-
-  // The category and its answers live on the offer (#494), so a gap in them is fixed on the offer's
-  // own screen — one line saying where, exactly like the profile and the price above.
-  if (!input.categoryId) {
-    blockers.push(
-      blocker(
-        "no-category",
-        "This offer has no Allegro category. Allegro will not take a listing without one — set it on the offer's Allegro card."
-      )
-    );
-  } else if (input.unansweredParameters.length > 0) {
-    blockers.push(
-      blocker(
-        "missing-category-parameters",
-        `This offer's Allegro category requires ${input.unansweredParameters.join(", ")}, which ${input.unansweredParameters.length === 1 ? "has" : "have"} no answer. Fill ${input.unansweredParameters.length === 1 ? "it" : "them"} in on the offer's Allegro card — Allegro refuses a listing missing one, naming a field you never saw.`
-      )
-    );
-  }
-
-  if (!input.photosReady) {
-    blockers.push(
-      blocker(
-        "photos-not-ready",
-        "This offer's listing images have not finished generating. Generate them on the Photos card first."
-      )
-    );
-  } else if (input.photoCount === 0) {
-    blockers.push(
-      blocker("no-photos", "This offer has no publishable images, and an Allegro listing needs at least one.")
-    );
-  }
-
-  return blockers;
+  return [];
 }
 
 /**
@@ -335,28 +211,6 @@ export function namesIneligibleAccount(messages: readonly string[]): boolean {
     const text = message.toLowerCase();
     return text.includes("business account") || text.includes("konta firmowego");
   });
-}
-
-/** Whether a decimal string states a figure at all. `0.00` is not a price — it is the auction's
- *  "nobody has bid" (#449). */
-function hasAmount(amount: string | null): boolean {
-  if (!amount) return false;
-  const value = Number(amount);
-  return Number.isFinite(value) && value > 0;
-}
-
-/** The profile fields a listing cannot go out without, by the names the editor calls them. The two
- *  after-sales ids are deliberately **not** here: Allegro defaults them for accounts that have none
- *  defined, and refusing over a field a private collector's account never had is refusing a listing
- *  Allegro would take. */
-function incompleteProfileFields(profile: AllegroProfileForPublish): string[] {
-  const missing: string[] = [];
-  if (!profile.shippingRatesId.trim()) missing.push("a delivery price list");
-  if (!profile.handlingTime.trim()) missing.push("a handling time");
-  if (!profile.locationCity.trim()) missing.push("a city");
-  if (!profile.locationPostCode.trim()) missing.push("a post code");
-  if (!profile.locationCountryCode.trim()) missing.push("a country");
-  return missing;
 }
 
 // ---------------------------------------------------------------------------

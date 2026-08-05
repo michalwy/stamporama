@@ -39,5 +39,19 @@ export async function GET(
     );
   }
 
+  // The platform's own refusals, on the same terms (#493). Allegro's sale form asks for a category,
+  // a delivery profile and a title it will take, and a task that cannot answer those is refused here
+  // rather than filled in halfway on somebody's live selling account. They are reported in the very
+  // shape #406's are, so the caller still needs no vocabulary of its own.
+  if (kit.allegro && kit.allegro.blockers.length > 0) {
+    return NextResponse.json(
+      {
+        error: "preconditions",
+        blockers: kit.allegro.blockers.map((blocker) => ({ ...blocker, subjects: [], stampIds: [] })),
+      },
+      { status: 409 }
+    );
+  }
+
   return NextResponse.json(kit);
 }

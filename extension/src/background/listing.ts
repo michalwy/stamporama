@@ -288,6 +288,28 @@ export async function listingTabClosed(tabId: number): Promise<void> {
   if (pending?.submitted) await deliverListedUrl(pending, null);
 }
 
+/**
+ * The page the form was filled into says the listing exists, and names it (#412/#493).
+ *
+ * The same conclusion {@link captureListedUrl} draws from a navigation, arriving the other way: a
+ * marketplace that confirms in place never changes its address, so the page itself is the only thing
+ * that can say what was posted. Forgotten first for that function's reason — an offer is activated
+ * once — and the URL is already the module's own answer, so nothing is re-derived here.
+ */
+export async function listedUrlReported(tabId: number | undefined, url: string): Promise<void> {
+  if (tabId === undefined) return;
+  const pending = await getPendingListing(tabId, Date.now());
+  if (!pending) {
+    // Worth saying: the page found the listing and named it, and there is no run to give it to —
+    // a tab other than the one the Assistant filled, or a record that has expired. Silence here
+    // reads exactly like the watch never firing, and the two are fixed in different places.
+    console.warn("[assistant] a listing was reported with no run waiting for it", url);
+    return;
+  }
+  await forgetPendingListing(tabId);
+  await deliverListedUrl(pending, url);
+}
+
 /** The filled form has been submitted, reported by the content script watching it (#412). */
 export async function listingSubmitted(tabId: number | undefined): Promise<void> {
   if (tabId === undefined) return;

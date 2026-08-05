@@ -26,6 +26,27 @@ export const ALLEGRO_HANDLING_TIMES: { value: string; label: string }[] = [
   { value: "P60D", label: "60 working days" },
 ];
 
+/**
+ * How long a listing runs, as Allegro's **sale form** offers it (#493).
+ *
+ * A second vocabulary rather than a reuse of the handling times above, and the difference is the
+ * whole point: the API states the same durations in a different notation (`P3D` where the form says
+ * `PT72H`), so a value stored for one path does not select an option on the other. What is stored
+ * here is the form's own, and the module matches an option by **how long it is** rather than by the
+ * string, so either notation lands on the right row.
+ *
+ * Only the durations both of the form's two selects offer are listed: a fixed-price listing may also
+ * run 20 or 30 days and an auction may run 1, but a profile is one setting used by whichever format
+ * the offer turns out to be, and a value only one of them accepts is a value that silently does
+ * nothing on the other.
+ */
+export const ALLEGRO_LISTING_DURATIONS: { value: string; label: string }[] = [
+  { value: "PT72H", label: "3 days" },
+  { value: "PT120H", label: "5 days" },
+  { value: "PT168H", label: "7 days" },
+  { value: "PT240H", label: "10 days" },
+];
+
 /** What a listing promises about invoicing (`payments.invoice`). A private collector sells without
  *  one, which is why that leads and is the column default. */
 export const ALLEGRO_INVOICE_TYPES: { value: string; label: string }[] = [
@@ -36,6 +57,12 @@ export const ALLEGRO_INVOICE_TYPES: { value: string; label: string }[] = [
 
 export function isAllegroHandlingTime(value: string): boolean {
   return ALLEGRO_HANDLING_TIMES.some((h) => h.value === value);
+}
+
+/** Whether a stored duration is one this app offers. Null — "leave the form as served" — is a state
+ *  rather than a value and is not asked about here. */
+export function isAllegroListingDuration(value: string): boolean {
+  return ALLEGRO_LISTING_DURATIONS.some((d) => d.value === value);
 }
 
 export function isAllegroInvoiceType(value: string): boolean {

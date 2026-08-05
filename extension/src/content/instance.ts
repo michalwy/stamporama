@@ -45,8 +45,16 @@ declare global {
   }
 }
 
-/** Handoffs already answered (or being answered), so a re-render of the element — React owns that
- *  node — is not read as the collector asking again. */
+/**
+ * Handoffs already answered (or being answered), so a re-render of the element — React owns that
+ * node — is not read as the collector asking again.
+ *
+ * A request stays here **however it ended**, failures included. The answer is written back onto that
+ * very node, so an id dropped on failure is picked straight back up by the observer the report itself
+ * fires, handed over again, and fails again — a run that opens a marketplace tab per turn, for ever.
+ * Pressing the button again is not blocked by this: the page mints a fresh `requestId` per press
+ * (`assistant-handoff.ts`), which is what a retry *is*.
+ */
 const handled = new Set<string>();
 
 function handoffElement(): HTMLElement | null {
@@ -90,15 +98,13 @@ async function pump(): Promise<void> {
       requestId: handoff.requestId,
     } satisfies ListRequest)) as ListResponse;
   } catch (e) {
-    // The worker is gone or the extension was reloaded mid-handoff. Forget the request, so pressing
-    // the button again actually retries it.
-    handled.delete(handoff.requestId);
+    // The worker is gone or the extension was reloaded mid-handoff. Reported and left alone — see
+    // {@link handled} for why this must not be retried from here.
     report(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
     return;
   }
 
   if (!res.ok) {
-    handled.delete(handoff.requestId);
     report(handoff.requestId, "error", res.error);
     return;
   }
@@ -150,15 +156,14 @@ async function pumpMatch(): Promise<void> {
       requestId: handoff.requestId,
     } satisfies OpenMatchRequest)) as OpenMatchResponse;
   } catch (e) {
-    // The worker is gone or the extension was reloaded mid-handoff. Forget it, so pressing the
-    // button again actually retries.
-    matchesHandled.delete(handoff.requestId);
+    // Reported and left alone, for the listing pump's reason exactly: the answer is written onto the
+    // node the request came in on, so a request forgotten on failure is re-read from the mutation the
+    // failure itself caused. A press of the button mints a new id.
     reportMatch(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
     return;
   }
 
   if (!res.ok) {
-    matchesHandled.delete(handoff.requestId);
     reportMatch(handoff.requestId, "error", res.error);
     return;
   }

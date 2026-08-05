@@ -40,6 +40,67 @@ export interface ListingTask {
   /** One set's copies in listing order — what a single buyer takes. */
   items: ListingTaskItem[];
   photos: ListingTaskPhotos;
+  /** Allegro's own half of the task (#493) — null for an offer on any other platform. A **named
+   *  section** rather than fields above: a category and a delivery profile mean nothing on another
+   *  marketplace, and the neutral shape must not grow one marketplace's vocabulary. Its own
+   *  `blockers` are always empty on a served task, exactly as the kit's are, so they are not
+   *  mirrored. */
+  allegro?: ListingTaskAllegro | null;
+}
+
+/** What Allegro's sale form needs beside the neutral fields: what the stamps are filed as, and what
+ *  the account sells them under. Every value is what the offer stores (#494), never worked out
+ *  here. */
+export interface ListingTaskAllegro {
+  /** The category number the form's own **Nr kategorii** field takes, which is what opens it in the
+   *  right category. */
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryPath: string | null;
+  parameters: ListingTaskAllegroParameter[];
+  profile: ListingTaskAllegroProfile | null;
+  /** Whether it opens as an auction (#449), and at what — a different figure from `price`. */
+  listingType: "fixed" | "auction";
+  startingPrice: string | null;
+}
+
+/** One answered category parameter. `parameterId` is Allegro's own, which on the sale form is also
+ *  the **element id** of the control that answers it. */
+export interface ListingTaskAllegroParameter {
+  parameterId: string;
+  parameterName: string | null;
+  /** Whether Allegro files this under the product rather than the offer. The sale form asks for
+   *  both, so both are filled here — it is the API path that drops these. */
+  describesProduct: boolean;
+  /** What the form's control shows for this answer: a `select` submits the option's **text**, not
+   *  the dictionary id. Empty where Allegro could not be asked, which is a field left for the
+   *  collector rather than one filled wrongly. */
+  displayValues: string[];
+}
+
+/** The listing profile (#486). The three ids are the option values of the form's own delivery,
+ *  handling-time and returns selects; the address has no field on the form and is carried so the
+ *  fill can *say* what it could not set. */
+export interface ListingTaskAllegroProfile {
+  id: string;
+  name: string;
+  shippingRatesId: string;
+  shippingRatesName: string | null;
+  /** Both are ISO-8601 durations, and both are matched against the form's options **by length**
+   *  rather than by string: Allegro's API states the same durations in another notation (`P3D` where
+   *  the form says `PT72H`). Null on the duration leaves the form as it was served. */
+  handlingTime: string;
+  durationLimit: string | null;
+  /** Whether Allegro re-lists the offer when its duration runs out (#493). Written **either way**:
+   *  it is a decision the profile makes, not a value that may be absent. */
+  autoRepublish: boolean;
+  returnPolicyId: string | null;
+  returnPolicyName: string | null;
+  impliedWarrantyId: string | null;
+  locationCountryCode: string;
+  locationCity: string;
+  locationPostCode: string;
+  invoiceType: string;
 }
 
 export type ListingDescriptionFormat = "plain" | "html" | "markdown";
@@ -148,6 +209,27 @@ export interface PlatformListing {
    * platform's own: what matters is whether the fields are there to fill.
    */
   isFormDocument(doc: Document): boolean;
+  /**
+   * Walk a page that is at {@link isFormUrl} but not yet {@link isFormDocument} **one step closer**
+   * to the sale form (#493).
+   *
+   * **Optional**, and most modules will never have one: a marketplace whose sale form is at an
+   * address is opened by opening it, and Colnect's is. Allegro's is not — it answers that address
+   * with a different form, whose opt-out link leads to a product search, which must be run before it
+   * will offer to continue without a catalogue product, which finally opens the category modal the
+   * form is entered through. Only the ends of that sequence are page loads.
+   *
+   * That is why this is **async** while {@link fill} is not: the steps are network round-trips inside
+   * one document, and a synchronous DOM pass cannot wait for one. It is also why it is a separate
+   * member rather than part of the fill — nothing here writes a value from the offer into a listing;
+   * it is navigation, and the fill still happens exactly once, on the form itself.
+   *
+   * Called at most once per page, and only when the document is not the form. It may end by causing a
+   * navigation, in which case it simply resolves — the page is on its way out and the shell picks the
+   * run up again on the next load. Throws when the page cannot be advanced at all, which is a refusal
+   * with a reason worth showing.
+   */
+  prepare?(doc: Document, task: ListingTask): Promise<void>;
   /** Fill the form in `doc` from `task`, and stop. Never submits, and never touches a field the
    *  task has nothing to say about (#410). Throws only on unexpected DOM. */
   fill(doc: Document, task: ListingTask): ListingFillOutcome;
@@ -166,6 +248,21 @@ export interface PlatformListing {
    */
   listedUrl(url: string): string | null;
   /**
+   * The listed entry's own URL as **this page states it**, for a marketplace that confirms a
+   * submitted form without navigating (#493) — and null on every other page.
+   *
+   * **Optional**, and the counterpart of {@link listedUrl} rather than a replacement: Colnect
+   * navigates to the new entry, so its address *is* the answer, while Allegro re-renders the same
+   * document into a thank-you page that carries the offer's link and leaves the address bar on the
+   * form. A run that only watched the address bar would report every Allegro listing as "submitted,
+   * URL unread" — the listing exists and the offer would never learn its address.
+   *
+   * Read from the page's own confirmation, never from anything the form still holds: this is what
+   * gets stored on the offer, and a link found somewhere else on the page is not the listing that was
+   * just posted.
+   */
+  listedUrlInDocument?(doc: Document): string | null;
+  /**
    * Put the offer's rendered images into the form's own uploader, in upload order, and stop (#411).
    *
    * **Optional**, like the listing half itself: a sale form with no pictures is a form this module
@@ -179,6 +276,14 @@ export interface PlatformListing {
    *
    * Reports rather than throws, exactly as {@link fill} does: a picture the uploader will not take is
    * one the collector drags in from the offer's ZIP, and the rest of the filled form must survive it.
+   *
+   * May answer **asynchronously**, because handing pictures over is not always the end of it: Allegro
+   * opens a dialog the moment the files arrive (its AI-watermark question, #493) and the uploader is
+   * not done until that dialog is answered. A module with nothing to wait for returns its report
+   * directly, as Colnect's does, and pays nothing for this.
    */
-  attachPhotos?(doc: Document, photos: readonly ListingPhotoFile[]): ListingFillOutcome;
+  attachPhotos?(
+    doc: Document,
+    photos: readonly ListingPhotoFile[]
+  ): ListingFillOutcome | Promise<ListingFillOutcome>;
 }
