@@ -330,7 +330,7 @@ detail of this one.
 instance holds an API grant for the marketplace *and the listing is the collector's own*: Allegro's
 own feed states the standing bid and the bidder count on the seller's offers, so a figure typed by
 hand there is a worse figure. That is the sold-side sync's business and is decided in ADR-0024 §8a
-(`Offer.price` / `priceCheckedAt` / `bidderCount`, off `GET /sale/offer-events`).
+(`Offer.price` / `priceCheckedAt` / `bidderCount` / `endsAt`, off `GET /sale/offer-events`).
 
 The decision above stands unchanged for **tracked lots** — everything this ADR is about. Those are
 other sellers' listings, they are not in `GET /sale/offers`, and no grant this instance holds says

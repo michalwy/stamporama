@@ -26,6 +26,7 @@ import {
   bidWriteFor,
   MAX_BID_EVENT_PAGES,
   matchListingToOffer,
+  type ObservedBidding,
   ORDER_EVENT_TYPES,
   paymentStatusFor,
   SYNC_LOCK_TIMEOUT_MS,
@@ -540,6 +541,7 @@ interface SyncOffer extends MatchableOffer {
   currency: string;
   inActiveBidding: boolean;
   bidderCount: number | null;
+  endsAt: Date | null;
 }
 
 /** Every offer the sync could match against: this collection's offers on the platform marked as
@@ -564,6 +566,7 @@ async function loadMatchableOffers(collectionId: string): Promise<SyncOffer[]> {
       currency: true,
       inActiveBidding: true,
       bidderCount: true,
+      endsAt: true,
     },
   });
 }
@@ -927,12 +930,13 @@ async function recordListing(
     platformOfferId: listing.id,
     externalId: listing.externalId,
   });
-  const endingAt = listing.endingAt ? new Date(listing.endingAt) : null;
+  const parsed = listing.endingAt ? new Date(listing.endingAt) : null;
+  const endingAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
   const common = {
     externalId: listing.externalId,
     title: listing.title,
     status: listing.status,
-    endingAt: endingAt && !Number.isNaN(endingAt.getTime()) ? endingAt : null,
+    endingAt,
     available: listing.available,
     sold: listing.sold,
     // What Allegro said about the bidding (#481), kept beside its own row whether or not it reaches
@@ -952,7 +956,7 @@ async function recordListing(
     update: common,
   });
 
-  return applyBidding(listing, match?.offerId ?? null, offers, now);
+  return applyBidding({ ...listing, endingAt }, match?.offerId ?? null, offers, now);
 }
 
 /**
@@ -970,7 +974,7 @@ async function recordListing(
  * and there is no offer here to say it about.
  */
 async function applyBidding(
-  listing: { format: string | null; biddersCount: number | null; currentPrice: string | null; currentCurrency: string | null },
+  listing: ObservedBidding,
   offerId: string | null,
   offers: SyncOffer[],
   now: Date
@@ -998,6 +1002,7 @@ async function applyBidding(
   // was true before this write — two listings resolving to one offer must not both report a flag.
   if (write.inActiveBidding) offer.inActiveBidding = true;
   if (write.bidderCount !== undefined) offer.bidderCount = write.bidderCount;
+  if (write.endsAt !== undefined) offer.endsAt = write.endsAt;
 
   return { flagged: write.inActiveBidding === true, refreshed: write.price !== undefined };
 }

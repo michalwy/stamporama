@@ -33,6 +33,7 @@ import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
   isAuctionListing,
@@ -650,6 +651,14 @@ export function OfferDetailPanel({
                 {offer.priceCheckedAt && (
                   <Tooltip content="When this price was last checked against the listing" align="end">
                     <span>· checked {new Date(offer.priceCheckedAt).toISOString().slice(0, 10)}</span>
+                  </Tooltip>
+                )}
+                {/* When the auction closes (#490) — read-only here and edited on the header form,
+                    because on a connected platform it is the sync's to keep current (#481) and an
+                    inline edit would invite typing over what the marketplace just said. */}
+                {offer.endsAt && (
+                  <Tooltip content="When this auction closes" align="end">
+                    <span>· closes {formatInstant(String(offer.endsAt))}</span>
                   </Tooltip>
                 )}
               </span>

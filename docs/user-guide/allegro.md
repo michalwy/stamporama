@@ -563,6 +563,13 @@ The moment Allegro reports a bidder, Stamporama:
 - writes the **standing bid** into the offer's current price and stamps the **checked** date;
 - records how many people have bid, shown beside the price as *"3 bidders"*.
 
+The same check also carries the auction's **closing time** onto the offer, whether or not anyone has
+bid — it is a fact about the listing rather than about the bidding. That is what fills in **Closes**
+on the offer's header, and it is kept current rather than filled in once: when Allegro **relists an
+unsold auction by itself**, the next check brings the new closing time with it, so the listing never
+sits there looking like an auction that ended and was ignored (see [ended
+auctions](offers.md#ended-auctions--waiting-on-you)).
+
 It does this without asking. A bid commits you whether or not you have seen it, and a marker waiting
 for your confirmation would be no faster than clicking it yourself. So that you always know it
 happened, the auction appears in the notification bell under **Bidding started on Allegro** — once,
@@ -590,7 +597,8 @@ The worklist header says when bids were last checked, and says so plainly if tha
 ### What it does not do
 
 - It never creates a sale, and never touches money.
-- It never edits your offers, beyond the bid marker and the standing bid described above.
+- It never edits your offers, beyond the bid marker, the standing bid and the closing time described
+  above.
 - It never creates a contact. The buyer's login is shown, not saved as somebody to write to.
 - **Cancelled orders are left out entirely.** The sale did not happen, so there is nothing waiting.
 

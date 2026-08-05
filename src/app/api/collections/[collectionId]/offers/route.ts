@@ -26,6 +26,8 @@ export async function GET(
   const states = (sp.get("state") || "").split(",").filter(isOfferState);
   const needsAction = sp.get("needsAction") === "1";
   const bidding = sp.get("bidding") === "1";
+  // Ended auctions with a bid on them, waiting to be resolved (#490).
+  const endedAuction = sp.get("endedAuction") === "1";
   const search = sp.get("search") || undefined;
   const includeClosed = sp.get("includeClosed") === "1";
 
@@ -36,6 +38,7 @@ export async function GET(
       states,
       needsAction,
       bidding,
+      endedAuction,
       search,
       includeClosed,
       pageSize: 50,

@@ -254,6 +254,63 @@ export function parseOfferDate(
   return { ok: true, value: d };
 }
 
+/** Parse an auction's closing time (#490), sent as an ISO instant — the `datetime-local` field
+ * converts in the browser, which is the only place the collector's own zone is known (the auction
+ * dialogs' rule, `auction-format.ts`). Blank → `null` (not recorded); malformed → an error. */
+export function parseOfferEndsAt(
+  raw: string
+): { ok: true; value: Date | null } | { ok: false; message: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, value: null };
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return { ok: false, message: "Enter a valid closing time." };
+  return { ok: true, value: d };
+}
+
+/** What {@link auctionNeedsResolution} reads — the offer's auction half, and nothing else. */
+export interface ResolvableAuction {
+  listingType: OfferListingType;
+  state: OfferState;
+  /** When the listing closes (#490); null on a quick buy and on an auction with no known closing. */
+  endsAt: Date | null;
+  /** The standing bid, as the list holds it: an *observation*, so `0` is "nobody has bid". */
+  price: string;
+  /** "In active bidding" (#215) — set by hand or by the sync the moment a bidder appears. */
+  inActiveBidding: boolean;
+  /** Bidders the connected platform reported (#481); null where nothing has looked. */
+  bidderCount: number | null;
+}
+
+/**
+ * An auction that has **ended with a bid on it** and is still sitting there (#490).
+ *
+ * Nothing in the app transitions such a listing: it needs the collector to say what happened — mark
+ * it sold, which starts the sale flow, or record that it went unsold and relist. Until they do, the
+ * copies in it are committed to a buyer who does not exist in the record yet.
+ *
+ * Three parts, and each one earns its place:
+ *
+ *  • **It ended.** `endsAt` in the past. An auction with no closing time recorded is never flagged —
+ *    the app would be guessing, and on a connected platform the sync fills the date in anyway.
+ *  • **Somebody bid.** Any of the three signals the app has: a `price` above zero (an auction's
+ *    price is an observation, so zero means unbid — the opening figure lives in `startingPrice` and
+ *    is deliberately not read here), the standing `inActiveBidding` flag (#215), or a `bidderCount`
+ *    the platform sync actually observed (#481). A bid nobody placed is the one thing this must not
+ *    report, which is also what makes it safe on a marketplace that **relists unsold auctions by
+ *    itself**: a relist carries no bids, and the sweep moves `endsAt` forward with it.
+ *  • **It is still open.** A `sold` or `withdrawn` listing has already been resolved — that is what
+ *    those states mean — so flagging it would be asking for a decision already taken.
+ *
+ * Pure, and `now` is passed in: the offer list, its facet count and the notification centre all read
+ * one instant, exactly as the lot list's closing windows do.
+ */
+export function auctionNeedsResolution(offer: ResolvableAuction, now: Date): boolean {
+  if (!isAuctionListing(offer.listingType)) return false;
+  if ((CLOSED_OFFER_STATES as readonly OfferState[]).includes(offer.state)) return false;
+  if (!offer.endsAt || offer.endsAt.getTime() > now.getTime()) return false;
+  return hasPrice(offer.price) || offer.inActiveBidding || (offer.bidderCount ?? 0) > 0;
+}
+
 /** The non-terminal states an offer may be *created* directly in (#257): the collector states the
  * listing's real-world status up front rather than stepping the draft through the lifecycle. `ready`
  * and `active` still require the offer to list something (see {@link requiresSets}) and to carry an

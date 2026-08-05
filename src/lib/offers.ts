@@ -26,6 +26,7 @@ import {
   requiresSets,
   requiresPrice,
   hasPrice,
+  auctionNeedsResolution,
   CLOSED_OFFER_STATES,
   type OfferListingType,
   isAuctionListing,
@@ -946,6 +947,72 @@ export async function offersWithObservedBidding(
   };
 }
 
+/** One auction that ended with a bid on it and is still waiting to be resolved (#490). */
+export interface EndedAuctionOffer {
+  offerId: string;
+  label: string;
+  platformName: string;
+  /** The standing bid the listing closed at, and its currency. */
+  price: string;
+  currency: string;
+  /** When it closed — what the row is *about*, and what the panel ages ("2 days ago"). */
+  endsAt: Date;
+}
+
+/**
+ * Auctions the notification centre reports as needing resolution (#490).
+ *
+ * The same set the offer list's own chip shows — {@link endedAuctionWhere}, so "see all" lands on
+ * exactly the rows counted here — read **longest closed first**: an auction that ended a week ago
+ * with a buyer waiting is worse than one that ended an hour ago, and nothing else on this screen
+ * will bring it up again.
+ */
+export async function offersWithEndedAuction(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: EndedAuctionOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const where: Prisma.OfferWhereInput = {
+    collectionId,
+    AND: endedAuctionWhere(new Date()),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.offer.count({ where }),
+    prisma.offer.findMany({
+      where,
+      orderBy: [{ endsAt: "asc" }, { offerNo: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        currency: true,
+        endsAt: true,
+        platform: { select: { name: true } },
+        sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+      },
+    }),
+  ]);
+
+  const labeller = rows.some((row) => !row.name) ? await makeOfferLabeller(collectionId) : null;
+
+  return {
+    total,
+    offers: rows.map((row) => ({
+      offerId: row.id,
+      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      platformName: row.platform.name,
+      price: row.price.toFixed(2),
+      currency: row.currency,
+      // Non-null by the `where` — an auction with no closing time is never in this set.
+      endsAt: row.endsAt!,
+    })),
+  };
+}
+
 // ── Collision lookup (non-blocking warning) ─────────────────────────────────
 
 export interface OfferCollision {
@@ -1047,6 +1114,11 @@ export interface OfferListItem {
   /** "In active bidding" (#215): an auction bid has been placed, committing the collector before
    * the sale is recorded. Independent of `state`/`sold`; freely revertible. */
   inActiveBidding: boolean;
+  /** When an auction closes (#490); null on a quick buy and where no closing time is known. */
+  endsAt: Date | null;
+  /** Derived (#490): this auction has ended with a bid on it and nothing has resolved it — the row
+   * carries a flag, because only the collector can say whether it sold or has to be relisted. */
+  needsResolution: boolean;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
   createdAt: Date;
@@ -1064,6 +1136,8 @@ const OFFER_SELECT = {
   currency: true,
   state: true,
   inActiveBidding: true,
+  bidderCount: true,
+  endsAt: true,
   listingDate: true,
   createdAt: true,
   platform: { select: { name: true } },
@@ -1082,6 +1156,8 @@ type OfferRow = {
   currency: string;
   state: string;
   inActiveBidding: boolean;
+  bidderCount: number | null;
+  endsAt: Date | null;
   listingDate: Date | null;
   createdAt: Date;
   platform: { name: string };
@@ -1108,6 +1184,7 @@ function toListItem(
   soldCopyCount = 0
 ): OfferListItem {
   const state = (isOfferState(row.state) ? row.state : "active") as OfferState;
+  const listingType = normalizeListingType(row.listingType);
   return {
     id: row.id,
     offerNo: row.offerNo,
@@ -1116,7 +1193,7 @@ function toListItem(
     platformId: row.platformId,
     platformName: row.platform.name,
     url: row.url,
-    listingType: normalizeListingType(row.listingType),
+    listingType,
     price: row.price.toFixed(2),
     startingPrice: row.startingPrice?.toFixed(2) ?? null,
     currency: row.currency,
@@ -1128,6 +1205,21 @@ function toListItem(
     needsAction: soldCopyCount > 0,
     soldCopyCount,
     inActiveBidding: biddingLive(row.inActiveBidding, state),
+    endsAt: row.endsAt,
+    // Read against this row's own instant rather than a clock passed down the page: the rule is a
+    // comparison against "now" whichever way it is reached, and the facet count below asks the
+    // database the same question with `new Date()` at the same point in the request.
+    needsResolution: auctionNeedsResolution(
+      {
+        listingType,
+        state,
+        endsAt: row.endsAt,
+        price: row.price.toFixed(2),
+        inActiveBidding: row.inActiveBidding,
+        bidderCount: row.bidderCount,
+      },
+      new Date()
+    ),
     listingDate: row.listingDate,
     createdAt: row.createdAt,
   };
@@ -1193,6 +1285,10 @@ export interface OfferListFilters {
    * composes with everything else — it is what the notification centre's "bidding started" group
    * (#481) links to, so that "see all" lands on exactly the rows it was counting. */
   bidding?: boolean;
+  /** Only auctions that have **ended with a bid on them** and are waiting to be resolved (#490).
+   * The stored side of {@link auctionNeedsResolution} — every part of that rule is a column, so it
+   * narrows, counts and paginates like any other filter rather than being resolved to ids. */
+  endedAuction?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
    * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
@@ -1276,18 +1372,51 @@ function offerSearchWhere(search: string): Prisma.OfferWhereInput {
   return { OR: or };
 }
 
+/**
+ * {@link auctionNeedsResolution} restated as a `where` (#490) — an auction that has ended with a bid
+ * on it and has not been resolved.
+ *
+ * Two statements of one rule, accepted for the reason the auction lot list accepts the same thing
+ * for its outcomes: every part sits on the row, so this is a handful of indexed predicates, and the
+ * alternative — resolving it to ids like the needs-action overlay — would load every auction in the
+ * collection to answer a question about a column. `tests/unit/offer-rules.test.ts` pins the pure
+ * rule and the integration tests pin this against it.
+ *
+ * Returned as an `AND` list rather than one object: the bid signals are an `OR`, and the list's
+ * search is already an `OR` on the same object.
+ */
+function endedAuctionWhere(now: Date): Prisma.OfferWhereInput[] {
+  return [
+    { listingType: "auction" },
+    { state: { notIn: [...CLOSED_OFFER_STATES] } },
+    { endsAt: { not: null, lt: now } },
+    {
+      OR: [
+        // An auction's price is an observation, so anything above zero is a bid actually seen.
+        { price: { gt: 0 } },
+        { inActiveBidding: true },
+        { bidderCount: { gt: 0 } },
+      ],
+    },
+  ];
+}
+
 /** The offer list's `where`, shared by the paginated list and the summary bar (#317) so both read
  * exactly the same offer set. Pass `needsActionIds` for the derived overlay (ADR-0013 §4): it is
  * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice. */
 function offerListWhere(
   collectionId: string,
-  filters: Pick<OfferListFilters, "platformId" | "states" | "includeClosed" | "search" | "bidding">,
+  filters: Pick<
+    OfferListFilters,
+    "platformId" | "states" | "includeClosed" | "search" | "bidding" | "endedAuction"
+  >,
   needsActionIds?: string[]
 ): Prisma.OfferWhereInput {
   return {
     collectionId,
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.bidding ? { inActiveBidding: true } : {}),
+    ...(filters.endedAuction ? { AND: endedAuctionWhere(new Date()) } : {}),
     ...(filters.search?.trim() ? offerSearchWhere(filters.search) : {}),
     ...(needsActionIds
       ? { id: { in: needsActionIds } }
@@ -1384,7 +1513,7 @@ export async function offerListNeighbours(
   offerId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding" | "endedAuction"
   > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -1663,6 +1792,10 @@ export interface OfferFilterCounts {
   states: Partial<Record<OfferState, number>>;
   /** Flagged offers within the selected platform. */
   needsAction: number;
+  /** Ended auctions with a bid on them, waiting to be resolved (#490), within the selected
+   * platform. Like `needsAction` it is an overlay rather than a state, so it ignores the state
+   * chips' selection and its own. */
+  endedAuction: number;
   /** Offers per platform, under the selected state / needs-action / show-closed choice. */
   platforms: Record<string, number>;
   /** Total across platforms — the "All platforms" option. */
@@ -1687,7 +1820,13 @@ export async function offerFilterCounts(
   collectionId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+    | "platformId"
+    | "states"
+    | "needsAction"
+    | "includeClosed"
+    | "search"
+    | "bidding"
+    | "endedAuction"
   > = {}
 ): Promise<OfferFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -1708,7 +1847,7 @@ export async function offerFilterCounts(
   // The needs-action facet comes back already grouped by platform, so both the chip's own count
   // (within the selected platform) and the platform facet under a needs-action selection are read
   // off the same few flagged rows — no id list travels back into a `where`.
-  const [flagged, byState, byPlatform] = await Promise.all([
+  const [flagged, byState, byPlatform, endedAuction] = await Promise.all([
     needsActionRows(collectionId, searchIds),
     prisma.offer.groupBy({
       by: ["state"],
@@ -1737,6 +1876,16 @@ export async function offerFilterCounts(
           },
           _count: { _all: true },
         }),
+    // The ended-auction chip's own count (#490): its own selection ignored like every facet's, and
+    // the state chips' too — it is an overlay across states, exactly as "Needs action" is.
+    prisma.offer.count({
+      where: {
+        collectionId,
+        ...(filters.platformId ? { platformId: filters.platformId } : {}),
+        ...(searchWhere ?? {}),
+        AND: endedAuctionWhere(new Date()),
+      },
+    }),
   ]);
 
   const states: Partial<Record<OfferState, number>> = {};
@@ -1763,6 +1912,7 @@ export async function offerFilterCounts(
     needsAction: filters.platformId
       ? flagged.filter((r) => r.platformId === filters.platformId).length
       : flagged.length,
+    endedAuction,
     platforms,
     total,
   };
@@ -1803,7 +1953,7 @@ export async function offersSummary(
   collectionId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding"
+    "platformId" | "states" | "needsAction" | "includeClosed" | "search" | "bidding" | "endedAuction"
   > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
@@ -2308,6 +2458,9 @@ export interface OfferDetail {
    * to go live, in place of the asking price a quick buy needs. Null on a quick buy. Nothing is
    * computed from it. */
   startingPrice: string | null;
+  /** When an auction closes (#490); null on a quick buy and on an auction with no known closing.
+   * Editable on the header form, and kept current by a connected platform's sync (#481). */
+  endsAt: Date | null;
   /** When {@link price} was last confirmed against the live listing (#449) — the auction lot's
    * `checkedAt` (#351), stamped by the in-place price edit and by a connected platform's sync
    * (#481). Null on a price never re-checked, which is every quick buy. */
@@ -2448,6 +2601,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       listingType: true,
       price: true,
       startingPrice: true,
+      endsAt: true,
       priceCheckedAt: true,
       bidderCount: true,
       biddingNoticeAt: true,
@@ -2719,6 +2873,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     listingType: normalizeListingType(offer.listingType),
     price: offer.price.toFixed(2),
     startingPrice: offer.startingPrice?.toFixed(2) ?? null,
+    endsAt: offer.endsAt,
     priceCheckedAt: offer.priceCheckedAt,
     bidderCount: offer.bidderCount,
     biddingNoticeAt: offer.biddingNoticeAt,
@@ -3011,6 +3166,11 @@ export interface OfferInput {
    * opening figure was not noted. Storing it on a `fixed` listing would be a figure describing a
    * format this listing is not in, so the domain drops it there rather than keeping a contradiction. */
   startingPrice?: string | null;
+  /** When an auction closes (#490), or null. Dropped on a quick buy for the same reason
+   * `startingPrice` is: a fixed-price listing does not end of its own accord, and a date saying it
+   * does would describe a format this listing is not in. On a connected platform the sync (#481)
+   * keeps this current on its own — including through a marketplace's automatic relist. */
+  endsAt?: Date | null;
   /** The date the listing went live (#257), or null when not recorded. Stored on create + edit. */
   listingDate: Date | null;
   /** The status to create the offer in (#257): `preparing` (default), or a live `ready` / `active`
@@ -3190,6 +3350,10 @@ export async function createOffer(
         // The whole pricing decision, resolved once above (#449): format, live price, and the
         // auction-only opening figure + check date.
         ...pricing,
+        // An auction's closing time (#490), dropped on a quick buy exactly as the opening figure is:
+        // a fixed-price listing has no ending of its own, so a date here would be about a format
+        // this listing is not in.
+        endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
         currency,
         listingDate: input.listingDate,
         // Set the target state directly (creation states the real-world status; the step-through
@@ -3348,6 +3512,7 @@ export async function duplicateOffer(
         // so the format comes from that form (or the new platform's default) rather than being
         // carried over from the source.
         ...pricing,
+        endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
         currency,
         listingDate: input.listingDate,
         state: targetState,
@@ -3428,6 +3593,7 @@ export async function updateOffer(
           ? { priceCheckedAt: pricing.priceCheckedAt }
           : {}
         : { priceCheckedAt: null }),
+      endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
       // Listing date is editable on the header form (#257); the status is not — an existing offer's
       // lifecycle is driven by its dedicated controls, so `input.state` is ignored here.
       listingDate: input.listingDate,

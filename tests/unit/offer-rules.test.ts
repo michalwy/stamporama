@@ -19,6 +19,8 @@ import {
   normalizeListingType,
   priceLabel,
   parseStartingPrice,
+  parseOfferEndsAt,
+  auctionNeedsResolution,
   pricingReadyFor,
   requiresStartingPrice,
   OFFER_LISTING_TYPES,
@@ -319,5 +321,75 @@ describe("an auction's two prices (#449)", () => {
     assert.equal(pricingReadyFor("auction", "active", "18.00", null), false);
     // Nothing is asked of a state that does not go live.
     assert.equal(pricingReadyFor("auction", "preparing", "0.00", null), true);
+  });
+});
+
+// Ended auctions with a bid on them (#490) ----------------------------------
+
+describe("auctionNeedsResolution", () => {
+  const now = new Date("2026-08-05T12:00:00Z");
+  const ended = new Date("2026-08-04T18:00:00Z");
+  const running = new Date("2026-08-06T18:00:00Z");
+  const auction = {
+    listingType: "auction" as const,
+    state: "active" as const,
+    endsAt: ended,
+    price: "0.00",
+    inActiveBidding: false,
+    bidderCount: null as number | null,
+  };
+
+  it("flags an auction that closed with a standing bid", () => {
+    assert.equal(auctionNeedsResolution({ ...auction, price: "42.00" }, now), true);
+  });
+
+  it("takes any of the three bid signals the app has", () => {
+    // The flag set by hand or by the sync (#215/#481)…
+    assert.equal(auctionNeedsResolution({ ...auction, inActiveBidding: true }, now), true);
+    // …and a bidder count a sync actually observed (#481).
+    assert.equal(auctionNeedsResolution({ ...auction, bidderCount: 1 }, now), true);
+  });
+
+  it("leaves an auction that ended unbid alone — which is what a relist is", () => {
+    // A marketplace that relists an unsold auction by itself must never produce a flag: nobody bid,
+    // so there is nothing to resolve, and the opening figure is deliberately not read here.
+    assert.equal(auctionNeedsResolution(auction, now), false);
+    assert.equal(auctionNeedsResolution({ ...auction, bidderCount: 0 }, now), false);
+  });
+
+  it("says nothing about an auction still running, or one with no closing time", () => {
+    assert.equal(auctionNeedsResolution({ ...auction, endsAt: running, price: "42.00" }, now), false);
+    assert.equal(auctionNeedsResolution({ ...auction, endsAt: null, price: "42.00" }, now), false);
+  });
+
+  it("leaves a quick buy alone — it has no ending of its own", () => {
+    assert.equal(
+      auctionNeedsResolution({ ...auction, listingType: "fixed", price: "42.00" }, now),
+      false
+    );
+  });
+
+  it("stops once the listing has been resolved", () => {
+    for (const state of CLOSED_OFFER_STATES) {
+      assert.equal(auctionNeedsResolution({ ...auction, state, price: "42.00" }, now), false);
+    }
+    // A paused auction is not resolved — it may still be taking bids, exactly as #215 has it.
+    assert.equal(
+      auctionNeedsResolution({ ...auction, state: "paused", price: "42.00" }, now),
+      true
+    );
+  });
+});
+
+describe("parseOfferEndsAt", () => {
+  it("reads the instant the form sends, and blank as not recorded", () => {
+    const parsed = parseOfferEndsAt("2026-08-04T18:00:00.000Z");
+    assert.equal(parsed.ok && parsed.value?.toISOString(), "2026-08-04T18:00:00.000Z");
+    const blank = parseOfferEndsAt("   ");
+    assert.equal(blank.ok && blank.value, null);
+  });
+
+  it("refuses what is not a time at all", () => {
+    assert.equal(parseOfferEndsAt("soon").ok, false);
   });
 });

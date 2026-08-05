@@ -33,6 +33,9 @@ export interface OfferFilters {
   /** Only offers in active bidding (#215) — what the notification centre's "bidding started" group
    * (#481) links to. Composes with every other filter rather than replacing them. */
   bidding?: boolean;
+  /** Only auctions that ended with a bid on them and are waiting to be resolved (#490) — what the
+   * notification centre's ended-auction group links to. Composes with every other filter. */
+  endedAuction?: boolean;
   /** Show closed (sold / withdrawn) offers; off by default hides dead listings (#245). */
   includeClosed?: boolean;
   /** Free text over the title, the offer number, the listing URL and the copies' catalog numbers
@@ -59,6 +62,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.bidding) params.set("bidding", "1");
+      if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
@@ -130,6 +134,7 @@ export function useOfferNeighbours(
       const params = new URLSearchParams({ offerId });
       if (context?.platformId) params.set("platformId", context.platformId);
       if (context?.bidding) params.set("bidding", "1");
+      if (context?.endedAuction) params.set("endedAuction", "1");
       if (context?.needsAction) params.set("needsAction", "1");
       else if (context?.states?.length) params.set("state", context.states.join(","));
       else if (context?.includeClosed) params.set("includeClosed", "1");
@@ -155,6 +160,7 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       const params = new URLSearchParams();
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.bidding) params.set("bidding", "1");
+      if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
@@ -178,6 +184,7 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       const params = new URLSearchParams();
       if (filters.platformId) params.set("platformId", filters.platformId);
       if (filters.bidding) params.set("bidding", "1");
+      if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");

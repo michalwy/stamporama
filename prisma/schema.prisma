@@ -1674,6 +1674,16 @@ model Offer {
   // Nothing is calculated from it: every figure in the app is about what the lot is at now. Null on
   // a fixed-price listing, and on an auction still being assembled.
   startingPrice Decimal? @db.Decimal(10, 2)
+  // When an `auction` listing closes (#490) — the counterpart of `AuctionLot.endsAt` on the selling
+  // side, and the date the "ended, and somebody bid" flag is read against. Null on a fixed-price
+  // listing, which never ends of its own accord, and on any auction whose closing time is not known.
+  //
+  // Optional and **not** a gate on going ready/active, unlike `startingPrice`: a listing published
+  // before this field existed has none, and the field's job is to raise a flag rather than to hold a
+  // listing back. What fills it in on a connected platform is the sync (#481), from the same sweep
+  // that reads the bidding — which is what makes Allegro's automatic relist of an unsold auction
+  // safe here: a republished listing arrives with a new closing time, and the flag moves with it.
+  endsAt         DateTime?
   // When `price` was last confirmed against the live listing (#449), the auction lot's
   // `currentBid`/`checkedAt` pattern (#351): what a stored figure is worth depends on when it was
   // last looked at. Stamped by the in-place price edit, and by the sync of a **connected selling

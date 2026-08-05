@@ -86,6 +86,24 @@ export function ListingTypeChip({ listingType }: { listingType: OfferListingType
   return tinted("info", "Auction", "Sold by bidding — the price shown is where the bidding stands");
 }
 
+/**
+ * An auction that **ended with a bid on it** and has not been resolved (#490).
+ *
+ * Nothing in the app transitions such a listing: it closed with somebody committed to buying, and
+ * only the collector can say whether it sold — which starts the sale flow — or went unsold and has
+ * to be relisted. Until they do, the copies in it are promised to a buyer the record does not have.
+ *
+ * `error`-tinted like *Needs action* and for the same reason: the stock is committed in a place the
+ * app cannot see, and every day it sits there is a day it could also sell somewhere else.
+ */
+export function AuctionEndedChip() {
+  return tinted(
+    "error",
+    "Ended, unresolved",
+    "This auction closed with a bid on it — record the sale, or mark it unsold and relist"
+  );
+}
+
 /** "In active bidding" (#215): an auction bid has been placed on this offer, committing the
  * collector before the sale is actually recorded. */
 export function InActiveBiddingChip() {

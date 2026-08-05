@@ -159,6 +159,7 @@ describe("bidWriteFor", () => {
     biddersCount: 0,
     currentPrice: null as string | null,
     currentCurrency: null as string | null,
+    endingAt: null as Date | null,
   };
   const offer = {
     listingType: "auction",
@@ -166,6 +167,7 @@ describe("bidWriteFor", () => {
     currency: "PLN",
     inActiveBidding: false,
     bidderCount: null as number | null,
+    endsAt: null as Date | null,
   };
 
   it("flags an auction the moment somebody bids, and records the standing bid", () => {
@@ -247,6 +249,39 @@ describe("bidWriteFor", () => {
 
   it("reads a count Allegro did not state as unknown rather than as no bids", () => {
     assert.equal(bidWriteFor({ ...auction, biddersCount: null }, offer, now), null);
+  });
+
+  it("carries the closing time whatever the bidding says (#490)", () => {
+    const closes = new Date("2026-08-04T18:00:00Z");
+    // Recorded even where Allegro stated no bidder count at all, which otherwise writes nothing:
+    // when a listing closes is a fact about the listing, not about the bidding.
+    assert.deepEqual(bidWriteFor({ ...auction, biddersCount: null, endingAt: closes }, offer, now), {
+      endsAt: closes,
+    });
+    assert.deepEqual(
+      bidWriteFor(
+        { ...auction, biddersCount: 2, currentPrice: "42.00", currentCurrency: "PLN", endingAt: closes },
+        offer,
+        now
+      ),
+      { endsAt: closes, bidderCount: 2, inActiveBidding: true, price: "42.00", priceCheckedAt: now }
+    );
+  });
+
+  it("moves the closing time forward when Allegro relists an unsold auction (#490)", () => {
+    // The relist is what makes this an overwrite rather than a backfill: an offer left holding the
+    // old date would be reported as an ended auction waiting to be resolved for as long as it ran.
+    const was = new Date("2026-08-01T18:00:00Z");
+    const now2 = new Date("2026-08-08T18:00:00Z");
+    assert.deepEqual(
+      bidWriteFor({ ...auction, endingAt: now2 }, { ...offer, bidderCount: 0, endsAt: was }, now),
+      { endsAt: now2 }
+    );
+    // …and an unchanged date is not rewritten.
+    assert.equal(
+      bidWriteFor({ ...auction, endingAt: was }, { ...offer, bidderCount: 0, endsAt: was }, now),
+      null
+    );
   });
 
   it("leaves a closed offer alone — there is nothing left to commit or to price", () => {

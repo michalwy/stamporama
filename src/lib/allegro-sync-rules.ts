@@ -255,6 +255,8 @@ export interface ObservedBidding {
   /** The standing bid and the currency it is quoted in; both null together. */
   currentPrice: string | null;
   currentCurrency: string | null;
+  /** When Allegro says the listing closes (#490), or null where it said nothing. */
+  endingAt: Date | null;
 }
 
 /** The local offer a bid observation would be written onto. */
@@ -264,6 +266,8 @@ export interface BiddableOffer {
   currency: string;
   inActiveBidding: boolean;
   bidderCount: number | null;
+  /** The closing time already recorded locally (#490), so an unchanged one is not rewritten. */
+  endsAt: Date | null;
 }
 
 /** What to write onto the offer — only the fields that should actually change. */
@@ -272,6 +276,8 @@ export interface BidWrite {
   price?: string;
   priceCheckedAt?: Date;
   bidderCount?: number;
+  /** The listing's closing time as Allegro states it (#490). */
+  endsAt?: Date;
 }
 
 /**
@@ -297,6 +303,12 @@ export interface BidWrite {
  *    flag still goes on — *that* somebody has bid does not depend on the currency it was bid in.
  *  • **A closed offer is left alone.** Sold or withdrawn, there is nothing here to commit and
  *    nothing left to price.
+ *  • **The closing time is carried whatever the bidding says** (#490). It is a fact about the
+ *    listing, not about the bids, so it is recorded above the guard that stops on an unstated count
+ *    — and it is *always* taken from Allegro rather than only being filled in when absent, which is
+ *    the whole point: an auction that ended unsold and was relisted automatically comes back with a
+ *    new closing time, and an offer still holding the old one would go on being reported as an ended
+ *    auction waiting to be resolved.
  *
  * `null` means "write nothing" — including the case where every field already says this. `now` is
  * passed in rather than read, so the rule stays pure and one pass stamps one instant.
@@ -310,10 +322,16 @@ export function bidWriteFor(
   if (!isAuctionListing(normalizeListingType(offer.listingType))) return null;
   if ((CLOSED_OFFER_STATES as readonly string[]).includes(offer.state)) return null;
 
-  const bidders = listing.biddersCount;
-  if (bidders === null || bidders < 0) return null;
-
   const write: BidWrite = {};
+  if (listing.endingAt && listing.endingAt.getTime() !== (offer.endsAt?.getTime() ?? 0)) {
+    write.endsAt = listing.endingAt;
+  }
+
+  const bidders = listing.biddersCount;
+  if (bidders === null || bidders < 0) {
+    return write.endsAt ? write : null;
+  }
+
   if (offer.bidderCount !== bidders) write.bidderCount = bidders;
 
   if (bidders > 0) {

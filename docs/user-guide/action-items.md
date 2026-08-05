@@ -66,6 +66,15 @@ one is announced once. Clicking through therefore does two things at once: it ta
 and clears the row. The list of everything currently under the hammer, read or unread, is the offers
 list's **In bidding** filter, which is where the group's own link goes.
 
+**Auction ended with a bid** — amber. An [auction of yours](offers.md#ended-auctions--waiting-on-you)
+whose closing time has passed with a bid on it, and which nothing has resolved. It is the mirror
+image of *Waiting to be closed* above: that one is a lot somebody else was selling, this one is a
+listing of yours somebody has bought. Record the sale, or mark the listing unsold and relist it; it
+is amber rather than blue because until then those copies are still sitting in every other listing
+they are in, where they can sell a second time. Longest-closed first, and clicking through lands on
+the offers list's **Ended auctions** chip. An auction that ended with nobody bidding is never here —
+which is also why a marketplace that relists unsold auctions by itself cannot fill this list up.
+
 **Bid withdrawn, still marked in bidding** — amber, and this one does **not** go away on its own. The
 offer is still marked in active bidding while Allegro now reports nobody bidding on it — a bid was
 cancelled. That matters because the marker is holding those copies out of every other listing for a

@@ -21,6 +21,7 @@ describe("offer list context", () => {
       states: ["preparing"],
       needsAction: false,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });
@@ -32,6 +33,7 @@ describe("offer list context", () => {
       states: ["ready", "active"],
       needsAction: false,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });
@@ -43,6 +45,7 @@ describe("offer list context", () => {
       states: [],
       needsAction: false,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: "Mi 865",
     });
@@ -54,6 +57,7 @@ describe("offer list context", () => {
       states: ["sold"],
       needsAction: false,
       bidding: false,
+      endedAuction: false,
       includeClosed: true,
       search: undefined,
     });
@@ -65,6 +69,7 @@ describe("offer list context", () => {
       states: [],
       needsAction: true,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });
@@ -76,6 +81,7 @@ describe("offer list context", () => {
       states: [],
       needsAction: false,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });
@@ -87,10 +93,27 @@ describe("offer list context", () => {
       states: ["active"],
       needsAction: false,
       bidding: true,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });
     assert.equal(offerListHref("mine", { bidding: true }), "/c/mine/offers?bidding=1");
+  });
+
+  it("carries the ended-auction narrowing the notification centre links to (#490)", () => {
+    assert.deepEqual(roundTrip({ endedAuction: true }), {
+      platformId: undefined,
+      states: [],
+      needsAction: false,
+      bidding: false,
+      endedAuction: true,
+      includeClosed: false,
+      search: undefined,
+    });
+    assert.equal(
+      offerListHref("mine", { endedAuction: true }),
+      "/c/mine/offers?endedAuction=1"
+    );
   });
 
   it("has no context without the marker: a deep link is not a walk", () => {
@@ -115,6 +138,7 @@ describe("offer list context", () => {
       states: [],
       needsAction: true,
       bidding: false,
+      endedAuction: false,
       includeClosed: false,
       search: undefined,
     });

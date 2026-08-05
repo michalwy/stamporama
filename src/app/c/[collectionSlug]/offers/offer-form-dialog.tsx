@@ -21,6 +21,10 @@ import {
 } from "@/lib/offer-rules";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import {
+  fromLocalInputValue,
+  toLocalInputValue,
+} from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { useLastOfferDefaults } from "./use-last-offer-defaults";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -63,6 +67,7 @@ export interface OfferFormDialogProps {
     | "listingDate"
     | "listingType"
     | "startingPrice"
+    | "endsAt"
   >;
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
@@ -159,6 +164,9 @@ export function OfferFormDialog({
     offer?.startingPrice ?? (isEdit ? "" : (initialPlatform?.defaultStartingPrice ?? ""))
   );
   const [startingPriceTyped, setStartingPriceTyped] = useState(false);
+  // When the auction closes (#490), held as the field's local-time value and converted to an instant
+  // on submit. Never seeded from the last offer: a closing time belongs to one listing.
+  const [endsAt, setEndsAt] = useState(toLocalInputValue(offer?.endsAt));
   // Where a parent's suggested figure lands (#449). It is what one would ask for the goods, which on
   // an auction is what one would open at — so it fills the starting price there and leaves the
   // current one blank, rather than recording a bid nobody placed.
@@ -413,6 +421,26 @@ export function OfferFormDialog({
               />
             </div>
           </div>
+
+          {/* When the auction closes (#490) — asked only of an auction, which is the only listing
+              that ends of its own accord. It is what the "ended with a bid on it" flag is read
+              against, and on a connected platform the sync keeps it current by itself (#481), so
+              this is for the marketplaces the app cannot see. The field converts to an instant in
+              the browser, the only place the collector's own zone is known. */}
+          {isAuction && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="offer-ends-at">Closes (optional)</LabelWithError>
+              <input
+                id="offer-ends-at"
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                disabled={isPending}
+                style={INPUT_STYLE}
+              />
+              <input type="hidden" name="endsAt" value={fromLocalInputValue(endsAt)} />
+            </div>
+          )}
 
           {!isEdit && sourceNote && (
             <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>

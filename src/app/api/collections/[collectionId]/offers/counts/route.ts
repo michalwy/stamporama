@@ -28,6 +28,7 @@ export async function GET(
       search: sp.get("search") || undefined,
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
+      endedAuction: sp.get("endedAuction") === "1",
       includeClosed: sp.get("includeClosed") === "1",
     });
     return NextResponse.json(counts);

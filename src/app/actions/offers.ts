@@ -55,6 +55,7 @@ import {
   parsePrice,
   parseStartingPrice,
   parseOfferDate,
+  parseOfferEndsAt,
   normalizeUrl,
   normalizeListingType,
   type OfferState,
@@ -128,6 +129,12 @@ async function readOfferInput(
   const listing = parseOfferDate(str(formData, "listingDate"));
   if (!listing.ok) return { ok: false, message: listing.message };
 
+  // When an auction closes (#490): optional, and sent as an ISO instant — the form's
+  // `datetime-local` field converts in the browser, the only place the collector's zone is known.
+  // The domain drops it on a quick buy, so it is passed on as given.
+  const ends = parseOfferEndsAt(str(formData, "endsAt"));
+  if (!ends.ok) return { ok: false, message: ends.message };
+
   // Initial status (#257): defaults to `preparing`; a live `ready` / `active` is honoured by the
   // domain only when the offer lists something. `updateOffer` ignores it.
   const rawState = str(formData, "state");
@@ -148,6 +155,7 @@ async function readOfferInput(
       listingType,
       price,
       startingPrice: starting.value,
+      endsAt: ends.value,
       currency,
       listingDate: listing.value,
       state,

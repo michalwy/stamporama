@@ -18,6 +18,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   OfferStateChip,
+  AuctionEndedChip,
   NeedsActionChip,
   InActiveBiddingChip,
   ListingTypeChip,
@@ -248,6 +249,9 @@ export function OfferRow({
               whether anyone has actually bid (#215). */}
           <ListingTypeChip listingType={offer.listingType} />
           {offer.inActiveBidding && <InActiveBiddingChip />}
+          {/* …and whether that bidding is over with nobody having settled it (#490): the auction's
+              moment has passed, somebody bid, and only the collector can say what became of it. */}
+          {offer.needsResolution && <AuctionEndedChip />}
           {offer.setCount > 1 && (
             <Tooltip content="Sets in this offer">
               <span style={CHIP}>{offer.setCount}×</span>

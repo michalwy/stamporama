@@ -204,6 +204,13 @@ Three rules bound that write.
   filter, which is what the group links to. Beside it, the offer states the bidder count the sync
   reported and **Sync now** says what it flagged. `Offer.bidderCount` is written only ever by a sync,
   so its presence is the provenance of both the figure and the flag.
+- **The closing time comes with it (#490).** The same read states `publication.endingAt`, so it is
+  carried onto `Offer.endsAt` for every auction the sweep sees — above the bidding rules, since when
+  a listing ends is a fact about the listing and not about the bids, and *overwriting* rather than
+  backfilling. That last part is the point: Allegro relists an unsold auction by itself, and an offer
+  left holding the old date would be reported as an ended auction waiting to be resolved for as long
+  as the relist ran. It is the fourth field this sync writes, and the reasoning is the same as for
+  the other three — the marketplace's own feed is better evidence than a date typed by hand.
 - **A withdrawn bid is the one thing that does not expire.** An offer still flagged while the
   platform reports no bidders gets its own group (`offer-bid-withdrawn`, `warning`) which stays until
   the collector settles it. It is the only case where the flag is genuinely waiting on somebody:

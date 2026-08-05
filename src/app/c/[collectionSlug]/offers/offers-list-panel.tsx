@@ -153,9 +153,22 @@ export function OffersListPanel({
   // narrowing the list long after they had forgotten following it.
   const bidding = searchParams.get("bidding") === "1";
 
+  // Auctions that ended with a bid and are waiting to be resolved (#490). URL-only, like the two
+  // above: it is a batch of work to sit down to — and one that empties as it is done — not the shape
+  // the list should still have tomorrow.
+  const endedAuction = searchParams.get("endedAuction") === "1";
+
   const filters: OfferFilters = useMemo(
-    () => ({ platformId, states, needsAction, bidding, includeClosed, search: search || undefined }),
-    [platformId, states, needsAction, bidding, includeClosed, search]
+    () => ({
+      platformId,
+      states,
+      needsAction,
+      bidding,
+      endedAuction,
+      includeClosed,
+      search: search || undefined,
+    }),
+    [platformId, states, needsAction, bidding, endedAuction, includeClosed, search]
   );
 
   // What every row hands to the offer it opens (#429): the filters this list is showing, so the
@@ -249,7 +262,7 @@ export function OffersListPanel({
   }
 
   const hasActiveFilters =
-    !!platformId || states.length > 0 || needsAction || bidding || !!search;
+    !!platformId || states.length > 0 || needsAction || bidding || endedAuction || !!search;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -370,6 +383,19 @@ export function OffersListPanel({
               updateParams({ needsAction: needsAction ? "" : "1", state: "" });
             }}
           />
+          {/* Auctions whose moment has passed with a bid on them and nothing recorded (#490).
+              Beside "Needs action" because it is the same kind of thing — an overlay across states,
+              and stock committed where the app cannot see it — and it alarms on the same terms:
+              every one of these is a buyer waiting on a decision only the collector can make. */}
+          <Tooltip content="Auctions that closed with a bid on them and have not been resolved — record the sale, or mark them unsold and relist">
+            <FilterChip
+              label="Ended auctions"
+              count={counts?.endedAuction}
+              alarm={!!counts && counts.endedAuction > 0}
+              active={endedAuction}
+              onClick={() => updateParams({ endedAuction: endedAuction ? "" : "1" })}
+            />
+          </Tooltip>
           {/* Only while a link has narrowed the list to the offers under the hammer (#481). It is
               shown *because* it is on: a filter arrived at by following a link and with no way back
               off it is a list quietly lying about what it holds. */}

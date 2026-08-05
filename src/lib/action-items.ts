@@ -1,6 +1,10 @@
 import "server-only";
 import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
-import { offersNeedingAction, offersWithObservedBidding } from "./offers";
+import {
+  offersNeedingAction,
+  offersWithEndedAuction,
+  offersWithObservedBidding,
+} from "./offers";
 
 /**
  * The **action items** the notification centre reports (#367) — the states already tracked
@@ -56,7 +60,8 @@ export type ActionItemGroupId =
   | "offer-sold-elsewhere"
   | "offer-bidding-conflict"
   | "offer-bidding-started"
-  | "offer-bid-withdrawn";
+  | "offer-bid-withdrawn"
+  | "offer-auction-ended";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -325,6 +330,42 @@ const biddingProviders: ActionItemProvider = {
   },
 };
 
+/**
+ * The collector's **own** auctions that have closed with a bid on them and nothing recorded (#490).
+ *
+ * The mirror image of `auction-outcome` above: that one is a lot somebody else was selling, this one
+ * is a listing of theirs that somebody has bought. Nothing transitions it — the sale has to be
+ * recorded (#390/#473), or the listing marked unsold and relisted — and until then the copies in it
+ * are promised to a buyer the record does not have.
+ *
+ * `warning` rather than `info`: unlike an unrecorded lot outcome, which is bookkeeping about
+ * something already over, this is stock still sitting in every *other* listing it is in, where it
+ * can sell a second time. It is graded below the `critical` pair only because that double sale has
+ * not happened yet — the same reading a lot closing tonight gets.
+ */
+const endedAuctionProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const ended = await offersWithEndedAuction(ownerId, collectionId, limit);
+    return [
+      {
+        id: "offer-auction-ended" as const,
+        title: "Auction ended with a bid",
+        severity: "warning" as const,
+        count: ended.total,
+        items: ended.offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          detail: `${offer.platformName} · ${offer.price} ${offer.currency}`,
+          at: offer.endsAt.toISOString(),
+          href: `offers/${offer.offerId}`,
+        })),
+        // The offers list' own chip, so "see all" is the same set counted here.
+        href: "offers?endedAuction=1",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
 const PROVIDERS: ActionItemProvider[] = [
@@ -332,6 +373,7 @@ const PROVIDERS: ActionItemProvider[] = [
   duplicateProvider,
   offerProvider,
   biddingProviders,
+  endedAuctionProvider,
 ];
 
 /**

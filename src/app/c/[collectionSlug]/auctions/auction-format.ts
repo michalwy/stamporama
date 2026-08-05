@@ -39,7 +39,7 @@ export function formatRelative(iso: string, now: Date): string {
  * collector's own time is known, so the conversion happens here in both directions and the server
  * only ever sees an instant.
  */
-export function toLocalInputValue(iso: string | null | undefined): string {
+export function toLocalInputValue(iso: string | Date | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";

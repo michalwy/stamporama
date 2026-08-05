@@ -1,0 +1,11 @@
+-- When an auction listing closes (#490) — the selling-side counterpart of `auction_lot.endsAt`.
+--
+-- It is what the "ended, and somebody bid" flag on the offer list is read against: an auction whose
+-- moment has passed with a bid on it has to be resolved by hand — marked sold, or relisted — and
+-- nothing in the app transitions it on its own.
+--
+-- Nullable and no gate: a listing published before this column existed has none, and a fixed-price
+-- listing never ends of its own accord. On a connected platform the Allegro sweep (#481) fills it in
+-- from `publication.endingAt`, the same read that carries the bidding, so an auction Allegro relists
+-- unsold comes back with its new closing time rather than staying flagged forever.
+ALTER TABLE "offer" ADD COLUMN "endsAt" TIMESTAMP(3);

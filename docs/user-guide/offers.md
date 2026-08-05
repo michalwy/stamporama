@@ -1013,7 +1013,7 @@ toolbar, the base-currency equivalent, the comparison against the suggested pric
 [sale](sales.md) is recorded at. The field is simply relabelled — **Asking price** or **Current
 price** — so what you type is never in doubt.
 
-An auction adds two things under that figure on the detail header:
+An auction adds three things under that figure on the detail header:
 
 - **Starting price** — what the auction opened at, and the figure an auction is actually **required**
   to have: it is the number you stated when you listed it. An auction cannot be marked **Ready** or
@@ -1027,6 +1027,11 @@ An auction adds two things under that figure on the detail header:
   the listing, read the standing bid, and type it into the price field. Committing a **changed**
   figure stamps the check date; retyping the same number does not, since nothing was learned. This
   is the same manual-refresh rhythm the [auction watchlist](auctions.md) uses for lots you bid on.
+- **Closes** — when the auction ends, set on the header form. Optional, and nothing is held back for
+  the want of it: it exists so the app can tell you when an auction has ended with a bid on it and
+  nobody has settled it (see [Ended auctions](#ended-auctions--waiting-on-you) below). On a
+  **connected** platform it is filled in and kept current for you, which matters most when the
+  marketplace relists an unsold auction by itself: the new closing time arrives with the next sync.
 
 The **current price is not** required, and nothing is filled in for it. It is an *observation* of the
 bidding, and an auction that is up with nobody bidding has none to make — so leave the field blank
@@ -1042,6 +1047,29 @@ current price would record a bid nobody placed.
 A quick buy carries neither extra field: its price is yours to set, and nothing moves it behind your
 back. Switching an existing auction back to **Quick buy** on the header form clears both, since a
 starting price and a check date describe a format the listing is no longer in.
+
+## Ended auctions — waiting on you
+
+An auction that has **closed with a bid on it** is the one thing here nothing else resolves. The
+listing is over, somebody has bought the stamps, and only you can say what happened next: record the
+sale, or — if it fell through — mark it unsold and relist. Until you do, the copies in it are still
+sitting in every other listing they are in, where they can sell a second time.
+
+So the offer list flags it. The row carries an **Ended, unresolved** chip, and the toolbar's **Ended
+auctions** chip counts them and narrows the list to exactly those; the [notification
+centre](action-items.md) reports the same set as *Auction ended with a bid*, longest-closed first.
+
+Three things have to be true, and each one is there to keep the flag honest:
+
+- the auction's **closing time has passed** — an auction with no closing time recorded is never
+  flagged, since the app would only be guessing;
+- **somebody bid**: a current price above zero, the **In active bidding** marker, or a bidder count
+  a connected platform reported. The starting price is deliberately not read — it is what *you*
+  asked, not what anyone offered. This is also what makes the flag safe on a marketplace that
+  **relists unsold auctions automatically**: nothing was bid, so nothing is flagged, and the relisted
+  auction's new closing time arrives with the next sync;
+- the listing is **still open** — a **Sold** or **Withdrawn** offer has already been resolved, which
+  is what those states mean.
 
 ## In active bidding — auction platforms
 
@@ -1135,6 +1163,12 @@ together, "everything Ready *or* Active" being one question rather than two. Cli
 again drops it. **Needs action** is not a state, so picking it clears the state chips and picking a
 state clears it.
 
+Beside it is **Ended auctions** — auctions that closed with a bid and have not been resolved (see
+[Ended auctions](#ended-auctions--waiting-on-you)). Like **Needs action** it is an overlay rather
+than a state, so it narrows whatever the chips beside it are showing, and it reddens as soon as its
+count is above zero. It is not remembered between visits: it is a batch of work you sit down to and
+finish, not the shape the list should still have tomorrow.
+
 ### Searching
 
 The search box finds one offer among hundreds by what you happen to know about it. It matches:
@@ -1169,15 +1203,16 @@ offers regardless of the toggle.
 
 ### Counts on the filters
 
-Every state chip, the **Needs action** chip, and each option in the platform dropdown carries the
+Every state chip, the **Needs action** and **Ended auctions** chips, and each option in the platform dropdown carries the
 **number of offers you would see by picking it**. The counts are *faceted*: a count ignores its own
 filter but respects the others, so with a platform selected the state chips count only that
 platform's offers, and each platform option counts only offers in the state (or **Needs action**,
 or **Show sold/withdrawn**) you currently have chosen. The **All platforms** option shows the total
 under that same choice. A **search** has no chip of its own to count, so it narrows every count.
 
-The **Needs action** chip turns **red** as soon as its count is above zero, so a stale listing is
-visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
+The **Needs action** and **Ended auctions** chips turn **red** as soon as their count is above zero,
+so a stale listing — or an auction that closed with a buyer waiting — is visible from the toolbar
+without clicking anything. The **Show sold/withdrawn** toggle carries no
 count — it widens the list rather than selecting a slice of it.
 
 ### Stepping through the filtered list
