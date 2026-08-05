@@ -22,6 +22,7 @@ describe("auction lot params", () => {
     signal: "outbid",
     undescribed: true,
     duplicate: true,
+    search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
   };
@@ -40,6 +41,7 @@ describe("auction lot params", () => {
     assert.equal(params.get("signal"), "outbid");
     assert.equal(params.get("undescribed"), "1");
     assert.equal(params.get("duplicate"), "1");
+    assert.equal(params.get("search"), "köhler");
     assert.equal(params.get("sellerId"), "seller-1");
     assert.equal(params.get("platformId"), "platform-1");
   });

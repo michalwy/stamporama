@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import {
+  ListSearchBox,
+  useDebouncedSearch,
+} from "@/app/c/[collectionSlug]/shared/list-search-box";
 import {
   AUCTION_SALE_STATUSES,
   AUCTION_SALE_STATUS_LABEL,
-  type AuctionSaleStatus,
+  isAuctionSaleStatus,
 } from "@/lib/auction-rules";
 import { useAuctionSales, useInvalidateAuctions, type AuctionSaleView } from "../use-auctions-query";
 import { AuctionSaleFormDialog } from "../auction-sale-form-dialog";
@@ -35,12 +40,55 @@ interface AuctionSalesPanelProps {
  */
 export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSalesPanelProps) {
   const router = useRouter();
-  const [status, setStatus] = useState<AuctionSaleStatus | undefined>();
+  const searchParams = useSearchParams();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
-  const { data: sales = [], isLoading } = useAuctionSales(collectionId, status);
+
+  // Both selections are remembered per collection (#496) with the URL winning whenever it carries
+  // one — the lot list's rule (#325/#351), so a shared link still means exactly what it says. Until
+  // now the status lived in `useState` and was lost on every navigation away from the screen, which
+  // on a settlement list is the wrong default: "what do I still owe for" is the question one comes
+  // back to, not one asked once.
+  const [storedStatus, rememberStatus] = usePersistedCollectionValue(
+    "auction-sale-status",
+    collectionId
+  );
+  const [storedSearch, rememberSearch] = usePersistedCollectionValue(
+    "auction-sale-search",
+    collectionId
+  );
+
+  const statusRaw = searchParams.has("status")
+    ? (searchParams.get("status") ?? "")
+    : (storedStatus ?? "");
+  const status = isAuctionSaleStatus(statusRaw) ? statusRaw : undefined;
+  const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      }
+      const qs = params.toString();
+      router.push(`/c/${collectionSlug}/auctions/sales${qs ? `?${qs}` : ""}`);
+    },
+    [router, collectionSlug, searchParams]
+  );
+
+  const [localSearch, setLocalSearch] = useDebouncedSearch(search, (value) => {
+    rememberSearch(value);
+    updateParams({ search: value });
+  });
+
+  const { data: sales = [], isLoading } = useAuctionSales(
+    collectionId,
+    status,
+    search || undefined
+  );
 
   function closeDialog() {
     if (!isPending) {
@@ -63,12 +111,33 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
         }}
       >
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Find one settlement by what it is called or who it is with (#484). A sale's identifier
+              is part of its name, so `Köhler 385` is found by either half of it. */}
+          <ListSearchBox
+            value={localSearch}
+            onChange={setLocalSearch}
+            placeholder="Search sale, seller, platform…"
+            label="Search sales"
+            width="16rem"
+          />
+          <span
+            style={{
+              width: "1px",
+              height: "1.25rem",
+              background: "var(--color-border)",
+              margin: "0 0.25rem",
+            }}
+          />
           {AUCTION_SALE_STATUSES.map((value) => (
             <FilterChip
               key={value}
               label={AUCTION_SALE_STATUS_LABEL[value]}
               active={status === value}
-              onClick={() => setStatus(status === value ? undefined : value)}
+              onClick={() => {
+                const next = status === value ? "" : value;
+                rememberStatus(next);
+                updateParams({ status: next });
+              }}
             />
           ))}
         </div>
@@ -112,7 +181,9 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
 
         {!isLoading && sales.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {status
+            {search
+              ? "No sales match your search."
+              : status
               ? "No sales in this status."
               : "No auction sales yet. One is started for you when you add a lot; create one here when a house sale is known up front."}
           </div>

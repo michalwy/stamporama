@@ -11,6 +11,10 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
+  ListSearchBox,
+  useDebouncedSearch,
+} from "@/app/c/[collectionSlug]/shared/list-search-box";
+import {
   AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_OUTCOME_LABEL,
   isAuctionLotOutcome,
@@ -98,6 +102,7 @@ export function AuctionLotsPanel({
     "auction-platform",
     collectionId
   );
+  const [storedSearch, rememberSearch] = usePersistedCollectionValue("auction-search", collectionId);
 
   const outcomeRaw = searchParams.has("outcome")
     ? (searchParams.get("outcome") ?? "")
@@ -140,13 +145,26 @@ export function AuctionLotsPanel({
   // the notification centre's duplicate group opens.
   const duplicate = searchParams.get("duplicate") === "1" || undefined;
 
+  // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
+  // by the URL whenever it carries one, so a link to a searched list still means what it says.
+  const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+
   const [groupBySale, setGroupBySale] = usePersistedFlag(
     `stamporama:auctions:groupBySale:${collectionId}`
   );
 
   const filters: AuctionLotFilters = useMemo(
-    () => ({ outcome, closing, signal, undescribed, duplicate, sellerId, platformId }),
-    [outcome, closing, signal, undescribed, duplicate, sellerId, platformId]
+    () => ({
+      outcome,
+      closing,
+      signal,
+      undescribed,
+      duplicate,
+      search: search || undefined,
+      sellerId,
+      platformId,
+    }),
+    [outcome, closing, signal, undescribed, duplicate, search, sellerId, platformId]
   );
 
   const updateParams = useCallback(
@@ -161,6 +179,11 @@ export function AuctionLotsPanel({
     },
     [router, collectionSlug, searchParams]
   );
+
+  const [localSearch, setLocalSearch] = useDebouncedSearch(search, (value) => {
+    rememberSearch(value);
+    updateParams({ search: value });
+  });
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useAuctionLotsInfinite(collectionId, filters);
@@ -206,7 +229,14 @@ export function AuctionLotsPanel({
   }
 
   const hasActiveFilters =
-    !!outcome || !!closing || !!signal || !!undescribed || !!duplicate || !!sellerId || !!platformId;
+    !!outcome ||
+    !!closing ||
+    !!signal ||
+    !!undescribed ||
+    !!duplicate ||
+    !!search ||
+    !!sellerId ||
+    !!platformId;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -224,6 +254,23 @@ export function AuctionLotsPanel({
         }}
       >
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Find one lot among the whole watchlist by what is known about it (#484): what it is
+              called, what was noted about it, the house's number for it or ours, or the sale it is
+              in. Server-side — the list is paginated, so it cannot be a client facet. */}
+          <ListSearchBox
+            value={localSearch}
+            onChange={setLocalSearch}
+            placeholder="Search lot, notes, sale, seller…"
+            label="Search lots"
+          />
+          <span
+            style={{
+              width: "1px",
+              height: "1.25rem",
+              background: "var(--color-border)",
+              margin: "0 0.25rem",
+            }}
+          />
           {/* What to do about a lot, before what became of it: on a live watchlist the derived
               states are the working set, while the recorded outcomes are how it is filed. */}
           {SIGNALS.map(({ value, label, hint }) => {
@@ -408,7 +455,9 @@ export function AuctionLotsPanel({
 
         {!isLoading && rows.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            {hasActiveFilters
+            {search
+              ? "No lots match your search."
+              : hasActiveFilters
               ? "No lots match this filter."
               : "No lots tracked yet. Add one by naming the seller and the platform — the settlement it belongs to follows from those."}
           </div>

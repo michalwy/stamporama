@@ -104,12 +104,13 @@ export function useAuctionParties(collectionId: string) {
 }
 
 /** Every sale with its parcel totals — the settlement list. Unpaginated (see `listAuctionSales`). */
-export function useAuctionSales(collectionId: string, status?: AuctionSaleStatus) {
+export function useAuctionSales(collectionId: string, status?: AuctionSaleStatus, search?: string) {
   return useQuery<AuctionSaleView[]>({
-    queryKey: ["auctions", collectionId, "sales", status ?? "all"] as const,
+    queryKey: ["auctions", collectionId, "sales", status ?? "all", search ?? ""] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
+      if (search) params.set("search", search);
       const res = await fetch(
         `/api/collections/${collectionId}/auctions/sales?${params.toString()}`
       );

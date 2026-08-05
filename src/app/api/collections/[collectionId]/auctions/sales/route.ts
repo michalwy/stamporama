@@ -16,11 +16,13 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const statusParam = request.nextUrl.searchParams.get("status");
+  const sp = request.nextUrl.searchParams;
+  const statusParam = sp.get("status");
 
   try {
     const items = await listAuctionSales(session.user.id, collectionId, {
       status: statusParam && isAuctionSaleStatus(statusParam) ? statusParam : undefined,
+      search: sp.get("search") || undefined,
     });
     return NextResponse.json({ items });
   } catch {

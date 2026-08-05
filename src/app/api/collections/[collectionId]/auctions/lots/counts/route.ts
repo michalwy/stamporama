@@ -38,6 +38,7 @@ export async function GET(
       signal: lotSignal(sp.get("signal")),
       undescribed: sp.get("undescribed") === "1" || undefined,
       duplicate: sp.get("duplicate") === "1" || undefined,
+      search: sp.get("search") || undefined,
       sellerId: sp.get("sellerId") || undefined,
       platformId: sp.get("platformId") || undefined,
       saleId: sp.get("saleId") || undefined,

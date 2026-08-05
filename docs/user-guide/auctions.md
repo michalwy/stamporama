@@ -364,18 +364,26 @@ the bidding:
 
 Finally:
 
+- The **search box** at the head of the toolbar, for when you already know which lot you want: it
+  matches the lot's title and notes, the house's lot number, the listing address, the lot's own
+  number (`12` or `#12`), and the sale, seller or platform it belongs to. It composes with every
+  chip beside it, so a search inside *Can still bid* stays inside it.
 - **Seller** and **platform** selects, so "everything I have running on Allegro right now" is one
   filter rather than a walk through parcels.
 - **Group by sale** turns the flat list into sections, off by default.
 
-Your choices are remembered per collection and are also in the address bar, so a filtered view can
-be bookmarked or shared. The ones that ask a question of *today's* list — the closing windows, the
+Your choices — including what is in the search box — are remembered per collection and are also in
+the address bar, so a filtered view can be bookmarked or shared. The ones that ask a question of
+*today's* list — the closing windows, the
 first row, **Not described** and **Duplicate** — live in the address bar only: they are jobs you go and do, and
 coming back tomorrow to a list still narrowed to them would hide everything actually running.
 
 ## Sales — paying for a parcel
 
-**Auctions → Sales** in the sidebar lists the settlements. Each row shows the parcel's **all-in total**:
+**Auctions → Sales** in the sidebar lists the settlements. Its toolbar carries a **search box** —
+over the sale's name, its catalogue URL and the seller or platform it is with — and the status
+chips; both are remembered per collection and travel in the address bar, exactly as the lot list's
+filters do, so coming back to the screen finds it as you left it. Each row shows the parcel's **all-in total**:
 every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus
 shipping once. Lots you lost, watched or cancelled cost nothing and are left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping

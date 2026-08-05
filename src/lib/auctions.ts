@@ -28,6 +28,7 @@ import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { getOrFetchRate } from "./exchange-rates";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
+import { parseEntityNoSearch } from "./quick-jump";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
@@ -457,6 +458,10 @@ export interface AuctionLotFilters {
    * express — and hard matches only, so the chip means "on course to buy this twice" rather than
    * "related to something else in the list". */
   duplicate?: boolean;
+  /** Free text the list is narrowed to (#484): the lot's title, its notes, the house's lot number or
+   * its URL, the lot's own short number, and the sale / seller / platform it belongs to. Composes
+   * with every other filter rather than replacing them. */
+  search?: string;
   sellerId?: string;
   platformId?: string;
   saleId?: string;
@@ -483,6 +488,10 @@ function lotListWhere(
   const and: Prisma.AuctionLotWhereInput[] = [];
   if (filters.outcome) and.push(outcomeWhere(filters.outcome));
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
+  // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
+  // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
+  // alongside it.
+  if (filters.search?.trim()) and.push(lotSearchWhere(filters.search));
 
   return {
     ...(derivedIds ? { id: { in: derivedIds } } : {}),
@@ -544,6 +553,40 @@ function outcomeWhere(outcome: AuctionLotOutcome): Prisma.AuctionLotWhereInput {
         ],
       };
   }
+}
+
+/**
+ * The `where` fragment for the lot list's search box (#484). Case-insensitive substring, over the
+ * things a collector knows a lot by:
+ *
+ * - what it is called — its own `title`, and its `notes`, which is where the description of an
+ *   untitled marketplace lot usually ends up;
+ * - the **house's** lot number and the listing `url`, which are how a lot is referred to away from
+ *   this app (for a captured Allegro listing `lotNo` is the offer id, #355);
+ * - **our** short lot number (#432), a bare integer or behind a `#` like every other list that
+ *   supports one — matched *in addition to* the text, since `12` is also a perfectly good house
+ *   number;
+ * - the sale it settles in, and that sale's seller and platform, so "philasearch" or a house's name
+ *   narrows the flat list to that parcel without going through the selects.
+ *
+ * Deliberately **not** the composition: what a lot contains is searched on the copies and stamps
+ * lists, and a lot list narrowed by a stamp name would answer a question the row cannot show.
+ */
+function lotSearchWhere(search: string): Prisma.AuctionLotWhereInput {
+  const s = search.trim();
+  const text = { contains: s, mode: "insensitive" as const };
+  const or: Prisma.AuctionLotWhereInput[] = [
+    { title: text },
+    { notes: text },
+    { lotNo: text },
+    { url: text },
+    { auctionSale: { name: text } },
+    { auctionSale: { seller: { name: text } } },
+    { auctionSale: { platform: { name: text } } },
+  ];
+  const auctionLotNo = parseEntityNoSearch(s);
+  if (auctionLotNo !== null) or.push({ auctionLotNo });
+  return { OR: or };
 }
 
 /** The stored side of `lotNeedsComposition` (#442), kept beside the `where` it is spliced into so
@@ -1009,17 +1052,39 @@ function toSaleListItem(
   };
 }
 
+export interface AuctionSaleListFilters {
+  status?: AuctionSaleStatus;
+  /** Free text the settlement list is narrowed to (#484): the sale's name or catalogue URL, and the
+   * seller / platform it is with — which, for a marketplace basket whose name is derived from the
+   * pair, is the same two words either way. */
+  search?: string;
+}
+
+/** The `where` fragment for the sale list's search box (#484). Case-insensitive substring over the
+ * sale's own name and URL and the two parties on it. A sale's identifier is part of its name
+ * (there is no separate sale-number column), so `Köhler 385` is found by either half. */
+function saleSearchWhere(search: string): Prisma.AuctionSaleWhereInput {
+  const text = { contains: search.trim(), mode: "insensitive" as const };
+  return {
+    OR: [{ name: text }, { url: text }, { seller: { name: text } }, { platform: { name: text } }],
+  };
+}
+
 /** Every sale, newest first, each with its parcel totals — the settlement list. Unpaginated: a sale
  * is one parcel from one seller, so there are as many as there have been settlements, and the
  * screen exists to answer "what do I owe whom", which a page boundary would cut in half. */
 export async function listAuctionSales(
   ownerId: string,
   collectionId: string,
-  filters: { status?: AuctionSaleStatus } = {}
+  filters: AuctionSaleListFilters = {}
 ): Promise<AuctionSaleListItem[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.auctionSale.findMany({
-    where: { collectionId, ...(filters.status ? { status: filters.status } : {}) },
+    where: {
+      collectionId,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.search?.trim() ? saleSearchWhere(filters.search) : {}),
+    },
     orderBy: { createdAt: "desc" },
     select: SALE_SELECT,
   });

@@ -18,6 +18,8 @@ export interface AuctionLotFilters {
   undescribed?: boolean;
   /** Only lots holding a stamp another lot being won also holds (#369). */
   duplicate?: boolean;
+  /** Free-text search over the lot, its notes and the sale it belongs to (#484). */
+  search?: string;
   sellerId?: string;
   platformId?: string;
 }
@@ -39,6 +41,7 @@ const LOT_PARAM: {
   signal: (value) => value,
   undescribed: () => "1",
   duplicate: () => "1",
+  search: (value) => value,
   sellerId: (value) => value,
   platformId: (value) => value,
 };
