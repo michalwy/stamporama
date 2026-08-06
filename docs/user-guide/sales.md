@@ -251,7 +251,8 @@ Stamporama, so update the packed checkboxes on the detail screen when you're bac
 Each printed page carries a line at its foot that identifies the sale on its own — the **sale
 number**, **platform**, **buyer**, **order number**, **sale date**, the **copy count** and the
 **status** — next to
-**Stamporama** and its version, the collection, and the date and time the sheet was **generated**.
+**Stamporama** and its version, the collection, and the date and time the sheet was **generated** —
+in your own timezone, not the server's, so it reads as the clock you printed it by.
 So a page that slips out of the stack can still be matched back to its order, two printouts of the
 same sale can be told apart, and a sheet found weeks later says where it came from. The note about
 the tick boxes closes the document, after the last row.

@@ -14,6 +14,7 @@ import { buildPackingList } from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "./print-button";
+import { GeneratedAt } from "./generated-at";
 import { PackingSheet } from "./packing-sheet";
 
 interface PackingListPageProps {
@@ -29,15 +30,12 @@ export async function generateMetadata({ params }: PackingListPageProps): Promis
   return { title: `Packing list ${formatEntityNo(sale.saleNo)} — ${sale.platformName}` };
 }
 
+/** The sale date is a **calendar date**, not an instant (`soldAt` is `@db.Date`, read back as UTC
+ * midnight), so it is printed off the UTC fields exactly as stored — reading it through a zone is
+ * what would move it a day. The generated *timestamp* is a real instant and belongs to the
+ * collector's zone instead; that one is `GeneratedAt` (#503). */
 function formatDate(d: Date): string {
   return new Date(d).toISOString().slice(0, 10);
-}
-
-/** `2026-07-26 14:32` in the instance's local time — when this sheet was generated. Minutes are
- * enough: it exists to tell two printouts of the same sale apart. */
-function formatDateTime(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /**
@@ -174,7 +172,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </span>
         <span>
           Stamporama {getAppVersionLabel()} · {collection.name} · generated{" "}
-          {formatDateTime(new Date())}
+          <GeneratedAt iso={new Date().toISOString()} />
         </span>
       </div>
     </div>
