@@ -12,7 +12,11 @@ export const SALE_STATUS_META: Record<SaleStatus, { label: string; token: string
   paid: { label: "Paid", token: "accent" },
   packed: { label: "Packed", token: "accent" },
   sent: { label: "Sent", token: "accent" },
-  received: { label: "Received", token: "success" },
+  // Labelled **Delivered** (#492): what the sale is waiting on is the parcel arriving, and
+  // "received" reads from the wrong side of the transaction — the collector is the one who sent it.
+  // Only the label changed; the stored token stays `received`, since the word on screen is what the
+  // rename was about and rewriting the value would migrate every sale and status event for nothing.
+  received: { label: "Delivered", token: "success" },
 };
 
 const BASE_CHIP: CSSProperties = {
