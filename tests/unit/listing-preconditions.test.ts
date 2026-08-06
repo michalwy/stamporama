@@ -282,4 +282,60 @@ describe("evaluateListingPreconditions", () => {
       ["missing-catalog-id", "unmapped-condition", "mixed-sets"]
     );
   });
+
+  // #462 — the update mode. It differs from the create mode in the leading state check and in
+  // nothing else, which is the whole reason there is one evaluation rather than two.
+  describe("updating a listing that is already live", () => {
+    const live = (over: Partial<PreconditionInput> = {}) =>
+      input({
+        mode: "update",
+        state: "active",
+        listingUrl: "https://colnect.com/en/market/sale/h5pxfc",
+        ...over,
+      });
+
+    it("passes an Active offer that carries the listing's address", () => {
+      assert.deepEqual(evaluateListingPreconditions(live()), []);
+    });
+
+    it("refuses an offer that is not live, and says nothing else about it", () => {
+      // A Ready offer has a listing to *post*, not one to correct — and `not-ready` would be the
+      // wrong sentence entirely.
+      assert.deepEqual(codes(live({ state: "ready" })), ["not-active"]);
+      assert.deepEqual(codes(live({ state: "sold" })), ["not-active"]);
+    });
+
+    it("refuses an Active offer with no listing URL, there being nothing to go back to", () => {
+      assert.deepEqual(codes(live({ listingUrl: null })), ["no-listing-url"]);
+      assert.deepEqual(codes(live({ listingUrl: "   " })), ["no-listing-url"]);
+    });
+
+    it("refuses a module that can post a listing but not edit one", () => {
+      // Allegro's Assistant form is entered on the way to a *new* listing (#493) and has no edit path.
+      assert.deepEqual(codes(live({ platformModule: "allegro" })), ["no-update-support"]);
+    });
+
+    it("asks every question about the goods exactly as the create mode does", () => {
+      assert.deepEqual(
+        codes(
+          live({
+            sets: [
+              {
+                setId: "set-1",
+                label: "A",
+                copies: [copy({ catalogItemId: null, platformCondition: null })],
+              },
+              { setId: "set-2", label: "B", copies: [copy({ catalogItemId: "222" })] },
+            ],
+          })
+        ),
+        ["missing-catalog-id", "unmapped-condition", "mixed-sets"]
+      );
+    });
+
+    it("is the create mode when nothing says otherwise", () => {
+      // Every caller predating the update flow omits the field, and must keep the rules it had.
+      assert.deepEqual(codes(input({ state: "active" })), ["not-ready"]);
+    });
+  });
 });

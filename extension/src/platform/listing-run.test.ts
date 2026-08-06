@@ -27,6 +27,10 @@ const listingModule: PlatformModule = {
       filled: [{ field: "Price", value: `${task.price} ${task.currency}` }],
       skipped: [{ field: "Title", reason: "FakeMarket has no title field." }],
     }),
+    editUrl: (task) => {
+      if (!task.listingUrl) throw new Error("FakeMarket needs the listing's address to edit it.");
+      return `${task.listingUrl}/edit`;
+    },
     listedUrl: (url) => (url.startsWith("https://fake.test/listing/") ? url : null),
     attachPhotos: (_doc, photos) => ({
       filled: [{ field: "Pictures", value: photos.map((p) => p.file.name).join(", ") }],
@@ -138,6 +142,33 @@ test("an unknown module id and a module that cannot list are different answers",
   const readOnly = resolveListingTarget(task("read-only-market"));
   assert.equal(readOnly.ok, false);
   assert.match(readOnly.ok ? "" : readOnly.error, /not listed from here/);
+});
+
+// #462: the same run, aimed at a listing that already exists. The mode changes which address is
+// opened and nothing else — the fill below is the identical one.
+test("an update resolves to the module's edit URL instead", () => {
+  const target = resolveListingTarget(
+    task("fake-market", { mode: "update", listingUrl: "https://fake.test/listing/abc" })
+  );
+  assert.deepEqual(target, {
+    ok: true,
+    moduleId: "fake-market",
+    moduleName: "FakeMarket",
+    url: "https://fake.test/listing/abc/edit",
+  });
+});
+
+test("a module that can post but not edit is its own refusal", () => {
+  // Posting to a marketplace is no promise that a posted listing can be reached again.
+  const target = resolveListingTarget(task("no-pictures-market", { mode: "update" }));
+  assert.equal(target.ok, false);
+  assert.match(target.ok ? "" : target.error, /but not edited/);
+});
+
+test("an update with no listing to go back to is refused by the module", () => {
+  const target = resolveListingTarget(task("fake-market", { mode: "update" }));
+  assert.equal(target.ok, false);
+  assert.match(target.ok ? "" : target.error, /needs the listing's address/);
 });
 
 test("filling reports what went in and what did not", () => {

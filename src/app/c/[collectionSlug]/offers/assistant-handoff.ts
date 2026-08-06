@@ -73,6 +73,8 @@ export interface AssistantReport {
  *     with nothing typed by hand.
  *   • `unread` — the sale was posted and the URL could not be read. Nothing failed; the offer is
  *     simply activated here, where a blank URL has always been an accepted answer.
+ *   • `updated` — an edit of a live listing was saved (#462). The end of that road: the offer was
+ *     Active before the run and is Active after it, so there is nothing here to publish.
  */
 export type AssistantHandoffState =
   | "loading"
@@ -81,11 +83,17 @@ export type AssistantHandoffState =
   | "listed"
   | "activated"
   | "unread"
+  | "updated"
   | "error";
+
+/** Which act a handoff is (#462), mirroring the kit's own `mode`. */
+export type AssistantHandoffMode = "create" | "update";
 
 export interface AssistantHandoff {
   offerId: string;
   requestId: string;
+  /** What was handed over — posting a listing, or correcting the one already live. */
+  mode: AssistantHandoffMode;
   /** The JSON the element carries, or null while the kit is still being fetched. */
   payload: string | null;
   state: AssistantHandoffState;
@@ -97,12 +105,13 @@ export interface AssistantHandoff {
  *  own error are ours and never arrive from there. */
 function isExtensionState(
   state: string | null
-): state is "running" | "filled" | "listed" | "unread" | "error" {
+): state is "running" | "filled" | "listed" | "unread" | "updated" | "error" {
   return (
     state === "running" ||
     state === "filled" ||
     state === "listed" ||
     state === "unread" ||
+    state === "updated" ||
     state === "error"
   );
 }
@@ -222,6 +231,8 @@ export function useAssistantHandoff(
    */
   const published = useRef<string | null>(null);
   useEffect(() => {
+    // `listed` is the only state that publishes, and an update never reaches it (#462): its answer is
+    // `updated`, which is the end of the road — the offer went Active when it was first listed.
     if (!handoff || handoff.state !== "listed") return;
     const url = handoff.report?.listedUrl;
     if (!url || published.current === handoff.requestId) return;
@@ -257,9 +268,13 @@ export function useAssistantHandoff(
    * Hand `offerId` over. The kit is fetched here rather than written into the page ahead of time:
    * it is a payload per offer, it is only wanted when the collector actually asks, and its refusal
    * (#405's 409) is the one place a precondition that changed since the batch was read shows up.
+   *
+   * `mode` picks which act is asked for (#462) and is the *only* difference between the two: the
+   * endpoint answers the same shape either way, and the extension takes it from there. An update's
+   * own refusals — not Active, no listing URL, a module that cannot edit — arrive as that same 409.
    */
   const start = useCallback(
-    async (offerId: string) => {
+    async (offerId: string, mode: AssistantHandoffMode = "create") => {
       const requestId =
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
@@ -267,9 +282,10 @@ export function useAssistantHandoff(
       setHandoff({
         offerId,
         requestId,
+        mode,
         payload: null,
         state: "loading",
-        message: "Preparing the listing…",
+        message: mode === "update" ? "Preparing the update…" : "Preparing the listing…",
         report: null,
       });
 
@@ -280,7 +296,11 @@ export function useAssistantHandoff(
 
       let res: Response;
       try {
-        res = await fetch(`/api/collections/${collectionId}/offers/${offerId}/listing-kit`);
+        res = await fetch(
+          `/api/collections/${collectionId}/offers/${offerId}/listing-kit${
+            mode === "update" ? "?mode=update" : ""
+          }`
+        );
       } catch {
         fail("Could not load this offer's listing.");
         return;
@@ -289,10 +309,11 @@ export function useAssistantHandoff(
         // The preconditions are evaluated twice — once for the row, once here — and this is the
         // reading that counts, so what it refuses on is what gets said.
         const body = (await res.json().catch(() => ({}))) as { blockers?: ListingBlocker[] };
+        const act = mode === "update" ? "update this listing" : "post this offer";
         fail(
           body.blockers?.length
-            ? `The Assistant cannot post this offer: ${body.blockers.map((b) => b.message).join(" ")}`
-            : "The Assistant cannot post this offer yet."
+            ? `The Assistant cannot ${act}: ${body.blockers.map((b) => b.message).join(" ")}`
+            : `The Assistant cannot ${act} yet.`
         );
         return;
       }

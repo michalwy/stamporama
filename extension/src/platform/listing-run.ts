@@ -24,18 +24,34 @@ export type ListingTarget =
   | { ok: true; moduleId: string; moduleName: string; url: string }
   | { ok: false; error: string };
 
-/** Where this task is filled in: the module that owns the platform, and the sale form's URL.
- *  Refuses rather than guesses — a task with no module, an unknown module and a module that only
- *  reads a marketplace are three different answers, each said in full. */
+/**
+ * Where this task is filled in: the module that owns the platform, and the form's URL.
+ *
+ * Refuses rather than guesses — a task with no module, an unknown module and a module that only reads
+ * a marketplace are three different answers, each said in full.
+ *
+ * An **update** (#462) resolves to the module's edit address instead, and a module with none is a
+ * fourth such answer: posting to a marketplace is no promise that a posted listing can be reached
+ * again. Which one is asked for is the only thing the mode changes here — everything downstream, the
+ * fill included, is the same run.
+ */
 export function resolveListingTarget(task: ListingTask): ListingTarget {
   const module = resolveListingModule(task);
   if (!module.ok) return module;
+  const { listing } = module.module;
+  const update = task.mode === "update";
+  if (update && !listing.editUrl) {
+    return {
+      ok: false,
+      error: `${module.module.name} listings can be posted from here, but not edited.`,
+    };
+  }
   try {
     return {
       ok: true,
       moduleId: module.module.id,
       moduleName: module.module.name,
-      url: module.module.listing.formUrl(task),
+      url: update ? listing.editUrl!(task) : listing.formUrl(task),
     };
   } catch (e) {
     // A task the module cannot express as a form at all — nothing the preconditions (#406) let

@@ -6,7 +6,11 @@ import {
   colnectAcceptsPicture,
   colnectListedSaleUrl,
   colnectPictureInput,
+  colnectSaleCode,
+  colnectSaleEditUrl,
   colnectSaleFormUrl,
+  colnectUploadedPictures,
+  removeColnectPictures,
   fillColnectSaleForm,
   isColnectSaleFormDocument,
   isColnectSaleFormUrl,
@@ -48,13 +52,43 @@ interface PictureOpts {
   pictures?: boolean;
   singlePicture?: boolean;
   picturesDisabled?: boolean;
+  /** Picture ids already uploaded to a live listing (#462) — empty, as here, on the new-sale form. */
+  uploaded?: string[];
+}
+
+/** The "Uploaded pictures" strip of a listing being edited, as Colnect renders it: one `.dz-preview`
+ *  per picture, each with the `ajax-link` that deletes it. */
+function uploadedPictures(ids: readonly string[]): string {
+  if (ids.length === 0) return "";
+  return `<div class="dz-ready-images">${ids
+    .map(
+      (id, i) =>
+        `<div class="dz-preview" data-order="${i + 1}" data-id="${id}">
+          <img src="//i.colnect.net/sale/list/michalwy/h5pxfc/${id}.jpg">
+          <a href="/en/sell/remove_picture" class="del-button ajax-link" data-ajax-post='{"picture_id":"${id}","sale_id":"h5pxfc"}'>X</a>
+        </div>`
+    )
+    .join("")}</div>`;
+}
+
+/** Stand in for Colnect's own `DzM.salePictureDeleted`: a click on a delete link takes the picture off
+ *  the page. `except` leaves those ids behind, which is what a deletion that never comes back looks
+ *  like from here. */
+function colnectDeletesPictures(doc: Document, except: readonly string[] = []): void {
+  for (const preview of colnectUploadedPictures(doc)) {
+    const id = preview.getAttribute("data-id") ?? "";
+    const link = preview.querySelector("a.del-button");
+    link?.addEventListener("click", () => {
+      if (!except.includes(id)) preview.remove();
+    });
+  }
 }
 
 function formHtml(colnectIds: string[], opts: PictureOpts = {}): string {
   return `<html><body>
   <form id="new-sale-form" method="post">
     ${colnectIds.map(itemFieldset).join("\n")}
-    <div class="dropzone">${pictureInput(opts)}</div>
+    <div class="dropzone">${pictureInput(opts)}${uploadedPictures(opts.uploaded ?? [])}</div>
     <input type="text" name="new_sale[price]" value="">
     <input type="number" name="new_sale[remaining_quantity]" value="1" min="1" max="65535">
     <input type="text" name="new_sale[sale_description_id]" maxlength="100" value="">
@@ -118,6 +152,55 @@ function task(items: ListingTaskItem[], overrides: Partial<ListingTask> = {}): L
     ...overrides,
   };
 }
+
+// The edit form of a listing that is already live (#462), mapped from a real one this session: the
+// same form at `…/sell/edit/sale_id/<code>`, the code being the one the entry URL already carries.
+describe("the edit form URL", () => {
+  const live = (url: string | null): ListingTask =>
+    task([item("111")], { state: "active", mode: "update", listingUrl: url });
+
+  it("is built from the sale code the offer's listing URL already carries", () => {
+    assert.equal(
+      colnectSaleEditUrl(live("https://colnect.com/en/market/sale/h5pxfc")),
+      "https://colnect.com/en/sell/edit/sale_id/h5pxfc"
+    );
+  });
+
+  it("accepts an edit address pasted in by hand, since it states the same code", () => {
+    assert.equal(
+      colnectSaleEditUrl(live("https://colnect.com/pl/sell/edit/sale_id/h5pxfc")),
+      "https://colnect.com/en/sell/edit/sale_id/h5pxfc"
+    );
+  });
+
+  it("refuses rather than guesses when the offer names no Colnect sale", () => {
+    // Opening an edit form at a guessed address would be somebody else's live listing.
+    assert.throws(() => colnectSaleEditUrl(live(null)), /no Colnect listing URL/);
+    assert.throws(
+      () => colnectSaleEditUrl(live("https://example.com/whatever")),
+      /not a Colnect sale/
+    );
+    assert.throws(
+      () => colnectSaleEditUrl(live("https://colnect.com/en/stamps/stamp/123273-x")),
+      /not a Colnect sale/
+    );
+  });
+
+  it("reads the code off either address Colnect states it at", () => {
+    assert.equal(colnectSaleCode("https://colnect.com/en/market/sale/h5UXNh"), "h5UXNh");
+    assert.equal(colnectSaleCode("https://www.colnect.com/de/sell/edit/sale_id/h5pxfc/"), "h5pxfc");
+    assert.equal(colnectSaleCode("https://colnect.com/en/market/list"), null);
+    assert.equal(colnectSaleCode(""), null);
+  });
+
+  it("is one of the two pages the shell will fill", () => {
+    assert.equal(isColnectSaleFormUrl("https://colnect.com/en/sell/edit/sale_id/h5pxfc"), true);
+    assert.equal(isColnectSaleFormUrl("https://colnect.com/pl/sell/new/category/stamps/item/1"), true);
+    // The entry itself is not a form — that is what the capture recognises (#412), and filling it
+    // would be filling a page the collector is merely reading.
+    assert.equal(isColnectSaleFormUrl("https://colnect.com/en/market/sale/h5pxfc"), false);
+  });
+});
 
 describe("the sale form URL", () => {
   it("declares a komplet in the URL, in listing order", () => {
@@ -337,9 +420,9 @@ describe("attaching the offer's pictures", () => {
     delete (globalThis as { DataTransfer?: unknown }).DataTransfer;
   });
 
-  it("hands the plan's images to the Dropzone's own input, in upload order", () => {
+  it("hands the plan's images to the Dropzone's own input, in upload order", async () => {
     const doc = docOf(formHtml(["111"]));
-    const outcome = attachColnectPictures(doc, [photo("offer-01.jpg"), photo("offer-02.jpg")]);
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg"), photo("offer-02.jpg")]);
 
     assert.deepEqual(attachedTo(doc), ["offer-01.jpg", "offer-02.jpg"]);
     assert.deepEqual(outcome.skipped, []);
@@ -347,25 +430,25 @@ describe("attaching the offer's pictures", () => {
     assert.match(outcome.filled[0].value, /2 handed/);
   });
 
-  it("says so instead of failing when the uploader is not on the page", () => {
+  it("says so instead of failing when the uploader is not on the page", async () => {
     const doc = docOf(formHtml(["111"], { pictures: false }));
-    const outcome = attachColnectPictures(doc, [photo("offer-01.jpg")]);
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg")]);
 
     assert.deepEqual(outcome.filled, []);
     assert.match(outcome.skipped[0].reason, /not on this page/);
   });
 
-  it("names *separate listings* when Colnect has switched the uploader off", () => {
+  it("names *separate listings* when Colnect has switched the uploader off", async () => {
     const doc = docOf(formHtml(["111"], { picturesDisabled: true }));
-    const outcome = attachColnectPictures(doc, [photo("offer-01.jpg")]);
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg")]);
 
     assert.deepEqual(attachedTo(doc), []);
     assert.match(outcome.skipped[0].reason, /separate sale listing/);
   });
 
-  it("leaves out a file type the form does not accept, and keeps the rest", () => {
+  it("leaves out a file type the form does not accept, and keeps the rest", async () => {
     const doc = docOf(formHtml(["111"]));
-    const outcome = attachColnectPictures(doc, [
+    const outcome = await attachColnectPictures(doc, [
       photo("offer-01.webp", "image/webp"),
       photo("offer-02.jpg"),
     ]);
@@ -375,17 +458,17 @@ describe("attaching the offer's pictures", () => {
     assert.match(outcome.skipped[0].reason, /image\/webp/);
   });
 
-  it("takes only the first picture when the input is not `multiple`, and says which were left", () => {
+  it("takes only the first picture when the input is not `multiple`, and says which were left", async () => {
     const doc = docOf(formHtml(["111"], { singlePicture: true }));
-    const outcome = attachColnectPictures(doc, [photo("offer-01.jpg"), photo("offer-02.jpg")]);
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg"), photo("offer-02.jpg")]);
 
     assert.deepEqual(attachedTo(doc), ["offer-01.jpg"]);
     assert.match(outcome.skipped[0].field, /offer-02\.jpg/);
   });
 
-  it("touches nothing when there is nothing to attach", () => {
+  it("touches nothing when there is nothing to attach", async () => {
     const doc = docOf(formHtml(["111"]));
-    const outcome = attachColnectPictures(doc, []);
+    const outcome = await attachColnectPictures(doc, []);
 
     assert.deepEqual(outcome, { filled: [], skipped: [] });
     assert.deepEqual(attachedTo(doc), []);
@@ -399,6 +482,43 @@ describe("attaching the offer's pictures", () => {
       </form></body></html>`
     );
     assert.equal(colnectPictureInput(doc)?.getAttribute("accept"), ".jpg,.jpeg,.png,.gif");
+  });
+
+  // #462. A live listing already carries pictures, and the offer's plan is the whole truth about what
+  // it should show — so the set is **replaced**, never added to.
+  it("clears the listing's existing pictures before uploading the current set", async () => {
+    const doc = docOf(formHtml(["111"], { uploaded: ["3vrJ8", "3vrw7"] }));
+    colnectDeletesPictures(doc);
+
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg")]);
+
+    assert.deepEqual(colnectUploadedPictures(doc), []);
+    assert.deepEqual(attachedTo(doc), ["offer-01.jpg"]);
+    assert.deepEqual(outcome.skipped, []);
+    assert.match(outcome.filled[0].value, /2 removed/);
+  });
+
+  it("uploads nothing when a picture would not go away, rather than duplicating the set", async () => {
+    const doc = docOf(formHtml(["111"], { uploaded: ["3vrJ8", "3vrw7"] }));
+    // Colnect answers for one of them and not the other, which is the case that would otherwise leave
+    // the live listing carrying both the old picture and every new one.
+    colnectDeletesPictures(doc, ["3vrw7"]);
+
+    const outcome = await attachColnectPictures(doc, [photo("offer-01.jpg")], {
+      removalTimeoutMs: 20,
+      removalPollMs: 5,
+    });
+
+    assert.deepEqual(attachedTo(doc), []);
+    assert.match(outcome.skipped[0].reason, /did not confirm 1 of the listing's existing picture\b/);
+    assert.match(outcome.skipped[0].reason, /nothing new was uploaded/);
+  });
+
+  it("costs a new sale form nothing — there is never anything to remove", async () => {
+    const doc = docOf(formHtml(["111"]));
+    const cleared = await removeColnectPictures(doc);
+
+    assert.deepEqual(cleared, { removed: 0, left: 0 });
   });
 
   it("reads an `accept` list by extension and by mime alike", () => {

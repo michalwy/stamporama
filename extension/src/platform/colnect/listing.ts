@@ -69,15 +69,65 @@ function declaredItemIds(items: readonly ListingTaskItem[]): string[] {
   return ids;
 }
 
-/** True for Colnect's new-sale form. The locale segment is whatever Colnect served — it may answer a
- *  `/en/` request in the seller's own language — and the trailing item list is not compared, since a
- *  redirect or a restored draft may word it differently than {@link colnectSaleFormUrl} did. */
+/**
+ * The **edit** form for the listing this offer is already live as (#462):
+ * `…/sell/edit/sale_id/<code>`, over the sale code the offer's stored listing URL carries (#412).
+ *
+ * Colnect serves the *same* form here that it serves at {@link colnectSaleFormUrl} — same
+ * `new_sale[…]` names, same grades, same uploader — so an update is this address and nothing else:
+ * {@link fillColnectSaleForm} needs no variant, and neither does the shell.
+ *
+ * The code is read off the entry's own address rather than stored separately, since the two are the
+ * same string; an edit address is accepted as well, so an offer whose URL was pasted in by hand from
+ * the seller's own screen still resolves.
+ *
+ * Throws when the offer carries no URL, or one that is not a Colnect sale — an edit form opened at a
+ * guessed address would be somebody else's listing, and this is the one step where guessing writes to
+ * a live marketplace.
+ */
+export function colnectSaleEditUrl(task: ListingTask): string {
+  const code = colnectSaleCode(task.listingUrl);
+  if (!code) {
+    throw new Error(
+      task.listingUrl?.trim()
+        ? `This offer's listing URL is not a Colnect sale, so there is no listing to edit: ${task.listingUrl}`
+        : "This offer carries no Colnect listing URL, so there is no listing to edit."
+    );
+  }
+  return `https://colnect.com/en/sell/edit/sale_id/${encodeURIComponent(code)}`;
+}
+
+/** The sale's own code, from either address Colnect states it at — the public entry (#412) or the
+ *  edit form. Null for anything else, including a Colnect page that is not a sale. */
+export function colnectSaleCode(url: string | null | undefined): string | null {
+  if (!url?.trim()) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return null;
+  const entry = /^\/[a-z]{2}\/market\/sale\/([^/]+)\/?$/.exec(u.pathname);
+  if (entry) return decodeURIComponent(entry[1]);
+  const edit = /^\/[a-z]{2}\/sell\/edit\/sale_id\/([^/]+)\/?$/.exec(u.pathname);
+  return edit ? decodeURIComponent(edit[1]) : null;
+}
+
+/** True for either form Colnect fills a listing in: the new-sale form and the edit form of a live one
+ *  (#462). One question rather than two because the shell asks it about the page it is standing on and
+ *  the answer is the same — this is the form, fill it.
+ *
+ *  The locale segment is whatever Colnect served — it may answer a `/en/` request in the seller's own
+ *  language — and the trailing item list is not compared, since a redirect or a restored draft may
+ *  word it differently than {@link colnectSaleFormUrl} did. */
 export function isColnectSaleFormUrl(url: string): boolean {
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, "");
     if (host !== "colnect.com" && !host.endsWith(".colnect.com")) return false;
-    return /^\/[a-z]{2}\/sell\/new\//.test(u.pathname);
+    return /^\/[a-z]{2}\/sell\/(new|edit)\//.test(u.pathname);
   } catch {
     return false;
   }
@@ -96,6 +146,9 @@ export function isColnectSaleFormUrl(url: string): boolean {
  * (#402), so one such control anywhere in the document is the form having arrived. Deliberately not
  * the *price* field or any other single one — a form Colnect has switched a field off on is still the
  * form, and this question is only ever "has the page loaded".
+ *
+ * The **edit** form (#462) answers it unchanged, keying its fields the same way — which is the whole
+ * reason an update needed no second implementation of anything below.
  */
 export function isColnectSaleFormDocument(doc: Document): boolean {
   return doc.querySelector('[name^="new_sale["]') !== null;
@@ -334,6 +387,92 @@ export function colnectListedSaleUrl(url: string): string | null {
 /** How the report names the picture step, matching the neutral shell's own label. */
 const PICTURES_FIELD = "Pictures";
 
+/** How the report names the removal half of a replacement (#462) — its own label rather than a second
+ *  `Pictures` line, since the strip lists the filled fields by name and "Pictures, Pictures" says
+ *  nothing. */
+const PICTURES_REMOVED_FIELD = "Pictures replaced";
+
+/** How long to wait for Colnect to confirm one deletion, and how often to look. Each removal is its
+ *  own AJAX round-trip, so the wait is per picture and generous enough for a slow answer while still
+ *  ending — a listing whose old pictures never go away must be *said*, not waited on for ever. */
+const PICTURE_REMOVAL_TIMEOUT_MS = 15_000;
+const PICTURE_REMOVAL_POLL_MS = 100;
+
+/** The already-uploaded pictures of a live listing, in the order Colnect shows them (#462). Empty on
+ *  the new-sale form, which is what makes {@link attachColnectPictures} one function for both. */
+export function colnectUploadedPictures(doc: Document): HTMLElement[] {
+  return Array.from(
+    doc.querySelectorAll<HTMLElement>(".dz-ready-images .dz-preview[data-id]")
+  );
+}
+
+/** The delete control of one uploaded picture — an `ajax-link` Colnect handles itself, with no
+ *  confirmation in front of it. */
+function pictureDeleteButton(preview: HTMLElement): HTMLElement | null {
+  return preview.querySelector<HTMLElement>("a.del-button");
+}
+
+/** Whether Colnect has taken this picture off the page yet — asked by re-reading the document rather
+ *  than by holding onto the node, since it is Colnect's own script that removes it. */
+function pictureStillThere(doc: Document, id: string): boolean {
+  return colnectUploadedPictures(doc).some((el) => el.getAttribute("data-id") === id);
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface ColnectPictureRemoval {
+  /** Pictures Colnect confirmed gone. */
+  removed: number;
+  /** Pictures still on the listing — a deletion that was asked for and never confirmed, or one with
+   *  no control to ask with. Non-zero is what stops the upload. */
+  left: number;
+}
+
+/**
+ * Take every already-uploaded picture off the listing being edited (#462), and say how it went.
+ *
+ * A **replacement, not an addition**: the offer's plan is the whole truth about what this listing
+ * shows, so a second update that merely added to what was there would leave the listing carrying two
+ * of every picture. The order matters too — the first picture is Colnect's main one — and there is no
+ * way to insert into the existing set.
+ *
+ * One at a time, and each one waited out: every delete is its own AJAX round-trip to Colnect, and a
+ * burst of them is how an account earns a rate limit in the middle of an edit (#487's reasoning on the
+ * upload side, arriving at the same answer here). Bounded per picture, because a deletion that never
+ * comes back has to be *reported* rather than waited on.
+ *
+ * A no-op on the new-sale form, which has nothing uploaded — which is why the caller does not ask
+ * which form it is on.
+ */
+export async function removeColnectPictures(
+  doc: Document,
+  opts: { timeoutMs?: number; pollMs?: number } = {}
+): Promise<ColnectPictureRemoval> {
+  const timeoutMs = opts.timeoutMs ?? PICTURE_REMOVAL_TIMEOUT_MS;
+  const pollMs = opts.pollMs ?? PICTURE_REMOVAL_POLL_MS;
+
+  let removed = 0;
+  let left = 0;
+  for (const preview of colnectUploadedPictures(doc)) {
+    const id = preview.getAttribute("data-id");
+    const button = pictureDeleteButton(preview);
+    if (!id || !button) {
+      left += 1;
+      continue;
+    }
+    button.click();
+    const deadline = Date.now() + timeoutMs;
+    while (pictureStillThere(doc, id) && Date.now() < deadline) {
+      await wait(pollMs);
+    }
+    if (pictureStillThere(doc, id)) left += 1;
+    else removed += 1;
+  }
+  return { removed, left };
+}
+
 /**
  * The sale form's real file input, behind the Dropzone.
  *
@@ -372,19 +511,48 @@ export function colnectAcceptsPicture(accept: string | null, fileName: string, m
 }
 
 /**
- * Hand `photos` to the Dropzone's own input, in upload order, and stop (#411).
+ * Hand `photos` to the Dropzone's own input, in upload order, and stop (#411) — after clearing
+ * whatever the listing already carries (#462).
  *
  * Reports rather than throws, like every other step: a picture the form will not take is one the
  * collector drags in from the offer's ZIP, and the filled form has to survive that. The report says
  * the pictures were **handed over**, not that they arrived — the upload is Colnect's own AJAX and the
  * thumbnails appearing in the Dropzone are what confirms it, right where the collector is looking.
+ *
+ * Asynchronous since #493 opened that door for Allegro, and used here for a plainer reason: clearing
+ * the old set is a round-trip per picture, and uploading on top of pictures that have not gone away
+ * yet is exactly the duplicate this replaces.
  */
-export function attachColnectPictures(
+export async function attachColnectPictures(
   doc: Document,
-  photos: readonly ListingPhotoFile[]
-): ListingFillOutcome {
+  photos: readonly ListingPhotoFile[],
+  /** How long to give Colnect to confirm each deletion. Only ever passed by tests, which have no
+   *  Colnect to answer them; the shell calls this with two arguments, as the interface states. */
+  opts: { removalTimeoutMs?: number; removalPollMs?: number } = {}
+): Promise<ListingFillOutcome> {
   const report = new FillReport();
   if (photos.length === 0) return report.outcome();
+
+  // Ahead of everything else, including finding the input: on a new sale there is nothing to remove
+  // and this costs a single empty query, while on an edit it is the step that decides whether
+  // uploading is safe at all.
+  const cleared = await removeColnectPictures(doc, {
+    timeoutMs: opts.removalTimeoutMs,
+    pollMs: opts.removalPollMs,
+  });
+  if (cleared.removed > 0) {
+    report.fill(PICTURES_REMOVED_FIELD, `${cleared.removed} removed from the listing`);
+  }
+  if (cleared.left > 0) {
+    // Nothing is uploaded on top of pictures that are still there — that is the duplicated set this
+    // exists to prevent, and it would be duplicated on the *live* listing. The form stays filled and
+    // the pictures are the one step with a hand fallback that is already written down (#411).
+    report.skip(
+      PICTURES_FIELD,
+      `Colnect did not confirm ${cleared.left} of the listing's existing picture${cleared.left === 1 ? "" : "s"} was removed, so nothing new was uploaded — remove them on the form and drag the offer's ZIP in.`
+    );
+    return report.outcome();
+  }
 
   const input = colnectPictureInput(doc);
   if (!input) {
@@ -448,9 +616,10 @@ function putFiles(input: HTMLInputElement, files: File[]): void {
   input.files = dt.files;
 }
 
-/** The Colnect module's listing half (#410, closed off by #412, pictures in #411). */
+/** The Colnect module's listing half (#410, closed off by #412, pictures in #411, updates in #462). */
 export const colnectListing: PlatformListing = {
   formUrl: colnectSaleFormUrl,
+  editUrl: colnectSaleEditUrl,
   isFormUrl: isColnectSaleFormUrl,
   isFormDocument: isColnectSaleFormDocument,
   fill: fillColnectSaleForm,

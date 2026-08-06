@@ -24,7 +24,11 @@ import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
-import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
+import {
+  AssistantOutcome,
+  ListViaAssistantButton,
+  UpdateViaAssistantButton,
+} from "../assistant-listing";
 import { PublishToAllegroButton } from "../allegro/publish-to-allegro";
 import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
@@ -502,6 +506,26 @@ export function OfferDetailPanel({
                 onStart={() => {
                   setActionError(undefined);
                   void startHandoff(offerId);
+                }}
+              />
+            )}
+            {/* The other half of the same handoff (#462): once the listing exists, the way to change
+                what it says is to go back to it. Only on an Active offer — the button's own rules do
+                the rest, and there is deliberately no equivalent in the bulk workspace, which is
+                scoped to Ready offers because posting is what a batch is for. */}
+            {offer.state === "active" && (
+              <UpdateViaAssistantButton
+                platformModule={offer.platformModule}
+                listingUrl={offer.url}
+                present={assistantPresent}
+                blockerCount={offer.listingUpdateBlockers.length}
+                busy={false}
+                running={handoffRunning}
+                disabled={isPending}
+                style={ASSISTANT_BTN}
+                onStart={() => {
+                  setActionError(undefined);
+                  void startHandoff(offerId, "update");
                 }}
               />
             )}

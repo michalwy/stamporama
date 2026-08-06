@@ -156,6 +156,17 @@ is done, the offer's card in Stamporama lists what was filled and what was skipp
 couldn't answer — a condition with no grade on that platform, a text over the platform's limit — is
 something you learn there rather than after posting.
 
+### Going back to a listing that is already live
+
+An **Active** offer's header carries **⟳ Update via Assistant** instead, which opens the *edit* form of
+the listing the offer is already posted as and re-fills it the same way. Everything is reloaded from
+the offer whether or not it changed, and the listing's pictures are **replaced** with the offer's
+current set rather than added to. Saving changes nothing in Stamporama — the offer was already live.
+
+Colnect serves the same form at an edit address, so its listings can be updated this way; Allegro's
+cannot, and is corrected on Allegro's own screen. The details are in the
+[offers guide](offers.md#update-via-assistant).
+
 ### Allegro's form is a longer walk
 
 Colnect's sale form is at an address, and opening it is the whole of getting there. Allegro's is not:

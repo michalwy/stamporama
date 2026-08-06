@@ -57,6 +57,18 @@ export interface ListingModuleRules {
   /** Where the collector maps those grades, by the name of the screen — the refusal names it, and
    *  only a module that asks for them has one. Null with {@link requiresPlatformCondition}. */
   conditionMappingLocation: string | null;
+  /**
+   * Whether this module can re-fill a listing that is **already live** (#462) — the question
+   * **⟳ Update via Assistant** asks.
+   *
+   * A third question rather than a consequence of the other two, for {@link hasListingModule}'s own
+   * reason: posting a listing and editing one are two different pages, and a marketplace that has the
+   * first has not thereby got the second. Colnect serves the very same form at an edit address, so
+   * one module answers both; Allegro's Assistant path (#493) enters its form through a category modal
+   * that only exists on the way to a *new* listing, and an offer already posted there is corrected on
+   * Allegro's own screen.
+   */
+  supportsUpdate: boolean;
 }
 
 const LISTING_MODULE_RULES: Record<string, ListingModuleRules> = {
@@ -64,6 +76,10 @@ const LISTING_MODULE_RULES: Record<string, ListingModuleRules> = {
     requiresCatalogItemId: true,
     requiresPlatformCondition: true,
     conditionMappingLocation: "Settings → Colnect",
+    // Colnect serves the **same** form at `…/sell/edit/sale_id/<code>` that it serves at
+    // `…/sell/new/…` — same field names, same grades, same uploader (#462) — so the module that fills
+    // one fills the other, and an update is a second address rather than a second implementation.
+    supportsUpdate: true,
   },
   // Allegro's form asks for **neither** (#493). A listing is filed under a category with that
   // category's parameters (#488), not against a catalogue entry, so there is no item-ID to point at;
@@ -76,6 +92,10 @@ const LISTING_MODULE_RULES: Record<string, ListingModuleRules> = {
     requiresCatalogItemId: false,
     requiresPlatformCondition: false,
     conditionMappingLocation: null,
+    // Allegro's Assistant form is reached through a sequence that only exists on the way to a *new*
+    // listing (#493's `prepare`: opt-out link → product search → category modal), and a published
+    // offer is edited on Allegro's own screen. Not a gap in this module — a different page.
+    supportsUpdate: false,
   },
 };
 
@@ -127,4 +147,15 @@ export function usesPlatformCatalogue(platformModule: string | null): boolean {
  *  question the condition map is loaded on. */
 export function usesPlatformConditions(platformModule: string | null): boolean {
   return listingModuleRules(platformModule)?.requiresPlatformCondition ?? false;
+}
+
+/**
+ * Whether an offer already live on this platform can be re-filled through the Assistant (#462) — the
+ * question **⟳ Update via Assistant** asks, and the one the update mode of the listing kit refuses on.
+ *
+ * Asked separately from {@link hasListingModule} for that function's own reason, one module later: a
+ * marketplace the Assistant can post to is not thereby a marketplace it can go back and correct.
+ */
+export function supportsAssistantUpdate(platformModule: string | null): boolean {
+  return listingModuleRules(platformModule)?.supportsUpdate ?? false;
 }

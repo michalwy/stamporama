@@ -9,6 +9,10 @@ import { getOfferListingKit } from "@/lib/listing-kit";
 // Session **or** Assistant bearer token, like the matcher endpoints (#250): the extension reaches us
 // cross-site from colnect.com, where the session cookie is not sent. Nothing is written here; the
 // write-back (listing URL, activation) is its own issue (#412).
+//
+// `?mode=update` asks for the same kit for a listing that is **already live** (#462). It is a
+// parameter rather than a second endpoint because the payload is identical — what differs is only
+// which offer may be served, and that is a precondition like every other one below.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string; offerId: string }> }
@@ -19,9 +23,13 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Anything other than the one word is the ordinary listing: a mistyped parameter must not quietly
+  // ask for a different act on somebody's live listing.
+  const mode = request.nextUrl.searchParams.get("mode") === "update" ? "update" : "create";
+
   let kit;
   try {
-    kit = await getOfferListingKit(ownerId, collectionId, offerId);
+    kit = await getOfferListingKit(ownerId, collectionId, offerId, mode);
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

@@ -18,8 +18,16 @@
 export interface ListingTask {
   offerId: string;
   collectionId: string;
-  /** The offer's lifecycle state (#405). `ready` for anything the workspace hands over. */
+  /** The offer's lifecycle state (#405). `ready` for anything the workspace hands over, and `active`
+   *  for an update (#462). */
   state: string;
+  /** Whether this posts a new listing or re-fills one already live (#462). **Optional**, and absent
+   *  means `create`: an instance predating the update flow serves a kit without it, and the shell must
+   *  read that as the act it has always been rather than as a malformed task. */
+  mode?: ListingMode;
+  /** The listing's address on the platform (#412), which an update navigates back to and a module
+   *  turns into its own edit address. Null on an offer that carries none. */
+  listingUrl?: string | null;
   /** The platform, and the module id that knows its sale form — `Contact.platformModule` (#406),
    *  matched against `PlatformModule.id`. Null when the platform names none, which the endpoint
    *  refuses; the shell refuses it too rather than guessing a module. */
@@ -104,6 +112,10 @@ export interface ListingTaskAllegroProfile {
 }
 
 export type ListingDescriptionFormat = "plain" | "html" | "markdown";
+
+/** Mirror of the instance's own `ListingMode` (#462): posting a listing, or correcting one that is
+ *  already live. Every other field of a task means the same thing in both. */
+export type ListingMode = "create" | "update";
 
 /** One copy of the listing. `catalogItemId` and `condition.platformValue` are non-null on a servable
  *  task — that is exactly what the preconditions check — but stay nullable in the shape, because the
@@ -195,6 +207,23 @@ export interface PlatformListing {
    *  Broader than an equality test against {@link formUrl}: the platform may redirect, add its own
    *  parameters, or restore a draft. */
   isFormUrl(url: string): boolean;
+  /**
+   * The URL of the form that edits the listing this task is **already live as** (#462), built from
+   * the task's own `listingUrl`.
+   *
+   * **Optional**, and the counterpart of {@link formUrl} rather than a variant of it: a marketplace
+   * whose live listing cannot be reached and re-filled simply has none, and the instance never offers
+   * **⟳ Update via Assistant** for it. Colnect has one because it serves the identical form at a
+   * second address — which is why the module needs no second {@link fill}, and why this is a URL and
+   * not a whole second half of the interface.
+   *
+   * A page at this address must also answer {@link isFormUrl}, since that is what the shell checks
+   * before it fills anything.
+   *
+   * Throws when the task's listing URL is missing or is not one this module recognises — a refusal the
+   * shell reports, because an edit form opened at a guessed address is somebody else's listing.
+   */
+  editUrl?(task: ListingTask): string;
   /**
    * True when `doc` — a document already at {@link isFormUrl} — actually **holds** the sale form
    * (#419).

@@ -923,6 +923,37 @@ listing is often posted from there rather than from a batch, and it behaves iden
 and self-activation included. That header's own **▲ Activate** stays there for everything posted by
 hand.
 
+### Update via Assistant
+
+Once a listing is live, the way to change what it says is to go back to it — and an **Active** offer's
+header carries **⟳ Update via Assistant** where the first button used to be. It opens the *edit* form
+of the listing this offer is already posted as, at the address the offer records, and re-fills it from
+the offer as it now stands: the price, the number of sets, both texts, each copy's condition and the
+pictures.
+
+It **reloads everything**, whether or not anything changed. Stamporama does not keep a copy of what
+was last posted, so it makes no claim about what has drifted — leaving a field out because it looked
+unchanged is how a listing quietly keeps an older value.
+
+The **pictures are replaced, not added to**: every picture already on the listing is deleted first and
+the offer's current upload set goes up in its place, in the offer's own order. If one of the old
+pictures will not go away, nothing new is uploaded and the report says so — a listing carrying two of
+everything is worse than one you finish by hand.
+
+Everything else works as the first listing does. Nothing is submitted; you look the form over and
+press the platform's own Save. Saving changes nothing in Stamporama — the offer was Active before the
+update and is Active after it, still carrying the same listing URL — so the report simply says the
+listing was updated.
+
+It is offered only where the platform's module can reach a live listing at all. **Colnect** can, since
+it serves the same form at an edit address. Allegro's Assistant form is entered on the way to a *new*
+listing and has no edit path, so an Allegro listing is corrected on Allegro's own screen. The button
+is also absent on an Active offer with **no listing URL** recorded — there is no listing to go back to;
+paste the address into the offer's header first.
+
+The composition is **not** something an update can change. Selling some of the sets is a smaller
+quantity, which the form does edit; an offer whose stamps are different is a different listing.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

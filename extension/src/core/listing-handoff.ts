@@ -54,9 +54,21 @@ export interface ListingHandoff {
  *     accepted answer. Distinct from `error` because nothing failed, and distinct from `filled`
  *     because the listing now exists.
  *
+ *   • `updated` — an **edit** of a live listing was saved (#462). Its own state rather than `listed`,
+ *     because nothing about the offer changes: it was Active before and it is Active after, and the
+ *     URL the page would have published is the address this run was sent to. It also does not split
+ *     into two the way the pair above does — the listing existed either way, so reading its URL back
+ *     adds nothing worth a separate answer.
+ *
  * A submission the collector abandons produces none of them: an untouched Ready offer is not news.
  */
-export type ListingHandoffState = "running" | "filled" | "listed" | "unread" | "error";
+export type ListingHandoffState =
+  | "running"
+  | "filled"
+  | "listed"
+  | "unread"
+  | "updated"
+  | "error";
 
 export const LISTING_STATE_ATTRIBUTE = "data-listing-state";
 export const LISTING_REQUEST_ATTRIBUTE = "data-listing-request";
@@ -134,6 +146,12 @@ export function describeListingReport(report: ListingHandoffReport): string {
  *  the marketplace, which is the part only the extension saw. */
 export function describeListedReport(report: ListingHandoffReport): string {
   return `Posted on ${report.moduleName}. Activating this offer with the listing's URL…`;
+}
+
+/** One sentence for an `updated` answer (#462): the edit was saved on the marketplace, and that is the
+ *  whole of it — there is nothing for the page to do afterwards, which is exactly what it says. */
+export function describeUpdatedReport(report: ListingHandoffReport): string {
+  return `The listing was updated on ${report.moduleName}. Nothing to do here — this offer was already live.`;
 }
 
 /** One sentence for an `unread` answer (#412). It names the listing as posted first, because that is

@@ -47,6 +47,26 @@ fields is the module's own. Driving it is two pure steps around the navigation t
 (`resolveListingTarget` → `fillListing`), with the tab-opening and the report back to the instance
 left to the wiring (#407/#409) — the part a second marketplace reuses without change.
 
+**Updating a live listing is a second address, not a second half (#462).** Correcting a listing that
+is already posted reuses the whole of the above and adds one optional member — `editUrl(task)`, the
+form that edits the listing the task's own `listingUrl` names — because on Colnect the edit page *is*
+the sale form: same `new_sale[…]` fields, same grades, same uploader. So `fill` needs no variant,
+`isFormUrl` simply answers for both addresses, and the only thing the task's `mode` decides is which
+URL is opened. Optional for `attachPhotos`' reason: posting to a marketplace is no promise that a
+posted listing can be reached again, and Allegro's Assistant form (#493) is entered through a sequence
+that exists only on the way to a *new* listing.
+
+Two consequences are deliberate. **Nothing records what was last posted**, so an update reloads every
+field rather than diffing — a field left out because it looked unchanged is how a listing quietly
+keeps an older value, and a snapshot would be a second copy of the offer to keep honest. And an
+update's pictures are a **replacement**: the listing's existing set is deleted first, one AJAX
+round-trip each and each one waited out, because appending would leave the live listing carrying two
+of everything on the second run. A deletion Colnect does not confirm stops the upload rather than
+duplicating the set — the form stays filled and the offer's ZIP is the fallback it already had.
+Saving an edit is reported as `updated` and writes **nothing**: the offer was Active before the run
+and carries the very URL the run was sent to, so the publish path (#412) is not merely skipped but
+unreachable.
+
 **A third half, and every half optional (#355).** Capturing one **auction listing** for the
 [watchlist](0021-auction-tracking-model.md) is neither of the two above: it reads a page, but it
 reads *one lot* rather than the stamps on a catalogue page, and it produces a watchlist entry rather

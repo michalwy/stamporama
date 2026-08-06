@@ -197,6 +197,15 @@ export interface ListedNotice {
   formUrl: string;
   /** The entry's own URL, or null when the sale was posted and it could not be read. */
   listedUrl: string | null;
+  /**
+   * Which act was saved (#462). Absent means `create`, the only one there used to be.
+   *
+   * An `update` is the same event on the same page — Colnect answers a saved edit with the listing's
+   * own entry — and a **different fact**: the listing already existed, the offer is already Active,
+   * and the URL is the one this run was sent to. So the page reports it and does nothing else, and the
+   * worker's POST fallback is never reached: there is nothing to write back.
+   */
+  mode?: "create" | "update";
 }
 export interface ListedResponse {
   /** True when the page is still following this handoff, so it is the one activating the offer. */

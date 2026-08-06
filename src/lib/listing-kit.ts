@@ -7,7 +7,11 @@ import {
   getOfferPhotoPlanState,
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
-import { evaluateListingPreconditions, type ListingBlocker } from "./listing-preconditions";
+import {
+  evaluateListingPreconditions,
+  type ListingBlocker,
+  type ListingMode,
+} from "./listing-preconditions";
 import {
   ALLEGRO_PLATFORM_MODULE,
   usesPlatformCatalogue,
@@ -99,6 +103,15 @@ export interface OfferListingKit {
   offerId: string;
   collectionId: string;
   state: OfferState;
+  /** Whether this kit is for posting a new listing or for re-filling one already live (#462). The
+   *  payload is otherwise **identical** — an update reloads every field from the offer, exactly as a
+   *  first listing does, because nothing here records what was last posted and a field left out of an
+   *  edit would quietly keep the platform's older value. */
+  mode: ListingMode;
+  /** The listing's own address on the platform (`Offer.url`, #412) — what an update navigates back to,
+   *  and null on an offer that has none. Carried in both modes: it is a fact about the offer, and a
+   *  create task naming the listing it is about to replace would be the more surprising shape. */
+  listingUrl: string | null;
   /** The platform, and the Assistant module that knows its sale form (#406) — null when it names
    *  none, which is itself the `no-platform-module` refusal below. */
   platform: { id: string; name: string; module: string | null };
@@ -155,11 +168,15 @@ const KIT_ITEM_SELECT = {
  * `blockers` (#406), and the workspace card reads the very same evaluation to say why before the
  * handoff is offered. Where a precondition fails the affected fields are simply null — nothing is
  * guessed, and a wrong grade or an unmatched stamp is never papered over.
+ *
+ * `mode` decides only **which offer** may be served (#462) — Ready and unposted, or Active and live —
+ * never what is in the payload. An update is the same listing read again.
  */
 export async function getOfferListingKit(
   ownerId: string,
   collectionId: string,
-  offerId: string
+  offerId: string,
+  mode: ListingMode = "create"
 ): Promise<OfferListingKit | null> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
@@ -173,6 +190,7 @@ export async function getOfferListingKit(
       descriptionFormat: true,
       price: true,
       currency: true,
+      url: true,
       collection: { select: { ownerId: true } },
       platform: { select: { id: true, name: true, platformModule: true } },
       sets: {
@@ -225,6 +243,8 @@ export async function getOfferListingKit(
   const blockers = evaluateListingPreconditions({
     platformModule,
     state: offer.state as OfferState,
+    mode,
+    listingUrl: offer.url,
     sets: sets.map((s) => ({
       setId: s.setId,
       label: s.label,
@@ -248,6 +268,8 @@ export async function getOfferListingKit(
     offerId: offer.id,
     collectionId: offer.collectionId,
     state: offer.state as OfferState,
+    mode,
+    listingUrl: offer.url,
     platform: {
       id: offer.platform.id,
       name: offer.platform.name,

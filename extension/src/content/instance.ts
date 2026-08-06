@@ -3,6 +3,7 @@ import {
   describeListedReport,
   describeListingReport,
   describeUnreadReport,
+  describeUpdatedReport,
   LISTING_ELEMENT_ID,
   LISTING_MESSAGE_ATTRIBUTE,
   LISTING_REPORT_ATTRIBUTE,
@@ -228,12 +229,18 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
           skipped: [],
           ...(msg.listedUrl ? { listedUrl: msg.listedUrl } : {}),
         };
-        report(
-          msg.requestId,
-          msg.listedUrl ? "listed" : "unread",
-          msg.listedUrl ? describeListedReport(detail) : describeUnreadReport(detail),
-          detail
-        );
+        // An update is one answer rather than two (#462): the listing existed before this run, so
+        // whether its URL was read back changes nothing the page would act on.
+        if (msg.mode === "update") {
+          report(msg.requestId, "updated", describeUpdatedReport(detail), detail);
+        } else {
+          report(
+            msg.requestId,
+            msg.listedUrl ? "listed" : "unread",
+            msg.listedUrl ? describeListedReport(detail) : describeUnreadReport(detail),
+            detail
+          );
+        }
       }
       sendResponse({ taken });
     }

@@ -98,6 +98,8 @@ export async function runListingTask(
       offerId: task.offerId,
       collectionId: task.collectionId,
       requestId,
+      // What a Save on this page will mean (#462) — see `PendingListing.mode`.
+      mode: task.mode === "update" ? "update" : "create",
       instanceTabId: sender?.id ?? null,
       instanceOrigin: originOf(sender?.url),
       submitted: false,
@@ -330,6 +332,7 @@ export async function listingSubmitted(tabId: number | undefined): Promise<void>
  * simply told so.
  */
 async function deliverListedUrl(pending: PendingListing, listedUrl: string | null): Promise<void> {
+  const update = pending.mode === "update";
   const notice: ListedNotice = {
     type: "listed",
     requestId: pending.requestId,
@@ -338,6 +341,7 @@ async function deliverListedUrl(pending: PendingListing, listedUrl: string | nul
     moduleName: pending.moduleName,
     formUrl: pending.formUrl,
     listedUrl,
+    mode: update ? "update" : "create",
   };
 
   let taken = false;
@@ -352,6 +356,12 @@ async function deliverListedUrl(pending: PendingListing, listedUrl: string | nul
     }
   }
   if (taken || !listedUrl) return;
+
+  // An **update** has nothing to write back (#462): the offer is already Active and already carries
+  // this very URL — it is the address this run was sent to. The page is told, because a collector
+  // watching the strip wants to know the edit was saved; nobody else needs to hear about it, and the
+  // POST below exists solely to make a listing *exist* in Stamporama.
+  if (update) return;
 
   const profile = await profileForListing(pending.instanceOrigin, pending.collectionId);
   if (!profile) {

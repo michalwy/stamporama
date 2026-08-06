@@ -52,6 +52,7 @@ import { colnectMarketUrl, colnectSearchUrl, colnectStampUrl } from "./colnect-l
 import {
   evaluateListingPreconditions,
   type ListingBlocker,
+  type ListingMode,
 } from "./listing-preconditions";
 import {
   hasListingModule,
@@ -2532,12 +2533,18 @@ function listingBlockersFor(
   platformModule: string | null,
   labeller: OfferLabeller,
   conditionMap: Map<string, string>,
-  state: OfferState
+  state: OfferState,
+  /** Which act is being judged (#462) — posting this offer, or re-filling the listing it is already
+   *  live as. Only the leading state check differs; everything about the goods is asked either way. */
+  mode: ListingMode = "create",
+  listingUrl: string | null = null
 ): ListingBlocker[] {
   if (!hasListingModule(platformModule)) return [];
   return evaluateListingPreconditions({
     platformModule,
     state,
+    mode,
+    listingUrl,
     sets: sets.map((set) => ({
       setId: set.id,
       label: labeller.set(set),
@@ -2864,6 +2871,11 @@ export interface OfferDetail {
    * (#405) use. Note it is evaluated at the offer's **own** state, so anything not Ready reports
    * `not-ready` alone. */
   listingBlockers: ListingBlocker[];
+  /** Why the Assistant cannot **update** the listing this offer is already live as (#462) — the same
+   * evaluation asked about the other act, and empty when it can. Anything not Active reports
+   * `not-active` alone, and an Active offer with no listing URL reports `no-listing-url`: both are
+   * why **⟳ Update via Assistant** is absent rather than refused. */
+  listingUpdateBlockers: ListingBlocker[];
   /** Why this offer cannot be marked **Ready** (#418) — the listing preconditions judged at the state
    * it is about to reach rather than at the one it is in, plus the state of its listing photos
    * (#311): a listing whose images do not exist, or were rendered from a composition it no longer
@@ -3282,6 +3294,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     },
     platformModule,
     listingBlockers: listingBlockersFor(offer.sets, platformModule, labeller, conditionMap, state),
+    // The same evaluation asked as an **update** (#462). Its own field rather than a mode on the one
+    // above, because the two answer about different acts and are read by two different controls: an
+    // Active offer reports `not-ready` to the first — correctly, there is nothing to post — while the
+    // second is asking whether the listing that exists can be corrected.
+    listingUpdateBlockers: listingBlockersFor(
+      offer.sets,
+      platformModule,
+      labeller,
+      conditionMap,
+      state,
+      "update",
+      offer.url
+    ),
     // The same evaluation at the target state (#418), so the header can disable **Mark ready** with
     // the reasons rather than let the collector press it and be refused. The preconditions reuse this
     // screen's own sets and condition map — a second read would be the same answer at twice the cost;

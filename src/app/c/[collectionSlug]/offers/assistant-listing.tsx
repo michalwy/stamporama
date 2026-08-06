@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { hasListingModule } from "@/lib/platform-modules";
+import { hasListingModule, supportsAssistantUpdate } from "@/lib/platform-modules";
 import type { AssistantHandoff } from "./assistant-handoff";
 
 // The two controls of the Assistant handoff (#407/#414), shared by the surfaces that offer it: the
@@ -22,12 +22,15 @@ export function assistantHint({
   blockerCount,
   present,
   busy,
+  /** What the Assistant would be doing — the only word the two buttons say differently. */
+  act = "post it",
 }: {
   blockerCount: number;
   present: string | null;
   busy: boolean;
+  act?: string;
 }): string | null {
-  if (blockerCount > 0) return "Fix what this offer lists before the Assistant can post it";
+  if (blockerCount > 0) return `Fix what this offer lists before the Assistant can ${act}`;
   if (!present) {
     return "The Stamporama Assistant is not installed in this browser, or it has not been connected to this instance";
   }
@@ -93,6 +96,69 @@ export function ListViaAssistantButton({
 }
 
 /**
+ * **⟳ Update via Assistant** — the same handoff, aimed at the listing this offer is **already live
+ * as** (#462): the extension opens the platform's edit form for that listing and re-fills it from the
+ * offer as it now stands.
+ *
+ * Deliberately a second button rather than a mode on the one above, on the surfaces' own terms: the
+ * two are never offered together — one is a Ready offer's step and the other an Active one's — so a
+ * control that changed meaning with the offer's state would be a control nobody could describe.
+ *
+ * Renders nothing where the platform's module cannot edit a live listing, and nothing without a
+ * listing URL to go back to. Both are facts about the platform and the offer rather than faults to
+ * fix, and #273's "disable with the reason" is for the second kind.
+ */
+export function UpdateViaAssistantButton({
+  platformModule,
+  listingUrl,
+  present,
+  blockerCount,
+  busy,
+  running,
+  disabled,
+  style,
+  onStart,
+}: {
+  platformModule: string | null;
+  /** The offer's own listing URL. Without one there is no listing to open. */
+  listingUrl: string | null;
+  present: string | null;
+  blockerCount: number;
+  busy: boolean;
+  running: boolean;
+  disabled?: boolean;
+  style: React.CSSProperties;
+  onStart: () => void;
+}) {
+  if (!supportsAssistantUpdate(platformModule) || !listingUrl?.trim()) return null;
+  const hint = assistantHint({ blockerCount, present, busy, act: "update the listing" });
+  const inert = hint !== null || running;
+
+  return (
+    <Tooltip
+      content={
+        hint ??
+        "Open this listing's edit form on the platform, re-filled from this offer as it now stands. Its pictures are replaced with the current set. Nothing is saved — you check it and submit it yourself."
+      }
+    >
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={inert || disabled}
+        style={{
+          ...style,
+          opacity: inert || disabled ? 0.55 : 1,
+          cursor: inert ? "default" : "pointer",
+        }}
+      >
+        <span aria-hidden>⟳</span>
+        {running ? "Updating…" : "Update via Assistant"}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
  * How the handoff went — a strip under the line the offer is on, so it is read where the offer is.
  *
  * The extension's outcome is a **report, not a verdict** (#408): `filled` and `skipped` both come
@@ -105,6 +171,8 @@ export function ListViaAssistantButton({
  * has its own publish control in view at the same time, so a second one here is the same button twice.
  * From `listed` on (#412) the collector has submitted it and the publication is this strip's own doing,
  * so there is nothing left to press either: the strip reports what happened and links to the listing.
+ * `updated` (#462) is the same shape with nothing behind it at all — the offer was Active before the
+ * run — which is why it reads as a plain ✓ and not as a step that led anywhere.
  */
 export function AssistantOutcome({
   handoff,
@@ -117,12 +185,14 @@ export function AssistantOutcome({
   // as fetching the kit does.
   const running =
     handoff.state === "loading" || handoff.state === "running" || handoff.state === "listed";
+  const done =
+    handoff.state === "filled" || handoff.state === "activated" || handoff.state === "updated";
   const tone =
     handoff.state === "error"
       ? "var(--color-error)"
       : handoff.state === "unread"
         ? "var(--color-warning)"
-        : handoff.state === "filled" || handoff.state === "activated"
+        : done
           ? "var(--color-accent)"
           : "var(--color-border)";
   const report = handoff.report;
@@ -141,13 +211,7 @@ export function AssistantOutcome({
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <span aria-hidden style={{ fontSize: "0.75rem" }}>
-          {handoff.state === "error"
-            ? "⚠"
-            : handoff.state === "unread"
-              ? "⚠"
-              : handoff.state === "filled" || handoff.state === "activated"
-                ? "✓"
-                : "⚡"}
+          {handoff.state === "error" || handoff.state === "unread" ? "⚠" : done ? "✓" : "⚡"}
         </span>
         <span
           style={{

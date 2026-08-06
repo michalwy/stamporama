@@ -17,13 +17,28 @@ import { listingModuleRules } from "./platform-modules";
 // by gaining a sale form; `listingModuleRules` is where each module states what its form asks for.
 // What is left over is shell-wide, being about the offer rather than about anyone's form.
 
+/**
+ * Which act a listing task is (#462): posting a listing that does not exist yet, or re-filling one
+ * that is already live on the platform.
+ *
+ * The two share every rule about the *goods* — a wrong grade is as wrong on an edit form as on a new
+ * one — and differ only in what the offer has to **be**: `create` starts from a Ready offer with
+ * nothing posted, `update` from an Active one whose listing has an address to go back to.
+ */
+export type ListingMode = "create" | "update";
+
 export type ListingBlockerCode =
   | "no-platform-module"
   | "not-ready"
   | "no-sets"
   | "missing-catalog-id"
   | "unmapped-condition"
-  | "mixed-sets";
+  | "mixed-sets"
+  // #462, the update mode's own three. Each stands alone, exactly as `not-ready` does: an offer that
+  // is not live has no listing to correct, and there is nothing else worth saying about it.
+  | "not-active"
+  | "no-listing-url"
+  | "no-update-support";
 
 /** One reason an offer cannot be listed, ready to show verbatim. */
 export interface ListingBlocker {
@@ -70,6 +85,12 @@ export interface PreconditionInput {
   platformModule: string | null;
   state: OfferState;
   sets: readonly PreconditionSet[];
+  /** Which act this is (#462). Absent means `create`, which is what every caller predating the update
+   *  flow asks for and what every rule below was written against. */
+  mode?: ListingMode;
+  /** The listing's own address on the platform (`Offer.url`, #412) — what an update navigates to.
+   *  Only read in `update` mode, where its absence is the `no-listing-url` refusal. */
+  listingUrl?: string | null;
 }
 
 /**
@@ -117,10 +138,14 @@ function distinct(values: readonly string[]): string[] {
  * Every reason this offer cannot be handed over, in the order they are worth fixing. An empty array
  * means the listing kit is servable.
  *
- * `no-platform-module`, `not-ready` and `no-sets` are checked first and each stands **alone**: there
- * is no form to fill, with no sets there is no composition to say anything else about, and repeating
- * "no catalog item-ID" under an offer that simply is not finished buries the one thing to do about
- * it.
+ * `no-platform-module`, the mode's own state check and `no-sets` are checked first and each stands
+ * **alone**: there is no form to fill, with no sets there is no composition to say anything else
+ * about, and repeating "no catalog item-ID" under an offer that simply is not finished buries the one
+ * thing to do about it.
+ *
+ * Everything **after** that check is asked identically in both modes (#462), which is the point of
+ * one evaluation rather than two: a stamp with no item-ID and a condition with no grade misdescribe
+ * the goods just as badly on an edit form as on a new one.
  *
  * Of what follows, the first two are the **module's** rules and are asked only where its own entry
  * claims them (#493); the homogeneity of the sets is asked of every module, being a fact about the
@@ -147,15 +172,37 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     ];
   }
 
-  if (input.state !== "ready") {
-    return [
-      {
-        code: "not-ready",
-        message: `This offer is ${OFFER_STATE_LABEL[input.state]}, not Ready — only a Ready offer can be listed.`,
-        subjects: [],
-        stampIds: [],
-      },
-    ];
+  // What the offer has to **be** is the one thing the two modes disagree about (#462), and each
+  // answer stands alone for `not-ready`'s reason: there is nothing else worth saying about an offer
+  // that is not in a position to be listed at all.
+  const standalone = (code: ListingBlockerCode, message: string): ListingBlocker[] => [
+    { code, message, subjects: [], stampIds: [] },
+  ];
+
+  if ((input.mode ?? "create") === "update") {
+    if (!rules.supportsUpdate) {
+      return standalone(
+        "no-update-support",
+        "This platform's Assistant module can post a listing but cannot go back and edit one. Correct it on the platform's own page."
+      );
+    }
+    if (input.state !== "active") {
+      return standalone(
+        "not-active",
+        `This offer is ${OFFER_STATE_LABEL[input.state]}, not Active — only a live listing can be updated.`
+      );
+    }
+    if (!input.listingUrl?.trim()) {
+      return standalone(
+        "no-listing-url",
+        "This offer carries no listing URL, so there is no listing to go back to. Paste the platform's address into the offer first."
+      );
+    }
+  } else if (input.state !== "ready") {
+    return standalone(
+      "not-ready",
+      `This offer is ${OFFER_STATE_LABEL[input.state]}, not Ready — only a Ready offer can be listed.`
+    );
   }
 
   const sets = input.sets.filter((s) => s.copies.length > 0);

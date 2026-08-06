@@ -33,6 +33,16 @@ export interface PendingListing {
   collectionId: string;
   /** The handoff this belongs to (#409), so an answer names the request it answers. */
   requestId: string;
+  /**
+   * Whether this was a new listing or an edit of a live one (#462). Absent on a record written before
+   * the update flow existed, which is a `create` — the same reading the task's own mode takes.
+   *
+   * Remembered rather than re-derived because it decides what a Save *means*: Colnect answers a saved
+   * edit with the very entry page that a saved new sale lands on, and read without this, correcting a
+   * live listing would be reported as having just posted one — and the page would try to publish an
+   * offer that has been Active for weeks.
+   */
+  mode?: "create" | "update";
   /** The instance tab that handed the offer over, and its origin: how the answer gets home, and
    *  which connected instance to post to when no page is still following (#412). */
   instanceTabId: number | null;
