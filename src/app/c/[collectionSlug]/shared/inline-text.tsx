@@ -39,6 +39,7 @@ export function InlineText({
   editControl = false,
   editAriaLabel = "Edit",
   selectOnEdit = false,
+  inputStyle,
   onSave,
 }: {
   value: string;
@@ -54,6 +55,13 @@ export function InlineText({
    *  instead of landing beside it — the pattern the picker's search field uses (#183). For a short
    *  value that is typically retyped whole, like a price; not for a URL you came back to amend. */
   selectOnEdit?: boolean;
+  /**
+   * Overrides for the input box, merged over the shared one. For a field whose *display* is smaller
+   * than the default input — the base-currency line under an auction amount (#498) — where the
+   * standard box would make the row taller the moment editing starts, and shorter again when it
+   * ends. Give it the metrics of the text it replaces and nothing on the screen moves.
+   */
+  inputStyle?: React.CSSProperties;
   onSave: (next: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -134,7 +142,12 @@ export function InlineText({
             setEditing(false);
           }
         }}
-        style={{ ...INLINE_INPUT, width: inputType === "url" ? "16rem" : inputType === "text" ? "20rem" : "6rem", textAlign: inputType === "number" ? "right" : "left" }}
+        style={{
+          ...INLINE_INPUT,
+          width: inputType === "url" ? "16rem" : inputType === "text" ? "20rem" : "6rem",
+          textAlign: inputType === "number" ? "right" : "left",
+          ...inputStyle,
+        }}
       />
       {suffix && <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{suffix}</span>}
     </span>

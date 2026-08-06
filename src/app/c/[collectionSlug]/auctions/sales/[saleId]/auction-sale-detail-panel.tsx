@@ -24,7 +24,7 @@ import {
 import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
 import { CONTROL_STYLE, FilterChip, SIGNALS } from "../../auction-controls";
-import { formatDay } from "../../auction-format";
+import { formatBase, formatDay } from "../../auction-format";
 
 type DialogState =
   | { kind: "none" }
@@ -127,6 +127,9 @@ export function AuctionSaleDetailPanel({
   }
 
   const { summary } = sale;
+  /** Every money field on this card in the collection's base currency too (#498) — one rate for the
+   * parcel, since a sale carries one currency for all of it. */
+  const inBase = (amount: string | null) => formatBase(amount, sale.baseRate, sale.baseCurrency);
   // The whole parcel is already loaded, so narrowing it is a client-side question — no second
   // request, and the counts come off the same rows the chips filter.
   const outcomeCounts = sale.lots.reduce<Partial<Record<AuctionLotOutcome, number>>>((acc, lot) => {
@@ -314,18 +317,21 @@ export function AuctionSaleDetailPanel({
           label="Shipping"
           value={sale.shippingCost ? `${sale.shippingCost} ${sale.currency}` : "not quoted"}
           hint="For the whole parcel — counted once, however many lots are won."
+          base={inBase(sale.shippingCost)}
         />
         <span style={{ flex: 1 }} />
         <Field
           label="Bids"
           value={`${summary.bidTotal} ${sale.currency}`}
           hint={`Over the ${summary.payableCount} lot${summary.payableCount === 1 ? "" : "s"} you would pay for — watching and won.`}
+          base={inBase(summary.bidTotal)}
         />
         <Field
           label="All-in"
           value={`${summary.allInTotal} ${sale.currency}`}
           hint="Bids plus premium on every payable lot, plus shipping once."
           strong
+          base={inBase(summary.allInTotal)}
         />
         {/* What the parcel is worth against what it costs (#353). Unlike a lot row's headroom this
             one has shipping in it — that is what the parcel actually costs, and shipping is added
@@ -338,11 +344,13 @@ export function AuctionSaleDetailPanel({
               ? `Over the payable lots whose contents are described. ${summary.unvaluedCount} of them ${summary.unvaluedCount === 1 ? "is" : "are"} not, so this is lower than the parcel is worth.`
               : "Catalogue value of everything this parcel is described as holding."
           }
+          base={inBase(summary.catalogTotal)}
         />
         <Field
           label="Headroom"
           value={summary.headroom === null ? "—" : `${summary.headroom} ${sale.currency}`}
           hint="Catalogue value less the all-in cost of the parcel, shipping included."
+          base={inBase(summary.headroom)}
           tone={
             summary.headroom === null ? undefined : Number(summary.headroom) < 0 ? "bad" : "good"
           }
@@ -586,6 +594,7 @@ function Field({
   hint,
   strong,
   tone,
+  base,
 }: {
   label: string;
   value: string;
@@ -593,6 +602,9 @@ function Field({
   strong?: boolean;
   /** Colours the figure where it carries a verdict rather than a measurement. */
   tone?: "good" | "bad";
+  /** The same figure in the collection's base currency (#498), already formatted — null on a
+   * field that is not money, on a sale already in the base currency, and where no rate was had. */
+  base?: string | null;
 }) {
   return (
     <Tooltip content={hint}>
@@ -623,6 +635,17 @@ function Field({
         >
           {value}
         </span>
+        {base && (
+          <span
+            style={{
+              fontSize: "0.6875rem",
+              color: "var(--color-text-muted)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {base}
+          </span>
+        )}
       </div>
     </Tooltip>
   );

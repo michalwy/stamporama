@@ -1082,7 +1082,8 @@ on its own. But the order exists, the buyer is waiting, and the copies in that l
 sitting in every other listing they are in.
 
 So the offer row says so: **Sold on Allegro · not paid** (or *· paid*), with the order number in the
-tooltip. The toolbar's **Sold, not recorded** chip counts them and narrows the list to exactly those,
+tooltip — and so does the offer's **own screen**, in the same chip beside the state, so a listing
+opened from the list keeps telling you what the list told you. The toolbar's **Sold, not recorded** chip counts them and narrows the list to exactly those,
 and the [notification centre](action-items.md) reports the same set as *Sold on Allegro, no sale
 recorded*, longest-waiting first. The payment status is on the chip because the two ask for different
 things: an **unpaid** order may still fall through, while a **paid** one is waiting only on your

@@ -11,6 +11,7 @@ import {
   NeedsActionChip,
   InActiveBiddingChip,
   ListingTypeChip,
+  PlatformSaleChip,
 } from "../offer-badges";
 import {
   useOfferDetail,
@@ -522,6 +523,18 @@ export function OfferDetailPanel({
             />
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
+            )}
+            {/* The list's own flag, carried onto the screen the list opens (#505). It is the
+                strongest thing an offer can be carrying — an order the marketplace has taken — and
+                a chip seen in passing that is then absent from the offer's own page reads as
+                something already dealt with. Ahead of the auction chips for the same reason: it
+                outranks both a bid that may still be outbid and an auction still to be resolved. */}
+            {offer.platformSale && (
+              <PlatformSaleChip
+                paymentStatus={offer.platformSale.paymentStatus}
+                orderId={offer.platformSale.orderId}
+                platformName={offer.platformName}
+              />
             )}
             {/* An auction says how to read the price beside it (#449); "in bidding" (#215) says
                 somebody has actually bid. Two different facts, so two chips. */}

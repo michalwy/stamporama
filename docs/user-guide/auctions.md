@@ -115,6 +115,24 @@ What it is worth:
 | **value** | what the contents are worth |
 | **headroom** | what is left over |
 
+Every figure is in the **sale's** currency — a lot has none of its own — and where that is not the
+currency your collection counts in, a smaller `≈ 25.00 EUR` sits under it. On the flat watchlist
+only the **bid** carries one: the list is scanned down a column of forty rows, and a second line
+under every figure would double the height of all of them. A sale's own screen converts the lot in
+full, and the parcel's totals with it. The rate is today's, except on a lot whose result has been
+recorded — that one keeps the rate of the day it closed, because a lost lot is a *dated* price
+observation and revaluing it would make it say something that was never true.
+
+On **your own** figures — *Mine* and *Ceiling*, both their bid and their all-in line — that
+converted line is **editable**. What is being decided while you bid is how much of your own money
+leaves the account, so `≈ 300.00 PLN` under a ceiling can be clicked and retyped as `350`, and what
+gets stored is the SEK (or EUR, or CHF) figure that comes to. It is the same two-sided editing the
+bid and its all-in already have, with a third side: whichever one you type into, the sale's currency
+is what is kept, because that is what the platform's bid box takes and what the invoice will say.
+An empty figure still offers the line, so a limit can be **named** in your own currency rather than
+only corrected in it, and clearing it clears the amount in both. What the lot **stands at** is not
+editable this way: that number is copied off the listing, in the currency the listing states it in.
+
 On the **cost** side each figure exists twice: the **bid** line is hammer prices, the **all-in**
 line is the same figure with the seller's premium added. Exactly one of each pair is what gets
 stored — the auction's bid and yours are bids, a ceiling is a valuation of the total — and the other
@@ -157,6 +175,13 @@ Each figure is tinted about its own side. Yours is **green** while it still cove
 **grey** once it has been passed — a bid that is out of play, not a problem. The auction's price is
 what turns **red**, because the price running away from you is the thing you might still answer.
 Red is never used on your own figure for that: there it already means *over ceiling*.
+
+A colour applies to the **whole column, both of its lines**. The bid and the all-in under it are one
+figure expressed twice, so your bid is green on both lines while it leads, and the auction's column
+is red on both when the price has passed either your bid or your ceiling. Weight is what still tells
+the two lines apart — the one that gets stored is solid, the one computed from it is muted. Once a
+result has been recorded the tinting stops altogether: leading and outbid are positions in a race
+that is over.
 
 Once the closing time has passed the same comparison becomes a result: **Won?** or **Lost?**. The
 question mark is honest — it is inferred from the last bid you recorded, not from the platform.
@@ -397,7 +422,9 @@ filters do, so coming back to the screen finds it as you left it. Each row shows
 every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus
 shipping once. Lots you lost, watched or cancelled cost nothing and are left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping
-included, because that is what the parcel actually costs.
+included, because that is what the parcel actually costs. A parcel priced in another currency shows
+its all-in total in your collection's currency too, and its own screen does the same under every
+figure on the terms-and-totals card.
 
 **Add lot** on a sale's own screen puts a lot straight into that parcel — no seller, platform or
 matching to go through, because the settlement is already the screen you are on. Its closing date

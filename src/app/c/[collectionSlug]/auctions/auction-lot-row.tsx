@@ -25,6 +25,7 @@ import {
 } from "./auction-badges";
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
+import { AmountWithBase } from "./auction-base-amount";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -151,9 +152,21 @@ const CLOSING_STYLE: Record<ClosingUrgency, React.CSSProperties> = {
  * has been passed is simply out of play. It must not go red: on your own figure red already reads
  * as *over ceiling*, and two different problems in one colour is worse than one of them unmarked.
  * Over-ceiling takes amber and outranks both, being the one you can still take back.
+ *
+ * **A colour applies to a whole column, both of its lines.** The bid line and the all-in line are
+ * one figure expressed twice — the same money, with the seller's premium on it — so a fact about
+ * that money is a fact about both. Tinting only the stored half made a column read as two unrelated
+ * numbers that happened to disagree: your bid green for still leading, and the very same bid grey
+ * one line below. What keeps the two lines *distinguishable* is weight, not colour: the stored side
+ * is solid and the derived side muted, and that is unchanged.
  */
-function auctionBidColor(standing: "leading" | "outbid" | null): string | undefined {
-  return standing === "outbid" ? "var(--color-error)" : undefined;
+function auctionBidColor(
+  standing: "leading" | "outbid" | null,
+  overCeiling: boolean | null
+): string | undefined {
+  // Both facts say the same thing about the auction's own column — the price has run past something
+  // of yours — and both were already drawn in red, one on each line. Now either colours the pair.
+  return standing === "outbid" || overCeiling ? "var(--color-error)" : undefined;
 }
 
 function myBidColor(
@@ -431,6 +444,18 @@ interface AuctionLotRowProps {
    */
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  /**
+   * How much of the row is read in the base currency too (#498).
+   *
+   * `headline` — the flat watchlist — converts the **bid** alone: the list is scanned down a column
+   * of forty rows for what to deal with next, and a second line under every figure would double the
+   * height of all of them to answer a question that is asked of one lot at a time.
+   *
+   * `full` — the sale's own screen, where a card is opened *because* this lot is the one being
+   * decided — converts every figure in the grid. Nothing is drawn at all where the sale already
+   * trades in the base currency, so a collection with one currency sees neither.
+   */
+  baseAmounts?: "headline" | "full";
 }
 
 /**
@@ -460,6 +485,7 @@ export function AuctionLotRow({
   onOutcomeRecorded,
   expanded,
   onToggleExpanded,
+  baseAmounts = "headline",
 }: AuctionLotRowProps) {
   const router = useRouter();
   const outcome = useLotOutcomeActions(lot, onOutcomeRecorded);
@@ -502,6 +528,49 @@ export function AuctionLotRow({
   const myAllIn = allIn(myBid, fees);
   /** The most that can be bid with the all-in still inside the ceiling. */
   const bidRoom = maxBidWithin(maxBid, fees);
+
+  /** The figure the bid cell is actually showing (#498): the result once one is recorded, else what
+   * the lot stands at, else what it opens at — so the conversion is of the number on screen. */
+  const shownBid = lot.finalPrice ?? currentBid ?? lot.startingPrice;
+
+  // One colour per column, applied to both of its lines — see `auctionBidColor` / `myBidColor`.
+  // Suppressed once a result is recorded, on the rule the bid cell already stated for itself:
+  // leading and outbid are positions in a race that is over, and a settled figure tinted as though
+  // it were live keeps asking a question nobody can answer any more.
+  const auctionColor = lot.finalPrice !== null ? undefined : auctionBidColor(lot.standing, lot.overCeiling);
+  const mineColor =
+    lot.finalPrice !== null ? undefined : myBidColor(lot.standing, lot.myBidOverCeiling);
+  /**
+   * A cell and its base-currency reading, stacked (#498). `headline` marks the one figure the flat
+   * list converts too; every other cell is converted in `full` mode alone.
+   *
+   * `onSaveBase` makes that reading a **third way of typing the same figure**, beside the two the
+   * *Mine* and *Ceiling* columns already have: what is entered is read in the base currency and
+   * converted back to what gets stored. Passed only where the figure is the collector's own.
+   */
+  function withBase(
+    amount: string | null,
+    node: React.ReactNode,
+    opts: {
+      headline?: boolean;
+      onSaveBase?: (stored: string) => void;
+      editable?: boolean;
+    } = {}
+  ) {
+    if (baseAmounts !== "full" && !opts.headline) return node;
+    return (
+      <AmountWithBase
+        amount={amount}
+        rate={lot.baseRate}
+        baseCurrency={lot.baseCurrency}
+        onSaveBase={opts.onSaveBase}
+        editable={opts.editable}
+        isPending={isPending}
+      >
+        {node}
+      </AmountWithBase>
+    );
+  }
 
   // The three quick fills (#370, #371), resolved once and used by both the ⋮ entries and the
   // controls in the gutter beside the column each writes.
@@ -839,7 +908,12 @@ export function AuctionLotRow({
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
-              alignItems: "center",
+              // **Baselines, not centres** (#498). A cell carrying a base-currency line under its
+              // figure is two lines tall while its neighbours are one, and centring made a row's
+              // label — and every unconverted cell in it — float half a line above the amounts it
+              // belongs to. Aligned on the first baseline, `bid` sits on the same line as the bids
+              // whether or not any of them is converted.
+              alignItems: "baseline",
             }}
           >
             <span style={GRID_RULE} aria-hidden />
@@ -892,105 +966,113 @@ export function AuctionLotRow({
                 recorded (#354) that figure takes the cell instead: it is what the lot actually went
                 for, and it is already what the all-in below is computed from, so showing the last
                 bid anyone happened to see would put two different prices on one row. */}
-            <Tooltip
-              content={
-                lot.finalPrice !== null
-                  ? lot.outcome === "won"
-                    ? `What you paid for this lot, ${formatInstant(lot.endsAt)}`
-                    : `What this lot went for, ${formatInstant(lot.endsAt)}`
-                  : lot.checkedAt
-                    ? `Checked ${formatInstant(lot.checkedAt)}`
-                    : "What the lot stands at now"
-              }
-            >
-              <span>
-                <InlineText
-                  value={currentBid ?? ""}
-                  placeholder="0.00"
-                  inputType="number"
-                  selectOnEdit
-                  editable={editable && !terminal}
-                  isPending={isPending}
-                  onSave={(next) => {
-                    setPendingBid({ value: formatAmountInput(next) || null, was: lot.currentBid });
-                    onSetBid(lot, next);
-                  }}
-                  display={
-                    lot.finalPrice !== null ? (
-                      // The result, uncoloured: leading and outbid are positions in a race that is
-                      // over, and tinting a settled figure would keep asking a question nobody can
-                      // answer any more.
-                      <span style={AMOUNT}>{lot.finalPrice}</span>
-                    ) : currentBid === null ? (
-                      // Nothing bid yet: show what the lot opens at, muted. It is not a bid —
-                      // nobody is committed to it — so it never takes the amount's own weight.
-                      <span style={MUTED_AMOUNT}>
-                        {lot.startingPrice === null ? "—" : `from ${lot.startingPrice}`}
-                      </span>
-                    ) : (
-                      <span style={{ ...AMOUNT, color: auctionBidColor(lot.standing) }}>
-                        {currentBid}
-                      </span>
-                    )
-                  }
-                />
-              </span>
-            </Tooltip>
+            {withBase(
+              shownBid,
+              <Tooltip
+                content={
+                  lot.finalPrice !== null
+                    ? lot.outcome === "won"
+                      ? `What you paid for this lot, ${formatInstant(lot.endsAt)}`
+                      : `What this lot went for, ${formatInstant(lot.endsAt)}`
+                    : lot.checkedAt
+                      ? `Checked ${formatInstant(lot.checkedAt)}`
+                      : "What the lot stands at now"
+                }
+              >
+                <span>
+                  <InlineText
+                    value={currentBid ?? ""}
+                    placeholder="0.00"
+                    inputType="number"
+                    selectOnEdit
+                    editable={editable && !terminal}
+                    isPending={isPending}
+                    onSave={(next) => {
+                      setPendingBid({ value: formatAmountInput(next) || null, was: lot.currentBid });
+                      onSetBid(lot, next);
+                    }}
+                    display={
+                      lot.finalPrice !== null ? (
+                        // The result, uncoloured: leading and outbid are positions in a race that is
+                        // over, and tinting a settled figure would keep asking a question nobody can
+                        // answer any more.
+                        <span style={AMOUNT}>{lot.finalPrice}</span>
+                      ) : currentBid === null ? (
+                        // Nothing bid yet: show what the lot opens at, muted. It is not a bid —
+                        // nobody is committed to it — so it never takes the amount's own weight.
+                        <span style={MUTED_AMOUNT}>
+                          {lot.startingPrice === null ? "—" : `from ${lot.startingPrice}`}
+                        </span>
+                      ) : (
+                        <span style={{ ...AMOUNT, color: auctionColor }}>{currentBid}</span>
+                      )
+                    }
+                  />
+                </span>
+              </Tooltip>,
+              { headline: true }
+            )}
             {/* What you have placed at the platform. Its quick fills live in the gutter to its
                 left, centred against this figure and the all-in below it (#371). */}
-            <Tooltip
-              content={
-                lot.myBidOverCeiling
-                  ? "All-in, the bid you placed costs more than your ceiling"
-                  : lot.standing === "leading"
-                    ? "Your bid still covers the current price"
-                    : lot.standing === "outbid"
-                      ? "The price has passed the bid you placed"
-                      : "What you have placed at the platform"
-              }
-            >
-              <span>
-                <InlineText
-                  value={myBid ?? ""}
-                  placeholder="0.00"
-                  inputType="number"
-                  selectOnEdit
-                  editable={editable && !terminal}
-                  isPending={isPending}
-                  onSave={(next) => {
-                    setPendingMine({ value: formatAmountInput(next) || null, was: lot.myBid });
-                    onSetMyBid(lot, next);
-                  }}
-                  display={
-                    myBid === null ? (
-                      <span style={MUTED_AMOUNT}>—</span>
-                    ) : (
-                      <span style={{ ...AMOUNT, color: myBidColor(lot.standing, lot.myBidOverCeiling) }}>
-                        {myBid}
-                      </span>
-                    )
-                  }
-                />
-              </span>
-            </Tooltip>
+            {withBase(
+              myBid,
+              <Tooltip
+                content={
+                  lot.myBidOverCeiling
+                    ? "All-in, the bid you placed costs more than your ceiling"
+                    : lot.standing === "leading"
+                      ? "Your bid still covers the current price"
+                      : lot.standing === "outbid"
+                        ? "The price has passed the bid you placed"
+                        : "What you have placed at the platform"
+                }
+              >
+                <span>
+                  <InlineText
+                    value={myBid ?? ""}
+                    placeholder="0.00"
+                    inputType="number"
+                    selectOnEdit
+                    editable={editable && !terminal}
+                    isPending={isPending}
+                    onSave={(next) => {
+                      setPendingMine({ value: formatAmountInput(next) || null, was: lot.myBid });
+                      onSetMyBid(lot, next);
+                    }}
+                    display={
+                      myBid === null ? (
+                        <span style={MUTED_AMOUNT}>—</span>
+                      ) : (
+                        <span style={{ ...AMOUNT, color: mineColor }}>{myBid}</span>
+                      )
+                    }
+                  />
+                </span>
+              </Tooltip>,
+              { onSaveBase: applyMyBid, editable: editable && !terminal }
+            )}
             {/* The ceiling's **bid** side: the most that can be bid without the all-in passing it.
                 Editable too — typing a bid here is another way of saying what the lot is worth
                 to you, and the ceiling stored is what bidding that much would cost. Muted, because
                 the ceiling is what is stored and this is the figure computed from it. */}
-            <Tooltip content="The most you can bid with the all-in still inside your ceiling. Type a bid here to set the ceiling from it instead.">
-              <span>
-                <InlineText
-                  value={bidRoom ?? ""}
-                  placeholder="0.00"
-                  inputType="number"
-                  selectOnEdit
-                  editable={editable}
-                  isPending={isPending}
-                  onSave={applyCeilingBid}
-                  display={<span style={MUTED_AMOUNT}>{bidRoom ?? "—"}</span>}
-                />
-              </span>
-            </Tooltip>
+            {withBase(
+              bidRoom,
+              <Tooltip content="The most you can bid with the all-in still inside your ceiling. Type a bid here to set the ceiling from it instead.">
+                <span>
+                  <InlineText
+                    value={bidRoom ?? ""}
+                    placeholder="0.00"
+                    inputType="number"
+                    selectOnEdit
+                    editable={editable}
+                    isPending={isPending}
+                    onSave={applyCeilingBid}
+                    display={<span style={MUTED_AMOUNT}>{bidRoom ?? "—"}</span>}
+                  />
+                </span>
+              </Tooltip>,
+              { onSaveBase: applyCeilingBid, editable }
+            )}
             {/* The worth section's own labels: what the contents are worth, and what is left of it
                 once the lot is paid for. Deliberately not `bid` / `all-in` — neither figure here is
                 a bid, and neither is a cost. */}
@@ -998,125 +1080,138 @@ export function AuctionLotRow({
             {/* Catalogue value of what the lot is described as holding. The cell is the way in to
                 the composition editor, so describing a lot is one click from the row that made you
                 want to — and an empty one says so rather than showing a bare dash. */}
-            <Tooltip content={catalogHint(lot)}>
-              <button
-                type="button"
-                onClick={() => onEditComposition(lot)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                  textAlign: "right",
-                }}
-              >
-                {lot.catalogValue === null ? (
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--color-accent)",
-                      textDecoration: "underline",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {lot.lineCount === 0 ? "+ contents" : "+ catalog value"}
-                  </span>
-                ) : (
-                  <span
-                    style={
-                      // The one vocabulary for *inferred, not recorded* (#238): a `~` and italics.
-                      lot.catalogUncertain
-                        ? { ...AMOUNT, color: "var(--color-text-muted)", fontStyle: "italic" }
-                        : AMOUNT
-                    }
-                  >
-                    {lot.catalogUncertain ? "~" : ""}
-                    {lot.catalogValue}
-                  </span>
-                )}
-              </button>
-            </Tooltip>
+            {withBase(
+              lot.catalogValue,
+              <Tooltip content={catalogHint(lot)}>
+                <button
+                  type="button"
+                  onClick={() => onEditComposition(lot)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "right",
+                  }}
+                >
+                  {lot.catalogValue === null ? (
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "var(--color-accent)",
+                        textDecoration: "underline",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {lot.lineCount === 0 ? "+ contents" : "+ catalog value"}
+                    </span>
+                  ) : (
+                    <span
+                      style={
+                        // The one vocabulary for *inferred, not recorded* (#238): a `~` and italics.
+                        lot.catalogUncertain
+                          ? { ...AMOUNT, color: "var(--color-text-muted)", fontStyle: "italic" }
+                          : AMOUNT
+                      }
+                    >
+                      {lot.catalogUncertain ? "~" : ""}
+                      {lot.catalogValue}
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+            )}
 
             <span style={GRID_LABEL}>all-in</span>
-            <Tooltip content="The current bid plus the seller's premium. Shipping is added once, on the sale.">
-              <span style={{ ...MUTED_AMOUNT, color: lot.overCeiling ? "var(--color-error)" : "var(--color-text-muted)" }}>
-                {lot.allIn ?? "—"}
-              </span>
-            </Tooltip>
+            {withBase(
+              lot.allIn,
+              <Tooltip content="The current bid plus the seller's premium. Shipping is added once, on the sale.">
+                <span
+                  // The bid line's own colour, muted weight — one column, one verdict.
+                  style={{ ...MUTED_AMOUNT, color: auctionColor ?? "var(--color-text-muted)" }}
+                >
+                  {lot.allIn ?? "—"}
+                </span>
+              </Tooltip>
+            )}
             {/* Your column's **all-in** side, editable for the same reason: naming what you are
                 willing to have the lot cost is another way of naming the bid. What is stored is
                 still the hammer price. */}
-            <Tooltip content="What the bid you placed would cost you. Type a total here to set the bid from it instead.">
-              <span>
-                <InlineText
-                  value={myAllIn ?? ""}
-                  placeholder="0.00"
-                  inputType="number"
-                  selectOnEdit
-                  editable={editable && !terminal}
-                  isPending={isPending}
-                  onSave={applyMyAllIn}
-                  display={
-                    <span
-                      style={{
-                        ...MUTED_AMOUNT,
-                        color: lot.myBidOverCeiling
-                          ? "var(--color-warning)"
-                          : "var(--color-text-muted)",
-                      }}
-                    >
-                      {myAllIn ?? "—"}
-                    </span>
-                  }
-                />
-              </span>
-            </Tooltip>
+            {withBase(
+              myAllIn,
+              <Tooltip content="What the bid you placed would cost you. Type a total here to set the bid from it instead.">
+                <span>
+                  <InlineText
+                    value={myAllIn ?? ""}
+                    placeholder="0.00"
+                    inputType="number"
+                    selectOnEdit
+                    editable={editable && !terminal}
+                    isPending={isPending}
+                    onSave={applyMyAllIn}
+                    display={
+                      <span style={{ ...MUTED_AMOUNT, color: mineColor ?? "var(--color-text-muted)" }}>
+                        {myAllIn ?? "—"}
+                      </span>
+                    }
+                  />
+                </span>
+              </Tooltip>,
+              { onSaveBase: applyMyAllIn, editable: editable && !terminal }
+            )}
             {/* The ceiling itself: an all-in valuation, which is why it is stored on this row — and
                 why catalogue value copies into it unchanged (#370), with no fee arithmetic. */}
-            <Tooltip content="The most this lot is worth to you, all-in">
-              <span>
-                <InlineText
-                  value={maxBid ?? ""}
-                  placeholder="0.00"
-                  inputType="number"
-                  selectOnEdit
-                  editable={editable}
-                  isPending={isPending}
-                  onSave={(next) => {
-                    setPendingMax({ value: formatAmountInput(next) || null, was: lot.maxBid });
-                    onSetMaxBid(lot, next);
-                  }}
-                  display={
-                    maxBid === null ? (
-                      <span style={MUTED_AMOUNT}>—</span>
-                    ) : (
-                      <span style={AMOUNT}>{maxBid}</span>
-                    )
-                  }
-                />
-              </span>
-            </Tooltip>
+            {withBase(
+              maxBid,
+              <Tooltip content="The most this lot is worth to you, all-in">
+                <span>
+                  <InlineText
+                    value={maxBid ?? ""}
+                    placeholder="0.00"
+                    inputType="number"
+                    selectOnEdit
+                    editable={editable}
+                    isPending={isPending}
+                    onSave={(next) => {
+                      setPendingMax({ value: formatAmountInput(next) || null, was: lot.maxBid });
+                      onSetMaxBid(lot, next);
+                    }}
+                    display={
+                      maxBid === null ? (
+                        <span style={MUTED_AMOUNT}>—</span>
+                      ) : (
+                        <span style={AMOUNT}>{maxBid}</span>
+                      )
+                    }
+                  />
+                </span>
+              </Tooltip>,
+              { onSaveBase: applyMaxBid, editable }
+            )}
             {/* The domain's own word for it, the one the user guide's *Headroom* section uses —
                 the row should name the figure the same way the documentation does. */}
             <span style={GRID_LABEL}>headroom</span>
             {/* Headroom: catalogue value less what the lot costs all-in. Green while there is room
                 left, red once the price has passed what the contents are worth. */}
-            <Tooltip content="Catalogue value less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
-              <span
-                style={{
-                  ...AMOUNT,
-                  fontWeight: 500,
-                  color:
-                    lot.headroom === null
-                      ? "var(--color-text-muted)"
-                      : Number(lot.headroom) < 0
-                        ? "var(--color-error)"
-                        : "var(--color-success)",
-                }}
-              >
-                {lot.headroom ?? "—"}
-              </span>
-            </Tooltip>
+            {withBase(
+              lot.headroom,
+              <Tooltip content="Catalogue value less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
+                <span
+                  style={{
+                    ...AMOUNT,
+                    fontWeight: 500,
+                    color:
+                      lot.headroom === null
+                        ? "var(--color-text-muted)"
+                        : Number(lot.headroom) < 0
+                          ? "var(--color-error)"
+                          : "var(--color-success)",
+                  }}
+                >
+                  {lot.headroom ?? "—"}
+                </span>
+              </Tooltip>
+            )}
           </div>
 
           <Tooltip content={`Closes ${formatInstant(lot.endsAt)}`}>

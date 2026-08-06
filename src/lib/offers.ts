@@ -1023,14 +1023,19 @@ export interface UnrecordedPlatformSale {
  * Where an offer has more than one outstanding order against it — a quantity listing bought by two
  * people — the **earliest** is reported: it is the one that has been waiting longest, and the row
  * has space for one.
+ *
+ * `offerIds` narrows the read to a known set — what an offer's **own screen** asks for (#505),
+ * where the answer is about one listing and the collection-wide scan is the whole cost of it.
  */
 export async function unrecordedPlatformSales(
-  collectionId: string
+  collectionId: string,
+  offerIds?: string[]
 ): Promise<Map<string, UnrecordedPlatformSale>> {
+  if (offerIds?.length === 0) return new Map();
   const lines = await prisma.allegroOrderLine.findMany({
     where: {
       collectionId,
-      offerId: { not: null },
+      offerId: offerIds ? { in: offerIds } : { not: null },
       offer: { state: { in: [...OPEN_OFFER_STATES] } },
       allegroOrder: {
         // A cancelled order is not a sale (`lineAwaitsSale`), and one a merged order has taken over
@@ -2826,6 +2831,11 @@ export interface OfferDetail {
   /** "In active bidding" (#215): an auction bid has been placed, committing the collector before
    * the sale is recorded. Independent of `state`/`sold`; freely revertible. */
   inActiveBidding: boolean;
+  /** The order this listing sold on, where a connected platform reported one and no sale has been
+   * recorded for it yet (#499) — the same fact the list row carries, on the screen the collector
+   * lands on from it (#505). A flag shown on the way past and then missing from the offer's own
+   * page reads as having been dealt with, which is the one thing it must not say. */
+  platformSale: UnrecordedPlatformSale | null;
   /** Derived suggested asking price **in the offer's currency**: the average catalog value per set
    * (a buyer takes one set), converted from base at the current FX rate. Null when nothing is
    * valued or no rate is available. */
@@ -3176,6 +3186,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // past `preparing` has no **Mark ready** to disable, and this re-derives the whole photo plan.
   const readyPhotoBlockers = state === "preparing" ? await readOfferPhotoBlockers(offerId) : [];
 
+  // The list's *Sold on Allegro* flag, on this offer's own screen (#505). Narrowed to this one
+  // offer — the comparison is the same one the list makes, asked about a single listing — and read
+  // through `unrecordedPlatformSales` rather than restated here, which is the rule the worklist and
+  // the flag already share (#499).
+  const platformSale =
+    (await unrecordedPlatformSales(offer.collectionId, [offerId])).get(offerId) ?? null;
+
   // Asking price converted to base at the current rate (#208). Skipped when already in base or
   // unpriced; a missing rate leaves it null.
   const priceNum = Number(offer.price);
@@ -3224,6 +3241,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     state,
     needsAction: sets.some((s) => s.needsAction),
     inActiveBidding: biddingLive(offer.inActiveBidding, state),
+    platformSale,
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
     sets,

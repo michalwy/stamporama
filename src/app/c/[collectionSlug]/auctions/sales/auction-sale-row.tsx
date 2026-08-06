@@ -7,6 +7,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { AuctionSaleView } from "../use-auctions-query";
 import { SaleStatusChip } from "../auction-badges";
 import { formatDay } from "../auction-format";
+import { AmountWithBase } from "../auction-base-amount";
 
 interface AuctionSaleRowProps {
   sale: AuctionSaleView;
@@ -115,18 +116,27 @@ export function AuctionSaleRow({
             </span>
           )}
           <span style={{ flex: 1 }} />
-          <Tooltip content="Bids, premium and shipping over the lots you would pay for">
-            <span
-              style={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {sale.summary.allInTotal} {sale.currency}
-            </span>
-          </Tooltip>
+          {/* The parcel's one headline figure, and what it comes to in the collection's own
+              currency (#498) — the whole row exists to be scanned for "what is this costing me",
+              which is a question asked in the money the collector counts in. */}
+          <AmountWithBase
+            amount={sale.summary.allInTotal}
+            rate={sale.baseRate}
+            baseCurrency={sale.baseCurrency}
+          >
+            <Tooltip content="Bids, premium and shipping over the lots you would pay for">
+              <span
+                style={{
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                {sale.summary.allInTotal} {sale.currency}
+              </span>
+            </Tooltip>
+          </AmountWithBase>
           {/* The menu is inside the clickable row, so its own clicks must not open the sale too. */}
           <span onClick={(e) => e.stopPropagation()}>
             <RowActionsMenu actions={actions} ariaLabel="Sale actions" />

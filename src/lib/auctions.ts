@@ -26,7 +26,8 @@ import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
-import { getOrFetchRate } from "./exchange-rates";
+import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
+import type { BaseCurrency } from "./currencies";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
 import { parseEntityNoSearch } from "./quick-jump";
 import { resolvePurchaseContact } from "./contacts";
@@ -95,25 +96,44 @@ export class AuctionActionBlockedError extends Error {
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
-async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
+/** The guard every read starts with — and, since #498, the collection's base currency too: every
+ * auction screen converts into it, and asking for it separately would be a second round trip for a
+ * field the guard already has the row open for. */
+async function assertCollectionOwner(
+  ownerId: string,
+  collectionId: string
+): Promise<{ baseCurrency: string }> {
   const collection = await prisma.collection.findFirst({
     where: { id: collectionId, ownerId },
-    select: { id: true },
+    select: { baseCurrency: true },
   });
   if (!collection) throw new Error("Collection not found");
+  return collection;
 }
 
 /** Resolve a sale the owner may act on, returning what every mutation guard needs. */
 async function assertSaleOwner(
   ownerId: string,
   saleId: string
-): Promise<{ id: string; collectionId: string; status: string; purchaseId: string | null }> {
+): Promise<{
+  id: string;
+  collectionId: string;
+  baseCurrency: string;
+  status: string;
+  purchaseId: string | null;
+}> {
   const sale = await prisma.auctionSale.findFirst({
     where: { id: saleId, collection: { ownerId } },
-    select: { id: true, collectionId: true, status: true, purchaseId: true },
+    select: {
+      id: true,
+      collectionId: true,
+      status: true,
+      purchaseId: true,
+      collection: { select: { baseCurrency: true } },
+    },
   });
   if (!sale) throw new Error("Auction sale not found");
-  return sale;
+  return { ...sale, baseCurrency: sale.collection.baseCurrency };
 }
 
 /** Resolve a lot the owner may act on, along with its sale. */
@@ -182,6 +202,22 @@ export interface AuctionLotListItem {
   platformId: string;
   platformName: string;
   currency: string;
+  /** The collection's base currency (#498), so a screen can label what {@link baseRate} converts to. */
+  baseCurrency: string;
+  /**
+   * Rate from the sale's currency into the base one (#498).
+   *
+   * **One rate for the whole lot**, not a converted figure per amount: every number on a lot — bid,
+   * ceiling, all-in, catalogue value, headroom — is in the sale's currency, and the screens compute
+   * several of them from the fees as they are typed. A rate converts what is *on screen*; a
+   * server-converted field would go stale the moment a bid was edited in place.
+   *
+   * The lot's **frozen** `fxRateToBase` where it has one — a recorded result keeps the rate of the
+   * day it was recorded (ADR-0009 §4), since the whole worth of a lost lot is that it is a *dated*
+   * price observation. The live rate otherwise. Null when the sale already trades in the base
+   * currency, and null when no rate could be had — nothing here fails for want of a conversion.
+   */
+  baseRate: number | null;
   /** Ours, per collection (#432) — what the quick-jump box takes after `lot`. Always present. */
   auctionLotNo: number;
   /** The **house's** number for the lot, as typed in or captured. Optional and free to repeat. */
@@ -310,6 +346,7 @@ const LOT_SELECT = {
   myBid: true,
   maxBid: true,
   finalPrice: true,
+  fxRateToBase: true,
   status: true,
   wonTie: true,
   notes: true,
@@ -334,7 +371,11 @@ const LOT_SELECT = {
 
 type LotRow = Prisma.AuctionLotGetPayload<{ select: typeof LOT_SELECT }>;
 
-function toLotListItem(row: LotRow, composition?: AuctionLotComposition): AuctionLotListItem {
+function toLotListItem(
+  row: LotRow,
+  baseCurrency: string,
+  composition?: AuctionLotComposition
+): AuctionLotListItem {
   const sale = row.auctionSale;
   const status = (isAuctionLotStatus(row.status) ? row.status : "open") as AuctionLotStatus;
   const outcome = lotOutcome({
@@ -363,6 +404,10 @@ function toLotListItem(row: LotRow, composition?: AuctionLotComposition): Auctio
     platformId: sale.platformId,
     platformName: sale.platform.name,
     currency: sale.currency,
+    baseCurrency,
+    // The frozen rate is the lot's own answer and needs no lookup; the live one is filled in by
+    // `attachBaseRates`, in one batch per currency for the whole page.
+    baseRate: row.fxRateToBase === null ? null : Number(row.fxRateToBase),
     auctionLotNo: row.auctionLotNo,
     lotNo: row.lotNo,
     url: row.url,
@@ -414,6 +459,38 @@ function toLotListItem(row: LotRow, composition?: AuctionLotComposition): Auctio
     settled: row.purchaseLotId !== null,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Fill each item's `baseRate` with the live rate from its own currency into the base one (#498).
+ *
+ * Structural rather than typed to the two list items, because it serves both — a sale and its lots
+ * are converted the same way, and the sale detail hands it one array of each.
+ *
+ * A rate already set is **left alone**: that is a lot's frozen `fxRateToBase`, and a recorded
+ * result keeps the rate of its own day. Distinct currencies are fetched in one batch, and a lookup
+ * that fails (nothing cached, offline) leaves the rate null rather than breaking the screen — the
+ * same best-effort rule the offers list follows (#208).
+ */
+async function attachBaseRates(
+  collectionId: string,
+  baseCurrency: string,
+  items: { currency: string; baseRate: number | null }[]
+): Promise<void> {
+  const currencies = [
+    ...new Set(items.filter((i) => i.baseRate === null && i.currency !== baseCurrency).map((i) => i.currency)),
+  ];
+  if (currencies.length === 0) return;
+  let rates: Map<string, { rate: number }>;
+  try {
+    rates = await getOrFetchRates(collectionId, baseCurrency as BaseCurrency, currencies);
+  } catch {
+    return;
+  }
+  for (const item of items) {
+    if (item.baseRate !== null || item.currency === baseCurrency) continue;
+    item.baseRate = rates.get(item.currency)?.rate ?? null;
+  }
 }
 
 /**
@@ -721,7 +798,7 @@ export async function listAuctionLots(
   collectionId: string,
   filters: AuctionLotFilters = {}
 ): Promise<PaginatedAuctionLotsResult> {
-  await assertCollectionOwner(ownerId, collectionId);
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
 
@@ -741,8 +818,10 @@ export async function listAuctionLots(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   const compositions = await compositionsFor(collectionId, page);
+  const items = page.map((row) => toLotListItem(row, baseCurrency, compositions.get(row.id)));
+  await attachBaseRates(collectionId, baseCurrency, items);
   return {
-    items: page.map((row) => toLotListItem(row, compositions.get(row.id))),
+    items,
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
 }
@@ -978,6 +1057,17 @@ export interface AuctionSaleListItem {
   platformId: string;
   platformName: string;
   currency: string;
+  /** The collection's base currency (#498). */
+  baseCurrency: string;
+  /**
+   * Rate from the sale's currency into the base one (#498), or null in the base currency already
+   * and when no rate could be had.
+   *
+   * The **live** rate, with no frozen counterpart: a parcel's totals are sums over lots that are
+   * still being bid, so there is no one day they belong to. A settled sale's dated cost is the
+   * purchase's (ADR-0009 §4), which is where it is read from once the parcel has been transcribed.
+   */
+  baseRate: number | null;
   endsAt: Date | null;
   shippingCost: string | null;
   premiumPercent: string | null;
@@ -1026,6 +1116,7 @@ type SaleRow = Prisma.AuctionSaleGetPayload<{ select: typeof SALE_SELECT }>;
 
 function toSaleListItem(
   row: SaleRow,
+  baseCurrency: string,
   compositions: Map<string, AuctionLotComposition>
 ): AuctionSaleListItem {
   const fees = {
@@ -1043,6 +1134,8 @@ function toSaleListItem(
     platformId: row.platformId,
     platformName: row.platform.name,
     currency: row.currency,
+    baseCurrency,
+    baseRate: null, // filled by `attachBaseRates` — it needs the current rate.
     endsAt: row.endsAt,
     shippingCost: fees.shippingCost,
     premiumPercent: fees.premiumPercent,
@@ -1091,7 +1184,7 @@ export async function listAuctionSales(
   collectionId: string,
   filters: AuctionSaleListFilters = {}
 ): Promise<AuctionSaleListItem[]> {
-  await assertCollectionOwner(ownerId, collectionId);
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.auctionSale.findMany({
     where: {
       collectionId,
@@ -1107,7 +1200,9 @@ export async function listAuctionSales(
     collectionId,
     rows.flatMap((row) => row.lots)
   );
-  return rows.map((row) => toSaleListItem(row, compositions));
+  const items = rows.map((row) => toSaleListItem(row, baseCurrency, compositions));
+  await attachBaseRates(collectionId, baseCurrency, items);
+  return items;
 }
 
 /**
@@ -1147,13 +1242,17 @@ export async function getAuctionSaleDetail(
   // The sale's own lot rows and the detail's are the same lots, so one pass serves both the parcel
   // total and each row's catalogue-value cell.
   const compositions = await compositionsFor(sale.collectionId, lots);
-  return {
-    ...toSaleListItem(row, compositions),
+  const detail = {
+    ...toSaleListItem(row, sale.baseCurrency, compositions),
     lots: lots.map((lot) => ({
-      ...toLotListItem(lot, compositions.get(lot.id)),
+      ...toLotListItem(lot, sale.baseCurrency, compositions.get(lot.id)),
       lines: compositions.get(lot.id)?.lines ?? [],
     })),
   };
+  // The parcel and its lots share one currency, so this is one rate lookup for the screen — the
+  // lots that froze their own keep it (`attachBaseRates` leaves a set rate alone).
+  await attachBaseRates(sale.collectionId, sale.baseCurrency, [detail, ...detail.lots]);
+  return detail;
 }
 
 // ── Open-sale matching (#352) ───────────────────────────────────────────────

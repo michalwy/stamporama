@@ -17,6 +17,7 @@ import {
 import { useHydrated, usePersistentString, usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { issueLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotRow } from "../../auction-lot-row";
+import { BaseAmount } from "../../auction-base-amount";
 import { AuctionLotLineDialog } from "../../auction-lot-line-dialog";
 import type { AuctionLotDetailView } from "../../use-auctions-query";
 import { AuctionLotLineRow } from "./auction-lot-line-row";
@@ -285,6 +286,9 @@ function LotCompositionFooter({ lot }: { lot: AuctionLotDetailView }) {
           {lot.currency}
         </span>
       </Tooltip>
+      {/* #498 — inline here rather than stacked: the footing is one line of small print, and a
+          second line under one figure in it would break the row it shares with the gaps. */}
+      <BaseAmount amount={lot.catalogValue} rate={lot.baseRate} baseCurrency={lot.baseCurrency} />
       <Tooltip content="Catalogue value less what this lot costs at the current bid, the seller's premium included. Shipping belongs to the parcel and is added once, above.">
         <span style={{ cursor: "help" }}>Headroom</span>
       </Tooltip>
@@ -303,6 +307,7 @@ function LotCompositionFooter({ lot }: { lot: AuctionLotDetailView }) {
       >
         {lot.headroom ?? "—"} {lot.currency}
       </span>
+      <BaseAmount amount={lot.headroom} rate={lot.baseRate} baseCurrency={lot.baseCurrency} />
     </div>
   );
 }
@@ -442,6 +447,10 @@ function LotCard({
           showSale={false}
           // The parcel has one seller and one platform, both named in the header above.
           showParties={false}
+          // The parcel's own screen reads every figure in the base currency too (#498): a card is
+          // opened because this is the lot being decided, and that is where "what does that come to
+          // in my money" is actually asked of each number rather than of the row as a whole.
+          baseAmounts="full"
           isLast
           isPending={isPending}
           expanded={expanded}

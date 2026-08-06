@@ -468,6 +468,97 @@ describe("auction tracking (#351/#352)", () => {
     await assert.rejects(deleteAuctionSale(userId, sale.id), /still holds/);
   });
 
+  // Amounts read in the collection's own currency (#498). The rate is seeded rather than fetched —
+  // the snapshot is the collection's cached ECB table (#20), so nothing here depends on the ECB
+  // being reachable — and what is actually asserted is which rate each lot answers with.
+  it("reads a foreign-currency sale in the base currency, and keeps a result's own rate", async () => {
+    await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+    const seedRates = async (pln: number) => {
+      await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+      await prisma.exchangeRate.createMany({
+        data: [
+          { collectionId, fromCurrency: "EUR", toCurrency: "EUR", rate: 1, fetchedAt: new Date() },
+          { collectionId, fromCurrency: "EUR", toCurrency: "PLN", rate: pln, fetchedAt: new Date() },
+        ],
+      });
+    };
+    await seedRates(4);
+
+    const saleId = await createAuctionSale(userId, collectionId, {
+      sellerId: otherSellerId,
+      platformId,
+      name: "Warsaw 12",
+      url: null,
+      endsAt: null,
+      currency: "PLN",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    const lot = (lotNo: string) =>
+      createAuctionLot(userId, collectionId, {
+        auctionSaleId: saleId,
+        lotNo,
+        url: null,
+        title: null,
+        endsAt: hourFromNow(),
+        startingPrice: null,
+        currentBid: "100.00",
+        myBid: "120.00",
+        maxBid: null,
+        notes: null,
+      });
+    const openLotId = await lot("1");
+    const closedLotId = await lot("2");
+    // Closing freezes the rate of the day, off the same snapshot: 100 PLN is 25 EUR at 4.
+    await recordAuctionLotTransition(userId, closedLotId, {
+      status: "closed",
+      finalPrice: "100.00",
+      wonTie: null,
+    });
+
+    // The market moves — and with it every *live* figure, but nothing already recorded.
+    await seedRates(5);
+
+    const items = (await listAuctionLots(userId, collectionId, { saleId, includeClosed: true }))
+      .items;
+    const open = items.find((l) => l.id === openLotId);
+    const closed = items.find((l) => l.id === closedLotId);
+    assert.equal(open?.baseCurrency, "EUR");
+    assert.equal(open?.baseRate, 0.2, "an open lot converts at today's rate");
+    assert.equal(
+      closed?.baseRate,
+      0.25,
+      "a result keeps the rate it was recorded at — the datapoint is dated"
+    );
+
+    // The parcel itself is a live figure, so it follows the market like the open lot does.
+    const detail = await getAuctionSaleDetail(userId, saleId);
+    assert.equal(detail.baseCurrency, "EUR");
+    assert.equal(detail.baseRate, 0.2);
+    assert.equal(detail.lots.find((l) => l.id === closedLotId)?.baseRate, 0.25);
+
+    // A sale already in the base currency has nothing to convert, and says so with a null rather
+    // than a rate of 1 — a screen must draw no second line at all there.
+    const homeSaleId = await createAuctionSale(userId, collectionId, {
+      sellerId: otherSellerId,
+      platformId,
+      name: "Köhler 386",
+      url: null,
+      endsAt: null,
+      currency: "EUR",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    assert.equal((await getAuctionSaleDetail(userId, homeSaleId)).baseRate, null);
+
+    await deleteAuctionSale(userId, homeSaleId);
+    await prisma.auctionLot.deleteMany({ where: { auctionSaleId: saleId } });
+    await deleteAuctionSale(userId, saleId);
+    await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+  });
+
   it("scopes everything to the owner", async () => {
     const sale = await findOpenAuctionSale(userId, collectionId, sellerId, platformId);
     assert.ok(sale);

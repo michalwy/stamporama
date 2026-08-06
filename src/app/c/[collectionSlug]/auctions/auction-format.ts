@@ -62,6 +62,55 @@ export function formatMoney(amount: string | null, currency: string): string | n
 }
 
 /**
+ * An amount converted into the collection's base currency (#498) — `≈ 41.20 PLN` — or null when
+ * there is nothing to convert or no rate to convert it with.
+ *
+ * Takes a **rate** rather than a figure converted on the server, deliberately. Half the numbers on
+ * an auction screen are computed here from the seller's fees as they are typed — the all-in cost of
+ * a bid being entered, the bid a ceiling allows — and a server-converted field would describe the
+ * figure as it was fetched. One rate per lot converts whatever is actually on screen.
+ */
+export function formatBase(
+  amount: string | null,
+  rate: number | null,
+  baseCurrency: string
+): string | null {
+  if (amount === null || rate === null) return null;
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return null;
+  return `≈ ${(n * rate).toFixed(2)} ${baseCurrency}`;
+}
+
+/** The bare converted figure, with no `≈` and no currency — what an editable base-currency line
+ * puts in its input, so what is being amended is a number rather than a sentence. */
+export function baseValue(amount: string | null, rate: number | null): string {
+  if (amount === null || rate === null) return "";
+  const n = Number(amount);
+  return Number.isFinite(n) ? (n * rate).toFixed(2) : "";
+}
+
+/**
+ * The inverse of {@link formatBase}: a figure typed **in the base currency**, as the amount that
+ * will be stored in the sale's own (#498).
+ *
+ * What is stored stays the sale's currency — that is what the platform's bid box takes and what the
+ * invoice will say — so this is the same two-sided editing the *Mine* and *Ceiling* columns already
+ * have between a bid and its all-in cost: a second way of stating one figure, not a second figure.
+ *
+ * A blank comes back as `""`, which **clears** the amount: a ceiling given up in one currency is
+ * given up in both. Anything unparseable, and anything with no rate to convert it, comes back null
+ * — there is nothing to save, so the caller does nothing and the field reverts.
+ */
+export function fromBase(typed: string, rate: number | null): string | null {
+  const trimmed = typed.trim();
+  if (!trimmed) return "";
+  if (!rate) return null;
+  const n = Number(trimmed.replace(/,/g, "."));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return (n / rate).toFixed(2);
+}
+
+/**
  * An amount as it is *stored*: two decimals, always. `40` becomes `40.00`, `20,5` becomes `20.50`.
  *
  * Used the moment a figure is committed — a field left, an inline edit confirmed — so what the

@@ -5,6 +5,7 @@ import { createItem } from "../../src/lib/items";
 import {
   addOfferSet,
   createOffer,
+  getOfferDetail,
   listOffersPaginated,
   offerFilterCounts,
   offersNeedingAction,
@@ -156,6 +157,38 @@ describe("offers sold on a platform without a recorded sale (#499)", () => {
       [offerId]
     );
     assert.equal((await offerFilterCounts(userId, collectionId, {})).platformSale, 1);
+  });
+
+  // #505 — the same flag on the offer's own screen. It is one derivation read twice, so what this
+  // asserts is the *agreement*: the detail says exactly what the row it was opened from said, and
+  // is cleared by exactly the same thing.
+  it("carries the flag onto the offer's own screen, and clears it there too", async () => {
+    const item = await newItem();
+    const offerId = await liveOffer(allegroId, "Open me", [item]);
+    await order(offerId, "ord-detail", "unpaid");
+
+    const detail = await getOfferDetail(userId, offerId);
+    const row = await flagOn(offerId);
+    assert.deepEqual(detail?.platformSale, row, "the detail and the row report one order");
+    assert.equal(detail?.platformSale?.orderId, "ord-detail");
+    assert.equal(detail?.platformSale?.paymentStatus, "unpaid");
+
+    const set = await prisma.offerSet.findFirstOrThrow({ where: { offerId }, select: { id: true } });
+    const sale = await prisma.sale.create({
+      data: {
+        collectionId,
+        saleNo: 9002,
+        platformId: allegroId,
+        soldAt: new Date(),
+        currency: "EUR",
+        externalRef: "ord-detail",
+      },
+    });
+    await prisma.saleLine.create({
+      data: { saleId: sale.id, offerId, offerSetId: set.id, price: "20.00" },
+    });
+
+    assert.equal((await getOfferDetail(userId, offerId))?.platformSale, null);
   });
 
   it("flags every other listing holding those copies as needing action", async () => {
