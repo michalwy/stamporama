@@ -367,12 +367,20 @@ Ticking **Platform** also reveals a **Shipping methods** row with a **Methods…
 platform's own postage price list — the services buyers here can choose from, each with what sending
 by it costs *you*:
 
-| Method | Cost | Currency |
-| --- | --- | --- |
-| Registered letter | 12.00 | PLN |
-| Courier | 25.00 | PLN |
+| Method | Carrier | Cost | Currency |
+| --- | --- | --- | --- |
+| Registered letter | Poczta Polska | 12.00 | PLN |
+| Courier | DPD | 25.00 | PLN |
 
-Add a row by filling in the three fields at the bottom and pressing **+**. Each row's **⋮** menu
+**Carrier** is optional and is only a **default**: it says who *usually* moves a parcel sent this
+way, and is pre-selected when you mark a sale sent — where you change it if this one went with
+somebody else. That matters because a marketplace sells a service, not a company: Allegro's
+"Courier" is whichever courier you walk it to. Naming one is what lets a sale's
+[tracking number](sales.md#tracking-the-shipment) become a link to the carrier's own tracking page.
+Carriers are kept per collection under **Settings → Shipping**, not per platform — the same post
+office carries parcels for every marketplace you sell on.
+
+Add a row by filling in the fields at the bottom and pressing **+**. Each row's **⋮** menu
 edits or deletes it; a delete confirms on the row itself. Names are unique per platform, so two
 "Courier" rows can't shadow one another — but two different platforms can each have their own
 Courier at their own price. The list is available once the contact has been saved: a method has to

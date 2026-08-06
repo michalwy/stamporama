@@ -9,6 +9,8 @@ import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
 import { allocateEntityNumber, listItemsPaginated, type ItemListItem } from "./items";
 import { resolveShippingMethodForPlatform } from "./shipping-methods";
+import { assertCarrierInCollection } from "./carriers";
+import { buildTrackingUrl } from "./tracking-rules";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -633,6 +635,37 @@ export async function updateSaleTransactionUrl(
   await prisma.sale.update({ where: { id: saleId }, data: { transactionUrl: url } });
 }
 
+/** What the collector says about the parcel itself (#491): who carried it and its tracking number. */
+export interface SaleShipmentInput {
+  /** The carrier that actually took it, or null to fall back on the shipping method's default. */
+  carrierId: string | null;
+  /** Free text — every carrier numbers its consignments its own way. Null when cleared. */
+  trackingCode: string | null;
+}
+
+/** Record who carried the parcel and under what number (#491), from the prompt shown while a sale
+ * is marked **Sent** or the same dialog reopened from the detail header.
+ *
+ * The two are written together because they are one act: the courier is chosen and the receipt with
+ * the number on it is handed over at the same counter. Editable in any status, like the transaction
+ * link — a number turns up late as often as not, and a wrong one has to be correctable afterwards.
+ *
+ * The carrier is checked against the sale's own collection (the dictionary is the collection's).
+ * Nothing but these two columns is written: the tracking *address* is built on read from the
+ * carrier's template. */
+export async function updateSaleShipment(
+  ownerId: string,
+  saleId: string,
+  input: SaleShipmentInput
+): Promise<void> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  if (input.carrierId) await assertCarrierInCollection(ref.collectionId, input.carrierId);
+  await prisma.sale.update({
+    where: { id: saleId },
+    data: { carrierId: input.carrierId, trackingCode: input.trackingCode },
+  });
+}
+
 /** Set (or clear) how a sale was shipped and what it cost me (#206/#468), from the detail screen's
  * shipping row. Freezes the shipping currency's base rate at save time — independent of the sale's
  * transaction currency — so profit is computed in the base currency. The method is resolved against
@@ -1113,6 +1146,19 @@ export interface SaleDetail {
   /** True when shipping is in a foreign currency but no FX rate to base is known — the cost can't
    * be converted, so it is excluded from the base net until a rate exists. */
   shippingRateMissing: boolean;
+  /** The shipment's tracking number (#491), or null. Editable in place in any status. */
+  trackingCode: string | null;
+  /** The carrier in force for this parcel: the one the sale recorded, else the **default** named on
+   * its shipping method. Null when neither says. The distinction is deliberate — the buyer picks a
+   * service, the courier is chosen at the counter — but everything downstream wants the effective
+   * answer, so the fallback is resolved here rather than in three screens. */
+  carrierId: string | null;
+  /** {@link carrierId}'s name — what the tracking chip is attributed to. */
+  carrierName: string | null;
+  /** The tracking number's own link, built from the carrier's template (#491). Null when there is
+   * nothing to link to — no number yet, or no carrier with a tracking page. The number is still
+   * shown; only the link is missing. */
+  trackingUrl: string | null;
   commission: string | null;
   grossProceeds: string;
   /** Base-currency net (#206): buyer-side proceeds converted to base, minus shipping (base). */
@@ -1149,6 +1195,14 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       shippingCost: true,
       shippingCurrency: true,
       shippingFxRateToBase: true,
+      trackingCode: true,
+      // The sale's own carrier, and the method's as the fallback default (#491). Only the *link* is
+      // derived from either — it is a way of looking the parcel up, not a fact the sale freezes, so
+      // a carrier that moves its tracking site is corrected once and every sale it carried follows.
+      carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
+      shippingMethod: {
+        select: { carrier: { select: { id: true, name: true, trackingUrlTemplate: true } } },
+      },
       commission: true,
       status: true,
       createdAt: true,
@@ -1235,6 +1289,9 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const buyerNetTx = gross + shared.buyerHandling - shared.commission;
   const net = buyerNetTx * rate - shippingBase;
 
+  // What the sale said, else the default its shipping method carries (#491).
+  const carrier = sale.carrier ?? sale.shippingMethod?.carrier ?? null;
+
   // "All packed" hint (#192): true only when the sale has copies and every one is packed. Never
   // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
   const allCopies = sale.lines.flatMap((l) => l.items);
@@ -1264,6 +1321,10 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     shippingCurrency: sale.shippingCurrency,
     shippingBase: sale.shippingCost == null ? null : shippingBase.toFixed(2),
     shippingRateMissing,
+    trackingCode: sale.trackingCode,
+    carrierId: carrier?.id ?? null,
+    carrierName: carrier?.name ?? null,
+    trackingUrl: buildTrackingUrl(carrier?.trackingUrlTemplate, sale.trackingCode),
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),
     netProceeds: net.toFixed(2),

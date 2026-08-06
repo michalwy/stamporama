@@ -354,6 +354,25 @@ Subtypes translate exactly like [conditions](#conditions-in-other-languages) —
 
 The token follows the same rule as the tag: a stamp on the collection's **default** subtype renders `{subtype}` as empty, so ordinary variants do not pick up a redundant word in their listing title.
 
+## Carriers
+
+The post offices and couriers you post with, kept under **Settings → Shipping**. A carrier is a name
+and a **tracking address** — the page where it looks a parcel up, written with `{code}` where the
+tracking number goes:
+
+`https://emonitoring.poczta-polska.pl/?numer={code}`
+
+Leave the address blank for a carrier with no tracking page worth linking to; sales still record
+their tracking numbers, they simply aren't links.
+
+Carriers belong to the **collection** rather than to a platform, unlike the
+[shipping methods](contacts.md#shipping-methods) that name them: postage is priced by the
+marketplace a parcel sold on, but the same Poczta Polska carries an Allegro parcel and a Delcampe
+one and tracks both at the same address. A carrier named on a shipping method is a **default** —
+each sale records the carrier that actually took its parcel when you mark it sent, and shows its
+[tracking number as a link](sales.md#tracking-the-shipment) from there. A carrier still used by a
+shipping method or named on a sale can't be deleted — detach it there first.
+
 ## Collage templates
 
 Offer photos put several stamps on one image. How many fit sensibly is a property of **stamp size**, not of the platform: many small definitives sit comfortably where only a few large commemoratives do. Rather than setting those numbers by hand on every offer, keep them as named, reusable **collage templates** under **Settings → Collage templates**.

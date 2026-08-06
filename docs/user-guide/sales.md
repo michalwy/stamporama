@@ -55,6 +55,8 @@ Every amount field accepts either a comma or a period as the decimal separator �
   in the cost and its currency for you; change either afterwards whenever this parcel cost
   something else. **Custom…** lets you name a one-off method that isn't worth adding to the list.
   Both stay editable on the detail screen — the real postage often turns up later than the order.
+  A method can also name the **carrier** it usually posts by — a default for the
+  [shipment](#tracking-the-shipment), overridable on each sale.
 
 **Continue** creates the sale and opens its detail screen.
 
@@ -127,7 +129,7 @@ header, and opens the marketplace's order page in a new tab. On the row it opens
 sale itself doesn't open — and it's also in the row's **⋮** menu as **Open transaction**. In the
 header, use the **✎** beside the link to change it without navigating away; if no link is recorded
 yet, click **Add transaction link** and type one. You can set or change it whatever the sale's
-[status](#fulfillment-status) is, including long after it was received — the order page is usually
+[status](#fulfillment-status) is, including long after it was delivered — the order page is usually
 what you go back to once a sale is done.
 
 You can revise the header (platform, buyer, date, buyer handling, commission) any time with
@@ -153,7 +155,7 @@ profit/loss (surfaced with the profit/loss views).
 
 A sale carries a **fulfillment status** that tracks its progress through a fixed sequence:
 
-**Ordered → Paid → Packed → Sent → Received**
+**Ordered → Paid → Packed → Sent → Delivered**
 
 A new sale starts at **Ordered**. On the detail screen's header, the **Status** control lets you
 either pick any step from the dropdown or click the **→ next** button to advance one step. Each
@@ -174,6 +176,43 @@ since handling can't be negative.
 The prompt only appears when the buyer side has **no** figure at all. A sale that already carries a
 total paid — or a buyer handling you entered directly — is not asked again: the two are alternate
 anchors for the same money, and answering would replace the one you chose.
+
+**Moving to Sent asks about the parcel.** The moment it goes is the moment you know which courier
+took it and hold the receipt with the number on it, so a **Mark as sent** prompt asks for both. The
+carrier arrives **pre-selected** from the sale's shipping method — change it when the parcel went
+another way — and the prompt says what the choice means: whether that carrier will turn the number
+into a link, or whether it has no tracking page recorded. **Skip** moves the sale to Sent without a
+number, which is the right answer for postage that carries no tracking at all. As with the paid
+prompt, a sale that already has a tracking number isn't asked again.
+
+## Tracking the shipment
+
+A sale records **who carried the parcel** and its **tracking number** — the number free text,
+exactly as the carrier gave it to you. Both live in one **Shipment** dialog: it opens at the
+[**Sent** transition](#fulfillment-status), and again from the detail header — **Add tracking
+number** when there is none, or the **✎** beside the 📦 chip to correct what was recorded. Like the
+transaction link, either can be set or changed whatever the sale's status is.
+
+**The carrier on a shipping method is only a default.** On a marketplace you offer a *service* —
+"Courier" — and which courier actually takes the parcel is settled at the counter, so what the
+method names is a suggestion the Shipment dialog pre-selects and you override per sale. A sale that
+never says anything of its own keeps following its method's carrier.
+
+Whether the number becomes a **link** depends on that carrier:
+
+1. Add the carrier under **Settings → Shipping** with its **tracking address** — the page where it
+   looks a parcel up, with `{code}` where the tracking number goes, e.g.
+   `https://emonitoring.poczta-polska.pl/?numer={code}`. Leave the address blank for a carrier with
+   no tracking page.
+2. Name a usual carrier on the platform's [shipping method](contacts.md#shipping-methods), so the
+   common case needs no thought.
+3. Record the sale, pick the carrier that actually took it when you mark it Sent, and the tracking
+   number becomes a **📦 link** straight to the parcel.
+
+Without a carrier — or with one that has no tracking address — the number is still recorded and
+shown, just as plain text; hover it and the chip says which of the two is missing. Because the link
+is built when the sale is read rather than stored on it, a carrier that moves its tracking site is
+corrected in one place and every sale it ever carried follows.
 
 ## Packing view
 

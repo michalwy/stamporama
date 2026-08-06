@@ -21,6 +21,7 @@ import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
 import { getCollageTemplates } from "@/lib/collage-templates";
+import { getCarriers } from "@/lib/carriers";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
@@ -52,6 +53,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     certificateStatuses,
     subtypes,
     collageTemplates,
+    carriers,
     colnectMappings,
     colnectConditionMappings,
     colnectPlatform,
@@ -73,6 +75,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
+    getCarriers(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
     getColnectPlatform(session.user.id, collection.id),
@@ -106,6 +109,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
           initialCollageTemplates={collageTemplates}
+          initialCarriers={carriers}
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
           colnectPlatformId={colnectPlatform?.id ?? null}

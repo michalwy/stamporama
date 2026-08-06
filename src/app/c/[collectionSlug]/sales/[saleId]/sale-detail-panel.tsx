@@ -14,6 +14,7 @@ import type { SaleDetail } from "@/lib/sales";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
+import type { CarrierData } from "@/lib/carriers";
 import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
 import type { SaleShippingRaw } from "@/app/actions/sales";
 import { SaleFormDialog } from "../sale-form-dialog";
@@ -21,6 +22,7 @@ import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
 import { PaidTotalDialog } from "./paid-total-dialog";
+import { ShipmentDialog } from "./shipment-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 
 const CHIP: React.CSSProperties = {
@@ -90,17 +92,27 @@ type Dialog =
   | { kind: "editHeader" }
   | { kind: "addLines" }
   | { kind: "removeLine"; lineId: string; label: string }
-  | { kind: "paidTotal" };
+  | { kind: "paidTotal" }
+  | { kind: "shipment"; mode: "sent" | "edit" };
 
 interface SaleDetailPanelProps {
   collectionId: string;
   sale: SaleDetail;
+  /** The collection's carriers (#491) — what the shipment dialog picks from. */
+  carriers: CarrierData[];
   areas: CollectionAreaData[];
   locations: LocationData[];
   issueHeaderById: Record<string, IssueHeader>;
 }
 
-export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHeaderById }: SaleDetailPanelProps) {
+export function SaleDetailPanel({
+  collectionId,
+  sale,
+  carriers,
+  areas,
+  locations,
+  issueHeaderById,
+}: SaleDetailPanelProps) {
   const router = useRouter();
   const params = useParams<{ collectionSlug: string }>();
   const { invalidateAll } = useInvalidateSales();
@@ -134,6 +146,14 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
     if (next === "paid" && buyerSideUnanchored) {
       setError(undefined);
       setDialog({ kind: "paidTotal" });
+      return;
+    }
+    // Sending the parcel is the moment the tracking number exists and is in hand (#491) — the same
+    // reasoning as the total on `paid` above. Only asked when the sale carries none: one already
+    // recorded has answered, and re-asking would invite overwriting it.
+    if (next === "sent" && sale.trackingCode == null) {
+      setError(undefined);
+      setDialog({ kind: "shipment", mode: "sent" });
       return;
     }
     setStatus(next);
@@ -257,6 +277,75 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
               })
             }
           />
+          {/* The parcel (#491): who carried it and its tracking number. A link only when the carrier
+              in force has a tracking address; otherwise the number is shown plain, which is still
+              what you read out to a buyer who asks. Both are edited in the same dialog the Sent
+              transition raises — the carrier is decided at the same counter as the number, so
+              editing one without the other is not a thing anybody wants to do. */}
+          {sale.trackingCode ? (
+            <>
+              {sale.trackingUrl ? (
+                <Tooltip
+                  content={`Track this parcel${sale.carrierName ? ` with ${sale.carrierName}` : ""}`}
+                >
+                  <a
+                    href={sale.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
+                  >
+                    📦 {sale.trackingCode}
+                  </a>
+                </Tooltip>
+              ) : (
+                <Tooltip
+                  content={
+                    sale.carrierName
+                      ? `${sale.carrierName} has no tracking address recorded — add one in Settings → Shipping`
+                      : "No carrier is recorded for this parcel, so there is nothing to link to"
+                  }
+                >
+                  <span style={CHIP}>📦 {sale.trackingCode}</span>
+                </Tooltip>
+              )}
+              <button
+                type="button"
+                aria-label="Edit shipment"
+                title="Edit carrier and tracking number"
+                onClick={() => {
+                  setError(undefined);
+                  setDialog({ kind: "shipment", mode: "edit" });
+                }}
+                disabled={isPending}
+                style={{
+                  border: "none",
+                  background: "none",
+                  cursor: isPending ? "default" : "pointer",
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.75rem",
+                  padding: "0 0.125rem",
+                }}
+              >
+                ✎
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setDialog({ kind: "shipment", mode: "edit" });
+              }}
+              disabled={isPending}
+              style={{
+                ...CHIP,
+                color: "var(--color-text-muted)",
+                cursor: isPending ? "default" : "pointer",
+              }}
+            >
+              Add tracking number
+            </button>
+          )}
           {sale.fxRateToBase && (
             <Tooltip content={`Frozen FX rate to ${sale.baseCurrency}: ${sale.fxRateToBase}`}>
               <span style={CHIP}>
@@ -625,6 +714,41 @@ export function SaleDetailPanel({ collectionId, sale, areas, locations, issueHea
                 const saved = await updateSaleAmountAction(sale.id, "buyerPaidTotal", totalPaid);
                 if (saved.status !== "success") return saved;
                 return setSaleStatusAction(sale.id, "paid");
+              },
+              () => setDialog({ kind: "none" })
+            )
+          }
+        />
+      )}
+
+      {/* The parcel, asked for on the way to `sent` (#491) and reopenable to correct. Saving and
+          the transition are one run, like the paid prompt above: a refused save leaves the status
+          alone, so the sale never says "sent" over a number that was never stored. */}
+      {dialog.kind === "shipment" && (
+        <ShipmentDialog
+          mode={dialog.mode}
+          shippingMethodName={sale.shippingMethodName}
+          carriers={carriers}
+          carrierId={sale.carrierId}
+          trackingCode={sale.trackingCode}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onSkip={() => setStatus("sent", () => setDialog({ kind: "none" }))}
+          onSubmit={(carrierId, trackingCode) =>
+            run(
+              async () => {
+                const { updateSaleShipmentAction, setSaleStatusAction } = await import(
+                  "@/app/actions/sales"
+                );
+                const saved = await updateSaleShipmentAction(sale.id, carrierId, trackingCode);
+                if (saved.status !== "success" || dialog.mode === "edit") return saved;
+                return setSaleStatusAction(sale.id, "sent");
               },
               () => setDialog({ kind: "none" })
             )

@@ -62,16 +62,19 @@ describe("shipping methods dictionary", () => {
       name: "Registered letter",
       cost: "12.00",
       currency: "PLN",
+      carrierId: null,
     });
     await createShippingMethod(userId, collectionId, platformId, {
       name: "Courier",
       cost: "25.00",
       currency: "PLN",
+      carrierId: null,
     });
     await createShippingMethod(userId, collectionId, otherPlatformId, {
       name: "Priority",
       cost: "4.50",
       currency: "EUR",
+      carrierId: null,
     });
 
     const methods = await getShippingMethods(userId, platformId);
@@ -93,6 +96,7 @@ describe("shipping methods dictionary", () => {
           name: "Nope",
           cost: "1.00",
           currency: "EUR",
+          carrierId: null,
         }),
       /not a platform/i
     );
@@ -105,6 +109,7 @@ describe("shipping methods dictionary", () => {
           name: "Nope",
           cost: "1.00",
           currency: "PLN",
+          carrierId: null,
         }),
       /access denied/i
     );
@@ -116,12 +121,14 @@ describe("shipping methods dictionary", () => {
         name: "Courier",
         cost: "30.00",
         currency: "PLN",
+        carrierId: null,
       })
     );
     await createShippingMethod(userId, collectionId, otherPlatformId, {
       name: "Courier",
       cost: "9.00",
       currency: "EUR",
+      carrierId: null,
     });
   });
 
@@ -131,6 +138,7 @@ describe("shipping methods dictionary", () => {
       name: "Courier (DPD)",
       cost: "27.50",
       currency: "PLN",
+      carrierId: null,
     });
     const renamed = (await getShippingMethods(userId, platformId)).find((m) => m.id === courier.id);
     assert.equal(renamed?.name, "Courier (DPD)");
@@ -172,6 +180,7 @@ describe("a sale's shipping method", () => {
       name: "Registered letter",
       cost: "12.00",
       currency: "PLN",
+      carrierId: null,
     });
     methodId = (await getShippingMethods(userId, platformId))[0].id;
   });
@@ -226,6 +235,7 @@ describe("a sale's shipping method", () => {
       name: "Registered letter (priority)",
       cost: "14.00",
       currency: "PLN",
+      carrierId: null,
     });
     const detail = await getSaleDetail(userId, saleId);
     assert.equal(detail?.shippingMethodName, "Registered letter");
@@ -269,6 +279,7 @@ describe("a sale's shipping method", () => {
       name: "Elsewhere",
       cost: "3.00",
       currency: "PLN",
+      carrierId: null,
     });
     const elsewhere = (await getShippingMethods(userId, otherPlatformId))[0];
     await assert.rejects(

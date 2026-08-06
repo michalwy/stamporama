@@ -18,6 +18,7 @@ import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { AllegroProfilesPanel } from "./allegro-profiles-panel";
 import { AllegroCategoriesPanel } from "./allegro-categories-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
+import { CarriersPanel } from "./carriers-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -30,6 +31,7 @@ import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
+import type { CarrierData } from "@/lib/carriers";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
@@ -53,6 +55,8 @@ interface SettingsTabsProps {
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
   initialCollageTemplates: CollageTemplateData[];
+  /** The collection's carriers (#491) — the tracking-address side of shipping. */
+  initialCarriers: CarrierData[];
   initialColnectMappings: ColnectMappingData[];
   /** Every condition with the Colnect grade it maps to (#404) — one row each, mapped or not. */
   initialColnectConditionMappings: ColnectConditionMappingData[];
@@ -88,6 +92,7 @@ const TABS = [
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
   { key: "collages", label: "Collage templates" },
+  { key: "shipping", label: "Shipping" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
   { key: "allegro", label: "Allegro" },
@@ -119,6 +124,7 @@ export function SettingsTabs({
   initialCertificateStatuses,
   initialSubtypes,
   initialCollageTemplates,
+  initialCarriers,
   initialColnectMappings,
   initialColnectConditionMappings,
   colnectPlatformId,
@@ -144,6 +150,7 @@ export function SettingsTabs({
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "collages" ||
+    rawTab === "shipping" ||
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
     rawTab === "allegro" ||
@@ -284,6 +291,15 @@ export function SettingsTabs({
             collectionId={collectionId}
             initialTemplates={initialCollageTemplates}
           />
+        </section>
+      )}
+      {activeTab === "shipping" && (
+        <section>
+          {/* Carriers are the collection's, while the price list they are named on is each
+              platform's (#468/#491) — a marketplace quotes the postage, a carrier moves the parcel
+              and tracks it the same way whichever marketplace it came from. */}
+          <h2 style={sectionHeadingStyle}>Carriers</h2>
+          <CarriersPanel collectionId={collectionId} initialCarriers={initialCarriers} />
         </section>
       )}
       {activeTab === "duplicates" && (

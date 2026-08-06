@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { assertCarrierInCollection } from "./carriers";
 
 // Per-platform shipping methods (#468) — the dictionary a sale's shipping method is picked from.
 // Shaped after `certificate-statuses.ts` (owner assertion, `*InUseError` on delete), with one
@@ -13,6 +14,9 @@ import { prisma } from "./db";
 export interface ShippingMethodData {
   id: string;
   platformId: string;
+  /** Which carrier posts by this method (#491), or null where it was never said. The only thing it
+   * decides is whether a sale's tracking number becomes a link. */
+  carrierId: string | null;
   name: string;
   /** The method's **current** cost, fixed to 2 decimals. Copied onto a sale when picked, never read
    * back into one already recorded. */
@@ -66,11 +70,12 @@ export async function getShippingMethods(
   const rows = await prisma.shippingMethod.findMany({
     where: { platformId },
     orderBy: { name: "asc" },
-    select: { id: true, platformId: true, name: true, cost: true, currency: true },
+    select: { id: true, platformId: true, carrierId: true, name: true, cost: true, currency: true },
   });
   return rows.map((m) => ({
     id: m.id,
     platformId: m.platformId,
+    carrierId: m.carrierId,
     name: m.name,
     cost: m.cost.toFixed(2),
     currency: m.currency,
@@ -81,6 +86,19 @@ export interface ShippingMethodInput {
   name: string;
   cost: string;
   currency: string;
+  /** The carrier that posts by this method (#491), or null for none. Checked against the method's
+   * own collection, since the carrier dictionary is the collection's. */
+  carrierId: string | null;
+}
+
+/** Resolve the carrier half of a method's input, checking it belongs to the same collection. */
+async function resolveCarrier(
+  collectionId: string,
+  carrierId: string | null
+): Promise<string | null> {
+  if (!carrierId) return null;
+  await assertCarrierInCollection(collectionId, carrierId);
+  return carrierId;
 }
 
 export async function createShippingMethod(
@@ -95,6 +113,7 @@ export async function createShippingMethod(
     data: {
       collectionId,
       platformId,
+      carrierId: await resolveCarrier(collectionId, input.carrierId),
       name: input.name,
       cost: input.cost,
       currency: input.currency,
@@ -107,10 +126,15 @@ export async function updateShippingMethod(
   methodId: string,
   input: ShippingMethodInput
 ): Promise<void> {
-  await assertMethodOwner(ownerId, methodId);
+  const { collectionId } = await assertMethodOwner(ownerId, methodId);
   await prisma.shippingMethod.update({
     where: { id: methodId },
-    data: { name: input.name, cost: input.cost, currency: input.currency },
+    data: {
+      carrierId: await resolveCarrier(collectionId, input.carrierId),
+      name: input.name,
+      cost: input.cost,
+      currency: input.currency,
+    },
   });
 }
 

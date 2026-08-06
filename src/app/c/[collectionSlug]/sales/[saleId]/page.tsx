@@ -8,6 +8,7 @@ import { getSaleDetail, getSaleIssueIds } from "@/lib/sales";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { getCarriers } from "@/lib/carriers";
 import { SaleDetailPanel } from "./sale-detail-panel";
 
 interface SaleDetailPageProps {
@@ -37,10 +38,12 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
 
   // Supporting data for the sold-unit copy rows (packing view). Copies themselves stream in per
   // unit via client queries, so the page only preloads the small, shared lookups.
-  const [areas, locations, issueIds] = await Promise.all([
+  const [areas, locations, issueIds, carriers] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getSaleIssueIds(saleId),
+    // Short list, and the shipment dialog needs it the moment the header renders (#491).
+    getCarriers(session.user.id, collection.id),
   ]);
   const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
   const issueHeaderById: Record<string, IssueHeader> = {};
@@ -69,6 +72,7 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
       <SaleDetailPanel
         collectionId={collection.id}
         sale={sale}
+        carriers={carriers}
         areas={areas}
         locations={locations}
         issueHeaderById={issueHeaderById}

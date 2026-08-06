@@ -37,7 +37,9 @@ export async function getShippingMethodsAction(platformId: string): Promise<Ship
  * free-entry amount this dictionary exists to replace. */
 function parseFields(
   formData: FormData
-): { ok: true; name: string; cost: string; currency: string } | { ok: false; message: string } {
+):
+  | { ok: true; name: string; cost: string; currency: string; carrierId: string | null }
+  | { ok: false; message: string } {
   const name = ((formData.get("name") as string | null) ?? "").trim();
   if (!name) return { ok: false, message: "Name is required." };
   const currency = ((formData.get("currency") as string | null) ?? "").trim();
@@ -45,7 +47,10 @@ function parseFields(
   const cost = parseAmount((formData.get("cost") as string | null) ?? "", "Cost");
   if (!cost.ok) return { ok: false, message: cost.message };
   if (cost.value == null) return { ok: false, message: "Cost is required." };
-  return { ok: true, name, cost: cost.value, currency };
+  // Optional (#491): a method whose carrier was never said is a complete method — the carrier only
+  // decides whether a tracking number becomes a link.
+  const carrierId = ((formData.get("carrierId") as string | null) ?? "").trim() || null;
+  return { ok: true, name, cost: cost.value, currency, carrierId };
 }
 
 /** The unique index on (platform, name) is what enforces the pick-list's distinct names, so the

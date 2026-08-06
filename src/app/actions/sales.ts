@@ -8,6 +8,7 @@ import {
   updateSaleHeader,
   updateSaleAmount,
   updateSaleTransactionUrl,
+  updateSaleShipment,
   updateSaleShipping,
   addSaleLines,
   updateSaleLinePrice,
@@ -24,6 +25,7 @@ import { parseAmount, parsePrice } from "@/lib/sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
+import { normalizeTrackingCode } from "@/lib/tracking-rules";
 // The form → domain parsing lives beside the domain (`sale-header-input.ts`) rather than here,
 // because the Allegro order flow (#463) writes the same header through its own action and a
 // `"use server"` module cannot export a shared parser.
@@ -125,6 +127,27 @@ export async function updateSaleTransactionUrlAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the transaction link.");
+  }
+}
+
+/** Record who carried the parcel and its tracking number (#491), from the prompt shown while a sale
+ * is marked Sent or the same dialog reopened from the detail header. A blank carrier means "no
+ * answer of my own" and falls back to the shipping method's default on read; a blank number clears
+ * it. Nothing else is done to the text — every carrier numbers its consignments its own way. */
+export async function updateSaleShipmentAction(
+  saleId: string,
+  carrierId: string,
+  rawTrackingCode: string
+): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await updateSaleShipment(session.user.id, saleId, {
+      carrierId: carrierId.trim() || null,
+      trackingCode: normalizeTrackingCode(rawTrackingCode),
+    });
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to save the shipment details.");
   }
 }
 

@@ -82,6 +82,7 @@ model Collection {
   offers          Offer[]
   sales           Sale[]
   shippingMethods ShippingMethod[]
+  carriers        Carrier[]
   auctionSales    AuctionSale[]
   colnectCatalogMappings ColnectCatalogMapping[]
   colnectConditionMappings ColnectConditionMapping[]
@@ -2143,6 +2144,21 @@ model Sale {
   // Base-currency FX rate for `shippingCurrency`, frozen at `soldAt` (DECIMAL(65,30), like
   // `fxRateToBase`). Null when `shippingCurrency == base` (identity) or no rate is known (#206).
   shippingFxRateToBase Decimal?
+  // The shipment's tracking number (#491), as the carrier stated it — free text, trimmed only.
+  // Null until the parcel is sent (the `sent` transition asks for it) or where the service has no
+  // tracking at all. Deliberately **not** a link: the address is built on read from the carrier's
+  // own template, so re-pointing a carrier at a new tracking site fixes every sale at once rather
+  // than none of them.
+  trackingCode  String?
+  // Who actually carried **this** parcel (#491). Null on a sale that never said, which then falls
+  // back on read to the carrier named on its shipping method.
+  //
+  // A sale needs its own answer because the two questions are genuinely different: the buyer picks
+  // a *service* at checkout ("Courier"), and which courier that turns out to be is decided at the
+  // parcel counter days later. The method's carrier is therefore a **default**, not the truth —
+  // seeded into the prompt shown while a sale is marked `sent`, and overridable there. `onDelete:
+  // Restrict`, the guard every other dictionary reference carries.
+  carrierId     String?
   // Platform commission/fees, entered manually per transaction (subtracts, −).
   commission    Decimal? @db.Decimal(10, 2)
   // Fulfillment status in lifecycle order (#191): ordered → paid → packed → sent → received.
@@ -2155,6 +2171,7 @@ model Sale {
   platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
   shippingMethod ShippingMethod?  @relation(fields: [shippingMethodId], references: [id], onDelete: Restrict)
+  carrier       Carrier?          @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
   statusEvents  SaleStatusEvent[]
 
@@ -2163,6 +2180,7 @@ model Sale {
   @@index([platformId])
   @@index([buyerId])
   @@index([shippingMethodId])
+  @@index([carrierId])
   @@map("sale")
 }
 
@@ -2180,6 +2198,13 @@ model ShippingMethod {
   collectionId String
   // The platform (a `Contact` carrying the `platform` role) this method is offered on.
   platformId   String
+  // Who usually carries a parcel sent this way (#491) — a **default**, seeded onto a sale and
+  // overridable there, because the buyer picks a service ("Courier") and which courier it actually
+  // goes with is decided at the parcel counter. Optional, and the only reason it exists is the
+  // tracking link: the method is per platform, the carrier is not, and "Poczta Polska" tracks the
+  // same way whichever marketplace the sale came from. `onDelete: Restrict` — the
+  // detach-before-delete guard every other dictionary reference carries.
+  carrierId    String?
   name         String
   // What sending by this method costs *me* — the seller-side postage, which is what the sale's
   // `shippingCost` records. Not what the buyer is charged for it (that is `buyerHandling`).
@@ -2193,6 +2218,7 @@ model ShippingMethod {
   // A method belongs to its platform: deleting the platform takes its price list with it. (In
   // practice a platform with sales cannot be deleted at all — `Sale.platformId` is `Restrict`.)
   platform   Contact    @relation("PlatformShippingMethod", fields: [platformId], references: [id], onDelete: Cascade)
+  carrier    Carrier?   @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   sales      Sale[]
 
   // Names are the pick-list, so they are unique per platform — two "Courier" rows would be a
@@ -2200,7 +2226,38 @@ model ShippingMethod {
   @@unique([platformId, name])
   @@index([collectionId])
   @@index([platformId])
+  @@index([carrierId])
   @@map("shipping_method")
+}
+
+// A carrier the collection posts with (#491) — the post office or courier that actually moves the
+// parcel, and where its consignments are tracked.
+//
+// A dictionary in the same sense as `StampCondition` (#93) or `ShippingMethod` (#468), but hung off
+// the **collection** rather than a platform, which is the whole point of it existing: a shipping
+// method is per marketplace, and the same Poczta Polska carries an Allegro parcel and a Delcampe one
+// and tracks both at the same address. Storing the tracking address on the method would mean typing
+// it again for every platform, and one of the copies going stale.
+model Carrier {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  // Where a consignment is looked up, with `{code}` standing in for the tracking number — e.g.
+  // `https://emonitoring.poczta-polska.pl/?numer={code}`. Null (or blank) where the carrier has no
+  // tracking page worth linking to, which is a real case: the code is then still recorded and shown,
+  // just not as a link. A stored template always carries the `{code}` token — a template without it
+  // would build a link that lands somewhere other than this parcel, so it is refused on save.
+  trackingUrlTemplate String?
+  createdAt    DateTime @default(now())
+
+  collection      Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  shippingMethods ShippingMethod[]
+  sales           Sale[]
+
+  // The name is the pick-list, as it is for shipping methods.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("carrier")
 }
 
 // Append-only fulfillment-status transition log for a sale (#191). One row per status change,

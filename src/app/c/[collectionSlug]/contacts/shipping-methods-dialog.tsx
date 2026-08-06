@@ -13,6 +13,8 @@ import { NumericInput } from "../shared/numeric-input";
 import { NO_AUTOFILL } from "../shared/no-autofill";
 import { RowActionsMenu } from "../shared/row-actions-menu";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
+import type { CarrierData } from "@/lib/carriers";
+import { getCarriersAction } from "@/app/actions/carriers";
 import {
   getShippingMethodsAction,
   createShippingMethodAction,
@@ -32,13 +34,14 @@ const INPUT_STYLE: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-/** name · cost · currency · actions — one grid so the rows, the editor and the add form line up.
+/** name · carrier · cost · currency · actions — one grid so the rows, the editor and the add form
+ * line up.
  * The last column is sized for the **widest** thing that lands in it, the editor's ✓ + ✕ pair, not
  * for the single `⋮` a resting row shows; a column cut to the narrower case clips the other. Its
  * contents are flush right, so a resting row's `⋮` still sits at the edge. */
 const GRID: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 7rem 6rem 4.5rem",
+  gridTemplateColumns: "1fr 9rem 6rem 5rem 4.5rem",
   alignItems: "center",
   gap: "0.5rem",
 };
@@ -96,6 +99,9 @@ export function ShippingMethodsDialog({
   onCountChange,
 }: ShippingMethodsDialogProps) {
   const [methods, setMethods] = useState<ShippingMethodData[]>([]);
+  // The collection's carriers (#491) — what a method can name as the one that actually posts by it.
+  // Loaded once beside the methods; the list is short and maintained in Settings, not here.
+  const [carriers, setCarriers] = useState<CarrierData[]>([]);
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<RowState>({ kind: "none" });
   // A row menu owns Escape while it is open (it is not an escape layer of its own), so the dialog
@@ -108,6 +114,7 @@ export function ShippingMethodsDialog({
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [currency, setCurrency] = useState(defaultCurrency);
+  const [carrierId, setCarrierId] = useState("");
 
   async function reload() {
     const rows = await getShippingMethodsAction(platformId);
@@ -118,10 +125,11 @@ export function ShippingMethodsDialog({
 
   useEffect(() => {
     let cancelled = false;
-    getShippingMethodsAction(platformId)
-      .then((rows) => {
+    Promise.all([getShippingMethodsAction(platformId), getCarriersAction(collectionId)])
+      .then(([rows, carrierRows]) => {
         if (cancelled) return;
         setMethods(rows);
+        setCarriers(carrierRows);
         onCountChange?.(rows.length);
       })
       .catch(() => {
@@ -143,6 +151,7 @@ export function ShippingMethodsDialog({
     setName("");
     setCost("");
     setCurrency(defaultCurrency);
+    setCarrierId("");
   }
 
   function startEdit(m: ShippingMethodData) {
@@ -150,6 +159,7 @@ export function ShippingMethodsDialog({
     setName(m.name);
     setCost(m.cost);
     setCurrency(m.currency);
+    setCarrierId(m.carrierId ?? "");
     setRow({ kind: "edit", id: m.id });
   }
 
@@ -158,6 +168,7 @@ export function ShippingMethodsDialog({
     fd.set("name", name);
     fd.set("cost", cost);
     fd.set("currency", currency);
+    fd.set("carrierId", carrierId);
     startTransition(async () => {
       const result = await action(fd);
       if (result.status === "error") {
@@ -184,13 +195,25 @@ export function ShippingMethodsDialog({
     });
   }
 
-  const draft = { name, setName, cost, setCost, currency, setCurrency, disabled: isPending };
+  const draft = {
+    name,
+    setName,
+    cost,
+    setCost,
+    currency,
+    setCurrency,
+    carrierId,
+    setCarrierId,
+    carriers,
+    disabled: isPending,
+  };
+  const carrierNameById = new Map(carriers.map((c) => [c.id, c.name]));
 
   return (
     <DialogShell
       title={`Shipping methods — ${platformName}`}
       onClose={onClose}
-      maxWidth="36rem"
+      maxWidth="44rem"
       minHeight="24rem"
       zIndexBase={DIALOG_Z_INDEX_BASE}
       dismissable={!menuOpen}
@@ -206,6 +229,7 @@ export function ShippingMethodsDialog({
             columns would sit 0.625rem to the left of the rows they label. */}
         <div style={{ ...GRID, padding: ROW_INSET, marginBottom: "0.375rem" }}>
           <LabelWithError>Method</LabelWithError>
+          <LabelWithError>Carrier</LabelWithError>
           <LabelWithError>Cost</LabelWithError>
           <LabelWithError>Currency</LabelWithError>
           <span />
@@ -253,6 +277,7 @@ export function ShippingMethodsDialog({
                     </span>
                     <span />
                     <span />
+                    <span />
                     <div style={ACTIONS_CELL}>
                       <IconButton label="Delete" danger disabled={isPending} onClick={() => confirmDelete(m.id)}>
                         ✓
@@ -266,6 +291,17 @@ export function ShippingMethodsDialog({
                   <>
                     <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
                       {m.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.875rem",
+                        color: "var(--color-text-muted)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {m.carrierId ? (carrierNameById.get(m.carrierId) ?? "—") : "—"}
                     </span>
                     <span
                       style={{
@@ -338,7 +374,7 @@ export function ShippingMethodsDialog({
   );
 }
 
-/** The three draft inputs, shared by the inline editor and the add form. Declared at module level
+/** The four draft inputs, shared by the inline editor and the add form. Declared at module level
  * on purpose: a component defined inside the dialog would be a new type on every keystroke, and
  * React would remount the inputs and take the caret with them. */
 function DraftFields({
@@ -349,6 +385,9 @@ function DraftFields({
   setCost,
   currency,
   setCurrency,
+  carrierId,
+  setCarrierId,
+  carriers,
   disabled,
 }: {
   idPrefix: string;
@@ -358,6 +397,9 @@ function DraftFields({
   setCost: (v: string) => void;
   currency: string;
   setCurrency: (v: string) => void;
+  carrierId: string;
+  setCarrierId: (v: string) => void;
+  carriers: CarrierData[];
   disabled: boolean;
 }) {
   return (
@@ -373,6 +415,24 @@ function DraftFields({
         {...NO_AUTOFILL}
         style={INPUT_STYLE}
       />
+      {/* Optional (#491), and only ever about tracking: naming the carrier is what turns a sale's
+          tracking number into a link to its own consignment. Carriers are kept in
+          Settings → Shipping, because the same one carries parcels for every platform. */}
+      <select
+        id={`${idPrefix}-carrier`}
+        value={carrierId}
+        onChange={(e) => setCarrierId(e.target.value)}
+        disabled={disabled}
+        aria-label="Carrier"
+        style={{ ...INPUT_STYLE, cursor: "pointer" }}
+      >
+        <option value="">— no carrier —</option>
+        {carriers.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
       <NumericInput
         id={`${idPrefix}-cost`}
         value={cost}
