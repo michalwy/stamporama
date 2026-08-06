@@ -22,6 +22,11 @@ export interface OfferSummaryRow {
   setCount: number;
   /** The copies across those sets, one entry per membership. */
   itemIds: string[];
+  /** The listing has **already sold on its platform** with no sale recorded here yet (#499/#501).
+   * Such an offer is still `active` as far as its state goes — recording the sale is what makes it
+   * `sold` — but it is not stock on the market any more, so it is counted apart rather than inside
+   * the asking value. */
+  platformSold?: boolean;
 }
 
 /** The asking-value figures for one slice — the whole filtered set, or a single platform. The two
@@ -57,18 +62,31 @@ export interface OffersAskingSummary extends OfferAskingTotal {
   baseCurrency: string;
   /** Per-platform breakdown, largest asking value first. Empty when the slice is empty. */
   platforms: OfferPlatformTotal[];
+  /** The offers held out of every figure above — sold on their platform, not yet recorded here
+   * (#501). Same shape as the total, so the bar reads the two lines off one type. */
+  platformSold: OfferAskingTotal;
 }
 
-/** Aggregate offers into their asking total, plus a per-platform breakdown. `rates` maps a currency
+/**
+ * Aggregate offers into their asking total, plus a per-platform breakdown. `rates` maps a currency
  * to its rate into `baseCurrency`; an offer already in the base currency needs no entry, and a
- * missing entry is what makes an offer unconvertible. Pure. */
+ * missing entry is what makes an offer unconvertible. Pure.
+ *
+ * Rows flagged `platformSold` are **partitioned out** of the total and out of every platform row
+ * (#501), and totalled on their own. The asking value answers "what is still on the market at my
+ * prices", and a listing the marketplace has already sold is not that — it is money owed, waiting
+ * only for the sale to be written down. Counting it as stock overstates both halves at once.
+ */
 export function aggregateOfferAsking(
   rows: OfferSummaryRow[],
   baseCurrency: string,
   rates: Map<string, number>
 ): OffersAskingSummary {
+  const sold = rows.filter((r) => r.platformSold);
+  const open = sold.length > 0 ? rows.filter((r) => !r.platformSold) : rows;
+
   const perPlatform = new Map<string, { name: string; rows: OfferSummaryRow[] }>();
-  for (const row of rows) {
+  for (const row of open) {
     const entry = perPlatform.get(row.platformId);
     if (entry) entry.rows.push(row);
     else perPlatform.set(row.platformId, { name: row.platformName, rows: [row] });
@@ -91,8 +109,9 @@ export function aggregateOfferAsking(
 
   return {
     baseCurrency,
-    ...askingTotal(rows, baseCurrency, rates),
+    ...askingTotal(open, baseCurrency, rates),
     platforms,
+    platformSold: askingTotal(sold, baseCurrency, rates),
   };
 }
 

@@ -10,6 +10,8 @@ import type { AuctionLotOutcome } from "@/lib/auction-rules";
 export interface AuctionLotFilters {
   /** How the bidding went — the toolbar's chips (`won`, `lost`, `watched`…). */
   outcome?: AuctionLotOutcome;
+  /** Show lots that are done — won, lost, observed, cancelled (#504). Off by default. */
+  includeClosed?: boolean;
   /** Closing-time window: already ended, or closing inside a day / a week. */
   closing?: AuctionClosingWindow;
   /** A derived state: still biddable, outbid, over ceiling… */
@@ -37,6 +39,7 @@ const LOT_PARAM: {
   [K in keyof Required<AuctionLotFilters>]-?: (value: NonNullable<AuctionLotFilters[K]>) => string;
 } = {
   outcome: (value) => value,
+  includeClosed: () => "1",
   closing: (value) => value,
   signal: (value) => value,
   undescribed: () => "1",

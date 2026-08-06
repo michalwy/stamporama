@@ -443,6 +443,11 @@ export interface AuctionLotFilters {
    * lifecycle because that is what the collector is looking for: "what did I win", "what did I only
    * watch". `open | closed | cancelled` is bookkeeping and never appears as a chip. */
   outcome?: AuctionLotOutcome;
+  /** Include lots that are **done** — won, lost, observed, cancelled (#504). Off by default: the
+   * watchlist is a list of things still to do, and a lot that has been resolved is filed, not
+   * pending. The offers list hides its closed listings on exactly this rule (#245). Ignored when an
+   * explicit `outcome` is chosen — picking "Won" is asking for closed lots. */
+  includeClosed?: boolean;
   closing?: AuctionClosingWindow;
   /** A **derived** state (`auction-lot.ts`) rather than a stored one — outbid, over ceiling, still
    * biddable. Resolved to ids in memory before the page query, exactly as the offers list resolves
@@ -486,7 +491,11 @@ function lotListWhere(
   // them touch `status` — the outcome predicates and the undescribed rule both do — and as sibling
   // keys the later one would silently overwrite the earlier instead of narrowing it.
   const and: Prisma.AuctionLotWhereInput[] = [];
+  // An explicit outcome wins; otherwise the list is the watchlist and closed lots stay out of it
+  // unless the collector opted in (#504). A sale's own lots are exempt — that screen is the
+  // settlement of one parcel, where a won lot is the entire point.
   if (filters.outcome) and.push(outcomeWhere(filters.outcome));
+  else if (!filters.includeClosed && !filters.saleId) and.push(outcomeWhere("pending"));
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
   // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
@@ -690,6 +699,9 @@ function closingWhere(window: AuctionClosingWindow | undefined): Prisma.AuctionL
  * reads most-recently-closed first. With no outcome chosen at all the two orders contradict each
  * other — a lot closing in six months would sit above one closing tonight — so the mixed list falls
  * back to newest-tracked first, which is meaningful for both halves.
+ *
+ * Since #504 the default selection is no longer mixed: with nothing chosen the list holds open lots
+ * alone, so it reads as the watchlist it is. Only "Show closed" brings the mixed case back.
  */
 function lotOrderBy(filters: AuctionLotFilters): Prisma.AuctionLotOrderByWithRelationInput {
   // A window of lots that have already closed is history, whatever became of them: most recent first.
@@ -698,6 +710,7 @@ function lotOrderBy(filters: AuctionLotFilters): Prisma.AuctionLotOrderByWithRel
   if (filters.closing) return { endsAt: "asc" };
   if (filters.outcome === "pending") return { endsAt: "asc" };
   if (filters.outcome) return { endsAt: "desc" };
+  if (!filters.includeClosed && !filters.saleId) return { endsAt: "asc" };
   return { createdAt: "desc" };
 }
 

@@ -36,6 +36,7 @@ export async function GET(
     const result = await listAuctionLots(session.user.id, collectionId, {
       offset: offsetParam ? parseInt(offsetParam, 10) : undefined,
       outcome: outcomeParam && isAuctionLotOutcome(outcomeParam) ? outcomeParam : undefined,
+      includeClosed: sp.get("includeClosed") === "1" || undefined,
       closing: closingWindow(sp.get("closing")),
       signal: lotSignal(sp.get("signal")),
       undescribed: sp.get("undescribed") === "1" || undefined,

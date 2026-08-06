@@ -350,6 +350,85 @@ describe("auction tracking (#351/#352)", () => {
     assert.equal(narrowed.items.length, 0);
   });
 
+  // The watchlist is what is still to be decided (#504). Its own sale, so closing a lot here does
+  // not move the figures the tests above and below assert on.
+  it("keeps closed lots out of the list until they are asked for", async () => {
+    // Its own seller too: creating a sale is what teaches a seller its default platform, and the
+    // test below asserts on a seller that has never been bid with.
+    const hiddenSellerId = (
+      await prisma.contact.create({ data: { collectionId, name: "Hidden-by-default house" } })
+    ).id;
+    const saleId = await createAuctionSale(userId, collectionId, {
+      sellerId: hiddenSellerId,
+      platformId,
+      name: "Hidden-by-default sale",
+      url: null,
+      endsAt: null,
+      currency: "EUR",
+      shippingCost: null,
+      premiumPercent: null,
+      premiumFixed: null,
+    });
+    const lot = (lotNo: string) =>
+      createAuctionLot(userId, collectionId, {
+        auctionSaleId: saleId,
+        lotNo,
+        url: null,
+        title: `Lot ${lotNo}`,
+        endsAt: hourFromNow(),
+        startingPrice: null,
+        currentBid: "10.00",
+        myBid: "50.00",
+        maxBid: "50.00",
+        notes: null,
+      });
+    const openLotId = await lot("101");
+    const wonLotId = await lot("102");
+    await recordAuctionLotTransition(userId, wonLotId, {
+      status: "closed",
+      finalPrice: "30.00",
+      wonTie: null,
+    });
+
+    const inSale = async (filters: Parameters<typeof listAuctionLots>[2]) =>
+      new Set(
+        (await listAuctionLots(userId, collectionId, { ...filters, sellerId: hiddenSellerId })).items.map(
+          (l) => l.id
+        )
+      );
+
+    assert.deepEqual(await inSale({}), new Set([openLotId]), "a won lot is filed, not pending");
+    assert.deepEqual(
+      await inSale({ includeClosed: true }),
+      new Set([openLotId, wonLotId]),
+      "Show closed is the way back to both halves at once"
+    );
+    // An explicit outcome chip is already a request for closed lots, so the toggle has no say.
+    assert.deepEqual(await inSale({ outcome: "won" }), new Set([wonLotId]));
+    assert.deepEqual(await inSale({ outcome: "pending" }), new Set([openLotId]));
+
+    // Each chip's own count is unaffected — a facet ignores its own dimension, so it never had the
+    // default applied to it in the first place.
+    const counts = await auctionLotFilterCounts(userId, collectionId, {
+      sellerId: hiddenSellerId,
+    });
+    assert.equal(counts.outcomes.pending, 1);
+    assert.equal(counts.outcomes.won, 1);
+    // …while the total describes what the list is actually showing.
+    assert.equal(counts.total, 1);
+    assert.equal(
+      (await auctionLotFilterCounts(userId, collectionId, {
+        sellerId: hiddenSellerId,
+        includeClosed: true,
+      })).total,
+      2
+    );
+
+    await prisma.auctionLot.deleteMany({ where: { auctionSaleId: saleId } });
+    await prisma.auctionSale.delete({ where: { id: saleId } });
+    await prisma.contact.delete({ where: { id: hiddenSellerId } });
+  });
+
   it("remembers which platform a seller was last tracked on", async () => {
     // Written server-side, because a seller and a platform typed in by name only become contacts
     // once the server has resolved them — that is where both ids first exist.
@@ -428,9 +507,12 @@ describe("auction tracking (#351/#352)", () => {
         select: { status: true, finalPrice: true, fxRateToBase: true, currentBid: true },
       });
     /** What the lot derives to — read through the list, so this asserts on the same figure the
-     * screen shows rather than on a re-implementation of the rule. */
+     * screen shows rather than on a re-implementation of the rule. `includeClosed`, because the
+     * outcomes asserted here are exactly the ones the list hides by default (#504). */
     const lotOutcomeOf = async (id: string) =>
-      (await listAuctionLots(userId, collectionId)).items.find((l) => l.id === id)?.outcome;
+      (await listAuctionLots(userId, collectionId, { includeClosed: true })).items.find(
+        (l) => l.id === id
+      )?.outcome;
 
     // The lot carries a maximum of 45.00, so every outcome below follows from what it fetched
     // against that figure — nothing here files a verdict (ADR-0021 §4).

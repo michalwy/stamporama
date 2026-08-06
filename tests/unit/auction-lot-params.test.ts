@@ -18,6 +18,7 @@ import {
 describe("auction lot params", () => {
   const every: Required<AuctionLotFilters> = {
     outcome: "won",
+    includeClosed: true,
     closing: "week",
     signal: "outbid",
     undescribed: true,
@@ -37,6 +38,7 @@ describe("auction lot params", () => {
   it("sends each filter under the name the route reads back", () => {
     const params = lotParams(every);
     assert.equal(params.get("outcome"), "won");
+    assert.equal(params.get("includeClosed"), "1");
     assert.equal(params.get("closing"), "week");
     assert.equal(params.get("signal"), "outbid");
     assert.equal(params.get("undescribed"), "1");
@@ -52,7 +54,10 @@ describe("auction lot params", () => {
 
   it("omits what is not set", () => {
     assert.equal(lotParams({}).toString(), "");
-    assert.equal(lotParams({ undescribed: false, duplicate: false }).toString(), "");
+    assert.equal(
+      lotParams({ undescribed: false, duplicate: false, includeClosed: false }).toString(),
+      ""
+    );
     assert.equal(lotParams({ sellerId: "" }).toString(), "");
   });
 });

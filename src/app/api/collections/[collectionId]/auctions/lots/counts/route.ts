@@ -34,6 +34,7 @@ export async function GET(
   try {
     const counts = await auctionLotFilterCounts(session.user.id, collectionId, {
       outcome: outcomeParam && isAuctionLotOutcome(outcomeParam) ? outcomeParam : undefined,
+      includeClosed: sp.get("includeClosed") === "1" || undefined,
       closing: closingWindow(sp.get("closing")),
       signal: lotSignal(sp.get("signal")),
       undescribed: sp.get("undescribed") === "1" || undefined,

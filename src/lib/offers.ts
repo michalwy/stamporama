@@ -1612,33 +1612,64 @@ function endedAuctionWhere(now: Date): Prisma.OfferWhereInput[] {
   ];
 }
 
-/** The offer list's `where`, shared by the paginated list and the summary bar (#317) so both read
+/**
+ * The offer list's `where`, shared by the paginated list and the summary bar (#317) so both read
  * exactly the same offer set. Pass `needsActionIds` for the derived overlay (ADR-0013 §4): it is
- * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice. */
+ * resolved to ids first and, as in the list, takes precedence over the state / show-closed choice.
+ *
+ * `platformSoldIds` is the reclassification in #501: for the **state chips only**, a listing the
+ * marketplace has already sold counts as `sold` rather than as whatever its stored state still says.
+ * So "Sold" gathers it and "Active" does not, and the chip's badge describes the rows clicking it
+ * produces. The default view — no state chosen — is deliberately left alone: these are the offers
+ * most in need of attention, and hiding them behind a chip is the opposite of what #499 flagged them
+ * for.
+ */
 function offerListWhere(
   collectionId: string,
   filters: Pick<
     OfferListFilters,
     "platformId" | "states" | "includeClosed" | "search" | "bidding" | "endedAuction"
   >,
-  needsActionIds?: string[]
+  needsActionIds?: string[],
+  platformSoldIds?: string[]
 ): Prisma.OfferWhereInput {
+  // Every narrowing goes into one `AND` list rather than onto the object as sibling keys: the
+  // search is an `OR`, the ended-auction rule is an `AND`, and since #501 the state selection can be
+  // either — as sibling keys the later one would silently replace the earlier instead of narrowing
+  // alongside it (the `lotListWhere` rule).
+  const and: Prisma.OfferWhereInput[] = [];
+  if (filters.endedAuction) and.push(...endedAuctionWhere(new Date()));
+  if (filters.search?.trim()) and.push(offerSearchWhere(filters.search));
+  if (needsActionIds) and.push({ id: { in: needsActionIds } });
+  // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the user
+  // opted in (#245).
+  else if (filters.states?.length) and.push(stateSelectionWhere(filters.states, platformSoldIds));
+  else if (!filters.includeClosed) and.push({ state: { notIn: [...CLOSED_OFFER_STATES] } });
+
   return {
     collectionId,
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.bidding ? { inActiveBidding: true } : {}),
-    ...(filters.endedAuction ? { AND: endedAuctionWhere(new Date()) } : {}),
-    ...(filters.search?.trim() ? offerSearchWhere(filters.search) : {}),
-    ...(needsActionIds
-      ? { id: { in: needsActionIds } }
-      : // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the
-        // user opted in (#245).
-        filters.states?.length
-        ? { state: { in: filters.states } }
-        : filters.includeClosed
-          ? {}
-          : { state: { notIn: [...CLOSED_OFFER_STATES] } }),
+    ...(and.length > 0 ? { AND: and } : {}),
   };
+}
+
+/**
+ * The state chips' `where`, with a platform-sold listing read as `sold` (#501).
+ *
+ * Three shapes, because the reclassification cuts both ways: picking `sold` **adds** the flagged
+ * offers to whatever the states select, picking anything else **removes** them from it, and with no
+ * flagged offers at all — the ordinary case — it stays the plain `state: { in: … }` it always was.
+ */
+function stateSelectionWhere(
+  states: readonly OfferState[],
+  platformSoldIds?: string[]
+): Prisma.OfferWhereInput {
+  const inStates: Prisma.OfferWhereInput = { state: { in: [...states] } };
+  if (!platformSoldIds?.length) return inStates;
+  return states.includes("sold")
+    ? { OR: [inStates, { id: { in: platformSoldIds } }] }
+    : { AND: [inStates, { id: { notIn: platformSoldIds } }] };
 }
 
 /** The order the offer list is read in, shared by the paginated list and the detail screen's
@@ -1671,7 +1702,7 @@ export async function listOffersPaginated(
   if (overlays.ids?.length === 0) return { items: [], nextCursor: null };
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, overlays.ids),
+    where: offerListWhere(collectionId, filters, overlays.ids, overlays.platformSoldIds),
     orderBy: OFFER_LIST_ORDER_BY,
     take: pageSize + 1,
     skip: offset,
@@ -1693,25 +1724,36 @@ export async function listOffersPaginated(
  * array** when one is selected and matches nothing, which is a real answer and not the same as "not
  * asked". `resolved` hands the maps on so the rows can be labelled and flagged without asking for
  * the same comparison a second time.
+ *
+ * The platform-sale set is resolved for a **state selection** too (#501), where it is not an overlay
+ * at all but the reclassification the state chips are read through — see {@link stateSelectionWhere}.
+ * That is why it is returned separately from `ids`: being flagged decides which chip an offer
+ * answers to, and only selecting the overlay narrows the list to the flagged ones.
  */
 async function resolveOfferOverlays(
   collectionId: string,
-  filters: Pick<OfferListFilters, "needsAction" | "platformSale">
+  filters: Pick<OfferListFilters, "needsAction" | "platformSale" | "states">
 ): Promise<{
   ids?: string[];
+  /** The flagged offers, whenever anything downstream needs to tell them apart. */
+  platformSoldIds?: string[];
   resolved: { counts?: Map<string, number>; platformSales?: Map<string, UnrecordedPlatformSale> };
 }> {
   // The platform-sale set first, because the needs-action pass reads it as well (the sibling
   // cascade), and handing it on is what keeps one request to one comparison.
-  const platformSales = filters.platformSale ? await unrecordedPlatformSales(collectionId) : null;
+  const platformSales =
+    filters.platformSale || filters.states?.length
+      ? await unrecordedPlatformSales(collectionId)
+      : null;
+  const platformSoldIds = platformSales ? [...platformSales.keys()] : undefined;
   const counts = filters.needsAction
-    ? await needsActionCounts(
-        collectionId,
-        undefined,
-        platformSales ? [...platformSales.keys()] : undefined
-      )
+    ? await needsActionCounts(collectionId, undefined, platformSoldIds)
     : null;
-  const lists = [counts, platformSales].flatMap((m) => (m ? [[...m.keys()]] : []));
+  // Only a *selected* overlay narrows the page. A state selection reads the same set, but as a
+  // reclassification rather than a filter, so it must not turn into an `id: { in: … }` here.
+  const lists = [counts, filters.platformSale ? platformSales : null].flatMap((m) =>
+    m ? [[...m.keys()]] : []
+  );
   const ids =
     lists.length === 0
       ? undefined
@@ -1721,6 +1763,7 @@ async function resolveOfferOverlays(
         });
   return {
     ids,
+    platformSoldIds,
     resolved: { counts: counts ?? undefined, platformSales: platformSales ?? undefined },
   };
 }
@@ -1767,13 +1810,13 @@ export async function offerListNeighbours(
 
   // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first —
   // exactly as the list page and the summary bar do.
-  const { ids } = await resolveOfferOverlays(collectionId, filters);
+  const { ids, platformSoldIds } = await resolveOfferOverlays(collectionId, filters);
   if (ids?.length === 0) {
     return { previousId: null, nextId: null, position: null, total: 0 };
   }
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, ids),
+    where: offerListWhere(collectionId, filters, ids, platformSoldIds),
     orderBy: OFFER_LIST_ORDER_BY,
     select: { id: true },
   });
@@ -2140,21 +2183,36 @@ export async function offerFilterCounts(
   ]);
 
   const platformSaleIds = [...platformSales.keys()];
-  const platformSale =
+  // Grouped rather than counted (#501): the chip's own badge is the total, and the per-state split is
+  // what moves each flagged offer out of the state it is still stored in and into `sold`.
+  const platformSoldByState =
     platformSaleIds.length === 0
-      ? 0
-      : await prisma.offer.count({
+      ? []
+      : await prisma.offer.groupBy({
+          by: ["state"],
           where: {
             collectionId,
             id: { in: platformSaleIds },
             ...(filters.platformId ? { platformId: filters.platformId } : {}),
             ...(searchWhere ?? {}),
           },
+          _count: { _all: true },
         });
+  const platformSale = platformSoldByState.reduce((n, row) => n + row._count._all, 0);
 
   const states: Partial<Record<OfferState, number>> = {};
   for (const row of byState) {
     if (isOfferState(row.state)) states[row.state] = row._count._all;
+  }
+  // A listing the marketplace has already sold is counted as **sold** (#501), whatever its stored
+  // state still says — recording the sale is what moves the state, and until that happens the chips
+  // would otherwise go on calling it active. `unrecordedPlatformSales` is scoped to open offers, so
+  // no row is ever moved out of `sold` into itself.
+  for (const row of platformSoldByState) {
+    if (!isOfferState(row.state) || row.state === "sold") continue;
+    states[row.state] = (states[row.state] ?? 0) - row._count._all;
+    if (states[row.state] === 0) delete states[row.state];
+    states.sold = (states.sold ?? 0) + row._count._all;
   }
 
   const platforms: Record<string, number> = {};
@@ -2232,7 +2290,7 @@ export async function offersSummary(
 
   // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first — exactly
   // as the list page does. Nothing matching means an empty slice, not an unfiltered one.
-  const { ids } = await resolveOfferOverlays(collectionId, filters);
+  const { ids, resolved } = await resolveOfferOverlays(collectionId, filters);
   if (ids?.length === 0) {
     return {
       ...aggregateOfferAsking([], baseCurrency, new Map()),
@@ -2241,9 +2299,15 @@ export async function offersSummary(
     };
   }
 
+  // What has already sold on its platform (#501), so the bar can hold it out of the asking value
+  // and state it on a line of its own. Reused from the overlay pass when the collector is filtering
+  // by it, rather than asking for the same comparison twice.
+  const platformSales = resolved.platformSales ?? (await unrecordedPlatformSales(collectionId));
+
   const offers = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, ids),
+    where: offerListWhere(collectionId, filters, ids, [...platformSales.keys()]),
     select: {
+      id: true,
       platformId: true,
       price: true,
       currency: true,
@@ -2259,6 +2323,7 @@ export async function offersSummary(
     currency: o.currency,
     setCount: o.sets.length,
     itemIds: o.sets.flatMap((s) => s.items.map((i) => i.itemId)),
+    platformSold: platformSales.has(o.id),
   }));
 
   const currencies = [...new Set(rows.map((r) => r.currency).filter((c) => c !== baseCurrency))];
@@ -2283,7 +2348,12 @@ export async function offersSummary(
   // on two marketplaces belongs to both), and valuing each slice on its own would price it twice.
   const TOTAL = "";
   const holdingsByGroup = await getHoldingsValuationByGroup(collectionId, [
-    { key: TOTAL, itemIds: [...new Set(rows.flatMap((r) => r.itemIds))] },
+    // Over the same offers the asking value is read from, so the three figures on the bar describe
+    // one set: an offer already sold on its platform is out of all of them (#501).
+    {
+      key: TOTAL,
+      itemIds: [...new Set(rows.filter((r) => !r.platformSold).flatMap((r) => r.itemIds))],
+    },
     ...platforms.map((p) => ({ key: p.platformId, itemIds: p.itemIds })),
   ]);
 

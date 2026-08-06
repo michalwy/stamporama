@@ -250,9 +250,16 @@ export function CollectionSidebar({
    * `startsWith` is right for a section whose sub-routes all belong to it, but wrong where two
    * entries sit on one branch — Auction lots (`/auctions`) and Auction sales (`/auctions/sales`)
    * would otherwise both light up on a sale (#376). The shorter of such a pair asks for `exact`.
+   *
+   * `except` is the softer form of that, for a parent whose *other* sub-routes are still its own
+   * (#502): the offer list owns `/offers/[offerId]`, so opening an offer must keep Offers lit, but
+   * it yields the two branches that became siblings of it.
    */
-  function isActive(href: string, exact = false) {
+  function isActive(href: string, exact = false, except: string[] = []) {
     if (exact || href === base) return pathname === href;
+    if (except.some((branch) => pathname === branch || pathname.startsWith(`${branch}/`))) {
+      return false;
+    }
     return pathname.startsWith(href);
   }
 
@@ -375,7 +382,44 @@ export function CollectionSidebar({
 
         {/* Trading is split by *direction* (#351): what comes in and what goes out are two
             different jobs, done on different days, and one "Trading" heading made a five-item list
-            you had to read to the end to find either. */}
+            you had to read to the end to find either. **Selling leads**: buying is what a collection
+            is built from, but selling is the side worked on daily — offers prepared, batches posted,
+            orders caught up with — and the section reached first should be the one opened most. */}
+        <p style={sectionLabelStyle}>Selling</p>
+        {/* Three entries, not one (#502), on the reasoning #376 split Auctions with. The offer list
+            is the daily screen, but posting a prepared batch and working through what the
+            marketplace has already sold are their own sittings — and both were reachable only by
+            first landing on the list and finding the way out of it. Nested rather than flat: they
+            are three views of one subject, and Offers leads. */}
+        <NavGroup icon={<IconOffers />} label="Offers">
+          <NavItem
+            href={`${base}/offers`}
+            label="Offers"
+            // Not exact: an offer's own detail screen is still the list's, so it keeps this entry
+            // lit. Only the two branches that became siblings are yielded.
+            active={isActive(`${base}/offers`, false, [
+              `${base}/offers/listing`,
+              `${base}/offers/allegro`,
+            ])}
+          />
+          <NavItem
+            href={`${base}/offers/listing`}
+            label="Bulk Listing"
+            active={isActive(`${base}/offers/listing`)}
+          />
+          <NavItem
+            href={`${base}/offers/allegro`}
+            label="Sold on Allegro"
+            active={isActive(`${base}/offers/allegro`)}
+          />
+        </NavGroup>
+        <NavItem
+          href={`${base}/sales`}
+          icon={<IconSales />}
+          label="Sales"
+          active={isActive(`${base}/sales`)}
+        />
+
         <p style={sectionLabelStyle}>Buying</p>
         <NavItem
           href={`${base}/purchases`}
@@ -402,20 +446,6 @@ export function CollectionSidebar({
             active={isActive(`${base}/auctions/sales`)}
           />
         </NavGroup>
-
-        <p style={sectionLabelStyle}>Selling</p>
-        <NavItem
-          href={`${base}/offers`}
-          icon={<IconOffers />}
-          label="Offers"
-          active={isActive(`${base}/offers`)}
-        />
-        <NavItem
-          href={`${base}/sales`}
-          icon={<IconSales />}
-          label="Sales"
-          active={isActive(`${base}/sales`)}
-        />
 
         {/* Contacts serves both directions — the same address book holds the house you bid with and
             the marketplace you list on — so it sits under neither heading, set apart by spacing

@@ -8,6 +8,7 @@ import {
   listOffersPaginated,
   offerFilterCounts,
   offersNeedingAction,
+  offersSummary,
   offersWithPlatformSale,
   setOfferState,
   unrecordedPlatformSales,
@@ -236,5 +237,175 @@ describe("offers sold on a platform without a recorded sale (#499)", () => {
       !(await unrecordedPlatformSales(collectionId)).has(offerId),
       "a terminal offer is resolved, whatever the marketplace has since done"
     );
+  });
+});
+
+// Counting the same flag as *sold* rather than active (#501).
+//
+// Its own collection, because every assertion here is about a **total** over the whole set: sharing
+// the fixture above would make each figure a function of the test that ran before it.
+describe("a listing sold on its platform counts as sold (#501)", () => {
+  let userId: string;
+  let collectionId: string;
+  let allegroId: string;
+  let stampId: string;
+  let conditionId: string;
+  /** The one flagged listing, and the one plain active listing beside it. */
+  let soldOfferId: string;
+  let activeOfferId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-soldcount-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User soldcount-${ts}`,
+        email: `test-soldcount-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: {
+          slug: `col-soldcount-${ts}`,
+          name: `Collection soldcount-${ts}`,
+          baseCurrency: "EUR",
+          ownerId: userId,
+        },
+      })
+    ).id;
+    allegroId = (
+      await prisma.contact.create({
+        data: { collectionId, name: "Allegro", platform: true, platformModule: "allegro" },
+      })
+    ).id;
+    stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp S" } })).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+
+    const live = async (name: string, price: string) => {
+      const itemId = (await createItem(userId, collectionId, { stampId, conditionId, forSale: true }))
+        .id;
+      const offerId = await createOffer(userId, collectionId, {
+        platformId: allegroId,
+        url: null,
+        listingType: "fixed",
+        price,
+        currency: "EUR",
+        listingDate: null,
+        state: "preparing",
+      });
+      await prisma.offer.update({ where: { id: offerId }, data: { name } });
+      await addOfferSet(userId, offerId, [itemId]);
+      await setOfferState(userId, offerId, "ready");
+      await setOfferState(userId, offerId, "active");
+      return offerId;
+    };
+
+    soldOfferId = await live("Already gone", "30.00");
+    activeOfferId = await live("Still up", "12.00");
+
+    const row = await prisma.allegroOrder.create({
+      data: {
+        collectionId,
+        orderId: "ord-counted",
+        status: "BOUGHT",
+        paymentStatus: "paid",
+        boughtAt: new Date(),
+        currency: "PLN",
+        observedAt: new Date(),
+      },
+    });
+    await prisma.allegroOrderLine.create({
+      data: {
+        collectionId,
+        allegroOrderId: row.id,
+        lineItemId: "ord-counted-1",
+        platformOfferId: "1000-counted",
+        title: "Listing",
+        quantity: 1,
+        unitPrice: "30.00",
+        currency: "PLN",
+        boughtAt: new Date(),
+        offerId: soldOfferId,
+        matchedBy: "external",
+        observedAt: new Date(),
+      },
+    });
+  });
+
+  it("is counted under Sold, not under the state it is still stored in", async () => {
+    const counts = await offerFilterCounts(userId, collectionId, {});
+    assert.equal(counts.states.active, 1, "only the listing still on the market is active");
+    assert.equal(counts.states.sold, 1, "the flagged one is counted as sold");
+    // …and the overlay chip still reports it as itself.
+    assert.equal(counts.platformSale, 1);
+  });
+
+  it("is listed by the Sold chip it is counted under, and left out of Active", async () => {
+    const sold = await listOffersPaginated(userId, collectionId, { states: ["sold"] });
+    assert.deepEqual(
+      sold.items.map((o) => o.id),
+      [soldOfferId]
+    );
+    const active = await listOffersPaginated(userId, collectionId, { states: ["active"] });
+    assert.deepEqual(
+      active.items.map((o) => o.id),
+      [activeOfferId]
+    );
+  });
+
+  it("still shows on the default list, which is where it is worked from", async () => {
+    const rows = await listOffersPaginated(userId, collectionId, {});
+    assert.deepEqual(new Set(rows.items.map((o) => o.id)), new Set([soldOfferId, activeOfferId]));
+  });
+
+  it("is held out of the asking value and stated on its own", async () => {
+    const summary = await offersSummary(userId, collectionId, {});
+    assert.equal(summary.askingBaseAmount, "12.00");
+    assert.equal(summary.offerCount, 1);
+    assert.equal(summary.platformSold.askingBaseAmount, "30.00");
+    assert.equal(summary.platformSold.offerCount, 1);
+    // The per-platform row describes the same set as the total above it.
+    assert.equal(summary.platforms.length, 1);
+    assert.equal(summary.platforms[0].askingBaseAmount, "12.00");
+  });
+
+  it("goes back to being an ordinary sold offer once the sale is recorded", async () => {
+    const set = await prisma.offerSet.findFirstOrThrow({
+      where: { offerId: soldOfferId },
+      select: { id: true },
+    });
+    const sale = await prisma.sale.create({
+      data: {
+        collectionId,
+        saleNo: 9101,
+        platformId: allegroId,
+        soldAt: new Date(),
+        currency: "EUR",
+        externalRef: "ord-counted",
+      },
+    });
+    await prisma.saleLine.create({
+      data: { saleId: sale.id, offerId: soldOfferId, offerSetId: set.id, price: "30.00" },
+    });
+    assert.ok(!(await unrecordedPlatformSales(collectionId)).has(soldOfferId));
+
+    const counts = await offerFilterCounts(userId, collectionId, {});
+    assert.equal(counts.platformSale, 0);
+    // The offer's own state has not moved — recording the sale through the domain layer is what does
+    // that — so it is back in the `active` bucket, counted by the plain rule and nothing else.
+    assert.equal(counts.states.active, 2);
+    assert.equal(counts.states.sold, undefined);
+
+    const summary = await offersSummary(userId, collectionId, {});
+    assert.equal(summary.askingBaseAmount, "42.00");
+    assert.equal(summary.platformSold.offerCount, 0);
   });
 });

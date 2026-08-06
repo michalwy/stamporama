@@ -257,6 +257,18 @@ export function OffersSummaryBar({
     );
   }
 
+  // Held out of every figure above (#501) and stated on a line of its own, but only when there is
+  // one: a permanent row reading zero would be a standing reminder of a thing that is not happening,
+  // and the bar's whole job is the figure at the top of it.
+  const platformSold = summary.platformSold;
+  const platformSoldNotes: string[] = [];
+  if (platformSold.unpricedCount > 0) {
+    platformSoldNotes.push(`${platformSold.unpricedCount} not priced`);
+  }
+  if (platformSold.unconvertibleCount > 0) {
+    platformSoldNotes.push(`${platformSold.unconvertibleCount} not convertible`);
+  }
+
   const cost = holdings.cost;
   const costNotes: string[] = [];
   if (cost.pendingCount > 0) costNotes.push(`${cost.pendingCount} pending`);
@@ -292,6 +304,21 @@ export function OffersSummaryBar({
           </button>
         </Tooltip>
       </div>
+
+      {platformSold.offerCount > 0 && (
+        <div style={ROW_STYLE}>
+          <Tooltip content="Listings the marketplace has already sold with no sale recorded here yet — their value is money owed, not stock still on offer, so it is counted apart from the asking value above">
+            <span style={{ ...LABEL_STYLE, cursor: "help" }}>Sold, not recorded</span>
+          </Tooltip>
+          <span style={AMOUNT_STYLE}>
+            {platformSold.askingBaseAmount} {summary.baseCurrency}
+          </span>
+          <span style={NOTE_STYLE}>
+            {platformSold.offerCount} {platformSold.offerCount === 1 ? "offer" : "offers"}
+            {platformSoldNotes.length > 0 ? ` · ${platformSoldNotes.join(" · ")}` : ""}
+          </span>
+        </div>
+      )}
 
       {expanded && (
         <>

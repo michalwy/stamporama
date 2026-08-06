@@ -4,7 +4,7 @@
 buyers, exchange partners, auction houses, and the platforms you trade through (Allegro,
 eBay, Delcampe). Contacts are scoped to a collection: each collection keeps its own list.
 
-Open the **Contacts** screen from the sidebar — it sits below **Buying** and **Selling**, because
+Open the **Contacts** screen from the sidebar — it sits below **Selling** and **Buying**, because
 the same address book serves both.
 
 ## Roles

@@ -153,9 +153,19 @@ export function AuctionLotsPanel({
     `stamporama:auctions:groupBySale:${collectionId}`
   );
 
+  // Lots that are done — won, lost, observed, cancelled — are out of the list unless asked for
+  // (#504), the rule the offers list hides its sold and withdrawn listings by (#245). A watchlist is
+  // what is still to be decided; everything else is filed, and it accumulates for ever. Remembered
+  // per collection rather than URL-only, because unlike the closing window it is the *shape* the
+  // list should still have tomorrow.
+  const [includeClosed, setIncludeClosed] = usePersistedFlag(
+    `stamporama:auctions:includeClosed:${collectionId}`
+  );
+
   const filters: AuctionLotFilters = useMemo(
     () => ({
       outcome,
+      includeClosed: includeClosed || undefined,
       closing,
       signal,
       undescribed,
@@ -164,7 +174,17 @@ export function AuctionLotsPanel({
       sellerId,
       platformId,
     }),
-    [outcome, closing, signal, undescribed, duplicate, search, sellerId, platformId]
+    [
+      outcome,
+      includeClosed,
+      closing,
+      signal,
+      undescribed,
+      duplicate,
+      search,
+      sellerId,
+      platformId,
+    ]
   );
 
   const updateParams = useCallback(
@@ -310,6 +330,17 @@ export function AuctionLotsPanel({
               />
             );
           })}
+          {/* The escape hatch for the hide-by-default rule (#504), beside the chips it relaxes: the
+              outcome chips are single-select, so without it there is no way back to a list holding
+              both halves at once — searching for a lot you cannot remember the fate of, above all.
+              Ignored while an outcome chip is on, which is already a request for closed lots. */}
+          <Tooltip content="Include lots that are done — won, lost, observed or cancelled">
+            <FilterChip
+              label="Show closed"
+              active={includeClosed}
+              onClick={() => setIncludeClosed(!includeClosed)}
+            />
+          </Tooltip>
           <span
             style={{
               width: "1px",

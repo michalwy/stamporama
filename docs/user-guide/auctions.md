@@ -319,8 +319,12 @@ actually went for, and it is the figure the all-in beside it is worked out from.
 **Lost?** guess disappears: it was the same comparison against the last bid anyone happened to see,
 and it is replaced by the same comparison against the price you confirmed.
 
-Closed lots stay on the list and stay filterable. They are the archive the market data comes out of,
-not clutter to be cleared away.
+Closed lots stay on the list and stay filterable, but they are **out of the way by default**: the
+lots screen opens on what is still open, because that is the watchlist. They are the archive the
+market data comes out of, and an archive that grows for ever should not be the first thing between
+you and tonight's closing times. Pick an outcome chip — *Won*, *Lost*, *Watched*, *Cancelled* — or
+turn on **Show closed** to have them all back at once. See
+[Filtering and grouping](#filtering-and-grouping).
 
 Won lots stay on the list too, and count into what the parcel will cost — a won lot is priced at
 what you actually paid rather than at the last bid anyone saw, so the sale's total stops being an
@@ -345,8 +349,13 @@ to decide, and the status says it plainly.
 The second row is **what became of it** — the outcome, worked out from the figures:
 
 - **Outcome** chips — *Open*, *Won*, *Lost*, *Watched*, *Cancelled*, each with a count. Open lots
-  read soonest-closing first; a finished outcome reads most-recent first. With no outcome chosen the
-  list is everything, newest tracked first.
+  read soonest-closing first; a finished outcome reads most-recent first.
+- **Show closed** — with no outcome chip on, the list holds **open lots only**, soonest-closing
+  first: a watchlist is what is still to be decided, and everything else is filed. This toggle brings
+  the finished lots back — won, lost, watched and cancelled together — which is what you want when
+  you are searching for a lot and cannot remember how it ended. Picking an outcome chip already asks
+  for closed lots, so the toggle has no say while one is on. Unlike the closing windows it is
+  remembered per collection: it is the shape the list should still have tomorrow.
 Then, on its own, the one that asks what is **missing from the record** rather than anything about
 the bidding:
 
@@ -372,7 +381,8 @@ Finally:
   filter rather than a walk through parcels.
 - **Group by sale** turns the flat list into sections, off by default.
 
-Your choices — including what is in the search box — are remembered per collection and are also in
+Your choices — including what is in the search box and the **Show closed** toggle — are remembered
+per collection and are also in
 the address bar, so a filtered view can be bookmarked or shared. The ones that ask a question of
 *today's* list — the closing windows, the
 first row, **Not described** and **Duplicate** — live in the address bar only: they are jobs you go and do, and

@@ -175,4 +175,70 @@ describe("aggregateOfferAsking", () => {
     assert.equal(delcampe?.askingBaseAmount, "0.00");
     assert.equal(delcampe?.unpricedCount, 1);
   });
+
+  // #501 — a listing the marketplace has already sold is money owed, not stock still on offer.
+  describe("a listing already sold on its platform", () => {
+    it("is counted apart from the asking value, not inside it", () => {
+      const total = aggregateOfferAsking(
+        [row({ price: "10.00" }), row({ price: "4.00", platformSold: true })],
+        "PLN",
+        new Map()
+      );
+      assert.equal(total.askingBaseAmount, "10.00");
+      assert.equal(total.offerCount, 1);
+      assert.equal(total.platformSold.askingBaseAmount, "4.00");
+      assert.equal(total.platformSold.offerCount, 1);
+    });
+
+    it("is out of the sets and copies behind the asking value too", () => {
+      const total = aggregateOfferAsking(
+        [
+          row({ setCount: 1, itemIds: ["a"] }),
+          row({ setCount: 3, itemIds: ["b", "c"], platformSold: true }),
+        ],
+        "PLN",
+        new Map()
+      );
+      assert.equal(total.setCount, 1);
+      assert.equal(total.itemCount, 1);
+      assert.equal(total.platformSold.setCount, 3);
+      assert.equal(total.platformSold.itemCount, 2);
+    });
+
+    it("is out of its platform's row as well, so the breakdown matches the total", () => {
+      const total = aggregateOfferAsking(
+        [
+          row({ platformId: "p1", platformName: "Allegro", price: "10.00" }),
+          row({ platformId: "p1", platformName: "Allegro", price: "7.00", platformSold: true }),
+        ],
+        "PLN",
+        new Map()
+      );
+      assert.equal(total.platforms.length, 1);
+      assert.equal(total.platforms[0].askingBaseAmount, "10.00");
+      assert.equal(total.platforms[0].offerCount, 1);
+    });
+
+    it("drops a platform whose every offer has sold, rather than showing it at zero", () => {
+      const total = aggregateOfferAsking(
+        [
+          row({ platformId: "p1", platformName: "Allegro" }),
+          row({ platformId: "p2", platformName: "Delcampe", platformSold: true }),
+        ],
+        "PLN",
+        new Map()
+      );
+      assert.deepEqual(
+        total.platforms.map((p) => p.platformName),
+        ["Allegro"]
+      );
+    });
+
+    it("leaves the ordinary case — nothing flagged — exactly as it was", () => {
+      const total = aggregateOfferAsking([row({ price: "10.00" })], "PLN", new Map());
+      assert.equal(total.askingBaseAmount, "10.00");
+      assert.equal(total.platformSold.offerCount, 0);
+      assert.equal(total.platformSold.askingBaseAmount, "0.00");
+    });
+  });
 });

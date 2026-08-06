@@ -494,7 +494,8 @@ One card per Allegro order, with the lines it covers. A card carries:
 
 The same fact reaches the screens you actually work from, so an order does not have to be gone
 looking for here: an offer whose listing is on one of these cards carries a **Sold on Allegro · not
-paid** chip on the offers list, is counted by its **Sold, not recorded** filter, and is reported by
+paid** chip on the offers list, is counted by its **Sold, not recorded** filter, counts as **sold**
+rather than active in the list's chip counts and summary bar, and is reported by
 the notification bell — while every *other* listing holding those copies is flagged **Needs action**,
 since the stock is committed the moment the order exists (see [sold on a
 platform](offers.md#sold-on-a-platform-not-recorded-here)). All of it is this list, read from

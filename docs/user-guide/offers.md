@@ -5,11 +5,14 @@ or Colnect. The offer **owns what it lists**: you compose it from your inventory
 more **sets**. Nothing is shared between offers, so the *same* copy listed on two platforms is two
 independent offers — each tracked, edited, and sold on its own.
 
-Open the **Offers** screen from the **Selling** section of the sidebar. When a batch of offers is
-prepared and ready to go live, [**Bulk listing**](#bulk-listing--posting-a-prepared-batch) on its
-toolbar is where you post them. **Sold on Allegro**, beside it, is the other end of the same job:
-what has sold there and is still waiting to be recorded here — see the
-[Allegro guide](allegro.md#sold-on-allegro).
+**Offers** is a group of three entries in the **Selling** section of the sidebar:
+
+- **Offers** — the list itself, and the screen you spend the day on.
+- **Bulk listing** — where you post a batch that is prepared and ready to go live. See
+  [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
+  list's toolbar as well, which carries the platform filter across.
+- **Sold on Allegro** — the other end of the same job: what has sold there and is still waiting to
+  be recorded here. See the [Allegro guide](allegro.md#sold-on-allegro).
 
 ## Offer number and short link
 
@@ -1085,6 +1088,14 @@ recorded*, longest-waiting first. The payment status is on the chip because the 
 things: an **unpaid** order may still fall through, while a **paid** one is waiting only on your
 books.
 
+**It also counts as sold**, everywhere a figure is added up. The state chips count it under **Sold**
+rather than under the state it is still stored in, and the [summary bar](#the-summary-bar) holds it
+out of the asking value and states it on a line of its own. Both are true whether the order is paid
+or not: what has been taken off the market is not stock you are still asking a price for. The chips
+follow through — picking **Sold** brings these listings up alongside the recorded ones, and picking
+**Active** leaves them out — so a count and the rows behind it always say the same thing. The
+offer's own **state** is untouched, as ever: recording the sale is what moves it.
+
 Every **other** active listing holding one of those copies is flagged **Needs action** at the same
 time — the same cascade a live auction bid triggers. That is the part that matters: the sale is
 already made on one marketplace, and the second one taking an order for the same stamp is exactly
@@ -1235,6 +1246,11 @@ platform's offers, and each platform option counts only offers in the state (or 
 or **Show sold/withdrawn**) you currently have chosen. The **All platforms** option shows the total
 under that same choice. A **search** has no chip of its own to count, so it narrows every count.
 
+A listing flagged [**Sold on Allegro**](#sold-on-a-platform-not-recorded-here) is counted
+under **Sold**, not under the state it is still stored in — and the **Sold** and **Active** chips
+list it the same way they count it, so a badge and the rows behind it never disagree. The default
+view, with no state chip on, still shows it: it is the listing most in need of your attention.
+
 The **Needs action**, **Ended auctions** and **Sold, not recorded** chips turn **red** as soon as
 their count is above zero, so a stale listing — or an auction that closed, or a sale the books have
 not caught up with — is visible from the toolbar without clicking anything. The **Show sold/withdrawn** toggle carries no
@@ -1273,6 +1289,15 @@ Collapsed, it shows one line:
   priced in a currency with **no available exchange rate** — those are counted but not summed,
   the same way the per-row conversion behaves.
 
+…and a second line whenever there is anything on it:
+
+- **Sold, not recorded** — the listings that have
+  [sold on their platform](#sold-on-a-platform-not-recorded-here) with no sale written down here yet,
+  and what they came to. They are **out of the asking value**, and out of the catalog and cost
+  figures below it: the asking value answers "what is still on the market at my prices", and a
+  listing the marketplace has already sold is not that — it is money owed, waiting on your books.
+  The line is absent when nothing is flagged.
+
 Click **More** to expand it (the choice is remembered per collection). That adds:
 
 - **Catalog value** and **Purchase cost** of the copies these offers hold — the same pair the
@@ -1282,7 +1307,8 @@ Click **More** to expand it (the choice is remembered per collection). That adds
   here — it is one piece of stock — even though the copy count on the asking line counts it per
   offer, because each of those offers is separately sellable.
 - A **per-platform breakdown** — the same three figures again, one row per platform, largest
-  asking value first, with the offer / set / copy counts beside them. The amount columns sit
+  asking value first, with the offer / set / copy counts beside them. Sold-not-recorded listings are
+  out of these rows too, so the breakdown and the total describe one set. The amount columns sit
   right next to the platform name so a wide screen doesn't make you read across empty space,
   and the asking column lines up under the total above it.
 
