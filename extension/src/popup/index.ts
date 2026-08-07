@@ -28,14 +28,20 @@ import type { BackfillProposal, Candidate, MatchResult, RefView } from "../core/
 
 // Popup controller. On open it detects whether the active tab is a page one of our platform modules
 // handles and extracts it straight away — the user only sees "Found N stamps" and decides whether to
-// match. Nothing reaches the instance until Match (a dry-run preview), and nothing is written until
-// an in-popup confirm that names the active profile.
+// match. Nothing reaches the instance until Match (a dry-run preview), and the writes that are
+// genuinely a decision — linking one ambiguous candidate, overwriting a catalog number we hold —
+// go through an in-popup confirm that names the active profile. Writing the unambiguous matches
+// does not (#515): see `writeAuto`.
 //
 // Results are grouped so the noisy majority (nothing of ours on the page, or already linked) folds
 // away and only what needs a decision stays in view.
 
 /** Items per match request — keeps payloads sane and makes the progress bar meaningful. */
 const BATCH_SIZE = 25;
+
+/** How long the result line stays up before the window closes itself after a batch write (#515) —
+ * long enough to read "Wrote 8 auto-matches", short enough not to be a step of its own. */
+const CLOSE_AFTER_WRITE_MS = 1200;
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const badge = $("badge");
@@ -144,7 +150,8 @@ function sendToBackground<R>(msg: BackgroundRequest): Promise<R> {
 
 // ── In-popup confirmation ────────────────────────────────────────────────────
 // Native confirm() is unreliable inside an MV3 popup (it can dismiss the popup), so the confirm is
-// rendered in-page. Always names the target profile + instance before any write.
+// rendered in-page. Always names the target profile + instance, and is raised for the writes that
+// are a decision rather than for every write (#515).
 
 let resolveConfirm: ((ok: boolean) => void) | null = null;
 
@@ -438,19 +445,22 @@ async function preview(): Promise<void> {
   setStatus("Preview only — nothing written.");
 }
 
+/**
+ * Write every unambiguous match, then close the window (#515).
+ *
+ * **No confirmation.** The button already reads `Write 8 auto-matches + 3 catalog numbers` and names
+ * the target in the badge above it, so the overlay only restated the label that was just clicked —
+ * a keystroke, not a decision. An auto-match is by definition the one the matcher had no doubt
+ * about, and the backfill never changes a number we already hold. The two writes that *are*
+ * decisions keep their confirm: `confirmOne` names the one stamp it links, and `overwriteOne`
+ * destroys a number of ours.
+ *
+ * **Then the window closes.** A batch write is the last thing done here — the collector is going
+ * back to the page it was opened from — and after a short pause, so the result line is readable.
+ * Nothing is lost by closing: the write landed on the instance, and the next icon click rescans.
+ */
 async function writeAuto(): Promise<void> {
   if (!profile) return;
-  const n = pendingAutoCount();
-  const fills = pendingFillCount();
-  const fillLine = fills
-    ? `<div>…and add <strong>${fills}</strong> missing catalog number${
-        fills === 1 ? "" : "s"
-      } from Colnect. Existing numbers are never changed.</div>`
-    : "";
-  const ok = await askConfirm(
-    `<div>Write <strong>${n}</strong> unambiguous match${n === 1 ? "" : "es"}?</div>${fillLine}${targetLine()}`
-  );
-  if (!ok) return;
   const out = await runMatch(false);
   if (!out) return;
   results = out;
@@ -466,6 +476,7 @@ async function writeAuto(): Promise<void> {
       filled ? ` and ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
     } to ${profile.name}.`
   );
+  window.setTimeout(() => window.close(), CLOSE_AFTER_WRITE_MS);
 }
 
 /** Swap one item's result in place after an individual write, so it leaves the to-do list. */
@@ -973,7 +984,7 @@ function render(): void {
 /**
  * Scan the page and, when there is something to match and a profile to match against, run the
  * dry-run immediately — the user lands on the decisions without clicking. This is read-only: the
- * matcher only computes, and every write still goes through an explicit in-window confirm.
+ * matcher only computes, and every write still needs a button pressed for it.
  *
  * This runs once per window load, and again whenever the active profile changes. There is
  * deliberately no rescan/re-match button: clicking the toolbar icon re-points and reloads this

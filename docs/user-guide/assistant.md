@@ -97,6 +97,13 @@ closes it, or, while a confirmation is on screen, cancels that first and leaves 
 Nothing is lost either way: a confirmed write reached your collection the moment you confirmed it,
 and the page is read afresh the next time you click the toolbar icon.
 
+**Write auto-matches** closes the window for you. It asks nothing first — the button already names
+exactly what it will do (*Write 8 auto-matches + 3 catalog numbers*), and an auto-match is one the
+matcher had no doubt about — then writes, shows what it wrote for a moment and closes, leaving you
+back on the page you were reading. The two writes that really are a decision still ask: linking one
+of several candidate stamps, and [replacing a catalog number](#when-colnects-number-disagrees-with-yours)
+you already hold.
+
 ## Decisions that are already made
 
 The Assistant never silently replaces a Colnect ID you already have. So when one of your stamps is
