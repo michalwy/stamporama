@@ -884,25 +884,39 @@ export async function matchColnectItems(
     }
   }
 
-  const candidateStamps = recall.size
-    ? await prisma.stamp.findMany({
+  // Asked of the numbers table rather than of `stamp`, and deliberately so. Written the obvious way
+  // — one `catalogNumbers: { some }` per condition, OR-ed on `stamp` — Prisma emits a *correlated
+  // EXISTS per condition*, and one batch of 25 items carries around sixty of them. Postgres costs
+  // that plan at ~900k, crosses its JIT inlining threshold (`jit_above_cost` 100k,
+  // `jit_inline_above_cost` 500k) and spends ~1.7s compiling ~900 functions to run 10ms of work —
+  // measured on a collection of 1,740 stamps, so it is the plan shape, not the data. Against the
+  // numbers table the same conditions are plain column predicates: one scan with an OR-ed filter,
+  // plan cost ~600, no JIT, ~5ms. The stamps themselves are then loaded by id.
+  const recallRows = recall.size
+    ? await prisma.stampCatalogNumber.findMany({
         where: {
-          collectionId,
+          stamp: { collectionId },
           OR: [...recall.values()].map((r) => ({
-            catalogNumbers: {
-              some: {
-                catalogVendorId: r.catalogVendorId,
-                // Every run has to be inside the *same* stored number, so they are ANDed on one
-                // `some` rather than spread over several.
-                AND: r.values.map((value) => ({
-                  number: r.insensitive
-                    ? { contains: value, mode: "insensitive" as const }
-                    : { contains: value },
-                })),
-              },
-            },
+            catalogVendorId: r.catalogVendorId,
+            // Every run has to be inside the *same* stored number, so they are ANDed on one row
+            // rather than spread over several.
+            AND: r.values.map((value) => ({
+              number: r.insensitive
+                ? { contains: value, mode: "insensitive" as const }
+                : { contains: value },
+            })),
           })),
         },
+        select: { stampId: true },
+      })
+    : [];
+
+  const candidateIds = [...new Set(recallRows.map((r) => r.stampId))];
+  const candidateStamps = candidateIds.length
+    ? await prisma.stamp.findMany({
+        // Scoped again rather than trusting the join above: every read of stamps in this file is
+        // collection-scoped, and a lookup by id is exactly where that would quietly stop being true.
+        where: { id: { in: candidateIds }, collectionId },
         select: {
           id: true,
           name: true,

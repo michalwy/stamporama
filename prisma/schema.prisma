@@ -1143,6 +1143,11 @@ model StampCatalogNumber {
   catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
 
   @@id([stampId, catalogVendorId])
+  // The primary key answers "this stamp's number in that catalog"; the Colnect matcher asks the
+  // opposite question — who holds this catalog's number — over a batch at a time. Its recall
+  // predicate is a substring match, so this index cannot serve it directly, but it keeps the
+  // planner's cost estimate for that scan honest as the collection grows.
+  @@index([catalogVendorId, number])
   @@map("stamp_catalog_number")
 }
 
