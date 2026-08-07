@@ -39,6 +39,10 @@ import type { BackfillProposal, Candidate, MatchResult, RefView } from "../core/
 /** Items per match request — keeps payloads sane and makes the progress bar meaningful. */
 const BATCH_SIZE = 25;
 
+/** Match requests in flight at once. A page of 200 stamps is eight chunks, and walking them one at a
+ *  time made the window's own first render the slowest thing about it. */
+const MATCH_CONCURRENCY = 3;
+
 /** How long the result line stays up before the window closes itself after a batch write (#515) —
  * long enough to read "Wrote 8 auto-matches", short enough not to be a step of its own. */
 const CLOSE_AFTER_WRITE_MS = 1200;
@@ -310,6 +314,26 @@ function pendingFillCount(): number {
   return results.reduce((n, r) => n + fillsOf(r), 0);
 }
 
+/**
+ * The extracted items behind everything the write button offers — the two counts `syncButtons`
+ * prints, resolved back to what has to be sent. An already-linked decision is in only when it still
+ * has numbers to add: re-sending the rest would ask the instance to re-decide a page for nothing.
+ */
+function pendingWriteItems(): ExtractedItem[] {
+  const wanted = new Set(
+    results
+      .filter((r) => r.status === "auto" && !r.written && (!r.alreadySet || fillsOf(r) > 0))
+      .map((r) => r.colnectId)
+  );
+  return items.filter((i) => wanted.has(i.platformItemId));
+}
+
+/** Fold the outcome of a partial run into what is on screen, leaving untouched decisions alone. */
+function mergeResults(written: MatchResult[]): void {
+  const byId = new Map(written.map((r) => [r.colnectId, r]));
+  results = results.map((r) => byId.get(r.colnectId) ?? r);
+}
+
 function syncButtons(): void {
   const pending = pendingAutoCount();
   const fills = pendingFillCount();
@@ -381,27 +405,51 @@ function hideProgress(): void {
   barEl.style.width = "0%";
 }
 
-/** Run the whole batch through the matcher in chunks, reporting progress. Null on failure. */
-async function runMatch(dryRun: boolean): Promise<MatchResult[] | null> {
+/**
+ * Run a set of items through the matcher in chunks, reporting progress. Null on failure.
+ *
+ * Takes what to match rather than reading `items`, because a write is not a match of the page: the
+ * preview already decided, and only the decisions still owing a write need to be sent (see
+ * `writeAuto`). The results come back in input order regardless of which chunk finished first.
+ */
+async function runMatch(batch: ExtractedItem[], dryRun: boolean): Promise<MatchResult[] | null> {
   busy = true;
   syncButtons();
-  const out: MatchResult[] = [];
+  const slices: ExtractedItem[][] = [];
+  for (let i = 0; i < batch.length; i += BATCH_SIZE) slices.push(batch.slice(i, i + BATCH_SIZE));
+  const out: MatchResult[][] = slices.map(() => []);
   let done = 0;
-  showProgress(0, items.length);
-  try {
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      const slice = items.slice(i, i + BATCH_SIZE);
+  let failure: string | null = null;
+  let next = 0;
+  showProgress(0, batch.length);
+
+  // Chunks are independent — the matcher decides each item on its own — so they need not wait in
+  // line. A few at a time: every request is a real query on the instance, and this window is a
+  // background errand, not a load test.
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < slices.length && failure === null; i = next++) {
+      const slice = slices[i];
       const res = await sendToBackground<MatchResponse>({ type: "match", items: slice, dryRun });
       if (!res.ok) {
-        setStatus(res.error, true);
-        return null;
+        failure ??= res.error;
+        return;
       }
-      out.push(...res.results);
+      out[i] = res.results;
       done += slice.length;
-      showProgress(done, items.length);
-      setStatus(`${dryRun ? "Matching" : "Writing"} ${done}/${items.length}…`);
+      showProgress(done, batch.length);
+      setStatus(`${dryRun ? "Matching" : "Writing"} ${done}/${batch.length}…`);
     }
-    return out;
+  };
+
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(MATCH_CONCURRENCY, slices.length) }, () => worker())
+    );
+    if (failure !== null) {
+      setStatus(failure, true);
+      return null;
+    }
+    return out.flat();
   } finally {
     busy = false;
     hideProgress();
@@ -438,7 +486,7 @@ async function preview(): Promise<void> {
     return;
   }
   const gen = generation;
-  const out = await runMatch(true);
+  const out = await runMatch(items, true);
   if (!out || gen !== generation) return; // the target changed while this ran
   results = out;
   render();
@@ -458,15 +506,24 @@ async function preview(): Promise<void> {
  * **Then the window closes.** A batch write is the last thing done here — the collector is going
  * back to the page it was opened from — and after a short pause, so the result line is readable.
  * Nothing is lost by closing: the write landed on the instance, and the next icon click rescans.
+ *
+ * **Only the pending decisions are sent.** A page of 200 stamps holding one unwritten match used to
+ * be re-matched whole — the same eight requests the preview had just run, to write one row. The
+ * button promises what `syncButtons` counted, so that is exactly what goes: the items behind the
+ * pending auto-matches and the pending fills. This concedes nothing to the client, which still only
+ * says *which items to consider* — the instance decides each one again and writes nothing it does
+ * not rule `auto` itself.
  */
 async function writeAuto(): Promise<void> {
   if (!profile) return;
-  const out = await runMatch(false);
+  const batch = pendingWriteItems();
+  if (batch.length === 0) return;
+  const out = await runMatch(batch, false);
   if (!out) return;
-  results = out;
+  mergeResults(out);
   render();
-  const written = results.filter((r) => r.status === "auto" && r.written).length;
-  const filled = results.reduce(
+  const written = out.filter((r) => r.status === "auto" && r.written).length;
+  const filled = out.reduce(
     (acc, r) =>
       acc + (r.status === "auto" ? (r.stamp?.backfill.filter((p) => p.status === "filled").length ?? 0) : 0),
     0

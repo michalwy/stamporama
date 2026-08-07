@@ -296,8 +296,8 @@ candidate stamps. On a wide window each row shows the Colnect item and the stamp
 second one — that click *is* the refresh gesture, so there is no rescan/re-match button.
 
 The window reuses the load-time match when it is still current, so it opens instantly; otherwise it
-extracts the page and **matches it** as a **dry-run** (sent in chunks,
-with a progress bar) — so you land directly on the decisions. That call only reads: nothing is
+extracts the page and **matches it** as a **dry-run** (sent in chunks, a few in flight at once, with
+a progress bar) — so you land directly on the decisions. That call only reads: nothing is
 written until you confirm. **Re-match** re-runs it; **Rescan** re-reads the page and matches again
 after you navigate.
 
@@ -325,7 +325,9 @@ so only what matters stays open:
 - **Will link automatically** — unambiguous, ready to write.
 - **Already linked** / **Skipped** — folded away (click to expand).
 
-Then **Write auto-matches** commits the unambiguous ones, and **Use this** commits a specific
+Then **Write auto-matches** commits the unambiguous ones — sending back only the decisions still
+owing a write, not the whole page again, so the cost is the size of what it writes rather than of
+what you were reading — and **Use this** commits a specific
 candidate; each is gated by an in-popup confirm naming the active profile and instance URL (a native
 `confirm()` is avoided — it can dismiss an MV3 popup). Written items move to *Already linked*
 immediately. **Rescan** re-reads the page after you navigate.
