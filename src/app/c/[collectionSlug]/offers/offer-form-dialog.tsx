@@ -112,6 +112,13 @@ export interface OfferFormDialogProps {
   /** A line describing what a non-edit form is seeded from (e.g. "Copying 3 sets from …"), shown in
    * place of the default "add the copies next" hint. */
   sourceNote?: React.ReactNode;
+  /** A caller's warning about what this form is about to create — the stamp × condition conflict
+   * the inventory path checks for (#513). Rendered above the fields, since it is about the whole
+   * offer rather than any one of them, and never blocks the submit. */
+  notice?: React.ReactNode;
+  /** Fires with the picked platform's id (empty for a typed, not-yet-existing one) whenever it
+   * changes, including on mount — what the collision check above is asked about. */
+  onPlatformChange?: (platformId: string) => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -136,6 +143,8 @@ export function OfferFormDialog({
   title: titleProp,
   submitLabel,
   sourceNote,
+  notice,
+  onPlatformChange,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -179,7 +188,7 @@ export function OfferFormDialog({
   // current one blank, rather than recording a bid nobody placed.
   const suggestionFillsPrice = priceControlled && !isAuction;
   const suggestionFillsStartingPrice = priceControlled && isAuction;
-  const [, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
+  const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
   // brand-new platform) shows an inline picker whose value becomes the platform's currency.
@@ -205,6 +214,16 @@ export function OfferFormDialog({
   useEffect(() => {
     onCurrencyChangeRef.current?.(effectiveCurrency);
   }, [effectiveCurrency]);
+
+  // Same shape for the picked platform (#513): reported on mount and on every change, so a caller
+  // checking what listing there would conflict with re-asks when the collector switches house.
+  const onPlatformChangeRef = useRef(onPlatformChange);
+  useEffect(() => {
+    onPlatformChangeRef.current = onPlatformChange;
+  });
+  useEffect(() => {
+    onPlatformChangeRef.current?.(platformId);
+  }, [platformId]);
 
   // Cursor straight in the money field on open (`autoFocusPrice`), on the one a suggestion fills:
   // the asking price on a quick buy, the starting price on an auction. Selected rather than merely
@@ -238,6 +257,10 @@ export function OfferFormDialog({
         onSubmit={handleSubmit}
       >
         <DialogBody>
+          {/* A caller's warning about the offer as a whole (#513) — above the fields, since it is
+              about none of them in particular, and purely advisory. */}
+          {notice && <div style={{ marginBottom: "0.875rem" }}>{notice}</div>}
+
           {/* Platform */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="offer-platform">Platform</LabelWithError>

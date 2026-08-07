@@ -975,6 +975,12 @@ platform already lists, Stamporama shows a **heads-up**. It is only a warning: y
 but normally you would remove it from the other offer first. (Listing the same copy on *different*
 platforms is exactly the point and is never flagged.)
 
+There is a second, wider rule some marketplaces enforce: Colnect allows only **one offer per stamp
+per condition**, whichever copy it is. Adding copies to an offer from the Inventory screen checks
+that too — see [The same stamp in the same
+condition](inventory.md#the-same-stamp-in-the-same-condition). It is likewise a warning and never a
+block.
+
 ## Listing the same thing on another platform
 
 To offer the same stamps on a second marketplace, you don't re-compose them by hand. From an

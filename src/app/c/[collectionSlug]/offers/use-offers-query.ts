@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import type {
   OfferListItem,
   OfferCollision,
+  StampConditionCollision,
   OfferDetail,
   ComposeTargets,
   OfferFilterCounts,
@@ -294,6 +295,37 @@ export function useOfferCollisions(
       for (const id of itemIds) params.append("itemId", id);
       if (excludeOfferId) params.set("excludeOfferId", excludeOfferId);
       const res = await fetch(`/api/collections/${collectionId}/offers/collision?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to check collisions");
+      return (await res.json()).collisions;
+    },
+    enabled: enabled && !!platformId && itemIds.length > 0,
+  });
+}
+
+/** Live offers that already list the same **stamp in the same condition** as these copies (#513) —
+ * Colnect's one-offer-per-stamp-per-condition rule, asked before the copies go on. `platformId`
+ * narrows to the platform being listed on; without one the hook stays idle, since a collision is
+ * always a collision *somewhere*. */
+export function useStampConditionCollisions(
+  collectionId: string,
+  itemIds: string[],
+  platformId: string | null,
+  enabled: boolean
+) {
+  return useQuery<StampConditionCollision[]>({
+    queryKey: [
+      "offers",
+      collectionId,
+      "stamp-condition-collision",
+      [...itemIds].sort(),
+      platformId,
+    ] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ platformId: platformId! });
+      for (const id of itemIds) params.append("itemId", id);
+      const res = await fetch(
+        `/api/collections/${collectionId}/offers/stamp-condition-collisions?${params.toString()}`
+      );
       if (!res.ok) throw new Error("Failed to check collisions");
       return (await res.json()).collisions;
     },

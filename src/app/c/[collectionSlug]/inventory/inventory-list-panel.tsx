@@ -27,6 +27,8 @@ import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import { formatItemNo } from "@/lib/item-number";
+import { formatEntityNo } from "@/lib/quick-jump";
+import { useStampConditionCollisions } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import {
   useInventoryItemsInfinite,
   useCopyGroupsInfinite,
@@ -67,8 +69,9 @@ type DialogState =
   | { kind: "history"; item: ItemListItem }
   | { kind: "delete"; item: ItemListItem }
   // One entry point, one or many copies (#373): a row's own action passes `[item]`, the bulk bar
-  // passes the whole selection.
-  | { kind: "addToOffer"; items: ItemListItem[] }
+  // passes the whole selection. `targetOfferId` opens the picker with one offer already picked —
+  // the bar's "add to the conflicting offer instead" shortcut (#513).
+  | { kind: "addToOffer"; items: ItemListItem[]; targetOfferId?: string }
   // Straight into offer creation, packaging already decided (#277, #497) — so the picker and the
   // "Add as" control are both skipped. `packaging` is what the two quick bulk buttons carry.
   | { kind: "addToNewOffer"; items: ItemListItem[]; packaging?: "per-copy" | "one-set" }
@@ -553,6 +556,26 @@ export function InventoryListPanel({
     },
     [collectionId, invalidateList, clearSelection]
   );
+  // The stamp × condition conflict for the selection (#513): live offers on the platform in scope
+  // that already list one of these stamps in this condition — which Colnect refuses a second time.
+  // Only asked while a platform *is* in scope (#506's shared reading of the platform filter): a
+  // collision is always a collision on some platform, and with none named there is no listing being
+  // planned to warn about.
+  const selectedIdList = useMemo(() => [...selectedIds], [selectedIds]);
+  const { data: selectionCollisions = [] } = useStampConditionCollisions(
+    collectionId,
+    selectedIdList,
+    scopedPlatform?.id ?? null,
+    selectedIdList.length > 0
+  );
+  // The offer the bar's shortcut points at: the one accounting for the most of the selection, which
+  // is how `findStampConditionCollisions` already orders them.
+  const collisionOffer = selectionCollisions[0];
+  const collidingCopies = useMemo(
+    () => new Set(selectionCollisions.flatMap((c) => c.itemIds)).size,
+    [selectionCollisions]
+  );
+
   // Whether the whole selection is already set aside from the platform in scope — which is what the
   // bulk button offers to undo. "All of them", not "any": with a mixed selection the useful action
   // is still to set the rest aside, and the excluded ones absorb it as a no-op.
@@ -735,6 +758,66 @@ export function InventoryListPanel({
                   >
                     Clear
                   </button>
+                  {/* The conflict this selection would create on the platform in scope (#513):
+                      another live offer already lists one of these stamps in this condition, and
+                      Colnect refuses a second. Stated where the listing actions are, with the
+                      shortcut that resolves it — adding to that offer instead of making a new one.
+                      A warning beside the buttons, never a disabled button: the collector may know
+                      exactly what they are doing. */}
+                  {collisionOffer && (
+                    <Tooltip
+                      content={selectionCollisions
+                        .map(
+                          (c) =>
+                            `${formatEntityNo(c.offerNo)} ${c.offerLabel} — ${c.itemIds.length} cop${c.itemIds.length === 1 ? "y" : "ies"}`
+                        )
+                        .join(" · ")}
+                    >
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          fontSize: "0.8125rem",
+                          color: "var(--color-warning)",
+                        }}
+                      >
+                        <Icon name="warning" size="sm" />
+                        {collidingCopies === 1
+                          ? "1 copy is"
+                          : `${collidingCopies} copies are`}{" "}
+                        already offered on {collisionOffer.platformName} in this condition
+                      </span>
+                    </Tooltip>
+                  )}
+                  {collisionOffer && (
+                    <Tooltip
+                      content={`Add the selection to ${formatEntityNo(collisionOffer.offerNo)} ${collisionOffer.offerLabel} instead of creating a second listing for the same stamps.`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDialog({
+                            kind: "addToOffer",
+                            items: selectedCopies,
+                            targetOfferId: collisionOffer.offerId,
+                          })
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          fontSize: "0.8125rem",
+                          fontWeight: 600,
+                          color: "var(--color-accent)",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Add to {formatEntityNo(collisionOffer.offerNo)} instead
+                      </button>
+                    </Tooltip>
+                  )}
                   {/* The picker flow, and beside it the shortcuts that skip it (#497): a new offer
                       is the common quick start, so the only decision left — one set or one each —
                       is made by which button is pressed. Secondary next to the primary, since they
@@ -1443,6 +1526,7 @@ export function InventoryListPanel({
           initialPlatform={preferredPlatform}
           onPlatformUsed={rememberPlatform}
           startInCreate={dialog.kind === "addToNewOffer"}
+          initialTargetOfferId={dialog.kind === "addToOffer" ? dialog.targetOfferId : undefined}
           initialPackaging={dialog.kind === "addToNewOffer" ? dialog.packaging : undefined}
           onClose={closeDialog}
           onDone={handleSuccess}

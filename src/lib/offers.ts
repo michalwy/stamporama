@@ -10,6 +10,7 @@ import {
   type ItemListItem,
 } from "./items";
 import type { HoldingsSummary } from "./valuation";
+import { collidingItemIdsByOffer } from "./offer-collision-rules";
 import {
   aggregateOfferAsking,
   type OfferPlatformTotal,
@@ -1259,6 +1260,118 @@ export async function findOfferCollisions(
     }
   }
   return collisions;
+}
+
+// ── Stamp × condition collisions (#513) ─────────────────────────────────────
+
+/** A live offer that already lists the same stamp in the same condition as some of the copies being
+ * added — through a *different* copy, since one it already holds is `containsItemIds`' fact. */
+export interface StampConditionCollision {
+  offerId: string;
+  offerNo: number;
+  offerLabel: string;
+  platformId: string;
+  platformName: string;
+  state: OfferState;
+  /** Which of the candidate copies this offer would duplicate. */
+  itemIds: string[];
+}
+
+/** The offer states a collision is reported against (#513) — every *live* one, so a duplicate is
+ * caught while both listings are still drafts rather than after one is posted. */
+const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
+
+/**
+ * The raw read behind every stamp × condition warning: which live offers duplicate which of
+ * `itemIds`, keyed by offer id. Shared by {@link findStampConditionCollisions} and
+ * {@link listComposeTargets} so the picker's note and the selection bar's chip cannot disagree.
+ *
+ * One membership query, narrowed by the candidates' *stamps* — the condition is matched in memory
+ * by {@link collidingItemIdsByOffer}, which is where the key lives.
+ */
+async function collidingItemIds(
+  collectionId: string,
+  itemIds: string[],
+  opts: { platformId?: string; excludeOfferId?: string } = {}
+): Promise<Map<string, string[]>> {
+  if (itemIds.length === 0) return new Map();
+  const candidates = await prisma.item.findMany({
+    where: { collectionId, id: { in: itemIds } },
+    select: { id: true, stampId: true, conditionId: true },
+  });
+  if (candidates.length === 0) return new Map();
+
+  const memberships = await prisma.offerSetItem.findMany({
+    where: {
+      item: { stampId: { in: [...new Set(candidates.map((c) => c.stampId))] } },
+      offerSet: {
+        offer: {
+          collectionId,
+          state: { in: [...COLLIDING_STATES] },
+          ...(opts.platformId ? { platformId: opts.platformId } : {}),
+          ...(opts.excludeOfferId ? { id: { not: opts.excludeOfferId } } : {}),
+        },
+      },
+    },
+    select: {
+      itemId: true,
+      offerSet: { select: { offerId: true } },
+      item: { select: { stampId: true, conditionId: true } },
+    },
+  });
+
+  return collidingItemIdsByOffer(
+    candidates.map((c) => ({ itemId: c.id, stampId: c.stampId, conditionId: c.conditionId })),
+    memberships.map((m) => ({
+      offerId: m.offerSet.offerId,
+      itemId: m.itemId,
+      stampId: m.item.stampId,
+      conditionId: m.item.conditionId,
+    }))
+  );
+}
+
+/**
+ * Live offers that would end up listing the same stamp in the same condition twice (#513) —
+ * Colnect refuses a second offer for a stamp in one condition, so this is the mistake worth
+ * catching *before* the copies go on. A **warning**: nothing is blocked, and a collector listing
+ * deliberately on two platforms passes `platformId` to ask about only the one that matters.
+ */
+export async function findStampConditionCollisions(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[],
+  opts: { platformId?: string; excludeOfferId?: string } = {}
+): Promise<StampConditionCollision[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const byOffer = await collidingItemIds(collectionId, itemIds, opts);
+  if (byOffer.size === 0) return [];
+
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: [...byOffer.keys()] } },
+    select: {
+      id: true,
+      offerNo: true,
+      name: true,
+      platformId: true,
+      state: true,
+      platform: { select: { name: true } },
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const labeller = rows.some((r) => !r.name) ? await makeOfferLabeller(collectionId) : null;
+
+  return rows
+    .map((r) => ({
+      offerId: r.id,
+      offerNo: r.offerNo,
+      offerLabel: r.name ?? labeller?.offer(r.sets) ?? "Untitled listing",
+      platformId: r.platformId,
+      platformName: r.platform.name,
+      state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+      itemIds: byOffer.get(r.id) ?? [],
+    }))
+    .sort((a, b) => b.itemIds.length - a.itemIds.length || a.offerNo - b.offerNo);
 }
 
 // ── Read models ─────────────────────────────────────────────────────────────
@@ -3468,6 +3581,10 @@ export interface ComposeTargetOffer {
   /** Which of the copies being added are already listed somewhere in this offer (any set) — an
    * offer never lists the same copy twice, so a new set may not hold them either. */
   containsItemIds: string[];
+  /** Which of the copies being added this offer would duplicate by **stamp × condition** (#513):
+   * a *different* copy of the same stamp in the same condition is already listed here, which
+   * Colnect refuses. A warning the picker shows — never a reason to disable the destination. */
+  collidingItemIds: string[];
 }
 
 export interface ComposeTargets {
@@ -3498,6 +3615,9 @@ export async function listComposeTargets(
     select: OFFER_SELECT,
   });
   const labeller = await makeOfferLabeller(collectionId);
+  // Which offers would list a stamp twice in one condition (#513). Read for every listed offer at
+  // once rather than per row, and on the same states this query already narrowed to.
+  const colliding = await collidingItemIds(collectionId, itemIds);
 
   const offers: ComposeTargetOffer[] = rows
     .map((r) => {
@@ -3518,6 +3638,7 @@ export async function listComposeTargets(
         state: (isOfferState(r.state) ? r.state : "active") as OfferState,
         sets,
         containsItemIds: [...new Set(sets.flatMap((s) => s.containsItemIds))],
+        collidingItemIds: colliding.get(r.id) ?? [],
       };
     })
     .sort(

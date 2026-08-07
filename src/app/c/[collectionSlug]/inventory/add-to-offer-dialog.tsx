@@ -17,6 +17,7 @@ import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persiste
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
@@ -24,7 +25,9 @@ import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dial
 import {
   useComposeTargets,
   useInvalidateOffers,
+  useStampConditionCollisions,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import type { StampConditionCollision } from "@/lib/offers";
 import {
   useLastOfferDefaults,
   offerDefaultsFromForm,
@@ -140,6 +143,10 @@ export interface AddToOfferDialogProps {
    * "Add to new offer" row action. Cancelling the create form then closes the whole dialog rather
    * than dropping back to the picker the collector never asked for. */
   startInCreate?: boolean;
+  /** Opens with this offer already picked as the destination — a brand-new set on it (#513): the
+   * selection bar's "add to the conflicting offer instead" shortcut, where the offer is the whole
+   * point of opening the picker. */
+  initialTargetOfferId?: string;
   /** How several copies start out packaged. One set each by default — the Copies list's own
    * multi-select is most often a stock of duplicates, and it is what the duplicate-group flow
    * (#372) needs, which reaches this dialog through `startInCreate` and so never sees the footer
@@ -181,6 +188,7 @@ export function AddToOfferDialog({
   initialPlatform,
   onPlatformUsed,
   startInCreate = false,
+  initialTargetOfferId,
   initialPackaging = "per-copy",
   onClose,
   onDone,
@@ -194,6 +202,16 @@ export function AddToOfferDialog({
   // launched from the "Add to new offer" action (#277), which skips the picker entirely.
   const [creating, setCreating] = useState(startInCreate);
   const [createError, setCreateError] = useState<string | undefined>();
+  // Which platform the create form is currently on (#513). It is what decides whether a new offer
+  // would be the platform's *second* listing of a stamp in one condition, so it is asked about
+  // again whenever the collector switches house mid-form.
+  const [createPlatformId, setCreatePlatformId] = useState(initialPlatform?.id ?? "");
+  const { data: createCollisions = [] } = useStampConditionCollisions(
+    collectionId,
+    itemIds,
+    creating ? createPlatformId || null : null,
+    creating
+  );
 
   // Suggested asking price for the quick-start create path (#230): the copies' catalog value in the
   // collection base currency. Blank when a copy is unpriced, when its value can't be expressed in
@@ -230,14 +248,32 @@ export function AddToOfferDialog({
   // Persisted per collection so the picker reopens on the state facet it was left on (mirrors the
   // search box's own persistence). "" (or any non-composable value) means "All offers".
   const [storedFacet, setStoredFacet] = usePersistedSearch(`${collectionId}:add-to-offer-state`);
+  // Opened on a destination that was chosen for us (#513) the remembered facet may hide the very
+  // offer the picker is here to confirm — so it starts on *All offers* until the collector picks a
+  // facet themselves, and the persisted choice is left untouched for the next ordinary open.
+  const [facetTouched, setFacetTouched] = useState(false);
   const stateFacet: OfferState | null =
-    isOfferState(storedFacet) && (FACET_STATES as readonly string[]).includes(storedFacet)
-      ? storedFacet
-      : null;
-  const setStateFacet = (s: OfferState | null) => setStoredFacet(s ?? "");
+    !facetTouched && initialTargetOfferId
+      ? null
+      : isOfferState(storedFacet) && (FACET_STATES as readonly string[]).includes(storedFacet)
+        ? storedFacet
+        : null;
+  // The conflict facet (#513): narrow to the offers that already list one of these stamps in this
+  // condition. Not persisted — it is a question about *this* selection, not a way the collector
+  // likes the picker to open, and the count it carries is meaningless without one. It starts **on**
+  // when the picker was opened from the selection bar's conflict shortcut, which is a request to
+  // look at exactly those offers; picking a state facet is the collector saying otherwise.
+  const [conflictsOnly, setConflictsOnly] = useState(!!initialTargetOfferId);
+  const setStateFacet = (s: OfferState | null) => {
+    setFacetTouched(true);
+    setConflictsOnly(false);
+    setStoredFacet(s ?? "");
+  };
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [detailsOpen, setDetailsOpen] = useState<Set<string>>(new Set());
-  const [selected, setSelected] = useState<Target | null>(null);
+  const [selected, setSelected] = useState<Target | null>(
+    initialTargetOfferId ? { kind: "new", offerId: initialTargetOfferId } : null
+  );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
@@ -291,9 +327,21 @@ export function AddToOfferDialog({
     return counts;
   }, [byText]);
 
+  const conflictCount = useMemo(
+    () => byText.filter(({ offer }) => offer.collidingItemIds.length > 0).length,
+    [byText]
+  );
+  // A filter with nothing behind it is released rather than shown as an empty list: the picker may
+  // open on it (the conflict shortcut) before the targets have loaded, and a selection whose
+  // conflict was resolved elsewhere would otherwise leave the collector staring at nothing.
+  const conflictsActive = conflictsOnly && conflictCount > 0;
+
   const visible = useMemo(
-    () => byText.filter(({ offer }) => !stateFacet || offer.state === stateFacet),
-    [byText, stateFacet]
+    () =>
+      conflictsActive
+        ? byText.filter(({ offer }) => offer.collidingItemIds.length > 0)
+        : byText.filter(({ offer }) => !stateFacet || offer.state === stateFacet),
+    [byText, stateFacet, conflictsActive]
   );
 
   /** The copies still addable to a destination: an offer never lists the same copy twice, so any it
@@ -399,16 +447,44 @@ export function AddToOfferDialog({
           }}
         >
           <p style={{ ...FACET_LABEL, marginTop: 0 }}>State</p>
-          <FacetRow label="All offers" active={stateFacet === null} onClick={() => setStateFacet(null)} count={byText.length} />
+          <FacetRow
+            label="All offers"
+            active={!conflictsActive && stateFacet === null}
+            onClick={() => setStateFacet(null)}
+            count={byText.length}
+          />
           {FACET_STATES.map((s) => (
             <FacetRow
               key={s}
               label={OFFER_STATE_LABEL[s]}
-              active={stateFacet === s}
-              onClick={() => setStateFacet(stateFacet === s ? null : s)}
+              active={!conflictsActive && stateFacet === s}
+              onClick={() => setStateFacet(stateFacet === s && !conflictsActive ? null : s)}
               count={stateCounts[s] ?? 0}
             />
           ))}
+
+          {/* The conflict facet (#513) — a group of its own, since it cuts across the states: it
+              asks what these copies collide with, not what an offer's lifecycle is. Shown only when
+              something does collide, so an ordinary add never grows a facet reading zero. */}
+          {conflictCount > 0 && (
+            <>
+              <p style={FACET_LABEL}>Conflicts</p>
+              {/* The wrapper is inline-flex, so it must be told to span the panel or this one row
+                  would sit narrower than the state facets above it. */}
+              <Tooltip
+                style={{ width: "100%" }}
+                content="Offers that already list one of these stamps in this condition, through a different copy. Colnect allows only one offer per stamp per condition."
+              >
+                <FacetRow
+                  label="Same stamp + condition"
+                  active={conflictsActive}
+                  onClick={() => setConflictsOnly(!conflictsActive)}
+                  count={conflictCount}
+                  tone="warning"
+                />
+              </Tooltip>
+            </>
+          )}
         </div>
 
         {/* List column */}
@@ -550,6 +626,15 @@ export function AddToOfferDialog({
         isPending={isPending}
         error={createError}
         zIndexBase={110}
+        onPlatformChange={setCreatePlatformId}
+        // The stamp × condition conflict, asked *before* the offer exists (#513): a new listing of
+        // a stamp the platform already has an offer for in that condition is one Colnect refuses.
+        // Advisory only — the collector may have a reason, and the submit is never blocked.
+        notice={
+          createCollisions.length > 0 ? (
+            <CollisionNotice collisions={createCollisions} totalCopies={items.length} />
+          ) : undefined
+        }
         // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
         // price is set up front rather than deferred to the detail screen. When the copy has a catalog
         // value it pre-fills (#230), converted to the offer's currency and still fully editable;
@@ -585,17 +670,76 @@ export function AddToOfferDialog({
   );
 }
 
+/**
+ * The stamp × condition warning as a banner (#513): the offers on the platform being listed on
+ * that already hold one of these stamps in this condition, and how many copies each accounts for.
+ *
+ * It names the offers rather than merely counting them — the collector's next move is to look at
+ * the listing that already exists, and an offer number is what finds it. Advisory throughout:
+ * nothing here disables a submit.
+ */
+function CollisionNotice({
+  collisions,
+  totalCopies,
+}: {
+  collisions: StampConditionCollision[];
+  totalCopies: number;
+}) {
+  const affected = new Set(collisions.flatMap((c) => c.itemIds)).size;
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "0.5rem",
+        padding: "0.625rem 0.75rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-warning-border)",
+        background: "var(--color-warning-soft)",
+        color: "var(--color-warning)",
+        fontSize: "0.8125rem",
+      }}
+    >
+      <Icon name="warning" size="sm" />
+      <div style={{ minWidth: 0 }}>
+        <strong>
+          {affected === totalCopies && totalCopies > 1
+            ? "These copies are"
+            : affected === 1
+              ? "One of these copies is"
+              : `${affected} of these copies are`}{" "}
+          already offered on {collisions[0].platformName}
+        </strong>{" "}
+        — the same stamp in the same condition. Colnect allows one offer per stamp per condition, so
+        a second listing cannot be posted.
+        <ul style={{ margin: "0.375rem 0 0", paddingLeft: "1.1rem" }}>
+          {collisions.map((c) => (
+            <li key={c.offerId}>
+              {formatEntityNo(c.offerNo)} {c.offerLabel} ({OFFER_STATE_LABEL[c.state].toLowerCase()})
+              {c.itemIds.length > 1 ? ` — ${c.itemIds.length} copies` : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function FacetRow({
   label,
   active,
   count,
   onClick,
+  tone,
 }: {
   label: string;
   active: boolean;
   count: number;
   onClick: () => void;
+  /** `warning` marks the conflict facet (#513) — the one facet that reports a problem rather than
+   * a way of looking, so it keeps the amber the chips on the rows use. */
+  tone?: "warning";
 }) {
+  const accent = tone === "warning" ? "var(--color-warning)" : "var(--color-accent)";
   return (
     <button
       type="button"
@@ -608,8 +752,8 @@ function FacetRow({
         borderRadius: "0.375rem",
         border: "none",
         background: active ? "var(--color-bg-muted)" : "transparent",
-        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-        fontWeight: active ? 600 : 400,
+        color: active ? accent : tone === "warning" ? "var(--color-warning)" : "var(--color-text-secondary)",
+        fontWeight: active || tone === "warning" ? 600 : 400,
         fontSize: "0.8125rem",
         cursor: "pointer",
         textAlign: "left",
@@ -651,6 +795,7 @@ function OfferGroup({
   ctx: RowCtx;
 }) {
   const alreadyHere = offer.containsItemIds.length;
+  const colliding = offer.collidingItemIds.length;
   const disabled = alreadyHere >= totalCopies;
   const hasSets = offer.sets.length > 0;
   const newKey = `new:${offer.offerId}`;
@@ -699,6 +844,35 @@ function OfferGroup({
                   ? "— already listed here"
                   : `— ${alreadyHere} of ${totalCopies} already listed here, and left out`}
               </span>
+            )}
+            {/* The stamp × condition conflict (#513) — a different copy of the same stamp in the
+                same condition is already on this listing, which Colnect refuses. A warning, not a
+                gate: the destination stays pickable and nothing is left out of the add. */}
+            {colliding > 0 && (
+              <Tooltip
+                content={
+                  `${colliding === 1 ? "One of these copies is" : `${colliding} of these copies are`} the same stamp in the same condition as ` +
+                  "a copy already listed here. Colnect allows only one offer per stamp per condition, so adding " +
+                  `${colliding === 1 ? "it" : "them"} would make a listing that cannot be posted.`
+                }
+              >
+                <span
+                  style={{
+                    ...CHIP,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                    color: "var(--color-warning)",
+                    borderColor: "var(--color-warning-border)",
+                    background: "var(--color-warning-soft)",
+                  }}
+                >
+                  <Icon name="warning" size="xs" />{" "}
+                  {colliding === 1
+                    ? "same stamp + condition already here"
+                    : `${colliding} same stamp + condition already here`}
+                </span>
+              </Tooltip>
             )}
           </div>
         </div>

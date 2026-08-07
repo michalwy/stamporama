@@ -601,6 +601,29 @@ arrived, they stay in the menu but are **greyed out**, with the reason spelled o
 An offer that already lists this copy is shown but disabled — a copy is never listed twice in the
 same offer. A copy that has already **sold** elsewhere can't be added at all.
 
+### The same stamp in the same condition
+
+Colnect allows only **one offer per stamp per condition**, so a second listing of a stamp you are
+already offering in that condition cannot be posted. The picker points these out before you commit:
+an offer that already holds a **different** copy of one of the same stamps in the same condition
+carries an amber **same stamp + condition already here** marker, and the tooltip says how many of
+your copies it applies to.
+
+When at least one offer conflicts, the left facet panel grows a **Conflicts** group with a
+**Same stamp + condition** entry and its count. Click it and the list narrows to just those offers;
+clicking any **State** facet leaves it again. It appears only when something actually conflicts, so
+an ordinary add never grows a facet reading zero.
+
+It is a **warning, not a block**. The offer stays pickable and nothing is left out of the add — you
+may have a reason (a deliberate re-list, a platform without the rule). Only the copies the offer
+*literally* already lists are ever dropped from an add.
+
+The **＋ Create new offer** form checks the same thing for the platform in its Platform field, and
+shows an amber banner naming the offers that already hold those stamps — including their offer
+numbers, so you can go and look. Switching the platform re-asks the question. Offers in every live
+state count (**preparing, ready, active, paused**), so a duplicate is caught while both listings are
+still drafts.
+
 ## Adding several copies to an offer at once
 
 Every copy you can list carries a **checkbox** on the left of its row. Tick a few and a bar appears
@@ -628,6 +651,25 @@ the row says so (*"3 of 10 already listed here, and left out"*). Only an offer t
 
 The selection survives scrolling further down the list. Changing a filter clears it — what was picked
 is no longer on screen.
+
+### Conflicts in the selection bar
+
+While the **Not offered on…** (or **Never listed on…**) filter names a platform, the bar also
+answers the [one-offer-per-stamp-per-condition](#the-same-stamp-in-the-same-condition) question for
+that platform: if a live offer there already lists one of the picked stamps in that condition, an
+amber line says how many copies are affected, and beside it is **Add to #12 instead** — one click to
+put the selection into that existing offer rather than creating a second listing for the same
+stamps. The tooltip on the warning lists every conflicting offer when there is more than one.
+
+The shortcut opens the ordinary **Add to offer** picker with that offer already picked as the
+destination (as a **＋ New set** on it) **and the Same stamp + condition facet already on**, so the
+list shows the conflicting offers and nothing else. You can still change your mind — drop the copies
+into one of its existing sets, choose the packaging, or click a **State** facet to see every offer
+again and pick a different one.
+
+Without a platform in scope the bar says nothing about conflicts: a conflict is always a conflict on
+a particular platform, and until the filter names one there is no listing being planned to warn
+about.
 
 ### The new-offer shortcuts
 
