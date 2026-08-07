@@ -71,6 +71,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     noPhotos: boolParam(sp.get("noPhotos")),
     missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
+    // The review read (#506): the copies set aside on this platform.
+    excludedPlatformId: sp.get("excludedPlatformId") || undefined,
     // Sold copies are hidden from the inventory list by default (#207); an explicit
     // `includeSold=true` shows them again.
     excludeSold: boolParam(sp.get("includeSold")) ? undefined : true,

@@ -1239,6 +1239,8 @@ model Item {
   /** Manual offer attachments (#313) whose label tokens resolve from this copy. */
   offerPhotoAttachments OfferPhotoAttachment[]
   offerPhotoAttachmentTiles OfferPhotoAttachmentTile[]
+  /** Platforms this copy is deliberately never listed on (#506). */
+  platformExclusions ItemPlatformExclusion[]
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -1251,6 +1253,38 @@ model Item {
   // indexed together with the scope rather than on its own.
   @@index([collectionId, disposedAt])
   @@map("item")
+}
+
+// A copy the collector has decided is **never** to be listed on one platform (#506).
+//
+// The *not offered on X* worklist (#259) answers "what is for sale and still needs a listing there",
+// and its weakness is that a copy deliberately kept off a marketplace answers it truthfully for
+// ever: a thousand such copies bury the one that arrived yesterday. This row is the collector saying
+// "stop asking about this one, here" — a decision, not a fact about the goods, which is why it lives
+// beside the copy rather than on it and is scoped to one platform at a time.
+//
+// A flag and a timestamp, no reason field: the worklist only needs to know the question is settled,
+// and anything worth writing down about *why* is what the copy's own `notes` are. The presence of
+// the row is the whole state, so setting it twice is a no-op and clearing it is a delete — which is
+// what makes the bulk write idempotent.
+//
+// Both FKs **cascade**. Unlike a purchase or a sale, an exclusion records nothing that happened:
+// deleting the copy takes its exclusions with it, and deleting the platform contact must not be
+// blocked by a preference that stops meaning anything the moment the platform is gone.
+model ItemPlatformExclusion {
+  id         String   @id @default(cuid())
+  itemId     String
+  // A `Contact` carrying the `platform` role — the same reference `Offer.platformId` is.
+  platformId String
+  createdAt  DateTime @default(now())
+
+  item     Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  platform Contact @relation("PlatformItemExclusion", fields: [platformId], references: [id], onDelete: Cascade)
+
+  // One decision per copy per platform; the unique is what lets the write be an upsert-by-absence.
+  @@unique([itemId, platformId])
+  @@index([platformId])
+  @@map("item_platform_exclusion")
 }
 
 // A photo attached to an inventory copy (#112). One `Item` has many `Photo`s.
@@ -2493,6 +2527,9 @@ model Contact {
   // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
   auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
   auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
+  // Copies deliberately never listed on this platform (#506). Cascades on delete — a preference
+  // about a platform that no longer exists is not a record worth keeping.
+  itemExclusions       ItemPlatformExclusion[] @relation("PlatformItemExclusion")
   // Self-relation for the remembered auction platform above: a seller points at a platform, and a
   // platform knows which sellers were last tracked on it.
   defaultAuctionPlatform    Contact?  @relation("ContactAuctionPlatform", fields: [defaultAuctionPlatformId], references: [id], onDelete: SetNull)

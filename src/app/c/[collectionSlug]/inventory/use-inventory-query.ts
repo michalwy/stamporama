@@ -85,8 +85,11 @@ export interface InventoryItemFilters {
   /** Restrict to copies missing a catalog value — unpriced for their condition (#229). */
   missingCatalogValue?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259) — no non-terminal offer
-   * on it. Implies "for sale". */
+   * on it, and not set aside from it (#506). Implies "for sale". */
   notOfferedPlatformId?: string;
+  /** Restrict to the copies deliberately kept off this platform (#506) — the review read that makes
+   * an exclusion reversible. Carries no disposition of its own. */
+  excludedPlatformId?: string;
   /** The physical delivery states in scope (ADR-0009 §5, #272, #427) — an OR, absent meaning every
    * state, so "everything still on its way to me" is one filter rather than three passes. */
   deliveryStates?: string[];
@@ -120,6 +123,8 @@ export interface InventoryYearFacetFilters {
   missingCatalogValue?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259). */
   notOfferedPlatformId?: string;
+  /** Restrict to the copies deliberately kept off this platform (#506). */
+  excludedPlatformId?: string;
   /** The physical delivery states in scope (ADR-0009 §5, #272, #427) — an OR, absent meaning every
    * state, so "everything still on its way to me" is one filter rather than three passes. */
   deliveryStates?: string[];
@@ -178,6 +183,8 @@ function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.notOfferedPlatformId)
     params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+  if (filters.excludedPlatformId)
+    params.set("excludedPlatformId", filters.excludedPlatformId);
   if (filters.deliveryStates && filters.deliveryStates.length > 0)
     params.set("deliveryStates", filters.deliveryStates.join(","));
   if (filters.includeSold) params.set("includeSold", "true");
@@ -320,6 +327,7 @@ export function useHoldingsValuation(
       noPhotos: filters.noPhotos,
       missingCatalogValue: filters.missingCatalogValue,
       notOfferedPlatformId: filters.notOfferedPlatformId,
+      excludedPlatformId: filters.excludedPlatformId,
       deliveryStates: filters.deliveryStates,
       includeSold: filters.includeSold,
     }] as const,
@@ -347,6 +355,8 @@ export function useHoldingsValuation(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+      if (filters.excludedPlatformId)
+        params.set("excludedPlatformId", filters.excludedPlatformId);
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeSold) params.set("includeSold", "true");
@@ -392,6 +402,8 @@ export function useItemYears(
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
+      if (filters.excludedPlatformId)
+        params.set("excludedPlatformId", filters.excludedPlatformId);
       if (filters.deliveryStates && filters.deliveryStates.length > 0)
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeSold) params.set("includeSold", "true");

@@ -98,9 +98,16 @@ Stamps, Copies, Offers, Sales and Purchases.
   Copies marked **Not delivered / missing** or **Damaged** are left out as well: they are not in
   your hands and never will be, so they cannot be listed. Copies still on their way to you
   (*Ordered*, *In transit*, *To sort*) do show up — those are exactly the ones worth preparing.
+  Copies you have marked as [never listed on that platform](#copies-you-never-list-on-a-platform)
+  are left out too — that is what the marking is for.
   This filter appears once you have at least one offer platform,
   and the holdings totals and year panel follow it too. Your chosen platform here is **remembered**
   for this collection, so the filter comes back the way you left it next time.
+- **Never listed on…** — the same dropdown's second group, listing the copies you have deliberately
+  set aside from a platform, so you can review them and let any of them back in. Unlike the worklist
+  above it makes no assumption about disposition: it shows exactly what carries the marking. This
+  one is **not** remembered between visits — it is somewhere you go to look, not the list you work
+  from.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
   to look up what a piece went for); each one then carries a **💰 Sold** chip, so a copy that has
@@ -280,6 +287,42 @@ number is never handed to another copy. What changes is that the copy:
 The **Edit copy** dialog shows the disposal beside the delivery state rather than instead of it:
 the two are independent, and both stay readable.
 
+## Copies you never list on a platform
+
+Some copies you keep for sale but never intend to list on one particular
+[platform](offers.md) — the postage is wrong for it, the piece is promised elsewhere, whatever the
+reason. Left alone, every one of them keeps answering the **Not offered on…** worklist for that
+platform, and after a few hundred of them the copy that genuinely needs listing is impossible to
+find among them.
+
+Marking a copy **never listed on** a platform takes it out of that worklist and nothing else. The
+copy stays for sale, stays in your collection, keeps its value and its photos, and is still offered
+for listing on every *other* platform. It is a decision about where you sell, not about the stamp.
+
+There are three ways to set it, for the three situations it comes up in:
+
+- **From a row's ⋮ menu** — while the **Not offered on…** (or **Never listed on…**) filter names a
+  platform, every row offers **Never list on ⟨platform⟩**, or **List on ⟨platform⟩ again** if it is
+  already set aside. One click, no confirmation: the same menu undoes it.
+- **From the selection bar** — tick copies with their checkboxes and press
+  **⊗ Never list on ⟨platform⟩** to set aside the whole selection at once. This is how a backlog of
+  a thousand is cleared. A selection that is *already* set aside offers the reverse instead. Like
+  the row entry, it appears only while a platform is picked in the filter, since the decision names
+  one.
+- **From the Edit copy dialog** — the **Never list on** control lists your platforms and ticks any
+  number of them, so you can answer for all platforms at once without filtering the list first. What
+  you leave unticked is *allowed*, so this is also where an exclusion is cleared away from the
+  worklist.
+
+A copy that is set aside anywhere carries a muted **⊗ not on ⟨platform⟩** chip on its row, naming
+every platform it is kept off.
+
+To see what you have set aside — and to let any of it back in — pick the platform under **Never
+listed on…** in the same dropdown that carries the worklist. That list shows exactly the copies
+carrying the marking, whatever their disposition.
+
+If you later delete a platform contact, the markings that named it simply go with it.
+
 ## Viewing copies from the catalog
 
 You don't have to open the Inventory screen to see what you own. Every row across the
@@ -411,7 +454,8 @@ first.
 
 Open the row's **⋮** menu and choose **Edit**. The same dialog opens with the copy's
 current values. Changing the stamp to a more specific variant re-points the copy and
-records the change in its refinement history.
+records the change in its refinement history. The dialog also carries the **Never list on**
+control — see [copies you never list on a platform](#copies-you-never-list-on-a-platform).
 
 To edit the **stamp** a copy points to — its name, catalog numbers, or catalog prices — choose
 **Edit stamp** from the same **⋮** menu. It opens the shared stamp editor (the one on the Stamps

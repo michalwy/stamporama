@@ -76,6 +76,11 @@ interface InventoryCopyListProps {
    * hand, *Mark as held again* on one already disposed of. */
   onDispose?: (item: ItemListItem) => void;
   onRestore?: (item: ItemListItem) => void;
+  /** The platform the list is working through (#506), and the writer behind each row's one-click
+   * *Never list on X*. Absent on every surface that is not the Copies list — the decision belongs
+   * to the worklist it exists for. */
+  exclusionPlatform?: { id: string; name: string } | null;
+  onSetPlatformExclusion?: (item: ItemListItem, platformId: string, excluded: boolean) => void;
   /** When provided, each row's catalog-value cell becomes the quick-price trigger (#228): a
    * "+ catalog value" link when unpriced, click-to-edit when priced — mirroring the purchase
    * intake view (#121). The dialog itself is owned by the caller. */
@@ -128,6 +133,8 @@ export function InventoryCopyList({
   onViewPurchase,
   onDispose,
   onRestore,
+  exclusionPlatform,
+  onSetPlatformExclusion,
   onSetCatalogPrice,
   selection,
   differingIds,
@@ -169,6 +176,8 @@ export function InventoryCopyList({
             onViewPurchase={onViewPurchase}
             onDispose={onDispose}
             onRestore={onRestore}
+            exclusionPlatform={exclusionPlatform}
+            onSetPlatformExclusion={onSetPlatformExclusion}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}
             trailingChips={
               differs ? (

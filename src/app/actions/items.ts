@@ -11,6 +11,7 @@ import {
   restoreItem,
   resolveItemVariant,
   getItemListItem,
+  setItemPlatformExclusion,
 } from "@/lib/items";
 import type { ItemListItem } from "@/lib/items";
 import { isDisposalReason } from "@/lib/disposal";
@@ -53,6 +54,10 @@ interface ItemFields {
   locationId: string | null;
   locationRef: string | null;
   deliveryState: string | null;
+  /** Platforms this copy is never listed on (#506), as the form's comma-separated hidden field.
+   * Always present (an empty list clears the set) — the form is one of the surfaces that owns the
+   * whole answer, unlike the row and bulk toggles which change one platform. */
+  excludedPlatformIds: string[];
 }
 
 interface ParsedItemFields {
@@ -85,6 +90,10 @@ function parseItemFields(formData: FormData): ParsedItemFields {
       ? str(formData, "locationRef") || null
       : null,
     deliveryState: str(formData, "deliveryState") || null,
+    excludedPlatformIds: str(formData, "excludedPlatformIds")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 
   if (!stampId) return { data, error: "A stamp must be selected." };
@@ -198,6 +207,32 @@ export async function disposeItemAction(
       reason,
       note: str(formData, "disposalNote") || null,
     });
+    return { status: "success" };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "Failed to update this copy. Please try again.";
+    return { status: "error", message };
+  }
+}
+
+/** Set aside copies from one platform, or bring them back (#506). One action for the row's own ⋮
+ * entry and the bulk bar, because they are the same decision at two sizes; the domain narrows the
+ * ids to the collection and refuses an unknown platform. */
+export async function setItemPlatformExclusionAction(
+  collectionId: string,
+  itemIds: string[],
+  platformId: string,
+  excluded: boolean
+): Promise<ItemActionState> {
+  const session = await getSession();
+  try {
+    await setItemPlatformExclusion(
+      session.user.id,
+      collectionId,
+      itemIds,
+      platformId,
+      excluded
+    );
     return { status: "success" };
   } catch (e) {
     const message =

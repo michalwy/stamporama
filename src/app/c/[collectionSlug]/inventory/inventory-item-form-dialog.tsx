@@ -27,6 +27,7 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import {
   readAddCopyDefaults,
   writeAddCopyDefaults,
@@ -185,6 +186,14 @@ export function InventoryItemFormDialog({
   // Null for a copy still held, which is every copy in add mode.
   const disposalSummary = item ? describeDisposal(item) : null;
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+  // Platforms this copy is deliberately never listed on (#506), fetched here for the same reason
+  // the formats are: this dialog is opened from four screens. Add mode starts with none — a copy
+  // being added is normally being added *to* sell, and the exception is one tick away.
+  const { data: contacts = [] } = useContacts(collectionId);
+  const platforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
+  const [excludedPlatformIds, setExcludedPlatformIds] = useState<string[]>(
+    item?.excludedPlatformIds ?? []
+  );
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
     item
       ? { inCollection: item.inCollection, forSale: item.forSale, forTrade: item.forTrade }
@@ -392,6 +401,26 @@ export function InventoryItemFormDialog({
               />
             </div>
 
+            {/* Row 3b: platforms this copy is never listed on (#506). The whole set is edited
+                here, unlike the list's row and bulk entries, which turn one platform on or off —
+                this is the only surface that asks the question without a platform already in
+                scope. Absent until the collection has a platform contact to name. */}
+            {platforms.length > 0 && (
+              <div>
+                <GroupLabel>Never list on</GroupLabel>
+                <PlatformExclusionField
+                  platforms={platforms}
+                  excluded={excludedPlatformIds}
+                  onToggle={(id) =>
+                    setExcludedPlatformIds((ids) =>
+                      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+                    )
+                  }
+                  disabled={isPending}
+                />
+              </div>
+            )}
+
             {/* Row 4: storage (#56) — full width so the location tree-select breathes; the
                 in-location ref sits beside it. */}
             <div>
@@ -501,6 +530,80 @@ export function InventoryItemFormDialog({
         />
       </form>
     </DialogShell>
+  );
+}
+
+/**
+ * The platforms this copy is deliberately never listed on (#506) — the disposition control's own
+ * shape, because it is the same kind of answer: independent flags, any combination, a handful of
+ * them. One hidden field carries the whole set comma-separated, so an empty one **clears** it: this
+ * form owns the answer, unlike the row and bulk toggles which change a single platform.
+ *
+ * Ticking one says nothing about the copy itself — it is for sale exactly as before, just not there.
+ */
+function PlatformExclusionField({
+  platforms,
+  excluded,
+  onToggle,
+  disabled,
+}: {
+  platforms: { id: string; name: string }[];
+  excluded: string[];
+  onToggle: (id: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div>
+      <div
+        role="group"
+        aria-label="Platforms this copy is never listed on"
+        style={{
+          display: "inline-flex",
+          flexWrap: "wrap",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: "0.375rem",
+          overflow: "hidden",
+        }}
+      >
+        {platforms.map((p, i) => {
+          const active = excluded.includes(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={active}
+              disabled={disabled}
+              onClick={() => onToggle(p.id)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                padding: "0.5rem 0.85rem",
+                border: "none",
+                borderLeft: i === 0 ? undefined : "1px solid var(--color-border-strong)",
+                background: active ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                fontSize: "0.8125rem",
+                fontWeight: active ? 600 : 500,
+                cursor: disabled ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap",
+                transition: "background 0.1s ease, color 0.1s ease",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: "0.7rem" }}>
+                {active ? "⊗" : "+"}
+              </span>
+              {p.name}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ margin: "0.375rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+        Keeps this copy out of the &quot;not offered on…&quot; worklist for the platforms picked. It
+        stays for sale everywhere else.
+      </p>
+      <input type="hidden" name="excludedPlatformIds" value={excluded.join(",")} />
+    </div>
   );
 }
 

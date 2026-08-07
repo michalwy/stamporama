@@ -426,6 +426,9 @@ export interface ItemCreateInput {
    * damaged. Defaults to `delivered` (a manually added copy is in hand); intake passes
    * `in_transit`. */
   deliveryState?: string | null;
+  /** Platforms this copy is never to be listed on (#506) — a copy can be added already knowing it
+   * is not for one of them, so the add form asks the same question the edit form does. */
+  excludedPlatformIds?: string[];
 }
 
 // The delivery axis values a copy may carry live in `./delivery-state` (ADR-0009 §5). Both
@@ -465,6 +468,10 @@ export interface ItemUpdateInput {
   /** Physical delivery axis (ADR-0009 §5): ordered | to_sort | in_transit | delivered |
    * not_delivered | damaged. Ignored when not one of those. */
   deliveryState?: string | null;
+  /** The platforms this copy is never to be listed on (#506). Absent leaves the set alone; a list —
+   * including an empty one — **replaces** it, which is what the edit dialog's multi-select means by
+   * unticking the last platform. */
+  excludedPlatformIds?: string[];
   /** Optional reason recorded on the ItemVariantHistory row when `stampId` changes. */
   variantChangeNote?: string | null;
 }
@@ -474,6 +481,23 @@ export interface ItemListFilters {
   inCollection?: boolean;
   forSale?: boolean;
   forTrade?: boolean;
+}
+
+/** The platform contacts of this collection among `ids` (#506). Anything else is **dropped**, not
+ * refused: an id a form carries for a platform since deleted, or one belonging to another
+ * collection, says the same thing as no exclusion at all, and a copy edit is no place to fail over
+ * it. Deduplicated — the exclusions are a set. */
+async function resolvePlatformIds(
+  collectionId: string,
+  ids: readonly string[]
+): Promise<string[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const rows = await prisma.contact.findMany({
+    where: { id: { in: unique }, collectionId, platform: true },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
 }
 
 export async function createItem(
@@ -494,9 +518,15 @@ export async function createItem(
     await assertLotOpenInCollection(collectionId, data.lotId);
   }
   const deliveryState = isDeliveryState(data.deliveryState) ? data.deliveryState : "delivered";
+  const excludedPlatformIds = data.excludedPlatformIds
+    ? await resolvePlatformIds(collectionId, data.excludedPlatformIds)
+    : [];
   const itemNo = await allocateItemNumber(prisma, collectionId);
   const item = await prisma.item.create({
     data: {
+      platformExclusions: {
+        create: excludedPlatformIds.map((platformId) => ({ platformId })),
+      },
       collectionId,
       itemNo,
       stampId: data.stampId,
@@ -594,6 +624,14 @@ export async function updateItem(
   const repointing =
     data.stampId !== undefined && data.stampId !== current.stampId;
 
+  // Absent leaves the exclusions alone — every caller that is not the copy form (#506) has no
+  // opinion on them, and a missing field must not read as "clear them".
+  const excludedPlatformIds =
+    data.excludedPlatformIds === undefined
+      ? null
+      : await resolvePlatformIds(collectionId, data.excludedPlatformIds);
+
+  // `fields` is read key by key below, so the exclusions riding along in it reach no `update`.
   const { variantChangeNote, ...fields } = data;
   const updateData = {
     ...(fields.stampId !== undefined ? { stampId: fields.stampId } : {}),
@@ -625,6 +663,20 @@ export async function updateItem(
       data: updateData,
       select: ITEM_SELECT,
     });
+    if (excludedPlatformIds) {
+      // A replace, expressed as a delete of what is no longer ticked plus a create of what is:
+      // `skipDuplicates` leaves the rows that survive untouched, so an exclusion keeps the date it
+      // was made on rather than being re-stamped by an unrelated edit.
+      await tx.itemPlatformExclusion.deleteMany({
+        where: { itemId, platformId: { notIn: excludedPlatformIds } },
+      });
+      if (excludedPlatformIds.length > 0) {
+        await tx.itemPlatformExclusion.createMany({
+          data: excludedPlatformIds.map((platformId) => ({ itemId, platformId })),
+          skipDuplicates: true,
+        });
+      }
+    }
     if (repointing) {
       await tx.itemVariantHistory.create({
         data: {
@@ -638,6 +690,53 @@ export async function updateItem(
     return updated;
   });
   return toItemData(item);
+}
+
+/**
+ * Set or clear the "never list this copy here" flag (#506) over one platform and any number of
+ * copies — the row's own ⋮ entry passes one id, the bulk bar passes a whole selection, and both are
+ * the same write, because a decision taken about one copy and about a thousand is the same decision.
+ *
+ * **Idempotent in both directions**: excluding is a `createMany … skipDuplicates`, allowing is a
+ * `deleteMany`, so re-running either changes nothing. That is what makes it safe to point at a
+ * selection whose copies are in a mix of states — which is the normal case when working through the
+ * worklist, where some rows were already set aside.
+ *
+ * The copies are narrowed to the collection before anything is written, so an id from elsewhere is
+ * ignored rather than trusted; an unknown platform, by contrast, is a **refusal**, since the whole
+ * point of the call is that one platform. Returns how many copies the write actually addressed, for
+ * the confirmation the bulk bar shows.
+ */
+export async function setItemPlatformExclusion(
+  ownerId: string,
+  collectionId: string,
+  itemIds: readonly string[],
+  platformId: string,
+  excluded: boolean
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [platform] = await resolvePlatformIds(collectionId, [platformId]);
+  if (!platform) throw new Error("Platform not found in this collection.");
+
+  const ids = [...new Set(itemIds.filter(Boolean))];
+  if (ids.length === 0) return 0;
+  const rows = await prisma.item.findMany({
+    where: { id: { in: ids }, collectionId },
+    select: { id: true },
+  });
+  if (rows.length === 0) return 0;
+
+  if (excluded) {
+    await prisma.itemPlatformExclusion.createMany({
+      data: rows.map((r) => ({ itemId: r.id, platformId: platform })),
+      skipDuplicates: true,
+    });
+  } else {
+    await prisma.itemPlatformExclusion.deleteMany({
+      where: { itemId: { in: rows.map((r) => r.id) }, platformId: platform },
+    });
+  }
+  return rows.length;
 }
 
 /** What a disposal records (#394): why the copy stopped being held, plus free-text detail that is
@@ -859,8 +958,16 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * a different platform still matches — multi-platform listing is expected (#165) — unless that
    * offer is in active bidding (#215), which commits the copy to a pending sale and so excludes it
    * everywhere (#334). Implies the `forSale` disposition, so it surfaces exactly what still needs
-   * listing there. */
+   * listing there.
+   *
+   * Copies **excluded** from that platform (#506) are left out: the collector has already answered
+   * for them, and a worklist that keeps asking is one nobody can work through. */
   notOfferedPlatformId?: string;
+  /** The other half of {@link notOfferedPlatformId} (#506): the copies flagged as never to be listed
+   * on this platform. The way back — auditing what was set aside, and undoing it — so it is the
+   * exclusion and **nothing else**: no `forSale` implication, because a copy taken out of the
+   * worklist and then taken off sale would otherwise vanish from both readings at once. */
+  excludedPlatformId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -985,6 +1092,18 @@ function buildItemWhere(
     // never will be, so they can't be listed. The in-flight states stay — a copy still on its
     // way is exactly what one plans a listing for.
     and.push({ deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] } });
+    // …and the copies the collector has decided are never listed there (#506). Every other clause
+    // here says a copy *cannot* be listed yet; this one says the question has been answered.
+    and.push({
+      platformExclusions: { none: { platformId: filters.notOfferedPlatformId } },
+    });
+  }
+  // The review read (#506) — what was set aside on this platform, so it can be audited and undone.
+  // Deliberately not paired with a disposition: this filter answers about the decision itself.
+  if (filters.excludedPlatformId) {
+    and.push({
+      platformExclusions: { some: { platformId: filters.excludedPlatformId } },
+    });
   }
   const formats = nullableIdWhere("formatId", filters.formatIds, "single");
   if (formats) and.push(formats);
@@ -1158,6 +1277,10 @@ export interface ItemListItem {
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
+  /** Platforms this copy is never to be listed on (#506) — the collector's own decision, not a
+   * property of the goods. Ids only: the row resolves the names from the collection's contacts,
+   * exactly as it resolves locations. */
+  excludedPlatformIds: string[];
   /** Acquisition link: the `PurchaseLot` this copy came from (ADR-0009), or null. */
   lotId: string | null;
   /** Owning lot's lifecycle status (`open | closed`), or null when the copy has no lot.
@@ -1229,6 +1352,9 @@ const ITEM_LIST_SELECT = {
   // `variantHistory` drives the "refined" marker; `saleLineItems` is the copy's soldness (#393) —
   // the very relation `excludeSold` filters on (#207), so the chip and the filter cannot disagree.
   _count: { select: { variantHistory: true, saleLineItems: true } },
+  // The platforms this copy is kept off (#506) — the same relation the *not offered on X* filter
+  // narrows by, so the row's chip and the worklist can never disagree.
+  platformExclusions: { select: { platformId: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
@@ -1306,6 +1432,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,
+    excludedPlatformIds: row.platformExclusions.map((e) => e.platformId),
     lotId: row.lotId,
     lotStatus: row.lot?.status ?? null,
     purchase: row.lot?.purchase

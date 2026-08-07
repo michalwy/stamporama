@@ -107,6 +107,11 @@ function newOfferShortcuts(
   ];
 }
 
+/** Marks the *set aside* half of the platform select (#506). The two readings share one control and
+ * one `<select>` value space, so the review options are prefixed rather than given a second control
+ * nobody would connect to the first. */
+const EXCLUDED_OPTION_PREFIX = "excluded:";
+
 const DISPOSITION_FILTERS = [
   { key: "inCollection", label: "In collection" },
   { key: "forSale", label: "For sale" },
@@ -229,6 +234,23 @@ export function InventoryListPanel({
     notOfferedPlatformParam && offerPlatforms.some((p) => p.id === notOfferedPlatformParam)
       ? notOfferedPlatformParam
       : "";
+  // The other reading of the same control (#506): the copies deliberately set aside from a platform.
+  // A second URL param rather than a mode flag, because the two are different filters and a link
+  // should say which one it carries; they are mutually exclusive, so setting either clears the
+  // other. Validated against the platform list exactly as the worklist one is.
+  const excludedPlatformParam = searchParams.get("excludedPlatform") ?? "";
+  const excludedPlatformId =
+    excludedPlatformParam && offerPlatforms.some((p) => p.id === excludedPlatformParam)
+      ? excludedPlatformParam
+      : "";
+  // Which platform the screen is working through, whichever way round it is being asked (#506).
+  // It is what the row's and the bulk bar's one-click entries act on: a decision is always about
+  // one platform, and with none picked the copy form is where the whole set is edited.
+  const scopedPlatform = useMemo(
+    () =>
+      offerPlatforms.find((p) => p.id === (notOfferedPlatformId || excludedPlatformId)) ?? null,
+    [offerPlatforms, notOfferedPlatformId, excludedPlatformId]
+  );
   // Which platform seeds the "create new offer" sub-flow of Add to offer (#241). The list's own
   // "not offered on X" filter (#259) wins: while it is set, the screen *is* that platform's
   // worklist, and listing what it shows anywhere else would be a surprise. Without it, the last
@@ -344,13 +366,14 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
+      excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeSold, includeDisposed, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -372,11 +395,12 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
+      excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
       includeSold: includeSold || undefined,
       includeDisposed: includeDisposed || undefined,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, deliveryStates, includeSold, includeDisposed]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, locationId, includeSubLocations, issueId, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeSold, includeDisposed]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -501,6 +525,41 @@ export function InventoryListPanel({
     []
   );
 
+  // Setting a copy aside from a platform, or bringing it back (#506). No dialog on either path: it
+  // is one reversible flag, and a confirmation for something the very next click can undo is noise.
+  // The failure has nowhere to be shown for the same reason, so it gets the strip above the list.
+  const [exclusionError, setExclusionError] = useState<string | undefined>();
+  const applyPlatformExclusion = useCallback(
+    (items: ItemListItem[], platformId: string, excluded: boolean, clearAfter: boolean) => {
+      startTransition(async () => {
+        const { setItemPlatformExclusionAction } = await import("@/app/actions/items");
+        const result = await setItemPlatformExclusionAction(
+          collectionId,
+          items.map((i) => i.id),
+          platformId,
+          excluded
+        );
+        if (result.status === "error") {
+          setExclusionError(result.message);
+          return;
+        }
+        setExclusionError(undefined);
+        invalidateList(collectionId);
+        // A selection that has been dealt with is left ticked only long enough to invite doing it
+        // twice; a single row's toggle never touched the selection, so it leaves it alone.
+        if (clearAfter) clearSelection();
+      });
+    },
+    [collectionId, invalidateList, clearSelection]
+  );
+  // Whether the whole selection is already set aside from the platform in scope — which is what the
+  // bulk button offers to undo. "All of them", not "any": with a mixed selection the useful action
+  // is still to set the rest aside, and the excluded ones absorb it as a no-op.
+  const selectionExcluded =
+    !!scopedPlatform &&
+    selectedCopies.length > 0 &&
+    selectedCopies.every((c) => c.excludedPlatformIds.includes(scopedPlatform.id));
+
   function closeDialog() {
     if (!isPending) {
       setDialog({ kind: "none" });
@@ -557,6 +616,7 @@ export function InventoryListPanel({
     noPhotos ||
     missingCatalogValue ||
     !!notOfferedPlatformId ||
+    !!excludedPlatformId ||
     deliveryStates.length > 0 ||
     includeSold ||
     includeDisposed ||
@@ -682,6 +742,45 @@ export function InventoryListPanel({
                   <div
                     style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                   >
+                    {/* Clearing the worklist in one go (#506) — the reason the flag exists: a
+                        thousand copies deliberately kept off a platform are set aside in one
+                        press. Only offered while a platform is in scope, since the decision names
+                        one; without the filter, the copy form owns the whole set. */}
+                    {scopedPlatform && (
+                      <Tooltip
+                        content={
+                          selectionExcluded
+                            ? `Bring these copies back into the "not offered on ${scopedPlatform.name}" worklist.`
+                            : `Keep these copies out of the "not offered on ${scopedPlatform.name}" worklist for good. Nothing about the copies themselves changes.`
+                        }
+                      >
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() =>
+                            applyPlatformExclusion(
+                              selectedCopies,
+                              scopedPlatform.id,
+                              !selectionExcluded,
+                              true
+                            )
+                          }
+                          style={{
+                            ...CONTROL_STYLE,
+                            cursor: isPending ? "default" : "pointer",
+                            fontWeight: 600,
+                            color: "var(--color-text-secondary)",
+                            borderColor: "var(--color-border-strong)",
+                            background: "var(--color-bg-elevated)",
+                            padding: "0.375rem 0.75rem",
+                          }}
+                        >
+                          {selectionExcluded
+                            ? `✓ List on ${scopedPlatform.name} again`
+                            : `⊗ Never list on ${scopedPlatform.name}`}
+                        </button>
+                      </Tooltip>
+                    )}
                     {newOfferShortcuts(selectedCopies.length).map(({ packaging, label, hint }) => (
                       <Tooltip key={packaging} content={hint}>
                         <button
@@ -995,16 +1094,32 @@ export function InventoryListPanel({
                   that haven't been used yet. Only shown once at least one platform contact
                   exists. */}
               {offerPlatforms.length > 0 && (
-                <Tooltip content="Show for-sale copies with no active offer on the chosen platform">
+                <Tooltip content="Show for-sale copies with no active offer on the chosen platform — or the copies deliberately kept off it">
                   <select
-                    value={notOfferedPlatformId}
+                    value={
+                      excludedPlatformId
+                        ? `${EXCLUDED_OPTION_PREFIX}${excludedPlatformId}`
+                        : notOfferedPlatformId
+                    }
                     onChange={(e) => {
-                      rememberNotOfferedPlatform(e.target.value);
-                      updateParams({ notOfferedPlatform: e.target.value });
+                      const value = e.target.value;
+                      const excluded = value.startsWith(EXCLUDED_OPTION_PREFIX);
+                      const notOffered = excluded ? "" : value;
+                      // Only the worklist choice is remembered (#275): the review of what was set
+                      // aside (#506) is something one goes to look at and then leaves, and a
+                      // remembered one would greet the next visit with the copies deliberately
+                      // *not* being worked on.
+                      rememberNotOfferedPlatform(notOffered);
+                      updateParams({
+                        notOfferedPlatform: notOffered,
+                        excludedPlatform: excluded
+                          ? value.slice(EXCLUDED_OPTION_PREFIX.length)
+                          : "",
+                      });
                     }}
                     style={{
                       ...CONTROL_STYLE,
-                      ...(notOfferedPlatformId
+                      ...(notOfferedPlatformId || excludedPlatformId
                         ? {
                             fontWeight: 600,
                             color: "var(--color-accent)",
@@ -1013,14 +1128,29 @@ export function InventoryListPanel({
                           }
                         : null),
                     }}
-                    aria-label="Show for-sale copies not yet offered on a platform"
+                    aria-label="Filter by a platform's listing worklist"
                   >
                     <option value="">For sale: any platform</option>
-                    {offerPlatforms.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        Not offered on {p.name}
-                      </option>
-                    ))}
+                    {/* The two halves of one question (#506): what still needs listing there, and
+                        what was deliberately taken out of that answer. One control, because the
+                        second only ever exists to correct the first. */}
+                    <optgroup label="Still to list">
+                      {offerPlatforms.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          Not offered on {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Set aside">
+                      {offerPlatforms.map((p) => (
+                        <option
+                          key={p.id}
+                          value={`${EXCLUDED_OPTION_PREFIX}${p.id}`}
+                        >
+                          Never listed on {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </Tooltip>
               )}
@@ -1056,6 +1186,25 @@ export function InventoryListPanel({
               />
             </div>
           </ListToolbar>
+
+          {/* A platform-exclusion write that failed (#506) has no dialog to report into, so it
+              reports here, directly above the rows it did not change. */}
+          {exclusionError && (
+            <div
+              role="alert"
+              style={{
+                margin: "0.75rem 1rem 0",
+                padding: "0.5rem 0.75rem",
+                borderRadius: "0.375rem",
+                border: "1px solid var(--color-error-border, var(--color-border))",
+                background: "var(--color-error-soft, var(--color-bg-page))",
+                color: "var(--color-error)",
+                fontSize: "0.8125rem",
+              }}
+            >
+              {exclusionError}
+            </div>
+          )}
 
           {/* List — flat copies, one row per duplicate group (#372), per place (#421), or per
               issue (#424) */}
@@ -1168,6 +1317,10 @@ export function InventoryListPanel({
                 }
                 onDispose={(it) => setDialog({ kind: "dispose", item: it })}
                 onRestore={(it) => setDialog({ kind: "restore", item: it })}
+                exclusionPlatform={scopedPlatform}
+                onSetPlatformExclusion={(it, platformId, excluded) =>
+                  applyPlatformExclusion([it], platformId, excluded, false)
+                }
                 onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
               />
             </div>

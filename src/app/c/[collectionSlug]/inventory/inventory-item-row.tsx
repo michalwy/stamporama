@@ -32,6 +32,7 @@ import {
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
+import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { PhotoThumb } from "./photo-thumb";
 
 const CHIP: React.CSSProperties = {
@@ -357,6 +358,13 @@ interface InventoryItemRowProps {
    * axis — the row is always in exactly one of the two states. */
   onDispose?: (item: ItemListItem) => void;
   onRestore?: (item: ItemListItem) => void;
+  /** The platform the list is currently working through (#506) — the one named by the *Not offered
+   * on X* / *Excluded from X* filter. It is what makes a one-click row entry possible at all: a
+   * decision is always about one platform, and with none in scope the copy form is where the whole
+   * set is edited. Null when no platform is picked, and the entry is then simply absent. */
+  exclusionPlatform?: { id: string; name: string } | null;
+  /** Set aside this copy from {@link exclusionPlatform}, or bring it back (#506). */
+  onSetPlatformExclusion?: (item: ItemListItem, platformId: string, excluded: boolean) => void;
 }
 
 export function InventoryItemRow({
@@ -388,6 +396,8 @@ export function InventoryItemRow({
   onViewPurchase,
   onDispose,
   onRestore,
+  exclusionPlatform,
+  onSetPlatformExclusion,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
   const itemNoPad = useCollectionItemNoPad(collectionId);
@@ -425,6 +435,18 @@ export function InventoryItemRow({
       : `Only a delivered copy can be listed — this one is ${deliveryStateLabel(
           item.deliveryState
         ).toLowerCase()}.`;
+
+  // Platforms this copy is deliberately never listed on (#506), named from the collection's own
+  // contacts. Read here rather than threaded down, for the reason `useCollectionItemNoPad` is: the
+  // copy row is rendered from eight screens, and one shared, cached query costs less than one more
+  // prop through all of them. An id with no contact behind it is a platform since deleted, whose
+  // exclusion means nothing any more, so it is chipped as nothing.
+  const { data: contacts } = useContacts(collectionId);
+  const excludedNames = item.excludedPlatformIds
+    .map((id) => contacts?.find((c) => c.id === id)?.name)
+    .filter((name): name is string => !!name);
+  const excludedHere =
+    !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);
 
   const menuActions: RowAction[] = [
     ...(item.unknownVariant
@@ -491,6 +513,23 @@ export function InventoryItemRow({
           label: "Mark as held again",
           icon: "↺",
           onSelect: () => onRestore(item),
+        }]
+      : []),
+    // Kept off a platform for good (#506) — the one-click answer to the worklist's own question,
+    // so it is only offered while a platform is in scope, and it toggles: the row is either set
+    // aside there or it is not.
+    ...(onSetPlatformExclusion && exclusionPlatform
+      ? [{
+          key: "platform-exclusion",
+          label: excludedHere
+            ? `List on ${exclusionPlatform.name} again`
+            : `Never list on ${exclusionPlatform.name}`,
+          icon: excludedHere ? "✓" : "⊗",
+          hint: excludedHere
+            ? `This copy is set aside from ${exclusionPlatform.name}; bring it back into that worklist.`
+            : `Keep this copy out of the "not offered on ${exclusionPlatform.name}" worklist for good.`,
+          onSelect: () =>
+            onSetPlatformExclusion(item, exclusionPlatform.id, !excludedHere),
         }]
       : []),
     { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
@@ -728,6 +767,22 @@ export function InventoryItemRow({
             <Tooltip content={describeDisposal(item) ?? ""}>
               <span style={disposalChipStyle(item.disposalReason)}>
                 ⊘ {item.disposalReason ? disposalReasonLabel(item.disposalReason) : "No longer held"}
+              </span>
+            </Tooltip>
+          )}
+          {/* Never listed on these platforms (#506). One chip whatever the number of platforms —
+              it is a single decision about where this copy is *not* sold, and a chip each would
+              grow with a list nobody reads across. Muted, because it says what will not happen. */}
+          {excludedNames.length > 0 && (
+            <Tooltip
+              content={`Deliberately never listed on ${excludedNames.join(
+                ", "
+              )} — kept out of the "not offered" worklist for ${
+                excludedNames.length === 1 ? "that platform" : "those platforms"
+              }.`}
+            >
+              <span style={{ ...CHIP, color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                ⊗ not on {excludedNames.join(", ")}
               </span>
             </Tooltip>
           )}
