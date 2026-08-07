@@ -123,11 +123,11 @@ export function StampRow({
     copies.action,
     offers.action,
     ...(stamp.mainCatalogPrice ? [prices.action] : []),
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(stamp) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(stamp) },
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete(stamp),

@@ -81,6 +81,7 @@ import {
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -321,7 +322,7 @@ export function PurchaseDetailPanel({
                 href={`/c/${collectionSlug}/auctions/sales/${purchase.auctionSale.id}`}
                 style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
               >
-                ⚖ {purchase.auctionSale.name}
+                <Icon name="auctionSale" size="sm" /> {purchase.auctionSale.name}
               </Link>
             </Tooltip>
           )}
@@ -422,7 +423,7 @@ export function PurchaseDetailPanel({
           {purchase.shippingCost && (
             <Tooltip content="Shipping / shared cost">
               <span style={CHIP}>
-                🚚 {purchase.shippingCost} {purchase.currency}
+                <Icon name="shipping" size="sm" /> {purchase.shippingCost} {purchase.currency}
               </span>
             </Tooltip>
           )}
@@ -518,8 +519,7 @@ export function PurchaseDetailPanel({
                 background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
               }}
             >
-              {on ? "✓ " : ""}
-              {label}
+              {on && <Icon name="check" size="xs" />} {label}
             </button>
           ))}
           {!byLot && !byIssue && (
@@ -1237,29 +1237,29 @@ function CopyRow({
         {
           key: "edit-copy",
           label: "Edit copy",
-          icon: "✎",
+          icon: "edit",
           onSelect: () => copy.setEditCopyItem(item),
         },
         ...(item.unknownVariant
-          ? [
+          ? ([
               {
                 key: "identify",
                 label: "Identify variant",
-                icon: "◈",
+                icon: "variant",
                 onSelect: () => copy.setIdentifyItem(item),
               },
-            ]
+            ] satisfies RowAction[])
           : []),
         {
           key: "edit-stamp",
           label: "Edit stamp (prices…)",
-          icon: "◈",
+          icon: "variant",
           onSelect: () => copy.setEditStampItem(item),
         },
         {
           key: "remove",
           label: "Remove from lot",
-          icon: "✕",
+          icon: "remove",
           danger: true,
           separatorBefore: true,
           onSelect: () => copy.removeCopy(item.id),
@@ -1628,54 +1628,54 @@ function LotCard({
   };
   const actions: RowAction[] = [
     ...(open
-      ? [
+      ? ([
           // "Add stamps" is surfaced as a standalone quick-access button in the header, not here.
           // Attaching an *existing* copy is the correction path beside it (#388) — rare enough to
           // live in the menu, unlike intake, which is what this screen is for.
           {
             key: "attach",
             label: "Attach existing copies…",
-            icon: "🔗",
+            icon: "link",
             hint: "For a copy entered by hand, or filed under the wrong purchase",
             onSelect: () => setDialog("attach"),
           },
-          { key: "price", label: "Edit lot", icon: "✎", onSelect: () => setDialog("edit-price") },
+          { key: "price", label: "Edit lot", icon: "edit", onSelect: () => setDialog("edit-price") },
           ...(totalCount > 0
-            ? [
+            ? ([
                 {
                   key: "bulk-move",
                   label: "Move all copies to location…",
-                  icon: "📍",
+                  icon: "location",
                   separatorBefore: true,
                   onSelect: () => setBulkMove(lotBulkTarget),
                 },
                 {
                   key: "bulk-sort",
                   label: "Mark all copies sorted",
-                  icon: "✓",
+                  icon: "check",
                   onSelect: () => setBulkSort(lotBulkTarget),
                 },
-              ]
+              ] satisfies RowAction[])
             : []),
           {
             key: "close",
             label: "Close lot",
-            icon: "🔒",
+            icon: "locked",
             separatorBefore: true,
             onSelect: () => setDialog("close"),
           },
           {
             key: "delete",
             label: "Delete lot",
-            icon: "✕",
+            icon: "delete",
             danger: true,
             separatorBefore: true,
             onSelect: () => setDialog("delete"),
           },
-        ]
-      : [
-          { key: "reopen", label: "Reopen lot", icon: "🔓", onSelect: () => setDialog("reopen") },
-        ]),
+        ] satisfies RowAction[])
+      : ([
+          { key: "reopen", label: "Reopen lot", icon: "unlocked", onSelect: () => setDialog("reopen") },
+        ] satisfies RowAction[])),
   ];
 
   function closeDialog() {
@@ -1730,7 +1730,7 @@ function LotCard({
               lineHeight: 1,
             }}
           >
-            ✕
+            <Icon name="close" size="sm" />
           </button>
         </div>
       )}
@@ -1764,7 +1764,7 @@ function LotCard({
             padding: 0,
           }}
         >
-          {expanded ? "▾" : "▸"}
+          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </button>
         <Tooltip
           content={lot.title ? undefined : "Derived from the lot's copies — add a title to name it"}
@@ -1831,7 +1831,7 @@ function LotCard({
                 boxShadow: filterMode === "unpriced" ? "0 0 0 1px var(--color-error)" : undefined,
               }}
             >
-              ⚠ {blockingCount} unpriced
+              <Icon name="warning" size="sm" /> {blockingCount} unpriced
             </button>
           </Tooltip>
         )}
@@ -1885,7 +1885,7 @@ function LotCard({
                 whiteSpace: "nowrap",
               }}
             >
-              ＋ Add stamps
+              <Icon name="add" size="sm" /> Add stamps
             </button>
           </Tooltip>
         )}
@@ -1974,7 +1974,7 @@ function LotCard({
                         : filterMode === "no-photos"
                           ? "No photos only"
                           : "To sort only"}{" "}
-                      ✕
+                      <Icon name="close" size="sm" />
                     </button>
                   </Tooltip>
                 </div>
@@ -2669,8 +2669,7 @@ function MarkSortedDialog({
                   background: keepDisposition ? "var(--color-accent-soft)" : "var(--color-bg-page)",
                 }}
               >
-                {keepDisposition ? "✓ " : ""}
-                Leave as is
+                {keepDisposition && <Icon name="check" size="xs" />} Leave as is
               </button>
             </Tooltip>
             {/* The three flags are one selection against "Leave as is": picking any of them
@@ -2701,8 +2700,7 @@ function MarkSortedDialog({
                     opacity: keepDisposition ? 0.6 : 1,
                   }}
                 >
-                  {on ? "✓ " : "+ "}
-                  {d.label}
+                  <Icon name={on ? "check" : "add"} size="xs" /> {d.label}
                 </button>
               );
             })}
@@ -2920,8 +2918,7 @@ function DispositionChips({
               background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
             }}
           >
-            {on ? "✓ " : "+ "}
-            {d.label}
+            <Icon name={on ? "check" : "add"} size="xs" /> {d.label}
           </button>
         );
       })}

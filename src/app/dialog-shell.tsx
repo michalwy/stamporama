@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 import { useEscapeLayer } from "@/app/escape-stack";
+import { Icon } from "@/app/icons";
 
 // ── Shell ────────────────────────────────────────────────────────────────────
 
@@ -128,17 +129,17 @@ export function DialogShell({
             aria-label="Close dialog"
             onClick={onClose}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
               background: "transparent",
               border: "none",
               cursor: "pointer",
               color: "var(--color-text-muted)",
-              fontSize: "1.25rem",
-              lineHeight: 1,
               padding: "0.25rem",
               borderRadius: "0.25rem",
             }}
           >
-            ✕
+            <Icon name="close" size="lg" />
           </button>
         </div>
         {children}

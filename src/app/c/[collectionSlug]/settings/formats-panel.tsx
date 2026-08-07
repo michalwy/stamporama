@@ -25,6 +25,7 @@ import {
   type TranslationValues,
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
+import { Icon } from "@/app/icons";
 
 // The physical-format dictionary. Mirrors `conditions-panel.tsx` rather than reinventing the
 // list/drag/dialog scaffolding — a format is the same kind of per-collection taxonomy, set up once
@@ -171,7 +172,8 @@ function FormatForm({
         {translatable && (
           <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
             Used for the <code>{"{format}"}</code> and <code>{"{formatAbbr}"}</code> tokens in
-            listing titles. Translations (🌐) are saved together with the format.
+            listing titles. Translations (<Icon name="translations" size="xs" />) are saved together with the
+            format.
           </p>
         )}
       </div>
@@ -337,7 +339,7 @@ export function FormatsPanel({
               aria-hidden
               style={{ color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1 }}
             >
-              ⠿
+              <Icon name="dragGrip" size="sm" />
             </span>
             <span
               style={{
@@ -356,13 +358,13 @@ export function FormatsPanel({
                 {
                   key: "edit",
                   label: "Edit",
-                  icon: "✎",
+                  icon: "edit",
                   onSelect: () => openDialog({ kind: "edit", format }),
                 },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete", format }),

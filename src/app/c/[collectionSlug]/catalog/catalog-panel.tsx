@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/catalog";
 import type { CatalogVendorData, CatalogNameData, CatalogEditionData } from "@/lib/catalog";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Icon } from "@/app/icons";
 
 const CURRENCIES = [
   "AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP",
@@ -256,11 +257,11 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
             <RowActionsMenu
               ariaLabel="Vendor actions"
               actions={[
-                { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit-vendor", vendor }) },
+                { key: "edit", label: "Edit", icon: "edit", onSelect: () => openDialog({ kind: "edit-vendor", vendor }) },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete-vendor", vendor }),
@@ -288,11 +289,11 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
                 <RowActionsMenu
                   ariaLabel="Catalog name actions"
                   actions={[
-                    { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit-name", vendor, name }) },
+                    { key: "edit", label: "Edit", icon: "edit", onSelect: () => openDialog({ kind: "edit-name", vendor, name }) },
                     {
                       key: "delete",
                       label: "Delete",
-                      icon: "✕",
+                      icon: "delete",
                       danger: true,
                       separatorBefore: true,
                       onSelect: () => openDialog({ kind: "delete-name", name }),
@@ -323,7 +324,7 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
                       style={chipIconBtnStyle}
                       aria-label={`Edit edition ${edition.year}`}
                     >
-                      ✎
+                      <Icon name="edit" size="sm" />
                     </button>
                     <button
                       type="button"
@@ -331,7 +332,7 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
                       style={{ ...chipIconBtnStyle, color: "var(--color-error)" }}
                       aria-label={`Delete edition ${edition.year}`}
                     >
-                      ✕
+                      <Icon name="close" size="sm" />
                     </button>
                   </span>
                 ))}

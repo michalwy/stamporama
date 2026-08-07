@@ -10,6 +10,7 @@ import {
   type ComposedLine,
   type DuplicateMatch,
 } from "@/lib/auction-duplicates";
+import { Icon } from "@/app/icons";
 
 /**
  * "You are already winning this stamp" (#369), above the composition being edited.
@@ -75,7 +76,7 @@ export function AuctionDuplicateWarning({
     >
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
         <span aria-hidden style={{ color: "var(--color-warning)", lineHeight: 1.3 }}>
-          ⚠
+          <Icon name="warning" size="sm" />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: "0 0 0.375rem", fontWeight: 600, color: "var(--color-warning)" }}>

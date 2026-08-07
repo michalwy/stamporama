@@ -7,6 +7,7 @@ import { Tooltip } from "./tooltip";
 import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
 import type { IssuePriceDetails } from "@/lib/issues";
+import { Icon } from "@/app/icons";
 
 /** What the dialog describes: a single stamp, or a whole issue's required stamps. */
 export type PriceDetailsTarget =
@@ -442,7 +443,16 @@ function Dash() {
 function Warn({ content }: { content: ReactNode }) {
   return (
     <Tooltip content={content} placement="top" align="end">
-      <span style={{ color: "var(--color-warning)", marginLeft: "0.3rem", cursor: "default" }}>⚠</span>
+      <span
+        style={{
+          display: "inline-flex",
+          color: "var(--color-warning)",
+          marginLeft: "0.3rem",
+          cursor: "default",
+        }}
+      >
+        <Icon name="warning" size="sm" />
+      </span>
     </Tooltip>
   );
 }
@@ -506,7 +516,9 @@ function CollapsibleSection({
         }}
         aria-expanded={open}
       >
-        <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>{open ? "▾" : "▸"}</span>
+        <span style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
+          <Icon name={open ? "collapse" : "expand"} size="sm" />
+        </span>
         <span>{title}</span>
         {subtitle && (
           <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem" }}>

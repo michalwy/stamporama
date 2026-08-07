@@ -18,6 +18,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { BulkCopyPhotoAttachResult } from "@/lib/offer-photo-attachments";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
+import { Icon } from "@/app/icons";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
 // explicit and runs in a background worker, so the card's first job is to start a run and then tell
@@ -549,7 +550,7 @@ function PlanSequence({
                     padding: "0 0.25rem",
                   }}
                 >
-                  {image.publish ? "👁" : "🚫"}
+                  <Icon name={image.publish ? "visible" : "hidden"} size="sm" />
                 </button>
               </Tooltip>
             )}
@@ -569,7 +570,7 @@ function PlanSequence({
                     padding: "0 0.25rem",
                   }}
                 >
-                  ✕
+                  <Icon name="close" size="sm" />
                 </button>
               </Tooltip>
             )}
@@ -968,7 +969,7 @@ export function OfferPhotosCard({
                 transition: "transform 120ms ease",
               }}
             >
-              ▶
+              <Icon name="expand" size="sm" />
             </span>
             {heading}
             <StatusChip plan={plan} />
@@ -1061,7 +1062,7 @@ export function OfferPhotosCard({
               aria-label="Photo settings"
               style={{ ...ICON_BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
             >
-              <span aria-hidden>⚙</span>
+              <Icon name="settings" size="sm" />
             </button>
           </Tooltip>
         </div>

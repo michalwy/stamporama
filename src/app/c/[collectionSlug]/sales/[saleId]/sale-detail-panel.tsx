@@ -24,6 +24,7 @@ import { SoldUnitsView } from "./sold-units-view";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -217,7 +218,7 @@ export function SaleDetailPanel({
             style={{ ...SECONDARY_BTN, marginLeft: "auto", textDecoration: "none", display: "inline-block" }}
             title="Open a print-friendly packing list for this sale"
           >
-            🖨 Packing list
+            <Icon name="print" size="sm" /> Packing list
           </Link>
           <button
             type="button"
@@ -256,7 +257,7 @@ export function SaleDetailPanel({
                     onClick={(e) => e.stopPropagation()}
                     style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                   >
-                    🔗 Transaction
+                    <Icon name="externalLink" size="sm" /> Transaction
                   </a>
                 </Tooltip>
               ) : (
@@ -294,7 +295,7 @@ export function SaleDetailPanel({
                     rel="noopener noreferrer"
                     style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                   >
-                    📦 {sale.trackingCode}
+                    <Icon name="parcel" size="sm" /> {sale.trackingCode}
                   </a>
                 </Tooltip>
               ) : (
@@ -305,7 +306,7 @@ export function SaleDetailPanel({
                       : "No carrier is recorded for this parcel, so there is nothing to link to"
                   }
                 >
-                  <span style={CHIP}>📦 {sale.trackingCode}</span>
+                  <span style={CHIP}><Icon name="parcel" size="sm" /> {sale.trackingCode}</span>
                 </Tooltip>
               )}
               <button
@@ -326,7 +327,7 @@ export function SaleDetailPanel({
                   padding: "0 0.125rem",
                 }}
               >
-                ✎
+                <Icon name="edit" size="sm" />
               </button>
             </>
           ) : (
@@ -912,7 +913,7 @@ function EditableAmountRow({
               }}
             >
               <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-                ✎
+                <Icon name="edit" size="sm" />
               </span>
               <span>{value ? `${value} ${currency}` : "Set"}</span>
             </button>
@@ -1091,12 +1092,12 @@ function EditableShippingRow({
             </select>
             <Tooltip content="Save">
               <button type="button" onClick={commit} aria-label="Save shipping" style={SHIP_ICON_BTN}>
-                ✓
+                <Icon name="check" size="sm" />
               </button>
             </Tooltip>
             <Tooltip content="Cancel">
               <button type="button" onClick={() => setEditing(false)} aria-label="Cancel" style={SHIP_ICON_BTN}>
-                ✕
+                <Icon name="close" size="sm" />
               </button>
             </Tooltip>
           </span>
@@ -1123,7 +1124,7 @@ function EditableShippingRow({
               }}
             >
               <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-                ✎
+                <Icon name="edit" size="sm" />
               </span>
               {/* The method is the fact the row leads with once there is one — the cost answers
                   "how much", the method answers "how it went", and a sale often has the second

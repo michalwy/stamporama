@@ -3,6 +3,7 @@
 import type { OffersSummary } from "@/lib/offers";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 // Summary bar for the offer list (#317), over the currently filtered offers. It leads with the one
 // figure the toolbar cannot already give: the **asking value** — what the filtered offers would
@@ -300,7 +301,7 @@ export function OffersSummaryBar({
             style={TOGGLE_STYLE}
           >
             {expanded ? "Less" : "More"}
-            <span aria-hidden>{expanded ? "▾" : "▸"}</span>
+            <span aria-hidden><Icon name={expanded ? "collapse" : "expand"} size="sm" /></span>
           </button>
         </Tooltip>
       </div>

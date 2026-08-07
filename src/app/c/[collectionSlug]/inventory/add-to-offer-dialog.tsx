@@ -33,6 +33,7 @@ import { useInvalidateInventory } from "./use-inventory-query";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
+import { Icon } from "@/app/icons";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -527,7 +528,7 @@ export function AddToOfferDialog({
           Cancel
         </DialogSecondaryButton>
         <DialogSecondaryButton onClick={() => setCreating(true)} disabled={isPending}>
-          ＋ Create new offer
+          <Icon name="add" size="sm" /> Create new offer
         </DialogSecondaryButton>
         <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
           <ErrorBubble>{error}</ErrorBubble>
@@ -674,7 +675,7 @@ function OfferGroup({
               transition: "transform 0.12s ease",
             }}
           >
-            ▶
+            <Icon name="expand" size="sm" />
           </button>
         ) : (
           <span style={{ width: "1.1rem", flexShrink: 0 }} />
@@ -722,7 +723,7 @@ function OfferGroup({
             disabled={disabled}
             onChange={() => onSelect({ kind: "new", offerId: offer.offerId })}
           />
-          ＋ New set
+          <Icon name="add" size="sm" /> New set
         </label>
       </div>
 
@@ -812,7 +813,10 @@ function SetPickRow({
                 }}
                 style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--color-accent)", fontSize: "0.75rem", fontWeight: 600 }}
               >
-                {detailsShown ? "▾ Hide contents" : "▸ Show contents"}
+                <>
+                  <Icon name={detailsShown ? "collapse" : "expand"} size="xs" />{" "}
+                  {detailsShown ? "Hide contents" : "Show contents"}
+                </>
               </button>
             )}
             {set.containsItemIds.length > 0 && (

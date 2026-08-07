@@ -35,6 +35,7 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
+import { Icon } from "@/app/icons";
 
 type DialogState =
   | { kind: "none" }
@@ -332,7 +333,7 @@ export function OffersListPanel({
                     padding: "0 0.25rem",
                   }}
                 >
-                  ✕
+                  <Icon name="close" size="sm" />
                 </button>
               </Tooltip>
             )}

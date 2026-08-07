@@ -355,13 +355,13 @@ export function FormatFactorsPanel({
                       {
                         key: "edit",
                         label: "Edit",
-                        icon: "✎",
+                        icon: "edit",
                         onSelect: () => openDialog({ kind: "edit", factor }),
                       },
                       {
                         key: "delete",
                         label: "Delete",
-                        icon: "✕",
+                        icon: "delete",
                         danger: true,
                         separatorBefore: true,
                         onSelect: () => openDialog({ kind: "delete", factor }),

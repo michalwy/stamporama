@@ -33,6 +33,7 @@ import {
   writeAddCopyDefaults,
   type AddCopyDefaults,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
+import { Icon } from "@/app/icons";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -387,7 +388,7 @@ export function InventoryItemFormDialog({
                       color: "var(--color-error)",
                     }}
                   >
-                    ⊘ {disposalSummary}
+                    <Icon name="disposed" size="sm" /> {disposalSummary}
                   </p>
                 )}
               </div>
@@ -591,7 +592,7 @@ function PlatformExclusionField({
               }}
             >
               <span aria-hidden="true" style={{ fontSize: "0.7rem" }}>
-                {active ? "⊗" : "+"}
+                <Icon name={active ? "excluded" : "add"} size="sm" />
               </span>
               {p.name}
             </button>
@@ -658,7 +659,7 @@ function DispositionField({
               }}
             >
               <span aria-hidden="true" style={{ fontSize: "0.7rem" }}>
-                {active ? "✓" : "+"}
+                <Icon name={active ? "check" : "add"} size="sm" />
               </span>
               {label}
             </button>

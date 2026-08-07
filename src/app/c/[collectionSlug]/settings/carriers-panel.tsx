@@ -241,13 +241,13 @@ export function CarriersPanel({ collectionId, initialCarriers }: CarriersPanelPr
                 {
                   key: "edit",
                   label: "Edit",
-                  icon: "✎",
+                  icon: "edit",
                   onSelect: () => openDialog({ kind: "edit", carrier }),
                 },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete", carrier }),

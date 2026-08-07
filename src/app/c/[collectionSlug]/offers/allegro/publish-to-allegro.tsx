@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { activateAllegroDraftAction } from "@/app/actions/allegro-publish";
 import { ALLEGRO_PLATFORM_MODULE } from "@/lib/platform-modules";
 import { PublishToAllegroDialog } from "./publish-offer-dialog";
+import { Icon } from "@/app/icons";
 
 // The offer screen's own half of #477 — the one control, in the two states it has.
 //
@@ -65,7 +66,7 @@ export function PublishToAllegroButton({
         }}
         style={style}
       >
-        <span aria-hidden>🛒</span>
+        <Icon name="publish" size="sm" />
         {isDraft ? "Activate on Allegro" : "Publish to Allegro"}
       </button>
 

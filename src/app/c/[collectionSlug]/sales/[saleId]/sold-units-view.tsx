@@ -26,6 +26,7 @@ import {
   usePersistentString,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
+import { Icon } from "@/app/icons";
 
 
 // The sales packing view adds "Location ref" to the shared copy sort keys — the in-location
@@ -255,7 +256,7 @@ function CopyRow({ item, ctx, isLast }: { item: SaleCopyItem; ctx: CopyCtx; isLa
               background: packed ? "var(--color-success-soft, var(--color-bg-page))" : "var(--color-bg-elevated)",
             }}
           >
-            <span style={{ fontSize: "0.8rem", lineHeight: 1 }}>{packed ? "✓" : "○"}</span>
+            <span style={{ fontSize: "0.8rem", lineHeight: 1 }}><Icon name={packed ? "check" : "check"} size="sm" /></span>
             {packed ? "Packed" : "Pack"}
           </span>
         </button>
@@ -445,10 +446,10 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
         }}
       >
         <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          {collapsed ? "▶" : "▼"}
+          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
         </span>
         <span style={{ flex: 1, minWidth: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          📍 {group.label}
+          <Icon name="location" size="sm" /> {group.label}
         </span>
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
           {group.items.length} sold
@@ -666,8 +667,7 @@ function ToggleChip({ label, on, onClick }: { label: string; on: boolean; onClic
         background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
       }}
     >
-      {on ? "✓ " : ""}
-      {label}
+      {on && <Icon name="check" size="xs" />} {label}
     </button>
   );
 }
@@ -773,7 +773,7 @@ function EditableLinePrice({
         }}
       >
         <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
-          ✎
+          <Icon name="edit" size="sm" />
         </span>
         <span>
           {value} {currency}
@@ -813,7 +813,7 @@ function SoldUnitCard({
   const { data: copies = [], isLoading } = useSaleLineCopies(ctx.collectionId, line.id, expanded);
 
   const actions: RowAction[] = [
-    { key: "remove", label: "Remove", icon: "✕", danger: true, onSelect: onRemove },
+    { key: "remove", label: "Remove", icon: "remove", danger: true, onSelect: onRemove },
   ];
 
   return (
@@ -838,7 +838,7 @@ function SoldUnitCard({
         }}
       >
         <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          {expanded ? "▼" : "▶"}
+          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

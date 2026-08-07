@@ -40,6 +40,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { Icon } from "@/app/icons";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -199,17 +200,17 @@ function StampTreeNode({
   });
 
   const actions: RowAction[] = [
-    { key: "add-child", label: "Add child stamp", icon: "＋", onSelect: () => onAddChild(node.stampId) },
-    { key: "move", label: "Move to another issue…", icon: "⇄", onSelect: () => onMove(node.stampId) },
+    { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
+    { key: "move", label: "Move to another issue…", icon: "move", onSelect: () => onMove(node.stampId) },
     addCopy.action,
     copies.action,
     offers.action,
     ...(node.mainCatalogPrice ? [prices.action] : []),
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(node.stampId) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(node.stampId) },
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete(node.stampId, node.name ?? "(unnamed)"),
@@ -250,7 +251,7 @@ function StampTreeNode({
                 textAlign: "center",
               }}
             >
-              {collapsed ? "▶" : "▼"}
+              <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
             </button>
           ) : (
             <span style={{ width: "0.875rem", flexShrink: 0 }} />
@@ -473,8 +474,8 @@ export function IssueRow({
   const [recomputeOpen, setRecomputeOpen] = useState(false);
 
   const actions: RowAction[] = [
-    { key: "add-stamp", label: "Add stamp", icon: "＋", onSelect: () => callbacks.onAddStamp(issue.id) },
-    { key: "add-stamp-range", label: "Add stamp range…", icon: "⋯", onSelect: () => callbacks.onAddStampRange(issue) },
+    { key: "add-stamp", label: "Add stamp", icon: "add", onSelect: () => callbacks.onAddStamp(issue.id) },
+    { key: "add-stamp-range", label: "Add stamp range…", icon: "more", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
     copies.action,
     offers.action,
@@ -483,16 +484,16 @@ export function IssueRow({
     {
       key: "recompute-range",
       label: "Recompute declared range…",
-      icon: "⤢",
+      icon: "range",
       onSelect: () => setRecomputeOpen(true),
     },
-    { key: "move-area", label: "Move to another area…", icon: "⇄", onSelect: () => callbacks.onMoveIssueArea(issue) },
-    { key: "merge", label: "Merge into another issue…", icon: "⤵", onSelect: () => callbacks.onMergeIssue(issue) },
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => callbacks.onEdit(issue) },
+    { key: "move-area", label: "Move to another area…", icon: "move", onSelect: () => callbacks.onMoveIssueArea(issue) },
+    { key: "merge", label: "Merge into another issue…", icon: "merge", onSelect: () => callbacks.onMergeIssue(issue) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => callbacks.onEdit(issue) },
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => callbacks.onDelete(issue),
@@ -534,7 +535,7 @@ export function IssueRow({
             lineHeight: 1,
           }}
         >
-          {isExpanded ? "▼" : "▶"}
+          <Icon name={isExpanded ? "collapse" : "expand"} size="sm" />
         </button>
 
         {/* Issue-level gallery (#137): the main photos of the required-for-completeness stamps,
@@ -718,7 +719,7 @@ export function IssueRow({
                         }
                       >
                         <span aria-label={warningLabel} style={PRICE_STALE_ICON}>
-                          ⚠
+                          <Icon name="warning" size="sm" />
                         </span>
                       </Tooltip>
                     )}

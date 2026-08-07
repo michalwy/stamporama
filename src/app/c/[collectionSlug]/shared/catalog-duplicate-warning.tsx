@@ -2,6 +2,7 @@
 
 import type { CatalogDuplicateGroup } from "@/lib/duplicate-catalog";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 function stampLabel(s: CatalogDuplicateGroup["stamps"][number]): string {
   return (
@@ -80,7 +81,7 @@ export function CatalogDuplicateWarningIcon({
           cursor: "help",
         }}
       >
-        ⚠
+        <Icon name="warning" size="md" />
       </span>
     </Tooltip>
   );

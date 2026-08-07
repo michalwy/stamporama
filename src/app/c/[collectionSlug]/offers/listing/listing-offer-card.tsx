@@ -17,6 +17,7 @@ import type { OfferPhotoImage } from "@/lib/offer-photo-generation";
 import { useOfferDetail, useOfferPhotoPlan } from "../use-offers-query";
 import type { AssistantHandoff } from "../assistant-handoff";
 import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
+import { Icon } from "@/app/icons";
 
 // One prepared offer as a posting kit (#322). Collapsed it is a single line — enough to pick the next
 // listing to post and to publish it without opening anything. Expanded it is everything that has to
@@ -197,11 +198,11 @@ export function ListingOfferCard({
   // Publish is the quick action, everything else lives in the ⋮ — the same division the Offers row
   // makes between its quick-advance button and its menu.
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open offer", icon: "↗", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open offer", icon: "open", onSelect: () => router.push(detailHref) },
     {
       key: "preparing",
       label: "Back to preparing",
-      icon: "↩",
+      icon: "revert",
       disabled: isPending,
       onSelect: onSendBack,
     },
@@ -247,7 +248,7 @@ export function ListingOfferCard({
             }}
           >
             <span aria-hidden style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-              {expanded ? "▾" : "▸"}
+              <Icon name={expanded ? "collapse" : "expand"} size="sm" />
             </span>
             <span
               style={{
@@ -343,7 +344,7 @@ export function ListingOfferCard({
             disabled={isPublishing}
             style={{ ...PUBLISH_BTN, opacity: isPublishing ? 0.6 : 1 }}
           >
-            <span aria-hidden>▲</span>
+            <Icon name="activate" size="sm" />
             {isPublishing ? "Publishing…" : "Publish"}
           </button>
         </Tooltip>
@@ -513,7 +514,7 @@ function PostingKit({
           )}
           <Tooltip content="Open the offer to edit its texts, photos or composition" align="end">
             <Link href={`/c/${collectionSlug}/offers/${offerId}`} style={SMALL_BTN}>
-              Open offer ↗
+              Open offer <Icon name="open" size="sm" />
             </Link>
           </Tooltip>
         </div>

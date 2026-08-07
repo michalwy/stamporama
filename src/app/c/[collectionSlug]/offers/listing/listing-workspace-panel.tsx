@@ -27,6 +27,7 @@ import {
   useAssistantPresence,
 } from "../assistant-handoff";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { Icon } from "@/app/icons";
 
 // The bulk listing workspace (#322): one posting session on one marketplace. Most platforms have no
 // listing API (#154), so publishing a prepared batch means opening the platform's own form once per
@@ -407,7 +408,7 @@ export function ListingWorkspacePanel({
                 disabled={bulkPending !== null}
                 style={BULK_BTN}
               >
-                ↻ Regenerate photos
+                <Icon name="refresh" size="sm" /> Regenerate photos
               </button>
             </Tooltip>
             <Tooltip

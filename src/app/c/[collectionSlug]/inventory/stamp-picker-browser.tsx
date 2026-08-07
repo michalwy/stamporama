@@ -29,6 +29,7 @@ import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
+import { Icon } from "@/app/icons";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, or a new stamp / variant (parent set) in an issue. */
@@ -595,7 +596,7 @@ function PickIssueRow({
             lineHeight: 1,
           }}
         >
-          {isExpanded ? "▼" : "▶"}
+          <Icon name={isExpanded ? "collapse" : "expand"} size="sm" />
         </button>
 
         {/* Issue-level gallery as a left column, matching the inventory list. Reserved even when

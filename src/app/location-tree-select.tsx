@@ -10,6 +10,7 @@ import {
   defaultTreeSelectButtonClassName,
   useTreeSelect,
 } from "@/app/tree-select";
+import { Icon } from "@/app/icons";
 
 export type LocationTreeItem = TreeNode<LocationData>;
 
@@ -230,7 +231,7 @@ function LocationTreeSelectNode({
               aria-hidden="true"
               className={`text-xs leading-none transition-transform ${isExpanded ? "rotate-90" : ""}`}
             >
-              ▶
+              <Icon name="expand" size="sm" />
             </span>
           </button>
         ) : (

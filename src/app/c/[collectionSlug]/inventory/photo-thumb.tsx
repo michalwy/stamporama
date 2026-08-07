@@ -6,6 +6,7 @@ import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useEscapeLayer } from "@/app/escape-stack";
+import { Icon } from "@/app/icons";
 
 // Read-only photo display for a list row (#112, #137). Shows a single, larger thumbnail — the
 // first attached photo — meant to sit at the left of a row with the rest of the row's content
@@ -85,7 +86,13 @@ export function PhotoThumb({
           justifyContent: "center",
         }}
       >
-        <NoPhotoGlyph />
+        {/* Sized as a fraction of the slot rather than in steps: the placeholder follows the
+            thumbnail, which is a different size on every list that draws one. */}
+        <Icon
+          name="noPhoto"
+          color="var(--color-text-muted)"
+          style={{ width: "62%", height: "62%", opacity: 0.28 }}
+        />
       </div>
     );
   }
@@ -155,7 +162,7 @@ export function PhotoThumb({
               boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
             }}
           >
-            {slotMeta.short}
+            {slotMeta.icon ? <Icon name={slotMeta.icon} size="xs" /> : slotMeta.short}
           </span>
         )}
 
@@ -265,7 +272,7 @@ export function PhotoStrip({
                     boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
                   }}
                 >
-                  {slotMeta.short}
+                  {slotMeta.icon ? <Icon name={slotMeta.icon} size="xs" /> : slotMeta.short}
                 </span>
               )}
             </button>
@@ -358,7 +365,7 @@ export function PhotoLightbox({
     >
       {/* Close — top-right */}
       <LightboxButton
-        label="✕"
+        label={<Icon name="close" size="lg" />}
         ariaLabel="Close preview"
         onClick={onClose}
         style={{ position: "absolute", top: "1rem", right: "1rem" }}
@@ -368,13 +375,13 @@ export function PhotoLightbox({
       {total > 1 && (
         <>
           <LightboxButton
-            label="‹"
+            label={<Icon name="previous" size="lg" />}
             ariaLabel="Previous photo"
             onClick={() => step(-1)}
             style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)" }}
           />
           <LightboxButton
-            label="›"
+            label={<Icon name="next" size="lg" />}
             ariaLabel="Next photo"
             onClick={() => step(1)}
             style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)" }}
@@ -409,28 +416,6 @@ export function PhotoLightbox({
   );
 }
 
-/** Struck-through camera for the empty-photo placeholder — signals "no photo", drawn in the
- * muted token at low opacity so it stays quiet. */
-function NoPhotoGlyph() {
-  return (
-    <svg
-      width="62%"
-      height="62%"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-text-muted)"
-      strokeWidth="1.1"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ opacity: 0.28 }}
-      aria-hidden="true"
-    >
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-      <circle cx="12" cy="13" r="3" />
-      <line x1="3" y1="3" x2="21" y2="21" />
-    </svg>
-  );
-}
 
 /** Small round chevron overlaid on the thumbnail that cycles the shown photo without opening the
  * lightbox. A circular puck keeps most of the stamp visible (unlike a full-height bar). Stops
@@ -476,7 +461,7 @@ function ThumbNavButton({
         transition: "opacity 120ms ease",
       }}
     >
-      {side === "left" ? "‹" : "›"}
+      <Icon name={side === "left" ? "previous" : "next"} size="xs" />
     </button>
   );
 }
@@ -489,7 +474,7 @@ function LightboxButton({
   onClick,
   style,
 }: {
-  label: string;
+  label: React.ReactNode;
   ariaLabel: string;
   onClick: () => void;
   style?: React.CSSProperties;

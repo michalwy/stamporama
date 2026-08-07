@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Icon } from "@/app/icons";
 
 /**
  * A list filter that takes **several** values at once (#425) — the shape a `<select>` cannot have
@@ -119,7 +120,9 @@ export function MultiSelectFilter({
         }}
       >
         {label}
-        <span style={{ fontSize: "0.625rem", opacity: 0.7 }}>▾</span>
+        <span style={{ display: "inline-flex", opacity: 0.7 }}>
+          <Icon name="caret" size="xs" />
+        </span>
       </button>
       {open &&
         !disabled &&

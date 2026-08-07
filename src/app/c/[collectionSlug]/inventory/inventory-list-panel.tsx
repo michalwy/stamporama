@@ -56,6 +56,7 @@ import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dial
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 type DialogState =
   | { kind: "none" }
@@ -88,7 +89,7 @@ function newOfferShortcuts(
     return [
       {
         packaging: "one-set",
-        label: "＋ New offer",
+        label: "New offer",
         hint: "Create a new offer from this copy, skipping the picker.",
       },
     ];
@@ -96,12 +97,12 @@ function newOfferShortcuts(
   return [
     {
       packaging: "one-set",
-      label: "＋ New offer · one set",
+      label: "New offer · one set",
       hint: "Create a new offer holding all of them as one set — a series or a lot sold together.",
     },
     {
       packaging: "per-copy",
-      label: `＋ New offer · ${count} sets`,
+      label: `New offer · ${count} sets`,
       hint: "Create a new offer with each copy as its own single-copy set — a quantity of interchangeable singles.",
     },
   ];
@@ -775,9 +776,10 @@ export function InventoryListPanel({
                             padding: "0.375rem 0.75rem",
                           }}
                         >
+                          <Icon name={selectionExcluded ? "check" : "excluded"} size="sm" />{" "}
                           {selectionExcluded
-                            ? `✓ List on ${scopedPlatform.name} again`
-                            : `⊗ Never list on ${scopedPlatform.name}`}
+                            ? `List on ${scopedPlatform.name} again`
+                            : `Never list on ${scopedPlatform.name}`}
                         </button>
                       </Tooltip>
                     )}
@@ -798,7 +800,7 @@ export function InventoryListPanel({
                             padding: "0.375rem 0.75rem",
                           }}
                         >
-                          {label}
+                          <Icon name="add" size="sm" /> {label}
                         </button>
                       </Tooltip>
                     ))}
@@ -815,7 +817,7 @@ export function InventoryListPanel({
                         padding: "0.375rem 0.875rem",
                       }}
                     >
-                      🏷 Add selected to offer
+                      <Icon name="addToOffer" size="sm" /> Add selected to offer
                     </button>
                   </div>
                 </div>
@@ -950,6 +952,15 @@ export function InventoryListPanel({
                   has one unambiguous per-copy catalog value. They only appear under Duplicates,
                   because elsewhere they name nothing. */}
               <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                {/* The icon sits *beside* the select, not inside its options: a native `<option>`
+                    renders text only, which is what the ▦ in each label used to work around. */}
+                <Icon
+                  name="group"
+                  size="sm"
+                  style={{
+                    color: groupMode === "none" ? "var(--color-text-muted)" : "var(--color-accent)",
+                  }}
+                />
                 <Tooltip content="Collapse the list into groups: duplicates ready to list as one offer with a quantity, the copies filed in one place, or what you hold of one issue.">
                   <select
                     value={groupMode}
@@ -968,11 +979,11 @@ export function InventoryListPanel({
                         : null),
                     }}
                   >
-                    <option value="none">▦ No grouping</option>
-                    <option value="duplicates">▦ Group duplicates</option>
-                    {locations.length > 0 && <option value="location">▦ Group by location</option>}
-                    {locations.length > 0 && <option value="ref">▦ Group by location ref</option>}
-                    <option value="issue">▦ Group by issue</option>
+                    <option value="none">No grouping</option>
+                    <option value="duplicates">Group duplicates</option>
+                    {locations.length > 0 && <option value="location">Group by location</option>}
+                    {locations.length > 0 && <option value="ref">Group by location ref</option>}
+                    <option value="issue">Group by issue</option>
                   </select>
                 </Tooltip>
                 {groupDuplicates && formats.length > 0 && (

@@ -32,13 +32,13 @@ export function AuctionSaleRow({
   const detailHref = `/c/${collectionSlug}/auctions/sales/${sale.id}`;
 
   const actions: RowAction[] = [
-    { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
     ...(sale.url
       ? [
           {
             key: "catalogue",
             label: "Open catalogue",
-            icon: "🔗",
+            icon: "externalLink",
             onSelect: () => window.open(sale.url!, "_blank", "noopener,noreferrer"),
           } as RowAction,
         ]
@@ -50,7 +50,7 @@ export function AuctionSaleRow({
           {
             key: "purchase",
             label: "Open purchase",
-            icon: "🧾",
+            icon: "receipt",
             onSelect: () => router.push(`/c/${collectionSlug}/purchases/${sale.purchaseId}`),
           } as RowAction,
         ]
@@ -58,7 +58,7 @@ export function AuctionSaleRow({
     {
       key: "edit",
       label: "Edit",
-      icon: "✎",
+      icon: "edit",
       disabled: sale.purchaseId !== null,
       hint: sale.purchaseId ? "Settled into a purchase — edit the purchase instead" : undefined,
       onSelect: () => onEdit(sale),
@@ -66,7 +66,7 @@ export function AuctionSaleRow({
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       disabled: sale.summary.lotCount > 0,

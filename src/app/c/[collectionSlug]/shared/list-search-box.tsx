@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // The free-text search box a server-side list toolbar carries (#193, #465, #484), and the debounce
 // that decides when what was typed becomes a request. Extracted here when the auction screens got
@@ -91,15 +92,16 @@ export function ListSearchBox({
             aria-label="Clear search"
             tabIndex={-1}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
               background: "none",
               border: "none",
               cursor: "pointer",
               color: "var(--color-text-muted)",
-              fontSize: "0.75rem",
               padding: "0 0.25rem",
             }}
           >
-            ✕
+            <Icon name="clear" size="sm" />
           </button>
         </Tooltip>
       )}

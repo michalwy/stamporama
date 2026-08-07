@@ -17,6 +17,7 @@ import {
   type SlotRole,
 } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -552,7 +553,13 @@ function PhotoCard({
           {slots.map((slot) => (
             <RoleButton
               key={slot}
-              label={ROLE_META[slot].short}
+              label={
+                ROLE_META[slot].icon ? (
+                  <Icon name={ROLE_META[slot].icon!} size="xs" />
+                ) : (
+                  ROLE_META[slot].short
+                )
+              }
               title={ROLE_META[slot].title}
               color={ROLE_META[slot].color}
               soft={ROLE_META[slot].soft}
@@ -598,7 +605,7 @@ function PhotoCard({
                     boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
                   }}
                 >
-                  ⬆
+                  <Icon name="promote" size="sm" />
                 </button>
               </Tooltip>
             )}
@@ -622,7 +629,7 @@ function PhotoCard({
                 boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
               }}
             >
-              ✕
+              <Icon name="close" size="sm" />
             </button>
           </div>
         )}
@@ -700,7 +707,11 @@ function PhotoCard({
                 padding: 0,
               }}
             >
-              {entry.title || "＋ Title"}
+              {entry.title || (
+                <>
+                  <Icon name="add" size="xs" /> Title
+                </>
+              )}
             </button>
           </Tooltip>
         )}
@@ -924,7 +935,7 @@ function RoleButton({
   disabled,
   onClick,
 }: {
-  label: string;
+  label: React.ReactNode;
   title: string;
   color: string;
   soft: string;
@@ -1057,7 +1068,7 @@ function Dropzone({
           cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
-        ＋ Add photos — drop files here or click to browse
+        <Icon name="add" size="sm" /> Add photos — drop files here or click to browse
       </div>
       <input
         ref={inputRef}

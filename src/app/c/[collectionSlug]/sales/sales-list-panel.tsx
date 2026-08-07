@@ -19,6 +19,7 @@ import { SALE_STATUS_ORDER, SALE_STATUS_META } from "./sale-status";
 import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
+import { Icon } from "@/app/icons";
 
 type DialogState =
   | { kind: "none" }
@@ -154,7 +155,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
                   padding: "0 0.25rem",
                 }}
               >
-                ✕
+                <Icon name="close" size="sm" />
               </button>
             </Tooltip>
           )}

@@ -9,6 +9,7 @@ import {
 } from "@/lib/description-format";
 import { sanitizeDescriptionHtml } from "./rendered-description";
 import { Tooltip } from "./tooltip";
+import { Icon, type IconName } from "@/app/icons";
 
 /**
  * Copy one field's text to the clipboard (#327), with a moment of confirmation on the button
@@ -172,7 +173,7 @@ export function CopyButton({
 
   const empty = !value;
   const isDisabled = disabled || empty;
-  const glyph = copied ? "✓" : failed ? "✕" : "⧉";
+  const glyph: IconName = copied ? "check" : failed ? "reject" : "copy";
   const tone = copied
     ? "var(--color-success)"
     : failed
@@ -187,7 +188,7 @@ export function CopyButton({
           : failed
             ? "Could not copy — your browser blocked clipboard access"
             : hasChoice
-              ? `Copy the formatted ${label} — use ▾ for the source`
+              ? `Copy the formatted ${label} — use the caret for the source`
               : `Copy ${label} to the clipboard`
       }
     >
@@ -208,7 +209,7 @@ export function CopyButton({
           ...style,
         }}
       >
-        <span aria-hidden>{glyph}</span>
+        <Icon name={glyph} size="sm" />
       </button>
     </Tooltip>
   );
@@ -250,7 +251,7 @@ export function CopyButton({
             color: "var(--color-text-secondary)",
           }}
         >
-          <span aria-hidden>▾</span>
+          <Icon name="caret" size="xs" />
         </button>
       </Tooltip>
       {menuAt &&

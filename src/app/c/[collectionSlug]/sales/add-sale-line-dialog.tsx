@@ -20,6 +20,7 @@ import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
+import { Icon } from "@/app/icons";
 
 
 /** Maps + lookups the expandable copy rows need, bundled so they pass through one prop. */
@@ -518,7 +519,7 @@ function QuantityGroup({
           aria-hidden
           style={{ width: "0.9rem", flexShrink: 0, color: MUTED, fontSize: "0.75rem", transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.12s ease" }}
         >
-          ▶
+          <Icon name="expand" size="sm" />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -534,7 +535,7 @@ function QuantityGroup({
             content={`Listed in ${group.offerCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}
             align="end"
           >
-            <span style={STALE_CHIP}>⚠ {group.offerCurrency} — re-list</span>
+            <span style={STALE_CHIP}><Icon name="warning" size="sm" /> {group.offerCurrency} — re-list</span>
           </Tooltip>
         ) : (
           <span style={{ fontSize: "0.75rem", color: MUTED, whiteSpace: "nowrap", flexShrink: 0 }}>
@@ -643,7 +644,10 @@ function SetPickRow({
                 }}
                 style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--color-accent)", fontSize: "0.75rem", fontWeight: 600 }}
               >
-                {detailsShown ? "▾ Hide contents" : "▸ Show contents"}
+                <>
+                  <Icon name={detailsShown ? "collapse" : "expand"} size="xs" />{" "}
+                  {detailsShown ? "Hide contents" : "Show contents"}
+                </>
               </button>
             )}
           </div>
@@ -654,7 +658,7 @@ function SetPickRow({
             content={`Listed in ${askingCurrency}, but this sale is in ${currency}. Re-list it in the platform's current currency to sell it.`}
             align="end"
           >
-            <span style={STALE_CHIP}>⚠ {askingCurrency} — re-list</span>
+            <span style={STALE_CHIP}><Icon name="warning" size="sm" /> {askingCurrency} — re-list</span>
           </Tooltip>
         ) : checked ? (
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>

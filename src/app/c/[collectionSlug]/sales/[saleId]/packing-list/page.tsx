@@ -16,6 +16,7 @@ import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "./print-button";
 import { GeneratedAt } from "./generated-at";
 import { PackingSheet } from "./packing-sheet";
+import { Icon } from "@/app/icons";
 
 interface PackingListPageProps {
   params: Promise<{ collectionSlug: string; saleId: string }>;
@@ -142,7 +143,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           color: "var(--color-text-muted)",
         }}
       >
-        A ticked box (✓) is a copy already marked packed in Stamporama; empty boxes are for ticking
+        A ticked box (<Icon name="check" size="xs" />) is a copy already marked packed in Stamporama; empty boxes are for ticking
         by hand as you pack.
       </footer>
 

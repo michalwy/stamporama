@@ -24,6 +24,7 @@ import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-i
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { attachCopiesToLotAction } from "@/app/actions/purchases";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { Icon } from "@/app/icons";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -358,7 +359,7 @@ export function AttachCopiesDialog({
               style={{ marginTop: "0.15rem", cursor: "pointer" }}
             />
             <span>
-              ⚠ {relinked.length}{" "}
+              <Icon name="warning" size="sm" /> {relinked.length}{" "}
               {relinked.length === 1 ? "copy belongs" : "copies belong"} to another purchase (
               {relinkedOrders.join(", ")}). Attaching{" "}
               {relinked.length === 1 ? "it" : "them"} here moves{" "}

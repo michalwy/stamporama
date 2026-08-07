@@ -22,6 +22,7 @@ import {
   deleteShippingMethodAction,
   type ShippingMethodActionState,
 } from "@/app/actions/shipping-methods";
+import { Icon } from "@/app/icons";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -263,10 +264,10 @@ export function ShippingMethodsDialog({
                         disabled={isPending}
                         onClick={() => submit((fd) => updateShippingMethodAction(m.id, fd))}
                       >
-                        ✓
+                        <Icon name="check" size="sm" />
                       </IconButton>
                       <IconButton label="Cancel" disabled={isPending} onClick={() => setRow({ kind: "none" })}>
-                        ✕
+                        <Icon name="close" size="sm" />
                       </IconButton>
                     </div>
                   </>
@@ -280,10 +281,10 @@ export function ShippingMethodsDialog({
                     <span />
                     <div style={ACTIONS_CELL}>
                       <IconButton label="Delete" danger disabled={isPending} onClick={() => confirmDelete(m.id)}>
-                        ✓
+                        <Icon name="check" size="sm" />
                       </IconButton>
                       <IconButton label="Keep" disabled={isPending} onClick={() => setRow({ kind: "none" })}>
-                        ✕
+                        <Icon name="close" size="sm" />
                       </IconButton>
                     </div>
                   </>
@@ -320,11 +321,11 @@ export function ShippingMethodsDialog({
                       zIndex={ROW_MENU_Z_INDEX}
                       onOpenChange={setMenuOpen}
                       actions={[
-                        { key: "edit", label: "Edit", icon: "✎", onSelect: () => startEdit(m) },
+                        { key: "edit", label: "Edit", icon: "edit", onSelect: () => startEdit(m) },
                         {
                           key: "delete",
                           label: "Delete",
-                          icon: "✕",
+                          icon: "delete",
                           danger: true,
                           separatorBefore: true,
                           onSelect: () => {

@@ -6,6 +6,7 @@ import type { PurchaseListItem } from "@/lib/purchases";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -66,12 +67,12 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
   const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(p) },
+    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(p) },
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete(p),
@@ -154,7 +155,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           {p.shippingCost && (
             <Tooltip content="Shipping / shared cost">
               <span style={CHIP}>
-                🚚 {p.shippingCost} {p.currency}
+                <Icon name="shipping" size="sm" /> {p.shippingCost} {p.currency}
               </span>
             </Tooltip>
           )}

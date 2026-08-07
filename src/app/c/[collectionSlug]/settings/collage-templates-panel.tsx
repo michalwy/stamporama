@@ -389,13 +389,13 @@ export function CollageTemplatesPanel({
                 {
                   key: "edit",
                   label: "Edit",
-                  icon: "✎",
+                  icon: "edit",
                   onSelect: () => openDialog({ kind: "edit", template }),
                 },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete", template }),

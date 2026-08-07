@@ -11,6 +11,7 @@ import {
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { PhotoThumb } from "./photo-thumb";
+import { Icon } from "@/app/icons";
 
 /** True when this node or any descendant is in the active filter's match set (#186). */
 function subtreeHasMatch(treeNode: StampTreeNodeData, matched: Set<string>): boolean {
@@ -117,7 +118,7 @@ export function SelectableStampNode({
                   textAlign: "center",
                 }}
               >
-                {collapsed ? "▶" : "▼"}
+                <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
               </button>
             ) : (
               <span style={{ width: "0.875rem", flexShrink: 0 }} />

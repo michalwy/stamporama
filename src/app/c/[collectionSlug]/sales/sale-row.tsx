@@ -7,6 +7,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -39,13 +40,13 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
   const detailHref = `/c/${collectionSlug}/sales/${sale.id}`;
 
   const menuActions: RowAction[] = [
-    { key: "view", label: "View", icon: "↗", onSelect: () => router.push(detailHref) },
+    { key: "view", label: "View", icon: "open", onSelect: () => router.push(detailHref) },
     ...(sale.transactionUrl
       ? [
           {
             key: "transaction",
             label: "Open transaction",
-            icon: "🔗",
+            icon: "externalLink",
             onSelect: () => window.open(sale.transactionUrl!, "_blank", "noopener,noreferrer"),
           } as RowAction,
         ]
@@ -53,7 +54,7 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete(sale),
@@ -153,7 +154,7 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
                 onClick={(e) => e.stopPropagation()}
                 style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
               >
-                🔗 Transaction
+                <Icon name="externalLink" size="sm" /> Transaction
               </a>
             </Tooltip>
           )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Icon } from "@/app/icons";
+
 /** Opens the browser's print dialog for the packing list (#330). The sheet itself is a plain
  * server render — this is the only interactive part, and it hides itself on paper. */
 export function PrintButton() {
@@ -18,7 +20,7 @@ export function PrintButton() {
         fontSize: "0.8125rem",
       }}
     >
-      🖨 Print
+      <Icon name="print" size="sm" /> Print
     </button>
   );
 }

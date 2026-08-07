@@ -41,7 +41,7 @@ export function useInventoryPopupAction({
   const action: RowAction = {
     key,
     label,
-    icon: "▤",
+    icon: "list",
     onSelect: () => setOpen(true),
   };
 
@@ -105,7 +105,7 @@ export function useInventoryAddAction({
     label,
     // ⧉ rather than a plus: promoted onto the row (row-quick-actions.tsx) it sits beside
     // "Add stamp"/"Add child stamp", and two identical ＋ glyphs name neither.
-    icon: "⧉",
+    icon: "addCopies",
     onSelect: () => setOpen(true),
   };
 

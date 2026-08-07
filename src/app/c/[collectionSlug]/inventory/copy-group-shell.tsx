@@ -5,6 +5,7 @@ import { outlierCopyIds, type CopyGroupAxes } from "@/lib/copy-groups";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { SELECT_STRIP, type CopySelection } from "./inventory-copy-list";
 import { useInventoryItemsInfinite, type InventoryItemFilters } from "./use-inventory-query";
+import { Icon } from "@/app/icons";
 
 /**
  * What every grouped row of the Copies list is made of — the duplicate groups (#372) and the filing
@@ -114,7 +115,7 @@ export function CopyGroupShell({
               transition: "transform 0.12s ease",
             }}
           >
-            ▶
+            <Icon name="expand" size="sm" />
           </span>
         </button>
 

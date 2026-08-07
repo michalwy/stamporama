@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { languageLabel } from "@/lib/languages";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // Filling a **missing translation where the generated title needs it** (#299/#300).
 //
@@ -143,7 +144,17 @@ function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps
             color: state === "error" ? "var(--color-danger)" : "var(--color-text-muted)",
           }}
         >
-          {state === "saving" ? "Saving…" : state === "saved" ? "✓ Saved" : state === "error" ? "Failed" : ""}
+          {state === "saving" ? (
+            "Saving…"
+          ) : state === "saved" ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
+              <Icon name="check" size="xs" /> Saved
+            </span>
+          ) : state === "error" ? (
+            "Failed"
+          ) : (
+            ""
+          )}
         </span>
       </Tooltip>
     </div>
@@ -297,7 +308,7 @@ export function TranslationGapPopover({
           aria-label="Close"
           style={{ border: "none", background: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.875rem", lineHeight: 1 }}
         >
-          ✕
+          <Icon name="close" size="sm" />
         </button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", marginTop: "0.5rem" }}>

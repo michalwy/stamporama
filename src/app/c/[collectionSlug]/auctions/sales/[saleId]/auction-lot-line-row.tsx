@@ -218,11 +218,11 @@ export function AuctionLotLineRow({
   const hasIssue = !!(line.issueName || line.issueYear);
 
   const actions: RowAction[] = [
-    { key: "edit", label: "Edit line", icon: "✎", onSelect: () => onEdit?.() },
+    { key: "edit", label: "Edit line", icon: "edit", onSelect: () => onEdit?.() },
     {
       key: "delete",
       label: "Remove from lot",
-      icon: "✕",
+      icon: "remove",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete?.(),

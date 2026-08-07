@@ -8,6 +8,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useIssueSearch } from "./use-stamps-query";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...SEARCH_INPUT_STYLE,
@@ -96,7 +97,7 @@ export function IssueFilterAutocomplete({
                 lineHeight: 1,
               }}
             >
-              ✕
+              <Icon name="close" size="sm" />
             </button>
           </Tooltip>
         </span>

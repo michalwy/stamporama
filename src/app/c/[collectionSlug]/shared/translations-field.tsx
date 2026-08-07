@@ -8,6 +8,7 @@ import {
   type TranslationValues,
 } from "./translations-dialog";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // The opener half of the per-language entity text UI (#293–#296): a 🌐 icon button that sits beside
 // an entity form's default-language input, badged with how many languages still fall back, plus the
@@ -144,7 +145,7 @@ export function TranslationsField({
           tabIndex={-1}
           style={buttonStyle}
         >
-          🌐
+          <Icon name="translations" size="sm" />
           {missing > 0 && <span style={badgeStyle}>{missing}</span>}
         </button>
       </Tooltip>

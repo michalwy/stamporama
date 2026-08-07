@@ -25,6 +25,7 @@ import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
 import { CONTROL_STYLE, FilterChip, SIGNALS } from "../../auction-controls";
 import { formatBase, formatDay } from "../../auction-format";
+import { Icon } from "@/app/icons";
 
 type DialogState =
   | { kind: "none" }
@@ -211,7 +212,7 @@ export function AuctionSaleDetailPanel({
             rel="noopener noreferrer"
             style={{ fontSize: "0.8125rem", color: "var(--color-accent)" }}
           >
-            🔗 Catalogue
+            <Icon name="externalLink" size="sm" /> Catalogue
           </a>
         )}
         <span style={{ flex: 1 }} />

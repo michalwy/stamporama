@@ -21,6 +21,7 @@ import { BaseAmount } from "../../auction-base-amount";
 import { AuctionLotLineDialog } from "../../auction-lot-line-dialog";
 import type { AuctionLotDetailView } from "../../use-auctions-query";
 import { AuctionLotLineRow } from "./auction-lot-line-row";
+import { Icon, type IconName } from "@/app/icons";
 
 // **A parcel's lots, as collapsible cards over what each one holds** (#353).
 //
@@ -425,7 +426,7 @@ function LotCard({
               lineHeight: 1,
             }}
           >
-            ✕
+            <Icon name="close" size="sm" />
           </button>
         </div>
       )}
@@ -683,7 +684,8 @@ export function AuctionLotCardsView({
             {(unpricedCount > 0 || onlyUnpriced) && (
               <CountFilterChip
                 token="error"
-                label={`⚠ ${unpricedCount} unpriced`}
+                icon="warning"
+                    label={`${unpricedCount} unpriced`}
                 active={onlyUnpriced}
                 onClick={() => setOnlyUnpriced(!onlyUnpriced)}
               />
@@ -894,11 +896,14 @@ export function AuctionLotCardsView({
 function CountFilterChip({
   token,
   label,
+  icon,
   active,
   onClick,
 }: {
   token: string;
   label: string;
+  /** Marker for the chip, drawn ahead of the label (#459) — the old label text carried a glyph. */
+  icon?: IconName;
   active: boolean;
   onClick: () => void;
 }) {
@@ -917,7 +922,7 @@ function CountFilterChip({
         boxShadow: active ? `0 0 0 1px var(--color-${token})` : undefined,
       }}
     >
-      {label}
+      {icon && <Icon name={icon} size="xs" />} {label}
     </button>
   );
 }
@@ -937,8 +942,7 @@ function ToggleChip({ label, on, onClick }: { label: string; on: boolean; onClic
         background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
       }}
     >
-      {on ? "✓ " : ""}
-      {label}
+      {on && <Icon name="check" size="xs" />} {label}
     </button>
   );
 }

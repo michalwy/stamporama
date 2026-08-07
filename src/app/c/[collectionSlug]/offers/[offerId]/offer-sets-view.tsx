@@ -27,6 +27,7 @@ import {
   type DragList,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { useInvalidateOffers } from "../use-offers-query";
+import { Icon, type IconName } from "@/app/icons";
 
 
 // The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
@@ -669,12 +670,12 @@ function SetCard({
     // Selling one set out of the offer (#473) — the offer-level Sell in the header menu takes every
     // remaining set at once; this takes exactly this one, which is how a multi-qty offer (#372) is
     // actually sold down. First entry: it is the action, the others are housekeeping.
-    ...(onSell ? [{ key: "sell", label: "Sell this set", icon: "💰", onSelect: onSell } as RowAction] : []),
+    ...(onSell ? [{ key: "sell", label: "Sell this set", icon: "sell", onSelect: onSell } as RowAction] : []),
     // Only offered once the order was actually hand-corrected — a derived set has nothing to reset.
     ...(set.manualCopyOrder
-      ? [{ key: "reset-order", label: "Reset to catalog order", icon: "↕", separatorBefore: !!onSell, onSelect: onResetCopyOrder }]
+      ? [{ key: "reset-order", label: "Reset to catalog order", icon: "reorder", separatorBefore: !!onSell, onSelect: onResetCopyOrder } as RowAction]
       : []),
-    { key: "remove", label: "Remove set", icon: "✕", danger: true, separatorBefore: set.manualCopyOrder || !!onSell, onSelect: onRemove },
+    { key: "remove", label: "Remove set", icon: "remove", danger: true, separatorBefore: set.manualCopyOrder || !!onSell, onSelect: onRemove },
   ];
   return (
     <div
@@ -710,7 +711,7 @@ function SetCard({
       >
         {setDrag && <DragGrip label="Drag to reorder this set" />}
         <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          {expanded ? "▼" : "▶"}
+          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -796,10 +797,10 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
         }}
       >
         <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          {collapsed ? "▶" : "▼"}
+          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
         </span>
         <span style={{ flex: 1, minWidth: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          📍 {group.label}
+          <Icon name="location" size="sm" /> {group.label}
         </span>
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
           {group.items.length} cop{group.items.length === 1 ? "y" : "ies"}
@@ -1066,7 +1067,8 @@ export function OfferSetsView({
                 {(unpricedCount > 0 || onlyUnpriced) && (
                   <CountFilterChip
                     token="error"
-                    label={`⚠ ${unpricedCount} unpriced`}
+                    icon="warning"
+                    label={`${unpricedCount} unpriced`}
                     active={onlyUnpriced}
                     onClick={() => setOnlyUnpriced(!onlyUnpriced)}
                   />
@@ -1253,11 +1255,14 @@ export function OfferSetsView({
 function CountFilterChip({
   token,
   label,
+  icon,
   active,
   onClick,
 }: {
   token: string;
   label: string;
+  /** Marker for the chip, drawn ahead of the label (#459) — the old label text carried a glyph. */
+  icon?: IconName;
   active: boolean;
   onClick: () => void;
 }) {
@@ -1276,7 +1281,7 @@ function CountFilterChip({
         boxShadow: active ? `0 0 0 1px var(--color-${token})` : undefined,
       }}
     >
-      {label}
+      {icon && <Icon name={icon} size="xs" />} {label}
     </button>
   );
 }
@@ -1296,8 +1301,7 @@ function ToggleChip({ label, on, onClick }: { label: string; on: boolean; onClic
         background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
       }}
     >
-      {on ? "✓ " : ""}
-      {label}
+      {on && <Icon name="check" size="xs" />} {label}
     </button>
   );
 }

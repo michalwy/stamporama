@@ -17,7 +17,7 @@ export function usePriceDetailsAction(
   const action: RowAction = {
     key: opts?.key ?? "prices",
     label: opts?.label ?? "Show catalog prices",
-    icon: "＄",
+    icon: "prices",
     onSelect: () => setOpen(true),
   };
 

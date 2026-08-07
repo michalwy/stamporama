@@ -6,6 +6,7 @@ import { getDescendantIds, flattenAreaTree, hasChildAreas } from "./area-helpers
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 import { Tooltip } from "./tooltip";
 import { SubtreeScopeToggle, useSubtreeScope } from "./subtree-scope";
+import { Icon } from "@/app/icons";
 
 const STORAGE_KEY = "stamporama:area-tree-collapsed";
 
@@ -365,7 +366,7 @@ export function AreaFilterSidebar({
                       cursor: "pointer",
                     }}
                   >
-                    {isCollapsed ? "▶" : "▼"}
+                    <Icon name={isCollapsed ? "expand" : "collapse"} size="sm" />
                   </span>
                 ) : (
                   <span

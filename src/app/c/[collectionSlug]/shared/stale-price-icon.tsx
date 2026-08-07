@@ -2,8 +2,9 @@
 
 import { Tooltip } from "./tooltip";
 import { PRICE_STALE_ICON } from "./chip-styles";
+import { Icon } from "@/app/icons";
 
-/** ⚠ marker shown next to a stamp price that is from an older catalog edition. */
+/** Warning marker shown next to a stamp price that is from an older catalog edition. */
 export function StalePriceIcon() {
   return (
     <Tooltip
@@ -21,7 +22,7 @@ export function StalePriceIcon() {
       }
     >
       <span aria-label="Older-edition price" style={PRICE_STALE_ICON}>
-        ⚠
+        <Icon name="warning" size="sm" />
       </span>
     </Tooltip>
   );

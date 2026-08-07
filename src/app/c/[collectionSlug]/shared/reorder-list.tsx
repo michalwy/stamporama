@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // ── Drag-to-reorder (#306, #313) ────────────────────────────────────────────
 // The **container** is the drop target, not the individual cards / rows: the landing gap is derived
@@ -191,7 +192,7 @@ export function DragGrip({ label }: { label: string }) {
           userSelect: "none",
         }}
       >
-        ⠿
+        <Icon name="dragGrip" size="sm" />
       </span>
     </Tooltip>
   );

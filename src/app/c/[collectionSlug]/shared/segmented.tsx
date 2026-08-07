@@ -18,7 +18,8 @@ export function Segmented<T extends string>({
   label: string;
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string; title?: string }[];
+  /** `label` may be an icon (#459) — a two-way answer reads better as ✓/✕ than as words. */
+  options: { value: T; label: React.ReactNode; title?: string }[];
   disabled?: boolean;
 }) {
   const RADIUS = "0.375rem";
@@ -41,7 +42,7 @@ export function Segmented<T extends string>({
               type="button"
               onClick={() => onChange(o.value)}
               disabled={disabled}
-              aria-label={o.title ?? o.label}
+              aria-label={o.title}
               aria-pressed={active}
               style={{
                 padding: "0.35rem 0.75rem",

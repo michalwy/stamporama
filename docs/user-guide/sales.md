@@ -124,7 +124,7 @@ remove sold sets. If the total ever falls below the offer prices, handling is he
 warning asks you to raise the total. Switch a sale between the two modes any time from **Edit
 header**.
 
-Once a transaction link is set, a **🔗 Transaction** link appears on the sale row and in the detail
+Once a transaction link is set, a **Transaction** link appears on the sale row and in the detail
 header, and opens the marketplace's order page in a new tab. On the row it opens the link only — the
 sale itself doesn't open — and it's also in the row's **⋮** menu as **Open transaction**. In the
 header, use the **✎** beside the link to change it without navigating away; if no link is recorded

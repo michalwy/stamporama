@@ -12,6 +12,7 @@ import {
   type DescriptionFormat,
 } from "@/lib/description-format";
 import type { OfferDetail } from "@/lib/offers";
+import { Icon } from "@/app/icons";
 
 // The offer's two long generated texts (#266 description, #267 private note): shown under the header
 // card, edited in place, and regenerated per field from the platform's template. The title (#209)
@@ -60,7 +61,7 @@ const TEXTAREA: React.CSSProperties = {
 export function EditedChip({ what }: { what: string }) {
   return (
     <Tooltip
-      content={`This ${what} was written by hand, so it stays as written when the offer's composition changes. ↻ Regenerate hands it back to the platform's template.`}
+      content={`This ${what} was written by hand, so it stays as written when the offer's composition changes. Regenerate hands it back to the platform's template.`}
     >
       <span
         style={{
@@ -271,7 +272,7 @@ export function OfferListingText({
                         opacity: offer.regeneratable[f.key] ? 1 : 0.5,
                       }}
                     >
-                      ↻ Regenerate
+                      <Icon name="refresh" size="sm" /> Regenerate
                     </button>
                   </Tooltip>
                   <Tooltip content={`Edit ${f.label.toLowerCase()}`} align="end">
@@ -282,7 +283,7 @@ export function OfferListingText({
                       aria-label={`Edit ${f.label.toLowerCase()}`}
                       style={SMALL_BTN}
                     >
-                      ✎
+                      <Icon name="edit" size="sm" />
                     </button>
                   </Tooltip>
                 </>

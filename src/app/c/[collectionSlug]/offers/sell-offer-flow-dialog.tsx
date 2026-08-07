@@ -14,6 +14,7 @@ import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useInvalidateOffers } from "./use-offers-query";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
+import { Icon } from "@/app/icons";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -235,7 +236,7 @@ export function SellOfferFlowDialog({
               onClick={() => setStep("newSaleHeader")}
               style={{ ...ROW_STYLE, marginTop: "0.75rem", justifyContent: "center", fontWeight: 600, color: "var(--color-accent)" }}
             >
-              ＋ Create new sale
+              <Icon name="add" size="sm" /> Create new sale
             </button>
           </>
         )}

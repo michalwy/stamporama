@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useOfferNeighbours } from "../use-offers-query";
 import { offerListContextQuery, type OfferListContext } from "../list-context";
+import { Icon } from "@/app/icons";
 
 const STEP: React.CSSProperties = {
   display: "inline-flex",
@@ -56,11 +57,11 @@ export function OfferListNav({ collectionId, collectionSlug, offerId, context }:
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
       {data.previousId ? (
         <Link href={href(data.previousId)} title="Previous offer in the filtered list" style={STEP}>
-          ‹ Previous
+          <Icon name="previous" size="sm" /> Previous
         </Link>
       ) : (
         <span style={STEP_DISABLED} aria-disabled="true">
-          ‹ Previous
+          <Icon name="previous" size="sm" /> Previous
         </span>
       )}
       <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
@@ -68,11 +69,11 @@ export function OfferListNav({ collectionId, collectionSlug, offerId, context }:
       </span>
       {data.nextId ? (
         <Link href={href(data.nextId)} title="Next offer in the filtered list" style={STEP}>
-          Next ›
+          Next <Icon name="next" size="sm" />
         </Link>
       ) : (
         <span style={STEP_DISABLED} aria-disabled="true">
-          Next ›
+          Next <Icon name="next" size="sm" />
         </span>
       )}
     </div>

@@ -21,6 +21,7 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { getLocationDescendantIds, flattenLocationTree } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
+import { Icon } from "@/app/icons";
 
 // Persisted collapse state for the location management tree, consistent with the area
 // management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
@@ -364,7 +365,7 @@ export function LocationsPanel({
                     lineHeight: 1,
                   }}
                 >
-                  {isCollapsed ? "▶" : "▼"}
+                  <Icon name={isCollapsed ? "expand" : "collapse"} size="sm" />
                 </button>
               ) : (
                 <span style={{ width: "1rem", flexShrink: 0 }} />
@@ -405,20 +406,20 @@ export function LocationsPanel({
                   {
                     key: "add-sub",
                     label: "Add sub-location",
-                    icon: "＋",
+                    icon: "add",
                     onSelect: () =>
                       openDialog({ kind: "add", defaultParentId: location.id }),
                   },
                   {
                     key: "edit",
                     label: "Edit",
-                    icon: "✎",
+                    icon: "edit",
                     onSelect: () => openDialog({ kind: "edit", location }),
                   },
                   {
                     key: "delete",
                     label: "Delete",
-                    icon: "✕",
+                    icon: "delete",
                     danger: true,
                     separatorBefore: true,
                     onSelect: () => openDialog({ kind: "delete", location }),

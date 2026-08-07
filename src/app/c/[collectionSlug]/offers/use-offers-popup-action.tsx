@@ -29,7 +29,7 @@ export function useOffersPopupAction({
     label,
     // Same "▤" as the read-only copies popup — one icon for "open a read-only list of related
     // records".
-    icon: "▤",
+    icon: "list",
     onSelect: () => setOpen(true),
   };
 

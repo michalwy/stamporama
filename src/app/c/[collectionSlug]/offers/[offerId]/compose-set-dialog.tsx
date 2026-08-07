@@ -29,6 +29,7 @@ import {
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import type { OfferTitlePreview } from "@/lib/offers";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
+import { Icon } from "@/app/icons";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -336,7 +337,7 @@ export function ComposeSetDialog({
 
       {collisions.length > 0 && (
         <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-warning-border, var(--color-border))", background: "var(--color-warning-soft)", color: "var(--color-warning)", fontSize: "0.8125rem" }}>
-          ⚠ This platform already has an active offer sharing a copy — {collisions.map((c) => c.offerLabel).join(", ")}. You can still add it, but keep at most one active listing per copy on a platform.
+          <Icon name="warning" size="sm" /> This platform already has an active offer sharing a copy — {collisions.map((c) => c.offerLabel).join(", ")}. You can still add it, but keep at most one active listing per copy on a platform.
         </div>
       )}
 

@@ -212,14 +212,14 @@ export function AllegroCategoriesPanel({
                     {
                       key: "repoint",
                       label: "Change category",
-                      icon: "✎",
+                      icon: "edit",
                       disabled: !connected,
                       onSelect: () => setRepointing(lesson),
                     },
                     {
                       key: "forget",
                       label: "Forget",
-                      icon: "✕",
+                      icon: "delete",
                       danger: true,
                       separatorBefore: true,
                       onSelect: () => setConfirmForget(lesson),
@@ -276,7 +276,7 @@ export function AllegroCategoriesPanel({
                     {
                       key: "forget",
                       label: "Forget",
-                      icon: "✕",
+                      icon: "delete",
                       danger: true,
                       onSelect: () => forgetParameter(row),
                     },

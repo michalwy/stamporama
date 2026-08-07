@@ -16,6 +16,7 @@ import {
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 // The offer's stamps as the **platform's own catalogue** knows them (#423), each with the two pages
 // a seller actually opens while pricing a listing: what the stamp *is* (its catalog page, #290) and
@@ -140,28 +141,6 @@ const HEADER_CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** The same "opens in a new tab" glyph the Colnect chip uses, in `currentColor`. */
-function ExternalLinkIcon() {
-  return (
-    <svg
-      width="1em"
-      height="1em"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0 }}
-    >
-      <path d="M5 2H2.5v7.5H10V7" />
-      <path d="M7 2h3v3" />
-      <path d="M10 2 5.75 6.25" />
-    </svg>
-  );
-}
 
 export function OfferPlatformItemsCard({
   items,
@@ -307,7 +286,7 @@ export function OfferPlatformItemsCard({
               transition: "transform 120ms ease",
             }}
           >
-            ▶
+            <Icon name="expand" size="sm" />
           </span>
           <h3
             style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}
@@ -348,7 +327,13 @@ export function OfferPlatformItemsCard({
                 cursor: "pointer",
               }}
             >
-              {walking ? "Stop linking" : `⚡ Link all (${unmatched.length})`}
+              {walking ? (
+                "Stop linking"
+              ) : (
+                <>
+                  <Icon name="assistant" size="sm" /> Link all ({unmatched.length})
+                </>
+              )}
             </button>
           </Tooltip>
         )}
@@ -459,7 +444,7 @@ export function OfferPlatformItemsCard({
                 {item.catalogUrl ? (
                   <a href={item.catalogUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                     Catalog
-                    <ExternalLinkIcon />
+                    <Icon name="externalLink" size="xs" />
                   </a>
                 ) : item.searchUrl ? (
                   <>
@@ -472,7 +457,7 @@ export function OfferPlatformItemsCard({
                     >
                       <a href={item.searchUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                         Search
-                        <ExternalLinkIcon />
+                        <Icon name="externalLink" size="xs" />
                       </a>
                     </Tooltip>
                     {assistantPresent && (
@@ -490,7 +475,7 @@ export function OfferPlatformItemsCard({
                             cursor: "pointer",
                           }}
                         >
-                          ⚡ Link
+                          <Icon name="assistant" size="sm" /> Link
                         </button>
                       </Tooltip>
                     )}
@@ -511,7 +496,7 @@ export function OfferPlatformItemsCard({
                   >
                     <a href={item.marketUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
                       Market
-                      <ExternalLinkIcon />
+                      <Icon name="externalLink" size="xs" />
                     </a>
                   </Tooltip>
                 ) : (

@@ -54,6 +54,7 @@ import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
+import { Icon, type IconName } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -85,12 +86,12 @@ const BTN: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
-  ready: { label: "Mark ready", icon: "✓" },
-  preparing: { label: "Back to preparing", icon: "↩" },
-  active: { label: "Resume", icon: "▶" },
-  paused: { label: "Pause", icon: "⏸" },
-  withdrawn: { label: "Withdraw", icon: "⇤" },
+const TRANSITION_LABEL: Record<string, { label: string; icon: IconName }> = {
+  ready: { label: "Mark ready", icon: "check" },
+  preparing: { label: "Back to preparing", icon: "revert" },
+  active: { label: "Resume", icon: "resume" },
+  paused: { label: "Pause", icon: "pause" },
+  withdrawn: { label: "Withdraw", icon: "withdraw" },
 };
 
 /** Beside the quick-advance button, and deliberately quieter than it: the Assistant fills the
@@ -127,8 +128,8 @@ const QUICK_ADVANCE_BTN: React.CSSProperties = {
 
 /** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
  * marking a `preparing` one ready keeps the plain transition label. */
-function advanceLabel(to: ManualOfferTarget): { label: string; icon: string } {
-  return to === "active" ? { label: "Activate", icon: "▲" } : TRANSITION_LABEL[to];
+function advanceLabel(to: ManualOfferTarget): { label: string; icon: IconName } {
+  return to === "active" ? { label: "Activate", icon: "activate" } : TRANSITION_LABEL[to];
 }
 
 interface OfferDetailPanelProps {
@@ -351,12 +352,12 @@ export function OfferDetailPanel({
         return {
           key: s,
           label: activating ? "Activate" : TRANSITION_LABEL[s].label,
-          icon: activating ? "▲" : TRANSITION_LABEL[s].icon,
+          icon: activating ? "activate" : TRANSITION_LABEL[s].icon,
           danger: s === "withdrawn",
           onSelect: () => setState(s),
         };
       }),
-    { key: "regenerate", label: "Regenerate title", icon: "↻", onSelect: () => regenerate("name") },
+    { key: "regenerate", label: "Regenerate title", icon: "refresh", onSelect: () => regenerate("name") },
     // One entry per generated text × *other* language the collection lists in (#297/#266/#267) —
     // each field's own ↻ on the screen already covers the platform's own language, and a field the
     // platform has no template for is skipped. Absent for a single-language collection.
@@ -365,23 +366,23 @@ export function OfferDetailPanel({
         (t): RowAction => ({
           key: `regenerate-${t.field}-${code ?? "default"}`,
           label: `Regenerate ${t.label} in ${languageLabel(code ?? defaultLanguage)}`,
-          icon: "↻",
+          icon: "refresh",
           onSelect: () => regenerate(t.field, code),
         })
       )
     ),
     ...(offer.inActiveBidding
-      ? [{ key: "clear-bidding", label: "Clear active bidding", icon: "🔨", onSelect: () => setBidding(false) } as RowAction]
+      ? [{ key: "clear-bidding", label: "Clear active bidding", icon: "bidding", onSelect: () => setBidding(false) } as RowAction]
       : offer.state === "active"
-        ? [{ key: "mark-bidding", label: "Mark in active bidding", icon: "🔨", onSelect: () => setBidding(true) } as RowAction]
+        ? [{ key: "mark-bidding", label: "Mark in active bidding", icon: "bidding", onSelect: () => setBidding(true) } as RowAction]
         : []),
     // Same precondition as the list's entry: a terminal offer has nothing left to sell, and an
     // offer holding no set has nothing to put on a sale line.
     ...(editable && offer.sets.length > 0
-      ? [{ key: "sell", label: "Sell", icon: "💰", onSelect: () => setSelling(true) } as RowAction]
+      ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => setSelling(true) } as RowAction]
       : []),
-    { key: "duplicate", label: "List on another platform", icon: "⧉", onSelect: () => setDuplicating(true) },
-    { key: "delete", label: "Delete", icon: "✕", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
+    { key: "duplicate", label: "List on another platform", icon: "duplicate", onSelect: () => setDuplicating(true) },
+    { key: "delete", label: "Delete", icon: "delete", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];
 
   return (
@@ -412,7 +413,7 @@ export function OfferDetailPanel({
             aria-label="Dismiss"
             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1 }}
           >
-            ✕
+            <Icon name="close" size="sm" />
           </button>
         </div>
       )}
@@ -578,7 +579,7 @@ export function OfferDetailPanel({
               editable from the offer header form. Hidden when not recorded. */}
           {offer.listingDate && (
             <Tooltip content="Listing date — when this listing went live">
-              <span style={CHIP}>📅 {new Date(offer.listingDate).toISOString().slice(0, 10)}</span>
+              <span style={CHIP}><Icon name="date" size="sm" /> {new Date(offer.listingDate).toISOString().slice(0, 10)}</span>
             </Tooltip>
           )}
 
@@ -597,7 +598,7 @@ export function OfferDetailPanel({
                   onClick={(e) => e.stopPropagation()}
                   style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                 >
-                  🔗 Listing
+                  <Icon name="externalLink" size="sm" /> Listing
                 </a>
               ) : (
                 <span style={{ ...CHIP, color: "var(--color-text-muted)", cursor: "text" }}>Add listing URL</span>
@@ -719,7 +720,7 @@ export function OfferDetailPanel({
               <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <Tooltip content="Average catalog value per set, in this offer's currency" align="end">
                   <span>
-                    💡 suggested {offer.suggestedPrice} {offer.currency}
+                    <Icon name="suggestion" size="sm" /> suggested {offer.suggestedPrice} {offer.currency}
                     {offer.suggestedUnpricedSets > 0 && ` · ${offer.suggestedUnpricedSets} set${offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced`}
                   </span>
                 </Tooltip>
@@ -803,7 +804,7 @@ export function OfferDetailPanel({
             language={gapLanguage}
             gaps={gaps}
             onSaved={() => invalidateAll(collectionId)}
-            note={`Used by this platform's generated texts. Regenerate a text (↻) to pick up a new translation.`}
+            note={`Used by this platform's generated texts. Regenerate a text to pick up a new translation.`}
             maxHeight="14rem"
           />
         </div>

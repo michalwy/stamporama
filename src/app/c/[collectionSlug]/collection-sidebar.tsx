@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
 import { QuickJumpBox } from "./quick-jump-box";
+import { Icon } from "@/app/icons";
 
 interface CollectionSidebarProps {
   collectionSlug: string;
@@ -15,108 +16,6 @@ interface CollectionSidebarProps {
   collectionName: string;
   appVersion: string;
 }
-
-const IconHome = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
-    <path d="M9 21V12h6v9" />
-  </svg>
-);
-
-const IconIssues = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4h16v16H4z" />
-    <path d="M4 9h16" />
-    <path d="M4 14h16" />
-  </svg>
-);
-
-const IconStamps = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
-  </svg>
-);
-
-const IconCopies = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="8" y="8" width="12" height="12" rx="2" />
-    <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
-  </svg>
-);
-
-const IconLocations = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 21s-6-5.686-6-10a6 6 0 0112 0c0 4.314-6 10-6 10z" />
-    <circle cx="12" cy="11" r="2" />
-  </svg>
-);
-
-const IconPurchases = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-    <path d="M3 6h18" />
-    <path d="M16 10a4 4 0 01-8 0" />
-  </svg>
-);
-
-const IconOffers = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-    <line x1="7" y1="7" x2="7.01" y2="7" />
-  </svg>
-);
-
-const IconSales = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-  </svg>
-);
-
-const IconAuctions = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 3l7 7" />
-    <path d="M17.5 6.5l-4.5 4.5" />
-    <path d="M9.5 9.5l5 5" />
-    <path d="M12 12l-7 7" />
-    <line x1="3" y1="21" x2="11" y2="21" />
-  </svg>
-);
-
-const IconContacts = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 00-3-3.87" />
-    <path d="M16 3.13a4 4 0 010 7.75" />
-  </svg>
-);
-
-const IconSettings = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-  </svg>
-);
-
-const IconSignOut = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
-
-const IconCollections = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2l9 5-9 5-9-5 9-5z" />
-    <path d="M3 12l9 5 9-5" />
-    <path d="M3 17l9 5 9-5" />
-  </svg>
-);
 
 const sectionLabelStyle: React.CSSProperties = {
   fontSize: "0.6875rem",
@@ -347,7 +246,7 @@ export function CollectionSidebar({
       >
         <NavItem
           href={base}
-          icon={<IconHome />}
+          icon={<Icon name="overview" />}
           label="Overview"
           active={isActive(base)}
         />
@@ -355,13 +254,13 @@ export function CollectionSidebar({
         <p style={sectionLabelStyle}>Catalog</p>
         <NavItem
           href={`${base}/issues`}
-          icon={<IconIssues />}
+          icon={<Icon name="issues" />}
           label="Issues"
           active={isActive(`${base}/issues`)}
         />
         <NavItem
           href={`${base}/stamps`}
-          icon={<IconStamps />}
+          icon={<Icon name="stamps" />}
           label="Stamps"
           active={isActive(`${base}/stamps`)}
         />
@@ -369,13 +268,13 @@ export function CollectionSidebar({
         <p style={sectionLabelStyle}>Collection</p>
         <NavItem
           href={`${base}/inventory`}
-          icon={<IconCopies />}
+          icon={<Icon name="inventory" />}
           label="Inventory"
           active={isActive(`${base}/inventory`)}
         />
         <NavItem
           href={`${base}/locations`}
-          icon={<IconLocations />}
+          icon={<Icon name="locations" />}
           label="Locations"
           active={isActive(`${base}/locations`)}
         />
@@ -391,7 +290,7 @@ export function CollectionSidebar({
             marketplace has already sold are their own sittings — and both were reachable only by
             first landing on the list and finding the way out of it. Nested rather than flat: they
             are three views of one subject, and Offers leads. */}
-        <NavGroup icon={<IconOffers />} label="Offers">
+        <NavGroup icon={<Icon name="offers" />} label="Offers">
           <NavItem
             href={`${base}/offers`}
             label="Offers"
@@ -415,7 +314,7 @@ export function CollectionSidebar({
         </NavGroup>
         <NavItem
           href={`${base}/sales`}
-          icon={<IconSales />}
+          icon={<Icon name="sales" />}
           label="Sales"
           active={isActive(`${base}/sales`)}
         />
@@ -423,7 +322,7 @@ export function CollectionSidebar({
         <p style={sectionLabelStyle}>Buying</p>
         <NavItem
           href={`${base}/purchases`}
-          icon={<IconPurchases />}
+          icon={<Icon name="purchases" />}
           label="Purchases"
           active={isActive(`${base}/purchases`)}
         />
@@ -432,7 +331,7 @@ export function CollectionSidebar({
             do I owe for this parcel" — and reaching the second through the first made the daily
             screen double as a doorway. Nested rather than flat, because they are two views of one
             subject; Lots leads, being the daily job (ADR-0021 §9). */}
-        <NavGroup icon={<IconAuctions />} label="Auctions">
+        <NavGroup icon={<Icon name="auctions" />} label="Auctions">
           <NavItem
             href={`${base}/auctions`}
             label="Lots"
@@ -452,7 +351,7 @@ export function CollectionSidebar({
             instead of taking a one-item section of its own. */}
         <NavItem
           href={`${base}/contacts`}
-          icon={<IconContacts />}
+          icon={<Icon name="contacts" />}
           label="Contacts"
           active={isActive(`${base}/contacts`)}
           spacedAbove
@@ -475,13 +374,13 @@ export function CollectionSidebar({
             this collection's screens. */}
         <NavItem
           href="/collections"
-          icon={<IconCollections />}
+          icon={<Icon name="collections" />}
           label="All collections"
           active={false}
         />
         <NavItem
           href={`${base}/settings`}
-          icon={<IconSettings />}
+          icon={<Icon name="settings" />}
           label="Settings"
           active={isActive(`${base}/settings`)}
         />
@@ -508,7 +407,7 @@ export function CollectionSidebar({
             textAlign: "left",
           }}
         >
-          <IconSignOut />
+          <Icon name="signOut" />
           Sign out
         </button>
         <p

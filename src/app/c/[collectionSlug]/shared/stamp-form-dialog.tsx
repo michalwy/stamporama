@@ -35,6 +35,7 @@ import {
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
 import { NO_AUTOFILL } from "./no-autofill";
+import { Icon } from "@/app/icons";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
  * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
@@ -820,7 +821,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
               >
                 <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
                   <span aria-hidden style={{ color: "var(--color-warning)", lineHeight: 1.3 }}>
-                    ⚠
+                    <Icon name="warning" size="sm" />
                   </span>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "var(--color-warning)" }}>
@@ -994,8 +995,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   disabled={isPending}
                   options={[
                     { value: "", label: "↳", title: `Use subtype setting${inheritLabel}` },
-                    { value: "true", label: "✓", title: "Acts as variant" },
-                    { value: "false", label: "✕", title: "Not a variant" },
+                    { value: "true", label: <Icon name="check" size="sm" />, title: "Acts as variant" },
+                    { value: "false", label: <Icon name="reject" size="sm" />, title: "Not a variant" },
                   ]}
                 />
               </div>

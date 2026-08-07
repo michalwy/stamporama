@@ -31,6 +31,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { Icon } from "@/app/icons";
 
 // Persisted collapse state for the area management tree, consistent with the area
 // filter tree (#81). Distinct key so the two trees collapse independently (#237).
@@ -401,7 +402,7 @@ function CollectionAreaForm({
           with) this area&apos;s name. <strong>Clear it</strong> to roll this area up to the nearest
           parent that has a title name — handy for internal grouping levels.
           {titleLanguages.length > 0 && (
-            <> Translations (🌐) are saved together with the area.</>
+            <> Translations (<Icon name="translations" size="xs" />) are saved together with the area.</>
           )}
         </p>
       </div>
@@ -534,7 +535,7 @@ function CollectionAreaForm({
                         style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "0.875rem", padding: "0.25rem", lineHeight: 1 }}
                         aria-label="Remove"
                       >
-                        ✕
+                        <Icon name="close" size="sm" />
                       </button>
                     </div>
                   );
@@ -893,7 +894,7 @@ export function AreasPanel({
                     touchAction: "none",
                   }}
                 >
-                  ⠿
+                  <Icon name="dragGrip" size="sm" />
                 </button>
 
                 {/* Expand/collapse toggle for nodes with children; a reserved spacer
@@ -920,7 +921,7 @@ export function AreasPanel({
                       lineHeight: 1,
                     }}
                   >
-                    {isCollapsed ? "▶" : "▼"}
+                    <Icon name={isCollapsed ? "expand" : "collapse"} size="sm" />
                   </button>
                 ) : (
                   <span style={{ width: "1rem", flexShrink: 0 }} />
@@ -1010,27 +1011,27 @@ export function AreasPanel({
                     {
                       key: "add-sub",
                       label: "Add sub-area",
-                      icon: "＋",
+                      icon: "add",
                       onSelect: () =>
                         openDialog({ kind: "add-area", defaultParentId: area.id, ...inheritedValuesFor(area.id) }),
                     },
                     {
                       key: "edit",
                       label: "Edit",
-                      icon: "✎",
+                      icon: "edit",
                       onSelect: () =>
                         openDialog({ kind: "edit-area", area, ...inheritedValuesFor(area.parentId) }),
                     },
                     {
                       key: "format-multipliers",
                       label: "Format multipliers…",
-                      icon: "×",
+                      icon: "factors",
                       onSelect: () => openDialog({ kind: "format-factors", area }),
                     },
                     {
                       key: "delete",
                       label: "Delete",
-                      icon: "✕",
+                      icon: "delete",
                       danger: true,
                       separatorBefore: true,
                       onSelect: () => openDialog({ kind: "delete-area", area }),

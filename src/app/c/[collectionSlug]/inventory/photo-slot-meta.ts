@@ -3,11 +3,20 @@
 // Both the photo editor and the read-only strip read this map so their slot borders, badges,
 // and labels stay in lockstep — change a colour here and both surfaces follow.
 
+import { type IconName } from "@/app/icons";
+
 export type SlotRole = "front" | "back" | "main";
 
 export const SLOT_ROLE_META: Record<
   SlotRole,
-  { short: string; title: string; color: string; soft: string }
+  {
+    /** Badge letter. `main` has no letter of its own and names itself with {@link icon} (#459). */
+    short: string;
+    icon?: IconName;
+    title: string;
+    color: string;
+    soft: string;
+  }
 > = {
   front: {
     short: "F",
@@ -22,7 +31,8 @@ export const SLOT_ROLE_META: Record<
     soft: "var(--color-disposition-trade-soft)",
   },
   main: {
-    short: "★",
+    short: "",
+    icon: "primary",
     title: "Mark as main",
     color: "var(--color-accent)",
     soft: "var(--color-accent-soft)",

@@ -175,7 +175,7 @@ export function useLotOutcomeActions(
     {
       key: "close",
       label: lot.status === "closed" ? "Edit the final price" : "Close the lot",
-      icon: "◆",
+      icon: "settle",
       disabled: lot.settled,
       hint: settledHint,
       onSelect: () => {
@@ -195,7 +195,7 @@ export function useLotOutcomeActions(
           {
             key: "cancelled",
             label: "Mark as cancelled",
-            icon: "⊘",
+            icon: "cancelled",
             disabled: lot.settled,
             hint: settledHint,
             onSelect: () => {
@@ -209,7 +209,7 @@ export function useLotOutcomeActions(
           {
             key: "reopen",
             label: "Back to open",
-            icon: "↺",
+            icon: "restore",
             disabled: lot.settled,
             hint: settledHint,
             onSelect: () => {

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ActionItemGroup, ActionItemSeverity, ActionItemsResult } from "@/lib/action-items";
+import { Icon } from "@/app/icons";
 import { Tooltip } from "./shared/tooltip";
 import { formatInstant, formatRelative } from "./auctions/auction-format";
 
@@ -179,7 +180,7 @@ export function ActionItemsBell({
             flexShrink: 0,
           }}
         >
-          <IconBell />
+          <Icon name="notifications" />
           {/* No bubble at zero, and none while the first fetch is in flight — a control that
               flashes a zero teaches the collector to stop reading it. It sits **on** the bell
               rather than beside it: the trigger is an icon in a header row, and a pill in the flow
@@ -425,20 +426,3 @@ function Group({
   );
 }
 
-const IconBell = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ flexShrink: 0 }}
-    aria-hidden
-  >
-    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9z" />
-    <path d="M13.73 21a2 2 0 01-3.46 0" />
-  </svg>
-);

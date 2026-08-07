@@ -1,6 +1,7 @@
 "use client";
 
 import type { IssueRangeSuggestion } from "@/lib/issues";
+import { Icon } from "@/app/icons";
 
 /** Format a declared range for display, e.g. "Mi 100–105" or "Mi 100". */
 function rangeLabel(prefix: string, first: string, last: string | null): string {
@@ -41,7 +42,7 @@ export function IssueRangeWarning({
     >
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
         <span aria-hidden style={{ color: "var(--color-warning)", lineHeight: 1.3 }}>
-          ⚠
+          <Icon name="warning" size="sm" />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "var(--color-warning)" }}>

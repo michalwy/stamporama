@@ -3,6 +3,7 @@
 import { colnectSearchUrl, colnectStampUrl } from "@/lib/colnect-link";
 import { catalogChipCopyValue } from "@/lib/catalog-number";
 import type { AreaCatalogEntry } from "@/lib/areas";
+import { Icon } from "@/app/icons";
 import { Tooltip } from "./tooltip";
 
 // The Colnect tag shown next to a stamp's catalog numbers when the stamp has a Colnect
@@ -31,52 +32,6 @@ const CHIP: React.CSSProperties = {
   textDecoration: "none",
   flexShrink: 0,
 };
-
-/** Standard "opens in a new tab" glyph, in `currentColor` so it tracks the chip's text. */
-function ExternalLinkIcon() {
-  return (
-    <svg
-      width="1em"
-      height="1em"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0 }}
-    >
-      <path d="M5 2H2.5v7.5H10V7" />
-      <path d="M7 2h3v3" />
-      <path d="M10 2 5.75 6.25" />
-    </svg>
-  );
-}
-
-/** Companion glyph for the search state — a lens, so the chip reads as "go and find this"
- * rather than "open this", without the label having to say which. */
-function SearchIcon() {
-  return (
-    <svg
-      width="1em"
-      height="1em"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0 }}
-    >
-      <circle cx="5.25" cy="5.25" r="3.25" />
-      <path d="M7.75 7.75 10 10" />
-    </svg>
-  );
-}
 
 /**
  * The query a search chip runs for a stamp: the **area prefix and the number**, the vendor
@@ -132,7 +87,8 @@ export function ColnectChip({
         onClick={(e) => e.stopPropagation()}
       >
         Colnect
-        {url ? <ExternalLinkIcon /> : <SearchIcon />}
+        {/* An arrow leaves for a known page, a lens goes looking (#441). */}
+        {url ? <Icon name="externalLink" size="xs" /> : <Icon name="search" size="xs" />}
       </a>
     </Tooltip>
   );

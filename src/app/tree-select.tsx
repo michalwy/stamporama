@@ -19,6 +19,7 @@ import {
   getVisibleOptions,
   type TreeNode,
 } from "@/app/tree-picker-utils";
+import { Icon } from "@/app/icons";
 
 export const defaultTreeSelectButtonClassName =
   "grid min-h-8 w-full grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-left text-sm text-[var(--color-text-primary)] outline-none transition hover:border-[var(--color-border-hover)] focus:border-[var(--color-border-hover)] focus:ring-2 focus:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:bg-[var(--color-bg-subtle)] disabled:text-[var(--color-text-placeholder)]";
@@ -66,7 +67,7 @@ export function TreeSelectButton({
     >
       <span className={hasSelection ? "truncate" : "text-[var(--color-text-placeholder)]"}>{selectedLabel}</span>
       <span aria-hidden="true" className="text-sm text-[var(--color-text-muted)]">
-        ▾
+        <Icon name="caret" size="sm" />
       </span>
     </button>
   );

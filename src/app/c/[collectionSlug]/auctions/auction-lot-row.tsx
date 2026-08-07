@@ -26,6 +26,7 @@ import {
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
 import { AmountWithBase } from "./auction-base-amount";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -635,7 +636,7 @@ export function AuctionLotRow({
           {
             key: "listing",
             label: "Open listing",
-            icon: "🔗",
+            icon: "externalLink",
             onSelect: () => window.open(lot.url!, "_blank", "noopener,noreferrer"),
           } as RowAction,
         ]
@@ -648,7 +649,7 @@ export function AuctionLotRow({
           {
             key: "sale",
             label: "Open sale",
-            icon: "↗",
+            icon: "open",
             onSelect: () => router.push(highlightHref),
           } as RowAction,
         ]
@@ -656,7 +657,7 @@ export function AuctionLotRow({
     {
       key: "checked",
       label: "Bid unchanged",
-      icon: "↻",
+      icon: "refresh",
       // Confirming an observation needs an observation to confirm; the hint says so rather than
       // hiding the entry (#273).
       disabled: !editable || terminal || lot.currentBid === null,
@@ -676,7 +677,7 @@ export function AuctionLotRow({
     {
       key: "bid-ceiling",
       label: "Bid my ceiling",
-      icon: "⤒",
+      icon: "bidCeiling",
       disabled: bidCeiling.value === null,
       hint: bidCeiling.hint,
       onSelect: () => applyMyBid(bidCeiling.value!),
@@ -684,7 +685,7 @@ export function AuctionLotRow({
     {
       key: "bid-catalog",
       label: "Bid catalogue value",
-      icon: "⤓",
+      icon: "bidCatalog",
       disabled: bidCatalog.value === null,
       hint: bidCatalog.hint,
       onSelect: () => applyMyBid(bidCatalog.value!),
@@ -692,7 +693,7 @@ export function AuctionLotRow({
     {
       key: "ceiling-catalog",
       label: "Ceiling = catalogue value",
-      icon: "⤓",
+      icon: "bidCatalog",
       disabled: ceilingCatalog.value === null,
       hint: ceilingCatalog.hint,
       onSelect: () => applyMaxBid(ceilingCatalog.value!),
@@ -702,7 +703,7 @@ export function AuctionLotRow({
       // Readable whether or not anything has been entered — the same entry either way, because
       // "what is in this lot?" is the question in both cases.
       label: lot.lineCount === 0 ? "Describe contents" : `Contents (${lot.lineCount})`,
-      icon: "☰",
+      icon: "contents",
       onSelect: () => onEditComposition(lot),
     },
     // What became of it (#354), set apart from the bidding entries above: those are what you do
@@ -713,7 +714,7 @@ export function AuctionLotRow({
     {
       key: "edit",
       label: "Edit",
-      icon: "✎",
+      icon: "edit",
       separatorBefore: true,
       disabled: !editable,
       hint: lot.settled ? "Settled into a purchase — edit the purchase instead" : undefined,
@@ -722,7 +723,7 @@ export function AuctionLotRow({
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       disabled: !editable,
@@ -774,7 +775,7 @@ export function AuctionLotRow({
                     flexShrink: 0,
                   }}
                 >
-                  {expanded ? "▼" : "▶"}
+                  <Icon name={expanded ? "collapse" : "expand"} size="sm" />
                 </button>
               )}
               <span
@@ -811,7 +812,7 @@ export function AuctionLotRow({
                     rel="noopener noreferrer"
                     style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                   >
-                    🔗 Listing
+                    <Icon name="externalLink" size="sm" /> Listing
                   </a>
                 </Tooltip>
               )}

@@ -233,7 +233,7 @@ export function AuctionLotLinesDialog({
                 {
                   key: "edit",
                   label: "Edit line",
-                  icon: "✎",
+                  icon: "edit",
                   disabled: !editable,
                   hint: editable ? undefined : "Settled into a purchase — edit the purchase instead",
                   onSelect: () => setDraft({ kind: "edit", line }),
@@ -241,7 +241,7 @@ export function AuctionLotLinesDialog({
                 {
                   key: "delete",
                   label: "Remove",
-                  icon: "✕",
+                  icon: "remove",
                   danger: true,
                   separatorBefore: true,
                   disabled: !editable,

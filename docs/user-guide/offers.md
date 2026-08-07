@@ -118,7 +118,7 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
    asking price accepts either a comma or a period as the decimal separator (`12,50` or `12.50`), and
    opens with its current value **selected**, so typing a new one replaces it rather than running into
-   it. Once a listing URL is set, its **🔗 Listing** link opens the listing when clicked; use the **✎**
+   it. Once a listing URL is set, its **Listing** link opens the listing when clicked; use the **✎**
    pencil beside it to change the URL. The listing URL stays editable in **every** state — including a
    **sold** or **withdrawn** offer — so you can keep the record straight after the fact. The
    **currency** is fixed by the platform and shown read-only, and the offer's **state** actions live
@@ -204,7 +204,7 @@ exists, pick it in the first step and move straight on.
 
 The offer's sets render like a [purchase order](purchases.md): each set is a **collapsible card**
 showing its copies as full inventory rows. Cards start **collapsed** — a listing is read by its
-sets first, and what is inside one is a second question — so use a card's **▶** or the header
+sets first, and what is inside one is a second question — so use a card's **caret** or the header
 band's **Expand all** to open them. A set you add while the screen is open opens by itself.
 Group by **Set** or **Location**, optionally sub-group
 by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
@@ -291,7 +291,7 @@ Each field carries its own three controls:
 - **⧉** copies the field to the clipboard — the routine act here, since these texts exist to be
   pasted into the platform's listing form. The icon flashes **✓** on success; it is greyed out while
   the field is empty. On a description that is not plain text it copies the **formatted** version and
-  grows a **▾** for the choice (see below).
+  grows a **caret** for the choice (see below).
 - **✎** opens it for editing — a plain text box, so line breaks are yours to place. **⌘/Ctrl + Enter**
   saves, **Esc** cancels, and saving an empty box clears the field. Editable in every state, like the
   title.
@@ -350,7 +350,7 @@ With HTML or Markdown chosen:
   switches to what is actually stored (shown in a monospace font). Editing always edits the source —
   the box is the plain text box it has always been.
 - **⧉** copies the **formatted** description: the rendered version goes onto the clipboard as rich
-  text, so a platform's rich-text editor keeps the formatting when you paste. The **▾** beside it
+  text, so a platform's rich-text editor keeps the formatting when you paste. The **caret** beside it
   offers the choice explicitly — **Copy formatted**, or **Copy source** for a field that wants the
   raw tags (or the Markdown) typed in.
 

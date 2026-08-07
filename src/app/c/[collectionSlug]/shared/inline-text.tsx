@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 const INLINE_INPUT: React.CSSProperties = {
   padding: "0.125rem 0.375rem",
@@ -14,12 +15,13 @@ const INLINE_INPUT: React.CSSProperties = {
 };
 
 const EDIT_CONTROL: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
   background: "none",
   border: "none",
   padding: "0 0.125rem",
   cursor: "pointer",
   color: "var(--color-text-muted)",
-  fontSize: "0.75rem",
   lineHeight: 1,
 };
 
@@ -94,7 +96,7 @@ export function InlineText({
               aria-label={editAriaLabel}
               style={EDIT_CONTROL}
             >
-              ✎
+              <Icon name="edit" size="sm" />
             </button>
           </Tooltip>
         </span>

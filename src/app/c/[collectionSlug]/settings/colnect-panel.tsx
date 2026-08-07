@@ -228,11 +228,11 @@ export function ColnectPanel({ collectionId, initialMappings, vendors }: Colnect
               <RowActionsMenu
                 ariaLabel="Mapping actions"
                 actions={[
-                  { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit", mapping }) },
+                  { key: "edit", label: "Edit", icon: "edit", onSelect: () => openDialog({ kind: "edit", mapping }) },
                   {
                     key: "delete",
                     label: "Delete",
-                    icon: "✕",
+                    icon: "delete",
                     danger: true,
                     separatorBefore: true,
                     onSelect: () => openDialog({ kind: "delete", mapping }),

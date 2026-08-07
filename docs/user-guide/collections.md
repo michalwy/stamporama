@@ -75,10 +75,12 @@ Every list row across the app — stamps, issues, inventory copies, areas, catal
 
 A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. On the **Issues** list these are:
 
-- an issue row — **✎** Edit, **＋** Add stamp, **⧉** Add copy
-- a stamp row inside the tree — **✎** Edit, **＋** Add child stamp, **⧉** Add copy
+- an issue row — pencil (Edit), plus (Add stamp), copy (Add copy)
+- a stamp row inside the tree — pencil (Edit), plus (Add child stamp), copy (Add copy)
 
-Hovering tells you what each one is. They are skipped by **Tab**, which keeps one keyboard stop per row: the **⋮** menu, where the same actions live.
+Hovering tells you what each one is. Icons come from one set app-wide, so the same picture always
+means the same thing: a pencil edits in place, a bin deletes, a circular arrow re-generates
+something the app wrote, a globe opens per-language texts, a caret expands or collapses. They are skipped by **Tab**, which keeps one keyboard stop per row: the **⋮** menu, where the same actions live.
 
 ## Default language
 
@@ -170,7 +172,7 @@ If a generated catalog number would duplicate one already in the collection, the
 
 If the added stamps fall **outside the issue's declared catalog range**, a follow-up prompt appears right away showing the proposed widened range (for example, `Mi 100–105 → 100–110`) and asks you to choose **Widen range** or **Keep as-is** — the same decision offered when adding a single stamp. Keeping it as-is leaves the range warning on the issue row, which you can act on later.
 
-To add a **single** stamp instead, expand an issue row on the **Issues** list (the **▶** toggle) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
+To add a **single** stamp instead, expand an issue row on the **Issues** list (the **caret**) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
 To nest a stamp **under an existing one**, use **Add child stamp** in that stamp's **⋮** menu. The dialog starts from the parent: its catalog numbers are copied in as a starting point, and the **Year** is pre-filled from the **parent stamp's own year** rather than the issue's — a variant or reprint is usually dated from the node it hangs under. (A root-level stamp still starts from the issue's year.) After you save, the parent node **opens by itself** so the new child is visible instead of hiding behind a collapsed arrow.
 

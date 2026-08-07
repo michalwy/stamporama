@@ -18,6 +18,7 @@ import {
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { Icon } from "@/app/icons";
 
 // Settings → Assistant (#252, part of #155). Two ways to connect the browser extension to this
 // instance + collection:
@@ -258,7 +259,7 @@ export function AssistantPanel({
                     extStatus.state === "ok" ? "var(--color-success)" : "var(--color-error)",
                 }}
               >
-                {extStatus.state === "ok" ? "✓ " : "✕ "}
+                <Icon name={extStatus.state === "ok" ? "check" : "close"} size="sm" />{" "}
                 {extStatus.message}
               </p>
             )}
@@ -325,7 +326,13 @@ export function AssistantPanel({
               cursor: "pointer",
             }}
           >
-            {copiedId ? "Copied ✓" : "Copy"}
+            {copiedId ? (
+              <>
+                Copied <Icon name="check" size="xs" />
+              </>
+            ) : (
+              "Copy"
+            )}
           </button>
         </div>
 
@@ -379,7 +386,7 @@ export function AssistantPanel({
                     {
                       key: "revoke",
                       label: "Revoke",
-                      icon: "✕",
+                      icon: "delete",
                       danger: true,
                       onSelect: () => openDialog({ kind: "revoke-token", token }),
                     },
@@ -453,7 +460,7 @@ export function AssistantPanel({
               >
                 Copy
               </button>
-              {copied && <span style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>Copied ✓</span>}
+              {copied && <span style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>Copied <Icon name="check" size="xs" /></span>}
             </div>
           </DialogBody>
           <DialogActions actionLabel="Done" onCancel={closeDialog} onAction={closeDialog} disabled={isPending} />

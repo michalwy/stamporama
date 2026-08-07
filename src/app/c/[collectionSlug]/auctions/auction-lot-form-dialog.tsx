@@ -30,6 +30,7 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from "./auction-format";
+import { Icon } from "@/app/icons";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -731,7 +732,7 @@ export function AuctionLotFormDialog({
                           lineHeight: 1,
                         }}
                       >
-                        ✕
+                        <Icon name="close" size="sm" />
                       </button>
                     </div>
                   ))}

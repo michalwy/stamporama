@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -24,11 +25,12 @@ const LABEL_STYLE: React.CSSProperties = {
 // The ✕ that empties the field it sits in. Auxiliary to that input and therefore out of the tab
 // order everywhere it appears (#446) — a keyboard already clears a field it is standing in.
 const CLEAR_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
   background: "none",
   border: "none",
   cursor: "pointer",
   color: "var(--color-text-muted)",
-  fontSize: "0.75rem",
   padding: "0 0.25rem",
 };
 
@@ -157,7 +159,7 @@ export function ListToolbar({
                 tabIndex={-1}
                 style={CLEAR_BTN}
               >
-                ✕
+                <Icon name="clear" size="sm" />
               </button>
             </Tooltip>
           )}
@@ -242,7 +244,7 @@ export function ListToolbar({
                 tabIndex={-1}
                 style={CLEAR_BTN}
               >
-                ✕
+                <Icon name="clear" size="sm" />
               </button>
             </Tooltip>
           )}

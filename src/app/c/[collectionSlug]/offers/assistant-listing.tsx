@@ -3,6 +3,7 @@
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { hasListingModule, supportsAssistantUpdate } from "@/lib/platform-modules";
 import type { AssistantHandoff } from "./assistant-handoff";
+import { Icon } from "@/app/icons";
 
 // The two controls of the Assistant handoff (#407/#414), shared by the surfaces that offer it: the
 // bulk listing workspace's card and an offer's own screen. One implementation, because the rules
@@ -88,7 +89,7 @@ export function ListViaAssistantButton({
           cursor: inert ? "default" : "pointer",
         }}
       >
-        <span aria-hidden>⚡</span>
+        <Icon name="assistant" size="sm" />
         {running ? "Listing…" : "List via Assistant"}
       </button>
     </Tooltip>
@@ -151,7 +152,7 @@ export function UpdateViaAssistantButton({
           cursor: inert ? "default" : "pointer",
         }}
       >
-        <span aria-hidden>⟳</span>
+        <Icon name="refresh" size="sm" />
         {running ? "Updating…" : "Update via Assistant"}
       </button>
     </Tooltip>
@@ -211,7 +212,16 @@ export function AssistantOutcome({
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <span aria-hidden style={{ fontSize: "0.75rem" }}>
-          {handoff.state === "error" || handoff.state === "unread" ? "⚠" : done ? "✓" : "⚡"}
+          <Icon
+            name={
+              handoff.state === "error" || handoff.state === "unread"
+                ? "warning"
+                : done
+                  ? "check"
+                  : "assistant"
+            }
+            size="sm"
+          />
         </span>
         <span
           style={{
@@ -244,7 +254,7 @@ export function AssistantOutcome({
                 cursor: "pointer",
               }}
             >
-              ✕
+              <Icon name="close" size="sm" />
             </button>
           </Tooltip>
         )}

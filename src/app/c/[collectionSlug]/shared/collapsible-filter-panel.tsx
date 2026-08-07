@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // Whole-panel collapse state, persisted in localStorage (not a cookie, which
 // would ride on every request), keyed per panel so each filter column remembers
@@ -142,7 +143,7 @@ export function CollapsibleFilterPanel({
               fontSize: "0.75rem",
             }}
           >
-            ▸
+            <Icon name="expand" size="sm" />
           </button>
         </Tooltip>
         <span
@@ -207,7 +208,7 @@ export function CollapsibleFilterPanel({
                 padding: "0 0.25rem",
               }}
             >
-              ◂
+              <Icon name="hidePanel" size="sm" />
             </button>
           </Tooltip>
         </div>

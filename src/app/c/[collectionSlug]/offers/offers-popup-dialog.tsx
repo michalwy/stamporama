@@ -8,6 +8,7 @@ import { DialogShell, DialogBody } from "@/app/dialog-shell";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
 import { useOffersForTarget } from "./use-offers-query";
+import { Icon } from "@/app/icons";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -173,7 +174,7 @@ function PopupOfferRow({
               onClick={(e) => e.stopPropagation()}
               style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
             >
-              🔗 Listing
+              <Icon name="externalLink" size="sm" /> Listing
             </a>
           </Tooltip>
         )}

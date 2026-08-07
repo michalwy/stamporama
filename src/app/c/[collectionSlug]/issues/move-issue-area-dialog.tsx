@@ -15,6 +15,7 @@ import { effectiveVendorsForArea } from "@/app/c/[collectionSlug]/shared/area-he
 import { listIssueReferencedVendorsAction } from "@/app/actions/issues";
 import type { IssueListItem, IssueReferencedVendor } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
+import { Icon } from "@/app/icons";
 
 const FORM_STYLE: React.CSSProperties = {
   display: "flex",
@@ -137,7 +138,7 @@ export function MoveIssueAreaDialog({
                     marginBottom: "0.25rem",
                   }}
                 >
-                  ⚠ This area doesn&rsquo;t list{" "}
+                  <Icon name="warning" size="sm" /> This area doesn&rsquo;t list{" "}
                   {missingVendors.length === 1 ? "one catalog" : "some catalogs"} used
                   here
                 </div>

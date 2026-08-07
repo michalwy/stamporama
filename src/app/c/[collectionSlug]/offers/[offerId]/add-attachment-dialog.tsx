@@ -12,6 +12,7 @@ import { useOfferCopies } from "../use-offers-query";
 import type { ItemListItem } from "@/lib/items";
 import { formatBytes } from "@/lib/format-bytes";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -451,7 +452,7 @@ export function AddAttachmentDialog({
                                   textAlign: "center",
                                 }}
                               >
-                                ✓
+                                <Icon name="check" size="sm" />
                               </span>
                             )}
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -543,7 +544,7 @@ export function AddAttachmentDialog({
                         lineHeight: 1,
                       }}
                     >
-                      ✕
+                      <Icon name="close" size="sm" />
                     </button>
                   </Tooltip>
                 </div>

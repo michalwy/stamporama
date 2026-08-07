@@ -28,6 +28,7 @@ import {
   type TranslationValues,
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
+import { Icon } from "@/app/icons";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -132,7 +133,7 @@ function SubtypeForm({
         </div>
         {translatable && (
           <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-            Used for the <code>{"{subtype}"}</code> token in listing texts. Translations (🌐) are
+            Used for the <code>{"{subtype}"}</code> token in listing texts. Translations (<Icon name="translations" size="xs" />) are
             saved together with the subtype.
           </p>
         )}
@@ -348,7 +349,7 @@ export function SubtypesPanel({
               aria-hidden
               style={{ color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1 }}
             >
-              ⠿
+              <Icon name="dragGrip" size="sm" />
             </span>
 
             <Tooltip content={subtype.isDefault ? "Default subtype" : "Make default"}>
@@ -415,13 +416,13 @@ export function SubtypesPanel({
                 {
                   key: "edit",
                   label: "Edit",
-                  icon: "✎",
+                  icon: "edit",
                   onSelect: () => openDialog({ kind: "edit", subtype }),
                 },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete", subtype }),

@@ -42,6 +42,7 @@ import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-lan
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/catalog-duplicate-warning";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { Icon } from "@/app/icons";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -644,7 +645,7 @@ function DuplicateNameWarning({ matches }: { matches: DuplicateIssueMatch[] }) {
           cursor: "help",
         }}
       >
-        ⚠
+        <Icon name="warning" size="sm" />
       </span>
     </Tooltip>
   );

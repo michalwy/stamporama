@@ -25,6 +25,7 @@ import {
   type TranslationValues,
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
+import { Icon } from "@/app/icons";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -167,7 +168,8 @@ function CertificateStatusForm({
         {translatable && (
           <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
             Used for the <code>{"{certificate}"}</code> and <code>{"{certificateAbbr}"}</code> tokens
-            in listing titles. Translations (🌐) are saved together with the status.
+            in listing titles. Translations (<Icon name="translations" size="xs" />) are saved together with
+            the status.
           </p>
         )}
       </div>
@@ -336,7 +338,7 @@ export function CertificateStatusesPanel({
               aria-hidden
               style={{ color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1 }}
             >
-              ⠿
+              <Icon name="dragGrip" size="sm" />
             </span>
             <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
               {status.name}
@@ -345,11 +347,11 @@ export function CertificateStatusesPanel({
             <RowActionsMenu
               ariaLabel="Certificate status actions"
               actions={[
-                { key: "edit", label: "Edit", icon: "✎", onSelect: () => openDialog({ kind: "edit", status }) },
+                { key: "edit", label: "Edit", icon: "edit", onSelect: () => openDialog({ kind: "edit", status }) },
                 {
                   key: "delete",
                   label: "Delete",
-                  icon: "✕",
+                  icon: "delete",
                   danger: true,
                   separatorBefore: true,
                   onSelect: () => openDialog({ kind: "delete", status }),

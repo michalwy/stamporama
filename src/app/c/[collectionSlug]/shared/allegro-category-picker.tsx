@@ -14,6 +14,7 @@ import {
   browseAllegroCategoriesAction,
   getAllegroCategoryFormAction,
 } from "@/app/actions/allegro-categories";
+import { Icon } from "@/app/icons";
 
 // Picking an Allegro category, and answering its parameters (#488; ADR-0026 §6).
 //
@@ -390,7 +391,7 @@ export function AllegroCategoryPicker({
                     >
                       <span>{category.name}</span>
                       <span style={{ ...helpTextStyle, whiteSpace: "nowrap" }}>
-                        {category.leaf ? "Choose" : "›"}
+                        {category.leaf ? "Choose" : <Icon name="next" size="sm" />}
                       </span>
                     </button>
                   ))}

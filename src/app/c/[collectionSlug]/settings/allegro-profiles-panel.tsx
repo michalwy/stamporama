@@ -8,7 +8,7 @@ import {
   DialogActions,
   LabelWithError,
 } from "@/app/dialog-shell";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type {
   AllegroListingProfileData,
@@ -263,23 +263,23 @@ export function AllegroProfilesPanel({
                   {
                     key: "edit",
                     label: "Edit",
-                    icon: "✎",
+                    icon: "edit",
                     onSelect: () => setEditing({ profile }),
                   },
                   ...(profile.isDefault
                     ? []
-                    : [
+                    : ([
                         {
                           key: "default",
                           label: "Make default",
-                          icon: "★",
+                          icon: "primary",
                           onSelect: () => makeDefault(profile),
                         },
-                      ]),
+                      ] satisfies RowAction[])),
                   {
                     key: "delete",
                     label: "Delete",
-                    icon: "✕",
+                    icon: "delete",
                     danger: true,
                     separatorBefore: true,
                     onSelect: () => setConfirmDelete(profile),

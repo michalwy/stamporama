@@ -23,6 +23,7 @@ import type {
   AllegroOfferListingConfig,
   AllegroOfferParameterView,
 } from "@/lib/allegro-offer-listing";
+import { Icon } from "@/app/icons";
 
 // **On Allegro** — what this offer will be listed as (#494).
 //
@@ -266,7 +267,7 @@ export function OfferAllegroCard({
         ) : (
           <p style={{ ...helpText, margin: 0 }}>
             Nothing matched yet. A category is worked out when the offer gains its first copy — press
-            ↻ to try again, or choose one.
+            <Icon name="refresh" size="sm" /> to try again, or choose one.
           </p>
         )}
 
@@ -283,7 +284,7 @@ export function OfferAllegroCard({
             disabled={isPending}
             onClick={() => apply(() => rematchAllegroOfferCategoryAction(collectionSlug, offerId))}
           >
-            ↻ Match again
+            <Icon name="refresh" size="sm" /> Match again
           </button>
         </div>
       </div>

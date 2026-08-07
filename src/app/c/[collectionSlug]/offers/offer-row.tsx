@@ -24,6 +24,7 @@ import {
   InActiveBiddingChip,
   ListingTypeChip,
 } from "./offer-badges";
+import { Icon, type IconName } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -36,12 +37,12 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const TRANSITION_LABEL: Record<string, { label: string; icon: string }> = {
-  ready: { label: "Mark ready", icon: "✓" },
-  preparing: { label: "Back to preparing", icon: "↩" },
-  active: { label: "Resume", icon: "▶" },
-  paused: { label: "Pause", icon: "⏸" },
-  withdrawn: { label: "Withdraw", icon: "⇤" },
+const TRANSITION_LABEL: Record<string, { label: string; icon: IconName }> = {
+  ready: { label: "Mark ready", icon: "check" },
+  preparing: { label: "Back to preparing", icon: "revert" },
+  active: { label: "Resume", icon: "resume" },
+  paused: { label: "Pause", icon: "pause" },
+  withdrawn: { label: "Withdraw", icon: "withdraw" },
 };
 
 const QUICK_ADVANCE_BTN: React.CSSProperties = {
@@ -61,8 +62,8 @@ const QUICK_ADVANCE_BTN: React.CSSProperties = {
 
 /** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
  * marking a `preparing` one ready keeps the plain transition label. */
-function advanceLabel(to: ManualOfferTarget): { label: string; icon: string } {
-  return to === "active" ? { label: "Activate", icon: "▲" } : TRANSITION_LABEL[to];
+function advanceLabel(to: ManualOfferTarget): { label: string; icon: IconName } {
+  return to === "active" ? { label: "Activate", icon: "activate" } : TRANSITION_LABEL[to];
 }
 
 interface OfferRowProps {
@@ -121,30 +122,30 @@ export function OfferRow({
       return {
         key: s,
         label: activating ? "Activate" : TRANSITION_LABEL[s].label,
-        icon: activating ? "▲" : TRANSITION_LABEL[s].icon,
+        icon: activating ? "activate" : TRANSITION_LABEL[s].icon,
         danger: s === "withdrawn",
         onSelect: () => onSetState(offer, s),
       };
     });
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "↗", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
     ...(offer.url
-      ? [{ key: "listing", label: "Open listing", icon: "🔗", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
+      ? [{ key: "listing", label: "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
       : []),
     ...(terminal
       ? []
-      : [{ key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(offer) } as RowAction]),
+      : [{ key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(offer) } as RowAction]),
     ...stateActions,
     ...(!terminal && offer.setCount > 0
-      ? [{ key: "sell", label: "Sell", icon: "💰", onSelect: () => onSell(offer) } as RowAction]
+      ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => onSell(offer) } as RowAction]
       : []),
     ...(offer.inActiveBidding
       ? [
           {
             key: "clear-bidding",
             label: "Clear active bidding",
-            icon: "🔨",
+            icon: "bidding",
             onSelect: () => onSetInActiveBidding(offer, false),
           } as RowAction,
         ]
@@ -153,7 +154,7 @@ export function OfferRow({
             {
               key: "mark-bidding",
               label: "Mark in active bidding",
-              icon: "🔨",
+              icon: "bidding",
               onSelect: () => onSetInActiveBidding(offer, true),
             } as RowAction,
           ]
@@ -161,13 +162,13 @@ export function OfferRow({
     {
       key: "duplicate",
       label: "List on another platform",
-      icon: "⧉",
+      icon: "duplicate",
       onSelect: () => onDuplicate(offer),
     },
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete(offer),
@@ -277,7 +278,7 @@ export function OfferRow({
                 onClick={(e) => e.stopPropagation()}
                 style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
               >
-                🔗 Listing
+                <Icon name="externalLink" size="sm" /> Listing
               </a>
             </Tooltip>
           )}

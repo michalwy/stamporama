@@ -10,6 +10,7 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import { deriveFormatPrice, formatFactorKey } from "@/lib/format-factor";
+import { Icon } from "@/app/icons";
 
 const CELL_INPUT: React.CSSProperties = {
   padding: "0.25rem 0.375rem",
@@ -431,7 +432,7 @@ export function StampCatalogPricesTab({
                                   tabIndex={-1}
                                   style={warnBtnStyle}
                                 >
-                                  ⤴
+                                  <Icon name="copyUpwards" size="sm" />
                                 </button>
                               </Tooltip>
                             )}

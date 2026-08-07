@@ -4,6 +4,7 @@ import type { PackingListData, PackingListGroup, PackingListRow } from "@/lib/pa
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { Icon } from "@/app/icons";
 
 // The packing sheet's body (#330): the location sections plus the screen-only column picker.
 // Which columns are printed is the collector's call — some pack by shelf ref alone, some want the
@@ -162,8 +163,7 @@ export function PackingSheet({
                 background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
               }}
             >
-              {on ? "✓ " : ""}
-              {column.label}
+              {on && <Icon name="check" size="xs" />} {column.label}
             </button>
           );
         })}
@@ -208,7 +208,7 @@ function LocationSection({
           gap: "0.5rem",
         }}
       >
-        <span>📍 {group.location}</span>
+        <span><Icon name="location" size="sm" /> {group.location}</span>
         <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)" }}>
           {group.copyCount} {group.copyCount === 1 ? "copy" : "copies"}
           {group.packedCount > 0 ? ` · ${group.packedCount} packed` : ""}
@@ -272,7 +272,7 @@ function CopyRow({
             borderRadius: "0.125rem",
           }}
         >
-          {row.packed ? "✓" : ""}
+          {row.packed && <Icon name="check" size="xs" />}
         </span>
       </td>
       {columns.map((c) => (

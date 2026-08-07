@@ -110,7 +110,7 @@ Stamps, Copies, Offers, Sales and Purchases.
   from.
 - **Include sold** — copies that have [sold](sales.md) are **hidden by default**, so the list
   shows only what you still hold. Toggle this on to bring sold copies back into view (for example
-  to look up what a piece went for); each one then carries a **💰 Sold** chip, so a copy that has
+  to look up what a piece went for); each one then carries a **Sold** chip, so a copy that has
   left the collection is never mistaken for one still in it. The holdings totals and year panel
   follow this filter too.
 - **Include no longer held** — copies you have marked as [no longer held](#copies-you-no-longer-hold)
@@ -661,7 +661,7 @@ catalogue it came out of is something you already know in the box you are pastin
 
 ## Grouping the list
 
-The toolbar's **▦ grouping** select collapses the list into groups. There are four, and they answer
+The toolbar's **grouping** select collapses the list into groups. There are four, and they answer
 different questions:
 
 - **Group duplicates** — what stock do I hold several of? (below)
@@ -672,14 +672,14 @@ different questions:
   issue](#grouping-by-issue))
 
 Only one can be in effect, and the choice is remembered per collection. Every group row works the
-same way: the count leads it, **▶** expands it into the copies underneath, and the **checkbox** in
+same way: the count leads it, the **caret** expands it into the copies underneath, and the **checkbox** in
 front of it ticks all of them at once.
 
 ## Grouping duplicates
 
 When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
-Pick **▦ Group duplicates** and the list collapses to one row per duplicate, with its count up front
-(`×10`). Expand a row (**▶**) to see the individual copies underneath.
+Pick **Group duplicates** and the list collapses to one row per duplicate, with its count up front
+(`×10`). Expand a row (the **caret**) to see the individual copies underneath.
 
 Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
 never optional: Colnect refuses more than one offer for the same stamp in the same condition and
@@ -739,9 +739,9 @@ The group row also reports how many of its copies are **already listed** somewhe
 
 ## Grouping by where copies are filed
 
-**▦ Group by location** collapses the list to one row per [storage location](locations.md), over the
+**Group by location** collapses the list to one row per [storage location](locations.md), over the
 copies filed there — so a klaser is one row, with its count, and expanding it lists what is in it.
-**▦ Group by location ref** goes one level finer and splits each location by the **ref** written on
+**Group by location ref** goes one level finer and splits each location by the **ref** written on
 the copies (`A234`), in shelf order: prefix first, then the number, so `A2` comes before `A10`.
 
 A few things worth knowing:
@@ -762,7 +762,7 @@ Both groupings are computed on the server, so a group is never split in half by 
 
 ## Grouping by issue
 
-**▦ Group by issue** collapses the list to one row per [issue](collections.md), over the copies you
+**Group by issue** collapses the list to one row per [issue](collections.md), over the copies you
 hold of it — the reading you work a series through, and the one that shows at a glance where a set is
 thin. Rows are in the **Issues list's own order**: by year, then by the issue's primary catalog
 number, then by name. An issue with no year comes after the dated ones, and the copies whose stamp
@@ -801,7 +801,7 @@ in another currency). The same **Needs action** and **In bidding** badges you se
 [Offers](offers.md) list appear here too.
 
 - Click a row to open that offer's detail screen.
-- Click the **🔗 Listing** chip to open the listing on the platform itself, when you have recorded
+- Click the **Listing** chip to open the listing on the platform itself, when you have recorded
   its URL.
 - Closing the popup returns you to the list you opened it from, right where you were.
 

@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Icon, type IconName } from "@/app/icons";
 import { Tooltip } from "./tooltip";
 
 /** One entry in a row's action menu. `onSelect` runs after the menu closes, so it
@@ -15,8 +10,9 @@ import { Tooltip } from "./tooltip";
 export interface RowAction {
   key: string;
   label: string;
-  /** Small leading glyph for discoverability (inherits the item's text color). */
-  icon?: ReactNode;
+  /** Leading icon for discoverability, named from the app's vocabulary (#459). The menu sizes and
+   * colours it, so every row menu in the app looks alike. */
+  icon?: IconName;
   onSelect: () => void;
   /** Renders in the error color (used for delete). */
   danger?: boolean;
@@ -43,8 +39,6 @@ const triggerStyle: React.CSSProperties = {
   background: "var(--color-bg-page)",
   color: "var(--color-text-primary)",
   cursor: "pointer",
-  fontSize: "1.25rem",
-  fontWeight: 700,
   lineHeight: 1,
   flexShrink: 0,
 };
@@ -80,11 +74,10 @@ const itemBaseStyle: React.CSSProperties = {
 };
 
 const iconStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
   width: "1rem",
-  textAlign: "center",
   flexShrink: 0,
-  fontSize: "0.875rem",
-  lineHeight: 1,
 };
 
 interface MenuPosition {
@@ -201,7 +194,7 @@ export function RowActionsMenu({
             borderColor: open ? "var(--color-border-hover)" : "var(--color-border-strong)",
           }}
         >
-          ⋮
+          <Icon name="rowActions" size="lg" />
         </button>
       </Tooltip>
       {open &&
@@ -251,7 +244,11 @@ export function RowActionsMenu({
                     e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  {a.icon != null && <span style={iconStyle}>{a.icon}</span>}
+                  {a.icon != null && (
+                    <span style={iconStyle}>
+                      <Icon name={a.icon} size="sm" />
+                    </span>
+                  )}
                   <span style={{ flex: 1 }}>
                     {a.label}
                     {a.hint && (

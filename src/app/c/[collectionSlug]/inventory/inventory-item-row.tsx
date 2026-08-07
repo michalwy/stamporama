@@ -34,6 +34,7 @@ import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import { PhotoThumb } from "./photo-thumb";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -450,44 +451,44 @@ export function InventoryItemRow({
 
   const menuActions: RowAction[] = [
     ...(item.unknownVariant
-      ? [{ key: "identify", label: "Identify variant", icon: "◈", onSelect: () => onIdentify?.(item) }]
+      ? [{ key: "identify", label: "Identify variant", icon: "variant", onSelect: () => onIdentify?.(item) } as RowAction]
       : []),
     ...(item.hasHistory
-      ? [{ key: "history", label: "View history", icon: "↻", onSelect: () => onViewHistory?.(item) }]
+      ? [{ key: "history", label: "View history", icon: "refresh", onSelect: () => onViewHistory?.(item) } as RowAction]
       : []),
     ...(onViewOffers
       // Same "▤" as the stamp/issue lists' read-only "View copies" popup — one icon for
       // "open a read-only list of related records".
-      ? [{ key: "offers", label: "View offers", icon: "▤", onSelect: () => onViewOffers(item) }]
+      ? [{ key: "offers", label: "View offers", icon: "list", onSelect: () => onViewOffers(item) } as RowAction]
       : []),
     ...(onViewPurchase && item.purchase
       ? [{
           key: "purchase",
           label: "Go to purchase",
-          icon: "🧾",
+          icon: "receipt",
           hint: item.purchase.label,
           onSelect: () => onViewPurchase(item),
-        }]
+        } as RowAction]
       : []),
     ...(onAddToOffer && item.forSale
       ? [{
           key: "add-to-offer",
           label: "Add to offer",
-          icon: "🏷",
+          icon: "addToOffer",
           disabled: !listable,
           hint: offerHint,
           onSelect: () => onAddToOffer(item),
-        }]
+        } as RowAction]
       : []),
     ...(onAddToNewOffer && item.forSale
       ? [{
           key: "add-to-new-offer",
           label: "Add to new offer",
-          icon: "🆕",
+          icon: "newOffer",
           disabled: !listable,
           hint: offerHint,
           onSelect: () => onAddToNewOffer(item),
-        }]
+        } as RowAction]
       : []),
     // Disposal (#394/#395). Exactly one of the two shows, because a copy is either held or not.
     // A copy that has not arrived keeps the entry **visible but disabled** with the reason, the
@@ -497,7 +498,7 @@ export function InventoryItemRow({
       ? [{
           key: "dispose",
           label: "No longer held",
-          icon: "⊘",
+          icon: "disposed",
           disabled: !delivered,
           hint: delivered
             ? undefined
@@ -505,15 +506,15 @@ export function InventoryItemRow({
                 item.deliveryState
               ).toLowerCase()}.`,
           onSelect: () => onDispose(item),
-        }]
+        } as RowAction]
       : []),
     ...(onRestore && disposed
       ? [{
           key: "restore",
           label: "Mark as held again",
-          icon: "↺",
+          icon: "restore",
           onSelect: () => onRestore(item),
-        }]
+        } as RowAction]
       : []),
     // Kept off a platform for good (#506) — the one-click answer to the worklist's own question,
     // so it is only offered while a platform is in scope, and it toggles: the row is either set
@@ -524,22 +525,22 @@ export function InventoryItemRow({
           label: excludedHere
             ? `List on ${exclusionPlatform.name} again`
             : `Never list on ${exclusionPlatform.name}`,
-          icon: excludedHere ? "✓" : "⊗",
+          icon: excludedHere ? "check" : "excluded",
           hint: excludedHere
             ? `This copy is set aside from ${exclusionPlatform.name}; bring it back into that worklist.`
             : `Keep this copy out of the "not offered on ${exclusionPlatform.name}" worklist for good.`,
           onSelect: () =>
             onSetPlatformExclusion(item, exclusionPlatform.id, !excludedHere),
-        }]
+        } as RowAction]
       : []),
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit?.(item) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit?.(item) },
     ...(onEditStamp
-      ? [{ key: "edit-stamp", label: "Edit stamp", icon: "◆", onSelect: () => onEditStamp(item) }]
+      ? [{ key: "edit-stamp", label: "Edit stamp", icon: "stamp", onSelect: () => onEditStamp(item) } as RowAction]
       : []),
     {
       key: "delete",
       label: "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       separatorBefore: true,
       onSelect: () => onDelete?.(item),
@@ -712,7 +713,7 @@ export function InventoryItemRow({
                 onClick={onSetLocation}
                 style={{ ...LOCATION_CHIP, cursor: "pointer" }}
               >
-                📍{" "}
+                <Icon name="location" size="sm" />{" "}
                 {locationPath ? (
                   <>
                     {locationPath}
@@ -729,7 +730,7 @@ export function InventoryItemRow({
                 content={`Stored in ${locationPath}${item.locationRef ? ` · ${item.locationRef}` : ""}`}
               >
                 <span style={LOCATION_CHIP}>
-                  📍 {locationPath}
+                  <Icon name="location" size="sm" /> {locationPath}
                   {item.locationRef ? ` · ${item.locationRef}` : ""}
                 </span>
               </Tooltip>
@@ -757,7 +758,7 @@ export function InventoryItemRow({
               it changes how every other chip on the row should be read. */}
           {item.sold && (
             <Tooltip content="This copy has been sold and left the collection. It is only listed here because sold copies are being shown.">
-              <span style={soldChipStyle()}>💰 Sold</span>
+              <span style={soldChipStyle()}><Icon name="sell" size="sm" /> Sold</span>
             </Tooltip>
           )}
           {/* Disposal (#394/#395). Chipped whenever it applies — unlike delivery, where the
@@ -766,7 +767,7 @@ export function InventoryItemRow({
           {disposed && (
             <Tooltip content={describeDisposal(item) ?? ""}>
               <span style={disposalChipStyle(item.disposalReason)}>
-                ⊘ {item.disposalReason ? disposalReasonLabel(item.disposalReason) : "No longer held"}
+                <Icon name="disposed" size="sm" /> {item.disposalReason ? disposalReasonLabel(item.disposalReason) : "No longer held"}
               </span>
             </Tooltip>
           )}
@@ -782,7 +783,7 @@ export function InventoryItemRow({
               }.`}
             >
               <span style={{ ...CHIP, color: "var(--color-text-muted)", fontStyle: "italic" }}>
-                ⊗ not on {excludedNames.join(", ")}
+                <Icon name="excluded" size="sm" /> not on {excludedNames.join(", ")}
               </span>
             </Tooltip>
           )}
@@ -795,7 +796,7 @@ export function InventoryItemRow({
           {showCostBasis && <CostBasisChip item={item} baseCurrency={baseCurrency} />}
           {item.notes && (
             <Tooltip content={item.notes}>
-              <span style={META}>📝 notes</span>
+              <span style={META}><Icon name="notes" size="sm" /> notes</span>
             </Tooltip>
           )}
           {trailingChips}

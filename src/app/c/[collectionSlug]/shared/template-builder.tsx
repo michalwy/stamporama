@@ -15,6 +15,7 @@ import { RenderedDescription } from "./rendered-description";
 import { Tooltip } from "./tooltip";
 import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
+import { Icon } from "@/app/icons";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
 // real inventory — a random copy by default, shuffled, or searched out. Extracted from the old
@@ -182,7 +183,9 @@ export function TemplateSamplePicker({ samples }: { samples: TemplateSamples }) 
         </span>
         <Tooltip content="Preview on other random copies">
           <button type="button" onClick={samples.shuffle} disabled={samples.loading} style={SMALL_BTN}>
-            🎲 Random
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+              <Icon name="random" size="sm" /> Random
+            </span>
           </button>
         </Tooltip>
         <Tooltip content="Preview on a specific copy">
@@ -390,7 +393,7 @@ export function TemplateBuilder({
         }}
       >
         <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", width: "0.75rem" }}>
-          {open ? "▾" : "▸"}
+          <Icon name={open ? "collapse" : "expand"} size="sm" />
         </span>
         <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           {label}

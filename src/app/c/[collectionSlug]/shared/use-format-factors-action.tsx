@@ -68,7 +68,7 @@ export function useFormatFactorsAction({
   const action: RowAction = {
     key: "format-multipliers",
     label: "Format multipliers…",
-    icon: "×",
+    icon: "factors",
     onSelect: () => setOpen(true),
   };
 
@@ -232,13 +232,13 @@ export function FormatFactorsDialog({
                       {
                         key: "edit",
                         label: "Edit",
-                        icon: "✎",
+                        icon: "edit",
                         onSelect: () => setEditing({ kind: "edit", factor }),
                       },
                       {
                         key: "delete",
                         label: "Delete",
-                        icon: "✕",
+                        icon: "delete",
                         danger: true,
                         separatorBefore: true,
                         onSelect: () => setDeleting(factor),

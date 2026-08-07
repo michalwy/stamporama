@@ -5,6 +5,7 @@ import type { AreaCatalogEntry } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import { IssueTitle, IssueCatalogChips, StampCountBadge } from "./issue-view";
 import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -81,7 +82,7 @@ export function LotIssueGroupHeader({
             lineHeight: 1,
           }}
         >
-          {collapsed ? "▶" : "▼"}
+          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
         </button>
 
         {areaName && (
@@ -130,7 +131,7 @@ export function LotIssueGroupHeader({
               aria-label="Move this issue's copies to a location"
               style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
             >
-              📍
+              <Icon name="location" size="sm" />
             </button>
           </Tooltip>
         )}
@@ -145,7 +146,7 @@ export function LotIssueGroupHeader({
               aria-label="Mark this issue's copies sorted"
               style={{ ...CHIP, flexShrink: 0, cursor: "pointer" }}
             >
-              ✓
+              <Icon name="check" size="sm" />
             </button>
           </Tooltip>
         )}

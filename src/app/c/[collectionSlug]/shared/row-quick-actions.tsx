@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { Icon } from "@/app/icons";
 import { Tooltip } from "./tooltip";
 import type { RowAction } from "./row-actions-menu";
 
@@ -33,7 +34,6 @@ const buttonStyle: CSSProperties = {
   background: "transparent",
   color: "var(--color-text-secondary)",
   cursor: "pointer",
-  fontSize: "0.9375rem",
   lineHeight: 1,
   flexShrink: 0,
 };
@@ -96,7 +96,7 @@ export function RowQuickActions({
               cursor: a.disabled ? "not-allowed" : "pointer",
             }}
           >
-            {a.icon}
+            {a.icon != null && <Icon name={a.icon} />}
           </button>
         </Tooltip>
       ))}

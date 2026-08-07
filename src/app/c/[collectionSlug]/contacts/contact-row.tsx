@@ -38,11 +38,11 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
   const inUse = c.referenceCount > 0;
 
   const menuActions: RowAction[] = [
-    { key: "edit", label: "Edit", icon: "✎", onSelect: () => onEdit(c) },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(c) },
     {
       key: "delete",
       label: inUse ? `In use by ${c.referenceCount} purchase${c.referenceCount === 1 ? "" : "s"}` : "Delete",
-      icon: "✕",
+      icon: "delete",
       danger: true,
       disabled: inUse,
       separatorBefore: true,
