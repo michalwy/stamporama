@@ -120,7 +120,7 @@ model Collection {
 
 **Dialog primitive:** All modal dialogs use the shared shell at `src/app/dialog-shell.tsx`. It provides: backdrop, header with close button, scrollable body, optional fixed footer.
 
-**Icons** (#459; [ADR-0029](../decisions/0029-one-icon-vocabulary.md)): `src/app/icons.tsx` is the app's only icon module and the only file importing `lucide-react`. Icons are named for **meaning** (`<Icon name="edit" />`), `IconName` is a closed union so an unknown name fails typecheck, and size (five steps, `md` default), stroke (`1.75`), inherited colour and text alignment are all decided there rather than per call site. `RowAction.icon` and `CountFilterChip`'s `icon` take a name and are sized by the component drawing them. Typographic characters (`…`, `×` between dimensions, the `›` path separator, prose arrows) stay text; `extension/` is out of scope, having no React.
+**Icons** (#459; [ADR-0030](../decisions/0030-one-icon-vocabulary.md)): `src/app/icons.tsx` is the app's only icon module and the only file importing `lucide-react`. Icons are named for **meaning** (`<Icon name="edit" />`), `IconName` is a closed union so an unknown name fails typecheck, and size (five steps, `md` default), stroke (`1.75`), inherited colour and text alignment are all decided there rather than per call site. `RowAction.icon` and `CountFilterChip`'s `icon` take a name and are sized by the component drawing them. Typographic characters (`…`, `×` between dimensions, the `›` path separator, prose arrows) stay text; `extension/` is out of scope, having no React.
 
 ### Catalog prefixes (`CollectionAreaVendor` / `IssueCatalogPrefix`, #66/#377)
 

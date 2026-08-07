@@ -1,5 +1,5 @@
 /**
- * The app's **one** icon vocabulary (#459; ADR-0029).
+ * The app's **one** icon vocabulary (#459; ADR-0030).
  *
  * Every icon on screen comes from here, named for **what it means** rather than for the picture it
  * happens to be — `"edit"`, not `"pencil"`. That is what makes a change of picture a one-line edit
