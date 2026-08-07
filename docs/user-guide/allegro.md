@@ -285,9 +285,13 @@ photos and the sets. It holds the three things a listing needs that are not alre
   the way back after a correction, or after the offer has changed enough that the first match no
   longer describes it. It never re-matches on its own — a category you corrected stays corrected.
 - **Parameters.** What that category asks for, with the answers you gave last time already filled in.
-  Required ones with no answer are marked. Some are marked *product*: those describe the stamp rather
-  than the offer, Allegro takes them on its own sale form rather than through the API, and they are
-  kept here for listing by hand.
+  Required ones with no answer are marked. **Click an answer to change it** — the field you get is
+  the one Allegro asks for, a list of its options, a from/to pair or a box to type in; **Save**, or
+  Enter, records it, and Escape leaves it alone. Emptying a field puts the parameter back to
+  unanswered. Only that one answer changes: the category stays as it is, along with the line saying
+  where it came from. Some are marked *product*: those describe the stamp rather than the offer,
+  Allegro takes them on its own sale form rather than through the API, and they are kept here for
+  listing by hand.
 - **Listing profile.** Which delivery, returns and sending address this listing goes out with —
   the platform's default unless you pick another for this one offer.
 

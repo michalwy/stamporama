@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import type { AllegroCategory, AllegroCategoryParameter } from "@/lib/allegro-api";
-import type { AllegroParameterValue } from "@/lib/allegro-category-rules";
+import {
+  parameterDraft,
+  parameterValueFromDraft,
+  type AllegroParameterDraft,
+  type AllegroParameterValue,
+} from "@/lib/allegro-category-rules";
 import type { AllegroCategoryParameterPrefill } from "@/lib/allegro-category";
 import {
   browseAllegroCategoriesAction,
@@ -61,9 +66,9 @@ export interface AllegroCategoryChoice {
 
 type Crumb = { id: string | null; name: string };
 
-/** One parameter's answer while the form is open. Kept as strings, which is what every input gives
- *  back and what Allegro takes for everything but a dictionary's ids. */
-type Draft = { valuesIds: string[]; values: string[]; from: string; to: string };
+/** One parameter's answer while the form is open — the shared shape, so the offer card's inline edit
+ *  (#494) opens a stored value exactly the way this form does. */
+type Draft = AllegroParameterDraft;
 
 /**
  * What a parameter's field opens with.
@@ -79,29 +84,12 @@ function draftFrom(
   prefill: AllegroCategoryParameterPrefill,
   answered?: AllegroParameterValue
 ): Draft {
-  const value = answered ?? prefill.recalled;
-  return {
-    valuesIds: value?.valuesIds ?? [],
-    values: value?.values ?? [],
-    from: value?.rangeValue?.from ?? "",
-    to: value?.rangeValue?.to ?? "",
-  };
+  return parameterDraft(answered ?? prefill.recalled);
 }
 
-/** A draft as Allegro takes it, or null where nothing was answered — a blank parameter is left out
- *  rather than sent empty, which is what a category's optional fields expect. */
+/** A draft as Allegro takes it, or null where nothing was answered. */
 function valueFrom(parameter: AllegroCategoryParameter, draft: Draft): AllegroParameterValue | null {
-  if (parameter.type === "dictionary") {
-    const ids = draft.valuesIds.filter((id) => id.trim());
-    return ids.length > 0 ? { valuesIds: ids } : null;
-  }
-  if (parameter.range) {
-    const from = draft.from.trim();
-    const to = draft.to.trim();
-    return from || to ? { rangeValue: { from: from || null, to: to || null } } : null;
-  }
-  const values = draft.values.filter((value) => value.trim());
-  return values.length > 0 ? { values } : null;
+  return parameterValueFromDraft(parameter, draft);
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   getAllegroOfferListingConfig,
   rematchAllegroOfferCategory,
   setAllegroOfferCategory,
+  setAllegroOfferParameter,
   setAllegroOfferProfile,
   type AllegroOfferListingConfig,
   type AllegroOfferParameterView,
@@ -78,6 +79,24 @@ export async function setAllegroOfferCategoryAction(
     return { status: "success", config };
   } catch (err) {
     return failed(err, "That category could not be saved.");
+  }
+}
+
+/** Answer one parameter of the category the offer already holds — the card's inline edit. Separate
+ *  from the category write because it is not a category change: everything else about the card,
+ *  including where the category came from, stays as it was. */
+export async function setAllegroOfferParameterAction(
+  collectionSlug: string,
+  offerId: string,
+  input: Parameters<typeof setAllegroOfferParameter>[2]
+): Promise<AllegroListingConfigState> {
+  const session = await getSession();
+  try {
+    const config = await setAllegroOfferParameter(session.user.id, offerId, input);
+    revalidatePath(`/c/${collectionSlug}/offers/${offerId}`);
+    return { status: "success", config };
+  } catch (err) {
+    return failed(err, "That answer could not be saved.");
   }
 }
 

@@ -360,3 +360,44 @@ export function readParameterValue(raw: unknown): AllegroParameterValue | null {
   if (Object.keys(value).length === 0) return null;
   return isBlankParameterValue(value) ? null : value;
 }
+
+/** One parameter's answer while a field is open. Kept as strings, which is what every input gives
+ *  back and what Allegro takes for everything but a dictionary's ids. */
+export interface AllegroParameterDraft {
+  valuesIds: string[];
+  values: string[];
+  from: string;
+  to: string;
+}
+
+/** A stored value as a field opens on it. Shared by the two surfaces that answer a parameter — the
+ *  category picker's form (#488) and the offer card's inline edit (#494) — so the same stored value
+ *  opens the same way in both. */
+export function parameterDraft(value: AllegroParameterValue | null | undefined): AllegroParameterDraft {
+  return {
+    valuesIds: value?.valuesIds ?? [],
+    values: value?.values ?? [],
+    from: value?.rangeValue?.from ?? "",
+    to: value?.rangeValue?.to ?? "",
+  };
+}
+
+/** A draft as Allegro takes it, or null where nothing was answered — a blank parameter is left out
+ *  rather than sent empty, which is what a category's optional fields expect. Which member applies is
+ *  the parameter's own business: a dictionary answers by option id, a range by a pair. */
+export function parameterValueFromDraft(
+  parameter: { type: string; range: boolean },
+  draft: AllegroParameterDraft
+): AllegroParameterValue | null {
+  if (parameter.type === "dictionary") {
+    const ids = draft.valuesIds.filter((id) => id.trim());
+    return ids.length > 0 ? { valuesIds: ids } : null;
+  }
+  if (parameter.range) {
+    const from = draft.from.trim();
+    const to = draft.to.trim();
+    return from || to ? { rangeValue: { from: from || null, to: to || null } } : null;
+  }
+  const values = draft.values.filter((value) => value.trim());
+  return values.length > 0 ? { values } : null;
+}

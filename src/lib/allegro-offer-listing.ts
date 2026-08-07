@@ -5,6 +5,7 @@ import {
   suggestAllegroCategoryForOffer,
   recordAllegroCategoryLesson,
 } from "./allegro-category";
+import type { AllegroCategoryParameter } from "./allegro-api";
 import {
   isBlankParameterValue,
   readParameterValue,
@@ -206,6 +207,62 @@ export async function setAllegroOfferCategory(
   return getAllegroOfferListingConfig(ownerId, offerId);
 }
 
+/**
+ * Answer **one** parameter of the category the offer already holds (#494).
+ *
+ * The counterpart of {@link setAllegroOfferCategory} for the case that is not a category change at
+ * all: the category is right and one answer is wrong. Sending the whole set back would make every
+ * correction a re-pick of the category — which is what the card's inline edit exists to stop — so
+ * this merges by `parameterId` and leaves the rest of the answers, the category, its provenance and
+ * `matchedOn` exactly as they stood. Correcting an answer says nothing about where the category came
+ * from, and a card that started reading *chosen by you* because a dictionary value was fixed would
+ * be claiming something nobody did.
+ *
+ * A blank value **removes** the answer rather than storing an empty one, which is the same rule
+ * `sendableParameters` applies: an unanswered parameter is not an answer, and an optional field sent
+ * empty is a refusal.
+ */
+export async function setAllegroOfferParameter(
+  ownerId: string,
+  offerId: string,
+  input: {
+    parameterId: string;
+    parameterName: string | null;
+    describesProduct: boolean;
+    value: AllegroParameterValue | null;
+  }
+): Promise<AllegroOfferListingConfig | null> {
+  const offer = await allegroOfferRef(offerId);
+  if (!offer) return null;
+
+  const stored = readOfferParameters(offer.allegroCategoryParameters);
+  const answer =
+    input.value && !isBlankParameterValue(input.value)
+      ? {
+          parameterId: input.parameterId,
+          parameterName: input.parameterName,
+          describesProduct: input.describesProduct,
+          value: input.value,
+        }
+      : null;
+  // Replaced where it is rather than dropped and appended: the stored order is what a listing path
+  // sends, and moving a corrected parameter to the end changes a request for no reason.
+  const held = stored.some((entry) => entry.parameterId === input.parameterId);
+  const next = held
+    ? stored.flatMap((entry) =>
+        entry.parameterId === input.parameterId ? (answer ? [answer] : []) : [entry]
+      )
+    : answer
+      ? [...stored, answer]
+      : stored;
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { allegroCategoryParameters: sendableParameters(next) },
+  });
+  return getAllegroOfferListingConfig(ownerId, offerId);
+}
+
 /** Which profile this offer publishes with. `null` hands it back to the platform's default, which is
  *  a state rather than a gap — and is what almost every listing wants. */
 export async function setAllegroOfferProfile(
@@ -344,6 +401,14 @@ export interface AllegroOfferParameterView {
   /** Allegro's own wording for the answer, where it has one — a dictionary option's label rather
    *  than its opaque id, which is what the collector recognises. */
   answer: string | null;
+  /** What Allegro asks, in full — the type, the dictionary's options and the bounds — so the card
+   *  can put the *right field* under the collector's click rather than a text box for everything.
+   *  The three fields above are the row's own reading of it and stay where they are: the display is
+   *  what the card renders, this is what its editor is built from. */
+  field: AllegroCategoryParameter;
+  /** The answer as it is stored and as it will be sent, which is what an inline edit opens on — the
+   *  displayed `answer` is words, and a dictionary's words cannot be turned back into option ids. */
+  value: AllegroParameterValue | null;
 }
 
 /** The stored category's parameters as the card shows them, read live from Allegro (the questions
@@ -379,6 +444,8 @@ export async function describeAllegroOfferParameters(
         required: prefill.parameter.required,
         describesProduct: prefill.parameter.describesProduct,
         answer: describeAnswer(prefill.parameter.dictionary, answers.get(prefill.parameter.id)),
+        field: prefill.parameter,
+        value: answers.get(prefill.parameter.id) ?? null,
       })),
     };
   } catch (err) {

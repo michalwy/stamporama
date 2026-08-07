@@ -5,12 +5,20 @@ import {
   AllegroCategoryPicker,
   type AllegroCategoryChoice,
 } from "@/app/c/[collectionSlug]/shared/allegro-category-picker";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   getAllegroOfferParametersAction,
   rematchAllegroOfferCategoryAction,
   setAllegroOfferCategoryAction,
+  setAllegroOfferParameterAction,
   setAllegroOfferProfileAction,
 } from "@/app/actions/allegro-offer-listing";
+import {
+  parameterDraft,
+  parameterValueFromDraft,
+  type AllegroParameterDraft,
+  type AllegroParameterValue,
+} from "@/lib/allegro-category-rules";
 import type {
   AllegroOfferListingConfig,
   AllegroOfferParameterView,
@@ -62,6 +70,20 @@ const SELECT: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   maxWidth: "22rem",
+};
+
+/** A parameter's field while it is being answered. Sized to the row it replaces rather than to a
+ *  dialog's form: the list is read down its values, and a full-width box per row would make the card
+ *  a form the moment one answer is corrected. */
+const PARAM_INPUT: React.CSSProperties = {
+  padding: "0.125rem 0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  boxSizing: "border-box",
+  maxWidth: "18rem",
 };
 
 /** Where a value came from, in one word. Shown rather than explained at length: the sentence beside
@@ -186,6 +208,22 @@ export function OfferAllegroCard({
     [apply, collectionSlug, offerId]
   );
 
+  /** One answer, corrected in place. Not a category write: the category, its provenance and every
+   *  other answer stay as they were — see `setAllegroOfferParameter`. */
+  const saveParameter = useCallback(
+    (parameter: AllegroOfferParameterView, value: AllegroParameterValue | null) => {
+      apply(() =>
+        setAllegroOfferParameterAction(collectionSlug, offerId, {
+          parameterId: parameter.parameterId,
+          parameterName: parameter.field.name,
+          describesProduct: parameter.field.describesProduct,
+          value,
+        })
+      );
+    },
+    [apply, collectionSlug, offerId]
+  );
+
   // Only the offer-section ones: a required *product* parameter cannot be sent through the API at
   // all, so warning that Allegro will refuse the listing over it would be untrue. It still shows as
   // unanswered in the list above, which is what the Assistant path needs.
@@ -263,9 +301,22 @@ export function OfferAllegroCard({
           ) : parameters.length === 0 ? (
             <p style={{ ...helpText, margin: 0 }}>This category asks for nothing.</p>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", fontSize: "0.8125rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
+                gap: "0.375rem 1rem",
+                alignItems: "baseline",
+                fontSize: "0.8125rem",
+              }}
+            >
               {parameters.map((parameter) => (
-                <Parameter key={parameter.parameterId} parameter={parameter} />
+                <Parameter
+                  key={parameter.parameterId}
+                  parameter={parameter}
+                  isPending={isPending}
+                  onSave={(value) => saveParameter(parameter, value)}
+                />
               ))}
             </div>
           )}
@@ -368,22 +419,221 @@ function CategoryPath({ path, name }: { path: string | null; name: string }) {
   );
 }
 
-/** One parameter row. A required one with no answer is stated as missing rather than left blank —
- *  a gap that looks like an empty field is a gap nobody fixes. */
-function Parameter({ parameter }: { parameter: AllegroOfferParameterView }) {
+/**
+ * One parameter row, answered in place.
+ *
+ * Inline rather than through the picker, because correcting *one* answer and re-picking the category
+ * are different acts and only one of them was reachable: **Change category or answers** opens
+ * Allegro's tree, reads the whole form again and confirms the category along with the fix. A single
+ * wrong dictionary value — which is what a recalled answer gets wrong — should cost a click and a
+ * select, and nothing else about the card should move.
+ *
+ * The field is built from what Allegro says the parameter *is* (`parameter.field`), the same spec the
+ * picker's form is built from, so a dictionary opens as its options and a range as its pair rather
+ * than everything as a text box. Committing is explicit — Save, Enter, or Escape to leave it — since
+ * a range and a multiple-choice list are several controls and a blur between them is not an answer.
+ *
+ * A required one with no answer is stated as missing rather than left blank — a gap that looks like
+ * an empty field is a gap nobody fixes.
+ */
+function Parameter({
+  parameter,
+  isPending,
+  onSave,
+}: {
+  parameter: AllegroOfferParameterView;
+  isPending: boolean;
+  /** Null clears the answer: emptying the field is how a parameter goes back to unanswered. */
+  onSave: (value: AllegroParameterValue | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<AllegroParameterDraft>(() => parameterDraft(parameter.value));
+  const field = parameter.field;
   const missing = parameter.required && !parameter.answer;
+
+  function startEditing() {
+    setDraft(parameterDraft(parameter.value));
+    setEditing(true);
+  }
+
+  function commit() {
+    setEditing(false);
+    const next = parameterValueFromDraft(field, draft);
+    // A field opened and closed unchanged is not a write — and a write here re-reads the category's
+    // parameters from Allegro, which is not worth spending on a look.
+    if (JSON.stringify(next) === JSON.stringify(parameter.value)) return;
+    onSave(next);
+  }
+
   return (
     <>
       <span style={{ color: "var(--color-text-muted)" }}>
         {parameter.name}
         {parameter.required && <span aria-hidden> *</span>}
+        {field.unit && <span style={{ opacity: 0.8 }}> ({field.unit})</span>}
         {parameter.describesProduct && (
           <span style={{ fontStyle: "italic", opacity: 0.8 }}> · product</span>
         )}
       </span>
-      <span style={{ color: missing ? "var(--color-error)" : "var(--color-text-primary)" }}>
-        {parameter.answer ?? (missing ? "not answered" : "—")}
-      </span>
+      {editing ? (
+        <span
+          style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "0.375rem" }}
+          // Enter saves and Escape leaves it, from any of the controls — handled on the container
+          // because a parameter is one of four shapes and a key handler repeated per shape is the one
+          // missing from the fifth. A checkbox keeps its own Space, and a button its own Enter.
+          onKeyDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setEditing(false);
+              return;
+            }
+            if (event.key !== "Enter" || event.shiftKey || target.tagName === "BUTTON") return;
+            event.preventDefault();
+            commit();
+          }}
+        >
+          <ParameterInput field={field} draft={draft} disabled={isPending} onChange={setDraft} />
+          <button type="button" style={LINK_BTN} disabled={isPending} onClick={commit}>
+            Save
+          </button>
+          <button
+            type="button"
+            style={{ ...LINK_BTN, color: "var(--color-text-muted)" }}
+            disabled={isPending}
+            onClick={() => setEditing(false)}
+          >
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <Tooltip content="Click to edit">
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={startEditing}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") startEditing();
+            }}
+            style={{
+              cursor: "text",
+              color: missing ? "var(--color-error)" : "var(--color-text-primary)",
+            }}
+          >
+            {parameter.answer ?? (missing ? "not answered" : "—")}
+          </span>
+        </Tooltip>
+      )}
     </>
+  );
+}
+
+/** The control one parameter is answered with, by its type — the compact counterpart of the picker's
+ *  `ParameterField`, without the label and the recalled note the card states elsewhere. A type this
+ *  app does not know is a text box rather than nothing, for the same reason it is there: Allegro
+ *  adding a type should cost a typed value, not a parameter that cannot be answered at all. */
+function ParameterInput({
+  field,
+  draft,
+  disabled,
+  onChange,
+}: {
+  field: AllegroOfferParameterView["field"];
+  draft: AllegroParameterDraft;
+  disabled: boolean;
+  onChange: (draft: AllegroParameterDraft) => void;
+}) {
+  if (field.type === "dictionary" && field.multipleChoices) {
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          flexDirection: "column",
+          gap: "0.125rem",
+          maxHeight: "10rem",
+          overflowY: "auto",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: "0.375rem",
+          padding: "0.375rem 0.5rem",
+        }}
+      >
+        {field.dictionary.map((option) => (
+          <label key={option.id} style={{ display: "flex", gap: "0.375rem" }}>
+            <input
+              type="checkbox"
+              checked={draft.valuesIds.includes(option.id)}
+              disabled={disabled}
+              onChange={(e) =>
+                onChange({
+                  ...draft,
+                  valuesIds: e.target.checked
+                    ? [...draft.valuesIds, option.id]
+                    : draft.valuesIds.filter((id) => id !== option.id),
+                })
+              }
+            />
+            {option.value}
+          </label>
+        ))}
+      </span>
+    );
+  }
+
+  if (field.type === "dictionary") {
+    return (
+      <select
+        autoFocus
+        value={draft.valuesIds[0] ?? ""}
+        disabled={disabled}
+        style={PARAM_INPUT}
+        onChange={(e) => onChange({ ...draft, valuesIds: e.target.value ? [e.target.value] : [] })}
+      >
+        <option value="">—</option>
+        {field.dictionary.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.value}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field.range) {
+    return (
+      <>
+        <input
+          autoFocus
+          type="text"
+          value={draft.from}
+          placeholder="From"
+          disabled={disabled}
+          style={{ ...PARAM_INPUT, width: "6rem" }}
+          onChange={(e) => onChange({ ...draft, from: e.target.value })}
+        />
+        <input
+          type="text"
+          value={draft.to}
+          placeholder="To"
+          disabled={disabled}
+          style={{ ...PARAM_INPUT, width: "6rem" }}
+          onChange={(e) => onChange({ ...draft, to: e.target.value })}
+        />
+      </>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type={field.type === "integer" || field.type === "float" ? "number" : "text"}
+      value={draft.values[0] ?? ""}
+      disabled={disabled}
+      min={field.min ?? undefined}
+      max={field.max ?? undefined}
+      maxLength={field.maxLength ?? undefined}
+      step={field.type === "float" ? "any" : undefined}
+      style={{ ...PARAM_INPUT, width: "14rem" }}
+      onChange={(e) => onChange({ ...draft, values: e.target.value ? [e.target.value] : [] })}
+    />
   );
 }
