@@ -83,6 +83,8 @@ interface SettingsTabsProps {
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
+  /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
+  appReleaseDate: string | null;
 }
 
 const TABS = [
@@ -138,6 +140,7 @@ export function SettingsTabs({
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
+  appReleaseDate,
 }: SettingsTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -215,6 +218,7 @@ export function SettingsTabs({
           itemNoPad={itemNoPad}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
+          appReleaseDate={appReleaseDate}
         />
       )}
       {activeTab === "catalogs" && (

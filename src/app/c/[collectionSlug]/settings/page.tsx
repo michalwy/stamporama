@@ -25,7 +25,7 @@ import { getCarriers } from "@/lib/carriers";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
-import { getAppVersionLabel } from "@/lib/version";
+import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { SettingsTabs } from "./settings-tabs";
 
 export const metadata = { title: "Settings" };
@@ -122,6 +122,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
           appVersion={getAppVersionLabel()}
+          appReleaseDate={getAppReleaseDate()}
         />
       </Suspense>
     </div>

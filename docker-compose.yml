@@ -23,6 +23,7 @@ services:
       target: runner
       args:
         STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
+        STAMPORAMA_BUILD_DATE: ${STAMPORAMA_BUILD_DATE:-}
     ports:
       - "3000:3000"
     environment:
@@ -53,6 +54,7 @@ services:
       # where it ships commented out.
       STAMPORAMA_ALLEGRO_DEBUG: ${STAMPORAMA_ALLEGRO_DEBUG:-1}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
+      STAMPORAMA_BUILD_DATE: ${STAMPORAMA_BUILD_DATE:-}
     command: sh -c "pnpm exec prisma migrate deploy && pnpm start"
     # Persist uploaded photo bytes (#112) written under STAMPORAMA_DATA_DIR (default /data)
     # so they survive container rebuilds, matching the production stack. The hot-reload dev

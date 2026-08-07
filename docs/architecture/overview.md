@@ -65,6 +65,8 @@ The runner stage ships the full `node_modules` (not Next.js standalone output), 
 
 The `STAMPORAMA_VERSION` build argument is baked into the image and exposed at runtime via `process.env.STAMPORAMA_VERSION`. The `getAppVersion()` function in `src/lib/version.ts` reads it.
 
+`STAMPORAMA_BUILD_DATE` (#507) is baked the same way and read by `getAppReleaseDate()`, which returns the instant as an ISO string or `null` — an unstamped build (every local `pnpm dev`) shows no date rather than an invented one. CI sets it from the image's own `org.opencontainers.image.created` label, so the date shown in the UI and the date on the image agree. The value crosses to the client as a string and is formatted there (`AppVersionLabel`): the inline day is the UTC calendar date sliced off the ISO string, so a server-rendered shell cannot disagree with the browser, while the full instant is localized inside a hover tooltip that never exists in the server's HTML.
+
 ## Prisma / Database
 
 Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` driver adapter. The adapter uses the `pg` npm package for PostgreSQL connections — no native query engine binary is required.
@@ -484,6 +486,7 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 | `POSTGRES_PASSWORD` | yes (db) | Password for the `stamporama` database user |
 | `TAG` | prod only | Image tag to pull (default: `latest`) |
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |
+| `STAMPORAMA_BUILD_DATE` | build-time | When the image was built, ISO-8601 UTC; baked in and shown beside the version (#507). Unset means no date is shown |
 | `STAMPORAMA_DATA_DIR` | no | Directory for uploaded photo bytes (default `/data` in prod, `./.data` in dev). Backed by the `stamporama-data` Docker volume (#112) |
 | `STAMPORAMA_PHOTO_UPLOAD_TTL_HOURS` | no | Hours a staged, unsaved photo upload survives before the orphan-GC sweep (default `3`) |
 | `STAMPORAMA_SECRET_KEY` | when connecting Allegro | Encrypts third-party credentials at rest — the Allegro client secret and OAuth tokens (#476; ADR-0023). Generate with `openssl rand -base64 32`. Changing it invalidates every stored connection |

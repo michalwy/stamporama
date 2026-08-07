@@ -27,7 +27,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - An **All collections** link in the footer, to return to the collection picker. There is no
   quick-switch dropdown: changing collection is a rare enough act that it does not need a permanent
   control in the sidebar's most prominent row
-- The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**)
+- The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**). Where the build was stamped with one, the **release date** follows it — `v0.68.0 · 2026-08-07` — and hovering the date gives the full time in your own time zone. A build made outside the release process (a local development run) shows the version alone
 
 ## Filtering the Issues, Stamps, and Copies lists
 

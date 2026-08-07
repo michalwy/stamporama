@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
-import { getAppVersionLabel } from "@/lib/version";
+import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
 
 interface CollectionLayoutProps {
@@ -66,6 +66,7 @@ export default async function CollectionLayout({
           collectionId={collection.id}
           collectionName={collection.name}
           appVersion={getAppVersionLabel()}
+          appReleaseDate={getAppReleaseDate()}
         />
         <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
       </div>

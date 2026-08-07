@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
 import { QuickJumpBox } from "./quick-jump-box";
 import { Icon } from "@/app/icons";
+import { AppVersionLabel } from "./shared/app-version-label";
 
 interface CollectionSidebarProps {
   collectionSlug: string;
@@ -15,6 +16,8 @@ interface CollectionSidebarProps {
   collectionId: string;
   collectionName: string;
   appVersion: string;
+  /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
+  appReleaseDate: string | null;
 }
 
 const sectionLabelStyle: React.CSSProperties = {
@@ -137,6 +140,7 @@ export function CollectionSidebar({
   collectionId,
   collectionName,
   appVersion,
+  appReleaseDate,
 }: CollectionSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -418,7 +422,7 @@ export function CollectionSidebar({
             color: "var(--color-text-muted)",
           }}
         >
-          {appVersion}
+          <AppVersionLabel version={appVersion} releaseDate={appReleaseDate} />
         </p>
       </div>
     </aside>

@@ -29,6 +29,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG STAMPORAMA_VERSION=dev
 ENV STAMPORAMA_VERSION=$STAMPORAMA_VERSION
+# When this image was built, ISO-8601 UTC (#507). Empty by default: an unstamped build says
+# nothing rather than claiming a date, exactly as an unset version reads as "dev".
+ARG STAMPORAMA_BUILD_DATE=
+ENV STAMPORAMA_BUILD_DATE=$STAMPORAMA_BUILD_DATE
 RUN BETTER_AUTH_URL=http://localhost:3000 \
     BETTER_AUTH_SECRET=stamporama-local-build-auth-secret \
     pnpm prisma:generate \
@@ -49,6 +53,10 @@ ENV HOSTNAME="0.0.0.0"
 ENV npm_config_verify_deps_before_run=false
 ARG STAMPORAMA_VERSION=dev
 ENV STAMPORAMA_VERSION=$STAMPORAMA_VERSION
+# When this image was built, ISO-8601 UTC (#507). Empty by default: an unstamped build says
+# nothing rather than claiming a date, exactly as an unset version reads as "dev".
+ARG STAMPORAMA_BUILD_DATE=
+ENV STAMPORAMA_BUILD_DATE=$STAMPORAMA_BUILD_DATE
 
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml

@@ -15,6 +15,7 @@ import {
   formatItemNo,
 } from "@/lib/item-number";
 import { formatBytes } from "@/lib/format-bytes";
+import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
 
 interface SettingsPanelProps {
   collectionId: string;
@@ -26,9 +27,11 @@ interface SettingsPanelProps {
   itemNoPad: number;
   photoStorageBytes: number;
   appVersion: string;
+  /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
+  appReleaseDate: string | null;
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, photoStorageBytes, appVersion }: SettingsPanelProps) {
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -327,7 +330,7 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
               color: "var(--color-text-primary)",
             }}
           >
-            {appVersion}
+            <AppVersionLabel version={appVersion} releaseDate={appReleaseDate} />
           </span>
         </div>
       </section>

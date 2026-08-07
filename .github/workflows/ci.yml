@@ -388,8 +388,11 @@ jobs:
           target: runner
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          # `created` is the instant this build started, ISO-8601 UTC — the same value the OCI
+          # label carries, so the date shown in the UI (#507) and the one on the image agree.
           build-args: |
             STAMPORAMA_VERSION=${{ steps.meta.outputs.version }}
+            STAMPORAMA_BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
