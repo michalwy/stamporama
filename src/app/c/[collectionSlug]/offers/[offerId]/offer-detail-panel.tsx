@@ -484,7 +484,7 @@ export function OfferDetailPanel({
                     aria-label={label}
                     style={{ ...QUICK_ADVANCE_BTN, ...(blocked ? { opacity: 0.55, cursor: "default" } : null) }}
                   >
-                    <span aria-hidden>{icon}</span>
+                    <Icon name={icon} size="sm" />
                     {label}
                   </button>
                 </Tooltip>

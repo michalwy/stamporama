@@ -239,7 +239,7 @@ export function OfferRow({
                   aria-label={label}
                   style={QUICK_ADVANCE_BTN}
                 >
-                  <span aria-hidden>{icon}</span>
+                  <Icon name={icon} size="sm" />
                   {label}
                 </button>
               </Tooltip>
