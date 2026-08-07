@@ -14,7 +14,11 @@ import { isOfferState, isTerminalState } from "./offer-rules";
 import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
-import { resolveCollageColumns } from "./collage-layout";
+import {
+  resolveCollageColumns,
+  trueScaledSizes,
+  type CollageTileTrueSize,
+} from "./collage-layout";
 import { normalizeCollageGridMode } from "./collage-template-rules";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
@@ -1398,6 +1402,25 @@ async function renderTiles(
   };
 }
 
+/**
+ * The stored sizes of a planned group's tiles, in plan order — what `auto` mode measures its grid
+ * against (#514). Read from the photo rows the plan was built from, so nothing has to be decoded to
+ * decide the shape. A tile whose row is missing its dimensions comes back `0 × 0`, which the
+ * resolver reads as "no usable sizes" and answers on the count alone, exactly as #413 did.
+ */
+function plannedTileSizes(image: PlannedCollage, inputs: GenerationInputs): CollageTileTrueSize[] {
+  return image.tiles.map((tile) => {
+    const source = inputs.sourceById.get(tile.photoId);
+    return {
+      stored: { width: source?.width ?? 0, height: source?.height ?? 0 },
+      original:
+        source?.originalWidth != null && source.originalHeight != null
+          ? { width: source.originalWidth, height: source.originalHeight }
+          : null,
+    };
+  });
+}
+
 /** A planned collage group: every tile is a copy's scan, annotated from that copy's own data. */
 async function renderPlannedCollage(
   image: PlannedCollage,
@@ -1410,10 +1433,11 @@ async function renderPlannedCollage(
   }
   return {
     // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`,
-    // in `auto` it is solved from the tiles this group actually holds.
+    // in `auto` it is solved from the tiles this group actually holds — from their sizes (#514),
+    // read off the photo rows, so the grid is chosen before any scan is decoded.
     ...(await renderTiles(
       sources,
-      resolveCollageColumns(sources.length, {
+      resolveCollageColumns(trueScaledSizes(plannedTileSizes(image, inputs)), {
         gridMode: inputs.collage!.collageGridMode,
         rows: inputs.collage!.collageRows,
         columns: inputs.collage!.collageColumns,

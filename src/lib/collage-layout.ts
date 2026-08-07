@@ -16,7 +16,8 @@
  * - Rows hold up to `columns` tiles. `rows × columns` from the collage template is **capacity, not
  *   a frame** (#307): the canvas shrinks to the actual contents, so four tiles under a 5×4 template
  *   give a one-row image — or, in the template's `auto` mode (#413), a 2 × 2 one, because there the
- *   two numbers are bounds and `resolveCollageColumns` picks the width from the tile count.
+ *   two numbers are bounds and `resolveCollageColumns` solves the width from the tiles themselves —
+ *   their sizes, not just how many there are (#514).
  * - Rows are **centred** horizontally against the widest row. Justified rows (the photo-gallery
  *   look, each row stretched to full width) are explicitly rejected — they scale each row by a
  *   different factor and would destroy the true proportions that are the point of the feature.
@@ -94,6 +95,21 @@ export function trueSizeScales(tiles: readonly CollageTileTrueSize[]): number[] 
   return shrink.map((r) => r / worst);
 }
 
+/**
+ * The sizes the tiles will actually composite at — `trueSizeScales` applied to the stored ones.
+ *
+ * The renderer arrives at the same numbers from the decoded pixels; this reaches them from the photo
+ * rows instead, which is what lets the grid be solved (#514) before a single scan is decoded. The
+ * two agree because stored dimensions are recorded EXIF-rotated, the same normalisation the decode
+ * applies. Sub-pixel and never rounded: nothing is drawn from these, only measured.
+ */
+export function trueScaledSizes(tiles: readonly CollageTileTrueSize[]): CollageTileSize[] {
+  return trueSizeScales(tiles).map((scale, index) => ({
+    width: tiles[index].stored.width * scale,
+    height: tiles[index].stored.height * scale,
+  }));
+}
+
 /** The capacity an offer carries, and how to read it (#413). */
 export interface CollageGrid {
   gridMode: CollageGridMode;
@@ -103,23 +119,79 @@ export interface CollageGrid {
   columns: number;
 }
 
+/** A tile to fall back to when a size is missing or degenerate: a unit square, so a collage with no
+ * usable dimensions is scored as the uniform grid #413 always assumed. */
+const UNIT_TILE: CollageTileSize = { width: 1, height: 1 };
+
 /**
- * How many tiles go on a row (#413).
+ * What a step away from a square canvas costs, in empty tiles. Set so the two terms of the auto-grid
+ * cost trade at the parity #413 chose: `3 × |ln(3/2)| ≈ 1.2`, so moving one step off square costs
+ * about one tile-sized hole. Raising it prefers squarer canvases at the price of ragged rows.
+ */
+const SHAPE_WEIGHT = 3;
+
+/** Costs are floats now, so an exact tie needs a tolerance to still read as one. */
+const COST_EPSILON = 1e-9;
+
+/**
+ * What a candidate row width would cost, measured on the canvas it actually produces (#514).
+ *
+ * The geometry is `layOutCollage`'s, minus the gap and the label strips: rows of `columns` tiles, a
+ * row as tall as its tallest tile, the canvas as wide as its widest row. Both omissions are
+ * deliberate — the strip is a share of the finished image's longest edge and so depends on the very
+ * shape being chosen, and the gap is a share of the median tile height, which shifts every candidate
+ * by nearly the same amount. Neither changes which width wins often enough to be worth the
+ * circularity.
+ *
+ * Two terms, exactly the two #413 balanced, but read off pixels rather than off cell counts:
+ *
+ *     cost = empty area (in tile-sized holes) + SHAPE_WEIGHT × |ln(width / height)|
+ *
+ * - **Holes** — the canvas area the stamps do not cover, over the mean tile area. This is the term
+ *   that grew: it counts the ragged cell at the end of the last row *and* the space a small
+ *   definitive leaves beside a souvenir sheet in the same row, which is the imbalance #514 is about.
+ * - **Shape** — the log of the canvas's real aspect ratio, so a page of wide detail crops is judged
+ *   on the wide canvas it makes rather than on how many cells across it is. Portrait stamps, which
+ *   are most of them, keep answering what they answered before.
+ *
+ * For tiles of one size the two reduce exactly to `empty cells + |columns − rows|`, so every shape
+ * #413 documented is still the shape a uniform collage gets.
+ */
+function autoGridCost(sizes: readonly CollageTileSize[], columns: number): number {
+  let canvasWidth = 0;
+  let canvasHeight = 0;
+  let tileArea = 0;
+  for (let i = 0; i < sizes.length; i += columns) {
+    let rowWidth = 0;
+    let rowHeight = 0;
+    for (const size of sizes.slice(i, i + columns)) {
+      rowWidth += size.width;
+      rowHeight = Math.max(rowHeight, size.height);
+      tileArea += size.width * size.height;
+    }
+    canvasWidth = Math.max(canvasWidth, rowWidth);
+    canvasHeight += rowHeight;
+  }
+  if (tileArea <= 0 || canvasWidth <= 0 || canvasHeight <= 0) return 0;
+
+  const meanTileArea = tileArea / sizes.length;
+  const holes = (canvasWidth * canvasHeight - tileArea) / meanTileArea;
+  return holes + SHAPE_WEIGHT * Math.abs(Math.log(canvasWidth / canvasHeight));
+}
+
+/**
+ * How many tiles go on a row (#413, refined by #514).
  *
  * In `fixed` mode this is the template's `columns`, unchanged — the row is filled to that width and
  * the last one comes up short, which is what a collector who typed an exact grid asked for.
  *
- * In `auto` mode the two numbers are bounds and the grid is chosen from the count actually on the
- * image. Every width from the narrowest that fits inside the row ceiling up to `columns` is scored,
- * and the cheapest wins:
+ * In `auto` mode the two numbers are bounds and the grid is solved from the tiles actually on the
+ * image — their **sizes**, not merely how many there are, which is what a mixed page of definitives
+ * and souvenir sheets needs. Every width from the narrowest that fits inside the row ceiling up to
+ * `columns` is scored by `autoGridCost` and the cheapest wins.
  *
- *     cost = empty cells + |columns − rows|
- *
- * Two terms, because either one alone picks something absurd. Empty cells alone always answers "one
- * column": a single column of five stamps wastes no cell and is a strip nobody can read. Squareness
- * alone puts a set of ten into 3 + 3 + 3 + 1 rather than 4 + 4 + 2. Summed, they trade one against
- * the other at parity — a ragged cell costs about as much as a step away from square — which lands
- * on 2 × 2 for four, 3 + 2 for five and 3 × 2 for six.
+ * A row wider than the tile count is never a candidate: the canvas shrinks to its contents (#307),
+ * so those columns cost nothing and would win every tie by being wider.
  *
  * Ties go to the **wider** grid (a 2-wide and a 2-tall arrangement of the same six): text sits beside
  * the image on a marketplace page, so height costs more than width.
@@ -127,26 +199,39 @@ export interface CollageGrid {
  * `rows` is a hard ceiling: with more tiles than `rows × columns` — which the plan's grouping never
  * produces, since it chunks by that very product — the widest allowed row wins, because dropping
  * tiles is not something a layout may decide.
+ *
+ * Total: no tiles, or tiles with no usable dimensions, are scored as unit squares rather than
+ * refused, so a width is always named.
  */
-export function resolveCollageColumns(tileCount: number, grid: CollageGrid): number {
-  const maxColumns = Math.max(1, Math.round(grid.columns));
-  if (grid.gridMode !== "auto") return maxColumns;
+export function resolveCollageColumns(
+  sizes: readonly CollageTileSize[],
+  grid: CollageGrid
+): number {
+  if (grid.gridMode !== "auto") return Math.max(1, Math.round(grid.columns));
+
+  // One degenerate tile poisons the areas it is measured with, so the fallback is all-or-nothing.
+  const usable =
+    sizes.length > 0 && sizes.every((s) => s.width > 0 && s.height > 0)
+      ? sizes
+      : sizes.map(() => UNIT_TILE);
+  const tiles = usable.length > 0 ? usable : [UNIT_TILE];
 
   const maxRows = Math.max(1, Math.round(grid.rows));
-  const count = Math.max(1, Math.round(tileCount));
+  // Capped at the tile count, per the doc above; the template's own ceiling still binds.
+  const maxColumns = Math.min(tiles.length, Math.max(1, Math.round(grid.columns)));
   // The narrowest row that still fits inside the row ceiling. Past capacity it would exceed
   // `maxColumns`, and the clamp leaves the loop with the widest row allowed as its only candidate.
-  const minColumns = Math.min(maxColumns, Math.max(1, Math.ceil(count / maxRows)));
+  const minColumns = Math.min(maxColumns, Math.max(1, Math.ceil(tiles.length / maxRows)));
 
   let best = minColumns;
   let bestCost = Infinity;
   for (let columns = minColumns; columns <= maxColumns; columns += 1) {
-    const rows = Math.ceil(count / columns);
-    const cost = columns * rows - count + Math.abs(columns - rows);
-    // `<=` is what makes a tie go to the wider grid: the loop climbs, so the last equal cost wins.
-    if (cost <= bestCost) {
+    const cost = autoGridCost(tiles, columns);
+    // The tolerance is what makes a tie go to the wider grid: the loop climbs, so the last equal
+    // cost wins. `bestCost` keeps the true minimum, so a run of near-ties cannot drift upwards.
+    if (cost <= bestCost + COST_EPSILON) {
       best = columns;
-      bestCost = cost;
+      bestCost = Math.min(cost, bestCost);
     }
   }
   return best;

@@ -426,7 +426,9 @@ listing:
   **Background**. **Grid** says how the two numbers are read: a **fixed grid** fills every row to the
   column count, while **automatic** treats them as **Max rows** / **Max columns** and arranges each
   image from the stamps it actually holds — four stamps 2 × 2, five as 3 + 2 — so one setting suits a
-  listing of any size. Both
+  listing of any size. It reads their **sizes**, not just how many there are: a souvenir sheet among
+  small definitives, or a page of wide detail crops, gets the arrangement that leaves the least space
+  empty rather than the one a stamp-counting rule would pick. Both
   percentages are shares rather than pixels, so one setting reads the same whatever resolution you
   scan at: the gap is a share of the stamp's height, the label strip a share of the finished image
   (in tenths of a percent — 1–2% is the usual range),
