@@ -18,7 +18,11 @@ import {
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { InventoryCopyList, type CopySelection } from "./inventory-copy-list";
+import {
+  InventoryCopyList,
+  type CopyRowActions,
+  type CopySelection,
+} from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import { CopyValue } from "./inventory-item-row";
 import type { InventoryItemFilters } from "./use-inventory-query";
@@ -103,6 +107,7 @@ export function DuplicateGroupRow({
   vendorMap,
   isLast,
   selection,
+  rowActions,
 }: {
   collectionId: string;
   group: CopyGroupRow;
@@ -120,6 +125,9 @@ export function DuplicateGroupRow({
    * same checkboxes, and the group row's quick select-all feeds this state rather than a flow of its
    * own (#398). */
   selection: CopySelection;
+  /** The member rows' own `⋮` menu (#125/#516) — the very actions the ungrouped list offers.
+   * Grouping is a way of *reading* the stock, not a mode with fewer things one may do to a copy. */
+  rowActions?: CopyRowActions;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -340,7 +348,7 @@ export function DuplicateGroupRow({
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
           onLoadMore={fetchNextPage}
-          readOnly
+          {...rowActions}
           selection={selection}
           differingIds={outliers}
         />

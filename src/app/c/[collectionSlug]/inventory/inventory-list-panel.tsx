@@ -44,7 +44,7 @@ import {
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
-import { InventoryCopyList } from "./inventory-copy-list";
+import { InventoryCopyList, type CopyRowActions } from "./inventory-copy-list";
 import { DuplicateGroupList } from "./duplicate-group-list";
 import { LocationGroupList } from "./location-group-list";
 import { IssueGroupList } from "./issue-group-list";
@@ -627,6 +627,33 @@ export function InventoryListPanel({
         item.forSale && isDelivered(item.deliveryState) && item.disposedAt == null,
     }),
     [selectedIds, toggleSelected, setManySelected]
+  );
+
+  // The row `⋮` menu (#125), built once and given to **every** branch below — the flat list and all
+  // three groupings alike (#516). A grouping decides what a copy is listed under; it has never been
+  // a reason for the copy to offer fewer actions, and the grouped branches passing `readOnly` is
+  // exactly how the menu went missing the moment one was switched on.
+  const rowActions: CopyRowActions = useMemo(
+    () => ({
+      onEdit: (it) => setDialog({ kind: "edit", item: it }),
+      onEditStamp: (it) => setDialog({ kind: "editStamp", item: it }),
+      onIdentify: (it) => setDialog({ kind: "identify", item: it }),
+      onViewHistory: (it) => setDialog({ kind: "history", item: it }),
+      onDelete: (it) => setDialog({ kind: "delete", item: it }),
+      onAddToOffer: (it) => setDialog({ kind: "addToOffer", items: [it] }),
+      onAddToNewOffer: (it) => setDialog({ kind: "addToNewOffer", items: [it] }),
+      onViewOffers: (it) => setDialog({ kind: "viewOffers", item: it }),
+      onViewPurchase: (it) =>
+        it.purchase &&
+        router.push(`/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}`),
+      onDispose: (it) => setDialog({ kind: "dispose", item: it }),
+      onRestore: (it) => setDialog({ kind: "restore", item: it }),
+      exclusionPlatform: scopedPlatform,
+      onSetPlatformExclusion: (it, platformId, excluded) =>
+        applyPlatformExclusion([it], platformId, excluded, false),
+      onSetCatalogPrice: (it) => setDialog({ kind: "quickPrice", item: it }),
+    }),
+    [router, collectionSlug, scopedPlatform, applyPlatformExclusion]
   );
 
   const hasActiveFilters =
@@ -1344,6 +1371,7 @@ export function InventoryListPanel({
                 isFetchingNextPage={groupsQuery.isFetchingNextPage}
                 onLoadMore={groupsQuery.fetchNextPage}
                 selection={copySelection}
+                rowActions={rowActions}
               />
             </div>
           )}
@@ -1362,6 +1390,7 @@ export function InventoryListPanel({
                 isFetchingNextPage={locationGroupsQuery.isFetchingNextPage}
                 onLoadMore={locationGroupsQuery.fetchNextPage}
                 selection={copySelection}
+                rowActions={rowActions}
               />
             </div>
           )}
@@ -1379,6 +1408,7 @@ export function InventoryListPanel({
                 isFetchingNextPage={issueGroupsQuery.isFetchingNextPage}
                 onLoadMore={issueGroupsQuery.fetchNextPage}
                 selection={copySelection}
+                rowActions={rowActions}
               />
             </div>
           )}
@@ -1395,27 +1425,7 @@ export function InventoryListPanel({
                 isFetchingNextPage={isFetchingNextPage}
                 onLoadMore={fetchNextPage}
                 selection={copySelection}
-                onEdit={(it) => setDialog({ kind: "edit", item: it })}
-                onEditStamp={(it) => setDialog({ kind: "editStamp", item: it })}
-                onIdentify={(it) => setDialog({ kind: "identify", item: it })}
-                onViewHistory={(it) => setDialog({ kind: "history", item: it })}
-                onDelete={(it) => setDialog({ kind: "delete", item: it })}
-                onAddToOffer={(it) => setDialog({ kind: "addToOffer", items: [it] })}
-                onAddToNewOffer={(it) => setDialog({ kind: "addToNewOffer", items: [it] })}
-                onViewOffers={(it) => setDialog({ kind: "viewOffers", item: it })}
-                onViewPurchase={(it) =>
-                  it.purchase &&
-                  router.push(
-                    `/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}`
-                  )
-                }
-                onDispose={(it) => setDialog({ kind: "dispose", item: it })}
-                onRestore={(it) => setDialog({ kind: "restore", item: it })}
-                exclusionPlatform={scopedPlatform}
-                onSetPlatformExclusion={(it, platformId, excluded) =>
-                  applyPlatformExclusion([it], platformId, excluded, false)
-                }
-                onSetCatalogPrice={(it) => setDialog({ kind: "quickPrice", item: it })}
+                {...rowActions}
               />
             </div>
           )}

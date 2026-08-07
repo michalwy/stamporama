@@ -5,7 +5,7 @@ import type { LocationData } from "@/lib/locations";
 import type { IssueGroupRow as IssueGroupRowData } from "@/lib/items";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { IssueGroupRow } from "./issue-group-row";
-import type { CopySelection } from "./inventory-copy-list";
+import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
 /**
@@ -24,6 +24,7 @@ export function IssueGroupList({
   isFetchingNextPage,
   onLoadMore,
   selection,
+  rowActions,
 }: {
   collectionId: string;
   groups: IssueGroupRowData[];
@@ -35,6 +36,9 @@ export function IssueGroupList({
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
   selection: CopySelection;
+  /** The member rows' own `⋮` menu (#125/#516), threaded down to every group's copies: a
+   * grouping decides what a row is listed *under*, never what may be done to it. */
+  rowActions?: CopyRowActions;
 }) {
   return (
     <>
@@ -49,6 +53,7 @@ export function IssueGroupList({
           baseCurrency={baseCurrency}
           isLast={idx === groups.length - 1 && !hasNextPage}
           selection={selection}
+          rowActions={rowActions}
         />
       ))}
       <InfiniteScrollSentinel

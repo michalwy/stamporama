@@ -717,6 +717,10 @@ Only one can be in effect, and the choice is remembered per collection. Every gr
 same way: the count leads it, the **caret** expands it into the copies underneath, and the **checkbox** in
 front of it ticks all of them at once.
 
+The copies inside an expanded group are **ordinary copy rows**, and they carry the ordinary **⋮**
+menu — Edit, Add to offer, No longer held and the rest, exactly as they do with no grouping on. A
+grouping decides what a copy is listed *under*; it never changes what you can do to it.
+
 ## Grouping duplicates
 
 When you hold several identical copies, the interesting row is not the copy — it is the **stack**.

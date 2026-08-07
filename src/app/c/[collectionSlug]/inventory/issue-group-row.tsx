@@ -6,7 +6,11 @@ import type { LocationData } from "@/lib/locations";
 import type { IssueGroupRow as IssueGroupRowData } from "@/lib/items";
 import { NO_ISSUE } from "@/lib/issue-groups";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { InventoryCopyList, type CopySelection } from "./inventory-copy-list";
+import {
+  InventoryCopyList,
+  type CopyRowActions,
+  type CopySelection,
+} from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import type { InventoryItemFilters } from "./use-inventory-query";
 
@@ -47,6 +51,7 @@ export function IssueGroupRow({
   baseCurrency,
   isLast,
   selection,
+  rowActions,
 }: {
   collectionId: string;
   group: IssueGroupRowData;
@@ -58,6 +63,9 @@ export function IssueGroupRow({
   baseCurrency: string;
   isLast: boolean;
   selection: CopySelection;
+  /** The member rows' own `⋮` menu (#125/#516) — the very actions the ungrouped list offers.
+   * Grouping is a way of *reading* the stock, not a mode with fewer things one may do to a copy. */
+  rowActions?: CopyRowActions;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -133,7 +141,7 @@ export function IssueGroupRow({
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
           onLoadMore={fetchNextPage}
-          readOnly
+          {...rowActions}
           selection={selection}
         />
       )}

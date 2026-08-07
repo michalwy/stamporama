@@ -42,20 +42,17 @@ export const SELECT_STRIP: React.CSSProperties = {
   cursor: "pointer",
 };
 
-interface InventoryCopyListProps {
-  /** Owning collection, for building each row's collection-scoped photo URLs (#112). */
-  collectionId: string;
-  copies: ItemListItem[];
-  areas: CollectionAreaData[];
-  /** Storage locations, for resolving each copy's location path (#56). Defaults to
-   * empty (e.g. read-only popup contexts that don't load locations). */
-  locations?: LocationData[];
-  baseCurrency: string;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-  /** Read-only mode hides per-row actions (inventory popup, #110). */
-  readOnly?: boolean;
+/**
+ * Everything a copy row's `⋮` menu (#125) is made of, as **one** object.
+ *
+ * The flat list takes these thirteen one by one, which is fine where the panel renders the rows
+ * itself. A **grouped** list (#372/#421/#424) does not: two layers of group components sit between
+ * the panel and the member rows, and repeating thirteen props at each of them three times over is
+ * how #516 happened in the first place — the grouped branches simply passed `readOnly` instead and
+ * the menu disappeared the moment a grouping was switched on. One bundle threads through in one
+ * prop, so a new action reaches the grouped views without anyone remembering to plumb it.
+ */
+export interface CopyRowActions {
   onEdit?: (item: ItemListItem) => void;
   /** When provided, each row gains an "Edit stamp" action for its underlying stamp (#243). */
   onEditStamp?: (item: ItemListItem) => void;
@@ -85,6 +82,22 @@ interface InventoryCopyListProps {
    * "+ catalog value" link when unpriced, click-to-edit when priced — mirroring the purchase
    * intake view (#121). The dialog itself is owned by the caller. */
   onSetCatalogPrice?: (item: ItemListItem) => void;
+}
+
+interface InventoryCopyListProps extends CopyRowActions {
+  /** Owning collection, for building each row's collection-scoped photo URLs (#112). */
+  collectionId: string;
+  copies: ItemListItem[];
+  areas: CollectionAreaData[];
+  /** Storage locations, for resolving each copy's location path (#56). Defaults to
+   * empty (e.g. read-only popup contexts that don't load locations). */
+  locations?: LocationData[];
+  baseCurrency: string;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+  /** Read-only mode hides per-row actions (inventory popup, #110). */
+  readOnly?: boolean;
   /** When provided, each row gains a selection checkbox (#373). Only *eligible* copies get one —
    * a copy that is not for sale or not in hand cannot be listed, and the row already says so
    * through its disposition and delivery chips, so a permanently disabled checkbox would add a
