@@ -554,6 +554,10 @@ export function AddToOfferDialog({
         // value it pre-fills (#230), converted to the offer's currency and still fully editable;
         // otherwise the field starts blank for the collector to fill in.
         showPrice
+        // The price is the one thing this flow still asks for — the platform comes in pre-filled and
+        // the rest pre-fills from the last offer — so the cursor starts there, with any suggested
+        // figure selected so typing over it needs no clearing first.
+        autoFocusPrice
         priceValue={catalogBase ? suggestedPrice : undefined}
         onPriceValueChange={setSuggestedPrice}
         onCurrencyChange={handlePriceCurrencyChange}

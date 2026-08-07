@@ -94,6 +94,12 @@ export interface OfferFormDialogProps {
    * `onPriceValueChange` — lets the parent recompute it (e.g. converting on a currency change). */
   priceValue?: string;
   onPriceValueChange?: (value: string) => void;
+  /** Put the cursor straight in the money field on open, with its pre-filled figure selected so
+   * typing replaces it. For flows that arrive here with everything else already decided — the
+   * inventory "list these copies" path (#189/#277), where the platform is carried in and the price
+   * is the one thing left to state. Lands on the starting price when the listing is an auction,
+   * since that is where a suggested figure goes (#449). */
+  autoFocusPrice?: boolean;
   /** Seeds the currency picker's default on a non-edit form when the platform has no currency yet
    * (else `baseCurrency`). The duplicate flow carries the source offer's currency over. */
   initialCurrency?: string;
@@ -124,6 +130,7 @@ export function OfferFormDialog({
   showPrice = false,
   priceValue,
   onPriceValueChange,
+  autoFocusPrice = false,
   initialCurrency,
   onCurrencyChange,
   title: titleProp,
@@ -198,6 +205,20 @@ export function OfferFormDialog({
   useEffect(() => {
     onCurrencyChangeRef.current?.(effectiveCurrency);
   }, [effectiveCurrency]);
+
+  // Cursor straight in the money field on open (`autoFocusPrice`), on the one a suggestion fills:
+  // the asking price on a quick buy, the starting price on an auction. Selected rather than merely
+  // focused, so a pre-filled suggestion is overwritten by simply typing. Mount-only — once the
+  // collector is in the form, nothing here may pull the cursor out from under them.
+  const priceRef = useRef<HTMLInputElement>(null);
+  const startingPriceRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!autoFocusPrice || !showPriceField) return;
+    const el = isAuction ? startingPriceRef.current : priceRef.current;
+    el?.focus();
+    el?.select();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -325,6 +346,7 @@ export function OfferFormDialog({
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="offer-price">{priceLabel(listingType)}</LabelWithError>
                 <NumericInput
+                  ref={priceRef}
                   id="offer-price"
                   name="price"
                   placeholder="0.00"
@@ -347,6 +369,7 @@ export function OfferFormDialog({
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="offer-starting-price">Starting price</LabelWithError>
                   <NumericInput
+                    ref={startingPriceRef}
                     id="offer-starting-price"
                     name="startingPrice"
                     placeholder="0.00"
