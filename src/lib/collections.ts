@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
 import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
+import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { seedDemoData, wipeDemoData } from "./demo";
 import {
   recomputeIssueSortKeys,
@@ -171,6 +172,50 @@ export async function getCollectionItemNoPad(
   return col.itemNoPad;
 }
 
+/** The three percentages a bid recommendation is built from (#508). Every one optional, so the
+ * settings form can save the field that changed rather than rewriting all three. */
+export interface BidPercentPatch {
+  bidFloorPercent?: number;
+  bidCeilingPercent?: number;
+  bidFallbackPercent?: number;
+}
+
+/**
+ * Set a collection's bid-recommendation percentages (#508; ADR-0029 §3, §4).
+ *
+ * Each is validated on its own as a positive whole percentage. Floor ≤ 100 ≤ ceiling is
+ * deliberately **not** enforced: a collector may legitimately keep a band entirely below the fair
+ * figure, and a rule that refused it would be this app stating a market opinion.
+ */
+export async function setCollectionBidPercents(
+  ownerId: string,
+  collectionId: string,
+  patch: BidPercentPatch
+): Promise<void> {
+  const data: BidPercentPatch = {};
+  for (const key of ["bidFloorPercent", "bidCeilingPercent", "bidFallbackPercent"] as const) {
+    const raw = patch[key];
+    if (raw === undefined) continue;
+    const value = parseBidPercent(raw);
+    if (value === null) {
+      throw new Error(
+        `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`
+      );
+    }
+    data[key] = value;
+  }
+  if (Object.keys(data).length === 0) return;
+
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({ where: { id: collectionId }, data });
+}
+
 export async function getCollectionsByOwner(ownerId: string) {
   return prisma.collection.findMany({
     where: { ownerId },
@@ -190,6 +235,9 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       defaultLanguage: true,
       duplicateCatalogMode: true,
       itemNoPad: true,
+      bidFloorPercent: true,
+      bidCeilingPercent: true,
+      bidFallbackPercent: true,
     },
   });
 }

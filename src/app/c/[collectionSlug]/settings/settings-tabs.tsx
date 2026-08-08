@@ -80,6 +80,10 @@ interface SettingsTabsProps {
   initialAssistantTokens: AssistantTokenData[];
   /** Internal copy-number display width (#268), edited on the General tab. */
   itemNoPad: number;
+  /** The bid-recommendation percentages (#508), edited on the General tab. */
+  bidFloorPercent: number;
+  bidCeilingPercent: number;
+  bidFallbackPercent: number;
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   appVersion: string;
@@ -137,6 +141,9 @@ export function SettingsTabs({
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
+  bidFloorPercent,
+  bidCeilingPercent,
+  bidFallbackPercent,
   duplicateCatalogMode,
   photoStorageBytes,
   appVersion,
@@ -216,6 +223,9 @@ export function SettingsTabs({
           baseCurrency={baseCurrency}
           defaultLanguage={defaultLanguage}
           itemNoPad={itemNoPad}
+          bidFloorPercent={bidFloorPercent}
+          bidCeilingPercent={bidCeilingPercent}
+          bidFallbackPercent={bidFallbackPercent}
           photoStorageBytes={photoStorageBytes}
           appVersion={appVersion}
           appReleaseDate={appReleaseDate}

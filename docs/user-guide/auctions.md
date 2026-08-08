@@ -655,6 +655,48 @@ to the sale — and the bidding record is frozen: to change a settled lot's figu
 purchase. Deleting the purchase is how a settlement is undone; the sale, its lots and their results
 stay standing, only the link goes.
 
+## Bid recommendation settings
+
+What a lot is *worth bidding* is a different question from what its contents catalogue at, and the
+answer is not one number: it is three — a **floor**, below which the lot is a bargain, the **fair**
+figure itself, and a **walk-away**, past which it belongs to somebody else. A single figure would
+state a precision this evidence does not have; three state a decision.
+
+The percentages that band is built from live under **Settings → General → Bid recommendation**, per
+collection:
+
+| Setting | Default | What it means |
+|---|---|---|
+| **Bargain floor** | 75% | The share of the fair figure below which a lot is a bargain. |
+| **Walk-away ceiling** | 125% | The share past which you stop bidding. |
+| **Catalogue fallback** | 100% | What a catalogue value counts as while nothing has been learned yet. |
+
+Each is a whole percentage. The floor is **not** required to sit below 100 nor the ceiling above it:
+buying only well under what a lot is worth is a trading style, and the app has no business calling
+it a mistake.
+
+### Why "percent of catalogue" is not one of these
+
+The obvious fourth setting — *stamps in my areas fetch about 40% of Michel* — is deliberately absent.
+That figure is not a preference, it is a measurement, and it is not one number: it moves with the
+area, the period and the condition. A 1940s Polish issue and a modern Western European one realize
+nothing like the same share of their catalogue value, so a single percentage typed in once would be
+a market opinion that is wrong nearly everywhere.
+
+Instead it is **learned from the results you record**. Every closed lot whose contents you described
+is a hammer price beside a catalogue value, and their ratio is filed by area, condition and period.
+A recommendation uses the most specific group that holds at least three of them, and says which
+group it used and how many results are behind it — *"55% — Polska Ludowa, mint never hinged,
+1945–1949, from 6 results"* is something you can argue with; *"55%"* is not.
+
+The **catalogue fallback** above is what fills that gap until then, and 100% is chosen so it changes
+nothing: before anything has been learned, a catalogue-anchored recommendation is exactly the
+catalogue value the `CAT` quick fill already writes. It stops being consulted as soon as there is
+evidence.
+
+The settings are editable now; the recommendation that reads them is still being built, so nothing
+on the lots screen uses them yet.
+
 ## What is not here yet
 
 - Winning **part** of a lot, when a multi-stamp lot is split.

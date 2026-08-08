@@ -7,8 +7,10 @@ import {
   createCollection,
   getCollectionItemNoPad,
   resetCollectionToDemo,
+  setCollectionBidPercents,
   setCollectionDefaultLanguage,
   setCollectionItemNoPad,
+  type BidPercentPatch,
 } from "@/lib/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 
@@ -116,6 +118,29 @@ export async function updateCollectionItemNoPadAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to save the copy-number width.",
+    };
+  }
+}
+
+export type BidPercentsState =
+  | { status: "idle" }
+  | { status: "success" }
+  | { status: "error"; message: string };
+
+/** Save one of the bid-recommendation percentages (#508) from the Settings → General section. */
+export async function updateCollectionBidPercentsAction(
+  collectionId: string,
+  patch: BidPercentPatch
+): Promise<BidPercentsState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/sign-in");
+  try {
+    await setCollectionBidPercents(session.user.id, collectionId, patch);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the bid settings.",
     };
   }
 }

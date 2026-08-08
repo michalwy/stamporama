@@ -44,6 +44,21 @@ model Collection {
   // How many digits an internal copy number is padded to for display (#268). Purely a display
   // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
   itemNoPad    Int      @default(5)
+  // The band a bid recommendation is stated as, in percent of the lot's fair figure (#508;
+  // ADR-0029 §3, §4). Below the floor a lot is a bargain, past the ceiling it belongs to somebody
+  // else. A percentage of `fair` rather than the market's own spread: at the sample sizes this
+  // evidence has, a measured range would be one or two results wearing a statistic's name (§4).
+  // Floor ≤ 100 ≤ ceiling is deliberately not enforced — "I only buy at 40–60% of what it is
+  // worth" is a trading style, not a mistake.
+  bidFloorPercent   Int @default(75)
+  bidCeilingPercent Int @default(125)
+  // Catalogue → anchor while the collection has no ratio evidence at all (ADR-0029 §2, bucket 5).
+  // The realization ratio itself is *learned* from recorded results (#520) and is deliberately not
+  // a setting: a single configured percentage is a market opinion stated once and wrong nearly
+  // everywhere, which is what a base of recorded hammer prices exists to replace. 100 so that,
+  // until anything has been learned, a catalogue-anchored recommendation is exactly what the
+  // "ceiling ← catalogue value" quick fill (#370) already writes.
+  bidFallbackPercent Int @default(100)
   // The same allocation counter for `Offer.offerNo` (#416), bumped the same atomic way and for the
   // same reason: an offer number that has been published in a marketplace note must never be handed
   // to a different offer. Separate from `nextItemNo` because copies and listings are counted

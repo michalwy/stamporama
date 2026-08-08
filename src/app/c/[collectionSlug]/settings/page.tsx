@@ -98,6 +98,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           baseCurrency={collection.baseCurrency}
           defaultLanguage={collection.defaultLanguage}
           itemNoPad={collection.itemNoPad}
+          bidFloorPercent={collection.bidFloorPercent}
+          bidCeilingPercent={collection.bidCeilingPercent}
+          bidFallbackPercent={collection.bidFallbackPercent}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           catalogNames={catalogNames}

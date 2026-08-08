@@ -4,10 +4,13 @@ import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import {
   resetToDemoDataAction,
+  updateCollectionBidPercentsAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionItemNoPadAction,
   type ResetToDemoState,
 } from "@/app/actions/collections";
+import type { BidPercentPatch } from "@/lib/collections";
+import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "@/lib/bid-recommendation";
 import { COMMON_LANGUAGES } from "@/lib/languages";
 import {
   MAX_ITEM_NO_PAD,
@@ -25,13 +28,45 @@ interface SettingsPanelProps {
   defaultLanguage: string;
   /** How many digits an internal copy number is padded to for display (#268). */
   itemNoPad: number;
+  /** The band a bid recommendation is stated as, in percent of a lot's fair figure (#508). */
+  bidFloorPercent: number;
+  bidCeilingPercent: number;
+  /** What a catalogue value is anchored at until any realization ratio has been learned (#508). */
+  bidFallbackPercent: number;
   photoStorageBytes: number;
   appVersion: string;
   /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
   appReleaseDate: string | null;
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
+/** The three bid-recommendation percentages (#508), each said in the terms it is used in. Nothing
+ * reads them yet — the recommendation itself lands with #511. */
+const BID_PERCENT_FIELDS = [
+  {
+    key: "bidFloorPercent",
+    label: "Bargain floor",
+    description:
+      "Below this share of a lot's fair figure, it is a bargain. Default 75%.",
+  },
+  {
+    key: "bidCeilingPercent",
+    label: "Walk-away ceiling",
+    description:
+      "Past this share, the lot belongs to somebody else. It may sit below 100% — buying only under the fair figure is a style, not a mistake. Default 125%.",
+  },
+  {
+    key: "bidFallbackPercent",
+    label: "Catalogue fallback",
+    description:
+      "What a catalogue value counts as while nothing has been learned yet from your recorded results. It stops being used as soon as there is evidence. Default 100%.",
+  },
+] as const satisfies readonly {
+  key: "bidFloorPercent" | "bidCeilingPercent" | "bidFallbackPercent";
+  label: string;
+  description: string;
+}[];
+
+export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, photoStorageBytes, appVersion, appReleaseDate }: SettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -52,6 +87,51 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         setPad(previous);
         setPadError(result.message);
       }
+    });
+  }
+
+  // The three bid-recommendation percentages (#508). Held as text while typing — a number input
+  // that reparses every keystroke fights the collector halfway through "125".
+  const [bidPercents, setBidPercents] = useState({
+    bidFloorPercent: String(bidFloorPercent),
+    bidCeilingPercent: String(bidCeilingPercent),
+    bidFallbackPercent: String(bidFallbackPercent),
+  });
+  // What is actually stored, tracked here rather than read back off the props: the props come from
+  // a server render that does not re-run on a save, so a value edited twice would be compared
+  // against the figure the page was loaded with.
+  const [savedBidPercents, setSavedBidPercents] = useState({
+    bidFloorPercent,
+    bidCeilingPercent,
+    bidFallbackPercent,
+  });
+  const [bidError, setBidError] = useState<string | null>(null);
+
+  function commitBidPercent(key: keyof typeof bidPercents) {
+    const saved = savedBidPercents[key];
+    const value = parseBidPercent(bidPercents[key]);
+    if (value === null) {
+      // Put the stored figure back rather than leaving an unsaveable one on screen: this section
+      // saves on leaving a field, so a rejected value with nothing to press would just sit there.
+      setBidPercents((p) => ({ ...p, [key]: String(saved) }));
+      setBidError(
+        `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`
+      );
+      return;
+    }
+    setBidPercents((p) => ({ ...p, [key]: String(value) }));
+    setBidError(null);
+    if (value === saved) return;
+    startTransition(async () => {
+      const result = await updateCollectionBidPercentsAction(collectionId, {
+        [key]: value,
+      } as BidPercentPatch);
+      if (result.status === "error") {
+        setBidPercents((p) => ({ ...p, [key]: String(saved) }));
+        setBidError(result.message);
+        return;
+      }
+      setSavedBidPercents((p) => ({ ...p, [key]: value }));
     });
   }
 
@@ -284,6 +364,104 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
             ))}
           </select>
         </div>
+      </section>
+
+      {/* Bid recommendation (#508; ADR-0029 §3, §4). The percentages a recommended bid is stated
+          with — a trading style, unlike the realization ratio, which is learned from what the
+          collection has actually recorded (#520) and is deliberately not a setting. */}
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <p
+          style={{
+            margin: "0 0 0.25rem",
+            fontSize: "0.9375rem",
+            fontWeight: 500,
+            color: "var(--color-text-primary)",
+          }}
+        >
+          Bid recommendation
+        </p>
+        <p
+          style={{
+            margin: "0 0 1rem",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          What an auction lot is worth bidding is stated as three figures around what it is worth —
+          a floor, the fair figure itself, and a walk-away. These are the percentages that band is
+          built from. How much of catalogue a stamp actually fetches is not among them: that is
+          learned from the results you record, per area, condition and period, so it stays a
+          measurement rather than an opinion typed in once.
+        </p>
+
+        {BID_PERCENT_FIELDS.map((field) => (
+          <div
+            key={field.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "1rem",
+              paddingTop: "0.75rem",
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  margin: "0 0 0.125rem",
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                {field.label}
+              </p>
+              <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                {field.description}
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label={field.label}
+                min={MIN_BID_PERCENT}
+                max={MAX_BID_PERCENT}
+                step={1}
+                value={bidPercents[field.key]}
+                onChange={(e) =>
+                  setBidPercents((p) => ({ ...p, [field.key]: e.target.value }))
+                }
+                onBlur={() => commitBidPercent(field.key)}
+                disabled={isPending}
+                style={{
+                  width: "5rem",
+                  padding: "0.4rem 0.625rem",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-primary)",
+                  background: "var(--color-bg-elevated)",
+                }}
+              />
+              <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>%</span>
+            </div>
+          </div>
+        ))}
+
+        {bidError && (
+          <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+            {bidError}
+          </p>
+        )}
       </section>
 
       <section
