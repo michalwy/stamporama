@@ -822,6 +822,30 @@ export function ContactFormDialog({
                       </select>
                     </div>
                   </div>
+                  {/* Whether a new offer here photographs its single-stamp sets one per photo while
+                      the limit above has room, collaging only the tail (#521). Seeded like every
+                      other default in this block, and editable on the offer itself. */}
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4375rem",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      cursor: isPending ? "default" : "pointer",
+                      margin: "0.75rem 0 0",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      name="photoPreferSingles"
+                      value="true"
+                      defaultChecked={contact?.photoPreferSingles ?? true}
+                      disabled={isPending}
+                      style={{ cursor: isPending ? "default" : "pointer" }}
+                    />
+                    Single photos while the photo limit allows
+                  </label>
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                     Copied onto every new offer on this platform, along with the photo tile label from
                     the templates above. Changing them here leaves prepared offers untouched.

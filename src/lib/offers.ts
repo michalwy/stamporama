@@ -247,6 +247,8 @@ interface PlatformDescriptionFormat {
  * accepts and are read live at render time (#310). */
 interface PlatformPhotoDefaults {
   photoSides: string;
+  /** #521: photograph single-copy sets on their own while this platform's photo limit has room. */
+  photoPreferSingles: boolean;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -272,6 +274,7 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
     : null;
   return {
     photoSides: normalizePhotoSides(platform.photoSides),
+    photoPreferSingles: platform.photoPreferSingles,
     photoLabelLeftTemplate: platform.tileLabelLeftTemplate?.trim() || null,
     photoLabelRightTemplate: platform.tileLabelRightTemplate?.trim() || null,
     collageGridMode: template ? normalizeCollageGridMode(template.gridMode) : null,
@@ -314,6 +317,7 @@ async function assertPlatform(
       descriptionFormat: true,
       titleLanguage: true,
       photoSides: true,
+      photoPreferSingles: true,
       tileLabelLeftTemplate: true,
       tileLabelRightTemplate: true,
       defaultCollageTemplateId: true,
@@ -332,6 +336,7 @@ async function assertPlatform(
     descriptionFormat: contact.descriptionFormat,
     titleLanguage: contact.titleLanguage,
     photoSides: contact.photoSides,
+    photoPreferSingles: contact.photoPreferSingles,
     tileLabelLeftTemplate: contact.tileLabelLeftTemplate,
     tileLabelRightTemplate: contact.tileLabelRightTemplate,
     defaultCollageTemplateId: contact.defaultCollageTemplateId,
@@ -3091,6 +3096,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       allegroOfferId: true,
       allegroPublishStatus: true,
       photoSides: true,
+      photoPreferSingles: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
       collageGridMode: true,
@@ -3374,6 +3380,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     listingDate: offer.listingDate,
     photoConfig: {
       photoSides: normalizePhotoSides(offer.photoSides),
+      preferSingles: offer.photoPreferSingles,
       photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
       photoLabelRightTemplate: offer.photoLabelRightTemplate,
       // The collage numbers are written as a group, so one non-null column means the whole set is
@@ -4216,6 +4223,7 @@ export async function updateOfferPhotoConfig(
     where: { id: offerId },
     data: {
       photoSides: config.photoSides,
+      photoPreferSingles: config.preferSingles,
       photoLabelLeftTemplate: config.photoLabelLeftTemplate,
       photoLabelRightTemplate: config.photoLabelRightTemplate,
       collageGridMode: config.collage?.collageGridMode ?? null,

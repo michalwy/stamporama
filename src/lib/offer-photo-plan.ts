@@ -21,6 +21,35 @@
 //   in order, a run of single-copy sets accumulates, and a multi-copy set flushes whatever has
 //   accumulated before emitting its own group. Plan order therefore always follows set order.
 //
+// Single photos first (#521)
+// --------------------------
+// With `preferSingles`, the single-copy pool is grouped against the platform's **photo limit**
+// instead of against the collage's capacity alone. A collage is a compromise — the way to fit more
+// stamps than the listing has slots — so where there are slots to spare, a stamp is better shown on
+// its own: three one-stamp sets on a platform taking five photos are three photos, not one collage
+// of three.
+//
+// - The budget is the **whole plan**: `maxPhotos` less the images the multi-copy sets and the manual
+//   attachments already spend, counted as they actually fall (a group whose back scans are
+//   incomplete costs one image, not two) and ignoring anything marked do-not-publish, which spends
+//   nothing.
+// - Of N singles at capacity C with R slots left, the largest k whose plan fits is taken: k copies
+//   photographed alone, the remaining N−k chunked into collages of C. The tail therefore eats single
+//   slots one at a time — R=5, N=10, C≥6 is 4 singles and a collage; the same at C=4 is 3 singles
+//   and two collages.
+// - k is **never zero** while the pool has a copy in it: the plan's first image is what a
+//   marketplace shows as the listing's thumbnail, and one stamp says more there than a grid of six.
+//   The slot is spent even when the budget cannot afford it, `overLimit` reporting what falls off.
+// - No `maxPhotos` is no limit, so every single-copy set gets its own image. An offer the budget
+//   cannot fit at all falls back to one single and the rest chunked, `overLimit` reporting the tail:
+//   the limit decides the *composition* only while the composition can do something about it.
+// - Multi-copy sets are untouched: a set is one collage because it is one thing being sold.
+// - Placement follows the sets. Singles are emitted where their sets fall, and the tail collages sit
+//   at the end of the **last** run of singles — the arithmetic is over the whole pool, so a run
+//   split by a multi-copy set is still counted once.
+// - Off, grouping is exactly what it was before #521, which is what an offer prepared under the old
+//   rule keeps.
+//
 // Front / back
 // ------------
 // - Which sides are attempted comes from the offer's `photoSides` (#308).
@@ -116,8 +145,12 @@ export interface OfferPhotoPlanInput {
   photoSides: PhotoSides;
   /** The offer's collage numbers, or null while none have been copied in yet. */
   collage: PlanCollageCapacity | null;
-  /** The platform's `maxPhotos` limit (#308); null means no limit and so no truncation. */
+  /** The platform's `maxPhotos` limit (#308); null means no limit and so no truncation. With
+   * `preferSingles` it also decides the grouping of the single-copy pool (#521). */
   maxPhotos: number | null;
+  /** Photograph single-copy sets **on their own** while the limit has room, collaging only the tail
+   * (#521). Absent is off: the pool is chunked to the collage's capacity as it was before. */
+  preferSingles?: boolean;
   attachments?: readonly PlanAttachment[];
   /** A manual plan order (#313): the image tokens the collector dragged into place, in their order.
    * An override of the derived order — tokens no longer present are ignored, images not in the list
@@ -258,35 +291,166 @@ function chunk<T>(rows: readonly T[], size: number): T[][] {
   return out;
 }
 
-/** Walks the sets in explicit order and splits their copies into collage-sized groups. */
-function buildGroups(sets: readonly PlanSet[], capacity: number): CopyGroup[] {
-  const groups: CopyGroup[] = [];
-  /** The run of single-copy sets accumulated since the last multi-copy set. */
-  let singles: { setId: string; copy: PlanCopy }[] = [];
+/** One single-copy set, kept with its set id so a chunk can name every set it covers. */
+interface SingleEntry {
+  setId: string;
+  copy: PlanCopy;
+}
 
-  const flushSingles = () => {
-    for (const part of chunk(singles, capacity)) {
-      groups.push({
-        setIds: [...new Set(part.map((p) => p.setId))],
-        copies: part.map((p) => p.copy),
-      });
-    }
-    singles = [];
-  };
+/** The sets walked in explicit order, each contributing either its own collage-sized groups or a
+ * lone copy the two grouping rules treat differently. */
+type SetSlot = { kind: "multi"; group: CopyGroup } | { kind: "single"; entry: SingleEntry };
 
+function walkSets(sets: readonly PlanSet[], capacity: number): SetSlot[] {
+  const slots: SetSlot[] = [];
   for (const set of [...sets].sort(compareSets)) {
     const copies = sortSetItems(set.items);
     if (copies.length === 0) continue;
     if (copies.length === 1) {
-      singles.push({ setId: set.id, copy: copies[0] });
+      slots.push({ kind: "single", entry: { setId: set.id, copy: copies[0] } });
       continue;
     }
-    flushSingles();
     for (const part of chunk(copies, capacity)) {
-      groups.push({ setIds: [set.id], copies: part });
+      slots.push({ kind: "multi", group: { setIds: [set.id], copies: part } });
     }
   }
-  flushSingles();
+  return slots;
+}
+
+function groupOf(entries: readonly SingleEntry[]): CopyGroup {
+  return {
+    setIds: [...new Set(entries.map((e) => e.setId))],
+    copies: entries.map((e) => e.copy),
+  };
+}
+
+/**
+ * How many **upload slots** a group of copies costs (#521): one per side every copy in it has a scan
+ * for — a group whose backs are incomplete produces one image, not two — less any of those images
+ * the collector marked do-not-publish, which take no slot by definition.
+ */
+function groupSlotCost(
+  copies: readonly PlanCopy[],
+  sides: readonly PlanSide[],
+  unpublished: ReadonlySet<string>
+): number {
+  let cost = 0;
+  for (const side of sides) {
+    if (!copies.every((copy) => photoFor(copy, side))) continue;
+    if (unpublished.has(collageToken(side, copies.map((c) => c.itemId)))) continue;
+    cost += 1;
+  }
+  return cost;
+}
+
+/** What the single-copy pool costs when its first `k` copies stand alone and the rest are chunked. */
+function poolSlotCost(
+  singles: readonly SingleEntry[],
+  k: number,
+  capacity: number,
+  sides: readonly PlanSide[],
+  unpublished: ReadonlySet<string>
+): number {
+  let cost = 0;
+  for (let i = 0; i < k; i += 1) cost += groupSlotCost([singles[i].copy], sides, unpublished);
+  for (const part of chunk(singles.slice(k), capacity)) {
+    cost += groupSlotCost(part.map((e) => e.copy), sides, unpublished);
+  }
+  return cost;
+}
+
+/**
+ * How many of the single-copy pool's copies are photographed alone (#521): the largest `k` whose
+ * plan still fits the slots the rest of the plan leaves. Scanned downwards from "all of them"
+ * because the cost is not strictly monotonic in `k` — dropping one copy out of the tail can remove a
+ * whole chunk — and what is wanted is the most singles that fit, not the first fit found.
+ */
+function singlesThatFit(
+  singles: readonly SingleEntry[],
+  budget: number,
+  capacity: number,
+  sides: readonly PlanSide[],
+  unpublished: ReadonlySet<string>
+): number {
+  for (let k = singles.length; k > 0; k -= 1) {
+    if (poolSlotCost(singles, k, capacity, sides, unpublished) <= budget) return k;
+  }
+  return 0;
+}
+
+interface GroupingOptions {
+  capacity: number;
+  sides: readonly PlanSide[];
+  unpublished: ReadonlySet<string>;
+  /** #521's rule; off is the grouping as it stood before it. */
+  preferSingles: boolean;
+  /** The platform's photo limit, or null for none. Only read by #521's rule. */
+  maxPhotos: number | null;
+  /** Slots the manual attachments spend — one each, bar the ones marked do-not-publish. */
+  attachmentCost: number;
+}
+
+/** Walks the sets in explicit order and splits their copies into collage-sized groups. */
+function buildGroups(sets: readonly PlanSet[], options: GroupingOptions): CopyGroup[] {
+  const { capacity, preferSingles, maxPhotos, sides, unpublished, attachmentCost } = options;
+  const slots = walkSets(sets, capacity);
+  const singles = slots.flatMap((slot) => (slot.kind === "single" ? [slot.entry] : []));
+
+  // How many of the pool's copies stand alone. Without #521's rule none of them do, which is the
+  // original behaviour: every run of singles is chunked to the collage's capacity.
+  let alone = 0;
+  if (preferSingles) {
+    if (maxPhotos == null) {
+      alone = singles.length;
+    } else {
+      const fixed =
+        attachmentCost +
+        slots.reduce(
+          (sum, slot) =>
+            slot.kind === "multi" ? sum + groupSlotCost(slot.group.copies, sides, unpublished) : sum,
+          0
+        );
+      // At least one, always (#521): the first image is what a marketplace shows as the listing's
+      // thumbnail, and a thumbnail of a collage says far less about what is for sale than one stamp
+      // does. A pool with no room for even that spends the slot anyway and lets the truncation
+      // report whatever now falls off the end — the collector's order can still overrule it.
+      alone = Math.max(1, singlesThatFit(singles, maxPhotos - fixed, capacity, sides, unpublished));
+    }
+  }
+
+  const groups: CopyGroup[] = [];
+  const tail: SingleEntry[] = [];
+  /** Where the tail's collages go: the end of the last run of singles. */
+  let tailAt = 0;
+  /** The run of single-copy sets accumulated since the last multi-copy set — the pre-#521 path. */
+  let run: SingleEntry[] = [];
+  let seen = 0;
+
+  const flushRun = () => {
+    for (const part of chunk(run, capacity)) groups.push(groupOf(part));
+    run = [];
+  };
+
+  for (const slot of slots) {
+    if (slot.kind === "single") {
+      if (!preferSingles) {
+        run.push(slot.entry);
+        continue;
+      }
+      if (seen < alone) groups.push(groupOf([slot.entry]));
+      else tail.push(slot.entry);
+      seen += 1;
+      tailAt = groups.length;
+      continue;
+    }
+    flushRun();
+    groups.push(slot.group);
+  }
+  flushRun();
+
+  if (tail.length > 0) {
+    groups.splice(tailAt, 0, ...chunk(tail, capacity).map(groupOf));
+  }
 
   return groups;
 }
@@ -420,13 +584,21 @@ export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
     : 0;
 
   const sides = sidesFor(input.photoSides);
+  const unpublished = new Set(input.unpublished ?? []);
   const groups = configured
-    ? buildGroups(input.sets, capacity).map((group, index) =>
-        renderGroup(group, sides, `g${index}`)
-      )
+    ? buildGroups(input.sets, {
+        capacity,
+        sides,
+        unpublished,
+        preferSingles: input.preferSingles ?? false,
+        maxPhotos: input.maxPhotos,
+        // Every attachment is one image; a do-not-publish mark on one frees its slot exactly as it
+        // does for a collage, so the budget #521 hands the composition sees the same plan the
+        // truncation below does.
+        attachmentCost: attachments.filter((a) => !unpublished.has(attachmentToken(a.id))).length,
+      }).map((group, index) => renderGroup(group, sides, `g${index}`))
     : [];
 
-  const unpublished = new Set(input.unpublished ?? []);
   const ordered = applyManualOrder(
     placeAttachments(groups.flatMap((group) => group.images), attachments),
     input.order ?? []

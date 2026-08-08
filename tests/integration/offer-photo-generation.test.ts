@@ -161,6 +161,7 @@ describe("offer photo generation (#311)", () => {
     // Sides + collage numbers: without them there is nothing to lay out.
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "both",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -278,6 +279,7 @@ describe("offer photo generation (#311)", () => {
     // Editing the photo configuration is exactly the case #308 promised would mark the plan stale.
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -344,6 +346,7 @@ describe("offer photo generation (#311)", () => {
     // Configured, but its copy has no scans for the chosen side.
     await updateOfferPhotoConfig(userId, bare, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -426,6 +429,7 @@ describe("offer photo generation (#311)", () => {
     // The label template is part of the configuration, so setting it makes the stored images stale.
     await updateOfferPhotoConfig(userId, offerId, {
       ...frontOnly,
+      preferSingles: false,
       photoLabelLeftTemplate: "{ref}",
       photoLabelRightTemplate: "{name}",
     });
@@ -450,6 +454,7 @@ describe("offer photo generation (#311)", () => {
     });
     await updateOfferPhotoConfig(userId, offerId, {
       ...frontOnly,
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
     });
@@ -564,6 +569,7 @@ describe("offer photo generation (#311)", () => {
     });
     await updateOfferPhotoConfig(userId, secondId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -640,6 +646,7 @@ describe("offer photo generation (#311)", () => {
     await applyPhotoChangeSet(userId, back.itemId!, { add: [], update: [], remove: [back.id] });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "both",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -700,6 +707,7 @@ describe("offer photo generation (#311)", () => {
 
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {
@@ -898,6 +906,7 @@ describe("offer photo generation (#311)", () => {
     };
     const config = {
       photoSides: "front" as const,
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
     };

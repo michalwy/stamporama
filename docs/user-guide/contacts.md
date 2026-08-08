@@ -424,14 +424,20 @@ field blank when the platform states no limit for it. These are read **live** wh
 generated, so tightening a limit applies to every offer at once, including ones you prepared
 earlier.
 
-Below them sit the two defaults each **new** offer on this platform is seeded from:
+Below them sit the defaults each **new** offer on this platform is seeded from:
 
 - **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
 - **Collage template** — which of your [collage templates](collections.md#collage-templates)
   supplies the render numbers (rows, columns, gap, background, label strip). Leave it on *none* and
   new offers simply start without collage numbers until you pick a template on the offer itself.
+- **Single photos while the photo limit allows** — whether a new offer here photographs its
+  single-stamp sets one per image while *Max photos* above has room, collaging only what is left
+  over, or always collages them (see
+  [single photos and the limit](offers.md#single-photos-and-the-limit)). On unless you say
+  otherwise: the limit right above it is the very fact the rule reads, so a platform is where a
+  collector who always wants collages says so once.
 
-These two — plus the **photo tile labels** from the templates dialog — are **copied onto the offer**
+These — plus the **photo tile labels** from the templates dialog — are **copied onto the offer**
 when it is created, not looked up later. Changing them here therefore affects only offers you create
 from now on; offers already prepared or listed keep exactly the photos they were set up with. Adjust
 one of those on the offer itself, with the **⚙** button in its Photos card (see

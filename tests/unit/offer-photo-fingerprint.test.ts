@@ -300,3 +300,17 @@ describe("fingerprintOfferPhotoInputs rendered set (#313)", () => {
     assert.notEqual(fp(withAttachments), fp({ ...withAttachments, renderedTokens: ["a:m1"] }));
   });
 });
+
+describe("fingerprintOfferPhotoInputs single-first grouping (#521)", () => {
+  it("leaves an offer grouping the old way hashing exactly as before", () => {
+    // Off is what every offer did before the flag existed — and what the migration leaves on the
+    // ones whose images are already rendered, so the upgrade declares nothing stale on its own.
+    assert.equal(fp({ ...base, preferSingles: false }), fp(base));
+  });
+
+  it("changes when the offer photographs its single-copy sets alone", () => {
+    // It decides how many images there are and what each one shows, which is as much a change to
+    // the pixels as the collage numbers are.
+    assert.notEqual(fp({ ...base, preferSingles: true }), fp(base));
+  });
+});

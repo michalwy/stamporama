@@ -59,6 +59,13 @@ export const MAX_PHOTO_EDGE_LIMIT = 20000;
 /** Sanity ceiling in mebibytes — no platform accepts an image anywhere near this. */
 export const MAX_PHOTO_FILE_SIZE_MIB_LIMIT = 1024;
 
+/** Whether a checkbox came back ticked. Browsers post nothing at all for an unticked box, so the
+ * absence *is* the answer — the same reading every other checkbox in the app takes. */
+function isChecked(raw: string | undefined): boolean {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "on" || value === "true" || value === "1";
+}
+
 /** A platform's hard technical limits. Null means "no limit stated". */
 export interface PlatformPhotoLimits {
   maxPhotos: number | null;
@@ -132,6 +139,9 @@ export interface OfferCollageValues {
 /** An offer's own photo configuration. `collage` is null while no template has been copied in. */
 export interface OfferPhotoConfigInput {
   photoSides: PhotoSides;
+  /** Photograph single-copy sets on their own while the platform's photo limit has room (#521),
+   * collaging only the tail that does not fit. Off groups them as #309 always did. */
+  preferSingles: boolean;
   /** The two per-tile annotations (#312): left and right on one strip. Null means that side is not
    * drawn; both null leaves every tile unlabelled. */
   photoLabelLeftTemplate: string | null;
@@ -146,6 +156,8 @@ export interface OfferPhotoConfigInput {
  */
 export function parseOfferPhotoConfigInput(raw: {
   photoSides: string;
+  /** A checkbox, so absent is unticked — the form always posts the field it does have. */
+  preferSingles?: string;
   photoLabelLeftTemplate: string;
   photoLabelRightTemplate: string;
   collageGridMode?: string;
@@ -156,6 +168,7 @@ export function parseOfferPhotoConfigInput(raw: {
   collageLabelPercent: string;
 }): PhotoConfigParseResult<OfferPhotoConfigInput> {
   const photoSides = normalizePhotoSides(raw.photoSides);
+  const preferSingles = isChecked(raw.preferSingles);
   const photoLabelLeftTemplate = raw.photoLabelLeftTemplate.trim() || null;
   const photoLabelRightTemplate = raw.photoLabelRightTemplate.trim() || null;
 
@@ -172,7 +185,13 @@ export function parseOfferPhotoConfigInput(raw: {
   if (collageFields.every((f) => !f.trim())) {
     return {
       ok: true,
-      value: { photoSides, photoLabelLeftTemplate, photoLabelRightTemplate, collage: null },
+      value: {
+        photoSides,
+        preferSingles,
+        photoLabelLeftTemplate,
+        photoLabelRightTemplate,
+        collage: null,
+      },
     };
   }
 
@@ -220,6 +239,7 @@ export function parseOfferPhotoConfigInput(raw: {
     ok: true,
     value: {
       photoSides,
+      preferSingles,
       photoLabelLeftTemplate,
       photoLabelRightTemplate,
       collage: {

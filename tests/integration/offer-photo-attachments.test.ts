@@ -158,6 +158,7 @@ describe("offer photo attachments (#313)", () => {
     // `{ref}` resolves empty against no copy, and the engine tidies what it leaves behind.
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "both",
+      preferSingles: false,
       photoLabelLeftTemplate: "{ref}",
       photoLabelRightTemplate: "Lot 7",
       collage: {
@@ -676,6 +677,7 @@ describe("one photo per copy (#434)", () => {
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: "{ref}",
       photoLabelRightTemplate: "",
       collage: {

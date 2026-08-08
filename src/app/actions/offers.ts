@@ -391,6 +391,7 @@ export async function updateOfferPhotoConfigAction(
   const session = await getSession();
   const parsed = parseOfferPhotoConfigInput({
     photoSides: str(formData, "photoSides"),
+    preferSingles: str(formData, "preferSingles"),
     photoLabelLeftTemplate: str(formData, "photoLabelLeftTemplate"),
     photoLabelRightTemplate: str(formData, "photoLabelRightTemplate"),
     collageGridMode: str(formData, "collageGridMode"),

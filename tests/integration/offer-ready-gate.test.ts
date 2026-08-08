@@ -349,6 +349,7 @@ describe("marking an offer ready with listing photos (#311)", () => {
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: {

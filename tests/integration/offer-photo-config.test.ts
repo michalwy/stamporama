@@ -176,6 +176,7 @@ describe("offer photo configuration (#308)", () => {
     const offerId = await offerOn(configuredPlatformId);
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "back",
+      preferSingles: false,
       photoLabelLeftTemplate: "{name}",
       photoLabelRightTemplate: null,
       collage: {
@@ -193,6 +194,7 @@ describe("offer photo configuration (#308)", () => {
 
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
+      preferSingles: false,
       photoLabelLeftTemplate: null,
       photoLabelRightTemplate: null,
       collage: null,

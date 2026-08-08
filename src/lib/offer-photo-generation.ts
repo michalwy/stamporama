@@ -341,6 +341,8 @@ interface GenerationInputs {
   excludedSets: OfferPhotoExcludedSet[];
   labels: PlanLabels;
   photoSides: ReturnType<typeof normalizePhotoSides>;
+  /** #521: photograph single-copy sets on their own while the platform's limit has room. */
+  preferSingles: boolean;
   photoLabelLeftTemplate: string | null;
   photoLabelRightTemplate: string | null;
   /** The rendered tile annotations per copy id (#312) — what is actually drawn, not the template. */
@@ -440,6 +442,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       // available, because nothing is being sold any more (#315).
       state: true,
       photoSides: true,
+      photoPreferSingles: true,
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
       collageGridMode: true,
@@ -635,6 +638,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     excludedSets,
     labels,
     photoSides: normalizePhotoSides(offer.photoSides),
+    preferSingles: offer.photoPreferSingles,
     photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
     photoLabelRightTemplate: offer.photoLabelRightTemplate,
     tileLabels,
@@ -692,6 +696,7 @@ function planFor(inputs: GenerationInputs) {
     photoSides: inputs.photoSides,
     collage: inputs.collage,
     maxPhotos: inputs.limits.maxPhotos,
+    preferSingles: inputs.preferSingles,
     attachments: inputs.attachments,
     order: inputs.photoPlanOrder,
     unpublished: inputs.photoPlanUnpublished,
@@ -708,6 +713,7 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
       ([itemId, texts]) => [itemId, texts.left ?? "", texts.right ?? ""] as const
     ),
     collage: inputs.collage,
+    preferSingles: inputs.preferSingles,
     limits: inputs.limits,
     // A single-image attachment hashes as its one photo, exactly as it always did; a hand-composed
     // collage (#331) hashes its tiles and its width instead, because those are what it draws.

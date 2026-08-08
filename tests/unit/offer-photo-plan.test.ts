@@ -702,3 +702,216 @@ describe("planOfferPhotos unpublished images", () => {
     );
   });
 });
+
+// Single photos before a collage (#521) ---------------------------------------
+
+describe("planOfferPhotos single-first grouping (#521)", () => {
+  /** N single-copy sets in set order, one stamp each, ids `a`, `b`, `c`… */
+  const singleSets = (n: number): PlanSet[] =>
+    Array.from({ length: n }, (_, i) =>
+      set(`s${i}`, i, [copy(String.fromCharCode(97 + i))])
+    );
+
+  it("photographs every single-copy set on its own when the platform states no limit", () => {
+    const plan = planOfferPhotos({
+      sets: singleSets(5),
+      photoSides: "front",
+      collage, // capacity 4 — irrelevant, nothing is collaged
+      maxPhotos: null,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a",
+      "g1:front:b",
+      "g2:front:c",
+      "g3:front:d",
+      "g4:front:e",
+    ]);
+  });
+
+  it("keeps the pre-#521 chunking when the flag is off", () => {
+    const plan = planOfferPhotos({
+      sets: singleSets(5),
+      photoSides: "front",
+      collage,
+      maxPhotos: 5,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:a,b,c,d", "g1:front:e"]);
+  });
+
+  it("spends the limit on singles and collages only the tail", () => {
+    // Ten stamps, five slots, a collage holding six: four singles and one collage of the rest.
+    const plan = planOfferPhotos({
+      sets: singleSets(10),
+      photoSides: "front",
+      collage: { collageRows: 2, collageColumns: 3 },
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a",
+      "g1:front:b",
+      "g2:front:c",
+      "g3:front:d",
+      "g4:front:e,f,g,h,i,j",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("gives the tail a second collage at the cost of a single when it does not fit in one", () => {
+    // The same ten stamps at capacity four: k=4 would need 4 + ceil(6/4) = 6 slots, so k=3.
+    const plan = planOfferPhotos({
+      sets: singleSets(10),
+      photoSides: "front",
+      collage, // capacity 4
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a",
+      "g1:front:b",
+      "g2:front:c",
+      "g3:front:d,e,f,g",
+      "g4:front:h,i,j",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("counts the whole plan against the limit — a multi-copy set's collage included", () => {
+    // Five slots, one of them the multi-copy set's own collage: four left, so three singles.
+    const plan = planOfferPhotos({
+      sets: [
+        set("m", 0, [copy("x"), copy("y")]),
+        ...singleSets(6).map((s, i) => ({ ...s, sortOrder: i + 1 })),
+      ],
+      photoSides: "front",
+      collage,
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:x,y",
+      "g1:front:a",
+      "g2:front:b",
+      "g3:front:c",
+      "g4:front:d,e,f",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("counts manual attachments against the limit too", () => {
+    const plan = planOfferPhotos({
+      sets: singleSets(6),
+      photoSides: "front",
+      collage,
+      maxPhotos: 5,
+      preferSingles: true,
+      attachments: [
+        { id: "m1", position: 0, tiles: [{ photoId: "m1-p", itemId: null }], columns: 1 },
+        { id: "m2", position: 0, tiles: [{ photoId: "m2-p", itemId: null }], columns: 1 },
+      ],
+    });
+
+    // Two slots are the attachments', so three are left: two singles and a collage of four.
+    assert.deepEqual(shape(plan.images).filter((s) => s.startsWith("g")), [
+      "g0:front:a",
+      "g1:front:b",
+      "g2:front:c,d,e,f",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("counts a front and its back as two slots", () => {
+    // Four stamps scanned both sides on a platform taking five photos: one single (two images) would
+    // leave three slots for a tail of three, which costs two more images — 4 in all.
+    const plan = planOfferPhotos({
+      sets: singleSets(4),
+      photoSides: "both",
+      collage,
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a",
+      "g0:back:a",
+      "g1:front:b,c,d",
+      "g1:back:b,c,d",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("always photographs one stamp alone, even with no room for it", () => {
+    // One slot, taken by the multi-copy set: nothing is left, and the thumbnail rule spends it
+    // anyway rather than opening the listing with a collage.
+    const plan = planOfferPhotos({
+      sets: [
+        set("m", 0, [copy("x"), copy("y")]),
+        ...singleSets(3).map((s, i) => ({ ...s, sortOrder: i + 1 })),
+      ],
+      photoSides: "front",
+      collage,
+      maxPhotos: 1,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(shape(plan.images), ["g0:front:x,y", "g1:front:a", "g2:front:b,c"]);
+    assert.equal(plan.overLimitCount, 2, "the images past the one allowed slot are reported");
+  });
+
+  it("seats the tail collage at the end of the last run of singles", () => {
+    const plan = planOfferPhotos({
+      sets: [
+        set("s1", 0, [copy("a")]),
+        set("m", 1, [copy("x"), copy("y")]),
+        set("s2", 2, [copy("b")]),
+        set("s3", 3, [copy("c")]),
+        set("s4", 4, [copy("d")]),
+      ],
+      photoSides: "front",
+      collage,
+      maxPhotos: 4,
+      preferSingles: true,
+    });
+
+    // Four slots, one spent by the set: two singles and a collage of the two that are left, sitting
+    // where the singles end rather than at the head of the plan.
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:a",
+      "g1:front:x,y",
+      "g2:front:b",
+      "g3:front:c,d",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+
+  it("frees a slot when an image is marked do not publish", () => {
+    const hidden = collageToken("front", ["x", "y"]);
+    const plan = planOfferPhotos({
+      sets: [
+        set("m", 0, [copy("x"), copy("y")]),
+        ...singleSets(4).map((s, i) => ({ ...s, sortOrder: i + 1 })),
+      ],
+      photoSides: "front",
+      collage,
+      maxPhotos: 4,
+      preferSingles: true,
+      unpublished: [hidden],
+    });
+
+    // The hidden collage costs nothing, so all four slots go to the singles.
+    assert.deepEqual(shape(plan.images), [
+      "g0:front:x,y",
+      "g1:front:a",
+      "g2:front:b",
+      "g3:front:c",
+      "g4:front:d",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+  });
+});

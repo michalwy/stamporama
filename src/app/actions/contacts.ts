@@ -141,6 +141,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // The platform's listing-text caps (#403), read live wherever those texts are written.
     ...textLimits.value,
     photoSides: isPlatform ? str(formData, "photoSides") : null,
+    // #521's grouping default. A checkbox, so an unticked box posts nothing and reads false; a
+    // non-platform contact leaves it null and the domain's own default (on) stands.
+    photoPreferSingles: isPlatform ? bool(formData, "photoPreferSingles") : null,
     tileLabelLeftTemplate: isPlatform ? str(formData, "tileLabelLeftTemplate") || null : null,
     tileLabelRightTemplate: isPlatform ? str(formData, "tileLabelRightTemplate") || null : null,
     defaultCollageTemplateId: isPlatform

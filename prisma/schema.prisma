@@ -1790,6 +1790,15 @@ model Offer {
   //
   // Scan sides to include: `front` | `back` | `both`.
   photoSides   String  @default("front")
+  // Whether a single-copy set is photographed **on its own while the platform's limit has room**
+  // (#521). A collage exists to fit more stamps than the listing has slots for, so it is a
+  // compromise, not a goal: with five slots and three one-stamp sets, three photos show the stamps
+  // better than one collage of three. The planner therefore spends the platform's `maxPhotos`
+  // budget on singles first and collages only the tail that does not fit. Off restores #309's
+  // original rule — every run of single-copy sets chunked into collages regardless of the limit —
+  // for a listing where the collector wants the grouped look. Multi-copy sets are unaffected either
+  // way: a set is one collage because it is one thing being sold.
+  photoPreferSingles Boolean @default(true)
   // Per-tile label templates (#312), left and right annotation; null when the platform had none
   // configured. Both resolve per copy, share one strip and one font size.
   photoLabelLeftTemplate String?
@@ -2465,6 +2474,10 @@ model Contact {
   // label. A tile's strip carries two independent annotations, drawn flush left and flush right;
   // either may be null, and a lone one is centred.
   photoSides       String  @default("front")
+  // Seeded default for #521's single-first grouping. On, like the offer column it seeds: the
+  // platform's photo limit is exactly the fact the rule reads, so the platform is where a collector
+  // who always wants collages says so once.
+  photoPreferSingles Boolean @default(true)
   tileLabelLeftTemplate String?
   tileLabelRightTemplate String?
   // Which collage template (#307) a new offer on this platform copies its render numbers from.

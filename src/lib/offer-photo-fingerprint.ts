@@ -22,7 +22,9 @@
  * - the **source photo ids** per copy and side. Photo rows are immutable per id (replacing a front
  *   scan writes a new row), so an id captures the bytes;
  * - the **offer's photo configuration** (#308) — sides, the two tile label templates (#312) and the
- *   collage numbers, and the grid mode that says how those numbers are read (#413);
+ *   collage numbers, and the grid mode that says how those numbers are read (#413), and whether
+ *   single-copy sets are photographed alone while the limit has room (#521) — which decides how many
+ *   images there are and what each shows;
  * - the **rendered tile labels** (#312), not just their template: the labels are drawn into the
  *   images, so editing the location ref of a copy changes the pixels exactly as replacing its scan
  *   does, and has to read as out of date for the same reason;
@@ -76,6 +78,10 @@ export interface OfferPhotoFingerprintInput {
    * any order. A side with nothing to say is an empty string; copies with neither are absent. */
   tileLabels: readonly (readonly [string, string, string])[];
   collage: OfferCollageValues | null;
+  /** #521's grouping: single-copy sets photographed alone while the platform's limit has room.
+   * It decides which images exist and what each one shows, so it is as much an input as the collage
+   * numbers are. */
+  preferSingles?: boolean;
   limits: PlatformPhotoLimits;
   /** The offer's manual attachments (#313), in any order. */
   attachments?: readonly FingerprintAttachment[];
@@ -182,6 +188,10 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   const payload: unknown[] = [FINGERPRINT_VERSION, composition, config, limits];
   if (attachments.length > 0) payload.push(attachments, input.uploadTileLabel ?? null);
   if (rendered.length > 0) payload.push(["rendered", rendered]);
+  // Appended only when on (#521), the same rule as every extension above: off is how every offer
+  // grouped before the flag existed, and the migration leaves already-rendered offers there — so
+  // nothing generated under the old rule is declared stale by the upgrade alone.
+  if (input.preferSingles) payload.push(["singles"]);
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

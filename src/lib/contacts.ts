@@ -138,6 +138,9 @@ export interface ContactData extends ContactRoles {
    * include, the per-tile label template (#312), and which collage template (#307) supplies the
    * render numbers. Changing them never touches an offer already prepared. */
   photoSides: string;
+  /** #521's grouping, seeded onto new offers: single-copy sets photographed on their own while this
+   * platform's photo limit has room. */
+  photoPreferSingles: boolean;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -182,6 +185,7 @@ const CONTACT_SELECT = {
   maxPrivateNoteLength: true,
   platformModule: true,
   photoSides: true,
+  photoPreferSingles: true,
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
   defaultCollageTemplateId: true,
@@ -305,6 +309,9 @@ export interface ContactCreateInput {
   /** The photo defaults new offers on this platform are seeded from (#308). `photoSides` is
    * normalised; an unknown value falls back to the default side. */
   photoSides?: string | null;
+  /** #521's grouping default. Absent leaves it on, which is what a platform stating a photo limit
+   * wants: the limit is the fact the rule reads. */
+  photoPreferSingles?: boolean | null;
   tileLabelLeftTemplate?: string | null;
   tileLabelRightTemplate?: string | null;
   /** The collage template (#307) new offers copy their render numbers from, or null for none. A
@@ -439,6 +446,7 @@ async function photoData(
   maxPhotoEdge: number | null;
   maxPhotoFileSizeMib: number | null;
   photoSides: string;
+  photoPreferSingles: boolean;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -455,6 +463,7 @@ async function photoData(
     maxPhotoEdge: data.maxPhotoEdge ?? null,
     maxPhotoFileSizeMib: data.maxPhotoFileSizeMib ?? null,
     photoSides: normalizePhotoSides(data.photoSides),
+    photoPreferSingles: data.photoPreferSingles ?? true,
     tileLabelLeftTemplate: data.tileLabelLeftTemplate ?? null,
     tileLabelRightTemplate: data.tileLabelRightTemplate ?? null,
     defaultCollageTemplateId: template?.id ?? null,

@@ -413,6 +413,10 @@ edge, file size). Those are the platform's limits, not the offer's — change th
 listing:
 
 - **Sides to photograph** — *Front only*, *Back only*, or *Front and back*.
+- **Single photos while the platform's limit allows** — whether single-stamp sets are photographed
+  one per image while the listing has slots for them, with only the leftovers collaged, or always
+  collaged. On by default, seeded from the platform. Multi-copy sets are one collage each either
+  way. See [single photos and the limit](#single-photos-and-the-limit).
 - **Tile label (left)** and **Tile label (right)** — two `{token}` templates written under each
   stamp, one flush left and one flush right at the same size. Each is resolved **per stamp**, so
   `{ref}` writes that copy's own location ref (`A234`) under it and a buyer asking for "the one
@@ -469,8 +473,14 @@ next. Generate, Download all and the **⚙**
 
 What gets made follows the offer, not a choice you make here:
 
-- Each **multi-copy set** becomes its own collage. **Single-copy sets** are combined into shared
-  collages, because a collage of one stamp is pointless.
+- Each **multi-copy set** becomes its own collage — a set is one thing being sold, so it is shown as
+  one image.
+- **Single-copy sets** go up **one stamp per photo while the platform's photo limit has room**, and
+  only what is left over is collaged together. A collage exists to fit more stamps than the listing
+  has slots for, so where there are slots to spare a stamp is better seen on its own: three
+  one-stamp sets on a platform taking five photos are three photos, not one collage of three. See
+  [single photos and the limit](#single-photos-and-the-limit) for how the split is worked out, and
+  the setting that turns it off.
 - A set holding more copies than the collage fits is split across consecutive images, so nothing is
   dropped silently.
 - With *Front and back*, each group gives two images — but only if **every** copy in it has that
@@ -488,6 +498,31 @@ the background every image is drawn with.
 
 The images are **stored**, not made again on demand: what you download tomorrow is the same file you
 uploaded to the platform today.
+
+### Single photos and the limit
+
+How many of the offer's single-stamp sets get a photo to themselves follows from the **platform's
+photo limit**, and the arithmetic is the whole plan's, not the stamps' alone: the collages your
+multi-copy sets make and every [attachment](#attaching-your-own-images) you have added take their
+slots first, and *Front and back* counts each side. Whatever is left is spent on single photos, and
+the stamps that do not fit are collaged.
+
+The tail eats a single slot at a time as it has to. Ten stamps on a platform taking five photos, with
+a collage that holds six: four go up alone and the last six share one collage. The same ten with a
+collage of four: three alone, and the remaining seven fill two collages — five images either way.
+
+Two things fall out of this:
+
+- A platform that states **no photo limit** collages nothing: every single-stamp set is its own
+  photo.
+- The **first photo is a single stamp** whenever the offer has one to show. It is what a marketplace
+  puts up as the listing's thumbnail, and one stamp says far more there than a grid of six. That one
+  photo is taken even when the limit has no room for it — it simply pushes the last image
+  [past the limit](#holding-a-photo-back), which your own order can still overrule.
+
+Turn **Single photos while the limit allows** off in the [photo settings](#photo-settings) and the
+single-stamp sets are always collaged instead, as they were before this rule existed. It is
+per-offer, so one listing can be arranged differently from the next.
 
 ### When the offer changes afterwards
 

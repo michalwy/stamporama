@@ -170,6 +170,7 @@ export function PhotoSettingsDialog({
   const [photoSides, setPhotoSides] = useState(config.photoSides);
   const [labelLeft, setLabelLeft] = useState(config.photoLabelLeftTemplate ?? "");
   const [labelRight, setLabelRight] = useState(config.photoLabelRightTemplate ?? "");
+  const [preferSingles, setPreferSingles] = useState(config.preferSingles);
   const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config));
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
   // Regenerate on save (#328), on by default — see the note by the footer checkbox.
@@ -290,6 +291,38 @@ export function PhotoSettingsDialog({
           </span>
 
           <p style={SECTION_LABEL}>Collage</p>
+
+          {/* When a collage is made at all (#521). A collage is how more stamps fit than the
+              platform has slots for, so with slots to spare the stamps go up one per photo and only
+              the tail is grouped — and the first photo, the listing's thumbnail, is a single stamp
+              whenever this offer has one to show. Sets of several stamps are one collage either
+              way: a set is one thing being sold. */}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4375rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-secondary)",
+              cursor: isPending ? "default" : "pointer",
+              marginBottom: "0.25rem",
+            }}
+          >
+            <input
+              type="checkbox"
+              name="preferSingles"
+              checked={preferSingles}
+              onChange={(e) => setPreferSingles(e.target.checked)}
+              disabled={isPending}
+              style={{ cursor: isPending ? "default" : "pointer" }}
+            />
+            Single photos while {platformName}&rsquo;s limit allows
+          </label>
+          <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
+            {limits.maxPhotos == null
+              ? `${platformName} states no photo limit, so every single-stamp set gets its own photo.`
+              : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
+          </span>
 
           <div style={{ marginBottom: "1rem" }}>
             <LabelWithError htmlFor="offer-collage-template">Copy from template</LabelWithError>
