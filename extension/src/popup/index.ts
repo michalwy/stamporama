@@ -43,10 +43,6 @@ const BATCH_SIZE = 25;
  *  time made the window's own first render the slowest thing about it. */
 const MATCH_CONCURRENCY = 3;
 
-/** How long the result line stays up before the window closes itself after a batch write (#515) —
- * long enough to read "Wrote 8 auto-matches", short enough not to be a step of its own. */
-const CLOSE_AFTER_WRITE_MS = 1200;
-
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const badge = $("badge");
 const badgeName = $("badgeName");
@@ -503,9 +499,11 @@ async function preview(): Promise<void> {
  * decisions keep their confirm: `confirmOne` names the one stamp it links, and `overwriteOne`
  * destroys a number of ours.
  *
- * **Then the window closes.** A batch write is the last thing done here — the collector is going
- * back to the page it was opened from — and after a short pause, so the result line is readable.
- * Nothing is lost by closing: the write landed on the instance, and the next icon click rescans.
+ * **Then the window closes**, the moment the instance answers. A batch write is the last thing done
+ * here — the collector is going back to the page it was opened from — and a pause to let the result
+ * line be read would only be the dismiss step this replaced, worn differently. Nothing is lost: the
+ * write landed on the instance, and the next icon click rescans. The merge and the status line below
+ * it stay all the same, as what the window falls back to should the close ever not take.
  *
  * **Only the pending decisions are sent.** A page of 200 stamps holding one unwritten match used to
  * be re-matched whole — the same eight requests the preview had just run, to write one row. The
@@ -533,7 +531,7 @@ async function writeAuto(): Promise<void> {
       filled ? ` and ${filled} catalog number${filled === 1 ? "" : "s"}` : ""
     } to ${profile.name}.`
   );
-  window.setTimeout(() => window.close(), CLOSE_AFTER_WRITE_MS);
+  window.close();
 }
 
 /** Swap one item's result in place after an individual write, so it leaves the to-do list. */

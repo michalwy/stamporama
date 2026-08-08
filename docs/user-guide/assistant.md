@@ -99,8 +99,8 @@ and the page is read afresh the next time you click the toolbar icon.
 
 **Write auto-matches** closes the window for you. It asks nothing first — the button already names
 exactly what it will do (*Write 8 auto-matches + 3 catalog numbers*), and an auto-match is one the
-matcher had no doubt about — then writes, shows what it wrote for a moment and closes, leaving you
-back on the page you were reading. It sends only the matches it just named, so writing one match on
+matcher had no doubt about — then writes and closes as soon as your collection has answered, leaving
+you back on the page you were reading. It sends only the matches it just named, so writing one match on
 a page of two hundred stamps takes about as long as writing one on a page of one. The two writes that really are a decision still ask: linking one
 of several candidate stamps, and [replacing a catalog number](#when-colnects-number-disagrees-with-yours)
 you already hold.
