@@ -917,18 +917,31 @@ describe("offer photo generation (#311)", () => {
       ...config,
       collage: { ...collage, collageGridMode: "fixed" },
     });
-    const fixed = await regenerate();
-    assert.ok(fixed.width > fixed.height, "one row of three is a wide image");
+    const wide = await regenerate();
+    assert.ok(wide.width > wide.height, "one row of three is a wide image");
 
-    // The same numbers read as bounds put the three on two rows — 2 + 1 — which is a narrower and
-    // taller image from exactly the same scans.
+    // The same three scans under a fixed 2-wide grid: 2 + 1, a narrower and taller image, and the
+    // shape the auto grid has to be able to decline.
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...config,
+      collage: { ...collage, collageColumns: 2, collageGridMode: "fixed" },
+    });
+    const wrapped = await regenerate();
+    assert.ok(wrapped.width < wide.width, "wrapping at two is narrower");
+    assert.ok(wrapped.height > wide.height, "and taller");
+
+    // Read as bounds, the auto grid solves the width from the scans themselves and picks the wide
+    // row — three portrait stamps side by side is a landscape page (#526), where 2 + 1 is a taller
+    // canvas with a hole in it. It is a decision, not the template echoed back: the 2-wide grid was
+    // available and was not taken.
     await updateOfferPhotoConfig(userId, offerId, {
       ...config,
       collage: { ...collage, collageGridMode: "auto" },
     });
     const auto = await regenerate();
-    assert.ok(auto.width < fixed.width, "the auto grid is narrower");
-    assert.ok(auto.height > fixed.height, "and taller, because it wrapped");
+    assert.equal(auto.width, wide.width, "the auto grid lays the three out in one row");
+    assert.equal(auto.height, wide.height, "at exactly the fixed 3-wide geometry");
+    assert.ok(auto.width > wrapped.width, "rather than the narrower wrap it could have chosen");
   });
 
   it("leaves no files behind when the offer is deleted", async () => {
