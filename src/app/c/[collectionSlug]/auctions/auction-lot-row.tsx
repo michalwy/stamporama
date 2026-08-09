@@ -11,10 +11,12 @@ import {
   allIn,
   bidCosting,
   ceilingAllowing,
+  headroom,
   lotNeedsComposition,
   maxBidWithin,
   type AuctionFees,
 } from "@/lib/auction-lot";
+import type { BidRecommendation } from "@/lib/bid-recommendation";
 import type { AuctionLotView } from "./use-auctions-query";
 import {
   BidFreshnessChip,
@@ -26,6 +28,7 @@ import {
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
 import { AmountWithBase } from "./auction-base-amount";
+import { BidRecommendationPopover } from "./bid-recommendation-popover";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -313,6 +316,57 @@ function bidFromCeiling(
   };
 }
 
+/** Which of the three figures a control is about. The keys are the recommendation's own, so a
+ * control names a level by reading it rather than by mapping onto it. */
+type BidLevelKey = keyof Pick<BidRecommendation, "floor" | "fair" | "walkAway">;
+
+/** How each recommended level is named wherever one is offered — the `⋮` entry, the hint under it,
+ * and the popover's own rows. One vocabulary, so "walk-away" means the same thing in all three. */
+const LEVEL_LABEL: Record<BidLevelKey, string> = {
+  floor: "bargain floor",
+  fair: "recommended bid",
+  walkAway: "walk-away",
+};
+
+/**
+ * A recommended level → the ceiling (#511; ADR-0029 §8).
+ *
+ * Copies across unchanged, exactly as {@link ceilingFromCatalog} does and for the same reason — all
+ * three recommended figures are all-in valuations (ADR-0029 §5), and so is a ceiling.
+ *
+ * All three are offered, but **only `fair` is a control in the row**. Which level to take is a
+ * judgement, and a judgement belongs where the evidence for it is on screen: the other two are one
+ * click inside the popover, and in the `⋮` menu for the collector who already knows which one they
+ * want. The row's own `REC` stays on `fair` alone, so a scanned row still has one answer on it.
+ */
+function ceilingFromRecommendation(
+  lot: AuctionLotView,
+  editable: boolean,
+  which: BidLevelKey
+): QuickFill {
+  const name = LEVEL_LABEL[which];
+  if (!editable) {
+    return { value: null, hint: "Settled into a purchase — edit the purchase instead" };
+  }
+  if (lot.recommendation === null) {
+    return {
+      value: null,
+      hint: "Describe what the lot holds first — a recommendation follows from that",
+    };
+  }
+  const level = lot.recommendation[which];
+  if (level === null) {
+    return {
+      value: null,
+      hint: "Nothing in this lot could be priced — neither a recorded result nor a catalogue value",
+    };
+  }
+  return {
+    value: level.allIn,
+    hint: `Sets your ceiling to ${level.allIn} ${lot.currency} — the ${name}, all-in`,
+  };
+}
+
 /** Catalogue value → the bid you place (#371), through the same inverse, for the same reason. */
 function bidFromCatalog(lot: AuctionLotView, editable: boolean, terminal: boolean): QuickFill {
   if (!editable) return { value: null, hint: "Settled into a purchase — edit the purchase instead" };
@@ -403,6 +457,9 @@ function QuickFillControl({
 interface AuctionLotRowProps {
   lot: AuctionLotView;
   collectionSlug: string;
+  /** The recommendation's evidence is read per lot and only while its popover is open (#511), and
+   * that read is collection-scoped like every other one in the module. */
+  collectionId: string;
   /** The clock the whole list ages against, so every row on screen agrees. */
   now: Date;
   isLast: boolean;
@@ -470,6 +527,7 @@ interface AuctionLotRowProps {
 export function AuctionLotRow({
   lot,
   collectionSlug,
+  collectionId,
   now,
   isLast,
   showSale = true,
@@ -573,11 +631,20 @@ export function AuctionLotRow({
     );
   }
 
-  // The three quick fills (#370, #371), resolved once and used by both the ⋮ entries and the
+  // The four quick fills (#370, #371, #511), resolved once and used by both the ⋮ entries and the
   // controls in the gutter beside the column each writes.
   const bidCeiling = bidFromCeiling(lot, maxBid, bidRoom, editable, terminal);
   const bidCatalog = bidFromCatalog(lot, editable, terminal);
   const ceilingCatalog = ceilingFromCatalog(lot, editable);
+  const ceilingFloor = ceilingFromRecommendation(lot, editable, "floor");
+  const ceilingRecommended = ceilingFromRecommendation(lot, editable, "fair");
+  const ceilingWalkAway = ceilingFromRecommendation(lot, editable, "walkAway");
+
+  /** The recommendation as the *worth* section draws it: the fair figure, and the room left before
+   * the price passes it. The subtraction is the catalogue column's own — same function, same
+   * costed figure the server used — so the two headrooms are always about the same money. */
+  const recommendedFair = lot.recommendation?.fair?.allIn ?? null;
+  const recommendedHeadroom = headroom(recommendedFair, lot.finalPrice ?? lot.currentBid, fees);
 
   // Every write to one of the two-sided columns goes through these: they carry the same pending
   // override an inline edit does, so the figure appears at once — in **both** cells, since the
@@ -671,7 +738,7 @@ export function AuctionLotRow({
               : undefined,
       onSelect: () => onMarkChecked(lot),
     },
-    // The three one-click fills. Each places a figure the row already knows into a field beside it;
+    // The four one-click fills. Each places a figure the row already knows into a field beside it;
     // the two that place a *bid* go through the inverse of `allIn`, because the ceiling and the
     // catalogue value are both all-in figures while a platform's bid box takes a hammer price.
     {
@@ -698,6 +765,23 @@ export function AuctionLotRow({
       hint: ceilingCatalog.hint,
       onSelect: () => applyMaxBid(ceilingCatalog.value!),
     },
+    // The three recommended levels, beside the catalogue one and never instead of it — the two
+    // sources say different things. All three are here and only `fair` is in the row, because the
+    // menu is read deliberately while the row is scanned; #273's rule is the other reason they are
+    // here at all, since a hover control that is simply absent cannot say why.
+    ...(["floor", "fair", "walkAway"] as const).map((which) => {
+      const fill = { floor: ceilingFloor, fair: ceilingRecommended, walkAway: ceilingWalkAway }[
+        which
+      ];
+      return {
+        key: `ceiling-${which}`,
+        label: `Ceiling = ${LEVEL_LABEL[which]}`,
+        icon: "suggestion",
+        disabled: fill.value === null,
+        hint: fill.hint,
+        onSelect: () => applyMaxBid(fill.value!),
+      } as RowAction;
+    }),
     {
       key: "contents",
       // Readable whether or not anything has been entered — the same entry either way, because
@@ -905,7 +989,11 @@ export function AuctionLotRow({
               // its own number is on. One word wide, since a column offering two stacks them, and
               // fixed whether or not the row is hovered, so revealing a control never shunts a
               // figure out of its column.
-              gridTemplateColumns: "3rem 5.5rem 5.5rem 1.75rem 5.5rem 1.75rem 1px 3.5rem 6rem",
+              //
+              // Track 10 is the recommendation (#511), the *worth* section's second column against
+              // the same two labels — which is exactly what the note below said anything answering
+              // "what is this worth" should be.
+              gridTemplateColumns: "3rem 5.5rem 5.5rem 1.75rem 5.5rem 1.75rem 1px 3.5rem 6rem 6.5rem",
               columnGap: "0.5rem",
               rowGap: "0.125rem",
               justifyItems: "end",
@@ -945,6 +1033,13 @@ export function AuctionLotRow({
                 visible={hovered}
                 onApply={applyMaxBid}
               />
+              <QuickFillControl
+                fill={ceilingRecommended}
+                label="rec"
+                ariaLabel="Set the ceiling to the recommended bid"
+                visible={hovered}
+                onApply={applyMaxBid}
+              />
             </span>
 
             <span style={GRID_LABEL}>{lot.currency}</span>
@@ -959,8 +1054,10 @@ export function AuctionLotRow({
                 cost section's is the grid's, and repeating it would read as a second unit. */}
             <span />
             {/* What the lot is *worth*, against the three columns of what it costs — the whole
-                reason composition is structured (#353). */}
+                reason composition is structured (#353) — and beside it what it is worth **bidding**
+                (#511), which is a different question and therefore a column and not a footnote. */}
             <span style={GRID_HEAD}>Catalogue</span>
+            <span style={GRID_HEAD}>Recommended</span>
 
             <span style={GRID_LABEL}>bid</span>
             {/* What the lot stands at — the one field the daily loop writes. Once a result has been
@@ -1122,6 +1219,37 @@ export function AuctionLotRow({
                 </button>
               </Tooltip>
             )}
+            {/* What the lot is worth **bidding** — the `fair` figure, all-in, from recorded results
+                where there are any and catalogue × the learned ratio where there are not (#511).
+                The cell is the way in to the evidence, exactly as the catalogue cell beside it is
+                the way in to the composition: the figure a collector wants to interrogate is the
+                one they are looking at, so it is the thing they click.
+                A lot with nothing described has no figure and no panel — a bare dash, not a
+                control that would open to explain that it has nothing to explain. */}
+            {withBase(
+              recommendedFair,
+              lot.recommendation === null ? (
+                <Tooltip content="Nothing described yet. Say what the lot holds and a recommendation follows.">
+                  <span style={MUTED_AMOUNT}>—</span>
+                </Tooltip>
+              ) : (
+                // Opens even with no figure behind it: a described lot nothing could price is
+                // precisely the one whose empty cell needs explaining, and the panel is where the
+                // unanchored lines are counted.
+                <BidRecommendationPopover
+                  collectionId={collectionId}
+                  lotId={lot.id}
+                  currency={lot.currency}
+                  onPickCeiling={editable ? applyMaxBid : undefined}
+                >
+                  {recommendedFair === null ? (
+                    <span style={MUTED_AMOUNT}>—</span>
+                  ) : (
+                    <span style={AMOUNT}>{recommendedFair}</span>
+                  )}
+                </BidRecommendationPopover>
+              )
+            )}
 
             <span style={GRID_LABEL}>all-in</span>
             {withBase(
@@ -1210,6 +1338,30 @@ export function AuctionLotRow({
                   }}
                 >
                   {lot.headroom ?? "—"}
+                </span>
+              </Tooltip>
+            )}
+            {/* The same subtraction against the *other* value: what is left before the price passes
+                what the lot is worth **bidding**. The catalogue headroom answers "am I buying under
+                the book"; this one answers "am I still inside what the evidence says to pay", and
+                on a lot with recorded results behind it that is the sharper of the two. Same
+                arithmetic, same colours, same omission of shipping. */}
+            {withBase(
+              recommendedHeadroom,
+              <Tooltip content="The recommended fair figure less what this lot costs at the current bid, the seller's premium included. Shipping is added once, on the sale.">
+                <span
+                  style={{
+                    ...AMOUNT,
+                    fontWeight: 500,
+                    color:
+                      recommendedHeadroom === null
+                        ? "var(--color-text-muted)"
+                        : Number(recommendedHeadroom) < 0
+                          ? "var(--color-error)"
+                          : "var(--color-success)",
+                  }}
+                >
+                  {recommendedHeadroom ?? "—"}
                 </span>
               </Tooltip>
             )}

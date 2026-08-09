@@ -3,6 +3,8 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AuctionLotComposition } from "@/lib/auction-lines";
 import type { AtRiskLine } from "@/lib/auction-duplicates";
+import type { AnchorMarketEvidence, AuctionLotLineAnchor } from "@/lib/auction-lot-anchors";
+import type { AuctionLotBidEvidence } from "@/lib/bid-recommendations";
 import type {
   AuctionLotDetailItem,
   AuctionLotFilterCounts,
@@ -192,6 +194,36 @@ export function useAuctionLotComposition(collectionId: string, lotId: string | n
         `/api/collections/${collectionId}/auctions/lots/${lotId}/lines`
       );
       if (!res.ok) throw new Error("Failed to fetch the lot's contents");
+      return res.json();
+    },
+    enabled: !!lotId,
+  });
+}
+
+/**
+ * Why a lot is worth what the recommendation says (#511) — the evidence popover's read.
+ *
+ * The three figures themselves are on the row already; this is the composition line by line, with
+ * the market evidence or the learned ratio behind each. Fetched only while the popover is open, for
+ * the reason the composition is: a forty-lot watchlist would otherwise pull forty lots' evidence to
+ * draw forty collapsed rows.
+ *
+ * `null` is a real answer — a lot with no composition has nothing to recommend.
+ */
+export type AuctionLotBidEvidenceView = Serialized<Omit<AuctionLotBidEvidence, "lines">> & {
+  lines: (Serialized<Omit<AuctionLotLineAnchor, "market">> & {
+    market: Serialized<AnchorMarketEvidence> | null;
+  })[];
+};
+
+export function useAuctionLotBidEvidence(collectionId: string, lotId: string | null) {
+  return useQuery<AuctionLotBidEvidenceView | null>({
+    queryKey: ["auctions", collectionId, "recommendation", lotId] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/auctions/lots/${lotId}/recommendation`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the recommendation");
       return res.json();
     },
     enabled: !!lotId,

@@ -444,6 +444,7 @@ function LotCard({
         <AuctionLotRow
           lot={lot}
           collectionSlug={collectionSlug}
+          collectionId={ctx.collectionId}
           now={now}
           showSale={false}
           // The parcel has one seller and one platform, both named in the header above.

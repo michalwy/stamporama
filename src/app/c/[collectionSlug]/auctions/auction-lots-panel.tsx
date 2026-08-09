@@ -526,6 +526,7 @@ export function AuctionLotsPanel({
                     key={lot.id}
                     lot={lot}
                     collectionSlug={collectionSlug}
+                    collectionId={collectionId}
                     now={now}
                     showSale={false}
                     linkToSale
@@ -572,6 +573,7 @@ export function AuctionLotsPanel({
                   key={lot.id}
                   lot={lot}
                   collectionSlug={collectionSlug}
+                  collectionId={collectionId}
                   now={now}
                   linkToSale
                   isLast={idx === rows.length - 1 && !hasNextPage}

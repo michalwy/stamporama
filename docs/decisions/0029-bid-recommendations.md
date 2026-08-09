@@ -180,24 +180,42 @@ simply type.
 
 Urgency is a judgement. The recommendation's job is to put the facts next to it.
 
-### 8. One quick fill for `fair`, with the rest in an evidence popover
+### 8. A column of its own, one quick fill for `fair`, and an evidence popover behind the figure
 
-The lots screen's ceiling cell gains a third quick fill beside the existing catalogue one (#370) and
-the cross-column one — `REC`, which writes `fair`. Both catalogue and recommendation fills stay:
-"what the catalogue says" and "what it is worth bidding" are different statements, and the first is
-still the honest one when a lot has no evidence behind it.
+`fair` is a **column in the lots grid's *worth* section**, beside catalogue value and against the
+same two row labels — `value` and `headroom`. The two are different answers to *what is this worth*
+and belong side by side: catalogue headroom says whether the lot is going under the book, and
+recommended headroom whether it is still inside what the recorded evidence says to pay.
 
-Everything else lives in a popover on that cell: floor and walk-away with their bid conversions, one
-row per line showing which anchor it used, the median with `n` / latest date / span and the ADR-0022
-confidence badge for market-anchored lines, **the ratio bucket, its percentage and its `n`** for
-catalogue-anchored ones, the ownership counts, and the unanchored and unconvertible line counts.
+The ceiling cell also gains a third quick fill beside the existing catalogue one (#370) and the
+cross-column one — `REC`, which writes `fair`. Both catalogue and recommendation fills stay: "what
+the catalogue says" and "what it is worth bidding" are different statements, and the first is still
+the honest one when a lot has no evidence behind it.
+
+The recommendation cell **is** the trigger for the evidence popover, exactly as the catalogue cell
+is the way in to the composition editor. The way in has to be a figure that is already on screen: a
+disclosure revealed on hover is one most collectors never find, and this evidence is the whole
+argument for trusting the number.
+
+The popover holds floor and walk-away with their bid conversions, one row per line showing which
+anchor it used, the median with `n` / latest date / span and the ADR-0022 confidence badge for
+market-anchored lines, **the ratio bucket, its percentage and its `n`** for catalogue-anchored ones,
+the ownership counts, and the unanchored and unconvertible line counts.
 
 Naming the bucket is what makes a learned ratio trustworthy rather than magic: *"55% — Polska
 Ludowa, MNH, 1945–1949, n = 6"* can be argued with; *"55%"* cannot.
 
-Three quick fills, one per level, were rejected: a floor-or-fair-or-walk-away judgement does not
-belong in a row that is scanned. A section in the lot dialog was rejected because bidding happens on
-the list.
+**All three levels can be taken, and each is taken where its evidence is.** Every level in the
+popover is clickable and writes itself into the ceiling; all three are also in the row's `⋮` menu,
+for the collector who already knows which one they want. What the row itself offers is `fair` alone.
+The original decision here was one fill and no way to take the other two at all, on the argument
+that a floor-or-fair-or-walk-away judgement does not belong in a row that is scanned. That argument
+holds for the *row* and is why `REC` is still only `fair` — but it was wrong to conclude that the
+judgement should therefore be unavailable. It is exactly the decision this feature exists to
+support; it just belongs on a surface that is read rather than scanned, which the popover is.
+
+Three quick fills stacked in the row's gutter stay rejected, on the original argument. A section in
+the lot dialog was rejected because bidding happens on the list.
 
 ### 9. Three collection settings, and the ratio is not one of them
 

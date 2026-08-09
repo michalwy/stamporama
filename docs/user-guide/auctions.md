@@ -110,10 +110,15 @@ What it costs:
 
 What it is worth:
 
-| | **Catalogue** |
-|---|---|
-| **value** | what the contents are worth |
-| **headroom** | what is left over |
+| | **Catalogue** | **Recommended** |
+|---|---|---|
+| **value** | what the contents are worth | [what it is worth bidding](#what-a-lot-is-worth-bidding) |
+| **headroom** | what is left over | what is left before you overpay |
+
+Two answers to the same question, deliberately side by side: the catalogue says what the contents
+list at, the recommendation what your own recorded results suggest paying for them. Each headroom is
+that column's figure less what the lot costs at the current bid — so one tells you whether you are
+buying under the book, and the other whether you are still inside what the evidence says.
 
 Every figure is in the **sale's** currency — a lot has none of its own — and where that is not the
 currency your collection counts in, a smaller `≈ 25.00 EUR` sits under it. On the flat watchlist
@@ -223,6 +228,7 @@ learned.
 | **Bid my ceiling** | `CEIL` | Mine / bid | your ceiling |
 | **Bid catalogue value** | `CAT` | Mine / bid | the lot's catalogue value |
 | **Ceiling = catalogue value** | `CAT` | Ceiling | the lot's catalogue value |
+| **Ceiling = recommended bid** | `REC` | Ceiling | the [fair figure](#what-a-lot-is-worth-bidding) |
 
 The buttons sit **between the two lines** of their column, not on either one, because a quick fill
 sets the column as a whole: fill in a bid and the all-in under it follows, set the ceiling and the
@@ -232,8 +238,13 @@ their own number is on.
 
 The two that place a **bid** go through the same arithmetic *Bid my ceiling* does, because both
 sources are all-in figures and a bid box is not: on a house charging 20%, a catalogue value of 100
-means bidding **83.33**. The one that sets the **ceiling** copies across unchanged — a ceiling is
+means bidding **83.33**. The two that set the **ceiling** copy across unchanged — a ceiling is
 itself an all-in valuation, so there is nothing to convert.
+
+`CAT` and `REC` sit one under the other on the ceiling column, and both stay: *what the catalogue
+says* and *what it is worth bidding* are different statements, and the catalogue one is still the
+honest answer on a lot nothing has been recorded against. `REC` always writes the **fair** figure;
+the floor and the walk-away are taken from the panel or the ⋮ menu instead.
 
 Every one of them is a starting point, never a link: the field stays yours to edit afterwards, and
 nothing recomputes it if the catalogue value later changes.
@@ -655,14 +666,70 @@ to the sale — and the bidding record is frozen: to change a settled lot's figu
 purchase. Deleting the purchase is how a settlement is undone; the sale, its lots and their results
 stay standing, only the link goes.
 
-## Bid recommendation settings
+## What a lot is worth bidding
 
 What a lot is *worth bidding* is a different question from what its contents catalogue at, and the
 answer is not one number: it is three — a **floor**, below which the lot is a bargain, the **fair**
 figure itself, and a **walk-away**, past which it belongs to somebody else. A single figure would
 state a precision this evidence does not have; three state a decision.
 
-The percentages that band is built from live under **Settings → General → Bid recommendation**, per
+The **Recommended** column on the right of each row carries the fair figure, and clicking it opens
+everything behind that number. The `REC` button on the ceiling column writes the same figure
+straight into your ceiling without opening anything.
+
+### The three figures
+
+All three are **all-in** valuations, like the ceiling itself, and each is shown twice: what the lot
+is worth in total, and the **hammer bid to type** to stay inside it. The seller's premium is what
+separates the two; shipping is not counted, because a parcel ships once however many lots are in it.
+
+| | What it means |
+|---|---|
+| **floor** | your bargain percentage of fair — below this you are buying well |
+| **fair** | what the lot's contents suggest it is worth |
+| **walk-away** | your ceiling percentage of fair — past this it belongs to somebody else |
+
+`fair` is the sum over the lot's lines, and **nothing is added for a complete series or taken off
+for a big lot**. Both are real market effects and both are yours to judge — the floor percentage is
+where "multi-line lots go cheap" belongs, and the ceiling field stays editable in any case.
+
+**Any of the three can become your ceiling.** Click a level in the panel and it is written there and
+the panel closes; the same three are in the row's ⋮ menu as *Ceiling = bargain floor / recommended
+bid / walk-away*. Which one to take is a judgement — how badly you want the lot, how thin the
+evidence is — which is why the panel is where it is made: the results it is built from are on the
+same screen. The row's own `REC` button stays on **fair**, so a row you are only scanning still has
+exactly one answer on it.
+
+### Where each line's figure comes from
+
+Every line of the composition is priced **on its own**, because one lot routinely mixes a stamp you
+have results for with one you have never seen:
+
+1. **A recorded result**, if any closed lot has ever carried that exact `stamp × condition ×
+   certificate × format`. The panel shows the median, how many results are behind it, the span of
+   dates they cover, and a **confidence** badge built from sample size, how recent they are, how
+   much they agree and how much of the evidence was a whole lot rather than a share of a mixed one.
+2. Otherwise **its catalogue value times a learned percentage** — see below. The panel names the
+   percentage, the group it was learned from and how many results that group holds.
+3. Otherwise **nothing**. The line is counted and named at the foot of the panel, never treated as
+   worth zero: a lot half of which cannot be priced must not read as a finished answer.
+
+A line priced in a currency with no rate into the sale's is reported the same way — it has a value
+and it cannot be added up, which is a different fact from having none.
+
+The panel also says **how many copies of each line you already hold**. That is evidence and nothing
+else: it never moves a figure. Duplicates are bought deliberately, for trade and resale, so an
+automatic discount would bid *least* on exactly the material you most want. Whether it changes what
+you bid is a judgement, and the panel's job is to put the fact next to it.
+
+Nothing here is stored. The recommendation is worked out each time it is read, so a lot will be
+recommended differently a month later once more results have been recorded — that is the price base
+having learned something, not a figure going stale. The only number kept is the ceiling you commit
+to. A lot with nothing described yet has no recommendation at all.
+
+### The settings
+
+The percentages the band is built from live under **Settings → General → Bid recommendation**, per
 collection:
 
 | Setting | Default | What it means |
@@ -675,7 +742,7 @@ Each is a whole percentage. The floor is **not** required to sit below 100 nor t
 buying only well under what a lot is worth is a trading style, and the app has no business calling
 it a mistake.
 
-### Why "percent of catalogue" is not one of these
+#### Why "percent of catalogue" is not one of these
 
 The obvious fourth setting — *stamps in my areas fetch about 40% of Michel* — is deliberately absent.
 That figure is not a preference, it is a measurement, and it is not one number: it moves with the
@@ -694,15 +761,16 @@ nothing: before anything has been learned, a catalogue-anchored recommendation i
 catalogue value the `CAT` quick fill already writes. It stops being consulted as soon as there is
 evidence.
 
-The settings are editable now; the recommendation that reads them is still being built, so nothing
-on the lots screen uses them yet.
+There is no setting for the percentage itself, and there is deliberately no way to override it: you
+would be tuning against evidence the app is showing you on the same screen. If a group's percentage
+looks wrong, the answer is another recorded result — which is the strongest reason there is to file
+the lots you merely **watched** as well as the ones you won.
 
 ## What is not here yet
 
 - Winning **part** of a lot, when a multi-stamp lot is split.
-- Anything that reads the prices lost lots have produced back as a valuation.
-- Any recommendation beyond the raw catalogue value — what a lot is *worth bidding* is a separate
-  question from what its contents catalogue at.
+- A screen of its own for what the market has paid. Recorded results feed the
+  [recommendation](#what-a-lot-is-worth-bidding), but there is nowhere yet to browse them per stamp.
 - Capturing a listing from anywhere but Allegro. Other marketplaces are still typed in by hand.
 - Any automatic refreshing of bids. Capturing an Allegro listing again re-reads its price, but only
   when you ask it to — nothing polls a marketplace on your behalf.

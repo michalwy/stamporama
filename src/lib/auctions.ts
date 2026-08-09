@@ -10,9 +10,12 @@ import {
   maxBidWithin,
   summarizeAuctionSale,
   LOT_SIGNALS,
+  type AuctionFees,
   type AuctionSaleSummary,
   type LotSignal,
 } from "./auction-lot";
+import { resolveLotRecommendations } from "./bid-recommendations";
+import type { BidRecommendation } from "./bid-recommendation";
 import {
   emptyComposition,
   valuateAuctionLotLines,
@@ -304,6 +307,19 @@ export interface AuctionLotListItem {
    * fees alone already exceed it.
    */
   catalogBidRoom: string | null;
+  /**
+   * What the lot is worth **bidding** — floor, fair and walk-away, each all-in with the hammer
+   * price that fits inside it (#511; ADR-0029 §3, §5).
+   *
+   * A different question from {@link catalogValue}, which is why both are on the row: the catalogue
+   * says what the contents list at, this says what recorded results suggest paying for them. Null
+   * for a lot with no composition — there is nothing to recommend about a lot nobody has described,
+   * exactly as `lotNeedsComposition` (#442) already says.
+   *
+   * Present but **fully null inside** when a composition was entered and nothing in it could be
+   * anchored; the counts on it are what the popover reads to say why.
+   */
+  recommendation: BidRecommendation | null;
   /** Lines with no catalogue price at their condition × format. Surfaced rather than hidden: a
    * total that silently omits half the lot looks complete. */
   unpricedLineCount: number;
@@ -374,7 +390,8 @@ type LotRow = Prisma.AuctionLotGetPayload<{ select: typeof LOT_SELECT }>;
 function toLotListItem(
   row: LotRow,
   baseCurrency: string,
-  composition?: AuctionLotComposition
+  composition?: AuctionLotComposition,
+  recommendation?: BidRecommendation
 ): AuctionLotListItem {
   const sale = row.auctionSale;
   const status = (isAuctionLotStatus(row.status) ? row.status : "open") as AuctionLotStatus;
@@ -449,6 +466,7 @@ function toLotListItem(
     // Same inverse, same fees, same omission of shipping as `bidRoom` above — catalogue value is an
     // all-in figure and a bid box is not.
     catalogBidRoom: maxBidWithin(composition?.catalogValue ?? null, fees),
+    recommendation: recommendation ?? null,
     unpricedLineCount: composition?.unpricedLines ?? 0,
     unconvertibleLineCount: composition?.unconvertibleLines ?? 0,
     // Against the same costed figure `allIn` used — the settled price once the lot closed, else the
@@ -507,6 +525,44 @@ async function compositionsFor(
   const withLines = rows.filter((r) => r._count.lines > 0).map((r) => r.id);
   if (withLines.length === 0) return new Map();
   return valuateAuctionLotLines(collectionId, withLines);
+}
+
+/**
+ * What each lot of a page is worth **bidding** (#511), over the compositions just valued for it.
+ *
+ * One resolve for the whole page — one market read, one ratio load, one ownership count — on the
+ * same argument `compositionsFor` above makes about the valuation pass, and the one ADR-0029 §10
+ * accepts in place of a stored recommendation table. Lots with no composition never enter it.
+ *
+ * Best-effort: a recommendation is an extra column on a screen whose other figures are the record,
+ * so a market read or a rate lookup that fails leaves the rows without one rather than failing the
+ * list. That is the same rule `attachBaseRates` follows one function above.
+ */
+async function recommendationsFor(
+  collectionId: string,
+  rows: LotRow[],
+  compositions: Map<string, AuctionLotComposition>
+): Promise<Map<string, BidRecommendation>> {
+  if (compositions.size === 0) return new Map();
+  const feesByLot = new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        premiumPercent: money(row.auctionSale.premiumPercent),
+        premiumFixed: money(row.auctionSale.premiumFixed),
+      } satisfies AuctionFees,
+    ])
+  );
+  try {
+    return await resolveLotRecommendations(
+      collectionId,
+      rows.map((row) => row.id),
+      compositions,
+      (lotId) => feesByLot.get(lotId) ?? {}
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 /** The closing-time window a list is narrowed to (#351). `ended` is the one that earns its keep: a
@@ -818,7 +874,10 @@ export async function listAuctionLots(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   const compositions = await compositionsFor(collectionId, page);
-  const items = page.map((row) => toLotListItem(row, baseCurrency, compositions.get(row.id)));
+  const recommendations = await recommendationsFor(collectionId, page, compositions);
+  const items = page.map((row) =>
+    toLotListItem(row, baseCurrency, compositions.get(row.id), recommendations.get(row.id))
+  );
   await attachBaseRates(collectionId, baseCurrency, items);
   return {
     items,
@@ -1242,10 +1301,16 @@ export async function getAuctionSaleDetail(
   // The sale's own lot rows and the detail's are the same lots, so one pass serves both the parcel
   // total and each row's catalogue-value cell.
   const compositions = await compositionsFor(sale.collectionId, lots);
+  const recommendations = await recommendationsFor(sale.collectionId, lots, compositions);
   const detail = {
     ...toSaleListItem(row, sale.baseCurrency, compositions),
     lots: lots.map((lot) => ({
-      ...toLotListItem(lot, sale.baseCurrency, compositions.get(lot.id)),
+      ...toLotListItem(
+        lot,
+        sale.baseCurrency,
+        compositions.get(lot.id),
+        recommendations.get(lot.id)
+      ),
       lines: compositions.get(lot.id)?.lines ?? [],
     })),
   };

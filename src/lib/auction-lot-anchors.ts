@@ -1,5 +1,10 @@
 import "server-only";
-import { baseToSaleRates, valuateAuctionLotLines, type AuctionLotLineItem } from "./auction-lines";
+import {
+  baseToSaleRates,
+  valuateAuctionLotLines,
+  type AuctionLotComposition,
+  type AuctionLotLineItem,
+} from "./auction-lines";
 import type { BidLine } from "./bid-recommendation";
 import { countCopiesByStampAndCondition, stampConditionKey } from "./copy-counts";
 import { marketKeyOf, type MarketConfidenceBadge } from "./market-value";
@@ -108,17 +113,29 @@ export interface AuctionLotAnchors {
  *
  * Lots with no composition are absent from the result — the caller reads that as a lot there is
  * nothing to recommend for, which is the normal state of a lot while it is still being entered.
+ *
+ * `valued` is the composition pass the caller has **already** made, where it made one: the lots
+ * list values a page to fill its catalogue-value column before it ever asks for a recommendation,
+ * and valuing the same lots twice would load the format-factor table and the area tree twice for
+ * one screen. It is an input, never a cache — a caller with nothing in hand passes nothing and this
+ * makes the pass itself.
  */
 export async function resolveAuctionLotAnchors(
   collectionId: string,
-  lotIds: string[]
+  lotIds: string[],
+  valued?: Map<string, AuctionLotComposition>
 ): Promise<Map<string, AuctionLotAnchors>> {
   if (lotIds.length === 0) return new Map();
 
-  const compositions = await valuateAuctionLotLines(collectionId, lotIds);
-  if (compositions.size === 0) return new Map();
+  const valuations = valued ?? (await valuateAuctionLotLines(collectionId, lotIds));
+  // Narrowed to what was asked for: a caller handing in a page's valuations may well have valued
+  // more lots than it is asking about, and answering for those would be a quiet superset.
+  const compositions = lotIds
+    .map((lotId) => valuations.get(lotId))
+    .filter((composition): composition is AuctionLotComposition => composition !== undefined);
+  if (compositions.length === 0) return new Map();
 
-  const lines = [...compositions.values()].flatMap((composition) => composition.lines);
+  const lines = compositions.flatMap((composition) => composition.lines);
   const stampIds = lines.map((line) => line.stampId);
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
@@ -127,14 +144,14 @@ export async function resolveAuctionLotAnchors(
     baseToSaleRates(
       collectionId,
       baseCurrency,
-      [...compositions.values()].map((composition) => composition.currency)
+      compositions.map((composition) => composition.currency)
     ),
     loadRealizationRatios(collectionId),
     countCopiesByStampAndCondition(collectionId, stampIds),
   ]);
 
   const out = new Map<string, AuctionLotAnchors>();
-  for (const composition of compositions.values()) {
+  for (const composition of compositions) {
     const rate = rates.get(composition.currency) ?? null;
     out.set(composition.lotId, {
       lotId: composition.lotId,
