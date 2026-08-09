@@ -73,3 +73,47 @@ export async function countCopiesByStamp(
   }
   return counts;
 }
+
+/** How a `stamp × condition` count is keyed. The separator cannot occur in a cuid, so the two
+ * segments are unambiguous — the same trick `marketKeyOf` uses. */
+export function stampConditionKey(stampId: string, conditionId: string): string {
+  return `${stampId}~${conditionId}`;
+}
+
+/**
+ * Copies held per `stamp × condition`, keyed by {@link stampConditionKey}. Pairs with no copies are
+ * absent from the map — a caller reads them as zero.
+ *
+ * The condition axis is what an auction lot line is described at (ADR-0021 §7), so this is the
+ * figure a bid recommendation states as evidence: *"you already hold 2 of these"* (ADR-0029 §7). It
+ * is **shown, never computed with** — an automatic duplicate discount is wrong precisely where this
+ * app is strongest, since duplicates are bought deliberately for trade and resale.
+ *
+ * Exclusions are `countCopiesByStamp`'s exactly — sold, disposed and never-usably-delivered copies
+ * are not held — so the two counts cannot disagree about what "having one" means.
+ */
+export async function countCopiesByStampAndCondition(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const ids = [...new Set(stampIds)];
+  if (ids.length === 0) return counts;
+
+  const rows = await prisma.item.groupBy({
+    by: ["stampId", "conditionId"],
+    where: {
+      collectionId,
+      stampId: { in: ids },
+      saleLineItems: { none: {} },
+      disposedAt: null,
+      deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
+    },
+    _count: { _all: true },
+  });
+
+  for (const row of rows) {
+    counts.set(stampConditionKey(row.stampId, row.conditionId), row._count._all);
+  }
+  return counts;
+}

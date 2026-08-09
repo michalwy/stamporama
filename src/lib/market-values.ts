@@ -154,6 +154,19 @@ export async function getStampMarketValues(
   stampIds: string[]
 ): Promise<Map<string, StampMarketValue[]>> {
   await assertCollectionOwner(ownerId, collectionId);
+  return readStampMarketValues(collectionId, stampIds);
+}
+
+/**
+ * {@link getStampMarketValues} without the ownership check, for server reads that have **already**
+ * resolved the collection for the owner — the auction lot anchors (#510) are one. Split out rather
+ * than threading an `ownerId` through modules that have no other use for one; the caller owns the
+ * check, exactly as `readCollectionAreas` is split from `getCollectionAreas`.
+ */
+export async function readStampMarketValues(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, StampMarketValue[]>> {
   const wanted = new Set(stampIds);
   if (wanted.size === 0) return new Map();
 

@@ -173,7 +173,7 @@ function toPhotoSummary(p: { id: string; role: string | null; title: string | nu
  * priced rather than emptying the whole screen. A missing rate maps to null, which surfaces as
  * *unconvertible* lines rather than as silence.
  */
-async function baseToSaleRates(
+export async function baseToSaleRates(
   collectionId: string,
   baseCurrency: string,
   saleCurrencies: string[]
