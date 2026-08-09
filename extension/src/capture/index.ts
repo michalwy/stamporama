@@ -260,6 +260,20 @@ formEl.addEventListener("submit", (e) => {
   void save();
 });
 
+/**
+ * Write the lot, then close the window (#522), exactly as the match window's batch write does
+ * (#515).
+ *
+ * Saving is the last act here: the collector is going back to the listing this was opened from, and
+ * the window has nothing further to offer about a lot the instance has already accepted — the
+ * composition is entered in the app, not here. A pause to let the result line be read would only be
+ * the dismiss step this removes, worn differently, so the close happens the moment the instance
+ * answers. The plan and the status line before it stay as what the window falls back to should the
+ * close ever not take.
+ *
+ * A failed save keeps the window up: the error is the reason to still be here, and the form holds
+ * the corrections that were typed into it.
+ */
 async function save(): Promise<void> {
   if (!captured || !profile || busy) return;
   busy = true;
@@ -286,6 +300,7 @@ async function save(): Promise<void> {
   // reads as. Re-reading the page is how the collector asks for that.
   saveBtn.disabled = true;
   recheckBtn.disabled = false;
+  window.close();
 }
 
 recheckBtn.addEventListener("click", () => void readPage());

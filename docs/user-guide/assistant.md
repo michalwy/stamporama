@@ -105,6 +105,11 @@ a page of two hundred stamps takes about as long as writing one on a page of one
 of several candidate stamps, and [replacing a catalog number](#when-colnects-number-disagrees-with-yours)
 you already hold.
 
+**Save** in the capture window closes it the same way, as soon as the lot has reached your
+watchlist. There is nothing more to do here — what the lot holds is written in Stamporama, on the lot
+itself — and the listing you were reading is right behind the window. A save that *fails* leaves the
+window up, with your corrections still in the fields and the reason on screen.
+
 ## Decisions that are already made
 
 The Assistant never silently replaces a Colnect ID you already have. So when one of your stamps is
