@@ -18,6 +18,7 @@ import {
 } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { THUMB_OBJECT_FIT } from "./photo-thumb";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -530,7 +531,7 @@ function PhotoCard({
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "cover",
+            objectFit: THUMB_OBJECT_FIT,
             opacity: entry.status === "uploading" ? 0.5 : 1,
           }}
         />

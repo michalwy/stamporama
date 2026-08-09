@@ -124,11 +124,37 @@ export interface CollageGrid {
 const UNIT_TILE: CollageTileSize = { width: 1, height: 1 };
 
 /**
- * What a step away from a square canvas costs, in empty tiles. Set so the two terms of the auto-grid
- * cost trade at the parity #413 chose: `3 × |ln(3/2)| ≈ 1.2`, so moving one step off square costs
- * about one tile-sized hole. Raising it prefers squarer canvases at the price of ragged rows.
+ * What a step away from the wanted canvas shape costs, in empty tiles. Set so the two terms of the
+ * auto-grid cost trade at the parity #413 chose: `3 × |ln(3/2)| ≈ 1.2`, so moving one step off shape
+ * costs about one tile-sized hole. Raising it prefers well-shaped canvases at the price of ragged
+ * rows.
  */
 const SHAPE_WEIGHT = 3;
+
+/**
+ * The canvas shape the auto grid aims at (#526) — **landscape**, and a *band* rather than a point.
+ *
+ * The first cut of the cost aimed at a square, which is nobody's viewing surface: a collage is looked
+ * at on a monitor and as a marketplace listing image, both wider than they are tall, and aiming at 1:1
+ * meant a set of tall stamps could come out as a portrait column with no hole in it to argue against.
+ * Anything from 4:3 to 16:9 is a natural landscape shape and there is no reason to prefer one over
+ * another, so the whole band is free and the term only bites outside it — growing with the log
+ * distance to the nearest edge, exactly as it grew away from square before.
+ *
+ * Portrait canvases are not forbidden: a single tall scan, or a row ceiling that forces the shape,
+ * still lands where the holes term sends it. The band says which arrangement to reach for, not which
+ * ones are allowed.
+ */
+const TARGET_ASPECT_MIN = 4 / 3;
+const TARGET_ASPECT_MAX = 16 / 9;
+
+/** How far off the landscape band a canvas is, in log-ratio; 0 anywhere inside it. */
+function shapePenalty(width: number, height: number): number {
+  const ratio = width / height;
+  if (ratio < TARGET_ASPECT_MIN) return Math.log(TARGET_ASPECT_MIN / ratio);
+  if (ratio > TARGET_ASPECT_MAX) return Math.log(ratio / TARGET_ASPECT_MAX);
+  return 0;
+}
 
 /** Costs are floats now, so an exact tie needs a tolerance to still read as one. */
 const COST_EPSILON = 1e-9;
@@ -145,17 +171,15 @@ const COST_EPSILON = 1e-9;
  *
  * Two terms, exactly the two #413 balanced, but read off pixels rather than off cell counts:
  *
- *     cost = empty area (in tile-sized holes) + SHAPE_WEIGHT × |ln(width / height)|
+ *     cost = empty area (in tile-sized holes) + SHAPE_WEIGHT × shapePenalty(width, height)
  *
  * - **Holes** — the canvas area the stamps do not cover, over the mean tile area. This is the term
  *   that grew: it counts the ragged cell at the end of the last row *and* the space a small
  *   definitive leaves beside a souvenir sheet in the same row, which is the imbalance #514 is about.
- * - **Shape** — the log of the canvas's real aspect ratio, so a page of wide detail crops is judged
- *   on the wide canvas it makes rather than on how many cells across it is. Portrait stamps, which
- *   are most of them, keep answering what they answered before.
- *
- * For tiles of one size the two reduce exactly to `empty cells + |columns − rows|`, so every shape
- * #413 documented is still the shape a uniform collage gets.
+ * - **Shape** — how far the canvas's real aspect ratio falls outside the landscape band (#526), so a
+ *   page of wide detail crops is judged on the wide canvas it makes rather than on how many cells
+ *   across it is, and a page of tall stamps is pushed towards a wider arrangement rather than a
+ *   column.
  */
 function autoGridCost(sizes: readonly CollageTileSize[], columns: number): number {
   let canvasWidth = 0;
@@ -176,7 +200,7 @@ function autoGridCost(sizes: readonly CollageTileSize[], columns: number): numbe
 
   const meanTileArea = tileArea / sizes.length;
   const holes = (canvasWidth * canvasHeight - tileArea) / meanTileArea;
-  return holes + SHAPE_WEIGHT * Math.abs(Math.log(canvasWidth / canvasHeight));
+  return holes + SHAPE_WEIGHT * shapePenalty(canvasWidth, canvasHeight);
 }
 
 /**

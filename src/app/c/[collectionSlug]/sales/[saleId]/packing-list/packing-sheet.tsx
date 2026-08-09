@@ -5,6 +5,7 @@ import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-pr
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { Icon } from "@/app/icons";
+import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // The packing sheet's body (#330): the location sections plus the screen-only column picker.
 // Which columns are printed is the collector's call — some pack by shelf ref alone, some want the
@@ -312,7 +313,7 @@ function cell(
           style={{
             width: "2.5rem",
             height: "2.5rem",
-            objectFit: "cover",
+            objectFit: THUMB_OBJECT_FIT,
             display: "block",
             margin: "0 auto",
             border: "1px solid var(--color-border)",

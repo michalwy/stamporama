@@ -432,7 +432,10 @@ listing:
   image from the stamps it actually holds — four stamps 2 × 2, five as 3 + 2 — so one setting suits a
   listing of any size. It reads their **sizes**, not just how many there are: a souvenir sheet among
   small definitives, or a page of wide detail crops, gets the arrangement that leaves the least space
-  empty rather than the one a stamp-counting rule would pick. Both
+  empty rather than the one a stamp-counting rule would pick. It also aims at a **landscape** overall
+  shape — anything between 4:3 and 16:9 counts as equally good — since that is how the finished
+  image is looked at, on a monitor and as a listing thumbnail; a portrait arrangement is only chosen
+  when the stamps or the row bounds leave no wider one worth having. Both
   percentages are shares rather than pixels, so one setting reads the same whatever resolution you
   scan at: the gap is a share of the stamp's height, the label strip a share of the finished image
   (in tenths of a percent — 1–2% is the usual range),

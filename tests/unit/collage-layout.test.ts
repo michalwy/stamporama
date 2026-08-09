@@ -275,7 +275,9 @@ describe("resolveCollageColumns", () => {
     // Empty area alone would: a single column is always perfectly full. The shape term is what
     // stops five stamps coming out as a strip nobody can read.
     assert.equal(resolveCollageColumns(square(5), auto(20, 20)), 3);
-    assert.equal(resolveCollageColumns(square(7), auto(20, 20)), 3);
+    // Seven land 4 + 3: one hole, and a 4 × 2 canvas is inside the landscape band (#526) where the
+    // 3 + 3 + 1 near-square is not.
+    assert.equal(resolveCollageColumns(square(7), auto(20, 20)), 4);
   });
 
   it("prefers a rectangle over a ragged near-square", () => {
@@ -300,8 +302,9 @@ describe("resolveCollageColumns", () => {
 
   it("never answers a row wider than the tile count", () => {
     // The canvas shrinks to its contents (#307), so the columns past the last tile cost nothing —
-    // and would take every tie by being wider.
-    assert.equal(resolveCollageColumns(square(3), auto(20, 20)), 2);
+    // and would take every tie by being wider. Three square tiles fill one 3-wide row, which is as
+    // wide as three tiles can go; a 20-wide bound cannot make it any wider.
+    assert.equal(resolveCollageColumns(square(3), auto(20, 20)), 3);
     assert.equal(resolveCollageColumns(square(1), auto(20, 20)), 1);
   });
 
@@ -309,13 +312,32 @@ describe("resolveCollageColumns", () => {
 
   it("reads the canvas a wide tile makes, not the cells it fills", () => {
     // Six wide detail crops: the count alone says 3 × 2, which here is a 1200 × 200 letterbox.
-    // Measured, one on top of another is the balanced page — 400 × 600 — and a column is only a
-    // strip nobody can read when the tiles are tall. Six portrait stamps still answer 3, as they
-    // always did.
+    // Measured, they go two to a row — an 800 × 300 page, inside the landscape band (#526) — rather
+    // than the 400 × 600 column the square target used to answer. Six portrait stamps still answer
+    // 3, as they always did.
     const wide = Array.from({ length: 6 }, () => ({ width: 400, height: 100 }));
     const portrait = Array.from({ length: 6 }, () => ({ width: 100, height: 140 }));
-    assert.equal(resolveCollageColumns(wide, auto(6, 6)), 1);
+    assert.equal(resolveCollageColumns(wide, auto(6, 6)), 2);
     assert.equal(resolveCollageColumns(portrait, auto(6, 6)), 3);
+  });
+
+  // ── #526: landscape, not square ────────────────────────────────────────────
+
+  it("aims at a landscape canvas rather than a square one", () => {
+    // Four ordinary portrait stamps. Aiming at a square answered 2 — a 200 × 280 page taller than it
+    // is wide, which is the shape a monitor and a listing thumbnail have least room for. One row of
+    // four costs no more holes and lands landscape.
+    const portrait = Array.from({ length: 4 }, () => ({ width: 100, height: 140 }));
+    assert.equal(resolveCollageColumns(portrait, auto(20, 20)), 4);
+  });
+
+  it("does not chase width once the canvas is already in the band", () => {
+    // Six squares three to a row is 300 × 200 — 3:2, inside the band — so the shape term is spent
+    // and the holes term keeps it there rather than stretching to a 6 × 1 letterbox.
+    assert.equal(resolveCollageColumns(square(6), auto(20, 20)), 3);
+    // And a shape the band cannot rescue still loses to a squarer one: four squares in a row is 4:1,
+    // further out than the 2 × 2 canvas is on the other side.
+    assert.equal(resolveCollageColumns(square(4), auto(20, 20)), 2);
   });
 
   it("counts the space an outlier leaves beside its neighbours", () => {

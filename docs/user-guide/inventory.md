@@ -603,11 +603,16 @@ same offer. A copy that has already **sold** elsewhere can't be added at all.
 
 ### The same stamp in the same condition
 
-Colnect allows only **one offer per stamp per condition**, so a second listing of a stamp you are
-already offering in that condition cannot be posted. The picker points these out before you commit:
-an offer that already holds a **different** copy of one of the same stamps in the same condition
-carries an amber **same stamp + condition already here** marker, and the tooltip says how many of
-your copies it applies to.
+Listing the same stamp in the same condition twice is worth knowing about before you do it — some
+marketplaces (Colnect among them) refuse the second offer outright, others simply leave you with two
+competing listings. The picker points these out before you commit: an offer that already holds a
+**different** copy of one of the same stamps in the same condition carries an amber
+**same stamp + condition already here** marker, and the tooltip says how many of your copies it
+applies to.
+
+The warning only ever states the fact — *these copies are already offered on platform X, same stamp
+and condition*. It does not claim a rule, because whether it blocks anything depends on the platform
+you are listing on.
 
 When at least one offer conflicts, the left facet panel grows a **Conflicts** group with a
 **Same stamp + condition** entry and its count. Click it and the list narrows to just those offers;
@@ -876,6 +881,10 @@ add-photos area.
 
 Accepted formats are **JPEG, PNG, and WebP**, up to **60 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
+
+Thumbnails everywhere in the app show the **whole** image, scaled to fit inside the thumbnail box by
+its longest edge — never cropped to fill the box. A tall stamp leaves a little space at the sides, a
+wide one above and below, and nothing of the stamp itself is cut off.
 
 Photos upload **as soon as you drop them** — each thumbnail shows its own upload progress bar,
 and an overall bar above the strip tracks all in-flight uploads together — but nothing is

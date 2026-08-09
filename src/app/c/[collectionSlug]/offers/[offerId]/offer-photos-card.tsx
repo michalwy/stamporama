@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useOfferPhotoPlan, useInvalidateOffers, type OfferPhotoPlanView } from "../use-offers-query";
 import { formatBytes } from "@/lib/format-bytes";
-import { PhotoLightbox } from "../../inventory/photo-thumb";
+import { PhotoLightbox, THUMB_OBJECT_FIT } from "../../inventory/photo-thumb";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import { AddAttachmentDialog } from "./add-attachment-dialog";
 import {
@@ -280,7 +280,7 @@ function PlanPreview({
                 <img
                   src={photoUrl(collectionId, image.photoId, "thumb")}
                   alt={imageTitle(image)}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
                 />
               </button>
             </Tooltip>
@@ -485,7 +485,7 @@ function PlanSequence({
                   style={{
                     width: "2.5rem",
                     height: "2.5rem",
-                    objectFit: "cover",
+                    objectFit: THUMB_OBJECT_FIT,
                     borderRadius: "0.375rem",
                     // A dashed border says the thumbnail is a stand-in, not the image itself.
                     border: image.generatedPhotoId

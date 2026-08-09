@@ -473,7 +473,7 @@ export function AddToOfferDialog({
                   would sit narrower than the state facets above it. */}
               <Tooltip
                 style={{ width: "100%" }}
-                content="Offers that already list one of these stamps in this condition, through a different copy. Colnect allows only one offer per stamp per condition."
+                content="Offers on this platform that already list one of these stamps in this condition, through a different copy."
               >
                 <FacetRow
                   label="Same stamp + condition"
@@ -627,9 +627,10 @@ export function AddToOfferDialog({
         error={createError}
         zIndexBase={110}
         onPlatformChange={setCreatePlatformId}
-        // The stamp × condition conflict, asked *before* the offer exists (#513): a new listing of
-        // a stamp the platform already has an offer for in that condition is one Colnect refuses.
-        // Advisory only — the collector may have a reason, and the submit is never blocked.
+        // The stamp × condition conflict, asked *before* the offer exists (#513): the platform
+        // already has an offer for this stamp in this condition. Stated as a fact and never as a
+        // platform rule (#524) — the dialog lists on whatever platform was picked, and only some
+        // marketplaces refuse the second listing. Advisory only: the submit is never blocked.
         notice={
           createCollisions.length > 0 ? (
             <CollisionNotice collisions={createCollisions} totalCopies={items.length} />
@@ -709,8 +710,7 @@ function CollisionNotice({
               : `${affected} of these copies are`}{" "}
           already offered on {collisions[0].platformName}
         </strong>{" "}
-        — the same stamp in the same condition. Colnect allows one offer per stamp per condition, so
-        a second listing cannot be posted.
+        — the same stamp in the same condition, through a different copy.
         <ul style={{ margin: "0.375rem 0 0", paddingLeft: "1.1rem" }}>
           {collisions.map((c) => (
             <li key={c.offerId}>
@@ -846,14 +846,13 @@ function OfferGroup({
               </span>
             )}
             {/* The stamp × condition conflict (#513) — a different copy of the same stamp in the
-                same condition is already on this listing, which Colnect refuses. A warning, not a
-                gate: the destination stays pickable and nothing is left out of the add. */}
+                same condition is already on this listing. A warning, not a gate: the destination
+                stays pickable and nothing is left out of the add. */}
             {colliding > 0 && (
               <Tooltip
                 content={
                   `${colliding === 1 ? "One of these copies is" : `${colliding} of these copies are`} the same stamp in the same condition as ` +
-                  "a copy already listed here. Colnect allows only one offer per stamp per condition, so adding " +
-                  `${colliding === 1 ? "it" : "them"} would make a listing that cannot be posted.`
+                  "a copy already listed here, through a different copy."
                 }
               >
                 <span

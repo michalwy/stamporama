@@ -8,7 +8,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { TextLengthCounter } from "@/app/c/[collectionSlug]/shared/text-length-counter";
-import { PhotoLightbox } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { PhotoLightbox, THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatBytes } from "@/lib/format-bytes";
 import { normalizeDescriptionFormat } from "@/lib/description-format";
 import type { ListingWorkspaceOffer } from "@/lib/offers";
@@ -568,7 +568,7 @@ function PostingKit({
                     <img
                       src={photoUrl(collectionId, image.photoId, "thumb")}
                       alt={imageTitle(image)}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
                     />
                   </button>
                 </Tooltip>

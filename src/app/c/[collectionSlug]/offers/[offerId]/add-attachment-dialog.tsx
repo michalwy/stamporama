@@ -13,6 +13,7 @@ import type { ItemListItem } from "@/lib/items";
 import { formatBytes } from "@/lib/format-bytes";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -321,7 +322,7 @@ export function AddAttachmentDialog({
                     style={{
                       width: "2.5rem",
                       height: "2.5rem",
-                      objectFit: "cover",
+                      objectFit: THUMB_OBJECT_FIT,
                       borderRadius: "0.25rem",
                       border: "1px solid var(--color-border)",
                       display: "block",
@@ -462,7 +463,7 @@ export function AddAttachmentDialog({
                               style={{
                                 width: "4rem",
                                 height: "4rem",
-                                objectFit: "cover",
+                                objectFit: THUMB_OBJECT_FIT,
                                 borderRadius: "0.375rem",
                                 display: "block",
                               }}
@@ -517,7 +518,7 @@ export function AddAttachmentDialog({
                       style={{
                         width: "6rem",
                         height: "6rem",
-                        objectFit: "cover",
+                        objectFit: THUMB_OBJECT_FIT,
                         borderRadius: "0.375rem",
                         border: "1px solid var(--color-border)",
                         display: "block",

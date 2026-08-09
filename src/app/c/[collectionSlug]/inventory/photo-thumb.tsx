@@ -19,6 +19,13 @@ import { Icon } from "@/app/icons";
 
 const DEFAULT_THUMB_SIZE = "4rem"; // 64px — larger than the old strip's 2.75rem thumbnails.
 
+/** Every thumbnail in the app **fits** its image inside the box rather than cropping it to fill
+ * (#525). A stamp is the subject, and a cropped stamp hides exactly what the thumbnail is looked at
+ * for — a margin, a perforation, an overprint at the edge. The box keeps its size; the image scales
+ * by its longest edge and letterboxes against the tile's background. Import this rather than writing
+ * `objectFit` by hand, so a new thumbnail cannot quietly go back to cropping. */
+export const THUMB_OBJECT_FIT = "contain" as const;
+
 function thumbUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/thumb`;
 }
@@ -134,7 +141,7 @@ export function PhotoThumb({
             <img
               src={thumbUrl(collectionId, current.id)}
               alt={roleLabel(current)}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
             />
           </button>
         </Tooltip>
@@ -248,7 +255,7 @@ export function PhotoStrip({
               <img
                 src={thumbUrl(collectionId, p.id)}
                 alt={roleLabel(p)}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
               />
               {slotMeta && (
                 <span
