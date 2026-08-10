@@ -368,6 +368,35 @@ estimate. Marking a lot won does **not** create a purchase on its own: you pay f
 whole when the seller invoices it, and that is [**Settling**](#settling-a-parcel-into-a-purchase),
 one step for the whole sale.
 
+### What it can cost you — the bar above the toolbar
+
+The bar at the top of the lots screen answers the one question a live watchlist is worked against:
+*how much of my money is currently on this?* It is always in your collection's own currency, unlike
+every other figure on the screen — a watchlist spans platforms, and a sum across two currencies
+would not be a sum — and it covers **exactly the lots the filter is showing**, read whole rather
+than added up from the rows you have scrolled to. Change a filter and it changes with it.
+
+Two figures, and the gap between them is the decision:
+
+- **Committed** — what you owe if everything goes against you: every lot at the **maximum you have
+  placed** on it, plus what the lots you have already won fetched, plus each parcel's shipping once.
+  Placing a proxy maximum is a commitment to the platform, so this is the figure to check a budget
+  against. A lot you have not bid on costs nothing here — you are not on the hook for it.
+- **At ceiling** — the same, if you carried every open lot up to **your own ceiling**. This is the
+  one that says whether there is room to keep bidding.
+
+A ceiling is already an all-in figure ([Bidding to your ceiling](#bidding-to-your-ceiling)), so it
+counts as it stands — the premium is never added to it a second time. Where the bid you placed is
+*higher* than the ceiling, that bid is what counts: it is money committed whatever your valuation
+of the lot says.
+
+The note beside them says how many lots were counted, and calls out the two things that would make
+the totals read lower than the truth: lots carrying **neither a bid nor a ceiling**, which cannot be
+costed at all, and lots in a currency with **no rate** into yours, which are left out rather than
+added as though the two currencies were one.
+
+The same pair sits on a sale's own screen, beside its all-in total, for one parcel.
+
 ### Filtering and grouping
 
 The toolbar filters on two different questions. The first row is **what to do about a lot**, worked
@@ -440,6 +469,13 @@ figure on the terms-and-totals card.
 **Add lot** on a sale's own screen puts a lot straight into that parcel — no seller, platform or
 matching to go through, because the settlement is already the screen you are on. Its closing date
 fills the lot's in, and the amounts are in the sale's currency.
+
+A sale's own screen adds two more totals beside its all-in one, the pair the lots screen carries for
+the whole watchlist: **committed** — what this parcel costs if every bid you placed on it wins at
+your maximum, the won lots at what they fetched, shipping once — and **at ceiling**, the same if you
+carry every open lot in it up to your ceiling. The all-in total says what the parcel costs at
+today's prices; these two say what it can cost. Lots carrying neither a bid nor a ceiling are named
+under the card, because nothing can cost them.
 
 A sale's own screen shows its terms and its lots, and is where you:
 

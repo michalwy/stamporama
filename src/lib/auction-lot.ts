@@ -441,6 +441,9 @@ export interface AuctionLotSummaryRow {
   wonTie?: boolean | null;
   /** The live bid while the lot is open. */
   currentBid?: Amount;
+  /** The collector's own ceiling — an **all-in** valuation (ADR-0021 §6), not a hammer price. Read
+   * only by {@link AuctionSaleSummary.ceilingTotal}. */
+  maxBid?: Amount;
   /** What the lot fetched once it closed. Preferred over `currentBid` when present: it is the
    * settled figure, and the last observed bid is only ever an approximation of it. */
   finalPrice?: Amount;
@@ -473,6 +476,34 @@ export interface AuctionSaleSummary {
    * once however many lots are in it — that is the whole point of a sale being one settlement with
    * one seller. Shipping is only added when something is actually payable. */
   allInTotal: string;
+  /**
+   * **What is already owed if everything goes against the collector** (#523) — the budget figure a
+   * watchlist is actually worked against.
+   *
+   * A `pending` lot is costed at `allIn(myBid)` and **not** at what it stands at: `myBid` is a proxy
+   * maximum lodged with the platform, so it is the most that lot can take, while `currentBid` is an
+   * observation that says nothing about the collector's exposure. A `won` lot is costed at its
+   * `finalPrice`, which is no longer worst-case but settled. Shipping once, as everywhere.
+   *
+   * A lot with no bid placed contributes **nothing**: nothing has been committed to it. That is the
+   * whole difference between this figure and {@link ceilingTotal}, and it is why the two are worth
+   * having side by side — this one is what has already been risked.
+   */
+  committedTotal: string;
+  /**
+   * The same total if every open lot were bid up to its **ceiling** (#523) — what carrying the
+   * watchlist through to the end would cost.
+   *
+   * A `pending` lot is costed at `max(maxBid, allIn(myBid))`. The ceiling is taken **as it stands**,
+   * because it is an all-in valuation already (ADR-0021 §6) — running {@link allIn} over it would
+   * charge the premium and the shipping a second time. The `max` is what keeps the figure honest
+   * when a bid was placed past the ceiling: that bid is money at risk whatever the valuation says,
+   * and the row already flags it as `myBidOverCeiling`.
+   */
+  ceilingTotal: string;
+  /** Payable lots carrying neither a bid nor a ceiling — they contribute to neither total, so like
+   * {@link unbidCount} the screens say so rather than presenting a figure that looks complete. */
+  uncappedCount: number;
   /** Catalogue value across the payable lots. */
   catalogTotal: string;
   /** `catalogTotal − allInTotal`. Null when nothing in the parcel carries both a bid and a
@@ -510,9 +541,18 @@ export function summarizeAuctionSale(
   let unvaluedCount = 0;
   let bidTotal = 0;
   let allInTotal = 0;
+  let committedTotal = 0;
+  let ceilingTotal = 0;
+  let uncappedCount = 0;
   let catalogTotal = 0;
   // Headroom compares like with like: only lots carrying both a bid and a catalogue value.
   let comparableCount = 0;
+  // Every per-lot figure carries the premium and not the shipping; the parcel's shipping is added
+  // once at the end.
+  const perLotFees: AuctionFees = {
+    premiumPercent: fees.premiumPercent,
+    premiumFixed: fees.premiumFixed,
+  };
 
   for (const lot of lots) {
     const outcome = lotOutcome(lot);
@@ -534,15 +574,40 @@ export function summarizeAuctionSale(
     if (bid !== null) {
       bidTotal += bid;
       // Shipping is deliberately excluded here and added once below.
-      allInTotal += allInValue(bid, {
-        premiumPercent: fees.premiumPercent,
-        premiumFixed: fees.premiumFixed,
-      });
+      allInTotal += allInValue(bid, perLotFees);
     }
     if (cv !== null) catalogTotal += cv;
+
+    // Exposure (#523). A won lot is settled money — what it fetched, all-in — and its ceiling has
+    // nothing left to say about it, so it enters both totals at the same figure.
+    if (outcome === "won") {
+      const won = num(lot.finalPrice);
+      if (won !== null) {
+        const cost = allInValue(won, perLotFees);
+        committedTotal += cost;
+        ceilingTotal += cost;
+      }
+      continue;
+    }
+
+    // An open lot: costed at the proxy maximum lodged with the platform, never at what it stands
+    // at. The ceiling enters `ceilingTotal` as it stands — it is an all-in valuation already.
+    const placed = num(lot.myBid);
+    const placedCost = placed === null ? null : allInValue(placed, perLotFees);
+    const ceiling = num(lot.maxBid);
+    if (placedCost !== null) committedTotal += placedCost;
+    if (placedCost === null && ceiling === null) uncappedCount++;
+    else ceilingTotal += Math.max(placedCost ?? 0, ceiling ?? 0);
   }
 
-  if (payableCount > 0) allInTotal += fee(fees.shippingCost);
+  // Shipping once, on the same condition and for the same reason as `allInTotal`: a parcel ships
+  // once however many lots are in it.
+  if (payableCount > 0) {
+    const shipping = fee(fees.shippingCost);
+    allInTotal += shipping;
+    committedTotal += shipping;
+    ceilingTotal += shipping;
+  }
 
   return {
     lotCount: lots.length,
@@ -556,6 +621,9 @@ export function summarizeAuctionSale(
     unvaluedCount,
     bidTotal: money(bidTotal),
     allInTotal: money(allInTotal),
+    committedTotal: money(committedTotal),
+    ceilingTotal: money(ceilingTotal),
+    uncappedCount,
     catalogTotal: money(catalogTotal),
     headroom: comparableCount > 0 ? money(catalogTotal - allInTotal) : null,
   };

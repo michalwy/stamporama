@@ -905,6 +905,154 @@ export async function countAuctionLots(
   });
 }
 
+// ── Exposure across the watchlist (#523) ────────────────────────────────────
+
+/** What the filtered watchlist can cost, in the collection's **base** currency. */
+export interface AuctionLotExposure {
+  baseCurrency: string;
+  /** Everything already committed: each open lot at the proxy maximum placed on it, each won lot at
+   * what it fetched, and each sale's shipping once. See {@link AuctionSaleSummary.committedTotal}. */
+  committedTotal: string;
+  /** The same if every open lot were bid up to its ceiling. See
+   * {@link AuctionSaleSummary.ceilingTotal}. */
+  ceilingTotal: string;
+  /** Lots counted into the two totals — the payable ones under the current filter. */
+  payableCount: number;
+  /** Payable lots carrying neither a bid nor a ceiling, so costed at nothing. */
+  uncappedCount: number;
+  /** Payable lots in a sale whose currency has no rate into the base one, so left out of the totals
+   * altogether (#208's best-effort rule) rather than added as if the two currencies were one. */
+  unconvertibleCount: number;
+}
+
+/** One sale's own money, as the exposure roll-up reads it. */
+const EXPOSURE_LOT_SELECT = {
+  auctionSaleId: true,
+  status: true,
+  myBid: true,
+  maxBid: true,
+  finalPrice: true,
+  wonTie: true,
+} satisfies Prisma.AuctionLotSelect;
+
+/**
+ * What the watchlist on screen can cost (#523) — the budget question a list of live auctions is
+ * actually worked against.
+ *
+ * Over the same `lotListWhere` + {@link resolveDerivedIds} the list and its counts use, so the bar
+ * answers for exactly the rows below it (#151) rather than for the pages loaded so far.
+ *
+ * Rolled up **per sale** and only then summed, which is what makes it right rather than merely
+ * convenient: the premium and the shipping are the sale's, and shipping is charged once per parcel
+ * however many of its lots are on screen — winning any one of them pays it. The per-sale totals are
+ * then converted into the base currency, because a watchlist spans platforms and a figure summed
+ * across two currencies is not a figure.
+ *
+ * Best-effort on the rates, like every other auction read: a sale whose rate cannot be had is
+ * counted out loud instead of being silently added at par.
+ */
+export async function auctionLotExposure(
+  ownerId: string,
+  collectionId: string,
+  filters: Omit<AuctionLotFilters, "offset" | "pageSize"> = {}
+): Promise<AuctionLotExposure> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const empty: AuctionLotExposure = {
+    baseCurrency,
+    committedTotal: "0.00",
+    ceilingTotal: "0.00",
+    payableCount: 0,
+    uncappedCount: 0,
+    unconvertibleCount: 0,
+  };
+
+  const derivedIds = await resolveDerivedIds(collectionId, filters);
+  if (derivedIds?.length === 0) return empty;
+
+  const rows = await prisma.auctionLot.findMany({
+    where: lotListWhere(collectionId, filters, derivedIds),
+    select: EXPOSURE_LOT_SELECT,
+  });
+  if (rows.length === 0) return empty;
+
+  const sales = await prisma.auctionSale.findMany({
+    where: { id: { in: [...new Set(rows.map((r) => r.auctionSaleId))] } },
+    select: { id: true, currency: true, premiumPercent: true, premiumFixed: true, shippingCost: true },
+  });
+  const byId = new Map(sales.map((s) => [s.id, s]));
+
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const group = grouped.get(row.auctionSaleId) ?? [];
+    group.push(row);
+    grouped.set(row.auctionSaleId, group);
+  }
+
+  const rates = await exposureRates(collectionId, baseCurrency, sales);
+
+  let committed = 0;
+  let ceiling = 0;
+  let payableCount = 0;
+  let uncappedCount = 0;
+  let unconvertibleCount = 0;
+
+  for (const [saleId, lots] of grouped) {
+    const sale = byId.get(saleId);
+    if (!sale) continue;
+    const summary = summarizeAuctionSale(
+      lots.map((lot) => ({
+        status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
+        myBid: money(lot.myBid),
+        maxBid: money(lot.maxBid),
+        finalPrice: money(lot.finalPrice),
+        wonTie: lot.wonTie,
+      })),
+      {
+        premiumPercent: money(sale.premiumPercent),
+        premiumFixed: money(sale.premiumFixed),
+        shippingCost: money(sale.shippingCost),
+      }
+    );
+    if (summary.payableCount === 0) continue;
+
+    const rate = sale.currency === baseCurrency ? 1 : (rates.get(sale.currency) ?? null);
+    if (rate === null) {
+      unconvertibleCount += summary.payableCount;
+      continue;
+    }
+    payableCount += summary.payableCount;
+    uncappedCount += summary.uncappedCount;
+    committed += Number(summary.committedTotal) * rate;
+    ceiling += Number(summary.ceilingTotal) * rate;
+  }
+
+  return {
+    baseCurrency,
+    committedTotal: committed.toFixed(2),
+    ceilingTotal: ceiling.toFixed(2),
+    payableCount,
+    uncappedCount,
+    unconvertibleCount,
+  };
+}
+
+/** The live rate from each sale currency into the base one, in one batch. Best-effort: a lookup
+ * that fails leaves the currency absent, and its sales are reported as unconvertible. */
+async function exposureRates(
+  collectionId: string,
+  baseCurrency: string,
+  sales: { currency: string }[]
+): Promise<Map<string, number>> {
+  const currencies = [...new Set(sales.map((s) => s.currency).filter((c) => c !== baseCurrency))];
+  if (currencies.length === 0) return new Map();
+  try {
+    const rates = await getOrFetchRates(collectionId, baseCurrency as BaseCurrency, currencies);
+    return new Map([...rates].map(([currency, { rate }]) => [currency, rate]));
+  } catch {
+    return new Map();
+  }
+}
+
 export interface AuctionLotFilterCounts {
   /** Lots per derived outcome, under the selected seller / platform. Outcomes with none are absent. */
   outcomes: Partial<Record<AuctionLotOutcome, number>>;
@@ -1163,6 +1311,9 @@ const SALE_SELECT = {
       // The parcel's totals count the lots the collector pays for, and which those are is now read
       // off the money (ADR-0021 §4) — so the rollup needs the two figures the outcome follows from.
       myBid: true,
+      // The exposure totals (#523): what is committed follows from `myBid`, and what carrying the
+      // parcel to its ceilings would cost from `maxBid`.
+      maxBid: true,
       wonTie: true,
       // What the parcel's catalogue total is summed from (#353); the ids of the lots that have one
       // are what the batched valuation is asked for.
@@ -1204,6 +1355,7 @@ function toSaleListItem(
       row.lots.map((lot) => ({
         status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
         myBid: money(lot.myBid),
+        maxBid: money(lot.maxBid),
         wonTie: lot.wonTie,
         currentBid: money(lot.currentBid),
         finalPrice: money(lot.finalPrice),

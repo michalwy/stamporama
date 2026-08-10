@@ -10,6 +10,7 @@ import {
   getAuctionSellerDefaults,
   listAuctionLots,
   auctionLotFilterCounts,
+  auctionLotExposure,
   recordAuctionLotTransition,
   setAuctionLotBid,
   setAuctionLotMyBid,
@@ -719,6 +720,93 @@ describe("auction tracking (#351/#352)", () => {
     );
 
     await prisma.auctionLot.delete({ where: { id: lotId } });
+    await deleteAuctionSale(userId, saleId);
+  });
+
+  it("totals what the filtered watchlist can cost, per sale and in the base currency (#523)", async () => {
+    const exposureSellerId = (
+      await prisma.contact.create({
+        data: { collectionId, name: `Exposure seller ${Date.now()}`, seller: true },
+      })
+    ).id;
+    // 20% + 1/lot, 15 shipping — the same terms the pure tests use, so the arithmetic is checkable
+    // by hand against them. The sale is in the collection's own currency, so no rate is involved.
+    const saleId = await createAuctionSale(userId, collectionId, {
+      sellerId: exposureSellerId,
+      platformId,
+      name: "Exposure parcel",
+      url: null,
+      endsAt: null,
+      currency: "EUR",
+      shippingCost: "15.00",
+      premiumPercent: "20",
+      premiumFixed: "1",
+    });
+    const lot = (lotNo: string, over: { myBid?: string | null; maxBid?: string | null }) =>
+      createAuctionLot(userId, collectionId, {
+        auctionSaleId: saleId,
+        lotNo,
+        url: null,
+        title: `Exposure ${lotNo}`,
+        endsAt: hourFromNow(),
+        startingPrice: null,
+        // What the lot stands at is an observation and must not reach either total.
+        currentBid: "500.00",
+        myBid: over.myBid ?? null,
+        maxBid: over.maxBid ?? null,
+        notes: null,
+      });
+    const placed = await lot("201", { myBid: "100.00", maxBid: "300.00" });
+    await lot("202", { myBid: null, maxBid: null });
+
+    const inSale = () => auctionLotExposure(userId, collectionId, { sellerId: exposureSellerId });
+
+    const open = await inSale();
+    assert.equal(open.baseCurrency, "EUR");
+    // 100 + 20% + 1 = 121, plus one shipping of 15. The 500 standing bid is nowhere in it.
+    assert.equal(open.committedTotal, "136.00");
+    // The ceiling as it stands (300) + shipping — never allIn(300).
+    assert.equal(open.ceilingTotal, "315.00");
+    assert.equal(open.payableCount, 2);
+    assert.equal(open.uncappedCount, 1, "the lot with neither figure is named, not costed");
+    assert.equal(open.unconvertibleCount, 0);
+
+    // A won lot is costed at what it fetched, in both figures.
+    await recordAuctionLotTransition(userId, placed, {
+      status: "closed",
+      finalPrice: "50.00",
+      wonTie: null,
+    });
+    // The bar answers for the rows on screen, so the default watchlist — which files closed lots
+    // away (#504) — drops it, and only the open uncapped lot's shipping is left.
+    const stillOpen = await inSale();
+    assert.equal(stillOpen.committedTotal, "15.00");
+    assert.equal(stillOpen.payableCount, 1);
+
+    // Under *Show closed*, where the won lot is on screen: 50 + 20% + 1 = 61, plus shipping once.
+    const won = await auctionLotExposure(userId, collectionId, {
+      sellerId: exposureSellerId,
+      includeClosed: true,
+    });
+    assert.equal(won.committedTotal, "76.00");
+    assert.equal(won.ceilingTotal, "76.00", "a won lot is settled money, whatever its ceiling said");
+    assert.equal(won.payableCount, 2);
+    assert.equal(won.uncappedCount, 1);
+
+    // Lost money is nobody's exposure.
+    await recordAuctionLotTransition(userId, placed, {
+      status: "closed",
+      finalPrice: "900.00",
+      wonTie: null,
+    });
+    const lost = await auctionLotExposure(userId, collectionId, {
+      sellerId: exposureSellerId,
+      includeClosed: true,
+    });
+    assert.equal(lost.committedTotal, "15.00", "shipping only — nothing payable but the open lot");
+    assert.equal(lost.ceilingTotal, "15.00");
+
+    await prisma.auctionLot.deleteMany({ where: { auctionSaleId: saleId } });
     await deleteAuctionSale(userId, saleId);
   });
 });

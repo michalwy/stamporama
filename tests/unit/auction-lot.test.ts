@@ -184,6 +184,61 @@ describe("summarizeAuctionSale", () => {
     assert.equal(s.headroom, null);
   });
 
+  // Exposure (#523) — the budget question: what is owed if every proxy bid placed goes the whole
+  // way, and what carrying the watchlist to its ceilings would cost.
+
+  it("costs an open lot at the proxy maximum placed, not at what it stands at", () => {
+    // 200 + 20% + 1 = 241, plus one shipping of 15. `currentBid` of 100 is an observation and says
+    // nothing about what the collector is on the hook for.
+    const s = summarizeAuctionSale([lot({ myBid: "200", currentBid: "100" })], FEES);
+    assert.equal(s.committedTotal, "256.00");
+  });
+
+  it("commits nothing for an open lot with no bid placed", () => {
+    // Shipping still lands, exactly as it does in `allInTotal` — the parcel is payable.
+    const s = summarizeAuctionSale([lot({ myBid: null })], FEES);
+    assert.equal(s.committedTotal, "15.00");
+    assert.equal(s.ceilingTotal, "15.00");
+    assert.equal(s.uncappedCount, 1);
+  });
+
+  it("takes the ceiling as it stands — it is an all-in figure already", () => {
+    // 300 ceiling, not allIn(300) = 361: running the premium over it would charge it twice.
+    const s = summarizeAuctionSale([lot({ myBid: "100", maxBid: "300" })], FEES);
+    assert.equal(s.ceilingTotal, "315.00");
+    assert.equal(s.committedTotal, "136.00");
+  });
+
+  it("keeps a bid placed past the ceiling in the ceiling total", () => {
+    // Placed 200 (all-in 241) against a ceiling of 150 — the money at risk is the bid.
+    const s = summarizeAuctionSale([lot({ myBid: "200", maxBid: "150" })], FEES);
+    assert.equal(s.ceilingTotal, "256.00");
+  });
+
+  it("costs a won lot at what it fetched, in both totals", () => {
+    // 100 + 20% + 1 = 121, plus shipping. A settled lot has no worst case left.
+    const s = summarizeAuctionSale([wonLot({ finalPrice: "100", maxBid: "400" })], FEES);
+    assert.equal(s.committedTotal, "136.00");
+    assert.equal(s.ceilingTotal, "136.00");
+    assert.equal(s.uncappedCount, 0);
+  });
+
+  it("leaves lost, observed and cancelled lots out of both totals", () => {
+    const s = summarizeAuctionSale(
+      [lostLot({ maxBid: "500" }), observedLot({ maxBid: "500" }), lot({ status: "cancelled", maxBid: "500" })],
+      FEES
+    );
+    assert.equal(s.committedTotal, "0.00");
+    assert.equal(s.ceilingTotal, "0.00");
+    assert.equal(s.uncappedCount, 0);
+  });
+
+  it("charges shipping once across the parcel, and the premium per lot", () => {
+    // Two ceilings of 100 → 200, plus one shipping of 15. A ceiling carries no premium.
+    const s = summarizeAuctionSale([lot({ maxBid: "100" }), lot({ maxBid: "100" })], FEES);
+    assert.equal(s.ceilingTotal, "215.00");
+  });
+
   it("is all zeroes for an empty sale", () => {
     const s = summarizeAuctionSale([], FEES);
     assert.deepEqual(

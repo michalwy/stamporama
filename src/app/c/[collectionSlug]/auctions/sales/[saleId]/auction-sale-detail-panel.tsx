@@ -334,6 +334,23 @@ export function AuctionSaleDetailPanel({
           strong
           base={inBase(summary.allInTotal)}
         />
+        {/* What the parcel can still cost (#523). The two are one question asked twice: what is
+            already on the hook, and what carrying the bidding through to the ceilings would come
+            to. Both sit beside All-in rather than replacing it — that one says what the parcel
+            costs at today's prices, and these say what it can cost. */}
+        <Field
+          label="Committed"
+          value={`${summary.committedTotal} ${sale.currency}`}
+          hint="What you owe if every bid you have placed wins at your own maximum — the settled price on the lots already won, plus shipping once. A lot you have not bid on costs nothing here."
+          strong
+          base={inBase(summary.committedTotal)}
+        />
+        <Field
+          label="At ceiling"
+          value={`${summary.ceilingTotal} ${sale.currency}`}
+          hint="The same, if every open lot is bid up to its ceiling. A ceiling is already an all-in figure, so it is counted as it stands; where your placed bid is higher, that is what counts."
+          base={inBase(summary.ceilingTotal)}
+        />
         {/* What the parcel is worth against what it costs (#353). Unlike a lot row's headroom this
             one has shipping in it — that is what the parcel actually costs, and shipping is added
             here exactly once. */}
@@ -363,6 +380,16 @@ export function AuctionSaleDetailPanel({
         <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-warning)" }}>
           {summary.unbidCount} payable lot{summary.unbidCount === 1 ? " has" : "s have"} no bid
           recorded, so the totals above are lower than what this parcel will actually cost.
+        </p>
+      )}
+
+      {/* The exposure figures' own gap (#523), stated for the same reason: a lot with neither a bid
+          nor a ceiling is not costed at all, and a total that quietly omits it looks complete. */}
+      {summary.uncappedCount > 0 && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-warning)" }}>
+          {summary.uncappedCount} lot{summary.uncappedCount === 1 ? " has" : "s have"} neither a bid
+          nor a ceiling, so neither <strong>Committed</strong> nor <strong>At ceiling</strong> counts
+          {summary.uncappedCount === 1 ? " it" : " them"}.
         </p>
       )}
 

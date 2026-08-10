@@ -21,6 +21,7 @@ import {
 } from "@/lib/auction-rules";
 import {
   useAuctionLotCounts,
+  useAuctionLotExposure,
   useAuctionLotsInfinite,
   useAuctionParties,
   useInvalidateAuctions,
@@ -29,6 +30,7 @@ import {
   type AuctionLotFilters,
   type AuctionLotView,
 } from "./use-auctions-query";
+import { AuctionExposureBar } from "./auction-exposure-bar";
 import { AuctionLotRow } from "./auction-lot-row";
 import { AuctionLotFormDialog } from "./auction-lot-form-dialog";
 import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
@@ -208,6 +210,7 @@ export function AuctionLotsPanel({
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
     useAuctionLotsInfinite(collectionId, filters);
   const { data: counts } = useAuctionLotCounts(collectionId, filters);
+  const { data: exposure } = useAuctionLotExposure(collectionId, filters);
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
   // Grouping is a presentation of the rows already loaded, exactly as the listing workspace groups
@@ -260,6 +263,11 @@ export function AuctionLotsPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
+      {/* What the filtered watchlist can cost (#523) — above the toolbar rather than inside it,
+          because it is a reading of the list rather than a control over it, and the toolbar is what
+          stays pinned while the rows scroll (#358). */}
+      <AuctionExposureBar exposure={exposure} />
+
       {/* Toolbar — pinned while the rows scroll under it (#358), carrying the page background so
           rows never show through it. */}
       <div

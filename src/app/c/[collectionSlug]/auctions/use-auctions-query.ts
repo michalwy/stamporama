@@ -7,6 +7,7 @@ import type { AnchorMarketEvidence, AuctionLotLineAnchor } from "@/lib/auction-l
 import type { AuctionLotBidEvidence } from "@/lib/bid-recommendations";
 import type {
   AuctionLotDetailItem,
+  AuctionLotExposure,
   AuctionLotFilterCounts,
   AuctionLotListItem,
   AuctionSellerDefaults as AuctionSellerDefaultsData,
@@ -88,6 +89,26 @@ export function useAuctionLotCounts(collectionId: string, filters: AuctionLotFil
         `/api/collections/${collectionId}/auctions/lots/counts?${lotParams(filters).toString()}`
       );
       if (!res.ok) throw new Error("Failed to fetch auction lot counts");
+      return res.json();
+    },
+  });
+}
+
+/**
+ * What the filtered watchlist can cost (#523) — the summary bar's read.
+ *
+ * Its own endpoint rather than a sum over the loaded pages: a total that grows as you scroll is
+ * worse than none (#151). Under the same `["auctions", id]` key as everything else, so recording a
+ * bid on a row refreshes the bar with it.
+ */
+export function useAuctionLotExposure(collectionId: string, filters: AuctionLotFilters) {
+  return useQuery<AuctionLotExposure>({
+    queryKey: ["auctions", collectionId, "lot-exposure", filters] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/auctions/lots/exposure?${lotParams(filters).toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch the watchlist exposure");
       return res.json();
     },
   });
