@@ -251,7 +251,8 @@ laid out as a walk through your shelves:
   the transaction, and the reference to quote when the sheet is talked about on paper — plus the
   platform, buyer, order number, sale date, [status](#fulfillment-status), and the copy/packed
   counts. The **order number** beside it is a different thing: that one is the *marketplace's*
-  number for the same sale.
+  number for the same sale. When the sale records a **shipping method**, it prints there too, so
+  the sheet says how the parcel goes out; sales without one simply don't show the field.
 - One **section per storage [location](locations.md)**, in shelf order, with the copies filed
   nowhere in a trailing **No location** section.
 - Inside a section, one line per copy: a **tick box** plus whichever of the columns below you

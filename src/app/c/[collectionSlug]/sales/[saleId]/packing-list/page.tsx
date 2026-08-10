@@ -121,6 +121,10 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           <Meta label="Sold" value={formatDate(sale.soldAt)} />
           {sale.externalRef && <Meta label="Order" value={sale.externalRef} />}
           <Meta label="Buyer" value={sale.buyerName ?? "unknown"} />
+          {/* How the parcel goes out (#468) — printed only when the buyer's choice is recorded,
+              since an empty "Shipping: —" tells the packer nothing they can act on. It sits beside
+              the buyer because it is the other half of "where this parcel is going". */}
+          {sale.shippingMethodName && <Meta label="Shipping" value={sale.shippingMethodName} />}
           <Meta label="Status" value={status.label} />
           <Meta
             label="Copies"
