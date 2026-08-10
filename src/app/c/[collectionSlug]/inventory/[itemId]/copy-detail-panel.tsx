@@ -105,21 +105,17 @@ export function CopyDetailPanel({
           <Tooltip content="Internal copy number — never changes, never reused">
             <span style={ITEM_NO}>{formatItemNo(item.itemNo, itemNoPad)}</span>
           </Tooltip>
-          <Link
+          <StampIdentity
+            stamp={{
+              name: item.stampName,
+              catalogNumbers: item.catalogNumbers,
+              colnectId: item.colnectId,
+              subtype: item.subtype,
+            }}
+            vendorMap={vendorMap}
+            primaryVendorId={primaryVendorId}
             href={`/c/${collectionSlug}/stamps/${item.stampId}`}
-            style={{ textDecoration: "none", minWidth: 0 }}
-          >
-            <StampIdentity
-              stamp={{
-                name: item.stampName,
-                catalogNumbers: item.catalogNumbers,
-                colnectId: item.colnectId,
-                subtype: item.subtype,
-              }}
-              vendorMap={vendorMap}
-              primaryVendorId={primaryVendorId}
-            />
-          </Link>
+          />
           {item.unknownVariant && (
             <Tooltip content="Linked to a base stamp that has variants — which variant this copy is has not been decided">
               <span>

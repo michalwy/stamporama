@@ -271,17 +271,13 @@ function RelativeRow({
       <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", flexShrink: 0 }}>
         {role}
       </span>
-      <Link
+      <StampIdentity
+        stamp={stamp}
+        vendorMap={vendorMap}
+        primaryVendorId={primaryVendorId}
+        size="small"
         href={`/c/${collectionSlug}/stamps/${stamp.id}`}
-        style={{ textDecoration: "none", minWidth: 0 }}
-      >
-        <StampIdentity
-          stamp={stamp}
-          vendorMap={vendorMap}
-          primaryVendorId={primaryVendorId}
-          size="small"
-        />
-      </Link>
+      />
       {showCopies && <CopyCountBadge copies={stamp.copies} />}
       <span style={{ marginLeft: "auto" }}>
         <RowQuickActions actions={[detailPage]} visible={hovered} />
