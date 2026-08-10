@@ -404,6 +404,12 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
    (e.g. a page or pocket). Picking a location moves the cursor straight to the **Ref** field
    so you can type the ref without an extra click. Only locations that can hold copies are
    selectable — see [Locations](locations.md).
+
+   The **Ref** field is also where the cursor starts when the dialog opens, as long as a
+   remembered location has already filled the **Location** beside it: with the condition,
+   location and disposition all coming back from the last copy you added, the ref is the one
+   field that changes from copy to copy, so bulk intake needs no click before typing. With no
+   location filled in, the Ref field is disabled and the cursor is left alone.
 6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
 7. Optionally attach **photos** — front, back, and titled extras. See [Photos](#photos).
 8. Click **Add copy**. Everything is saved together in one step.

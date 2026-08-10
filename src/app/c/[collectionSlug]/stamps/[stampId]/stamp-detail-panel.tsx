@@ -69,7 +69,11 @@ export function StampDetailPanel({
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}
           />
-          <CopyCountBadge copies={stamp.copies} size="medium" />
+          <CopyCountBadge
+            copies={stamp.copies}
+            variantCopies={stamp.variantCopies}
+            size="medium"
+          />
           {price && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
               <span style={PRICE_MAIN}>{moneyPrimaryText(price)}</span>
@@ -98,12 +102,15 @@ export function StampDetailPanel({
                   {stamp.subtype ? stamp.subtype.name : stamp.parentId ? null : "Base stamp"}
                 </Field>
                 <Field label="Copies held">
-                  {stamp.copies.total > 0
+                  {stamp.copies.total > 0 || stamp.variantCopies > 0
                     ? [
-                        `${stamp.copies.total} held`,
+                        stamp.copies.total > 0 ? `${stamp.copies.total} held` : null,
                         stamp.copies.inCollection ? `${stamp.copies.inCollection} in collection` : null,
                         stamp.copies.forSale ? `${stamp.copies.forSale} for sale` : null,
                         stamp.copies.forTrade ? `${stamp.copies.forTrade} for trade` : null,
+                        // The variants' copies (#528) are held of something else and are stated as
+                        // their own figure, never folded into the number before them.
+                        stamp.variantCopies > 0 ? `${stamp.variantCopies} in variants` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")
@@ -298,7 +305,9 @@ function RelativeRow({
         size="small"
         href={`/c/${collectionSlug}/stamps/${stamp.id}`}
       />
-      {showCopies && <CopyCountBadge copies={stamp.copies} />}
+      {showCopies && (
+        <CopyCountBadge copies={stamp.copies} variantCopies={stamp.variantCopies} />
+      )}
       <span style={{ marginLeft: "auto" }}>
         <RowQuickActions actions={[detailPage]} visible={hovered} />
       </span>

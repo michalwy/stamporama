@@ -183,6 +183,17 @@ export function InventoryItemFormDialog({
       locationRefInputRef.current?.focus();
     }
   }, [locationId]);
+  // Cursor straight in the Ref field when the Add copy dialog opens (#534). Intake is bulk entry:
+  // condition, location and disposition come back remembered (#234), so the in-location ref is the
+  // one field that differs per copy and typing should start there. Add mode only — an edit is
+  // opened to change some particular field, and edit mode remembers nothing to make Ref the likely
+  // one. Mount-only, so nothing later pulls the cursor out from under the collector; a dialog
+  // opened with no remembered location leaves the field disabled and the focus alone.
+  useEffect(() => {
+    if (mode !== "add") return;
+    locationRefInputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [deliveryState, setDeliveryState] = useState(item?.deliveryState ?? "delivered");
   // Null for a copy still held, which is every copy in add mode.
   const disposalSummary = item ? describeDisposal(item) : null;

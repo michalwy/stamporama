@@ -31,7 +31,12 @@ import { loadIssuePrefixMap } from "./issue-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorResolver } from "./format-pricing";
-import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
+import {
+  loadStampCopyCounts,
+  NO_COPIES,
+  type StampCopyCountMaps,
+  type StampCopyCounts,
+} from "./copy-counts";
 import { putStampOnChecklists } from "./checklists";
 import {
   syncEntityTranslations,
@@ -350,6 +355,9 @@ export interface StampListItem {
   /** Copies held of this stamp (#348), counted for this stamp exactly — a variant's copies are
    *  its own, never rolled into its parent's badge. */
   copies: StampCopyCounts;
+  /** Copies held under this stamp's variant-kind descendants (#528), at any depth — reported
+   *  beside {@link copies}, never added to it. */
+  variantCopies: number;
 }
 
 export interface PaginatedStampsResult {
@@ -433,7 +441,7 @@ function toStampListItem(
   displayConditionId: string | null,
   displayFormatId: string | null,
   factorFor: (areaId: string | null, issueId: string | null) => number | null,
-  copyCounts: Map<string, StampCopyCounts>
+  copyCounts: StampCopyCountMaps
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
@@ -492,7 +500,8 @@ function toStampListItem(
         sortOrder: p.sortOrder,
       }))
       .sort(sortPhotos),
-    copies: copyCounts.get(stamp.id) ?? NO_COPIES,
+    copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
+    variantCopies: copyCounts.variant.get(stamp.id) ?? 0,
   };
 }
 
@@ -509,7 +518,7 @@ async function buildStampListItems(
     getLatestEditionYearByName(collectionId),
     makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
     // Only the page's stamps (#348) — this funnel is reached with the rows already sliced.
-    countCopiesByStamp(collectionId, stamps.map((s) => s.id)),
+    loadStampCopyCounts(collectionId, stamps.map((s) => s.id)),
   ]);
   const items = stamps.map((s) =>
     toStampListItem(

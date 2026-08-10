@@ -2,7 +2,11 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { countCopiesByStamp, NO_COPIES } from "../../src/lib/copy-counts";
+import {
+  countCopiesByStamp,
+  countVariantDescendantCopies,
+  NO_COPIES,
+} from "../../src/lib/copy-counts";
 
 // Copy counts behind the stamp badge (#348). The rules worth pinning down are all about *which*
 // copies count: per stamp exactly (a variant's copies are not its parent's), sold copies excluded
@@ -173,5 +177,135 @@ describe("stamp copy counts", () => {
 
   it("returns an empty map for no stamps", async () => {
     assert.equal((await countCopiesByStamp(collectionId, [])).size, 0);
+  });
+});
+
+// The second number the catalog rows show (#528): copies held of a stamp's *variant* descendants.
+// What is worth pinning down is which descendants feed it — ADR-0010 §3's effective actsAsVariant,
+// at any depth (#239), with the per-stamp override winning over the subtype — and that a copy no
+// longer held is left out of it exactly as it is left out of the direct count.
+describe("variant-descendant copy counts", () => {
+  let userId: string;
+  let collectionId: string;
+  let conditionId: string;
+  let baseId: string;
+  let variantId: string;
+  let midVariantId: string;
+  let deepVariantId: string;
+  let errorId: string;
+  let variantUnderErrorId: string;
+  let overriddenId: string;
+
+  before(async () => {
+    userId = `test-user-varcount-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User varcount-${ts}`,
+        email: `test-varcount-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: { slug: `col-varcount-${ts}`, name: "V", baseCurrency: "EUR", ownerId: userId },
+      })
+    ).id;
+    conditionId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
+      })
+    ).id;
+
+    const variantSubtypeId = (
+      await prisma.stampSubtype.create({
+        data: { collectionId, name: "Variant", actsAsVariant: true, isDefault: true, sortOrder: 0 },
+      })
+    ).id;
+    const errorSubtypeId = (
+      await prisma.stampSubtype.create({
+        data: { collectionId, name: "Error", actsAsVariant: false, sortOrder: 1 },
+      })
+    ).id;
+
+    const stamp = async (
+      name: string,
+      parentId: string | null,
+      subtypeId: string | null,
+      actsAsVariantOverride: boolean | null = null
+    ) =>
+      (
+        await prisma.stamp.create({
+          data: { collectionId, name, parentId, subtypeId, actsAsVariantOverride },
+        })
+      ).id;
+
+    // base ─┬─ variant (2 copies, one of them disposed of)
+    //       ├─ mid variant (no copies) ── deep variant (1 copy)
+    //       ├─ error (3 copies) ── variant under the error (1 copy)
+    //       └─ error subtype overridden to variant (1 copy)
+    baseId = await stamp("Base", null, null);
+    variantId = await stamp("Variant", baseId, variantSubtypeId);
+    midVariantId = await stamp("Mid variant", baseId, variantSubtypeId);
+    deepVariantId = await stamp("Deep variant", midVariantId, variantSubtypeId);
+    errorId = await stamp("Error", baseId, errorSubtypeId);
+    variantUnderErrorId = await stamp("Variant of the error", errorId, variantSubtypeId);
+    overriddenId = await stamp("Overridden", baseId, errorSubtypeId, true);
+
+    for (const stampId of [
+      variantId,
+      variantId,
+      deepVariantId,
+      errorId,
+      errorId,
+      errorId,
+      variantUnderErrorId,
+      overriddenId,
+    ]) {
+      await createItem(userId, collectionId, { stampId, conditionId });
+    }
+    const gone = await createItem(userId, collectionId, { stampId: variantId, conditionId });
+    await prisma.item.update({ where: { id: gone.id }, data: { disposedAt: new Date() } });
+  });
+
+  after(async () => {
+    await prisma.item.deleteMany({ where: { collectionId } });
+    await prisma.stamp.deleteMany({ where: { collectionId } });
+    await prisma.stampSubtype.deleteMany({ where: { collectionId } });
+    await prisma.stampCondition.deleteMany({ where: { collectionId } });
+    await prisma.collection.delete({ where: { id: collectionId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("sums variant descendants at any depth, and leaves distinct entries out", async () => {
+    const counts = await countVariantDescendantCopies(collectionId, [baseId]);
+    // 2 under the variant (the disposed third is not held), 1 under the deep variant, 1 under the
+    // variant filed below the error, 1 under the overridden child. The error's own 3 do not count.
+    assert.equal(counts.get(baseId), 5);
+  });
+
+  it("counts an intermediate node's own variant descendants", async () => {
+    const counts = await countVariantDescendantCopies(collectionId, [midVariantId, errorId]);
+    assert.equal(counts.get(midVariantId), 1);
+    // The error is a distinct entry, but the variant *of* it is still a variant of the error.
+    assert.equal(counts.get(errorId), 1);
+  });
+
+  it("omits stamps with no variant copies below them", async () => {
+    const counts = await countVariantDescendantCopies(collectionId, [
+      variantId,
+      deepVariantId,
+      overriddenId,
+    ]);
+    // A leaf has no descendants; the variant's own 2 copies are its own, not its subtree's.
+    assert.equal(counts.get(variantId), undefined);
+    assert.equal(counts.get(deepVariantId), undefined);
+    assert.equal(counts.get(overriddenId), undefined);
+  });
+
+  it("returns an empty map for no stamps", async () => {
+    assert.equal((await countVariantDescendantCopies(collectionId, [])).size, 0);
   });
 });

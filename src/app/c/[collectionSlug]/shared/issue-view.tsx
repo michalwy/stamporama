@@ -308,6 +308,7 @@ export function StampDetailLine({
     !node.colnectId &&
     !showsSubtype &&
     node.copies.total === 0 &&
+    node.variantCopies === 0 &&
     !node.mainCatalogPrice &&
     !onSetPrice
   )
@@ -343,7 +344,7 @@ export function StampDetailLine({
         searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
       />
       <SubtypeChip subtype={node.subtype} />
-      <CopyCountBadge copies={node.copies} />
+      <CopyCountBadge copies={node.copies} variantCopies={node.variantCopies} />
       {!node.mainCatalogPrice && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip

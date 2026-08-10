@@ -296,7 +296,11 @@ export function StampRow({
             size="medium"
           />
           <SubtypeChip subtype={stamp.subtype} size="medium" />
-          <CopyCountBadge copies={stamp.copies} size="medium" />
+          <CopyCountBadge
+            copies={stamp.copies}
+            variantCopies={stamp.variantCopies}
+            size="medium"
+          />
           {stamp.mainCatalogPrice && (
             <span
               style={{

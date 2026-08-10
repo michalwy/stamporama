@@ -23,7 +23,12 @@ import {
 } from "./translations";
 import { syncStampTranslations } from "./stamps";
 import { makeFormatFactorResolver } from "./format-pricing";
-import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
+import {
+  loadStampCopyCounts,
+  NO_COPIES,
+  type StampCopyCountMaps,
+  type StampCopyCounts,
+} from "./copy-counts";
 import { allocateEntityNumber } from "./items";
 import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
@@ -139,6 +144,9 @@ export interface StampNodeData {
   /** Copies held of this stamp (#348), counted for this stamp exactly — a variant child's copies
    *  belong to the child's own badge. Zero for every stamp when the caller loaded no counts. */
   copies: StampCopyCounts;
+  /** Copies held under this stamp's variant-kind descendants (#528), at any depth — the second
+   *  number beside {@link copies}. Zero when the caller loaded no counts. */
+  variantCopies: number;
 }
 
 export interface IssueCatalogNumberData {
@@ -297,8 +305,9 @@ function toStampNode(
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
     variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
   },
-  /** Copies held per stamp (#348); absent stamps read as none. */
-  copyCounts?: Map<string, StampCopyCounts>,
+  /** Copies held per stamp — its own (#348) and its variant descendants' (#528). Absent stamps
+   *  read as none; an absent map means the caller loaded no counts at all. */
+  copyCounts?: StampCopyCountMaps,
   /** The issue's own checklist ids (#531), used to narrow the stamp's memberships to this issue.
    *  Absent means the caller loaded no checklists, and every node reports none. */
   issueChecklistIds?: ReadonlySet<string>
@@ -355,7 +364,8 @@ function toStampNode(
     actsAsVariant: childIsVariant(m.stamp),
     subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
-    copies: copyCounts?.get(m.stampId) ?? NO_COPIES,
+    copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,
+    variantCopies: copyCounts?.variant.get(m.stampId) ?? 0,
   };
 }
 
@@ -433,7 +443,7 @@ function toIssueData(issue: {
   }[];
   checklists: ChecklistRow[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-}, copyCounts?: Map<string, StampCopyCounts>): IssueData {
+}, copyCounts?: StampCopyCountMaps): IssueData {
   const checklistIds = new Set(issue.checklists.map((c) => c.id));
   return {
     id: issue.id,
@@ -466,7 +476,7 @@ export async function listIssuesForArea(
     orderBy: [{ year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
     select: ISSUE_SELECT,
   });
-  const copyCounts = await countCopiesByStamp(
+  const copyCounts = await loadStampCopyCounts(
     collectionId,
     issues.flatMap((i) => i.members.map((m) => m.stampId))
   );
@@ -519,7 +529,7 @@ export async function listAllIssues(
     orderBy: [{ collectionAreaId: "asc" }, { year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
     select: ISSUE_SELECT,
   });
-  const copyCounts = await countCopiesByStamp(
+  const copyCounts = await loadStampCopyCounts(
     collectionId,
     issues.flatMap((i) => i.members.map((m) => m.stampId))
   );
@@ -1276,7 +1286,7 @@ export async function listIssueMembers(
   ];
   const [rates, copyCounts] = await Promise.all([
     safeRateMap(collectionId, baseCurrency, currencies),
-    countCopiesByStamp(collectionId, members.map((m) => m.stampId)),
+    loadStampCopyCounts(collectionId, members.map((m) => m.stampId)),
   ]);
 
   return members.map((m) =>
