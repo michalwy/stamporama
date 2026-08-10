@@ -23,11 +23,12 @@ import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import {
   buildStampTree,
+  ChecklistTreeFilter,
+  filterStampTreeByChecklists,
   IssueTitle,
   IssueCatalogChips,
   ChecklistsBadge,
   type VendorMap,
-  type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useIssuesByArea, useInvalidateInventory } from "./use-inventory-query";
@@ -558,7 +559,13 @@ function PickIssueRow({
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || matchedStampIds !== null;
-  const tree = useMemo<StampTreeNodeData[]>(() => buildStampTree(issue.members), [issue.members]);
+  // Narrowing the tree by checklist (#531), as on the issues list and the issue detail page.
+  // Local to the row and not remembered: a picker is opened to answer one question.
+  const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const { tree, contextIds } = useMemo(
+    () => filterStampTreeByChecklists(buildStampTree(issue.members), treeChecklistIds),
+    [issue.members, treeChecklistIds]
+  );
   // Issue-level gallery (#137): the main photos of the stamps on a checklist (#531) —
   // computed client-side from the members the picker already loaded.
   const issuePhotos = useMemo(
@@ -729,6 +736,27 @@ function PickIssueRow({
             borderLeft: "2px solid var(--color-border)",
           }}
         >
+          {/* Narrowing by checklist — only where there is a choice to make. */}
+          {issue.checklists.length > 1 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.5rem 0.5rem 0.5rem 0.75rem",
+                borderBottom: "1px solid var(--color-border)",
+              }}
+            >
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                Checklist
+              </span>
+              <ChecklistTreeFilter
+                checklists={issue.checklists}
+                selected={treeChecklistIds}
+                onChange={setTreeChecklistIds}
+              />
+            </div>
+          )}
           {tree.length === 0 ? (
             <div
               style={{
@@ -738,7 +766,12 @@ function PickIssueRow({
                 fontStyle: "italic",
               }}
             >
-              No stamps in this issue yet.
+              {/* Said explicitly rather than shown as an empty row: with a text search also on
+                  (which is what forces a row open, #186), an unexplained blank reads as "this
+                  issue has nothing", when in fact the checklist filter is what emptied it. */}
+              {treeChecklistIds.length > 0 && issue.members.length > 0
+                ? "No stamp on the checklists you picked."
+                : "No stamps in this issue yet."}
             </div>
           ) : (
             tree.map((treeNode, i) => (
@@ -746,6 +779,7 @@ function PickIssueRow({
                 key={treeNode.node.stampId}
                 treeNode={treeNode}
                 depth={0}
+                contextIds={contextIds}
                 collectionId={issue.collectionId}
                 vendorMap={vendorMap}
                 primaryVendorId={primaryVendorId}

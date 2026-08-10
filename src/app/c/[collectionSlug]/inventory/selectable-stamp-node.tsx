@@ -36,6 +36,7 @@ export function SelectableStampNode({
   onPick,
   onNewVariant,
   matchedStampIds,
+  contextIds,
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
@@ -48,6 +49,9 @@ export function SelectableStampNode({
   /** When set, the active filter matched only stamps within this issue (#186): nodes whose
    * subtree contains no match are dimmed, and nodes on the path to a match start expanded. */
   matchedStampIds?: Set<string> | null;
+  /** Stamps the checklist filter (#531) kept only as context for a matching descendant. Dimmed
+   *  the same way and for the same reason as #186's non-matches — one faded state, not two. */
+  contextIds?: Set<string>;
 }) {
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
@@ -59,8 +63,11 @@ export function SelectableStampNode({
   // when the filter clears, the node falls back to the user's own collapsed state.
   const collapsed = userCollapsed && !childHasMatch;
   const [hovered, setHovered] = useState(false);
-  // Dim a node when a filter is active and neither it nor any descendant matches.
-  const dimmed = !!matchedStampIds && !subtreeHasMatch(treeNode, matchedStampIds);
+  // Dim a node when a filter is active and neither it nor any descendant matches (#186), or when
+  // the checklist filter kept it only as the numbering a match hangs under (#531).
+  const dimmed =
+    (!!matchedStampIds && !subtreeHasMatch(treeNode, matchedStampIds)) ||
+    !!contextIds?.has(treeNode.node.stampId);
   // A node is selectable as the "unknown variant" when at least one of its children acts as a
   // variant (ADR-0010 §3) — not when its children are all distinct entries (errors, overprints…).
   // At **any** depth (#239/#401): `3 → 3A → 3Aa` puts the same question on `3A` as on `3`, and the
@@ -185,6 +192,7 @@ export function SelectableStampNode({
             onPick={onPick}
             onNewVariant={onNewVariant}
             matchedStampIds={matchedStampIds}
+            contextIds={contextIds}
           />
         ))}
     </>

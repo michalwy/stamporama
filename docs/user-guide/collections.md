@@ -305,6 +305,8 @@ Open **Checklists…** from the issue's **⋮** menu. From there you can:
 - **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
 - **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed; anything left unticked is an extra the issue holds but no set counts.
 - **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures.
+
+Names are **labels, not identifiers**: the same name may repeat freely across issues, and *Imperforate* on two different series is two unrelated checklists that never meet on one screen. Within **one** issue a repeated name is allowed too, but the field shows a **⚠** saying so — two checklists called the same thing read alike everywhere they are listed, and you can still save it if that is what you meant.
 - **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default.
 
 ### Putting a stamp on a checklist
@@ -320,6 +322,8 @@ When an issue carries **more than one** checklist, expanding its row puts a **Ch
 A stamp that is not on the picked checklists disappears, with one exception: a **parent whose variant did make the cut stays**, dimmed. `309AP` on its own is a number nobody can place, so the `309` it hangs under remains as context — visibly not part of the set, but there to read the numbering off.
 
 Untick everything to get the whole tree back; an empty selection means *no filter*, not *nothing*. The choice is not remembered — it is a way of looking at one issue for a moment, not a setting.
+
+The same filter sits in the **stamp picker** — the browser you reach from a purchase order's intake or an auction lot's composition — above each expanded issue's tree. When it empties the tree, the row says so rather than looking like an empty issue.
 
 An issue with a single checklist gets no filter: there is nothing to choose between.
 

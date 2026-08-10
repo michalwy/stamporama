@@ -33,6 +33,8 @@ import {
   dragStyle,
 } from "./reorder-list";
 import { NO_AUTOFILL } from "./no-autofill";
+import { Tooltip } from "./tooltip";
+import { Icon } from "@/app/icons";
 
 // The checklists of one issue, edited from that issue's row (#531; ADR-0031). The anchor is never a
 // field: the screen this was opened from already answered "which issue", which is ADR-0020 §7's
@@ -154,6 +156,24 @@ export function ChecklistsDialog({
 
   const drag = useReorderList(checklists.length > 1 && !isPending, move, { handleOnly: true });
 
+  // The typed name, mirrored so the duplicate check can read it. The input itself stays
+  // uncontrolled, as the issue form's does — the value is read off the form on submit.
+  const [nameText, setNameText] = useState("");
+
+  // Two checklists of one issue with the same name are indistinguishable everywhere they are
+  // listed — the badge tooltip, the filter, the stamp form's boxes, the price-details entries.
+  // Advisory rather than blocking, following #178's rule for duplicate issue names: the collector
+  // may have a reason, and the list behind this dialog already says what is there.
+  const duplicateName =
+    editing !== null &&
+    editing.kind !== "stamps" &&
+    nameText.trim() !== "" &&
+    checklists.some(
+      (c) =>
+        c.id !== (editing.kind === "rename" ? editing.checklist.id : null) &&
+        c.name.trim().toLowerCase() === nameText.trim().toLowerCase()
+    );
+
   function submitName(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const name = ((new FormData(e.currentTarget).get("name") as string | null) ?? "").trim();
@@ -253,7 +273,10 @@ export function ChecklistsDialog({
                           key: "rename",
                           label: "Rename…",
                           icon: "edit",
-                          onSelect: () => setEditing({ kind: "rename", checklist }),
+                          onSelect: () => {
+                            setNameText(checklist.name);
+                            setEditing({ kind: "rename", checklist });
+                          },
                         },
                         {
                           key: "delete",
@@ -274,7 +297,10 @@ export function ChecklistsDialog({
 
           <button
             type="button"
-            onClick={() => setEditing({ kind: "add" })}
+            onClick={() => {
+              setNameText("");
+              setEditing({ kind: "add" });
+            }}
             disabled={isPending}
             style={{
               marginTop: "1rem",
@@ -311,17 +337,55 @@ export function ChecklistsDialog({
           <form style={FORM_STYLE} onSubmit={submitName}>
             <DialogBody>
               <LabelWithError htmlFor="cl-name">Name</LabelWithError>
-              <input
-                id="cl-name"
-                name="name"
-                type="text"
-                autoFocus
-                defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
-                disabled={isPending}
-                placeholder="e.g. Basic set, Imperforate, With tabs"
-                style={INPUT_STYLE}
-                {...NO_AUTOFILL}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  id="cl-name"
+                  name="name"
+                  type="text"
+                  autoFocus
+                  defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
+                  disabled={isPending}
+                  placeholder="e.g. Basic set, Imperforate, With tabs"
+                  style={{ ...INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
+                  onChange={(e) => setNameText(e.target.value)}
+                  {...NO_AUTOFILL}
+                />
+                {duplicateName && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: "0.5rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      display: "inline-flex",
+                    }}
+                  >
+                    <Tooltip
+                      align="end"
+                      content={
+                        <span>
+                          A checklist called{" "}
+                          <span style={{ fontWeight: 600 }}>{nameText.trim()}</span> is already on
+                          this issue. You can still save it, but the two will read alike wherever
+                          checklists are listed.
+                        </span>
+                      }
+                    >
+                      <span
+                        role="img"
+                        aria-label="A checklist with this name is already on this issue"
+                        style={{
+                          color: "var(--color-warning)",
+                          lineHeight: 1,
+                          cursor: "help",
+                        }}
+                      >
+                        <Icon name="warning" size="sm" />
+                      </span>
+                    </Tooltip>
+                  </span>
+                )}
+              </div>
             </DialogBody>
             <DialogActions
               actionLabel={isPending ? "Saving…" : "Save"}

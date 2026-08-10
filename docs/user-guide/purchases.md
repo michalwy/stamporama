@@ -160,6 +160,10 @@ app: navigate areas and issues, and either
   every stamp on that checklist. An issue with a single checklist keeps the familiar
   **+ Whole issue** label.
 
+Expanding an issue whose stamps you want to pick one by one gives you the same **Checklist**
+filter the issues list has, so a series collected two ways can be narrowed to the set you are
+actually buying.
+
 You are then asked once for the **condition**, an optional **certificate**, an optional
 **storage location** — with an optional **in-location ref** (e.g. a page or pocket like
 `A234`) once a location is chosen — and an optional **disposition**. Disposition shows the

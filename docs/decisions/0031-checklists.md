@@ -130,6 +130,22 @@ match is attached to.
 An empty selection is the **absence of a filter**, not an empty set, matching what
 `MultiSelectFilter` means by an empty selection everywhere else.
 
+### 10. A name is a label, not an identifier
+
+`Checklist.name` carries **no uniqueness constraint** — not per collection, not per issue — and
+nothing anywhere resolves a checklist by it; every consumer holds the cuid. Two issues may both
+have an *Imperforate*, and they never meet: `getChecklistsForIssue` and `listChecklistsForIssues`
+are both scoped by `issueId`, so no surface lists checklists from more than one issue at a time.
+
+Within **one** issue a repeated name is still allowed, but the editor shows the advisory ⚠ that
+#178 uses for a duplicate issue name in an area. The check is client-side, since the dialog has
+already loaded the issue's checklists. Blocking was rejected for #178's own reason: the collector
+may mean it, and the list behind the field already says what is there.
+
+The visible cost of a duplicate is real but local — the badge tooltip, the tree filter, the stamp
+form's boxes and the price-details entries would each show two indistinguishable rows — which is
+what the warning names.
+
 ## Schema
 
 ```prisma
