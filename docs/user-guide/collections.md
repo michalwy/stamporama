@@ -59,14 +59,15 @@ Three rules worth knowing:
   “0” on every row would be pure noise. The badge only ever means *you have some*.
 - **The count is that stamp's own copies.** A copy filed under a variant belongs to the variant's
   badge, not its parent's — in the issue tree the child's badge is right underneath, so counting it
-  twice would be misleading. What the variants hold is a **second, grey chip** beside it instead:
-  *“+2 in variants”*, the copies held of everything below this stamp that counts as a **variant** of
-  it, at any depth. Children that are distinct entries — errors, plate flaws, overprints, anything
-  whose [subtype](stamps.md) is not marked as acting as a variant — are left out of it: those are
-  their own thing to collect rather than another way of holding this stamp. A variant filed *under*
-  such a child still counts, being a variant all the same. The two numbers are never added together
-  and the variant chip can appear on its own, which is the usual look of a base stamp whose copies
-  are all filed under specific variants.
+  twice would be misleading. What the variants hold is a **second number in the same badge**:
+  *“3 (+2) copies”* — the 3 are this stamp's, the *(+2)* are held of everything below it that counts
+  as a **variant** of it, at any depth. Children that are distinct entries — errors, plate flaws,
+  overprints, anything whose [subtype](stamps.md) is not marked as acting as a variant — are left
+  out of it: those are their own thing to collect rather than another way of holding this stamp. A
+  variant filed *under* such a child still counts, being a variant all the same. The two numbers are
+  never added together, and a base stamp whose copies are all filed under specific variants reads
+  *“0 (+2) copies”* — the one case where the badge shows a zero, because it is telling you about
+  something you do hold.
 - **Sold copies are not counted**, matching the **View copies** popup the badge sits beside: what
   the badge says and what the popup lists are always the same set. Neither are copies you no longer
   hold — marked [no longer held](inventory.md#copies-you-no-longer-hold), or *Not delivered /

@@ -61,8 +61,8 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 *Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Copies, Offers.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
-  item-ID is recorded), the copies-held badge — with the *+N in variants* chip beside it when the
-  variants under this stamp hold copies — and the headline catalog price.
+  item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
+  stamp's variants when there are any — and the headline catalog price.
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).
