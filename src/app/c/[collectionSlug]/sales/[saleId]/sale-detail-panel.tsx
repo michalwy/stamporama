@@ -524,6 +524,7 @@ export function SaleDetailPanel({
             saleCurrency={sale.currency}
             baseCurrency={sale.baseCurrency}
             baseEquivalent={sale.shippingBase}
+            baseColumnInUse={showBase}
             rateMissing={sale.shippingRateMissing}
             disabled={isPending}
             onSave={(shipping) =>
@@ -955,6 +956,7 @@ function EditableShippingRow({
   saleCurrency,
   baseCurrency,
   baseEquivalent,
+  baseColumnInUse,
   rateMissing,
   disabled,
   onSave,
@@ -967,6 +969,8 @@ function EditableShippingRow({
   saleCurrency: string;
   baseCurrency: string;
   baseEquivalent: string | null;
+  /** Whether the surrounding grid's base column carries anything at all — see the render below. */
+  baseColumnInUse: boolean;
   rateMissing: boolean;
   disabled: boolean;
   onSave: (shipping: SaleShippingRaw) => void;
@@ -1145,14 +1149,12 @@ function EditableShippingRow({
           >
             <span>no rate</span>
           </Tooltip>
-        ) : baseEquivalent ? (
-          // The base column always carries the shipping cost in base (#208/#206) — shown even when
-          // paid in the base currency, but then it's exact, so no "≈".
-          currency === baseCurrency ? (
-            `${baseEquivalent} ${baseCurrency}`
-          ) : (
-            baseEqText(baseEquivalent, baseCurrency)
-          )
+        ) : !baseEquivalent ? null : currency !== baseCurrency ? (
+          baseEqText(baseEquivalent, baseCurrency)
+        ) : baseColumnInUse ? (
+          // Paid in base already, so this is exact, not a conversion — no "≈". It is repeated here
+          // only to keep the base column complete when the other rows are converting into it.
+          `${baseEquivalent} ${baseCurrency}`
         ) : null}
       </div>
     </>
