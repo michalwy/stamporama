@@ -73,14 +73,14 @@ const NOTE: React.CSSProperties = {
 export interface LineSelectionSummary {
   /** Prefix-formatted catalog numbers (#357). Empty for a whole-issue pick. */
   catalogLabels: string[];
-  /** What to call it: the stamp's name, or `Whole issue: X — N stamps`. */
+  /** What to call it: the stamp's name, or `Whole set: X — N stamps`. */
   label: string;
 }
 
-/** What the picker handed back: one stamp, or a whole issue to expand into its required members. */
+/** What the picker handed back: one stamp, or a whole checklist to expand into its stamps (#531). */
 type LineSelection =
   | { kind: "stamp"; stampId: string; picked: PickedStamp }
-  | { kind: "issue"; issue: PickedIssue };
+  | { kind: "checklist"; checklist: PickedIssue };
 
 export function AuctionLotLineDialog({
   collectionId,
@@ -165,8 +165,8 @@ export function AuctionLotLineDialog({
         onPickIssue={
           line
             ? undefined
-            : (issue) => {
-                setSelection({ kind: "issue", issue });
+            : (checklist) => {
+                setSelection({ kind: "checklist", checklist });
                 setPicking(false);
               }
         }
@@ -178,10 +178,10 @@ export function AuctionLotLineDialog({
   }
   if (!selection) return null;
 
-  const count = selection.kind === "issue" ? selection.issue.requiredCount : 1;
+  const count = selection.kind === "checklist" ? selection.checklist.requiredCount : 1;
   const summaryText =
-    selection.kind === "issue"
-      ? `Whole issue: ${selection.issue.label} — ${count} required stamp${count === 1 ? "" : "s"}`
+    selection.kind === "checklist"
+      ? `Whole set: ${selection.checklist.label} — ${count} stamp${count === 1 ? "" : "s"}`
       : [selection.picked.catalogLabels.join(", ") || null, selection.picked.name || null]
           .filter(Boolean)
           .join(" · ") || "(unnamed stamp)";
@@ -199,7 +199,8 @@ export function AuctionLotLineDialog({
     onSubmit(
       {
         stampId: selection.kind === "stamp" ? selection.stampId : "",
-        issueId: selection.kind === "issue" ? selection.issue.issueId : undefined,
+        checklistId:
+          selection.kind === "checklist" ? selection.checklist.checklistId : undefined,
         conditionId: validCondition,
         certificateStatusId: validCertificate,
         formatId,
@@ -212,7 +213,7 @@ export function AuctionLotLineDialog({
           }
         : {
             catalogLabels: [],
-            label: `Whole issue: ${selection.issue.label} — ${count} stamp${count === 1 ? "" : "s"}`,
+            label: `Whole set: ${selection.checklist.label} — ${count} stamp${count === 1 ? "" : "s"}`,
           }
     );
   }
@@ -285,7 +286,7 @@ export function AuctionLotLineDialog({
                 {selection.picked.secondary}
               </div>
             )}
-            {selection.kind === "issue" && (
+            {selection.kind === "checklist" && (
               <div
                 style={{
                   fontSize: "0.75rem",

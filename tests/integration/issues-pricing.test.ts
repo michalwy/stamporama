@@ -4,8 +4,31 @@ import { prisma } from "../../src/lib/db";
 import {
   listIssuesPaginated,
   listIssueMembers,
-  getIssuePriceDetails,
+  getChecklistPriceDetails,
 } from "../../src/lib/issues";
+
+/** Put a stamp on the issue's set (#531) — the checklist a `requiredForCompleteness: true`
+ *  membership became. Creates the issue's checklist on first use, exactly as the migration and the
+ *  stamp form's box do. */
+async function requireOnChecklist(collectionId: string, issueId: string, stampId: string) {
+  await prisma.issueMember.create({ data: { issueId, stampId } });
+  await prisma.checklistStamp.create({
+    data: { checklistId: await issueChecklistId(collectionId, issueId), stampId },
+  });
+}
+
+/** The issue's first checklist, created if it has none. */
+async function issueChecklistId(collectionId: string, issueId: string): Promise<string> {
+  const existing = await prisma.checklist.findFirst({
+    where: { collectionId, issueId },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (existing) return existing.id;
+  const created = await prisma.checklist.create({
+    data: { collectionId, issueId, name: "Complete set", sortOrder: 0 },
+  });
+  return created.id;
+}
 
 // Records a single price against the given condition (no certificate status).
 async function addPrice(
@@ -78,9 +101,7 @@ describe("issue list price staleness", () => {
     await prisma.stampCollectionArea.create({
       data: { stampId, collectionAreaId: area.id, isPrimary: true },
     });
-    await prisma.issueMember.create({
-      data: { issueId, stampId, requiredForCompleteness: true },
-    });
+    await requireOnChecklist(collectionId, issueId, stampId);
   });
 
   after(async () => {
@@ -94,8 +115,8 @@ describe("issue list price staleness", () => {
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const item = items.find((i) => i.id === issueId);
     assert.ok(item);
-    assert.equal(item.requiredPriceTotal?.amount, "12.50");
-    assert.equal(item.requiredPriceStale, true);
+    assert.equal(item.checklists[0]?.priceTotal?.amount, "12.50");
+    assert.equal(item.checklists[0]?.priceStale, true);
 
     // member node exposes staleness too (used in the expanded issue view)
     const members = await listIssueMembers(userId, collectionId, issueId);
@@ -110,8 +131,8 @@ describe("issue list price staleness", () => {
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const item = items.find((i) => i.id === issueId);
     assert.ok(item);
-    assert.equal(item.requiredPriceTotal?.amount, "20.00");
-    assert.equal(item.requiredPriceStale, false);
+    assert.equal(item.checklists[0]?.priceTotal?.amount, "20.00");
+    assert.equal(item.checklists[0]?.priceStale, false);
 
     const members = await listIssueMembers(userId, collectionId, issueId);
     const node = members.find((n) => n.stampId === stampId);
@@ -181,9 +202,7 @@ describe("issue member price tracks the display condition (#238)", () => {
     await prisma.stampCollectionArea.create({
       data: { stampId, collectionAreaId: area.id, isPrimary: true },
     });
-    await prisma.issueMember.create({
-      data: { issueId, stampId, requiredForCompleteness: true },
-    });
+    await requireOnChecklist(collectionId, issueId, stampId);
 
     // Distinct prices per condition so the wrong condition is obvious.
     await addPrice(stampId, editionId, condMintId, "30.00");
@@ -273,13 +292,9 @@ describe("issue headline price rolls up from variants (#238)", () => {
         data: { stampId, collectionAreaId: area.id, isPrimary: true },
       });
     const requireMember = (stampId: string) =>
-      prisma.issueMember.create({
-        data: { issueId, stampId, requiredForCompleteness: true },
-      });
+      requireOnChecklist(collectionId, issueId, stampId);
     const optionalMember = (stampId: string) =>
-      prisma.issueMember.create({
-        data: { issueId, stampId, requiredForCompleteness: false },
-      });
+      prisma.issueMember.create({ data: { issueId, stampId } });
 
     // Required umbrella "10" (no own price) → variant "10a" (no own price) → variant "10aI" = 1000.
     umbrellaId = (await prisma.stamp.create({ data: { collectionId, name: "10" } })).id;
@@ -340,7 +355,7 @@ describe("issue headline price rolls up from variants (#238)", () => {
 
   it("issue total: sums the rolled-up umbrella price and flags the estimate", async () => {
     const { items } = await listIssuesPaginated(userId, collectionId, {});
-    const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
+    const t = items.find((i) => i.id === issueId)?.checklists[0]?.priceTotal;
     assert.ok(t);
     assert.equal(t.amount, "1020.00"); // 20 (plain) + 1000 (umbrella lowest variant)
     assert.equal(t.pricedCount, 2);
@@ -409,9 +424,7 @@ describe("issue total edition-mix handling", () => {
       await prisma.stampCollectionArea.create({
         data: { stampId: s.id, collectionAreaId: area.id, isPrimary: true },
       });
-      await prisma.issueMember.create({
-        data: { issueId, stampId: s.id, requiredForCompleteness: true },
-      });
+      await requireOnChecklist(collectionId, issueId, s.id);
       return s.id;
     };
     stampCurrentId = await linkStamp("On current edition");
@@ -428,7 +441,7 @@ describe("issue total edition-mix handling", () => {
     await addPrice(stampOldId, editionId2023, conditionId, "5.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
-    const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
+    const t = items.find((i) => i.id === issueId)?.checklists[0]?.priceTotal;
     assert.ok(t);
     assert.equal(t.amount, "15.00");
     assert.equal(t.usesOlderEdition, true);
@@ -442,7 +455,7 @@ describe("issue total edition-mix handling", () => {
     await addPrice(stampCurrentId, editionId2024, conditionId, "12.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
-    const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
+    const t = items.find((i) => i.id === issueId)?.checklists[0]?.priceTotal;
     assert.ok(t);
     assert.equal(t.amount, "12.00"); // only the current-edition member counts
     assert.equal(t.usesOlderEdition, false);
@@ -455,7 +468,7 @@ describe("issue total edition-mix handling", () => {
     await addPrice(stampOldId, editionId2024, conditionId, "6.00");
 
     const { items } = await listIssuesPaginated(userId, collectionId, {});
-    const t = items.find((i) => i.id === issueId)?.requiredPriceTotal;
+    const t = items.find((i) => i.id === issueId)?.checklists[0]?.priceTotal;
     assert.ok(t);
     assert.equal(t.amount, "18.00");
     assert.equal(t.usesOlderEdition, false);
@@ -463,8 +476,8 @@ describe("issue total edition-mix handling", () => {
     assert.equal(t.olderEditionExcludedCount, 0);
   });
 
-  it("getIssuePriceDetails totals and averages the complete catalog per condition", async () => {
-    const details = await getIssuePriceDetails(userId, collectionId, issueId);
+  it("getChecklistPriceDetails totals and averages the complete catalog per condition", async () => {
+    const details = await getChecklistPriceDetails(userId, collectionId, await issueChecklistId(collectionId, issueId));
     assert.equal(details.requiredCount, 2);
     assert.equal(details.baseCurrency, "EUR");
 
@@ -554,9 +567,7 @@ describe("issue price details cross-catalog averaging", () => {
       await prisma.stampCollectionArea.create({
         data: { stampId: s.id, collectionAreaId: area.id, isPrimary: true },
       });
-      await prisma.issueMember.create({
-        data: { issueId, stampId: s.id, requiredForCompleteness: true },
-      });
+      await requireOnChecklist(collectionId, issueId, s.id);
       return s.id;
     };
     stampOneId = await linkStamp("Stamp One");
@@ -575,7 +586,7 @@ describe("issue price details cross-catalog averaging", () => {
   });
 
   it("averages only complete catalogs and reports the incomplete ones", async () => {
-    const details = await getIssuePriceDetails(userId, collectionId, issueId);
+    const details = await getChecklistPriceDetails(userId, collectionId, await issueChecklistId(collectionId, issueId));
     assert.equal(details.requiredCount, 2);
 
     const avg = details.averageCells.find(
@@ -665,9 +676,7 @@ describe("issue price details certificate breakdown", () => {
       await prisma.stampCollectionArea.create({
         data: { stampId: s.id, collectionAreaId: area.id, isPrimary: true },
       });
-      await prisma.issueMember.create({
-        data: { issueId, stampId: s.id, requiredForCompleteness: true },
-      });
+      await requireOnChecklist(collectionId, issueId, s.id);
       return s.id;
     };
     stampOneId = await linkStamp("Stamp One");
@@ -695,7 +704,7 @@ describe("issue price details certificate breakdown", () => {
   });
 
   it("breaks totals and averages down per certificate status", async () => {
-    const details = await getIssuePriceDetails(userId, collectionId, issueId);
+    const details = await getChecklistPriceDetails(userId, collectionId, await issueChecklistId(collectionId, issueId));
     const cells = details.catalogsLatest[0].cells;
 
     // None column: both members priced → complete, summed.

@@ -5,7 +5,12 @@ import { createPortal } from "react-dom";
 import { DialogShell } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
-import type { IssueData, IssueListItem, StampNodeData } from "@/lib/issues";
+import type {
+  IssueData,
+  IssueListItem,
+  IssueChecklistSummary,
+  StampNodeData,
+} from "@/lib/issues";
 import { createIssueAction, addStampToIssueAction } from "@/app/actions/issues";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
@@ -20,7 +25,7 @@ import {
   buildStampTree,
   IssueTitle,
   IssueCatalogChips,
-  StampCountBadge,
+  ChecklistsBadge,
   type VendorMap,
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
@@ -54,9 +59,8 @@ function toIssueListItem(issue: IssueData): IssueListItem {
     catalogNumbers: issue.catalogNumbers,
     catalogPrefixes: [],
     memberCount: issue.members.length,
-    requiredCount: issue.completeness.required,
-    requiredPriceTotal: null,
-    requiredPriceStale: false,
+    requiredCount: issue.checklists.reduce((n, c) => Math.max(n, c.stampCount), 0),
+    checklists: issue.checklists.map((c) => ({ ...c, priceTotal: null, priceStale: false })),
     rangeSuggestions: [],
     photos: [],
   };
@@ -100,10 +104,11 @@ const NEW_ISSUE_BUTTON_STYLE: React.CSSProperties = {
  * a parent area includes its descendants. Right: the scope's issues, text-filterable,
  * each expandable to its stamp/variant tree — rendered with the same shared
  * presentation as the main issues list, minus action buttons; a click selects. */
-/** A whole issue picked for bulk intake (#121): the issue id, a display label, and how
- * many of its stamps are required-for-completeness (the copies that will be created). */
+/** A whole **checklist** picked for bulk intake (#121; #531): its id, a display label naming the
+ * issue and the set, and how many stamps it carries (the copies that will be created). An issue may
+ * hold several goals, so the button names one rather than saying "the whole issue". */
 export interface PickedIssue {
-  issueId: string;
+  checklistId: string;
   label: string;
   requiredCount: number;
 }
@@ -118,7 +123,8 @@ export function StampPickerBrowser({
   collectionId: string;
   areas: CollectionAreaData[];
   onPick: (picked: PickedStamp) => void;
-  /** When provided, each issue row offers an "Add whole issue" action (lot intake, #121). */
+  /** When provided, each issue row offers one "add this whole set" button per checklist
+   *  (lot intake, #121; #531). */
   onPickIssue?: (picked: PickedIssue) => void;
   onClose: () => void;
 }) {
@@ -492,11 +498,14 @@ function IssueBrowser({
               onPick={handlePick}
               onPickIssue={
                 onPickIssue
-                  ? () =>
+                  ? (checklist) =>
                       onPickIssue({
-                        issueId: issue.id,
-                        label: issueLabel(issue.name, issue.year),
-                        requiredCount: issue.completeness.required,
+                        checklistId: checklist.id,
+                        label:
+                          issue.checklists.length > 1
+                            ? `${issueLabel(issue.name, issue.year)} — ${checklist.name}`
+                            : issueLabel(issue.name, issue.year),
+                        requiredCount: checklist.stampCount,
                       })
                   : undefined
               }
@@ -539,7 +548,8 @@ function PickIssueRow({
   matchedStampIds: Set<string> | null;
   onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueData) => void;
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
-  onPickIssue?: () => void;
+  /** Called with the checklist whose button was pressed (#531). */
+  onPickIssue?: (checklist: IssueChecklistSummary) => void;
   onNewStamp: () => void;
   onNewVariant: (parentStampId: string) => void;
 }) {
@@ -549,12 +559,12 @@ function PickIssueRow({
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || matchedStampIds !== null;
   const tree = useMemo<StampTreeNodeData[]>(() => buildStampTree(issue.members), [issue.members]);
-  // Issue-level gallery (#137): the main photos of the required-for-completeness stamps —
+  // Issue-level gallery (#137): the main photos of the stamps on a checklist (#531) —
   // computed client-side from the members the picker already loaded.
   const issuePhotos = useMemo(
     () =>
       issue.members
-        .filter((m) => m.requiredForCompleteness)
+        .filter((m) => m.checklistIds.length > 0)
         .flatMap((m) => m.photos.filter((p) => p.role === "main")),
     [issue.members]
   );
@@ -637,31 +647,43 @@ function PickIssueRow({
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
-          {onPickIssue && issue.completeness.required > 0 && (
-            <Tooltip content="Add every required stamp of this issue to the lot" align="end">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPickIssue();
-                }}
-                style={{
-                  flexShrink: 0,
-                  padding: "0.25rem 0.5rem",
-                  background: "transparent",
-                  color: "var(--color-text-secondary)",
-                  border: "1px solid var(--color-border-strong)",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                + Whole issue ({issue.completeness.required})
-              </button>
-            </Tooltip>
-          )}
+          {/* One button per checklist (#531). With one it reads as it always did; with several
+              each names its own set, which is better than a chooser the collector has to open to
+              answer a question the row can already ask. */}
+          {onPickIssue &&
+            issue.checklists
+              .filter((c) => c.stampCount > 0)
+              .map((checklist) => (
+                <Tooltip
+                  key={checklist.id}
+                  content={`Add every stamp on “${checklist.name}” to the lot`}
+                  align="end"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPickIssue(checklist);
+                    }}
+                    style={{
+                      flexShrink: 0,
+                      padding: "0.25rem 0.5rem",
+                      background: "transparent",
+                      color: "var(--color-text-secondary)",
+                      border: "1px solid var(--color-border-strong)",
+                      borderRadius: "0.375rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    +{" "}
+                    {issue.checklists.length === 1 ? "Whole issue" : checklist.name} (
+                    {checklist.stampCount})
+                  </button>
+                </Tooltip>
+              ))}
         </div>
 
         {(issue.catalogNumbers.length > 0 || issue.members.length > 0) && (
@@ -680,7 +702,18 @@ function PickIssueRow({
               primaryVendorId={primaryVendorId}
             />
             {issue.members.length > 0 && (
-              <StampCountBadge required={issue.completeness.required} total={issue.members.length} />
+              <ChecklistsBadge
+                checklists={issue.checklists.map((c) => ({
+                  ...c,
+                  priceTotal: null,
+                  priceStale: false,
+                }))}
+                requiredCount={
+                  new Set(issue.members.filter((m) => m.checklistIds.length > 0).map((m) => m.stampId))
+                    .size
+                }
+                memberCount={issue.members.length}
+              />
             )}
           </div>
         )}

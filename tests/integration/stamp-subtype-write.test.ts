@@ -5,6 +5,7 @@ import { createCollection } from "../../src/lib/collections";
 import { addStampToIssue } from "../../src/lib/issues";
 import { updateStampWithCatalog, getStampSubtypeAssignment } from "../../src/lib/stamps";
 import { getDefaultSubtypeId, getStampSubtypes } from "../../src/lib/subtypes";
+import { DEFAULT_CHECKLIST } from "../../src/lib/checklist-vocabulary";
 
 describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => {
   let userId: string;
@@ -52,7 +53,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       data: { stampId: parentStampId, collectionAreaId: area.id, isPrimary: true },
     });
     await prisma.issueMember.create({
-      data: { issueId, stampId: parentStampId, requiredForCompleteness: true },
+      data: { issueId, stampId: parentStampId },
     });
 
     // A subtype belonging to a different collection, to test cross-collection guard.
@@ -68,7 +69,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
   it("assigns the collection default subtype to a child when none is chosen", async () => {
     const { stampId } = await addStampToIssue(userId, collectionId, issueId, {
       parentStampId,
-      requiredForCompleteness: false,
+      checklistIds: [],
       catalogNumbers: [],
     });
     const child = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
@@ -81,7 +82,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       parentStampId,
       subtypeId: errorSubtypeId,
       actsAsVariantOverride: true,
-      requiredForCompleteness: false,
+      checklistIds: [],
       catalogNumbers: [],
     });
     const child = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
@@ -94,7 +95,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       parentStampId: null,
       subtypeId: errorSubtypeId,
       actsAsVariantOverride: false,
-      requiredForCompleteness: true,
+      checklistIds: [DEFAULT_CHECKLIST],
       catalogNumbers: [],
     });
     const top = await prisma.stamp.findUniqueOrThrow({ where: { id: stampId } });
@@ -108,7 +109,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
         addStampToIssue(userId, collectionId, issueId, {
           parentStampId,
           subtypeId: otherCollectionSubtypeId,
-          requiredForCompleteness: false,
+          checklistIds: [],
           catalogNumbers: [],
         }),
       /not found in this collection/i
@@ -118,7 +119,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
   it("changes a child's subtype and override on edit", async () => {
     const { stampId } = await addStampToIssue(userId, collectionId, issueId, {
       parentStampId,
-      requiredForCompleteness: false,
+      checklistIds: [],
       catalogNumbers: [],
     });
     await updateStampWithCatalog(userId, stampId, {
@@ -146,7 +147,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       parentStampId,
       subtypeId: errorSubtypeId,
       actsAsVariantOverride: false,
-      requiredForCompleteness: false,
+      checklistIds: [],
       catalogNumbers: [],
     });
     const assignment = await getStampSubtypeAssignment(userId, stampId);
@@ -160,7 +161,7 @@ describe("subtype write path (addStampToIssue / updateStampWithCatalog)", () => 
       parentStampId,
       subtypeId: errorSubtypeId,
       actsAsVariantOverride: true,
-      requiredForCompleteness: false,
+      checklistIds: [],
       catalogNumbers: [],
     });
     await updateStampWithCatalog(userId, stampId, {

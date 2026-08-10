@@ -15,6 +15,7 @@ import { createIssue, updateIssue, addStampToIssue, deleteIssue } from "../../sr
 import { getStampTranslations, updateStampWithCatalog } from "../../src/lib/stamps";
 import { toTitleCopy, type TitleCopyRow } from "../../src/lib/title-copy";
 import type { AreaVendorMaps } from "../../src/lib/area-vendor";
+import { DEFAULT_CHECKLIST } from "../../src/lib/checklist-vocabulary";
 
 // Per-language entity text for the remaining title tokens (#294 condition / certificate status,
 // #295 issue name, #296 stamp name). The area equivalent (#293) is covered in
@@ -267,7 +268,7 @@ describe("issue and stamp name translations (#295, #296)", () => {
     const issue = await createIssue(userId, collectionId, areaId, { name: "Stamps here" });
     const { stampId } = await addStampToIssue(userId, collectionId, issue.id, {
       name: "5 kr blue",
-      requiredForCompleteness: true,
+      checklistIds: [DEFAULT_CHECKLIST],
       catalogNumbers: [],
       translations: { pl: { name: "5 kr niebieski" } },
     });
@@ -285,7 +286,7 @@ describe("issue and stamp name translations (#295, #296)", () => {
     const issue = await createIssue(userId, collectionId, areaId, { name: "Untouched" });
     const { stampId } = await addStampToIssue(userId, collectionId, issue.id, {
       name: "10 kr green",
-      requiredForCompleteness: true,
+      checklistIds: [DEFAULT_CHECKLIST],
       catalogNumbers: [],
       translations: { pl: { name: "10 kr zielony" } },
     });
@@ -298,7 +299,7 @@ describe("issue and stamp name translations (#295, #296)", () => {
     const issue = await createIssue(userId, collectionId, areaId, { name: "Cascade" });
     const { stampId } = await addStampToIssue(userId, collectionId, issue.id, {
       name: "1 kr red",
-      requiredForCompleteness: true,
+      checklistIds: [DEFAULT_CHECKLIST],
       catalogNumbers: [],
       translations: { pl: { name: "1 kr czerwony" } },
     });

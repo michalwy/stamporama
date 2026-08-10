@@ -114,6 +114,7 @@ describe("Issue and IssueMember", () => {
   let s2Id: string;
   let s3Id: string;
   let issueId: string;
+  let checklistId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -144,12 +145,21 @@ describe("Issue and IssueMember", () => {
       data: [
         { issueId, stampId: s1Id },
         { issueId, stampId: s2Id },
-        { issueId, stampId: s3Id, requiredForCompleteness: true },
+        { issueId, stampId: s3Id },
       ],
     });
+
+    // Membership of a checklist is what required-for-completeness became (#531): s3 is on the
+    // issue's set, s1 and s2 are extras it holds but no set counts.
+    const checklist = await prisma.checklist.create({
+      data: { collectionId, issueId, name: "Complete set", sortOrder: 0 },
+    });
+    checklistId = checklist.id;
+    await prisma.checklistStamp.create({ data: { checklistId, stampId: s3Id } });
   });
 
   after(async () => {
+    await prisma.checklist.deleteMany({ where: { collectionId } });
     await prisma.issueMember.deleteMany({ where: { issueId } });
     await prisma.issue.deleteMany({ where: { collectionId } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
@@ -162,20 +172,20 @@ describe("Issue and IssueMember", () => {
     assert.equal(members.length, 3);
   });
 
-  it("s3 member has requiredForCompleteness true", async () => {
-    const member = await prisma.issueMember.findUnique({
-      where: { issueId_stampId: { issueId, stampId: s3Id } },
+  it("s3 is on the issue's checklist", async () => {
+    const entry = await prisma.checklistStamp.findUnique({
+      where: { checklistId_stampId: { checklistId, stampId: s3Id } },
     });
-    assert.ok(member);
-    assert.equal(member.requiredForCompleteness, true);
+    assert.ok(entry);
   });
 
-  it("s1 member has requiredForCompleteness false", async () => {
+  it("s1 is a member of the issue but on no checklist", async () => {
     const member = await prisma.issueMember.findUnique({
       where: { issueId_stampId: { issueId, stampId: s1Id } },
     });
     assert.ok(member);
-    assert.equal(member.requiredForCompleteness, false);
+    const entries = await prisma.checklistStamp.findMany({ where: { stampId: s1Id } });
+    assert.equal(entries.length, 0);
   });
 
   it("isAutoCreated defaults to false", async () => {

@@ -527,9 +527,11 @@ screen remembers, since it is the same question about the same material.
 Either way:
 
 - Pick with the usual browser: area → issue → stamp. You can pick **a single stamp or a whole
-  issue** — the same choice the [purchase order](purchases.md) intake gives you. A house lot that
-  says *Michel 1–12, complete* is one pick: the issue expands into one line per stamp marked
-  **required for completeness**, all described the same way. The series is only a shortcut for
+  set** — the same choice the [purchase order](purchases.md) intake gives you. A house lot that
+  says *Michel 1–12, complete* is one pick: the issue's
+  [checklist](collections.md#checklists) expands into one line per stamp on it, all described the
+  same way. An issue collected more than one way offers a button per checklist, so the pick names
+  which set the lot is. The set is only a shortcut for
   entering them; what is stored is still a line per stamp, because that is what a catalogue value
   sums over and what a lost lot has to be attributable to. Editing an existing line offers stamps
   only — turning one line into twelve is not an edit.

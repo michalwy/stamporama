@@ -259,9 +259,16 @@ export async function updateStampWithCatalogAction(
   const hasPriceEntries = Array.from(formData.keys()).some((k) => k.startsWith("catalogPrice_"));
   const catalogPrices = hasPriceEntries ? parseCatalogPrices(formData) : undefined;
 
-  const requiredRaw = formData.get("requiredForCompleteness") as string | null;
-  const requiredForCompleteness =
-    requiredRaw === null ? undefined : requiredRaw === "true";
+  // Which checklists of the edited stamp's issue it should be on afterwards (#531). Present only
+  // when the form rendered the picker, which needs an issue to render against — absent means the
+  // caller is not managing checklists and every membership is left alone.
+  const checklistIds = formData.has("checklistIds")
+    ? ((formData.get("checklistIds") as string) || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    : undefined;
+  const checklistIssueId = (formData.get("checklistIssueId") as string | null) || null;
 
   // Colnect item-ID (#247): present only when the edit form rendered the field.
   // Absent → undefined → leave the stored value untouched.
@@ -305,7 +312,8 @@ export async function updateStampWithCatalogAction(
       catalogNumbers,
       catalogPrices,
       colnectId,
-      requiredForCompleteness,
+      checklistIds,
+      checklistIssueId,
       subtypeId,
       actsAsVariantOverride,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),

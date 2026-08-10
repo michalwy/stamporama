@@ -16,7 +16,9 @@ import {
   buildStampTree,
   IssueTitle,
   IssueCatalogChips,
-  StampCountBadge,
+  ChecklistsBadge,
+  ChecklistTreeFilter,
+  filterStampTreeByChecklists,
   StampTitle,
   StampDetailLine,
   type StampTreeNodeData,
@@ -28,7 +30,11 @@ import {
   RowQuickActions,
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
-import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import {
+  usePriceDetailsAction,
+  useChecklistPriceActions,
+} from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useChecklistsAction } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
@@ -68,6 +74,9 @@ export interface DisplayFormatRef {
 interface StampTreeNodeProps {
   treeNode: StampTreeNodeData;
   depth: number;
+  /** Stamps the checklist filter kept only as context for a matching descendant (#531) — drawn
+   *  dimmed, because they are the numbering the match hangs under and not part of the set. */
+  contextIds: Set<string>;
   collectionId: string;
   areas: CollectionAreaData[];
   baseCurrency: string;
@@ -95,6 +104,7 @@ interface StampTreeNodeProps {
 function StampTreeNode({
   treeNode,
   depth,
+  contextIds,
   collectionId,
   areas,
   baseCurrency,
@@ -117,6 +127,7 @@ function StampTreeNode({
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
   const indent = `${depth * 1.25}rem`;
+  const isContextOnly = contextIds.has(node.stampId);
 
   // Expansion is *derived*, never a setState-in-effect: a node is open when it just gained a
   // sub-stamp (#359) or when the collector opened it themselves. The user's own toggle is
@@ -232,6 +243,9 @@ function StampTreeNode({
           background: hovered ? "var(--color-bg-row-hover)" : undefined,
           transition: "background 0.1s ease",
           borderBottom: isLast ? undefined : "1px solid var(--color-border)",
+          // Context, not a member of the filtered set — legible enough to read the number off,
+          // faint enough that it never reads as part of what was asked for.
+          opacity: isContextOnly ? 0.5 : undefined,
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
@@ -307,6 +321,7 @@ function StampTreeNode({
             key={child.node.stampId}
             treeNode={child}
             depth={depth + 1}
+            contextIds={contextIds}
             collectionId={collectionId}
             areas={areas}
             baseCurrency={baseCurrency}
@@ -427,7 +442,14 @@ export function IssueRow({
     return chosen ? { id: chosen.id, abbreviation: chosen.abbreviation } : null;
   }, [formats, displayFormatId]);
 
-  const stampTree = members ? buildStampTree(members) : [];
+  // Which checklists the expanded tree is narrowed to (#531). Local rather than URL state: the
+  // list shows many issues at once, so there is no single parameter this could be, and the detail
+  // page keeps its own copy for the same rule.
+  const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeByChecklists(
+    members ? buildStampTree(members) : [],
+    treeChecklistIds
+  );
 
   const addCopy = useInventoryAddAction({
     collectionId,
@@ -462,7 +484,16 @@ export function IssueRow({
       label: issue.name ?? "(unnamed issue)",
     },
   });
-  const prices = usePriceDetailsAction({ kind: "issue", collectionId, issueId: issue.id });
+  // One entry per checklist that has a total (#531): an issue may hold several goals, and there is
+  // no single "the prices for this issue" to open when it does.
+  const prices = useChecklistPriceActions({ collectionId, checklists: issue.checklists });
+  // The issue's checklists are edited here for the same reason its format multipliers are: the row
+  // already answers which issue, and a flat collection-wide list would not (ADR-0020 §7).
+  const checklists = useChecklistsAction({
+    collectionId,
+    issueId: issue.id,
+    issueLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
+  });
   // An issue's format multipliers are edited here rather than in Settings: the issue is the
   // narrowest anchor a factor can take, and it is the one a catalog actually prints them against.
   const formatFactors = useFormatFactorsAction({
@@ -486,7 +517,8 @@ export function IssueRow({
     addCopy.action,
     copies.action,
     offers.action,
-    ...(issue.requiredPriceTotal ? [prices.action] : []),
+    ...prices.actions,
+    checklists.action,
     formatFactors.action,
     {
       key: "recompute-range",
@@ -597,6 +629,7 @@ export function IssueRow({
           {copies.dialog}
           {offers.dialog}
           {prices.dialog}
+          {checklists.dialog}
           {formatFactors.dialog}
           {recomputeOpen && (
             <RecomputeRangeDialog
@@ -635,11 +668,18 @@ export function IssueRow({
             />
 
             {issue.memberCount > 0 && (
-              <StampCountBadge required={issue.requiredCount} total={issue.memberCount} />
+              <ChecklistsBadge
+                checklists={issue.checklists}
+                requiredCount={issue.requiredCount}
+                memberCount={issue.memberCount}
+              />
             )}
 
-            {issue.requiredPriceTotal && (() => {
-              const t = issue.requiredPriceTotal;
+            {/* One checklist's total reads as the row's own figure, as it did when an issue had
+                exactly one set. With several, the totals live in the badge's tooltip instead: a
+                row carrying three money chips is no longer a row anybody scans. */}
+            {issue.checklists.length === 1 && issue.checklists[0].priceTotal && (() => {
+              const t = issue.checklists[0].priceTotal!;
               const incomplete = t.pricedCount < t.requiredCount;
               const unpriced = t.requiredCount - t.pricedCount - t.olderEditionExcludedCount;
               const showWarning = t.usesOlderEdition || incomplete;
@@ -650,7 +690,9 @@ export function IssueRow({
               const warningLabel = t.usesOlderEdition ? "Older-edition prices" : "Partial total";
               return (
                 <Tooltip
-                  content={showWarning ? undefined : "Total of required stamps (main catalog)"}
+                  content={
+                    showWarning ? undefined : `Total of "${issue.checklists[0].name}" (main catalog)`
+                  }
                   align="end"
                   style={{ marginLeft: "auto" }}
                 >
@@ -789,11 +831,33 @@ export function IssueRow({
             </div>
           ) : (
             <>
+              {/* Narrowing the tree by checklist (#531) — only where there is a choice to make. */}
+              {issue.checklists.length > 1 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.5rem 0.5rem 0.5rem 0.75rem",
+                    borderBottom: "1px solid var(--color-border)",
+                  }}
+                >
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                    Checklist
+                  </span>
+                  <ChecklistTreeFilter
+                    checklists={issue.checklists}
+                    selected={treeChecklistIds}
+                    onChange={setTreeChecklistIds}
+                  />
+                </div>
+              )}
               {stampTree.map((treeNode, i) => (
                 <StampTreeNode
                   key={treeNode.node.stampId}
                   treeNode={treeNode}
                   depth={0}
+                  contextIds={treeContextIds}
                   collectionId={collectionId}
                   areas={areas}
                   baseCurrency={baseCurrency}

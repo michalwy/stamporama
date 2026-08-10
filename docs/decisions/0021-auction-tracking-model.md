@@ -221,11 +221,15 @@ compositions unentered. Adding a line is likewise the intake's own **two-step fl
 picker opens on the click that asked for a line, and condition / certificate / format / quantity
 follow in a second dialog once something has been picked. Two questions of two different sources —
 the catalogue tree answers what it is, the listing text answers what state it is in — and putting
-both on one screen means asking about the condition of nothing in particular. What can be picked is a stamp **or a whole issue**, the purchase intake's own
+both on one screen means asking about the condition of nothing in particular. What can be picked is a stamp **or a whole set**, the purchase intake's own
 picker: a house lot is routinely "Michel 1–12, complete", and twelve trips through a picker is the
-reason such a lot would go undescribed. The series is an entry shortcut that expands into one line
-per member marked required for completeness — a stored line is always one stamp, because catalogue
+reason such a lot would go undescribed. The set is an entry shortcut that expands into one line
+per stamp on it — a stored line is always one stamp, because catalogue
 value is summed per stamp and a lost lot has to be attributable per stamp.
+
+> **Revised by [ADR-0031](0031-checklists.md).** The shortcut names a **checklist**, not an issue:
+> a publication may carry several goals, and the picker draws one button per checklist so the pick
+> says which set the lot is.
 
 A composition also **names the lot**. `AuctionLot.title` is what the listing called it, and a lot
 captured in a hurry has none; rather than "Untitled lot", the name is derived from what the lot

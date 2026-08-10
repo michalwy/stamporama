@@ -440,10 +440,10 @@ export async function deleteAuctionLotAction(lotId: string): Promise<AuctionActi
  * format × quantity — the same shape a catalogue price is keyed on. */
 export interface AuctionLotLineRaw {
   stampId: string;
-  /** A **whole issue** picked instead of a single stamp (#353), as the purchase intake offers: it
-   * expands here into one line per member marked required for completeness. Blank for a plain
+  /** A **whole checklist** picked instead of a single stamp (#353; #531), as the purchase intake
+   * offers: it expands here into one line per stamp on it. Blank for a plain
    * stamp pick, and never set when editing — an edit turning one line into twelve is not an edit. */
-  issueId?: string;
+  checklistId?: string;
   conditionId: string;
   /** Blank is **no certificate** — the unmarked default, as on a copy (ADR-0006 §2). */
   certificateStatusId: string;
@@ -453,14 +453,14 @@ export interface AuctionLotLineRaw {
 }
 
 /**
- * One submitted line into the line inputs it actually means — **plural**, because a whole-issue
- * pick fans out into one line per required member. The expansion lives here rather than in the
+ * One submitted line into the line inputs it actually means — **plural**, because a whole-checklist
+ * pick fans out into one line per stamp on it. The expansion lives here rather than in the
  * domain so a line stays "a stamp at a condition" everywhere below this point.
  */
 async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
   const stampId = raw.stampId.trim();
-  const issueId = raw.issueId?.trim() ?? "";
-  if (!stampId && !issueId) {
+  const checklistId = raw.checklistId?.trim() ?? "";
+  if (!stampId && !checklistId) {
     return { ok: false as const, message: "Pick the stamp this line is about." };
   }
   if (!raw.conditionId.trim()) {
@@ -471,7 +471,7 @@ async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
 
   let stampIds: string[];
   try {
-    stampIds = await resolveAuctionLineStamps(collectionId, { stampId, issueId });
+    stampIds = await resolveAuctionLineStamps(collectionId, { stampId, checklistId });
   } catch (e) {
     return {
       ok: false as const,
@@ -479,9 +479,9 @@ async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
     };
   }
 
-  // Every stamp of an issue is described the same way — one condition, one certificate, one format,
-  // the same count each. That is what "the lot contains this series" means; a lot that mixes
-  // conditions within a series is entered stamp by stamp.
+  // Every stamp on a checklist is described the same way — one condition, one certificate, one
+  // format, the same count each. That is what "the lot contains this set" means; a lot that mixes
+  // conditions within a set is entered stamp by stamp.
   return {
     ok: true as const,
     inputs: stampIds.map((id) => ({
@@ -520,7 +520,7 @@ export async function updateAuctionLotLineAction(
   raw: AuctionLotLineRaw
 ): Promise<AuctionActionState> {
   const session = await getSession();
-  const resolved = await resolveLine(collectionId, { ...raw, issueId: undefined });
+  const resolved = await resolveLine(collectionId, { ...raw, checklistId: undefined });
   if (!resolved.ok) return { status: "error", message: resolved.message };
   // An edit re-points one line at one stamp; the issue shortcut is an *add* affordance, and is
   // stripped above rather than silently multiplying the line it was applied to.

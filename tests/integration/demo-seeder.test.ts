@@ -243,13 +243,18 @@ describe("seedDemoData", () => {
   });
 
   it("includes issues with optional stamps", async () => {
+    // An optional stamp is a member of the issue that no checklist claims (#531).
     const issues = await prisma.issue.findMany({
       where: { collectionId },
-      include: { members: { select: { requiredForCompleteness: true } } },
+      include: {
+        members: { select: { stampId: true } },
+        checklists: { select: { stamps: { select: { stampId: true } } } },
+      },
     });
-    const withOptional = issues.filter((i) =>
-      i.members.some((m) => !m.requiredForCompleteness)
-    );
+    const withOptional = issues.filter((i) => {
+      const onChecklist = new Set(i.checklists.flatMap((c) => c.stamps.map((s) => s.stampId)));
+      return i.members.some((m) => !onChecklist.has(m.stampId));
+    });
     assert.ok(withOptional.length >= 1, `Expected >=1 issues with optional stamps`);
   });
 

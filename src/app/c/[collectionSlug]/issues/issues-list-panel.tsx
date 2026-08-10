@@ -654,7 +654,18 @@ export function IssuesListPanel({
               collectionId={collectionId}
               stamp={{
                 ...stamp,
-                issues: [{ requiredForCompleteness: stamp.requiredForCompleteness }],
+                // The issue's checklists, each ticked where this stamp is on it (#531) — the row
+                // carries only the ids it belongs to, and the picker needs the boxes it does not.
+                issues: [
+                  {
+                    issueId,
+                    checklists: issue.checklists.map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      on: stamp.checklistIds.includes(c.id),
+                    })),
+                  },
+                ],
               }}
               areaVendors={areaVendors}
               isPending={isPending}

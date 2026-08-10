@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
   DialogBody,
@@ -35,6 +36,7 @@ import {
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
 import { NO_AUTOFILL } from "./no-autofill";
+import { DEFAULT_CHECKLIST } from "@/lib/checklist-vocabulary";
 import { Icon } from "@/app/icons";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
@@ -73,13 +75,29 @@ const TAB_STYLE: React.CSSProperties = {
 
 type TabKey = "details" | "prices";
 
+const CHECKLIST_OPTION_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  fontSize: "0.875rem",
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
+  padding: "0.1rem 0",
+};
+
 export interface StampFormData {
   name: string | null;
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
-  issues?: { requiredForCompleteness: boolean }[];
+  /** The stamp's issue memberships, each carrying that issue's checklists with a tick (#531).
+   *  Omitted by callers that reuse this dialog without issue context (the copy's stamp edit from
+   *  Inventory / purchases, #243) — the picker is then hidden and no membership is touched. */
+  issues?: {
+    issueId: string;
+    checklists: { id: string; name: string; on: boolean }[];
+  }[];
   // Colnect item-ID (#247). `undefined` on an edit-mode stamp means the caller doesn't manage
   // the field — the input is then hidden and never submitted, so the stored value is untouched.
   colnectId?: string | null;
@@ -286,11 +304,29 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [selectedParentId, setSelectedParentId] = useState(
     addProps?.prefilledParentStampId ?? ""
   );
-  const [requiredForCompleteness, setRequiredForCompleteness] = useState(
-    editProps
-      ? (editProps.stamp.issues?.some((m) => m.requiredForCompleteness) ?? false)
-      : !addProps?.prefilledParentStampId
+  // Which checklists the stamp is on (#531), replacing the single *Required for completeness*
+  // box. In edit mode it is the first membership's issue that is edited — a stamp on two issues
+  // answers for each separately, and the dialog is opened from one of them. In add mode the
+  // default is {@link DEFAULT_CHECKLIST} for a root stamp and nothing for a variant, exactly the
+  // rule the old checkbox defaulted to.
+  const editedMembership = editProps?.stamp.issues?.[0] ?? null;
+  const [checklistIds, setChecklistIds] = useState<Set<string>>(() =>
+    editedMembership
+      ? new Set(editedMembership.checklists.filter((c) => c.on).map((c) => c.id))
+      : addProps?.prefilledParentStampId
+        ? new Set<string>()
+        : new Set<string>([DEFAULT_CHECKLIST])
   );
+  const onAnyChecklist = checklistIds.size > 0;
+
+  function toggleChecklist(id: string) {
+    setChecklistIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // ── Subtype classification (child stamps only) ──
   const [subtypes, setSubtypes] = useState<StampSubtypeData[]>([]);
@@ -415,8 +451,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const blockDuplicates = dupCheck.mode === "block" && dupCheck.groups.length > 0;
 
   // ── Declared-range extension (add-to-issue only) ──
-  // Only a required-for-completeness stamp defines an issue's range, so the prompt
-  // fires only when Required is checked. For each vendor whose entered number falls
+  // Only a stamp on a checklist defines an issue's range, so the prompt
+  // fires only when at least one checklist is ticked. For each vendor whose entered number falls
   // beyond the selected issue's declared First–Last (same numbering family), we
   // surface the proposed widened range and force an explicit widen/keep choice
   // before the stamp can be saved. Debounced so transient values while typing don't
@@ -430,7 +466,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       const issue =
-        addProps && !autoCreateIssue && requiredForCompleteness && selectedIssueId
+        addProps && !autoCreateIssue && onAnyChecklist && selectedIssueId
           ? addProps.issues.find((i) => i.id === selectedIssueId)
           : undefined;
       const out: { catalogVendorId: string; current: string; proposed: string }[] = [];
@@ -456,9 +492,36 @@ export function StampFormDialog(props: StampFormDialogProps) {
       if (out.length === 0) setRangeChoice(null);
     }, 300);
     return () => clearTimeout(timer);
-  }, [addProps, autoCreateIssue, requiredForCompleteness, selectedIssueId, catalogInputs, vendors]);
+  }, [addProps, autoCreateIssue, onAnyChecklist, selectedIssueId, catalogInputs, vendors]);
 
   const hasRangeExtension = rangeExtensions.length > 0;
+
+  // The checklists on offer (#531). Edit mode has them on the membership already; add mode fetches
+  // them for the chosen issue rather than reading `addProps.issues`, which the prefilled-issue call
+  // sites do not always carry the row for.
+  const { data: addChecklists } = useQuery({
+    queryKey: ["checklists", collectionId, selectedIssueId],
+    enabled: !!addProps && !!selectedIssueId && !autoCreateIssue,
+    queryFn: async () => {
+      const { getChecklistsForIssueAction } = await import("@/app/actions/checklists");
+      return getChecklistsForIssueAction(collectionId, selectedIssueId);
+    },
+  });
+  const offeredChecklists: { id: string; name: string }[] = editProps
+    ? (editedMembership?.checklists ?? [])
+    : autoCreateIssue
+      ? []
+      : (addChecklists ?? []);
+
+  // Switching to another issue invalidates ids belonging to the previous one; a root stamp falls
+  // back to the issue's own set, which is what the box meant before checklists existed. Adjusted
+  // during render against the issue the current selection was made for, rather than in an effect —
+  // the state is derived from the chosen issue, and an effect would render the stale ticks first.
+  const [checklistIssue, setChecklistIssue] = useState(selectedIssueId);
+  if (addProps && checklistIssue !== selectedIssueId) {
+    setChecklistIssue(selectedIssueId);
+    setChecklistIds(addProps.prefilledParentStampId ? new Set() : new Set([DEFAULT_CHECKLIST]));
+  }
 
   const needsMembers =
     !!addProps && !!selectedIssueId && !autoCreateIssue && !addProps.prefilledParentStampId;
@@ -525,12 +588,13 @@ export function StampFormDialog(props: StampFormDialogProps) {
     }
 
     if (props.mode === "edit") {
-      // Only send this when the "Required for completeness" checkbox was actually shown — i.e. the
-      // caller passed the stamp's issue memberships. Callers that reuse this dialog without that
-      // context (the copy's stamp edit from Inventory/purchases, #243) must not clobber the flag on
-      // every membership; omitting the field leaves it untouched server-side.
-      if ((editProps?.stamp.issues?.length ?? 0) > 0) {
-        fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
+      // Only send this when the checklist picker was actually shown — i.e. the caller passed the
+      // stamp's issue memberships. Callers that reuse this dialog without that context (the copy's
+      // stamp edit from Inventory/purchases, #243) must not rewrite membership; omitting the
+      // fields leaves every checklist untouched server-side.
+      if (editedMembership) {
+        fd.set("checklistIds", [...checklistIds].join(","));
+        fd.set("checklistIssueId", editedMembership.issueId);
       }
       props.onSubmit(fd);
       return;
@@ -540,7 +604,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
       fd.set("newIssueName", newIssueName.trim());
       fd.set("newIssueYear", newIssueYear.trim());
     }
-    fd.set("requiredForCompleteness", requiredForCompleteness ? "true" : "false");
+    fd.set("checklistIds", [...checklistIds].join(","));
     if (hasRangeExtension && rangeChoice === "widen") {
       fd.set("widenIssueRange", "true");
     }
@@ -788,18 +852,57 @@ export function StampFormDialog(props: StampFormDialogProps) {
               </div>
             )}
 
-            {/* Required for completeness */}
-            {(addProps || (editProps?.stamp.issues?.length ?? 0) > 0) && (
+            {/* Checklists (#531). One box per checklist of the issue — a stamp counts towards as
+                many sets as claim it. An issue with none yet keeps the old single box, which
+                starts the issue's own set: that is what "required for completeness" always meant,
+                and the dialog is often the very thing creating the issue. */}
+            {(addProps || editedMembership) && (
               <div style={{ marginBottom: "0.875rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "var(--color-text-secondary)", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={requiredForCompleteness}
-                    onChange={(e) => setRequiredForCompleteness(e.target.checked)}
-                    disabled={isPending}
-                  />
-                  Required for completeness
-                </label>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.02em",
+                    textTransform: "uppercase",
+                    color: "var(--color-text-muted)",
+                    marginBottom: "0.35rem",
+                  }}
+                >
+                  Counts towards
+                </div>
+                {offeredChecklists.length === 0 ? (
+                  <label style={CHECKLIST_OPTION_STYLE}>
+                    <input
+                      type="checkbox"
+                      checked={checklistIds.has(DEFAULT_CHECKLIST)}
+                      onChange={() => toggleChecklist(DEFAULT_CHECKLIST)}
+                      disabled={isPending}
+                    />
+                    Required for completeness
+                  </label>
+                ) : (
+                  offeredChecklists.map((c) => (
+                    <label key={c.id} style={CHECKLIST_OPTION_STYLE}>
+                      <input
+                        type="checkbox"
+                        checked={checklistIds.has(c.id)}
+                        onChange={() => toggleChecklist(c.id)}
+                        disabled={isPending}
+                      />
+                      {c.name}
+                    </label>
+                  ))
+                )}
+                <p
+                  style={{
+                    fontSize: "0.6875rem",
+                    color: "var(--color-text-muted)",
+                    margin: "0.35rem 0 0",
+                  }}
+                >
+                  Leave every box clear for an extra the issue holds but no set counts — a block, a
+                  variety.
+                </p>
               </div>
             )}
 

@@ -63,8 +63,9 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge and the headline catalog price.
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition.
-- **Issues** — which issues the stamp belongs to, and whether it is required for completeness in
-  each.
+- **Issues** — which issues the stamp belongs to, and which of each issue's
+  [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
+  counts it.
 - **Photos** — the stamp's catalog photos, full gallery.
 - **Catalog prices** — averages inline, full per-edition breakdown behind the button.
 - **Variants** — the base stamp this one hangs under, and the variants hanging under it. Each is a
@@ -82,12 +83,16 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
   many of them are actually priced.
 - **Completeness** — the breakdown described below.
-- **Catalog value** — averages across catalogs for the required stamps, full breakdown behind the
-  button.
+- **Catalog value** — averages across catalogs for the stamps on one
+  [checklist](collections.md#checklists), full breakdown behind the button. An issue collected more
+  than one way gets one card per checklist, each named after it.
 - **Stamps** — the whole tree, drawn out rather than behind an expander, each stamp linking to its
   own page, with **its own photo on its own line**. There is no separate gallery on this screen:
   a strip of thumbnails away from the tree would leave you matching pictures to catalog numbers by
-  eye, which is the work the tree is already doing for you.
+  eye, which is the work the tree is already doing for you. When the issue carries more than one
+  checklist, the card header holds a **Checklist** filter that narrows the tree to the set you
+  pick — a parent whose variant matched stays as dimmed context, so a variant never loses the
+  number it is read under.
 - **Copies** — every copy you hold from any stamp in the issue.
 - **Offers** — every offer holding a copy from this issue.
 
@@ -102,12 +107,14 @@ than as one owned/not-owned figure. It is a grid:
 - Each cell reads **owned / required**, and after a **×**, how many **complete sets** those copies
   make.
 
-A complete set is limited by the thinnest required stamp: if every required stamp has three copies
+A complete set is limited by the thinnest stamp on the checklist: if every stamp on it has three copies
 but one has only one, you have one complete set, not three. A single missing stamp makes it zero,
 however many duplicates of the others you hold — which is the point of the figure.
 
 Sold, disposed-of and never-usably-delivered copies are not counted, matching the copies-held badge
 on the catalog lists.
 
-An issue where no stamp is marked **Required for completeness** has no set to be complete against,
-and the card says so.
+There is **one card per [checklist](collections.md#checklists)** the issue carries, each titled
+after it — an issue collected basic and specialized shows both, side by side. An issue with no
+checklist at all has no set to be complete against, and the card says so; add one from the issue's
+**⋮ → Checklists…**.

@@ -267,9 +267,9 @@ When you type a name in the **Add issue** dialog, Stamporama checks whether an i
 
 ## Keeping an issue's catalog range in step with its stamps
 
-An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the issue's **required-for-completeness** stamps still fit inside that declared range and flags it when one **extends beyond** it. Only required stamps count — optional extras such as blocks or varieties never widen the range.
+An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the stamps on the issue's **checklists** still fit inside that declared range and flags it when one **extends beyond** it. Only stamps on a checklist count — optional extras such as blocks or varieties never widen the range. When an issue carries several checklists, all of them are read together: an issue publishes one range of numbers however many sets are collected inside it.
 
-**When you add a stamp** that is required for completeness and whose catalog number falls outside the issue's declared range, the **Add stamp** dialog shows the proposed widened range (for example, `Mi 100–105 → 100–106`) and asks you to choose before saving:
+**When you add a stamp** that is on a checklist and whose catalog number falls outside the issue's declared range, the **Add stamp** dialog shows the proposed widened range (for example, `Mi 100–105 → 100–106`) and asks you to choose before saving:
 
 - **Widen the issue's declared range to cover this stamp** — the range is updated as part of adding the stamp.
 - **Keep this stamp outside the declared range** — the stamp is added and the range is left as-is.
@@ -279,16 +279,62 @@ You cannot save the stamp until you pick one, so the decision is never made for 
 **On an existing issue**, the same situation is surfaced after the fact:
 
 - The affected **catalog-number chip** on the **Issues** list turns to a warning colour. Hover it to see the widened range being proposed.
-- The issue's **⋮** menu always offers **Recompute declared range…**, which re-runs the check against every stamp currently attached to the issue. The dialog lists each affected catalog as *current → proposed* and lets you **edit the proposed First/Last by hand** before committing; nothing is written until you press **Apply range**. When every declared range already covers its required stamps, the dialog says so and there is nothing to apply.
+- The issue's **⋮** menu always offers **Recompute declared range…**, which re-runs the check against every stamp currently attached to the issue. The dialog lists each affected catalog as *current → proposed* and lets you **edit the proposed First/Last by hand** before committing; nothing is written until you press **Apply range**. When every declared range already covers its checklist stamps, the dialog says so and there is nothing to apply.
 - You can also do it from the **Edit issue** dialog: the same suggestion appears under **Catalog numbers** with an **Apply** button that fills in the widened First/Last; save the issue to keep it.
 
-The check only ever suggests **widening** a range, never narrowing it — a range that is broader than the required stamps you have entered so far is normal while an issue is still being filled in, so it is never flagged. Comparison stays within the **same numbering family** as the range: for a plain numeric range like `100–105`, a block (`BL12`) or sheetlet (`Ark. 103`) that belongs to the same issue is a different family and is left alone, whereas a range written as `BL17–BL18` **is** extended by `BL19`.
+The check only ever suggests **widening** a range, never narrowing it — a range that is broader than the checklist stamps you have entered so far is normal while an issue is still being filled in, so it is never flagged. Comparison stays within the **same numbering family** as the range: for a plain numeric range like `100–105`, a block (`BL12`) or sheetlet (`Ark. 103`) that belongs to the same issue is a different family and is left alone, whereas a range written as `BL17–BL18` **is** extended by `BL19`.
 
-The **basic numbering takes precedence**. If a range was declared in a special numbering — for example a block range `BL1–BL3` — and a required stamp with the basic numbering (a plain number like `200`) is added, the series **adopts the basic numbering**: the proposal replaces the block range with the basic one (`BL1–BL3 → 200`) rather than extending it.
+The **basic numbering takes precedence**. If a range was declared in a special numbering — for example a block range `BL1–BL3` — and a checklist stamp with the basic numbering (a plain number like `200`) is added, the series **adopts the basic numbering**: the proposal replaces the block range with the basic one (`BL1–BL3 → 200`) rather than extending it.
 
-## Required for completeness
+## Checklists
 
-Each stamp carries a **Required for completeness** flag that controls whether it counts toward its issue's required-stamps total. The flag can be set when adding a stamp and changed later from the stamp's **Edit** dialog — toggle the **Required for completeness** checkbox and save.
+A **checklist** is a named list of stamps that counts as one complete set. Most issues need exactly one — the issue *is* the set — and that is how Stamporama behaves out of the box: the issue's row shows one count and one catalog-value total, exactly as before checklists existed.
+
+Some publications are collected more than one way, and those need several:
+
+- a **basic** set beside a **specialized** one that adds varieties, tabs and perforation types;
+- **perforated** beside **imperforate**, printed by the catalog as two series in one block;
+- the **tabbed** stamps as the goal, with the plain ones as background — or both, separately.
+
+Each checklist has its own completeness and its own catalog value.
+
+### Managing an issue's checklists
+
+Open **Checklists…** from the issue's **⋮** menu. From there you can:
+
+- **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
+- **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed; anything left unticked is an extra the issue holds but no set counts.
+- **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures.
+- **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default.
+
+### Putting a stamp on a checklist
+
+The **Add stamp** and **Edit stamp** dialogs carry a **Counts towards** list with one box per checklist of the issue — tick as many as apply. On an issue that has no checklist yet, the list is a single **Required for completeness** box; ticking it starts the issue's set, named after the issue.
+
+Leave every box clear for an extra the issue holds but no set counts.
+
+### Showing one checklist at a time
+
+When an issue carries **more than one** checklist, expanding its row puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. Tick one or more checklists and the tree narrows to the stamps on them.
+
+A stamp that is not on the picked checklists disappears, with one exception: a **parent whose variant did make the cut stays**, dimmed. `309AP` on its own is a number nobody can place, so the `309` it hangs under remains as context — visibly not part of the set, but there to read the numbering off.
+
+Untick everything to get the whole tree back; an empty selection means *no filter*, not *nothing*. The choice is not remembered — it is a way of looking at one issue for a moment, not a setting.
+
+An issue with a single checklist gets no filter: there is nothing to choose between.
+
+### What the issue row shows
+
+- **One checklist** — the row is unchanged: `12/14` (stamps on the checklist over stamps in the issue) and the set's catalog-value total beside it.
+- **Several** — the badge reads `3 checklists`; hover it to see each name, its size and its total. The row deliberately does not grow a line per set.
+
+The issue's own **detail page** is where several checklists get room: one completeness grid and one catalog-value card each.
+
+### Elsewhere
+
+- **Purchase intake** and **auction lot composition** offer a *whole set* button per checklist rather than one *whole issue* — the button names the goal it will add.
+- The stamp list and the issue's stamp tree show a stamp **in bold** when it is on at least one checklist.
+- A stamp's own detail page names the checklists counting it, under each issue it belongs to.
 
 ## Stamp conditions
 
@@ -424,7 +470,7 @@ Open a stamp's **Add** or **Edit** dialog; the photo editor sits at the bottom o
 
 Saved stamp photos appear as a single thumbnail at the left of the stamp's row. When a stamp has more than one photo, a counter and **‹ / ›** controls step through them in place, and the **main** photo carries a **★** corner badge to set it apart from extras. Click the thumbnail to view it full-size.
 
-They also show up on the **Issues** list: expand an issue to see each stamp's photos under its row, and the collapsed issue row shows the **main photos of its required-for-completeness stamps** — a quick visual summary of the issue. Where there is more than one, the counter and **‹ / ›** controls step through them. Click the thumbnail to view it full-size.
+They also show up on the **Issues** list: expand an issue to see each stamp's photos under its row, and the collapsed issue row shows the **main photos of the stamps on its [checklists](#checklists)** — a quick visual summary of the issue. Where there is more than one, the counter and **‹ / ›** controls step through them. Click the thumbnail to view it full-size.
 
 ### Promoting a copy photo to its stamp
 

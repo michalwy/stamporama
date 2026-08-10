@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { StampPriceDetails } from "@/lib/stamps";
-import type { IssuePriceDetails } from "@/lib/issues";
+import type { ChecklistPriceDetails } from "@/lib/issues";
 import { DetailCard, EmptyNote, DETAIL_BUTTON } from "./detail-page";
 import { PriceDetailsDialog, type PriceDetailsTarget } from "./price-details-dialog";
 import { Tooltip } from "./tooltip";
@@ -13,7 +13,7 @@ import { Icon } from "@/app/icons";
 // average** matrix — condition × certificate, always in the collection's currency — because that
 // is the figure a collector reads a value off, and puts the per-edition breakdown behind the same
 // #114 dialog the row menus open. One card, two targets: a stamp (the copy screen shows its
-// stamp's) and an issue's required members.
+// stamp's) and one checklist's stamps.
 
 interface AverageCell {
   conditionId: string;
@@ -69,23 +69,23 @@ export function CatalogPricesCard({
     },
   });
 
-  const issueQuery = useQuery<IssuePriceDetails>({
+  const checklistQuery = useQuery<ChecklistPriceDetails>({
     queryKey:
-      target.kind === "issue"
-        ? ["issuePriceDetails", target.collectionId, target.issueId]
-        : ["issuePriceDetails", null],
-    enabled: target.kind === "issue",
+      target.kind === "checklist"
+        ? ["checklistPriceDetails", target.collectionId, target.checklistId]
+        : ["checklistPriceDetails", null],
+    enabled: target.kind === "checklist",
     staleTime: 30_000,
     queryFn: async () => {
-      const t = target as { collectionId: string; issueId: string };
-      const { getIssuePriceDetailsAction } = await import("@/app/actions/issues");
-      return getIssuePriceDetailsAction(t.collectionId, t.issueId);
+      const t = target as { collectionId: string; checklistId: string };
+      const { getChecklistPriceDetailsAction } = await import("@/app/actions/issues");
+      return getChecklistPriceDetailsAction(t.collectionId, t.checklistId);
     },
   });
 
-  const isLoading = target.kind === "stamp" ? stampQuery.isLoading : issueQuery.isLoading;
+  const isLoading = target.kind === "stamp" ? stampQuery.isLoading : checklistQuery.isLoading;
   const cells: AverageCell[] =
-    (target.kind === "stamp" ? stampQuery.data?.averageCells : issueQuery.data?.averageCells) ?? [];
+    (target.kind === "stamp" ? stampQuery.data?.averageCells : checklistQuery.data?.averageCells) ?? [];
   const priced = cells.filter((c) => c.averageBase !== null);
 
   // Conditions as rows, certificates as columns — the dialog's own layout, so the two read alike.

@@ -272,7 +272,7 @@ export async function createLotWithStamps(
     price: number;
     title?: string | null;
     stampId?: string | null;
-    issueId?: string | null;
+    checklistId?: string | null;
     conditionId: string;
     certificateStatusId?: string | null;
     locationId?: string | null;
@@ -288,7 +288,7 @@ export async function createLotWithStamps(
   try {
     const count = await intakeStamps(ownerId, lotId, {
       stampId: input.stampId,
-      issueId: input.issueId,
+      checklistId: input.checklistId,
       conditionId: input.conditionId,
       certificateStatusId: input.certificateStatusId,
       locationId: input.locationId,
@@ -467,8 +467,9 @@ export async function attachItemsToLot(
 }
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single
- * `stampId` or an `issueId` (which fans out to every **required-for-completeness** member
- * of that issue). Every created copy shares the given condition, certificate, and storage
+ * `stampId` or a `checklistId` (which fans out to every stamp on that checklist, #531 — an issue
+ * may carry several, so the caller names the goal rather than the publication). Every created copy
+ * shares the given condition, certificate, and storage
  * location, is linked to the lot, and is **not** in the collection — a purchased copy is not a
  * holding until it is sorted. New copies enter as `ordered`, or `to_sort` when the order has
  * already arrived (they were identified during the sort pass). Returns how many were created. */
@@ -477,12 +478,12 @@ export async function intakeStamps(
   lotId: string,
   input: {
     stampId?: string | null;
-    issueId?: string | null;
+    checklistId?: string | null;
     conditionId: string;
     certificateStatusId?: string | null;
     locationId?: string | null;
     locationRef?: string | null;
-    // Only honoured for a single-stamp intake (#148); a whole-issue intake creates several
+    // Only honoured for a single-stamp intake (#148); a whole-checklist intake creates several
     // distinct copies, so the client never sends photos for it.
     photoChangeSet?: PhotoChangeSet | null;
     // Disposition flags chosen during intake (#160). Copies are still created not-yet-sorted
@@ -536,22 +537,17 @@ export async function intakeStamps(
     }
   }
 
-  // Resolve the target stamp ids: a whole issue expands to its required members.
+  // Resolve the target stamp ids: a whole checklist expands to the stamps on it.
   let stampIds: string[];
-  if (input.issueId) {
-    const issue = await prisma.issue.findFirst({
-      where: { id: input.issueId, collectionId },
-      select: {
-        members: {
-          where: { requiredForCompleteness: true },
-          select: { stampId: true },
-        },
-      },
+  if (input.checklistId) {
+    const checklist = await prisma.checklist.findFirst({
+      where: { id: input.checklistId, collectionId },
+      select: { name: true, stamps: { select: { stampId: true } } },
     });
-    if (!issue) throw new Error("Issue not found in this collection.");
-    stampIds = issue.members.map((m) => m.stampId);
+    if (!checklist) throw new Error("Checklist not found in this collection.");
+    stampIds = checklist.stamps.map((cs) => cs.stampId);
     if (stampIds.length === 0) {
-      throw new Error("This issue has no stamps marked required for completeness.");
+      throw new Error(`"${checklist.name}" has no stamps on it yet.`);
     }
   } else if (input.stampId) {
     const stamp = await prisma.stamp.findFirst({
@@ -588,7 +584,7 @@ export async function intakeStamps(
   // Internal copy numbers (#268) are reserved as one consecutive range for the whole intake, so a
   // whole-issue expansion numbers its copies in the order the stamps were resolved.
   const itemNos = await allocateItemNumbers(prisma, collectionId, stampIds.length);
-  const singleStamp = !!input.stampId && !input.issueId;
+  const singleStamp = !!input.stampId && !input.checklistId;
   if (singleStamp && input.photoChangeSet) {
     const item = await prisma.item.create({
       data: copyData(stampIds[0], itemNos[0]),

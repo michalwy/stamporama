@@ -1,10 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  computeIssueCompleteness,
+  computeChecklistCompleteness,
   type CompletenessCount,
   type CompletenessDisposition,
-} from "../../src/lib/issue-completeness-rules";
+} from "../../src/lib/checklist-completeness-rules";
 
 const MNH = "cond-mnh";
 const USED = "cond-used";
@@ -27,7 +27,7 @@ function count(
 }
 
 function cell(
-  grid: ReturnType<typeof computeIssueCompleteness>,
+  grid: ReturnType<typeof computeChecklistCompleteness>,
   disposition: CompletenessDisposition,
   conditionId: string | null
 ) {
@@ -36,9 +36,9 @@ function cell(
   return row;
 }
 
-describe("computeIssueCompleteness", () => {
+describe("computeChecklistCompleteness", () => {
   it("counts owned members and complete sets across any condition", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a", "b", "c"],
       [
         count("a", MNH, 3, { inCollection: true }),
@@ -55,7 +55,7 @@ describe("computeIssueCompleteness", () => {
   });
 
   it("reports zero complete sets while a required member is missing", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a", "b"],
       [count("a", MNH, 9, { inCollection: true })],
       CONDITIONS
@@ -66,7 +66,7 @@ describe("computeIssueCompleteness", () => {
   });
 
   it("narrows by condition", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a", "b"],
       [
         count("a", MNH, 2, { inCollection: true }),
@@ -83,7 +83,7 @@ describe("computeIssueCompleteness", () => {
   });
 
   it("treats dispositions as overlapping markers, not a partition", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a"],
       [count("a", MNH, 2, { inCollection: true, forSale: true })],
       CONDITIONS
@@ -95,7 +95,7 @@ describe("computeIssueCompleteness", () => {
   });
 
   it("sums a stamp's copies across the condition axis when no condition is fixed", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a"],
       [count("a", MNH, 1, { forTrade: true }), count("a", USED, 2, { forTrade: true })],
       CONDITIONS
@@ -104,15 +104,15 @@ describe("computeIssueCompleteness", () => {
     assert.equal(cell(grid, "for_trade", MNH).completeSets, 1);
   });
 
-  it("an issue with no required members is never complete", () => {
-    const grid = computeIssueCompleteness([], [], CONDITIONS);
+  it("an empty checklist is never complete", () => {
+    const grid = computeChecklistCompleteness([], [], CONDITIONS);
     assert.equal(grid.requiredCount, 0);
     assert.equal(cell(grid, "any", null).owned, 0);
     assert.equal(cell(grid, "any", null).completeSets, 0);
   });
 
   it("ignores copies of stamps outside the required set", () => {
-    const grid = computeIssueCompleteness(
+    const grid = computeChecklistCompleteness(
       ["a"],
       [count("a", MNH, 1, { inCollection: true }), count("z", MNH, 5, { inCollection: true })],
       CONDITIONS

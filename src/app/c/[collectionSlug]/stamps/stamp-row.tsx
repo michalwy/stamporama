@@ -74,7 +74,9 @@ export function StampRow({
   );
 
   const firstIssue = stamp.issues[0] ?? null;
-  const isRequired = stamp.issues.some((m) => m.requiredForCompleteness);
+  // On at least one checklist of at least one of its issues (#531) — what the old
+  // `requiredForCompleteness` flag said, now read off membership.
+  const isRequired = stamp.issues.some((m) => m.checklists.some((c) => c.on));
 
   const popupLabel =
     stamp.name ??

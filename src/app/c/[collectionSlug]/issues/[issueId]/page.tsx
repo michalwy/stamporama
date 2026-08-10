@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getIssueListItem, listIssueMembers } from "@/lib/issues";
-import { getIssueCompleteness } from "@/lib/issue-completeness";
+import { getIssueCompleteness } from "@/lib/checklist-completeness";
 import { IssueDetailPanel } from "./issue-detail-panel";
 
 interface IssueDetailPageProps {

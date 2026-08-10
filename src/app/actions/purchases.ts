@@ -212,7 +212,7 @@ export async function createLotAction(
 
 /** Create a lot and identify stamps into it in one step (the "add lot with stamps" flow,
  * #121). Expects the combined form: title/price plus the intake selection (stampId or
- * issueId) and condition/certificate/location. */
+ * checklistId) and condition/certificate/location. */
 export async function createLotWithStampsAction(
   purchaseId: string,
   formData: FormData
@@ -223,16 +223,16 @@ export async function createLotWithStampsAction(
   const conditionId = str(formData, "conditionId");
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
   const stampId = optionalStr(formData, "stampId");
-  const issueId = optionalStr(formData, "issueId");
-  if (!stampId && !issueId) {
-    return { status: "error", message: "Select a stamp or an issue to add." };
+  const checklistId = optionalStr(formData, "checklistId");
+  if (!stampId && !checklistId) {
+    return { status: "error", message: "Select a stamp or a checklist to add." };
   }
   try {
     const { lotId } = await createLotWithStamps(session.user.id, purchaseId, {
       price,
       title: optionalStr(formData, "title"),
       stampId,
-      issueId,
+      checklistId,
       conditionId,
       certificateStatusId: optionalStr(formData, "certificateStatusId"),
       locationId: optionalStr(formData, "locationId"),
@@ -324,7 +324,7 @@ export async function attachCopiesToLotAction(
 }
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). The client sends either a
- * single `stampId` or an `issueId` (which fans out to the issue's required stamps), plus a
+ * single `stampId` or a `checklistId` (which fans out to the stamps on it, #531), plus a
  * shared condition and optional certificate. Every created copy is `ordered` and not yet in
  * the collection; cost-basis stays pending until the lot closes. */
 export async function intakeStampsAction(
@@ -335,14 +335,14 @@ export async function intakeStampsAction(
   const conditionId = str(formData, "conditionId");
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
   const stampId = optionalStr(formData, "stampId");
-  const issueId = optionalStr(formData, "issueId");
-  if (!stampId && !issueId) {
-    return { status: "error", message: "Select a stamp or an issue to add." };
+  const checklistId = optionalStr(formData, "checklistId");
+  if (!stampId && !checklistId) {
+    return { status: "error", message: "Select a stamp or a checklist to add." };
   }
   try {
     await intakeStamps(session.user.id, lotId, {
       stampId,
-      issueId,
+      checklistId,
       conditionId,
       certificateStatusId: optionalStr(formData, "certificateStatusId"),
       locationId: optionalStr(formData, "locationId"),

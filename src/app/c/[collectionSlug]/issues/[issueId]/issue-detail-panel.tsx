@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { IssueListItem, StampNodeData } from "@/lib/issues";
+import type { IssueListItem, StampNodeData, IssueChecklistTotals } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
-import type { IssueCompleteness } from "@/lib/issue-completeness";
+import type { IssueCompleteness, ChecklistCompleteness } from "@/lib/checklist-completeness";
 import {
   COMPLETENESS_DISPOSITIONS,
   COMPLETENESS_DISPOSITION_LABEL,
-} from "@/lib/issue-completeness-rules";
+} from "@/lib/checklist-completeness-rules";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import {
   DetailBackLink,
@@ -24,7 +24,9 @@ import {
 import {
   IssueTitle,
   IssueCatalogChips,
-  StampCountBadge,
+  ChecklistsBadge,
+  ChecklistTreeFilter,
+  filterStampTreeByChecklists,
   StampTitle,
   StampDetailLine,
   buildStampTree,
@@ -46,6 +48,10 @@ import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offer
 // The issue detail screen (#519). Two things the list row cannot give: the stamp tree with enough
 // room to read it, and the completeness question answered from the copies actually held rather
 // than as one owned/not-owned indicator.
+//
+// Since #531 the subject of that question is a **checklist**, and an issue may carry several. This
+// is the screen with room for all of them: one card per checklist, each with its own grid — where
+// the list row could only collapse them to a count.
 
 const CELL: React.CSSProperties = {
   padding: "0.3rem 0.6rem",
@@ -88,8 +94,14 @@ export function IssueDetailPanel({
   const vendorMap = maps.vendorMapFor(issue.collectionAreaId, issue.id);
   const primaryVendorId = maps.primaryVendorByArea.get(issue.collectionAreaId) ?? null;
   const areaPath = buildAreaPath(areas, issue.collectionAreaId);
-  const total = issue.requiredPriceTotal;
-  const tree = buildStampTree(members);
+  // Same narrowing the list row's expanded tree offers (#531), on the screen where the tree has
+  // the most room. Local state for the same reason: the filter is per issue, and this page's copy
+  // follows the list's rule rather than inventing a second one.
+  const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const { tree, contextIds } = filterStampTreeByChecklists(
+    buildStampTree(members),
+    treeChecklistIds
+  );
 
   return (
     <>
@@ -107,7 +119,11 @@ export function IssueDetailPanel({
             primaryVendorId={primaryVendorId}
             rangeSuggestions={issue.rangeSuggestions}
           />
-          <StampCountBadge required={issue.requiredCount} total={issue.memberCount} />
+          <ChecklistsBadge
+            checklists={issue.checklists}
+            requiredCount={issue.requiredCount}
+            memberCount={issue.memberCount}
+          />
         </DetailFullRow>
 
         <DetailColumns>
@@ -118,42 +134,39 @@ export function IssueDetailPanel({
                 <Field label="Area">{areaPath}</Field>
                 <Field label="Year">{issue.year}</Field>
                 <Field label="Stamps">
-                  {issue.memberCount} ({issue.requiredCount} required for completeness)
+                  {issue.memberCount} ({issue.requiredCount} on a checklist)
                 </Field>
-                <Field label="Catalog value of the required stamps">
-                  {total ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                      <span style={PRICE_MAIN}>{moneyPrimaryText(total)}</span>
-                      {moneySecondaryText(total) && (
-                        <span style={PRICE_CONVERTED}>{moneySecondaryText(total)}</span>
-                      )}
-                      {issue.requiredPriceStale && <StalePriceIcon />}
-                      <Tooltip
-                        content={`${total.pricedCount} of ${total.requiredCount} required stamps are priced${
-                          total.estimatedCount
-                            ? `; ${total.estimatedCount} rolled up from a variant child (estimate)`
-                            : ""
-                        }${
-                          total.derivedCount
-                            ? `; ${total.derivedCount} derived from the single by a format multiplier`
-                            : ""
-                        }.`}
-                      >
-                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                          {total.pricedCount}/{total.requiredCount} priced
-                        </span>
-                      </Tooltip>
-                    </span>
-                  ) : null}
-                </Field>
+                {/* One value line per checklist (#531): summing them would double-count a stamp a
+                    basic and a specialized set both claim, so each set states its own worth. */}
+                {issue.checklists.map((c) =>
+                  c.priceTotal ? (
+                    <Field key={c.id} label={`Catalog value — ${c.name}`}>
+                      <ChecklistValue checklist={c} />
+                    </Field>
+                  ) : null
+                )}
                 <Field label="Created">{new Date(issue.createdAt).toLocaleDateString()}</Field>
                 <Field label="Auto-created">{issue.isAutoCreated ? "Yes" : "No"}</Field>
               </FieldGrid>
             </DetailCard>
 
-            <DetailCard title="Stamps" count={members.length || null}>
+            <DetailCard
+              title="Stamps"
+              count={members.length || null}
+              actions={
+                issue.checklists.length > 1 ? (
+                  <ChecklistTreeFilter
+                    checklists={issue.checklists}
+                    selected={treeChecklistIds}
+                    onChange={setTreeChecklistIds}
+                  />
+                ) : undefined
+              }
+            >
               {members.length === 0 ? (
                 <EmptyNote>This issue has no stamps yet.</EmptyNote>
+              ) : tree.length === 0 ? (
+                <EmptyNote>No stamp is on the checklists you picked.</EmptyNote>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {tree.map((node) => (
@@ -161,6 +174,7 @@ export function IssueDetailPanel({
                       key={node.node.stampId}
                       node={node}
                       depth={0}
+                      contextIds={contextIds}
                       collectionId={collectionId}
                       collectionSlug={collectionSlug}
                       vendorMap={vendorMap}
@@ -171,97 +185,45 @@ export function IssueDetailPanel({
               )}
             </DetailCard>
 
-            <CatalogPricesCard
-              target={{ kind: "issue", collectionId, issueId: issue.id }}
-              title="Catalog value"
-              emptyText="No catalog price is recorded for this issue's required stamps yet."
-            />
+            {/* One card per checklist, for the same reason the value fields are per checklist. */}
+            {issue.checklists.map((c) => (
+              <CatalogPricesCard
+                key={c.id}
+                target={{ kind: "checklist", collectionId, checklistId: c.id }}
+                title={
+                  issue.checklists.length === 1 ? "Catalog value" : `Catalog value — ${c.name}`
+                }
+                emptyText={`No catalog price is recorded for the stamps on “${c.name}” yet.`}
+              />
+            ))}
           </DetailColumn>
 
           {/* Right: how the collection stands against it. */}
           <DetailColumn>
-            <DetailCard title="Completeness">
-              {completeness.requiredCount === 0 ? (
+            {completeness.checklists.length === 0 ? (
+              <DetailCard title="Completeness">
                 <EmptyNote>
-                  No stamp in this issue is marked required for completeness, so there is no set to be
-                  complete against.
+                  This issue has no checklist, so there is no set to be complete against. Add one
+                  from the issue&apos;s row.
                 </EmptyNote>
-              ) : (
-                <>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", minWidth: "24rem" }}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...HEAD, textAlign: "left" }}>Disposition</th>
-                          <th style={HEAD}>Any condition</th>
-                          {completeness.conditions.map((c) => (
-                            <th key={c.id} style={HEAD}>
-                              <Tooltip content={c.name}>
-                                <span>{c.abbreviation}</span>
-                              </Tooltip>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {COMPLETENESS_DISPOSITIONS.map((disposition) => (
-                          <tr key={disposition}>
-                            <td style={{ ...CELL, textAlign: "left", fontWeight: 500 }}>
-                              {COMPLETENESS_DISPOSITION_LABEL[disposition]}
-                            </td>
-                            {[null, ...completeness.conditions.map((c) => c.id)].map((conditionId) => {
-                              const row = completeness.rows.find(
-                                (r) => r.disposition === disposition && r.conditionId === conditionId
-                              );
-                              if (!row) return <td key={conditionId ?? "any"} style={CELL} />;
-                              return (
-                                <td key={conditionId ?? "any"} style={CELL}>
-                                  <Tooltip
-                                    content={`${row.owned} of ${completeness.requiredCount} required stamps held · ${row.completeSets} complete ${
-                                      row.completeSets === 1 ? "set" : "sets"
-                                    }`}
-                                  >
-                                    <span
-                                      style={{
-                                        color:
-                                          row.owned === completeness.requiredCount
-                                            ? "var(--color-success)"
-                                            : row.owned === 0
-                                              ? "var(--color-text-muted)"
-                                              : "var(--color-text-primary)",
-                                      }}
-                                    >
-                                      {row.owned}/{completeness.requiredCount}
-                                      {row.completeSets > 0 && (
-                                        <span
-                                          style={{
-                                            marginLeft: "0.35rem",
-                                            fontSize: "0.6875rem",
-                                            color: "var(--color-text-muted)",
-                                          }}
-                                        >
-                                          ×{row.completeSets}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </Tooltip>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                    Required stamps held, and after ×, how many complete sets those copies make — the
-                    thinnest required stamp decides. Dispositions overlap: a copy can be in the
-                    collection and for sale at once. Sold, disposed and undelivered copies are not
-                    counted.
-                  </div>
-                </>
-              )}
-            </DetailCard>
+              </DetailCard>
+            ) : (
+              completeness.checklists.map((checklist) => (
+                <DetailCard
+                  key={checklist.checklistId}
+                  title={
+                    completeness.checklists.length === 1
+                      ? "Completeness"
+                      : `Completeness — ${checklist.name}`
+                  }
+                >
+                  <ChecklistCompletenessGrid
+                    checklist={checklist}
+                    conditions={completeness.conditions}
+                  />
+                </DetailCard>
+              ))
+            )}
 
             <RelatedCopiesCard
               collectionId={collectionId}
@@ -279,11 +241,133 @@ export function IssueDetailPanel({
   );
 }
 
+/** What one checklist is worth, with the caveats the figure carries. */
+function ChecklistValue({ checklist }: { checklist: IssueChecklistTotals }) {
+  const total = checklist.priceTotal;
+  if (!total) return null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+      <span style={PRICE_MAIN}>{moneyPrimaryText(total)}</span>
+      {moneySecondaryText(total) && (
+        <span style={PRICE_CONVERTED}>{moneySecondaryText(total)}</span>
+      )}
+      {checklist.priceStale && <StalePriceIcon />}
+      <Tooltip
+        content={`${total.pricedCount} of ${total.requiredCount} stamps on this checklist are priced${
+          total.estimatedCount
+            ? `; ${total.estimatedCount} rolled up from a variant child (estimate)`
+            : ""
+        }${
+          total.derivedCount
+            ? `; ${total.derivedCount} derived from the single by a format multiplier`
+            : ""
+        }.`}
+      >
+        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          {total.pricedCount}/{total.requiredCount} priced
+        </span>
+      </Tooltip>
+    </span>
+  );
+}
+
+/** One checklist's disposition × condition grid — #519's card, once per set the issue carries. */
+function ChecklistCompletenessGrid({
+  checklist,
+  conditions,
+}: {
+  checklist: ChecklistCompleteness;
+  conditions: { id: string; name: string; abbreviation: string }[];
+}) {
+  if (checklist.requiredCount === 0) {
+    return (
+      <EmptyNote>
+        Nothing is on this checklist yet, so there is no set to be complete against.
+      </EmptyNote>
+    );
+  }
+  return (
+    <>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", minWidth: "24rem" }}>
+          <thead>
+            <tr>
+              <th style={{ ...HEAD, textAlign: "left" }}>Disposition</th>
+              <th style={HEAD}>Any condition</th>
+              {conditions.map((c) => (
+                <th key={c.id} style={HEAD}>
+                  <Tooltip content={c.name}>
+                    <span>{c.abbreviation}</span>
+                  </Tooltip>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {COMPLETENESS_DISPOSITIONS.map((disposition) => (
+              <tr key={disposition}>
+                <td style={{ ...CELL, textAlign: "left", fontWeight: 500 }}>
+                  {COMPLETENESS_DISPOSITION_LABEL[disposition]}
+                </td>
+                {[null, ...conditions.map((c) => c.id)].map((conditionId) => {
+                  const row = checklist.rows.find(
+                    (r) => r.disposition === disposition && r.conditionId === conditionId
+                  );
+                  if (!row) return <td key={conditionId ?? "any"} style={CELL} />;
+                  return (
+                    <td key={conditionId ?? "any"} style={CELL}>
+                      <Tooltip
+                        content={`${row.owned} of ${checklist.requiredCount} stamps held · ${row.completeSets} complete ${
+                          row.completeSets === 1 ? "set" : "sets"
+                        }`}
+                      >
+                        <span
+                          style={{
+                            color:
+                              row.owned === checklist.requiredCount
+                                ? "var(--color-success)"
+                                : row.owned === 0
+                                  ? "var(--color-text-muted)"
+                                  : "var(--color-text-primary)",
+                          }}
+                        >
+                          {row.owned}/{checklist.requiredCount}
+                          {row.completeSets > 0 && (
+                            <span
+                              style={{
+                                marginLeft: "0.35rem",
+                                fontSize: "0.6875rem",
+                                color: "var(--color-text-muted)",
+                              }}
+                            >
+                              ×{row.completeSets}
+                            </span>
+                          )}
+                        </span>
+                      </Tooltip>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+        Stamps of this checklist held, and after ×, how many complete sets those copies make — the
+        thinnest one decides. Dispositions overlap: a copy can be in the collection and for sale at
+        once. Sold, disposed and undelivered copies are not counted.
+      </div>
+    </>
+  );
+}
+
 /** One member of the issue, and its variants under it. Every node links to its own screen (#518) —
  *  the tree is what this page is for, so it is drawn whole rather than behind an expander. */
 function TreeNode({
   node,
   depth,
+  contextIds,
   collectionId,
   collectionSlug,
   vendorMap,
@@ -291,6 +375,8 @@ function TreeNode({
 }: {
   node: StampTreeNodeData;
   depth: number;
+  /** Stamps the checklist filter kept only as context for a matching descendant (#531). */
+  contextIds: Set<string>;
   collectionId: string;
   collectionSlug: string;
   vendorMap: Map<string, import("@/lib/areas").AreaCatalogEntry>;
@@ -311,6 +397,8 @@ function TreeNode({
           padding: "0.5rem 0",
           paddingLeft: `${depth * 1.5}rem`,
           borderTop: depth === 0 ? "1px solid var(--color-border)" : undefined,
+          // Context, not a member of the filtered set — see the list row's own tree.
+          opacity: contextIds.has(node.node.stampId) ? 0.5 : undefined,
         }}
       >
         {/* The stamp's own photo, on the stamp's own line. This is why the screen carries no
@@ -329,7 +417,7 @@ function TreeNode({
             href={`/c/${collectionSlug}/stamps/${node.node.stampId}`}
             style={{
               fontSize: "0.875rem",
-              fontWeight: node.node.requiredForCompleteness ? 600 : 400,
+              fontWeight: node.node.checklistIds.length > 0 ? 600 : 400,
               textDecoration: "none",
             }}
           >
@@ -351,6 +439,7 @@ function TreeNode({
           key={child.node.stampId}
           node={child}
           depth={depth + 1}
+          contextIds={contextIds}
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           vendorMap={vendorMap}

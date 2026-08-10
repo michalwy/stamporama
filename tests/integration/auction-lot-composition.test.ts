@@ -433,14 +433,19 @@ describe("auction lot composition (#353)", () => {
     await prisma.collection.delete({ where: { id: otherCol.id } });
   });
 
-  it("expands a whole issue to its required members, and refuses one with none", async () => {
-    // Only two of the issue's stamps are marked required for completeness; the rest are members
-    // all the same, and a "complete series" lot is the required ones.
-    await prisma.issueMember.updateMany({
-      where: { issueId, stampId: { in: [plainStampId, multipleStampId] } },
-      data: { requiredForCompleteness: true },
+  it("expands a whole checklist to its stamps, and refuses an empty one", async () => {
+    // Only two of the issue's stamps are on the checklist; the rest are members all the same, and
+    // a "complete series" lot is what the set names (#531).
+    const checklist = await prisma.checklist.create({
+      data: { collectionId, issueId, name: "Complete set", sortOrder: 0 },
     });
-    const stampIds = await resolveAuctionLineStamps(collectionId, { issueId });
+    await prisma.checklistStamp.createMany({
+      data: [plainStampId, multipleStampId].map((stampId) => ({
+        checklistId: checklist.id,
+        stampId,
+      })),
+    });
+    const stampIds = await resolveAuctionLineStamps(collectionId, { checklistId: checklist.id });
     assert.deepEqual([...stampIds].sort(), [plainStampId, multipleStampId].sort());
 
     // A single stamp resolves to itself — the shortcut is the only thing that fans out.
@@ -448,18 +453,16 @@ describe("auction lot composition (#353)", () => {
       plainStampId,
     ]);
 
-    const emptyIssue = await prisma.issue.create({
-      data: { collectionId, issueNo: 9002, collectionAreaId: areaId, name: "Nothing required", year: 1960 },
+    const emptyChecklist = await prisma.checklist.create({
+      data: { collectionId, issueId, name: "Nothing on it", sortOrder: 1 },
     });
     // Silence here would create a lot line for nothing at all, so it is refused out loud.
-    await assert.rejects(() => resolveAuctionLineStamps(collectionId, { issueId: emptyIssue.id }));
+    await assert.rejects(() =>
+      resolveAuctionLineStamps(collectionId, { checklistId: emptyChecklist.id })
+    );
     await assert.rejects(() => resolveAuctionLineStamps(collectionId, {}));
 
-    await prisma.issue.delete({ where: { id: emptyIssue.id } });
-    await prisma.issueMember.updateMany({
-      where: { issueId },
-      data: { requiredForCompleteness: false },
-    });
+    await prisma.checklist.deleteMany({ where: { issueId } });
   });
 
   it("refuses a line pointing outside the collection", async () => {

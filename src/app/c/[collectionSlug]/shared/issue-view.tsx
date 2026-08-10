@@ -6,7 +6,11 @@ import {
   moneyPrimaryText,
   moneySecondaryText,
 } from "@/app/stamp-display";
-import type { StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
+import type {
+  StampNodeData,
+  IssueRangeSuggestion,
+  IssueChecklistTotals,
+} from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import { Tooltip } from "./tooltip";
 import {
@@ -23,6 +27,12 @@ import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
+import { MultiSelectFilter } from "./multi-select-filter";
+import { filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
+
+// The rule that decides what survives the checklist filter is pure and lives in
+// `src/lib/stamp-tree-filter.ts`; re-exported here so the tree helpers stay in one import.
+export { filterStampTreeByChecklists };
 
 // Shared presentational building blocks for an issue and its stamp/variant tree,
 // so the main issues list (issue-row.tsx) and the inventory stamp-picker popup
@@ -50,6 +60,37 @@ export function buildStampTree(members: StampNodeData[]): StampTreeNodeData[] {
     else roots.push(treeNode);
   }
   return roots;
+}
+
+/**
+ * The control that does the narrowing: one tick per checklist of the issue. Rendered **only** when
+ * an issue carries more than one — with a single checklist there is nothing to choose between, and
+ * the row keeps its plain `12/14` badge.
+ *
+ * Its resting label is the badge's own text (`2 checklists`), which is what makes it a replacement
+ * rather than an addition: `MultiSelectFilter` (#425) names one ticked value and counts several,
+ * so the control reads as the indicator until it is used.
+ */
+export function ChecklistTreeFilter({
+  checklists,
+  selected,
+  onChange,
+}: {
+  checklists: { id: string; name: string }[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  if (checklists.length <= 1) return null;
+  return (
+    <MultiSelectFilter
+      options={checklists.map((c) => ({ id: c.id, label: c.name }))}
+      selected={selected}
+      onChange={onChange}
+      allLabel={`${checklists.length} checklists`}
+      itemNoun="checklists"
+      ariaLabel="Filter the stamps by checklist"
+    />
+  );
 }
 
 /** Issue title inline: "1960, Birds of Poland" — year muted, name emphasised. */
@@ -160,6 +201,62 @@ export function StampCountBadge({ required, total }: { required: number; total: 
   );
 }
 
+/**
+ * The row's checklist indicator (#531). With one checklist the row reads exactly as it did before
+ * checklists existed — `12/14`, required over total members. With several it collapses to a
+ * **count**, the same rule `MultiSelectFilter` follows: a row that grows a line per goal stops
+ * scanning evenly, and three names never fit where one number does. The tooltip carries the
+ * detail, one line per checklist.
+ */
+export function ChecklistsBadge({
+  checklists,
+  requiredCount,
+  memberCount,
+}: {
+  checklists: IssueChecklistTotals[];
+  requiredCount: number;
+  memberCount: number;
+}) {
+  if (checklists.length <= 1) {
+    return <StampCountBadge required={requiredCount} total={memberCount} />;
+  }
+  return (
+    <Tooltip
+      style={{ flexShrink: 0 }}
+      content={
+        <>
+          <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>Checklists</div>
+          {checklists.map((c) => (
+            <div key={c.id} style={{ color: "var(--color-text-secondary)" }}>
+              {c.name} — {c.stampCount} stamp{c.stampCount !== 1 ? "s" : ""}
+              {c.priceTotal ? ` · ${moneyPrimaryText(c.priceTotal)}` : ""}
+            </div>
+          ))}
+          <div style={{ color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
+            {requiredCount} of {memberCount} stamps are on one of them
+          </div>
+        </>
+      }
+    >
+      <span
+        style={{
+          fontSize: "0.75rem",
+          fontFamily: "monospace",
+          color: "var(--color-text-muted)",
+          background: "var(--color-bg-muted)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.25rem",
+          padding: "0.1rem 0.4rem",
+          whiteSpace: "nowrap",
+          cursor: "help",
+        }}
+      >
+        {checklists.length} checklists
+      </span>
+    </Tooltip>
+  );
+}
+
 /** Stamp title inline: "12 Mar 1960, Eagle" — date muted, name emphasised. */
 export function StampTitle({ node }: { node: StampNodeData }) {
   const dateStr = formatIssuedDate(node.issuedDay, node.issuedMonth, node.issuedYear);
@@ -180,8 +277,8 @@ export function StampTitle({ node }: { node: StampNodeData }) {
   );
 }
 
-/** Stamp detail line: catalog-number chips (muted when not required for
- * completeness) and the main catalog price. Renders nothing when there's neither. */
+/** Stamp detail line: catalog-number chips (muted when the stamp is on no checklist of the issue,
+ * #531) and the main catalog price. Renders nothing when there's neither. */
 export function StampDetailLine({
   node,
   vendorMap,
@@ -199,7 +296,7 @@ export function StampDetailLine({
     ? node.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
     : null;
   const secondaryCNs = node.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId);
-  const notRequired = !node.requiredForCompleteness;
+  const notRequired = node.checklistIds.length === 0;
 
   // Mirrors `SubtypeChip`'s own rule, so a stamp whose only detail is a non-default subtype still
   // gets a line to show it on.

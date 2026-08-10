@@ -123,8 +123,9 @@ The lifecycle of a purchased copy (#121) is **`ordered → to_sort → delivered
 the lot and receive a cost-basis on close (only `not_delivered` is dropped). Closing a lot
 with copies still in one of these states is **allowed but warned** (sorting first is
 recommended), separate from the hard missing-price block. Intake accepts either a single
-stamp or a whole issue, fanning the issue out to its **required-for-completeness** members,
-all sharing one condition/certificate/location. Removing such a copy from its lot
+stamp or a whole **checklist** ([ADR-0031](0031-checklists.md)), fanning it out to the stamps on it,
+all sharing one condition/certificate/location. (Before checklists it fanned an *issue* out to its
+required-for-completeness members; an issue with one checklist behaves identically.) Removing such a copy from its lot
 **deletes** it, since it exists only to populate the lot; deleting a lot deletes its copies.
 
 - **Not-delivered** → the item is removed from its lot and its share **redistributes**

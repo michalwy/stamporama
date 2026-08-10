@@ -190,7 +190,37 @@ export function StampDetailPanel({
   );
 }
 
-/** One issue the stamp is a member of, and whether it counts towards that issue being complete. */
+/**
+ * Which of an issue's checklists claim this stamp (#531). Named when there is one — the ordinary
+ * case, and the name is what the collector reads a set by — counted when there are several, and
+ * *Optional* when there are none, which is the extra that belongs to the issue but to no set.
+ */
+function ChecklistMembershipChip({
+  checklists,
+}: {
+  checklists: { id: string; name: string; on: boolean }[];
+}) {
+  const on = checklists.filter((c) => c.on);
+  return (
+    <Tooltip
+      content={
+        on.length > 0
+          ? `Counted towards ${on.map((c) => c.name).join(", ")}`
+          : "An extra in this issue — on no checklist, so counted towards no set"
+      }
+    >
+      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+        {on.length === 0
+          ? "Optional"
+          : on.length === 1
+            ? on[0].name
+            : `${on.length} checklists`}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** One issue the stamp is a member of, and which of its checklists count it. */
 function IssueMembershipRow({
   membership,
   collectionSlug,
@@ -214,17 +244,7 @@ function IssueMembershipRow({
         {[membership.issueYear, membership.issueName].filter(Boolean).join(", ") ||
           "(unnamed issue)"}
       </Link>
-      <Tooltip
-        content={
-          membership.requiredForCompleteness
-            ? "Counted towards this issue being complete"
-            : "An extra in this issue — not counted towards completeness"
-        }
-      >
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          {membership.requiredForCompleteness ? "Required for completeness" : "Optional"}
-        </span>
-      </Tooltip>
+      <ChecklistMembershipChip checklists={membership.checklists} />
       <span style={{ marginLeft: "auto" }}>
         <RowQuickActions actions={[detailPage]} visible={hovered} />
       </span>

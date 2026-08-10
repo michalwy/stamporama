@@ -703,8 +703,8 @@ export function PurchaseDetailPanel({
           }}
           onPickIssue={(picked: PickedIssue) => {
             setWsSelection({
-              kind: "issue",
-              issueId: picked.issueId,
+              kind: "checklist",
+              checklistId: picked.checklistId,
               label: picked.label,
               requiredCount: picked.requiredCount,
             });
@@ -761,7 +761,7 @@ export function PurchaseDetailPanel({
           }}
           onSubmit={(fd) => {
             if (wsSelection.kind === "stamp") fd.set("stampId", wsSelection.stampId);
-            else fd.set("issueId", wsSelection.issueId);
+            else fd.set("checklistId", wsSelection.checklistId);
             fd.set("conditionId", wsIntake.conditionId);
             fd.set("certificateStatusId", wsIntake.certificateStatusId);
             fd.set("locationId", wsIntake.locationId);
@@ -820,11 +820,11 @@ interface LotCardProps {
   onRun: RunFn;
 }
 
-/** A stamp or a whole issue chosen in the picker, awaiting a condition/certificate before
- * its copies are created. */
+/** A stamp or a whole checklist chosen in the picker (#531), awaiting a condition/certificate
+ * before its copies are created. */
 type PendingSelection =
   | { kind: "stamp"; stampId: string; label: string }
-  | { kind: "issue"; issueId: string; label: string; requiredCount: number };
+  | { kind: "checklist"; checklistId: string; label: string; requiredCount: number };
 
 type RunFn = (
   fn: () => Promise<{ status: string; message?: string; id?: string }>,
@@ -2070,8 +2070,8 @@ function LotCard({
           }}
           onPickIssue={(picked: PickedIssue) => {
             setPending({
-              kind: "issue",
-              issueId: picked.issueId,
+              kind: "checklist",
+              checklistId: picked.checklistId,
               label: picked.label,
               requiredCount: picked.requiredCount,
             });
@@ -2102,7 +2102,7 @@ function LotCard({
           onSubmit={(fd) => {
             setCopyError(undefined);
             if (pending.kind === "stamp") fd.set("stampId", pending.stampId);
-            else fd.set("issueId", pending.issueId);
+            else fd.set("checklistId", pending.checklistId);
             onRun(
               async () => {
                 const { intakeStampsAction } = await import("@/app/actions/purchases");
@@ -3032,10 +3032,10 @@ function IntakeConditionDialog({
     }
     onSubmit(fd);
   }
-  const count = selection.kind === "issue" ? selection.requiredCount : 1;
+  const count = selection.kind === "checklist" ? selection.requiredCount : 1;
   const summary =
-    selection.kind === "issue"
-      ? `Whole issue: ${selection.label} — ${count} required stamp${count === 1 ? "" : "s"}`
+    selection.kind === "checklist"
+      ? `Whole set: ${selection.label} — ${count} stamp${count === 1 ? "" : "s"}`
       : selection.label;
   const actionLabel = isPending
     ? submitLabel
@@ -3044,7 +3044,7 @@ function IntakeConditionDialog({
     : photosUploading
       ? "Uploading photos…"
       : (submitLabel ??
-        (selection.kind === "issue"
+        (selection.kind === "checklist"
           ? `Add ${count} cop${count === 1 ? "y" : "ies"}`
           : "Add copy"));
 

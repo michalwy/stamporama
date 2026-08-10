@@ -10,14 +10,13 @@ import {
   previewIssueDeletion,
   addStampToIssue,
   addStampRangeToIssue,
-  toggleIssueMemberRequired,
   removeStampFromIssue,
   moveStampNode,
   moveIssueToArea,
   mergeIssues,
   previewIssueMerge,
   listIssueReferencedVendors,
-  getIssuePriceDetails,
+  getChecklistPriceDetails,
   getIssueAreaId,
   getIssueRangeSuggestions,
   setIssueCatalogRange,
@@ -27,7 +26,7 @@ import type {
   AutoCreateStampsInput,
   IssueDeletionPreview,
   IssueMergePreview,
-  IssuePriceDetails,
+  ChecklistPriceDetails,
   IssueReferencedVendor,
   IssueRangeSuggestion,
 } from "@/lib/issues";
@@ -41,12 +40,12 @@ import {
 } from "@/lib/catalog-number";
 import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
 
-export async function getIssuePriceDetailsAction(
+export async function getChecklistPriceDetailsAction(
   collectionId: string,
-  issueId: string
-): Promise<IssuePriceDetails> {
+  checklistId: string
+): Promise<ChecklistPriceDetails> {
   const session = await getSession();
-  return getIssuePriceDetails(session.user.id, collectionId, issueId);
+  return getChecklistPriceDetails(session.user.id, collectionId, checklistId);
 }
 
 /** Coverage suggestions for an issue: vendors whose members extend the declared range. */
@@ -357,7 +356,13 @@ export async function addStampToIssueAction(
   }
 
   const parentStampId = (formData.get("parentStampId") as string | null) || null;
-  const requiredForCompleteness = formData.get("requiredForCompleteness") === "true";
+  // Which of the issue's checklists the new stamp joins (#531). The `default` sentinel means the
+  // issue's own set, created from its name when it has none — what the old *Required for
+  // completeness* box did on an issue being started from scratch.
+  const checklistIds = ((formData.get("checklistIds") as string | null) ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   const colnectId = ((formData.get("colnectId") as string | null) ?? "").trim() || null;
 
   // Child subtype classification (ignored server-side for top-level stamps).
@@ -424,7 +429,7 @@ export async function addStampToIssueAction(
       parentStampId,
       subtypeId,
       actsAsVariantOverride,
-      requiredForCompleteness,
+      checklistIds,
       colnectId,
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
@@ -437,7 +442,7 @@ export async function addStampToIssueAction(
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
     }
     // The user chose to widen the issue's declared range to cover this stamp
-    // (required-for-completeness extensions only; see the add-stamp dialog). Recompute
+    // (checklist stamps only; see the add-stamp dialog). Recompute
     // and apply every current suggestion now that the new member exists.
     if (formData.get("widenIssueRange") === "true") {
       const suggestions = await getIssueRangeSuggestions(session.user.id, collectionId, issueId);
@@ -455,21 +460,6 @@ export async function addStampToIssueAction(
     return { status: "success", stampId };
   } catch {
     return { status: "error", message: "Failed to add stamp. Please try again." };
-  }
-}
-
-export async function toggleIssueMemberRequiredAction(
-  collectionId: string,
-  issueId: string,
-  stampId: string,
-  required: boolean
-): Promise<IssueActionState> {
-  const session = await getSession();
-  try {
-    await toggleIssueMemberRequired(session.user.id, collectionId, issueId, stampId, required);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to update stamp. Please try again." };
   }
 }
 

@@ -693,6 +693,17 @@ export async function seedStamps(
     const optSet = new Set(def.opt ?? []);
     const priceBase = priceFactor(def.y);
 
+    // The issue's set (#531). Every stamp joins it except the ones `def.opt` marks as extras —
+    // exactly what `requiredForCompleteness` expressed before checklists existed.
+    const checklist = await tx.checklist.create({
+      data: {
+        collectionId,
+        issueId: issue.id,
+        name: def.n ?? "Complete set",
+        sortOrder: 0,
+      },
+    });
+
     for (let i = 0; i < def.s.length; i++) {
       const stamp = await tx.stamp.create({
         data: { collectionId, name: def.s[i], issuedYear: def.y },
@@ -703,8 +714,13 @@ export async function seedStamps(
       });
 
       await tx.issueMember.create({
-        data: { issueId: issue.id, stampId: stamp.id, requiredForCompleteness: !optSet.has(i) },
+        data: { issueId: issue.id, stampId: stamp.id },
       });
+      if (!optSet.has(i)) {
+        await tx.checklistStamp.create({
+          data: { checklistId: checklist.id, stampId: stamp.id },
+        });
+      }
 
       const catNums: { stampId: string; catalogVendorId: string; number: string }[] = [];
       if (def.fi != null) {

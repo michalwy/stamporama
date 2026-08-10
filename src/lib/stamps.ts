@@ -32,6 +32,7 @@ import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photo
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorResolver } from "./format-pricing";
 import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
+import { putStampOnChecklists } from "./checklists";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -312,7 +313,11 @@ export interface StampIssueMembership {
   issueId: string;
   issueName: string | null;
   issueYear: number | null;
-  requiredForCompleteness: boolean;
+  /** **Every** checklist of this membership's issue (#531), each flagged with whether this stamp
+   *  is on it. All of them rather than only the ones it is on, because the stamp form's picker has
+   *  to offer the boxes it is *not* ticked for. None ticked = an optional extra of the issue,
+   *  which is what `requiredForCompleteness = false` used to say. */
+  checklists: { id: string; name: string; on: boolean }[];
 }
 
 export interface StampListItem {
@@ -383,10 +388,14 @@ const STAMP_LIST_SELECT = {
   issueMemberships: {
     select: {
       issueId: true,
-      requiredForCompleteness: true,
-      issue: { select: { name: true, year: true } },
+      // The issue's own checklists, so the row can say which sets claim this stamp (#531). Paired
+      // with `checklistEntries` below, which says which of them it is actually on.
+      issue: {
+        select: { name: true, year: true, checklists: { select: { id: true, name: true } } },
+      },
     },
   },
+  checklistEntries: { select: { checklistId: true } },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
 } as const;
 
@@ -409,9 +418,13 @@ function toStampListItem(
     stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
     issueMemberships: {
       issueId: string;
-      requiredForCompleteness: boolean;
-      issue: { name: string | null; year: number | null };
+      issue: {
+        name: string | null;
+        year: number | null;
+        checklists: { id: string; name: string }[];
+      };
     }[];
+    checklistEntries: { checklistId: string }[];
     photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
@@ -425,6 +438,7 @@ function toStampListItem(
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
   const primaryNameId = areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null;
+  const onChecklist = new Set(stamp.checklistEntries.map((e) => e.checklistId));
   // A format's price is explicit or derived (#343): the recorded row for the format wins, else the
   // single's price × the multiplier resolved for this stamp's area and issue.
   const { picked: main, derived: mainCatalogPriceDerived } = pickFormatCatalogPrice(
@@ -457,7 +471,9 @@ function toStampListItem(
       issueId: m.issueId,
       issueName: m.issue.name,
       issueYear: m.issue.year,
-      requiredForCompleteness: m.requiredForCompleteness,
+      // Each membership answers for its own issue: a stamp on two issues is on each one's
+      // checklists separately, exactly as the old per-membership boolean was.
+      checklists: m.issue.checklists.map((c) => ({ ...c, on: onChecklist.has(c.id) })),
     })),
     // convertedAmount filled by buildStampListItems after rates are fetched
     mainCatalogPrice: main
@@ -1064,7 +1080,12 @@ export async function updateStampWithCatalog(
     /** Per-language `name` overrides (#296), keyed by ISO 639-1 code then field key. Omitted
      * (undefined) by callers whose form doesn't render them, leaving every row untouched. */
     translations?: TranslationValueMap;
-    requiredForCompleteness?: boolean;
+    /** Which checklists of {@link checklistIssueId} the stamp should be on afterwards (#531).
+     *  `undefined` leaves every membership untouched — callers whose form does not render the
+     *  field. Requires `checklistIssueId`: a checklist edit is always about one issue's goals. */
+    checklistIds?: string[];
+    /** The issue whose checklists {@link checklistIds} names. */
+    checklistIssueId?: string | null;
     // Child-only subtype classification (ADR-0010). `undefined` leaves the current
     // value untouched; for a child, `subtypeId: null` falls back to the collection
     // default. Top-level stamps are always forced back to null on both fields.
@@ -1124,11 +1145,14 @@ export async function updateStampWithCatalog(
       },
     });
     await syncStampTranslations(tx, stampId, data.translations);
-    if (data.requiredForCompleteness !== undefined) {
-      await tx.issueMember.updateMany({
-        where: { stampId },
-        data: { requiredForCompleteness: data.requiredForCompleteness },
-      });
+    if (data.checklistIds !== undefined && data.checklistIssueId) {
+      await putStampOnChecklists(
+        tx,
+        collectionId,
+        data.checklistIssueId,
+        stampId,
+        data.checklistIds
+      );
     }
     await tx.stampCatalogNumber.deleteMany({ where: { stampId } });
     if (data.catalogNumbers.length > 0) {

@@ -89,6 +89,7 @@ model Collection {
   stampFormats    StampFormat[]
   stampFormatFactors StampFormatFactor[]
   stampSubtypes   StampSubtype[]
+  checklists      Checklist[]
   collageTemplates CollageTemplate[]
   items           Item[]
   contacts        Contact[]
@@ -1121,6 +1122,7 @@ model Stamp {
   catalogNumbers    StampCatalogNumber[]
   catalogPrices     StampCatalogPrice[]
   issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
+  checklistEntries  ChecklistStamp[]      @relation("ChecklistStampStamp")
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
@@ -2663,6 +2665,7 @@ model Issue {
   collection     Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   members        IssueMember[]
+  checklists     Checklist[]
   catalogNumbers IssueCatalogNumber[]
   catalogPrefixes IssueCatalogPrefix[]
   translations   IssueTranslation[]
@@ -2702,15 +2705,58 @@ model IssueCatalogNumber {
 }
 
 model IssueMember {
-  issueId                 String
-  stampId                 String
-  requiredForCompleteness Boolean @default(false)
+  issueId String
+  stampId String
 
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
   stamp Stamp @relation("IssueMemberStamp", fields: [stampId], references: [id], onDelete: Cascade)
 
   @@id([issueId, stampId])
   @@map("issue_member")
+}
+
+// A **checklist** (#531; ADR-0031) is a named list of stamps that counts as one complete unit —
+// the collecting goal, as against `Issue`, which is the publication event. They are usually 1:1
+// and used to be welded together by `IssueMember.requiredForCompleteness`, one boolean giving an
+// issue exactly one complete set. They are not always 1:1: the same series is collected basic and
+// specialized, perforated and imperforate, tabbed and plain, and each of those needs its own
+// completeness.
+//
+// `issueId` is the same nullable anchor `StampFormatFactor` uses: a row naming an issue is that
+// issue's goal and is edited on its row, and null means the checklist spans issues (a thematic
+// set, "all Grosik 1928-1932") — one kind of checklist with an optional anchor, rather than two.
+model Checklist {
+  id           String   @id @default(cuid())
+  collectionId String
+  // Null = spans issues. Not null = this issue's own goal, edited from the issue's row.
+  issueId      String?
+  name         String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  issue      Issue?           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  stamps     ChecklistStamp[]
+
+  @@index([collectionId])
+  @@index([issueId, sortOrder])
+  @@map("checklist")
+}
+
+// Membership **is** required-ness (#531). The old per-membership boolean expressed exactly this,
+// and a stamp that is an optional extra is simply an `IssueMember` in no checklist — so a checklist
+// needs no second flag. Many-to-many both ways: a stamp belongs to as many checklists as apply,
+// exactly as `IssueMember` already lets it belong to several issues.
+model ChecklistStamp {
+  checklistId String
+  stampId     String
+
+  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  stamp     Stamp     @relation("ChecklistStampStamp", fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([checklistId, stampId])
+  @@index([stampId])
+  @@map("checklist_stamp")
 }
 
 model ExchangeRate {

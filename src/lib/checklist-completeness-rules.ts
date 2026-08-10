@@ -1,10 +1,11 @@
-// Completeness of an issue read off the copies actually held (#519, the disposition × condition
-// half of #133). Pure: the caller supplies the required members and one count per
-// (stamp × condition × disposition), and gets back the grid the detail screen draws.
+// Completeness of a checklist read off the copies actually held (#519, the disposition × condition
+// half of #133; #531 made the subject a checklist rather than an issue). Pure: the caller supplies
+// the checklist's stamps and one count per (stamp × condition × disposition), and gets back the
+// grid the detail screen draws.
 //
-// Two figures, and they answer different questions. **Owned** is how many of the required stamps
-// are held at all — the progress bar. **Complete sets** is the *minimum* count across every
-// required stamp — how many times over the whole set can be assembled, which is the figure that
+// Two figures, and they answer different questions. **Owned** is how many of the checklist's
+// stamps are held at all — the progress bar. **Complete sets** is the *minimum* count across every
+// stamp on it — how many times over the whole set can be assembled, which is the figure that
 // says whether a duplicate is a spare or the only one. A single missing stamp makes it zero
 // however deep the pile of the others is, and that is the point.
 
@@ -40,13 +41,14 @@ export interface CompletenessCount {
 export interface CompletenessRow {
   disposition: CompletenessDisposition;
   conditionId: string | null;
-  /** Required members with at least one matching copy. */
+  /** Stamps on the checklist with at least one matching copy. */
   owned: number;
-  /** Times over the whole required set can be assembled from matching copies. */
+  /** Times over the whole checklist can be assembled from matching copies. */
   completeSets: number;
 }
 
-export interface IssueCompletenessGrid {
+export interface ChecklistCompletenessGrid {
+  /** How many stamps the checklist carries — the denominator of every `owned` figure. */
   requiredCount: number;
   /** Every (disposition × condition) cell, plus the `conditionId: null` roll-up per disposition.
    *  Cells with nothing owned are kept: an empty column is what says the condition is untouched. */
@@ -67,19 +69,18 @@ function matches(c: CompletenessCount, disposition: CompletenessDisposition): bo
 }
 
 /**
- * The completeness grid for one issue.
+ * The completeness grid for one checklist.
  *
- * `requiredStampIds` is the issue's required-for-completeness members — the same set the list
- * row's indicator counts, so the page and the row cannot disagree. An issue with no required
- * member has nothing to be complete against: every cell is zero rather than "complete", because
- * a set of nothing is not an achievement.
+ * `checklistStampIds` is the checklist's membership — the same set the list row's badge counts, so
+ * the page and the row cannot disagree. An empty checklist has nothing to be complete against:
+ * every cell is zero rather than "complete", because a set of nothing is not an achievement.
  */
-export function computeIssueCompleteness(
-  requiredStampIds: string[],
+export function computeChecklistCompleteness(
+  checklistStampIds: string[],
   counts: CompletenessCount[],
   conditionIds: string[]
-): IssueCompletenessGrid {
-  const required = [...new Set(requiredStampIds)];
+): ChecklistCompletenessGrid {
+  const required = [...new Set(checklistStampIds)];
   const rows: CompletenessRow[] = [];
 
   for (const disposition of COMPLETENESS_DISPOSITIONS) {

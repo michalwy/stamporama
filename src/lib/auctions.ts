@@ -2608,35 +2608,35 @@ async function assertLineTargets(collectionId: string, input: AuctionLotLineInpu
 }
 
 /**
- * The stamps a line target names: one stamp, or **every required member of a whole issue**.
+ * The stamps a line target names: one stamp, or **every stamp on a whole checklist**.
  *
- * Picking a series is how a lot that says "Michel 1–12, complete" is described without twelve trips
+ * Picking a set is how a lot that says "Michel 1–12, complete" is described without twelve trips
  * through the picker — the same convenience the purchase-order intake offers (#121), resolved the
- * same way, to the members marked *required for completeness*. A lot's composition stays a list of
- * per-stamp lines: the issue is an entry shortcut, never a thing a line points at, because the
- * catalogue value has to be summed per stamp and a lost lot has to be attributable per stamp.
+ * same way. The target is a checklist rather than an issue (#531): a publication may carry several
+ * goals, and "the complete set" of one that carries a basic and a specialized list is a question
+ * only a named checklist answers. A lot's composition stays a list of per-stamp lines: the
+ * checklist is an entry shortcut, never a thing a line points at, because the catalogue value has
+ * to be summed per stamp and a lost lot has to be attributable per stamp.
  */
 export async function resolveAuctionLineStamps(
   collectionId: string,
-  target: { stampId?: string | null; issueId?: string | null }
+  target: { stampId?: string | null; checklistId?: string | null }
 ): Promise<string[]> {
-  if (target.issueId) {
-    const issue = await prisma.issue.findFirst({
-      where: { id: target.issueId, collectionId },
-      select: {
-        members: { where: { requiredForCompleteness: true }, select: { stampId: true } },
-      },
+  if (target.checklistId) {
+    const checklist = await prisma.checklist.findFirst({
+      where: { id: target.checklistId, collectionId },
+      select: { name: true, stamps: { select: { stampId: true } } },
     });
-    if (!issue) {
-      throw new AuctionActionBlockedError("bad-line", "That issue no longer exists.");
+    if (!checklist) {
+      throw new AuctionActionBlockedError("bad-line", "That checklist no longer exists.");
     }
-    if (issue.members.length === 0) {
+    if (checklist.stamps.length === 0) {
       throw new AuctionActionBlockedError(
         "bad-line",
-        "This issue has no stamps marked required for completeness, so there is nothing to add."
+        `"${checklist.name}" has no stamps on it yet, so there is nothing to add.`
       );
     }
-    return issue.members.map((m) => m.stampId);
+    return checklist.stamps.map((s) => s.stampId);
   }
   if (target.stampId) return [target.stampId];
   throw new AuctionActionBlockedError("bad-line", "Pick the stamp this line is about.");

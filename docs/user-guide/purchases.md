@@ -155,8 +155,10 @@ the parcel, often long after the money changed hands. Click the lot's **＋ Add 
 app: navigate areas and issues, and either
 
 - pick a **single stamp** (creating the issue/stamp first if needed), or
-- add a **whole issue** with the **+ Whole issue** button on the issue row — this creates a
-  copy for every stamp in that issue marked *required for completeness*.
+- add a **whole set** with the button on the issue row — one per
+  [checklist](collections.md#checklists) the issue carries, named after it, creating a copy for
+  every stamp on that checklist. An issue with a single checklist keeps the familiar
+  **+ Whole issue** label.
 
 You are then asked once for the **condition**, an optional **certificate**, an optional
 **storage location** — with an optional **in-location ref** (e.g. a page or pocket like

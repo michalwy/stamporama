@@ -25,6 +25,7 @@ import { syncStampTranslations } from "./stamps";
 import { makeFormatFactorResolver } from "./format-pricing";
 import { countCopiesByStamp, NO_COPIES, type StampCopyCounts } from "./copy-counts";
 import { allocateEntityNumber } from "./items";
+import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
@@ -111,7 +112,10 @@ export interface StampNodeData {
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
-  requiredForCompleteness: boolean;
+  /** Checklists of *this issue* the stamp is on (#531) — empty means an optional extra, which is
+   *  what `requiredForCompleteness = false` used to say. A stamp on a checklist of some other
+   *  issue is not reported here: the tree belongs to one issue and answers for that one. */
+  checklistIds: string[];
   catalogNumbers: { catalogVendorId: string; number: string }[];
   /** Colnect Marketplace item-ID (#247), or null when unset. */
   colnectId: string | null;
@@ -164,7 +168,17 @@ export interface IssueData {
   createdAt: Date;
   members: StampNodeData[];
   catalogNumbers: IssueCatalogNumberData[];
-  completeness: { required: number; owned: number };
+  /** The issue's checklists (#531), in display order. An issue may carry none (nothing is a goal
+   *  yet), one (the ordinary case, and what `requiredForCompleteness` used to express) or several. */
+  checklists: IssueChecklistSummary[];
+}
+
+/** A checklist as a list row needs it: named, counted, and identified so an action can act on it. */
+export interface IssueChecklistSummary {
+  id: string;
+  name: string;
+  /** How many stamps it carries — the denominator of every completeness figure. */
+  stampCount: number;
 }
 
 /** Prisma select producing a {@link RawCatalogPrice} — the fields the headline price picker
@@ -182,9 +196,12 @@ const HEADLINE_PRICE_SELECT = {
 
 const MEMBER_SELECT = {
   stampId: true,
-  requiredForCompleteness: true,
   stamp: {
     select: {
+      // Every checklist the stamp is on, anywhere in the collection (#531). The mapper narrows
+      // them to the issue being rendered — a static select cannot name the issue it will be run
+      // for, and a stamp sits on a handful of checklists at most.
+      checklistEntries: { select: { checklistId: true } },
       parentId: true,
       name: true,
       issuedDay: true,
@@ -247,8 +264,8 @@ async function loadVariantPricesForUmbrellas(
 function toStampNode(
   m: {
     stampId: string;
-    requiredForCompleteness: boolean;
     stamp: {
+      checklistEntries: { checklistId: string }[];
       parentId: string | null;
       name: string | null;
       issuedDay: number | null;
@@ -281,7 +298,10 @@ function toStampNode(
     variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
   },
   /** Copies held per stamp (#348); absent stamps read as none. */
-  copyCounts?: Map<string, StampCopyCounts>
+  copyCounts?: Map<string, StampCopyCounts>,
+  /** The issue's own checklist ids (#531), used to narrow the stamp's memberships to this issue.
+   *  Absent means the caller loaded no checklists, and every node reports none. */
+  issueChecklistIds?: ReadonlySet<string>
 ): StampNodeData {
   const headline = pricing
     ? pickHeadlineCatalogPrice({
@@ -308,7 +328,11 @@ function toStampNode(
     issuedDay: m.stamp.issuedDay,
     issuedMonth: m.stamp.issuedMonth,
     issuedYear: m.stamp.issuedYear,
-    requiredForCompleteness: m.requiredForCompleteness,
+    checklistIds: issueChecklistIds
+      ? m.stamp.checklistEntries
+          .map((e) => e.checklistId)
+          .filter((id) => issueChecklistIds.has(id))
+      : [],
     catalogNumbers: m.stamp.catalogNumbers,
     colnectId: m.stamp.colnectId,
     mainCatalogPrice:
@@ -348,8 +372,33 @@ const ISSUE_SELECT = {
   // translation fields the same way the issues list does.
   translations: { select: { language: true, name: true } },
   members: { select: MEMBER_SELECT },
+  // The issue's checklists (#531), in the order the collector set — the first one is what a
+  // single-checklist badge shows and what a new stamp joins by default.
+  // Ordered in the mapper rather than by the query: this select is `as const`, and a readonly
+  // `orderBy` tuple is not assignable to Prisma's mutable input type. An issue carries a handful
+  // of checklists, so sorting them in memory costs nothing.
+  checklists: {
+    select: { id: true, name: true, sortOrder: true, createdAt: true, stamps: { select: { stampId: true } } },
+  },
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
 } as const;
+
+/** An issue's checklists as both list selects load them — ordered in memory (see the select). */
+interface ChecklistRow {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: Date;
+  stamps: { stampId: string }[];
+}
+
+/** Display order: the collector's `sortOrder`, then age. The first entry is what a single-checklist
+ *  badge shows and what a new stamp joins by default, so ties must not reorder between reads. */
+function orderChecklists(rows: ChecklistRow[]): ChecklistRow[] {
+  return [...rows].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime()
+  );
+}
 
 function toIssueData(issue: {
   id: string;
@@ -363,8 +412,8 @@ function toIssueData(issue: {
   translations: { language: string; name: string | null }[];
   members: {
     stampId: string;
-    requiredForCompleteness: boolean;
     stamp: {
+      checklistEntries: { checklistId: string }[];
       parentId: string | null;
       name: string | null;
       issuedDay: number | null;
@@ -382,9 +431,10 @@ function toIssueData(issue: {
       }[];
     };
   }[];
+  checklists: ChecklistRow[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
 }, copyCounts?: Map<string, StampCopyCounts>): IssueData {
-  const required = issue.members.filter((m) => m.requiredForCompleteness).length;
+  const checklistIds = new Set(issue.checklists.map((c) => c.id));
   return {
     id: issue.id,
     collectionId: issue.collectionId,
@@ -395,9 +445,13 @@ function toIssueData(issue: {
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
-    members: issue.members.map((m) => toStampNode(m, undefined, copyCounts)),
+    members: issue.members.map((m) => toStampNode(m, undefined, copyCounts, checklistIds)),
     catalogNumbers: issue.catalogNumbers,
-    completeness: { required, owned: 0 },
+    checklists: orderChecklists(issue.checklists).map((c) => ({
+      id: c.id,
+      name: c.name,
+      stampCount: c.stamps.length,
+    })),
   };
 }
 
@@ -482,6 +536,8 @@ export interface IssueHeader {
   collectionAreaId: string;
   catalogNumbers: IssueCatalogNumberData[];
   memberCount: number;
+  /** Distinct stamps on any of the issue's checklists (#531) — the union, because the header's
+   *  badge answers "how much of this issue is a goal", not "which goal". */
   requiredCount: number;
 }
 
@@ -503,7 +559,8 @@ export async function getIssueHeadersByIds(
       catalogNumbers: {
         select: { catalogVendorId: true, firstNumber: true, lastNumber: true },
       },
-      members: { select: { requiredForCompleteness: true } },
+      members: { select: { stampId: true } },
+      checklists: { select: { stamps: { select: { stampId: true } } } },
     },
   });
   return rows.map((r) => ({
@@ -513,7 +570,7 @@ export async function getIssueHeadersByIds(
     collectionAreaId: r.collectionAreaId,
     catalogNumbers: r.catalogNumbers,
     memberCount: r.members.length,
-    requiredCount: r.members.filter((m) => m.requiredForCompleteness).length,
+    requiredCount: new Set(r.checklists.flatMap((c) => c.stamps.map((s) => s.stampId))).size,
   }));
 }
 
@@ -541,16 +598,30 @@ export interface IssueListItem {
    * the edit dialog prefills its Prefix inputs without a second read. */
   catalogPrefixes: IssueCatalogPrefixData[];
   memberCount: number;
+  /** Distinct stamps on any of the issue's checklists (#531) — the union. With one checklist this
+   *  is that checklist's size, which is exactly what the badge showed before checklists existed. */
   requiredCount: number;
-  requiredPriceTotal: IssuePriceTotal | null;
-  /** True when at least one required member's counted price is on a non-latest edition. */
-  requiredPriceStale: boolean;
-  /** Per-vendor suggestions where member stamps extend the declared catalog range
-   *  (empty when every declared range still covers its members). */
+  /** The issue's checklists with their own counts and totals (#531), in display order. Empty for
+   *  an issue nothing is a goal on yet; one entry is the ordinary case. The row shows the single
+   *  entry as before, and collapses several into one `N checklists` badge. */
+  checklists: IssueChecklistTotals[];
+  /** Per-vendor suggestions where checklist stamps extend the declared catalog range
+   *  (empty when every declared range still covers them). Read against the **union**: an issue
+   *  publishes one range of numbers however many goals are collected inside it. */
   rangeSuggestions: IssueRangeSuggestion[];
-  /** Main photos of the required-for-completeness stamps (#137), shown on the collapsed issue
-   * row as a representative gallery of the issue. */
+  /** Main photos of the checklists' stamps (#137), deduped across checklists, shown on the
+   * collapsed issue row as a representative gallery of the issue. */
   photos: PhotoSummary[];
+}
+
+/** One checklist on a list row: what it is called, how big it is, and what it is worth. */
+export interface IssueChecklistTotals extends IssueChecklistSummary {
+  /** Sum of this checklist's stamps' main catalog prices. Deliberately **per checklist**: summing
+   *  the union would count a stamp shared by a basic and a specialized set once for a total that
+   *  answers neither question. */
+  priceTotal: IssuePriceTotal | null;
+  /** True when at least one counted price is on a non-latest edition. */
+  priceStale: boolean;
 }
 
 export interface PaginatedIssuesResult {
@@ -577,13 +648,12 @@ const ISSUE_LIST_SELECT = {
   members: {
     select: {
       stampId: true,
-      requiredForCompleteness: true,
       stamp: {
         select: {
           // Member catalog numbers drive the declared-range coverage check.
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           catalogPrices: { select: HEADLINE_PRICE_SELECT },
-          // Children's variant flags decide whether a required member is an unknown-variant
+          // Children's variant flags decide whether a checklist stamp is an unknown-variant
           // umbrella whose headline price rolls up from its lowest variant child (#238).
           variants: { select: VARIANT_FLAG_SELECT },
           // Only the main photo represents the stamp on the issue-level gallery (#137).
@@ -592,16 +662,24 @@ const ISSUE_LIST_SELECT = {
       },
     },
   },
+  // Which of those members each checklist claims (#531). Membership is ids only — the row's price
+  // total and gallery read the member rows above, which are already loaded.
+  // Ordered in the mapper rather than by the query: this select is `as const`, and a readonly
+  // `orderBy` tuple is not assignable to Prisma's mutable input type. An issue carries a handful
+  // of checklists, so sorting them in memory costs nothing.
+  checklists: {
+    select: { id: true, name: true, sortOrder: true, createdAt: true, stamps: { select: { stampId: true } } },
+  },
 } as const;
 
 /**
- * Sum of required members' main catalog prices for one display condition
- * (certificate = none). Members priced only on an older edition are handled the
- * same way as the list total: if any member is priced on the current edition the
+ * Sum of one checklist's stamps' main catalog prices for one display condition
+ * (certificate = none). Stamps priced only on an older edition are handled the
+ * same way as the list total: if any is priced on the current edition the
  * total uses only those, otherwise it falls back to older-edition prices.
  * `convertedAmount` is left null for the caller to fill after fetching rates.
  */
-function computeRequiredPriceTotal(
+function computeChecklistPriceTotal(
   requiredMembers: {
     stampId: string;
     stamp: {
@@ -753,7 +831,6 @@ function toIssueListItem(
     catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[];
     members: {
       stampId: string;
-      requiredForCompleteness: boolean;
       stamp: {
         catalogNumbers: { catalogVendorId: string; number: string }[];
         catalogPrices: RawCatalogPrice[];
@@ -764,6 +841,7 @@ function toIssueListItem(
         photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
       };
     }[];
+    checklists: ChecklistRow[];
   },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
@@ -775,31 +853,56 @@ function toIssueListItem(
   displayFormatId: string | null,
   factorFor: (areaId: string | null, issueId: string | null) => number | null
 ): IssueListItem {
-  const requiredMembers = issue.members.filter((m) => m.requiredForCompleteness);
+  const memberByStamp = new Map(issue.members.map((m) => [m.stampId, m]));
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
-  // One representative main photo per required stamp (already filtered to role="main").
+  // Every member of an issue shares the issue's area and the issue itself, so the multiplier is
+  // one lookup for the whole row rather than one per member.
+  const formatFactor = factorFor(issue.collectionAreaId, issue.id);
+
+  // A checklist may name a stamp that is not an `IssueMember` of this issue — a cross-issue
+  // checklist anchored here, or a member removed after the checklist was built. Only members can
+  // be priced or photographed from this row's data, so unknown stamps are skipped rather than
+  // faked; they still count towards the checklist's size, which is read from the checklist itself.
+  const checklists: IssueChecklistTotals[] = orderChecklists(issue.checklists).map((c) => {
+    const stamps = c.stamps
+      .map((s) => memberByStamp.get(s.stampId))
+      .filter((m): m is (typeof issue.members)[number] => m !== undefined);
+    const priceTotal = computeChecklistPriceTotal(
+      stamps,
+      primaryNameId,
+      baseCurrency,
+      latestYearByName,
+      displayConditionId,
+      rates,
+      variantPricesByStamp,
+      displayFormatId,
+      formatFactor
+    );
+    return {
+      id: c.id,
+      name: c.name,
+      stampCount: c.stamps.length,
+      priceTotal,
+      priceStale: priceTotal?.usesOlderEdition ?? false,
+    };
+  });
+
+  // The union across checklists: what any goal of this issue asks for, each stamp once.
+  const requiredStampIds = new Set(
+    issue.checklists.flatMap((c) => c.stamps.map((s) => s.stampId))
+  );
+  const requiredMembers = issue.members.filter((m) => requiredStampIds.has(m.stampId));
+
+  // One representative main photo per checklist stamp (already filtered to role="main").
   const photos = toPhotoSummaries(requiredMembers.flatMap((m) => m.stamp.photos));
 
-  // Declared-range coverage: only required-for-completeness members define the
-  // range — optional extras (blocks, varieties) never widen it.
+  // Declared-range coverage: only stamps on a checklist define the range — optional extras
+  // (blocks, varieties) never widen it. Read against the union, because an issue publishes one
+  // range of catalog numbers however many goals are collected inside it.
   const rangeSuggestions = computeIssueRangeSuggestions(
     issue.catalogNumbers,
     requiredMembers.flatMap((m) => m.stamp.catalogNumbers),
     vendorAbbrev
-  );
-
-  const requiredPriceTotal = computeRequiredPriceTotal(
-    requiredMembers,
-    primaryNameId,
-    baseCurrency,
-    latestYearByName,
-    displayConditionId,
-    rates,
-    variantPricesByStamp,
-    displayFormatId,
-    // Every member of an issue shares the issue's area and the issue itself, so the multiplier is
-    // one lookup for the whole row rather than one per member.
-    factorFor(issue.collectionAreaId, issue.id)
   );
 
   return {
@@ -815,9 +918,8 @@ function toIssueListItem(
     catalogNumbers: issue.catalogNumbers,
     catalogPrefixes: issue.catalogPrefixes,
     memberCount: issue.members.length,
-    requiredCount: requiredMembers.length,
-    requiredPriceTotal,
-    requiredPriceStale: requiredPriceTotal?.usesOlderEdition ?? false,
+    requiredCount: requiredStampIds.size,
+    checklists,
     rangeSuggestions,
     photos,
   };
@@ -842,22 +944,26 @@ async function buildIssueListItems(
   ]);
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
-  // Roll umbrella required members up from their variant children (#238): gather those
+  // Roll umbrella checklist stamps up from their variant children (#238): gather those
   // stamps across the page, load their variant prices, and build one rate map spanning
   // every currency in play (members' own prices and the variant candidates) so the
   // lowest-by-base comparison and the base-currency conversion both have their rates.
+  // Read against the union of the row's checklists — a stamp priced for one checklist is priced
+  // for every other one that also claims it.
+  const onAnyChecklist = (i: Parameters<typeof toIssueListItem>[0]) => {
+    const ids = new Set(i.checklists.flatMap((c) => c.stamps.map((s) => s.stampId)));
+    return i.members.filter((m) => ids.has(m.stampId));
+  };
   const umbrellaStampIds = issues.flatMap((i) =>
-    i.members
-      .filter((m) => m.requiredForCompleteness && isUnknownVariantStamp(m.stamp))
+    onAnyChecklist(i)
+      .filter((m) => isUnknownVariantStamp(m.stamp))
       .map((m) => m.stampId)
   );
   const { variantPricesByStamp, currencies: variantCurrencies } =
     await loadVariantPricesForUmbrellas(collectionId, umbrellaStampIds);
   const currencies = [
     ...issues.flatMap((i) =>
-      i.members
-        .filter((m) => m.requiredForCompleteness)
-        .flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency))
+      onAnyChecklist(i).flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency))
     ),
     ...variantCurrencies,
   ];
@@ -1140,10 +1246,11 @@ export async function listIssueMembers(
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  const members = await prisma.issueMember.findMany({
-    where: { issueId },
-    select: MEMBER_SELECT,
-  });
+  const [members, issueChecklists] = await Promise.all([
+    prisma.issueMember.findMany({ where: { issueId }, select: MEMBER_SELECT }),
+    prisma.checklist.findMany({ where: { collectionId, issueId }, select: { id: true } }),
+  ]);
+  const issueChecklistIds = new Set(issueChecklists.map((c) => c.id));
 
   const [primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId] = await Promise.all([
     buildEffectivePrimaryCatalogMap(collectionId),
@@ -1182,7 +1289,7 @@ export async function listIssueMembers(
       formatFactor,
       rates,
       variantPricesByStamp,
-    }, copyCounts)
+    }, copyCounts, issueChecklistIds)
   );
 }
 
@@ -1241,8 +1348,11 @@ export interface IssueAverageCell extends IssueCellAxes {
   incompleteCatalogs: IssueIncompleteCatalog[];
 }
 
-export interface IssuePriceDetails {
+export interface ChecklistPriceDetails {
   baseCurrency: string;
+  /** The checklist this breaks down (#531) — the dialog names it, since an issue may have several
+   *  and the row opens one entry per checklist. */
+  checklistName: string;
   requiredCount: number;
   /** Per (condition × certificate) average of the complete catalogs' totals, always in the base currency. */
   averageCells: IssueAverageCell[];
@@ -1253,30 +1363,35 @@ export interface IssuePriceDetails {
 }
 
 /**
- * An issue's required-stamps totals broken down per catalog and averaged across
- * catalogs, shaped for the price-details dialog. Two per-catalog breakdowns are
- * returned: `catalogsLatest` sums each member's price on the catalog's newest
- * (current) edition only; `catalogsAll` sums each member's newest priced edition
+ * One checklist's totals broken down per catalog and averaged across
+ * catalogs, shaped for the price-details dialog. The subject is a **checklist** rather than an
+ * issue (#531): with several goals in one publication, "the total for this set" had no single
+ * answer, and a checklist is what restores one. Two per-catalog breakdowns are
+ * returned: `catalogsLatest` sums each stamp's price on the catalog's newest
+ * (current) edition only; `catalogsAll` sums each stamp's newest priced edition
  * (older-edition fallback) — the dialog's latest/all toggle chooses between them.
  * Averages are always computed from the latest-edition totals (toggle-independent):
  * per (condition × certificate), the mean of the base-currency totals of catalogs
- * that price *all* required members in that variant; incomplete catalogs are always
+ * that price *all* the checklist's stamps in that variant; incomplete catalogs are always
  * reported so the gap is visible. Totals are broken down per certificate status
  * (plus "None"), mirroring the stamp matrix. See price-details dialog.
  */
-export async function getIssuePriceDetails(
+export async function getChecklistPriceDetails(
   ownerId: string,
   collectionId: string,
-  issueId: string
-): Promise<IssuePriceDetails> {
-  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
-  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  checklistId: string
+): Promise<ChecklistPriceDetails> {
   await assertCollectionOwner(ownerId, collectionId);
+  const checklist = await prisma.checklist.findFirst({
+    where: { id: checklistId, collectionId },
+    select: { name: true },
+  });
+  if (!checklist) throw new Error("Checklist not found.");
 
   const [members, conditions, certificateStatuses, baseCurrency, latestYearByName] =
     await Promise.all([
-      prisma.issueMember.findMany({
-        where: { issueId, requiredForCompleteness: true },
+      prisma.checklistStamp.findMany({
+        where: { checklistId },
         select: {
           stamp: {
             select: {
@@ -1478,7 +1593,14 @@ export async function getIssuePriceDetails(
     })
     .sort(comboSort);
 
-  return { baseCurrency, requiredCount, averageCells, catalogsLatest, catalogsAll };
+  return {
+    baseCurrency,
+    checklistName: checklist.name,
+    requiredCount,
+    averageCells,
+    catalogsLatest,
+    catalogsAll,
+  };
 }
 
 // ── Mutations ───────────────────────────────────────────────────────────────
@@ -1509,9 +1631,13 @@ function assertAutoCreateInput(input: AutoCreateStampsInput): void {
 }
 
 /** Create `input.count` stamps as root nodes of `issueId` in `areaId`, tagging each with
- *  the area (primary), enrolling it as a required member, and writing every vendor's
+ *  the area (primary), putting it on the issue's checklist, and writing every vendor's
  *  generated catalog number. Shared by issue creation (#70) and add-range (#219); runs
- *  inside an existing transaction. Caller must have validated `input`. */
+ *  inside an existing transaction. Caller must have validated `input`.
+ *
+ *  A generated range **is** the issue's set — that is what auto-creating from a catalog range
+ *  means — so it lands on the issue's first checklist, creating one named after the issue when
+ *  there is none. This is the flag's old `requiredForCompleteness: true` in checklist terms. */
 async function createRangeStamps(
   tx: Prisma.TransactionClient,
   params: {
@@ -1543,11 +1669,13 @@ async function createRangeStamps(
   });
 
   await tx.issueMember.createMany({
-    data: stampIds.map((stampId) => ({
-      issueId,
-      stampId,
-      requiredForCompleteness: true,
-    })),
+    data: stampIds.map((stampId) => ({ issueId, stampId })),
+  });
+
+  const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
+  await tx.checklistStamp.createMany({
+    data: stampIds.map((stampId) => ({ checklistId, stampId })),
+    skipDuplicates: true,
   });
 
   const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
@@ -1911,7 +2039,11 @@ export interface AddStampData {
   // top-level stamps, which stay unclassified.
   subtypeId?: string | null;
   actsAsVariantOverride?: boolean | null;
-  requiredForCompleteness: boolean;
+  /** Which of the issue's checklists the new stamp joins (#531). The sentinel
+   *  {@link DEFAULT_CHECKLIST} stands for "the issue's first checklist, created from the issue's
+   *  name if it has none" — what ticking *Required for completeness* meant before checklists
+   *  existed, and what an issue being started from scratch needs. Empty = an optional extra. */
+  checklistIds: string[];
   /** Colnect item-ID (#247), or null/omitted when unset. */
   colnectId?: string | null;
   /** Per-language `name` overrides (#296), keyed by ISO 639-1 code then field key. See
@@ -1990,13 +2122,9 @@ export async function addStampToIssue(
       data: { stampId: stamp.id, collectionAreaId, isPrimary: true },
     });
 
-    await tx.issueMember.create({
-      data: {
-        issueId,
-        stampId: stamp.id,
-        requiredForCompleteness: data.requiredForCompleteness,
-      },
-    });
+    await tx.issueMember.create({ data: { issueId, stampId: stamp.id } });
+
+    await putStampOnChecklists(tx, collectionId, issueId, stamp.id, data.checklistIds);
 
     if (data.catalogNumbers.length > 0) {
       await tx.stampCatalogNumber.createMany({
@@ -2028,22 +2156,6 @@ export async function addStampToIssue(
 
   await recomputeStampSortKeys(collectionId, [result.stampId]);
   return result;
-}
-
-export async function toggleIssueMemberRequired(
-  ownerId: string,
-  collectionId: string,
-  issueId: string,
-  stampId: string,
-  required: boolean
-): Promise<void> {
-  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
-  if (issueCollection !== collectionId) throw new Error("Issue not found.");
-  await assertCollectionOwner(ownerId, collectionId);
-  await prisma.issueMember.update({
-    where: { issueId_stampId: { issueId, stampId } },
-    data: { requiredForCompleteness: required },
-  });
 }
 
 export async function removeStampFromIssue(

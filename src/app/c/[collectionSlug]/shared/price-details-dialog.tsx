@@ -6,13 +6,14 @@ import { DialogShell } from "@/app/dialog-shell";
 import { Tooltip } from "./tooltip";
 import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
-import type { IssuePriceDetails } from "@/lib/issues";
+import type { ChecklistPriceDetails } from "@/lib/issues";
 import { Icon } from "@/app/icons";
 
-/** What the dialog describes: a single stamp, or a whole issue's required stamps. */
+/** What the dialog describes: a single stamp, or one checklist's stamps (#531 — an issue may carry
+ *  several goals, so "the set" is named by a checklist rather than by the publication). */
 export type PriceDetailsTarget =
   | { kind: "stamp"; stampId: string }
-  | { kind: "issue"; collectionId: string; issueId: string };
+  | { kind: "checklist"; collectionId: string; checklistId: string };
 
 type Scope = "latest" | "all";
 type CurrencyMode = "catalog" | "collection";
@@ -48,21 +49,21 @@ export function PriceDetailsDialog({
     },
   });
 
-  const issueQuery = useQuery<IssuePriceDetails>({
+  const checklistQuery = useQuery<ChecklistPriceDetails>({
     queryKey:
-      target.kind === "issue"
-        ? ["issuePriceDetails", target.collectionId, target.issueId]
-        : ["issuePriceDetails", null],
-    enabled: target.kind === "issue",
+      target.kind === "checklist"
+        ? ["checklistPriceDetails", target.collectionId, target.checklistId]
+        : ["checklistPriceDetails", null],
+    enabled: target.kind === "checklist",
     staleTime: 30_000,
     queryFn: async () => {
-      const t = target as { collectionId: string; issueId: string };
-      const { getIssuePriceDetailsAction } = await import("@/app/actions/issues");
-      return getIssuePriceDetailsAction(t.collectionId, t.issueId);
+      const t = target as { collectionId: string; checklistId: string };
+      const { getChecklistPriceDetailsAction } = await import("@/app/actions/issues");
+      return getChecklistPriceDetailsAction(t.collectionId, t.checklistId);
     },
   });
 
-  const isLoading = target.kind === "stamp" ? stampQuery.isLoading : issueQuery.isLoading;
+  const isLoading = target.kind === "stamp" ? stampQuery.isLoading : checklistQuery.isLoading;
 
   return (
     <DialogShell
@@ -109,8 +110,8 @@ export function PriceDetailsDialog({
           <StampSections data={stampQuery.data} scope={scope} currencyMode={currencyMode} />
         )}
 
-        {!isLoading && target.kind === "issue" && issueQuery.data && (
-          <IssueSections data={issueQuery.data} scope={scope} currencyMode={currencyMode} />
+        {!isLoading && target.kind === "checklist" && checklistQuery.data && (
+          <ChecklistSections data={checklistQuery.data} scope={scope} currencyMode={currencyMode} />
         )}
       </div>
     </DialogShell>
@@ -291,20 +292,20 @@ function StampSections({
   );
 }
 
-// ── Issue ─────────────────────────────────────────────────────────────────────
+// ── Checklist ─────────────────────────────────────────────────────────────────
 
-function IssueSections({
+function ChecklistSections({
   data,
   scope,
   currencyMode,
 }: {
-  data: IssuePriceDetails;
+  data: ChecklistPriceDetails;
   scope: Scope;
   currencyMode: CurrencyMode;
 }) {
   const catalogs = scope === "all" ? data.catalogsAll : data.catalogsLatest;
   if (data.averageCells.length === 0 && catalogs.length === 0) {
-    return <Empty>No prices recorded for required stamps.</Empty>;
+    return <Empty>No prices recorded for the stamps on “{data.checklistName}”.</Empty>;
   }
 
   // Shared certificate columns across the average and every catalog table (both
