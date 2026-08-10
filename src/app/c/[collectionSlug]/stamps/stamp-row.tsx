@@ -21,6 +21,10 @@ import {
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import {
@@ -136,6 +140,13 @@ export function StampRow({
 
   const actionsMenu = (
     <>
+      {/* Edit · add a copy of this stamp — the two a collector repeats on the flat list, on
+          hover beside the menu (#454). There is no "add child stamp" here: variants are added
+          from the issue tree, where the parent is on screen. */}
+      <RowQuickActions
+        actions={pickRowActions(actions, ["edit", "add-copy"])}
+        visible={hovered}
+      />
       <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
       {addCopy.dialog}
       {copies.dialog}

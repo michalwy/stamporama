@@ -69,7 +69,13 @@ export function RowQuickActions({
       }}
     >
       {actions.map((a) => (
-        <Tooltip key={a.key} content={a.label}>
+        // The menu draws an action's `hint` as a muted second line, and a blocked action is
+        // disabled *with* its reason rather than hidden (#273). An icon has no second line, so
+        // the hint joins the tooltip — otherwise a promoted action greys out saying nothing.
+        <Tooltip
+          key={a.key}
+          content={a.hint ? `${a.label} — ${a.hint}` : a.label}
+        >
           <button
             type="button"
             tabIndex={-1}

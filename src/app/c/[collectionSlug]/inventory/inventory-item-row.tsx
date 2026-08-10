@@ -24,6 +24,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   ColnectChip,
@@ -547,8 +551,28 @@ export function InventoryItemRow({
     },
   ];
 
+  const rowActions = actionsOverride ?? menuActions;
+
   const actions = readOnly ? null : (
-    <RowActionsMenu actions={actionsOverride ?? menuActions} ariaLabel="Copy actions" />
+    <>
+      {/* Edit the copy · edit the stamp behind it · put it on an existing offer · start a new
+          one from it — what is repeated while working the Copies list, on hover beside the menu
+          (#454). Both offer verbs are promoted because they are one decision made per copy
+          ("does this join a listing or open one"), and sending the collector into the menu for
+          half of it would make the promoted half the accidental default. Fed the same objects
+          the menu gets, so an overridden action list promotes whatever it actually offers and a
+          screen that drops one simply shows one icon fewer. */}
+      <RowQuickActions
+        actions={pickRowActions(rowActions, [
+          "edit",
+          "edit-stamp",
+          "add-to-offer",
+          "add-to-new-offer",
+        ])}
+        visible={hovered}
+      />
+      <RowActionsMenu actions={rowActions} ariaLabel="Copy actions" />
+    </>
   );
 
   const unknownVariantChip = item.unknownVariant && (

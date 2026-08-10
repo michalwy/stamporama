@@ -73,10 +73,12 @@ To see the copies themselves, use **View copies** in the row's **⋮** menu.
 
 Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
-A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. On the **Issues** list these are:
+A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. Each list promotes the actions it is most worked with:
 
-- an issue row — pencil (Edit), plus (Add stamp), copy (Add copy)
-- a stamp row inside the tree — pencil (Edit), plus (Add child stamp), copy (Add copy)
+- an issue row on the **Issues** list — pencil (Edit), plus (Add stamp), copy (Add copy)
+- a stamp row inside the issue tree — pencil (Edit), plus (Add child stamp), copy (Add copy)
+- a row on the flat **Stamps** list — pencil (Edit), copy (Add copy). There is no **Add child stamp** here: variants are added from the issue tree, where you can see the stamp they belong under.
+- a row on the **Copies** list — pencil (Edit), stamp (Edit stamp), and both offer icons (Add to offer, Add to new offer). You will see fewer of them on screens that offer the copy fewer actions — the copies popup, for instance, shows none, as it is read-only.
 
 Hovering tells you what each one is. Icons come from one set app-wide, so the same picture always
 means the same thing: a pencil edits in place, a bin deletes, a circular arrow re-generates
