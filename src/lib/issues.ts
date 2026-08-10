@@ -1068,6 +1068,37 @@ export async function listIssuesPaginated(
   return { items, nextCursor };
 }
 
+/**
+ * One issue enriched exactly as the Issues list enriches a row — same required-stamps total, same
+ * range suggestions, same representative gallery. The issue detail screen (#519) reads through
+ * this rather than assembling its own header, so the page and the row it was opened from cannot
+ * describe one issue differently. Returns null when the id is not this collection's.
+ */
+export async function getIssueListItem(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+): Promise<IssueListItem | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [primaryCatalogByArea, baseCurrency, displayConditionId, issue] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts?.displayConditionId),
+    prisma.issue.findFirst({ where: { id: issueId, collectionId }, select: ISSUE_LIST_SELECT }),
+  ]);
+  if (!issue) return null;
+  const [item] = await buildIssueListItems(
+    [issue],
+    collectionId,
+    primaryCatalogByArea,
+    baseCurrency,
+    displayConditionId,
+    opts?.displayFormatId ?? null
+  );
+  return item;
+}
+
 export interface IssueSearchItem {
   id: string;
   name: string | null;

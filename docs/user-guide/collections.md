@@ -71,14 +71,16 @@ To see the copies themselves, use **View copies** in the row's **⋮** menu.
 
 ## Row actions
 
-Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
+Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. On the **Issues**, **Stamps** and **Copies** lists the first entry opens the row's own full-page view — see [Detail pages](detail-pages.md). Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
 A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. Each list promotes the actions it is most worked with:
 
-- an issue row on the **Issues** list — pencil (Edit), plus (Add stamp), copy (Add copy)
-- a stamp row inside the issue tree — pencil (Edit), plus (Add child stamp), copy (Add copy)
-- a row on the flat **Stamps** list — pencil (Edit), copy (Add copy). There is no **Add child stamp** here: variants are added from the issue tree, where you can see the stamp they belong under.
-- a row on the **Copies** list — pencil (Edit), stamp (Edit stamp), and both offer icons (Add to offer, Add to new offer). You will see fewer of them on screens that offer the copy fewer actions — the copies popup, for instance, shows none, as it is read-only.
+- an issue row on the **Issues** list — arrow (Open issue page), pencil (Edit), plus (Add stamp), copy (Add copy)
+- a stamp row inside the issue tree — arrow (Open stamp page), pencil (Edit), plus (Add child stamp), copy (Add copy)
+- a row on the flat **Stamps** list — arrow (Open stamp page), pencil (Edit), copy (Add copy). There is no **Add child stamp** here: variants are added from the issue tree, where you can see the stamp they belong under.
+- a row on the **Copies** list — arrow (Open copy page), pencil (Edit), stamp (Edit stamp), and both offer icons (Add to offer, Add to new offer). You will see fewer of them on screens that offer the copy fewer actions — the copies popup, for instance, keeps only the arrow, since it is read-only and going to a page is not editing anything.
+
+The arrow appears on rows **inside** the detail pages too — the stamps of an issue, a stamp's variants and issues, the copies listed on either — so reaching a record's own screen is the same gesture wherever you meet that record.
 
 Hovering tells you what each one is. Icons come from one set app-wide, so the same picture always
 means the same thing: a pencil edits in place, a bin deletes, a circular arrow re-generates

@@ -24,6 +24,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import {
   RowQuickActions,
   pickRowActions,
@@ -453,7 +454,10 @@ export function InventoryItemRow({
   const excludedHere =
     !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);
 
+  const detailPage = useDetailPageAction("copy", item.id);
+
   const menuActions: RowAction[] = [
+    detailPage,
     ...(item.unknownVariant
       ? [{ key: "identify", label: "Identify variant", icon: "variant", onSelect: () => onIdentify?.(item) } as RowAction]
       : []),
@@ -553,7 +557,14 @@ export function InventoryItemRow({
 
   const rowActions = actionsOverride ?? menuActions;
 
-  const actions = readOnly ? null : (
+  // A read-only surface still gets **one** icon: the way to the copy's own screen (#517). Going to
+  // a record's page is navigation, not action — `readOnly` is about not editing a copy from a
+  // screen that is not the Copies list, and it would be a strange kind of read-only that refused
+  // to let you read more. This is what puts the icon on the copies list inside the stamp and issue
+  // detail screens, and on the copies popup (#110) it shares that list with.
+  const actions = readOnly ? (
+    <RowQuickActions actions={[detailPage]} visible={hovered} />
+  ) : (
     <>
       {/* Edit the copy · edit the stamp behind it · put it on an existing offer · start a new
           one from it — what is repeated while working the Copies list, on hover beside the menu
@@ -564,6 +575,7 @@ export function InventoryItemRow({
           screen that drops one simply shows one icon fewer. */}
       <RowQuickActions
         actions={pickRowActions(rowActions, [
+          "detail-page",
           "edit",
           "edit-stamp",
           "add-to-offer",

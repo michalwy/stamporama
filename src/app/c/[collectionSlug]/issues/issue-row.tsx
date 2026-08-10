@@ -29,6 +29,7 @@ import {
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
@@ -199,7 +200,10 @@ function StampTreeNode({
     onSaved: onPriceSaved,
   });
 
+  const detailPage = useDetailPageAction("stamp", node.stampId);
+
   const actions: RowAction[] = [
+    detailPage,
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
     { key: "move", label: "Move to another issue…", icon: "move", onSelect: () => onMove(node.stampId) },
     addCopy.action,
@@ -277,7 +281,7 @@ function StampTreeNode({
               {/* Edit · add a variant under this stamp · add a copy of it — the three a
                   collector repeats while filling an issue in, on hover beside the menu. */}
               <RowQuickActions
-                actions={pickRowActions(actions, ["edit", "add-child", "add-copy"])}
+                actions={pickRowActions(actions, ["detail-page", "edit", "add-child", "add-copy"])}
                 visible={hovered}
               />
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
@@ -473,7 +477,10 @@ export function IssueRow({
   // before writing — the list row's warning chip is a hint, not the only way in.
   const [recomputeOpen, setRecomputeOpen] = useState(false);
 
+  const detailPage = useDetailPageAction("issue", issue.id);
+
   const actions: RowAction[] = [
+    detailPage,
     { key: "add-stamp", label: "Add stamp", icon: "add", onSelect: () => callbacks.onAddStamp(issue.id) },
     { key: "add-stamp-range", label: "Add stamp range…", icon: "more", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
@@ -582,7 +589,7 @@ export function IssueRow({
 
           {/* The issue-level counterparts: edit · add a stamp to it · add a copy. */}
           <RowQuickActions
-            actions={pickRowActions(actions, ["edit", "add-stamp", "add-copy"])}
+            actions={pickRowActions(actions, ["detail-page", "edit", "add-stamp", "add-copy"])}
             visible={hovered}
           />
           <RowActionsMenu actions={actions} ariaLabel="Issue actions" />

@@ -7,6 +7,10 @@ copies of the same stamp are three rows.
 
 Open the **Inventory** screen from the **Collection** section of the sidebar.
 
+Each copy also has a page of its own, gathering everything about it — including its purchase, its
+offers and the sale it left on — in one place. Open it from the row's **⋮** menu with **Open copy
+page**; see [Detail pages](detail-pages.md).
+
 ## The inventory list
 
 Each row shows:

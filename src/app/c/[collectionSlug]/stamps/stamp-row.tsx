@@ -26,6 +26,7 @@ import {
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
+import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import {
   useInventoryPopupAction,
@@ -121,8 +122,10 @@ export function StampRow({
     target: { kind: "stamp", stampId: stamp.id, label: popupLabel },
   });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: stamp.id });
+  const detailPage = useDetailPageAction("stamp", stamp.id);
 
   const actions: RowAction[] = [
+    detailPage,
     addCopy.action,
     copies.action,
     offers.action,
@@ -144,7 +147,7 @@ export function StampRow({
           hover beside the menu (#454). There is no "add child stamp" here: variants are added
           from the issue tree, where the parent is on screen. */}
       <RowQuickActions
-        actions={pickRowActions(actions, ["edit", "add-copy"])}
+        actions={pickRowActions(actions, ["detail-page", "edit", "add-copy"])}
         visible={hovered}
       />
       <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />

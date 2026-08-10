@@ -738,6 +738,89 @@ export async function listStampsPaginated(
   return { items, nextCursor };
 }
 
+/**
+ * One stamp enriched exactly as the flat Stamps list enriches a row — same headline price, same
+ * copy counts, same photos. The stamp detail screen (#518) reads through this rather than through
+ * {@link getStamp} so the page and the row it was opened from cannot describe one stamp
+ * differently. The `getItemListItem` precedent (#241).
+ */
+export async function getStampListItem(
+  ownerId: string,
+  stampId: string,
+  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+): Promise<StampListItem> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const [primaryCatalogByArea, baseCurrency, displayConditionId, stamp] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts?.displayConditionId),
+    prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: STAMP_LIST_SELECT }),
+  ]);
+  const [item] = await buildStampListItems(
+    [stamp],
+    collectionId,
+    primaryCatalogByArea,
+    baseCurrency,
+    displayConditionId,
+    opts?.displayFormatId ?? null
+  );
+  return item;
+}
+
+/** A stamp's place in the variant tree (#54): the base it hangs under, and the variants under it. */
+export interface StampRelatives {
+  parent: StampListItem | null;
+  children: StampListItem[];
+}
+
+/**
+ * The parent and the direct children of a stamp, each enriched as a list row so the variant card
+ * on the stamp detail screen (#518) reads like the issue tree it mirrors. One level in each
+ * direction: the card is navigation, and a whole subtree drawn on a detail page is the issue
+ * screen's job (#519).
+ */
+export async function getStampRelatives(
+  ownerId: string,
+  stampId: string,
+  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+): Promise<StampRelatives> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const self = await prisma.stamp.findUniqueOrThrow({
+    where: { id: stampId },
+    select: { parentId: true },
+  });
+  const [primaryCatalogByArea, baseCurrency, displayConditionId, rows] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    getCollectionBaseCurrency(collectionId),
+    resolveDisplayConditionId(collectionId, opts?.displayConditionId),
+    prisma.stamp.findMany({
+      where: {
+        collectionId,
+        OR: [
+          { parentId: stampId },
+          ...(self.parentId ? [{ id: self.parentId }] : []),
+        ],
+      },
+      orderBy: [{ primaryCatalogSortKey: { sort: "asc", nulls: "last" } }, { name: "asc" }],
+      select: STAMP_LIST_SELECT,
+    }),
+  ]);
+  const items = await buildStampListItems(
+    rows,
+    collectionId,
+    primaryCatalogByArea,
+    baseCurrency,
+    displayConditionId,
+    opts?.displayFormatId ?? null
+  );
+  return {
+    parent: items.find((i) => i.id === self.parentId) ?? null,
+    children: items.filter((i) => i.parentId === stampId),
+  };
+}
+
 // ── Stamp picker search (inventory item dialog, #104) ──────────────────────
 
 /** One suggestion row for the inventory stamp/variant picker, carrying enough

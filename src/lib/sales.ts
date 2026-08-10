@@ -1454,3 +1454,80 @@ export async function listSaleCopies(
   });
   return withPacked(items);
 }
+
+/** How one copy left the collection — the sale it went out on, from the copy's own side (#517). */
+export interface ItemSaleRecord {
+  saleId: string;
+  saleNo: number;
+  soldAt: Date;
+  status: string;
+  currency: string;
+  platformName: string;
+  buyerName: string | null;
+  /** The sale line's price, in the sale's transaction currency. A line can carry several copies,
+   *  so this is the *line's* price and never "what this copy fetched" — there is no such figure. */
+  linePrice: string;
+  /** How many copies left on that same line, so the price above can be read for what it is. */
+  lineItemCount: number;
+  /** Whether this individual copy has been packed (#192). */
+  packed: boolean;
+  /** The number of the offer the copy left through, or null when the offer is since deleted. */
+  offerNo: number | null;
+  offerId: string | null;
+}
+
+/**
+ * The sale a copy left on, or null while it is still held. `SaleLineItem` is `@@unique([itemId])`
+ * — the no-double-sale invariant (ADR-0012) — so there is at most one, which is what lets the copy
+ * detail screen (#517) show a *Sale* card rather than a list.
+ */
+export async function getItemSaleRecord(
+  ownerId: string,
+  itemId: string
+): Promise<ItemSaleRecord | null> {
+  const row = await prisma.saleLineItem.findUnique({
+    where: { itemId },
+    select: {
+      packed: true,
+      saleLine: {
+        select: {
+          price: true,
+          offerId: true,
+          offer: { select: { offerNo: true } },
+          _count: { select: { items: true } },
+          sale: {
+            select: {
+              id: true,
+              saleNo: true,
+              soldAt: true,
+              status: true,
+              currency: true,
+              collection: { select: { ownerId: true } },
+              platform: { select: { name: true } },
+              buyer: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!row) return null;
+  const sale = row.saleLine.sale;
+  if (sale.collection.ownerId !== ownerId) {
+    throw new Error("Copy not found or access denied.");
+  }
+  return {
+    saleId: sale.id,
+    saleNo: sale.saleNo,
+    soldAt: sale.soldAt,
+    status: sale.status,
+    currency: sale.currency,
+    platformName: sale.platform.name,
+    buyerName: sale.buyer?.name ?? null,
+    linePrice: row.saleLine.price.toFixed(2),
+    lineItemCount: row.saleLine._count.items,
+    packed: row.packed,
+    offerNo: row.saleLine.offer?.offerNo ?? null,
+    offerId: row.saleLine.offerId,
+  };
+}
