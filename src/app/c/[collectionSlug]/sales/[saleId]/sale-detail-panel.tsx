@@ -483,12 +483,13 @@ export function SaleDetailPanel({
               />
               {/* Derived handling (read-only) */}
               <div style={ROW_LABEL}>+ Buyer handling</div>
-              <Tooltip content="Derived from the total paid minus the offer prices" style={{ display: "block" }}>
-                <div style={ORIG_CELL}>
-                  <span style={{ paddingRight: VALUE_INSET }}>
-                    {sale.buyerHandling} {sale.currency}
-                  </span>
-                </div>
+              {/* The tooltip wrapper *is* the grid cell here: wrapping the cell instead would put a
+                  stretched span between the grid and it, and `justifySelf: end` on a non-item does
+                  nothing — the amount would drift to the left of the column the others end at. */}
+              <Tooltip content="Derived from the total paid minus the offer prices" align="end" style={ORIG_CELL}>
+                <span style={{ paddingRight: VALUE_INSET }}>
+                  {sale.buyerHandling} {sale.currency}
+                </span>
               </Tooltip>
               <div style={BASE_CELL}>{baseEqText(toBase(sale.buyerHandling), sale.baseCurrency)}</div>
               {sale.totalBelowGross && (
