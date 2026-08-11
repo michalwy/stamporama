@@ -11,6 +11,7 @@ import {
   addStampToIssue,
   addStampRangeToIssue,
   removeStampFromIssue,
+  reorderIssueMembers,
   moveStampNode,
   moveIssueToArea,
   mergeIssues,
@@ -474,6 +475,24 @@ export async function removeStampFromIssueAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to remove stamp. Please try again." };
+  }
+}
+
+/**
+ * Put one level of an issue's stamp tree in the order given (#549) — the roots, or one parent's
+ * variants. `orderedStampIds` is the **whole** group; a partial one is refused server-side.
+ */
+export async function reorderIssueStampsAction(
+  collectionId: string,
+  issueId: string,
+  orderedStampIds: string[]
+): Promise<IssueActionState> {
+  const session = await getSession();
+  try {
+    await reorderIssueMembers(session.user.id, collectionId, issueId, orderedStampIds);
+    return { status: "success", issueId };
+  } catch {
+    return { status: "error", message: "Failed to reorder the stamps. Please try again." };
   }
 }
 

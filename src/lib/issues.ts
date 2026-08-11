@@ -33,6 +33,7 @@ import {
 import { allocateEntityNumber } from "./items";
 import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
+import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -208,6 +209,10 @@ const HEADLINE_PRICE_SELECT = {
 
 const MEMBER_SELECT = {
   stampId: true,
+  // The collector's own position in the tree (#549). Selected rather than ordered by: this select
+  // is `as const` and a readonly `orderBy` is not assignable to Prisma's input type — the same
+  // reason `checklists` is ordered in the mapper. `orderIssueMembers` is what applies it.
+  sortOrder: true,
   stamp: {
     select: {
       // Every checklist the stamp is on, anywhere in the collection (#531). The mapper narrows
@@ -230,6 +235,14 @@ const MEMBER_SELECT = {
     },
   },
 } as const;
+
+/** The tree's own order (#549): the collector's manual position, with the stamp id as the tiebreak
+ *  so a group whose members still share the seeded value reads the same on every request. Sorting
+ *  in memory rather than in the query, because {@link MEMBER_SELECT} is `as const`; the callers
+ *  that *can* order in SQL do, and this keeps the two answers identical. */
+function orderIssueMembers<T extends { stampId: string; sortOrder: number }>(members: T[]): T[] {
+  return [...members].sort((a, b) => a.sortOrder - b.sortOrder || a.stampId.localeCompare(b.stampId));
+}
 
 /** For a set of umbrella stamps (unknown-variant base stamps), the variant-kind descendants'
  *  prices, so the headline catalog price can roll up from the lowest variant (#238). Mirrors
@@ -429,6 +442,7 @@ function toIssueData(issue: {
   translations: { language: string; name: string | null }[];
   members: {
     stampId: string;
+    sortOrder: number;
     stamp: {
       checklistEntries: { checklistId: string }[];
       parentId: string | null;
@@ -462,7 +476,9 @@ function toIssueData(issue: {
     year: issue.year,
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
-    members: issue.members.map((m) => toStampNode(m, undefined, copyCounts, checklistIds)),
+    members: orderIssueMembers(issue.members).map((m) =>
+      toStampNode(m, undefined, copyCounts, checklistIds)
+    ),
     catalogNumbers: issue.catalogNumbers,
     checklists: orderChecklists(issue.checklists).map((c) => ({
       id: c.id,
@@ -1264,7 +1280,13 @@ export async function listIssueMembers(
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
   const [members, issueChecklists] = await Promise.all([
-    prisma.issueMember.findMany({ where: { issueId }, select: MEMBER_SELECT }),
+    prisma.issueMember.findMany({
+      where: { issueId },
+      select: MEMBER_SELECT,
+      // The manual order (#549), the tiebreak matching `orderIssueMembers` so the two readers of
+      // this select can never disagree about a group whose members share a seeded value.
+      orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+    }),
     prisma.checklist.findMany({ where: { collectionId, issueId }, select: { id: true } }),
   ]);
   const issueChecklistIds = new Set(issueChecklists.map((c) => c.id));
@@ -1686,8 +1708,11 @@ async function createRangeStamps(
     })),
   });
 
+  const rangeBase = await nextIssueSortOrder(tx, issueId);
   await tx.issueMember.createMany({
-    data: stampIds.map((stampId) => ({ issueId, stampId })),
+    // The range is numbered in the order it was generated, which is the order the numbers were
+    // typed — a bulk add is one insertion, not `count` of them (#549).
+    data: stampIds.map((stampId, i) => ({ issueId, stampId, sortOrder: rangeBase + i })),
   });
 
   const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
@@ -2140,7 +2165,9 @@ export async function addStampToIssue(
       data: { stampId: stamp.id, collectionAreaId, isPrimary: true },
     });
 
-    await tx.issueMember.create({ data: { issueId, stampId: stamp.id } });
+    await tx.issueMember.create({
+      data: { issueId, stampId: stamp.id, sortOrder: await nextIssueSortOrder(tx, issueId) },
+    });
 
     await putStampOnChecklists(tx, collectionId, issueId, stamp.id, data.checklistIds);
 
@@ -2176,6 +2203,60 @@ export async function addStampToIssue(
   return result;
 }
 
+/**
+ * Where a stamp joining this issue goes: past everything already in it (#549).
+ *
+ * One number for the whole issue rather than one per sibling group, because it only has to be past
+ * the group the newcomer lands in and the issue-wide maximum is past every group at once. That is
+ * also what makes it right for a stamp whose parent is picked *after* the position is taken.
+ */
+async function nextIssueSortOrder(
+  tx: Prisma.TransactionClient,
+  issueId: string
+): Promise<number> {
+  const highest = await tx.issueMember.aggregate({
+    where: { issueId },
+    _max: { sortOrder: true },
+  });
+  return (highest._max.sortOrder ?? -1) + 1;
+}
+
+/**
+ * Put one **sibling group** of an issue's stamp tree in the order given (#549) — the issue's root
+ * stamps, or one parent's variants. The request names the whole group, and
+ * {@link checkSiblingGroup} is what refuses anything else: a partial group would move a stamp past
+ * a sibling the collector could not see.
+ */
+export async function reorderIssueMembers(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  orderedStampIds: string[]
+): Promise<void> {
+  const { collectionId: issueCollection } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const members = await prisma.issueMember.findMany({
+    where: { issueId },
+    select: { stampId: true, stamp: { select: { parentId: true } } },
+  });
+  const check = checkSiblingGroup(
+    members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId })),
+    orderedStampIds
+  );
+  if (!check.ok) throw new Error(check.reason);
+
+  await prisma.$transaction(
+    sortOrderAssignments(orderedStampIds).map(({ stampId, sortOrder }) =>
+      prisma.issueMember.update({
+        where: { issueId_stampId: { issueId, stampId } },
+        data: { sortOrder },
+      })
+    )
+  );
+}
+
 export async function removeStampFromIssue(
   ownerId: string,
   collectionId: string,
@@ -2206,7 +2287,9 @@ export async function moveStampNode(
   // Collect the stamp and all its descendants that are members of this issue
   const allMembers = await prisma.issueMember.findMany({
     where: { issueId },
-    select: { stampId: true, requiredForCompleteness: true, stamp: { select: { parentId: true } } },
+    // `requiredForCompleteness` was selected here until #549's tests reached this path: the column
+    // went away with #531's checklists, the value was never read, and Prisma rejects the query.
+    select: { stampId: true, stamp: { select: { parentId: true } } },
   });
 
   const memberSet = new Map(allMembers.map((m) => [m.stampId, m]));
@@ -2223,14 +2306,18 @@ export async function moveStampNode(
 
   const stampIds = collectSubtree(stampId);
 
-  await prisma.$transaction(
-    stampIds.map((sid) =>
-      prisma.issueMember.update({
+  await prisma.$transaction(async (tx) => {
+    // The subtree lands at the end of the target issue, keeping its own internal order (#549) —
+    // arriving stamps are the newest members there, whatever position they held where they came
+    // from, and a position is a statement about one issue's tree.
+    const base = await nextIssueSortOrder(tx, targetIssueId);
+    for (const [i, sid] of stampIds.entries()) {
+      await tx.issueMember.update({
         where: { issueId_stampId: { issueId, stampId: sid } },
-        data: { issueId: targetIssueId },
-      })
-    )
-  );
+        data: { issueId: targetIssueId, sortOrder: base + i },
+      });
+    }
+  });
 }
 
 /** A catalog identity that both the source and target issue's stamps already carry —
@@ -2357,7 +2444,11 @@ export async function mergeIssues(
   await assertCollectionOwner(ownerId, collectionId);
 
   const [sourceMembers, targetMembers] = await Promise.all([
-    prisma.issueMember.findMany({ where: { issueId: sourceIssueId }, select: { stampId: true } }),
+    prisma.issueMember.findMany({
+      where: { issueId: sourceIssueId },
+      select: { stampId: true, sortOrder: true },
+      orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+    }),
     prisma.issueMember.findMany({ where: { issueId: targetIssueId }, select: { stampId: true } }),
   ]);
   const targetStampIds = new Set(targetMembers.map((m) => m.stampId));
@@ -2369,10 +2460,15 @@ export async function mergeIssues(
 
   await prisma.$transaction(async (tx) => {
     if (stampIdsToMove.length > 0) {
-      await tx.issueMember.updateMany({
-        where: { issueId: sourceIssueId, stampId: { in: stampIdsToMove } },
-        data: { issueId: targetIssueId },
-      });
+      // The source's stamps append after the target's, keeping the order they had among
+      // themselves (#549) — the same rule moving a single node follows, applied to a whole issue.
+      const base = await nextIssueSortOrder(tx, targetIssueId);
+      for (const [i, stampId] of stampIdsToMove.entries()) {
+        await tx.issueMember.update({
+          where: { issueId_stampId: { issueId: sourceIssueId, stampId } },
+          data: { issueId: targetIssueId, sortOrder: base + i },
+        });
+      }
     }
     await tx.issue.delete({ where: { id: sourceIssueId } });
   });

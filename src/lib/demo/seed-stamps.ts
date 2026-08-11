@@ -714,7 +714,8 @@ export async function seedStamps(
       });
 
       await tx.issueMember.create({
-        data: { issueId: issue.id, stampId: stamp.id },
+        // Seeded in the order they are written, which is the order added (#549).
+        data: { issueId: issue.id, stampId: stamp.id, sortOrder: i },
       });
       if (!optSet.has(i)) {
         await tx.checklistStamp.create({

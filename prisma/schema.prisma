@@ -2747,11 +2747,19 @@ model IssueCatalogNumber {
 model IssueMember {
   issueId String
   stampId String
+  // Manual position in the issue's stamp tree (#549). The value only ever has to be consistent
+  // **within one sibling group** — root nodes are read against root nodes and a parent's children
+  // against each other, and the two groups never compare — so a reorder densely renumbers the one
+  // group it was handed and leaves every other group's values alone. A new member appends at
+  // `max(sortOrder) over the issue + 1`, which is past every group, so it lands last in whichever
+  // group it joins. Backfilled by `stamp.createdAt`, which is the order added.
+  sortOrder Int @default(0)
 
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
   stamp Stamp @relation("IssueMemberStamp", fields: [stampId], references: [id], onDelete: Cascade)
 
   @@id([issueId, stampId])
+  @@index([issueId, sortOrder])
   @@map("issue_member")
 }
 

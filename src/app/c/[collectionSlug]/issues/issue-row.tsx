@@ -23,6 +23,14 @@ import {
   StampDetailLine,
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
+import {
+  ReorderModeButton,
+  StampDragGrip,
+  StampTreeGroup,
+  useStampTreeReorder,
+  type StampNodeDragProps,
+  type StampTreeReorder,
+} from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -104,6 +112,10 @@ interface StampTreeNodeProps {
   onAddChild: (parentStampId: string) => void;
   onDelete: (stampId: string, stampName: string) => void;
   onMove: (stampId: string) => void;
+  /** Reorder mode (#549), passed down so this node's own children become a drag list too. */
+  reorder: StampTreeReorder | null;
+  /** This row's place in its sibling group's drag list, or null when it cannot move. */
+  drag: StampNodeDragProps | null;
 }
 
 function StampTreeNode({
@@ -127,10 +139,13 @@ function StampTreeNode({
   onAddChild,
   onDelete,
   onMove,
+  reorder,
+  drag,
 }: StampTreeNodeProps) {
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
+  const reordering = !!reorder;
   const indent = `${depth * 1.25}rem`;
   const isContextOnly = contextIds.has(node.stampId);
 
@@ -242,6 +257,7 @@ function StampTreeNode({
   return (
     <>
       <div
+        {...(drag?.item ?? {})}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -253,9 +269,13 @@ function StampTreeNode({
           // Context, not a member of the filtered set — legible enough to read the number off,
           // faint enough that it never reads as part of what was asked for.
           opacity: isContextOnly ? 0.5 : undefined,
+          ...(drag?.style ?? {}),
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+          {/* The grip leads the row while reordering — ahead of the caret, since the whole
+              subtree travels with the row it is on. */}
+          {reordering && <StampDragGrip drag={drag} />}
           {/* Expand/collapse toggle sits first, before the photo. */}
           {hasChildren ? (
             <button
@@ -311,7 +331,9 @@ function StampTreeNode({
                   "add-copy",
                   "add-want",
                 ])}
-                visible={hovered}
+                // Nothing pops out from under the pointer while the row is being dragged — the
+                // grip is what the hover means in this mode.
+                visible={hovered && !reordering}
               />
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
               {addCopy.dialog}
@@ -331,32 +353,40 @@ function StampTreeNode({
           </div>
         </div>
       </div>
-      {!collapsed &&
-        children.map((child, i) => (
-          <StampTreeNode
-            key={child.node.stampId}
-            treeNode={child}
-            depth={depth + 1}
-            contextIds={contextIds}
-            collectionId={collectionId}
-            areas={areas}
-            baseCurrency={baseCurrency}
-            primaryVendorId={primaryVendorId}
-            vendorMap={vendorMap}
-            isLast={isLast && i === children.length - 1}
-            issueName={issueName}
-            issueYear={issueYear}
-            areaName={areaName}
-            displayCondition={displayCondition}
-            displayFormat={displayFormat}
-            expandStamp={expandStamp}
-            onPriceSaved={onPriceSaved}
-            onEdit={onEdit}
-            onAddChild={onAddChild}
-            onDelete={onDelete}
-            onMove={onMove}
-          />
-        ))}
+      {!collapsed && (
+        <StampTreeGroup
+          nodes={children}
+          parentStampId={node.stampId}
+          reorder={reorder}
+          indent={(depth + 1) * 20}
+          renderNode={({ node: child, isLast: lastChild, drag: childDrag }) => (
+            <StampTreeNode
+              treeNode={child}
+              depth={depth + 1}
+              contextIds={contextIds}
+              collectionId={collectionId}
+              areas={areas}
+              baseCurrency={baseCurrency}
+              primaryVendorId={primaryVendorId}
+              vendorMap={vendorMap}
+              isLast={isLast && lastChild}
+              issueName={issueName}
+              issueYear={issueYear}
+              areaName={areaName}
+              displayCondition={displayCondition}
+              displayFormat={displayFormat}
+              expandStamp={expandStamp}
+              onPriceSaved={onPriceSaved}
+              onEdit={onEdit}
+              onAddChild={onAddChild}
+              onDelete={onDelete}
+              onMove={onMove}
+              reorder={reorder}
+              drag={childDrag}
+            />
+          )}
+        />
+      )}
     </>
   );
 }
@@ -462,9 +492,23 @@ export function IssueRow({
   // list shows many issues at once, so there is no single parameter this could be, and the detail
   // page keeps its own copy for the same rule.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const { invalidateList, invalidateMembers } = useInvalidateIssues();
+
+  // Manual ordering (#549). The hook owns the optimistic order, so the tree below is built from
+  // *its* members rather than the query's — a drag has to show before the round trip.
+  const loadedMembers = useMemo(() => members ?? [], [members]);
+  const treeReorder = useStampTreeReorder({
+    collectionId,
+    issueId: issue.id,
+    members: loadedMembers,
+    onSaved: () => invalidateMembers(collectionId, issue.id),
+  });
+  // The checklist filter is dropped while reordering: dragging inside a narrowed tree would move
+  // a stamp past a sibling that was never on screen, and the server refuses a partial group.
+  const effectiveChecklistIds = treeReorder.active ? [] : treeChecklistIds;
   const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeByChecklists(
-    members ? buildStampTree(members) : [],
-    treeChecklistIds
+    buildStampTree(treeReorder.members),
+    effectiveChecklistIds
   );
 
   const addCopy = useInventoryAddAction({
@@ -529,7 +573,6 @@ export function IssueRow({
     scopeLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
   });
 
-  const { invalidateList } = useInvalidateIssues();
   const rangeSuggestions = issue.rangeSuggestions;
   // Recomputing the declared range (#333) is an explicit, always-available action that confirms
   // before writing — the list row's warning chip is a hint, not the only way in.
@@ -868,8 +911,10 @@ export function IssueRow({
             </div>
           ) : (
             <>
-              {/* Narrowing the tree by checklist (#531) — only where there is a choice to make. */}
-              {issue.checklists.length > 1 && (
+              {/* Narrowing the tree by checklist (#531) — only where there is a choice to make.
+                  Hidden while reordering: a drag inside a narrowed tree would move a stamp past a
+                  sibling that was never on screen. */}
+              {issue.checklists.length > 1 && !treeReorder.active && (
                 <div
                   style={{
                     display: "flex",
@@ -889,9 +934,12 @@ export function IssueRow({
                   />
                 </div>
               )}
-              {stampTree.map((treeNode, i) => (
+              <StampTreeGroup
+                nodes={stampTree}
+                parentStampId={null}
+                reorder={treeReorder.reorder}
+                renderNode={({ node: treeNode, isLast, drag }) => (
                 <StampTreeNode
-                  key={treeNode.node.stampId}
                   treeNode={treeNode}
                   depth={0}
                   contextIds={treeContextIds}
@@ -900,7 +948,7 @@ export function IssueRow({
                   baseCurrency={baseCurrency}
                   primaryVendorId={primaryVendorId}
                   vendorMap={vendorMap}
-                  isLast={i === stampTree.length - 1}
+                  isLast={isLast}
                   issueName={issue.name}
                   issueYear={issue.year}
                   areaName={
@@ -934,12 +982,24 @@ export function IssueRow({
                   onMove={(stampId) =>
                     callbacks.onMoveStamp(issue.id, stampId)
                   }
+                  reorder={treeReorder.reorder}
+                  drag={drag}
                 />
-              ))}
+                )}
+              />
               {/* Add-stamp button pinned at the bottom of the tree (#180), mirroring the
                   "+ New stamp" button in the browse-stamps picker. Opens the add-stamp dialog
-                  with this issue pre-filled. */}
-              <div style={{ padding: "0.625rem 1rem 0.75rem 0.5rem" }}>
+                  with this issue pre-filled. The reorder toggle (#549) sits beside it: both are
+                  things done *to* the tree as a whole rather than to any row in it, and the foot
+                  of the tree is where the eye already is after reading down it. */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.625rem 1rem 0.75rem 0.5rem",
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => callbacks.onAddStamp(issue.id)}
@@ -947,6 +1007,18 @@ export function IssueRow({
                 >
                   + Add stamp
                 </button>
+                <ReorderModeButton active={treeReorder.active} onToggle={treeReorder.toggle} />
+                {treeReorder.error ? (
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-danger)" }}>
+                    {treeReorder.error}
+                  </span>
+                ) : (
+                  treeReorder.active && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Drag a stamp by its grip. A stamp only moves among its own siblings.
+                    </span>
+                  )
+                )}
               </div>
             </>
           )}

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { IssueListItem, StampNodeData, IssueChecklistTotals } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueCompleteness, ChecklistCompleteness } from "@/lib/checklist-completeness";
@@ -32,6 +33,14 @@ import {
   buildStampTree,
   type StampTreeNodeData,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
+import {
+  ReorderModeButton,
+  StampDragGrip,
+  StampTreeGroup,
+  useStampTreeReorder,
+  type StampNodeDragProps,
+  type StampTreeReorder,
+} from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
@@ -98,9 +107,21 @@ export function IssueDetailPanel({
   // the most room. Local state for the same reason: the filter is per issue, and this page's copy
   // follows the list's rule rather than inventing a second one.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const router = useRouter();
+  // Manual ordering (#549), the same mode the list row's tree carries. This page's members are a
+  // server prop, so a saved reorder asks the route for fresh data; the optimistic order the hook
+  // holds is what the tree is drawn from until it arrives.
+  const treeReorder = useStampTreeReorder({
+    collectionId,
+    issueId: issue.id,
+    members,
+    onSaved: () => router.refresh(),
+  });
+  // Dropped while reordering: a drag inside a narrowed tree would move a stamp past a sibling
+  // that was never on screen, and the server refuses a partial group.
   const { tree, contextIds } = filterStampTreeByChecklists(
-    buildStampTree(members),
-    treeChecklistIds
+    buildStampTree(treeReorder.members),
+    treeReorder.active ? [] : treeChecklistIds
   );
 
   return (
@@ -157,7 +178,7 @@ export function IssueDetailPanel({
               // is a different thing and stays: the control that emptied it lives in this header.
               empty={members.length === 0}
               actions={
-                issue.checklists.length > 1 ? (
+                issue.checklists.length > 1 && !treeReorder.active ? (
                   <ChecklistTreeFilter
                     checklists={issue.checklists}
                     selected={treeChecklistIds}
@@ -170,20 +191,49 @@ export function IssueDetailPanel({
                 <EmptyNote>No stamp is on the checklists you picked.</EmptyNote>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column" }}>
-                  {tree.map((node) => (
-                    <TreeNode
-                      key={node.node.stampId}
-                      node={node}
-                      depth={0}
-                      contextIds={contextIds}
-                      collectionId={collectionId}
-                      collectionSlug={collectionSlug}
-                      vendorMap={vendorMap}
-                      primaryVendorId={primaryVendorId}
-                    />
-                  ))}
+                  <StampTreeGroup
+                    nodes={tree}
+                    parentStampId={null}
+                    reorder={treeReorder.reorder}
+                    renderNode={({ node, drag }) => (
+                      <TreeNode
+                        node={node}
+                        depth={0}
+                        contextIds={contextIds}
+                        collectionId={collectionId}
+                        collectionSlug={collectionSlug}
+                        vendorMap={vendorMap}
+                        primaryVendorId={primaryVendorId}
+                        reorder={treeReorder.reorder}
+                        drag={drag}
+                      />
+                    )}
+                  />
                 </div>
               )}
+              {/* At the foot of the tree, as on the list row (#549) — reordering is done to the
+                  tree as a whole, and this is where the eye lands after reading down it. */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  paddingTop: "0.75rem",
+                }}
+              >
+                <ReorderModeButton active={treeReorder.active} onToggle={treeReorder.toggle} />
+                {treeReorder.error ? (
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-danger)" }}>
+                    {treeReorder.error}
+                  </span>
+                ) : (
+                  treeReorder.active && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Drag a stamp by its grip. A stamp only moves among its own siblings.
+                    </span>
+                  )
+                )}
+              </div>
             </DetailCard>
 
             {/* One card per checklist, for the same reason the value fields are per checklist. */}
@@ -452,6 +502,8 @@ function TreeNode({
   collectionSlug,
   vendorMap,
   primaryVendorId,
+  reorder,
+  drag,
 }: {
   node: StampTreeNodeData;
   depth: number;
@@ -461,6 +513,10 @@ function TreeNode({
   collectionSlug: string;
   vendorMap: Map<string, import("@/lib/areas").AreaCatalogEntry>;
   primaryVendorId: string | null;
+  /** Reorder mode (#549), passed down so this node's variants become a drag list of their own. */
+  reorder: StampTreeReorder | null;
+  /** This row's place in its sibling group's drag list, or null when it cannot move. */
+  drag: StampNodeDragProps | null;
 }) {
   const [hovered, setHovered] = useState(false);
   const detailPage = useDetailPageAction("stamp", node.node.stampId);
@@ -468,6 +524,7 @@ function TreeNode({
   return (
     <>
       <div
+        {...(drag?.item ?? {})}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -479,8 +536,11 @@ function TreeNode({
           borderTop: depth === 0 ? "1px solid var(--color-border)" : undefined,
           // Context, not a member of the filtered set — see the list row's own tree.
           opacity: contextIds.has(node.node.stampId) ? 0.5 : undefined,
+          ...(drag?.style ?? {}),
         }}
       >
+        {/* The grip leads the row while reordering, as it does on the list's own tree. */}
+        {reorder && <StampDragGrip drag={drag} />}
         {/* The stamp's own photo, on the stamp's own line. This is why the screen carries no
             separate issue gallery: a strip of thumbnails detached from the tree makes the reader
             match pictures to numbers by eye, which is the work the tree is already doing.
@@ -512,20 +572,27 @@ function TreeNode({
         {/* The same dimmed icon the lists carry, on the same hover rule — a row inside a detail
             card is still a row, and the way to a record should not be a different gesture here
             than it is on the list this card mirrors. */}
-        <RowQuickActions actions={[detailPage]} visible={hovered} />
+        <RowQuickActions actions={[detailPage]} visible={hovered && !reorder} />
       </div>
-      {node.children.map((child) => (
-        <TreeNode
-          key={child.node.stampId}
-          node={child}
-          depth={depth + 1}
-          contextIds={contextIds}
-          collectionId={collectionId}
-          collectionSlug={collectionSlug}
-          vendorMap={vendorMap}
-          primaryVendorId={primaryVendorId}
-        />
-      ))}
+      <StampTreeGroup
+        nodes={node.children}
+        parentStampId={node.node.stampId}
+        reorder={reorder}
+        indent={(depth + 1) * 24}
+        renderNode={({ node: child, drag: childDrag }) => (
+          <TreeNode
+            node={child}
+            depth={depth + 1}
+            contextIds={contextIds}
+            collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            vendorMap={vendorMap}
+            primaryVendorId={primaryVendorId}
+            reorder={reorder}
+            drag={childDrag}
+          />
+        )}
+      />
     </>
   );
 }
