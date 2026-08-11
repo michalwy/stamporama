@@ -14,6 +14,8 @@ import {
   deleteWant,
   findWantsSatisfiedBy,
   createWantsForMissing,
+  createWantsForIssue,
+  previewIssueMissingWants,
   loadStampWantSummaries,
   loadItemWantSummaries,
   type WantInput,
@@ -1308,5 +1310,153 @@ describe("createWantsForMissing", () => {
     const result = await createWantsForMissing(f.userId, f.collectionId, checklistId);
     assert.deepEqual(result, { created: 1, missing: 1 });
     assert.equal((await listWants(f.userId, f.collectionId)).length, 2);
+  });
+});
+
+describe("previewIssueMissingWants / createWantsForIssue", () => {
+  let f: Fixtures;
+  let issueId: string;
+  let otherIssueId: string;
+  let basicId: string;
+  let withBlockId: string;
+
+  before(async () => {
+    f = await seedFixtures(`issue-wants-${Date.now()}`);
+    const area = await prisma.collectionArea.create({
+      data: { collectionId: f.collectionId, name: "Poland" },
+    });
+    const issue = await prisma.issue.create({
+      data: { collectionId: f.collectionId, issueNo: 9401, collectionAreaId: area.id, name: "Set" },
+    });
+    issueId = issue.id;
+    const other = await prisma.issue.create({
+      data: { collectionId: f.collectionId, issueNo: 9402, collectionAreaId: area.id, name: "Other" },
+    });
+    otherIssueId = other.id;
+
+    // Two goals of one issue, overlapping on `stamp`: the union is what a bulk add is over.
+    basicId = (
+      await prisma.checklist.create({
+        data: {
+          collectionId: f.collectionId,
+          issueId,
+          name: "Basic set",
+          sortOrder: 0,
+          stamps: { create: [{ stampId: f.stamp.id }] },
+        },
+      })
+    ).id;
+    withBlockId = (
+      await prisma.checklist.create({
+        data: {
+          collectionId: f.collectionId,
+          issueId,
+          name: "With block",
+          sortOrder: 1,
+          stamps: { create: [{ stampId: f.stamp.id }, { stampId: f.otherStamp.id }] },
+        },
+      })
+    ).id;
+  });
+  after(() => cleanup(f.userId));
+
+  it("previews each checklist of the issue in its own order, gap by gap", async () => {
+    const gaps = await previewIssueMissingWants(f.userId, f.collectionId, issueId);
+    assert.deepEqual(
+      gaps.map((g) => g.name),
+      ["Basic set", "With block"]
+    );
+    assert.deepEqual(gaps[0].toCreateStampIds, [f.stamp.id]);
+    assert.deepEqual([...gaps[1].toCreateStampIds].sort(), [f.stamp.id, f.otherStamp.id].sort());
+  });
+
+  it("wants the union of the picked checklists — a stamp on both is one want", async () => {
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [
+      basicId,
+      withBlockId,
+    ]);
+    assert.deepEqual(result, { created: 2, missing: 2 });
+    const rows = await listWants(f.userId, f.collectionId);
+    assert.deepEqual(
+      [...new Set(rows.map((r) => r.stampId))].sort(),
+      [f.stamp.id, f.otherStamp.id].sort()
+    );
+    assert.equal(rows.length, 2);
+  });
+
+  it("says what is already on the list rather than writing it twice", async () => {
+    const gaps = await previewIssueMissingWants(f.userId, f.collectionId, issueId);
+    assert.deepEqual(gaps[1].missingStampIds.length, 2);
+    assert.deepEqual(gaps[1].toCreateStampIds, []);
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [withBlockId]);
+    assert.deepEqual(result, { created: 0, missing: 2 });
+    assert.equal((await listWants(f.userId, f.collectionId)).length, 2);
+  });
+
+  it("wants the same stamp again on other terms — and only once per terms", async () => {
+    const mnh = { conditionIds: [f.mnh.id], certificateStatusIds: [], formatIds: [] };
+    // The wide-open wants from the runs above are not what a want for MNH would duplicate.
+    const preview = await previewIssueMissingWants(f.userId, f.collectionId, issueId, mnh);
+    assert.deepEqual(
+      [...preview[1].toCreateStampIds].sort(),
+      [f.stamp.id, f.otherStamp.id].sort()
+    );
+
+    const first = await createWantsForIssue(
+      f.userId,
+      f.collectionId,
+      issueId,
+      [withBlockId],
+      mnh
+    );
+    assert.deepEqual(first, { created: 2, missing: 2 });
+    const rows = await listWants(f.userId, f.collectionId);
+    assert.equal(rows.length, 4);
+    assert.equal(rows.filter((r) => r.conditionIds.length === 1).length, 2);
+
+    // A second run on the *same* terms is the no-op the wide-open one is.
+    const again = await createWantsForIssue(f.userId, f.collectionId, issueId, [withBlockId], mnh);
+    assert.deepEqual(again, { created: 0, missing: 2 });
+    assert.equal((await listWants(f.userId, f.collectionId)).length, 4);
+  });
+
+  it("a held copy the terms would not take leaves the stamp missing", async () => {
+    const stamp = await prisma.stamp.create({
+      data: { collectionId: f.collectionId, name: "Stamp 311" },
+    });
+    const usedOnly = await prisma.checklist.create({
+      data: {
+        collectionId: f.collectionId,
+        issueId,
+        name: "Third",
+        sortOrder: 2,
+        stamps: { create: [{ stampId: stamp.id }] },
+      },
+    });
+    await createItem(f.userId, f.collectionId, { stampId: stamp.id, conditionId: f.used.id });
+
+    // Wide open: the used copy in the album is a copy held, so there is no gap.
+    const any = await previewIssueMissingWants(f.userId, f.collectionId, issueId);
+    assert.deepEqual(any.find((g) => g.checklistId === usedOnly.id)!.missingStampIds, []);
+
+    // For MNH it answers nothing, so the stamp is missing and a want is written.
+    const mnh = { conditionIds: [f.mnh.id], certificateStatusIds: [], formatIds: [] };
+    const gap = await previewIssueMissingWants(f.userId, f.collectionId, issueId, mnh);
+    assert.deepEqual(gap.find((g) => g.checklistId === usedOnly.id)!.toCreateStampIds, [stamp.id]);
+    const result = await createWantsForIssue(f.userId, f.collectionId, issueId, [usedOnly.id], mnh);
+    assert.deepEqual(result, { created: 1, missing: 1 });
+    const written = (await listWants(f.userId, f.collectionId)).find((r) => r.stampId === stamp.id)!;
+    assert.deepEqual(written.conditionIds, [f.mnh.id]);
+  });
+
+  it("refuses a checklist that is not this issue's — and one that is nobody's", async () => {
+    await assert.rejects(
+      () => createWantsForIssue(f.userId, f.collectionId, otherIssueId, [basicId]),
+      /No checklist of this issue/
+    );
+    await assert.rejects(
+      () => createWantsForIssue(f.userId, f.collectionId, issueId, []),
+      /No checklist of this issue/
+    );
   });
 });

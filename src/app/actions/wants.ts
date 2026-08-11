@@ -12,7 +12,10 @@ import {
   deleteWant,
   findWantsSatisfiedBy,
   createWantsForMissing,
+  createWantsForIssue,
+  previewIssueMissingWants,
   isWantPriority,
+  type IssueWantGapChecklist,
   type ArrivingCopy,
   type WantAcceptanceInput,
   type WantCreateInput,
@@ -143,6 +146,44 @@ export async function findWantsSatisfiedByAction(
 ): Promise<WantMatchForCopy[]> {
   const session = await getSession();
   return findWantsSatisfiedBy(session.user.id, collectionId, copies);
+}
+
+/** What an issue's checklists are each missing **on the stated terms**, for the bulk-add
+ *  confirmation (#548). Both halves of the gap move with the terms, so the preview is re-read
+ *  whenever they change rather than filtered in the browser. */
+export async function previewIssueMissingWantsAction(
+  collectionId: string,
+  issueId: string,
+  acceptance: WantAcceptanceInput
+): Promise<IssueWantGapChecklist[]> {
+  const session = await getSession();
+  return previewIssueMissingWants(session.user.id, collectionId, issueId, acceptance);
+}
+
+/** "Add missing to want list" for a whole issue (#548) — the checklists the collector ticked, on
+ *  the terms they chose. */
+export async function addIssueMissingToWantListAction(
+  collectionId: string,
+  issueId: string,
+  checklistIds: string[],
+  acceptance: WantAcceptanceInput
+): Promise<AddMissingWantsState> {
+  const session = await getSession();
+  try {
+    const result = await createWantsForIssue(
+      session.user.id,
+      collectionId,
+      issueId,
+      checklistIds,
+      acceptance
+    );
+    return { status: "success", ...result };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to add the missing stamps.",
+    };
+  }
 }
 
 /** "Add missing to want list" from a checklist's completeness card (ADR-0032 §6). */

@@ -224,6 +224,30 @@ open want. One-directional, so a checklist can change afterwards without touchin
 skipping stamps that already have an open want is what makes pressing it twice a no-op rather than a
 pile of duplicates.
 
+The Issue list offers the same action over a whole issue (#548), which changes the *reach* and none
+of the rules above. What it does add is a **confirmation with a count**, for the one reason the
+card's plain button does not need one: there the collector is looking at the very checklist they
+are filling, and here the row states how large the goal is but not how much of it is missing. And
+because an issue may hold several checklists (#531), the dialog asks **which** — there is no single
+"the set" of an issue that carries more than one, and a stamp on no checklist at all is an extra
+nobody is shopping for.
+
+It also carries **terms**, wide open by default. That is not a softening of the paragraph above: a
+gap still carries no acceptance criteria, and nothing is derived from it — the terms are *stated by
+the collector*, exactly as they are on the form, and the generator only stops throwing them away.
+What this settles is the question the one-shot skip rule was quietly answering wrong. "Already has
+an open want" was never the real reason to skip; the real reason is that a **second wide-open want
+beside a wide-open one says nothing the first does not**. Once terms can differ, the rule states
+itself: skip a stamp that already carries an open want **on the same terms** (`acceptanceSetsEqual`),
+so *used, for sale* and *mint, for me* are two wants on one stamp — which §1 already made a want
+per terms to express — while pressing the same button twice remains a no-op.
+
+The other half follows for the same reason: **missing** becomes "no counted copy these terms would
+take" (`wantMatchesCopy`, §7's own predicate), not "no copy at all". Holding a used copy is not a
+reason to stop looking for the mint one, and a generator that cannot say that could not fill an MNH
+run of a series half of which is already in the album. On wide-open terms both rules reduce to the
+originals exactly, which is why the completeness card's button is unchanged.
+
 ### 6b. The review belongs to arrival, not to creation
 
 §7's review first fired when a copy's **row was written**. That was right for the hand-added copy

@@ -288,6 +288,37 @@ This runs **once, when you press it**. Changing the checklist afterwards does no
 the want list, and pressing the button again adds nothing for stamps that already have an
 open want.
 
+### Straight from the Issue list
+
+The same thing, without opening the issue: an Issue row's ⋮ menu carries **Add missing to
+want list…**, and the want-list icon beside the row's other quick actions opens it too.
+
+If the issue has one checklist, the dialog simply states how many wants it is about to
+create. If it has several, it lists them with a tick each — every checklist with something
+to add starts ticked — so you can go after one goal without accepting the others. A stamp
+on two of the ticked checklists is one want, not two.
+
+Under the counts sits **Terms** — the same three acceptance sets (and the same named
+[profile](collections.md#acceptance-profiles) picker) the want form carries. Leave them
+open and you get the plain gap generator: wants that accept anything. Narrow them and the
+whole run is written on those terms — *add everything I am missing from this set, MNH*.
+
+Both figures are then read **through** the terms, which is what makes a second run over the
+same issue meaningful:
+
+- a copy you hold that the terms would not take does not count as holding it — a used copy
+  in the album leaves the stamp missing for an MNH run;
+- a stamp is skipped only when it already has an open want **on the same terms**. A
+  used-for-sale want and a mint-for-me want are two intents about one stamp, and both
+  belong on the list.
+
+So the way to end up with two wants on one stamp is to run it twice with different terms —
+and running it twice with the *same* terms still adds nothing.
+
+The counts are read fresh when the dialog opens, and again whenever you change the terms.
+The entry is unavailable on an issue with no checklists — nothing is required of it yet, so
+there is nothing to want.
+
 ## Closing versus deleting
 
 **Close** a want you have satisfied — it keeps the record that you were looking for it, and

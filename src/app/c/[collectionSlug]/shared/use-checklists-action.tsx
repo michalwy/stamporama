@@ -22,7 +22,9 @@ import type { ChecklistData } from "@/lib/checklists";
 import type { StampNodeData } from "@/lib/issues";
 import type { RowAction } from "./row-actions-menu";
 import { RowActionsMenu } from "./row-actions-menu";
-import { buildStampTree, type StampTreeNodeData } from "./issue-view";
+import { buildStampTree, type StampTreeNodeData, type VendorMap } from "./issue-view";
+import { CatalogNumberChip } from "./catalog-number-chip";
+import { STAMP_PRIMARY_CHIP, STAMP_SECONDARY_CHIP } from "./chip-styles";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/issues/use-issues-query";
 import { formatIssuedDate } from "@/app/stamp-display";
 import {
@@ -80,6 +82,12 @@ export interface ChecklistsScope {
   issueId: string;
   /** Names the issue in the dialog title. */
   issueLabel: string;
+  /** The issue's area catalog entries, resolved through its own prefix overrides (#377) — what
+   *  turns a stored `200` into the `Mi·PL 200` the composition checklist reads by (#547). */
+  vendorMap: VendorMap;
+  /** The area's leading catalog, so the chip that names the stamp is the accented one, exactly as
+   *  it is on the row this dialog was opened from. */
+  primaryVendorId: string | null;
 }
 
 /** Row-menu entry opening the checklists editor, following the `{ action, dialog }` convention so
@@ -404,6 +412,8 @@ export function ChecklistsDialog({
         <ChecklistStampsDialog
           collectionId={collectionId}
           issueId={issueId}
+          vendorMap={scope.vendorMap}
+          primaryVendorId={scope.primaryVendorId}
           checklist={editing.checklist}
           isPending={isPending}
           error={error}
@@ -454,6 +464,8 @@ export function ChecklistsDialog({
 function ChecklistStampsDialog({
   collectionId,
   issueId,
+  vendorMap,
+  primaryVendorId,
   checklist,
   isPending,
   error,
@@ -462,6 +474,8 @@ function ChecklistStampsDialog({
 }: {
   collectionId: string;
   issueId: string;
+  vendorMap: VendorMap;
+  primaryVendorId: string | null;
   checklist: ChecklistData;
   isPending: boolean;
   error?: string;
@@ -537,6 +551,8 @@ function ChecklistStampsDialog({
                   key={node.node.stampId}
                   node={node}
                   depth={0}
+                  vendorMap={vendorMap}
+                  primaryVendorId={primaryVendorId}
                   picked={picked}
                   onToggle={toggle}
                   disabled={isPending}
@@ -560,17 +576,25 @@ function ChecklistStampsDialog({
 function StampCheckRow({
   node,
   depth,
+  vendorMap,
+  primaryVendorId,
   picked,
   onToggle,
   disabled,
 }: {
   node: StampTreeNodeData;
   depth: number;
+  vendorMap: VendorMap;
+  primaryVendorId: string | null;
   picked: Set<string>;
   onToggle: (stampId: string) => void;
   disabled: boolean;
 }) {
   const stamp = node.node;
+  const primaryCN = primaryVendorId
+    ? stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null
+    : null;
+  const secondaryCNs = stamp.catalogNumbers.filter((cn) => cn !== primaryCN);
   return (
     <>
       <label
@@ -592,13 +616,41 @@ function StampCheckRow({
           onChange={() => onToggle(stamp.stampId)}
           disabled={disabled}
         />
-        <span style={{ flex: 1, minWidth: 0 }}>{stampLabel(stamp)}</span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.3rem",
+            flexWrap: "wrap",
+          }}
+        >
+          {primaryCN && (
+            <CatalogNumberChip
+              number={primaryCN.number}
+              vendor={vendorMap.get(primaryCN.catalogVendorId)}
+              style={STAMP_PRIMARY_CHIP}
+            />
+          )}
+          {secondaryCNs.map((cn) => (
+            <CatalogNumberChip
+              key={cn.catalogVendorId}
+              number={cn.number}
+              vendor={vendorMap.get(cn.catalogVendorId)}
+              style={STAMP_SECONDARY_CHIP}
+            />
+          ))}
+          {stampRest(stamp)}
+        </span>
       </label>
       {node.children.map((child) => (
         <StampCheckRow
           key={child.node.stampId}
           node={child}
           depth={depth + 1}
+          vendorMap={vendorMap}
+          primaryVendorId={primaryVendorId}
           picked={picked}
           onToggle={onToggle}
           disabled={disabled}
@@ -608,13 +660,23 @@ function StampCheckRow({
   );
 }
 
-/** Enough to tell one stamp of an issue from another: its numbers, then its name or date. Bare
- *  numbers rather than prefixed labels — every row here belongs to the same issue, so the vendor
- *  and area context is the dialog's, not the row's. */
-function stampLabel(stamp: StampNodeData): string {
-  const numbers = stamp.catalogNumbers.map((cn) => cn.number).join(" · ");
+/**
+ * What is left of a stamp's label once its numbers are chips: the name, or the issue date when it
+ * has none.
+ *
+ * The numbers used to be printed here too, bare and dot-separated, on the reading that every row
+ * belongs to one issue so the vendor is the dialog's context (#547). It is not: an issue carries a
+ * number in *each* catalogue it is listed in, so `445 · 412 · 500` was three catalogues' answers
+ * for one stamp with nothing saying which was whose. They are the same chips the issue's own rows
+ * draw (#227), which also makes the leading catalogue the accented one and each number copyable
+ * (#420) — the state this dialog is ticked against is read off those rows.
+ *
+ * A stamp with neither name nor date still gets a row worth reading when it has chips, so the
+ * "(unnamed)" fallback is only for the one that has nothing at all.
+ */
+function stampRest(stamp: StampNodeData): string | null {
   const date = formatIssuedDate(stamp.issuedDay, stamp.issuedMonth, stamp.issuedYear);
-  const rest = stamp.name ?? date ?? "";
-  if (numbers && rest) return `${numbers} — ${rest}`;
-  return numbers || rest || "(unnamed)";
+  const rest = stamp.name ?? date ?? null;
+  if (rest) return rest;
+  return stamp.catalogNumbers.length > 0 ? null : "(unnamed)";
 }

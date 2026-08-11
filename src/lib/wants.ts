@@ -17,6 +17,7 @@ import {
 import { isUnknownVariantStamp } from "./variant-classification";
 import {
   wantMatchesCopy,
+  acceptanceSetsEqual,
   wantPriorityFromRank,
   isWantPriority,
   WANT_PRIORITIES,
@@ -1282,29 +1283,194 @@ export async function createWantsForMissing(
   });
   if (!checklist) throw new Error("Checklist not found in this collection.");
 
-  const stampIds = [...new Set(checklist.stamps.map((s) => s.stampId))];
-  if (stampIds.length === 0) return { created: 0, missing: 0 };
+  const gap = await wantGapForStamps(
+    collectionId,
+    checklist.stamps.map((s) => s.stampId),
+    ANY_ACCEPTANCE
+  );
+  return writeGeneratedWants(collectionId, gap, ANY_ACCEPTANCE);
+}
 
-  const [held, openWants] = await Promise.all([
+/** "Anything will do" — the terms the completeness card's own button has always written, and the
+ *  bulk dialog's default. Every axis empty, which is what an empty set means everywhere here. */
+const ANY_ACCEPTANCE: WantAcceptanceInput = {
+  conditionIds: [],
+  certificateStatusIds: [],
+  formatIds: [],
+};
+
+/**
+ * Which of `stampIds` are missing **on these terms**, and which of those the generator would write.
+ *
+ * The two rules of ADR-0032 §6, stated once so the read that *previews* a bulk add and the write
+ * that performs it cannot disagree — and both read *through the terms*, because a generator that
+ * can be asked for MNH has to answer the two questions about MNH:
+ *
+ * - **Missing** is "no counted copy the terms would take", judged by `wantMatchesCopy` — the same
+ *   predicate the intake review runs, so a want and the copy that answers it cannot drift. With
+ *   the terms wide open every copy matches, which is the original rule unchanged.
+ * - **Already wanted** is an open want *with the same terms* (`acceptanceSetsEqual`), not any open
+ *   want at all. A second wide-open want beside a wide-open one says nothing the first does not,
+ *   and that is what the skip is for; a used-for-sale want beside a mint-for-me one is two
+ *   different intents about one stamp, which ADR-0032 §1 makes a want *per terms* to express.
+ *
+ * A closed want still skips nothing: the collector closed it, and a gap that is back is real.
+ */
+async function wantGapForStamps(
+  collectionId: string,
+  stampIds: string[],
+  acceptance: WantAcceptanceInput
+): Promise<{ missing: string[]; toCreate: string[] }> {
+  const ids = [...new Set(stampIds)];
+  if (ids.length === 0) return { missing: [], toCreate: [] };
+
+  const [copies, openWants] = await Promise.all([
     prisma.item.findMany({
-      where: countedCopiesWhere(collectionId, stampIds),
-      select: { stampId: true },
-      distinct: ["stampId"],
+      where: countedCopiesWhere(collectionId, ids),
+      select: {
+        stampId: true,
+        conditionId: true,
+        certificateStatusId: true,
+        formatId: true,
+      },
     }),
     prisma.want.findMany({
-      where: { collectionId, closedAt: null, stampId: { in: stampIds } },
-      select: { stampId: true },
+      where: { collectionId, closedAt: null, stampId: { in: ids } },
+      select: {
+        stampId: true,
+        conditions: { select: { conditionId: true } },
+        certificateStatuses: { select: { certificateStatusId: true } },
+        formats: { select: { formatId: true } },
+      },
     }),
   ]);
-  const heldStamps = new Set(held.map((h) => h.stampId));
-  const wantedStamps = new Set(openWants.map((w) => w.stampId));
 
-  const missing = stampIds.filter((id) => !heldStamps.has(id));
-  const toCreate = missing.filter((id) => !wantedStamps.has(id));
-  if (toCreate.length > 0) {
-    await prisma.want.createMany({
-      data: toCreate.map((stampId) => ({ collectionId, stampId })),
+  const satisfied = new Set(
+    copies
+      .filter((c) => wantMatchesCopy({ ...acceptance, stampId: c.stampId }, c))
+      .map((c) => c.stampId)
+  );
+  const wantedOnTheseTerms = new Set(
+    openWants
+      .filter((w) =>
+        acceptanceSetsEqual(acceptance, {
+          conditionIds: w.conditions.map((c) => c.conditionId),
+          certificateStatusIds: w.certificateStatuses.map((c) => c.certificateStatusId),
+          formatIds: w.formats.map((f) => f.formatId),
+        })
+      )
+      .map((w) => w.stampId)
+  );
+
+  const missing = ids.filter((id) => !satisfied.has(id));
+  return { missing, toCreate: missing.filter((id) => !wantedOnTheseTerms.has(id)) };
+}
+
+/** Writes one want per stamp of a gap, all on the terms the gap was taken against, and reports what
+ *  it did in the two numbers every caller says out loud: how many rows appeared, and how large the
+ *  gap was. The acceptance rows go in the same transaction as the wants, `createWant`'s shape, so a
+ *  failure halfway cannot leave a batch of wants meaning "anything" by accident. */
+async function writeGeneratedWants(
+  collectionId: string,
+  gap: { missing: string[]; toCreate: string[] },
+  acceptance: WantAcceptanceInput
+): Promise<{ created: number; missing: number }> {
+  const hasTerms =
+    acceptance.conditionIds.length > 0 ||
+    acceptance.certificateStatusIds.length > 0 ||
+    acceptance.formatIds.length > 0;
+  if (gap.toCreate.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      const wants = await tx.want.createManyAndReturn({
+        data: gap.toCreate.map((stampId) => ({ collectionId, stampId })),
+        select: { id: true },
+      });
+      // Wide-open terms are the absence of rows, so a whole-issue run on the default writes the
+      // wants alone rather than three deletes per want against tables it just did not fill.
+      if (hasTerms) for (const w of wants) await writeAcceptance(tx, w.id, acceptance);
     });
   }
-  return { created: toCreate.length, missing: missing.length };
+  return { created: gap.toCreate.length, missing: gap.missing.length };
+}
+
+/** One checklist of an issue as the bulk-add dialog needs it (#548): named, and carrying the stamp
+ *  ids behind its two numbers so the client can union a *selection* of checklists — a stamp on two
+ *  of them is one want, and counts alone cannot say that. */
+export interface IssueWantGapChecklist {
+  checklistId: string;
+  name: string;
+  /** Stamps of this checklist with no counted copy. */
+  missingStampIds: string[];
+  /** The subset of {@link missingStampIds} carrying no open want — what pressing Add would write. */
+  toCreateStampIds: string[];
+}
+
+/**
+ * The gap of every checklist of one issue (#548), for the confirmation that precedes a bulk add.
+ *
+ * Read per checklist rather than over the issue's whole membership, because the collector chooses
+ * *which goals* to shop for when an issue holds several (#531) — and an issue's optional extras are
+ * on no checklist at all, so "every stamp of the issue" was never the right set to want.
+ */
+export async function previewIssueMissingWants(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE
+): Promise<IssueWantGapChecklist[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const terms = await validateAcceptance(collectionId, acceptance);
+  const checklists = await prisma.checklist.findMany({
+    where: { collectionId, issueId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true, stamps: { select: { stampId: true } } },
+  });
+
+  // One gap query per checklist: an issue carries a handful of them, and the alternative — one
+  // query over the union, split afterwards — is the same rows read once and attributed twice.
+  return Promise.all(
+    checklists.map(async (c) => {
+      const gap = await wantGapForStamps(collectionId, c.stamps.map((s) => s.stampId), terms);
+      return {
+        checklistId: c.id,
+        name: c.name,
+        missingStampIds: gap.missing,
+        toCreateStampIds: gap.toCreate,
+      };
+    })
+  );
+}
+
+/**
+ * The bulk add itself (#548): wants for what the named checklists of one issue are missing.
+ *
+ * The gap is recomputed here over the **union** of those checklists rather than taken from the
+ * preview the collector confirmed — a stamp on two of them must not be wanted twice, and a copy
+ * that arrived while the dialog was open is a copy held. Recomputed against the same `acceptance`
+ * the preview stated its count for, since on these terms both halves of the gap are different
+ * questions than on any other.
+ */
+export async function createWantsForIssue(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  checklistIds: string[],
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE
+): Promise<{ created: number; missing: number }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const terms = await validateAcceptance(collectionId, acceptance);
+  const checklists = await prisma.checklist.findMany({
+    // Scoped by issue as well as collection: a checklist id that belongs to another issue is not a
+    // goal of the issue this was raised from, whoever sent it.
+    where: { collectionId, issueId, id: { in: checklistIds } },
+    select: { id: true, stamps: { select: { stampId: true } } },
+  });
+  if (checklists.length === 0) throw new Error("No checklist of this issue was selected.");
+
+  const gap = await wantGapForStamps(
+    collectionId,
+    checklists.flatMap((c) => c.stamps.map((s) => s.stampId)),
+    terms
+  );
+  return writeGeneratedWants(collectionId, gap, terms);
 }

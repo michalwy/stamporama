@@ -50,6 +50,7 @@ import {
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useAddWantAction } from "@/app/c/[collectionSlug]/wants/use-add-want-action";
+import { useAddIssueWantsAction } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { Icon } from "@/app/icons";
 
@@ -502,12 +503,23 @@ export function IssueRow({
   // One entry per checklist that has a total (#531): an issue may hold several goals, and there is
   // no single "the prices for this issue" to open when it does.
   const prices = useChecklistPriceActions({ collectionId, checklists: issue.checklists });
+  // Going after a whole set in one step (#548) — the bulk counterpart of the per-stamp "Add to
+  // want list" the tree under this row carries.
+  const issueWants = useAddIssueWantsAction({
+    collectionId,
+    issueId: issue.id,
+    checklistCount: issue.checklists.length,
+  });
   // The issue's checklists are edited here for the same reason its format multipliers are: the row
   // already answers which issue, and a flat collection-wide list would not (ADR-0020 §7).
   const checklists = useChecklistsAction({
     collectionId,
     issueId: issue.id,
     issueLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
+    // The composition checklist draws the same catalog chips the tree under this row does (#547),
+    // so it takes the row's own maps — already resolved through this issue's prefixes (#377).
+    vendorMap,
+    primaryVendorId,
   });
   // An issue's format multipliers are edited here rather than in Settings: the issue is the
   // narrowest anchor a factor can take, and it is the one a catalog actually prints them against.
@@ -530,6 +542,7 @@ export function IssueRow({
     { key: "add-stamp", label: "Add stamp", icon: "add", onSelect: () => callbacks.onAddStamp(issue.id) },
     { key: "add-stamp-range", label: "Add stamp range…", icon: "more", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
+    issueWants.action,
     copies.action,
     offers.action,
     ...prices.actions,
@@ -634,13 +647,22 @@ export function IssueRow({
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
 
-          {/* The issue-level counterparts: edit · add a stamp to it · add a copy. */}
+          {/* The issue-level counterparts: edit · add a stamp to it · add a copy · want the whole
+              set. The last pairs with adding a copy exactly as it does on a stamp row (#548) —
+              this one I have, that one I am after — only over a set rather than a stamp. */}
           <RowQuickActions
-            actions={pickRowActions(actions, ["detail-page", "edit", "add-stamp", "add-copy"])}
+            actions={pickRowActions(actions, [
+              "detail-page",
+              "edit",
+              "add-stamp",
+              "add-copy",
+              "add-issue-wants",
+            ])}
             visible={hovered}
           />
           <RowActionsMenu actions={actions} ariaLabel="Issue actions" />
           {addCopy.dialog}
+          {issueWants.dialog}
           {copies.dialog}
           {offers.dialog}
           {prices.dialog}
