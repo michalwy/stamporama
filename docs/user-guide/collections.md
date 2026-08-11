@@ -87,6 +87,11 @@ A few of the most-repeated actions are also reachable **without opening the menu
 - a stamp row inside the issue tree — arrow (Open stamp page), pencil (Edit), plus (Add child stamp), copy (Add copy)
 - a row on the flat **Stamps** list — arrow (Open stamp page), pencil (Edit), copy (Add copy). There is no **Add child stamp** here: variants are added from the issue tree, where you can see the stamp they belong under.
 - a row on the **Copies** list — arrow (Open copy page), pencil (Edit), stamp (Edit stamp), and both offer icons (Add to offer, Add to new offer). You will see fewer of them on screens that offer the copy fewer actions — the copies popup, for instance, keeps only the arrow, since it is read-only and going to a page is not editing anything.
+- a row on the **Offers** list — pencil (Edit) and the sell icon (Sell). There is no icon for opening the offer, because clicking the row already does that, and none for the platform listing, which the row shows as a labelled **Listing** link of its own.
+- a row on the **Purchases** list — pencil (Edit), and only that: the row opens the purchase on its own click, and deleting one is never a single click.
+- a lot on the **Auction lots** list — the circular arrow (Bid unchanged) and the contents icon (Describe contents / Contents), which are the two halves of a watchlist pass. When there is a new figure to record you type it straight into the row, so the bid-filling entries stay in the menu. A greyed-out icon still says why when you hover it — for example, there is no bid to confirm as unchanged until one has been recorded.
+
+Lists whose menus hold nothing worth promoting keep the plain **⋮**. The **Sales** list is the one such: viewing a sale is the row's own click, its transaction link is already on the row as a labelled **Transaction** chip, and deleting is destructive.
 
 The arrow appears on rows **inside** the detail pages too — the stamps of an issue, a stamp's variants and issues, the copies listed on either — so reaching a record's own screen is the same gesture wherever you meet that record.
 

@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
@@ -1384,6 +1388,19 @@ export function AuctionLotRow({
               {formatRelative(lot.endsAt, now)}
             </span>
           </Tooltip>
+          {/* The busiest menu of the set on the densest row, so the promotion is **two** icons and
+              they are the watchlist pass itself: check the listing, then either type the new figure
+              into the row — already inline, which is why no bid-fill entry is promoted — or say the
+              bid has not moved. *Contents* is the row's other outstanding work, the one the
+              **Not described** chip is about. Both entries are always present (blocked ones are
+              disabled with their hint, #273), so the pair is a constant width and cannot shunt the
+              closing time and the ⋮ about from row to row, which is what the fixed widths beside it
+              exist to prevent. *Open listing* stays out for the offer row's reason — line 1 already
+              carries it as a labelled `Listing` chip — and *Open sale* is the row's own click. */}
+          <RowQuickActions
+            actions={pickRowActions(actions, ["checked", "contents"])}
+            visible={hovered}
+          />
           <RowActionsMenu actions={actions} ariaLabel="Lot actions" />
         </div>
 

@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { Icon } from "@/app/icons";
@@ -120,7 +124,15 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             </Tooltip>
           )}
           <span style={{ flex: 1 }} />
-          <span onClick={(e) => e.stopPropagation()}>
+          {/* A three-entry menu promotes exactly one icon, and that is the point rather than a
+              disappointment: **Open** is the row's own click and **Delete** is destructive, so
+              editing the header — supplier, date, delivery status, shipping — is the only thing
+              this list repeats without opening the purchase. */}
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          >
+            <RowQuickActions actions={pickRowActions(menuActions, ["edit"])} visible={hovered} />
             <RowActionsMenu actions={menuActions} ariaLabel="Purchase actions" />
           </span>
         </div>

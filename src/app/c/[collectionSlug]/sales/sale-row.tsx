@@ -39,6 +39,11 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
   const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/sales/${sale.id}`;
 
+  // Deliberately **not** promoted onto the row (#527), unlike the offer and purchase rows beside
+  // it: every entry here is already on screen or must not be a one-click icon. *View* is the row's
+  // own click, *Open transaction* is the labelled `Transaction` chip on line 2, and *Delete* is
+  // destructive. A promotion with nothing left to promote is two dimmed icons duplicating controls
+  // the collector can already see, which is the sprawl the pattern exists to avoid.
   const menuActions: RowAction[] = [
     { key: "view", label: "View", icon: "open", onSelect: () => router.push(detailHref) },
     ...(sale.transactionUrl

@@ -15,6 +15,10 @@ import {
 } from "@/lib/offer-rules";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   OfferStateChip,
@@ -211,7 +215,16 @@ export function OfferRow({
             {offer.name ?? offer.label}
           </span>
           <span style={{ flex: 1 }} />
-          <span onClick={(e) => e.stopPropagation()}>
+          {/* The two things done to an offer *from the list*: correcting its terms, and recording
+              that it sold. Deliberately not **Open** — the row itself is the offer's door, so an
+              icon for it would aim at what the whole row already does — and deliberately not
+              **Open listing**, which line 2 already carries as a labelled `Listing` chip: a
+              promotion is a shortcut past the menu, not a second copy of a control on the row. */}
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          >
+            <RowQuickActions actions={pickRowActions(menuActions, ["edit", "sell"])} visible={hovered} />
             <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
           </span>
         </div>
