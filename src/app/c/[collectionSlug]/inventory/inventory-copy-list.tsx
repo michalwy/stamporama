@@ -63,6 +63,10 @@ export interface CopyRowActions {
   /** When provided, each eligible row gains an "Add to new offer" action that skips the offer
    * picker and opens offer creation seeded with the copy (#277). */
   onAddToNewOffer?: (item: ItemListItem) => void;
+  /** Set while quick offer mode is armed (#537): the entry above creates the offer outright, on
+   * this platform in this status, so it names both rather than reading as an invitation to a dialog
+   * that will not open. */
+  quickOffer?: { platformName: string; stateLabel: string };
   /** When provided, each row gains a "View offers" action opening the read-only popup of every
    * offer that references the copy (#276). */
   onViewOffers?: (item: ItemListItem) => void;
@@ -142,6 +146,7 @@ export function InventoryCopyList({
   onDelete,
   onAddToOffer,
   onAddToNewOffer,
+  quickOffer,
   onViewOffers,
   onViewPurchase,
   onDispose,
@@ -185,6 +190,7 @@ export function InventoryCopyList({
             onDelete={onDelete}
             onAddToOffer={onAddToOffer}
             onAddToNewOffer={onAddToNewOffer}
+            quickOffer={quickOffer}
             onViewOffers={onViewOffers}
             onViewPurchase={onViewPurchase}
             onDispose={onDispose}

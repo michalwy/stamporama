@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { CopyGroupRow } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
@@ -107,6 +106,8 @@ export function DuplicateGroupRow({
   primaryVendorId,
   vendorMap,
   isLast,
+  open,
+  onToggle,
   selection,
   rowActions,
 }: {
@@ -122,6 +123,9 @@ export function DuplicateGroupRow({
   primaryVendorId: string | null;
   vendorMap: Map<string, AreaCatalogEntry>;
   isLast: boolean;
+  /** Owned by the panel (#538), so Expand all / Collapse all can speak for the whole list. */
+  open: boolean;
+  onToggle: () => void;
   /** The panel's multi-select (#373), shared with the flat list: the group's members carry the very
    * same checkboxes, and the group row's quick select-all feeds this state rather than a flow of its
    * own (#398). */
@@ -130,8 +134,6 @@ export function DuplicateGroupRow({
    * Grouping is a way of *reading* the stock, not a mode with fewer things one may do to a copy. */
   rowActions?: CopyRowActions;
 }) {
-  const [open, setOpen] = useState(false);
-
   const memberFilters = groupMemberFilters(group, axes, baseFilters);
   const {
     members,
@@ -149,7 +151,11 @@ export function DuplicateGroupRow({
     selection,
     axes,
     wanted: open,
-    onWant: () => setOpen(true),
+    // A select-all wants the copies on screen; with the row already open there is nothing to do,
+    // and toggling would shut it.
+    onWant: () => {
+      if (!open) onToggle();
+    },
   });
 
   const primaryCN = primaryVendorId
@@ -165,7 +171,7 @@ export function DuplicateGroupRow({
   return (
     <CopyGroupShell
       open={open}
-      onToggle={() => setOpen((o) => !o)}
+      onToggle={onToggle}
       isLast={isLast}
       // One click ticks the whole bag of copies (#422) — the shortcut #398 introduced, moved out of
       // the ⋮ menu into the gutter the member copies' own boxes sit in.

@@ -720,6 +720,36 @@ The same checkboxes are on the copies inside an expanded [duplicate group](#grou
 a group row can tick all of its copies at once — see [Listing a group's
 copies](#listing-a-groups-copies).
 
+### Quick offer mode
+
+Listing a hundred and seventy-eight copies one at a time means a hundred and seventy-eight trips
+through the create form, each asking for the same platform and the same status. **Quick offer mode**
+sets those once and takes the form out of the loop.
+
+Press **Quick offer mode** at the top of the list. A bar appears above the rows with two things in
+it:
+
+- **Platform** — which marketplace these offers are listed on.
+- **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
+
+From then on, every **Add to new offer** — the entry in a copy's **⋮** menu, its promoted icon on the
+row, and the **New offer** buttons in the selection bar — creates the offer **straight away**, with
+no dialog. The menu entry says so while the mode is on: it reads *New offer on Colnect* rather than
+*Add to new offer*. The bar counts what the pass has created so far, and reports anything that failed.
+
+The new offers carry **no asking price and no listing URL**. That is the point: the pass is about
+getting the listings made, and both of those belong on the offer's own screen once the listing
+exists. If you want the price filled in from the copy's catalog value, use the ordinary
+[create form](#the-new-offer-shortcuts) instead — quick mode is for the bulk case.
+
+Press **Done** (or the button at the top again) to leave. Two things to know:
+
+- The mode is **not remembered**. It is off every time you open the list, so a click can never list
+  something without asking on a screen you have just opened.
+- A platform with **no currency set** cannot be used here — its currency is fixed the first time
+  something is listed on it, and that choice belongs in the create form. The bar says so, and the
+  ordinary dialog stays in effect until you pick a platform that has one.
+
 ## Copying a catalog number
 
 Every catalog-number chip in the app — on this list, the Stamps and Issues lists, the pickers, the
@@ -745,6 +775,12 @@ different questions:
 Only one can be in effect, and the choice is remembered per collection. Every group row works the
 same way: the count leads it, the **caret** expands it into the copies underneath, and the **checkbox** in
 front of it ticks all of them at once.
+
+**Expand all** above the list opens every group at once, and reads **Collapse all** once they are
+open. Opening a group loads the copies under it, so this is a real request rather than a display
+toggle — on a long list it is worth pressing when you actually want to read through the copies. The
+list keeps scrolling as you go, and groups that arrive after you pressed **Expand all** come in open
+too. Switching to a different grouping starts collapsed again.
 
 The copies inside an expanded group are **ordinary copy rows**, and they carry the ordinary **⋮**
 menu — Edit, Add to offer, No longer held and the rest, exactly as they do with no grouping on. A

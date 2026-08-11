@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueGroupRow as IssueGroupRowData } from "@/lib/items";
@@ -50,6 +49,8 @@ export function IssueGroupRow({
   locations,
   baseCurrency,
   isLast,
+  open,
+  onToggle,
   selection,
   rowActions,
 }: {
@@ -62,13 +63,14 @@ export function IssueGroupRow({
   locations: LocationData[];
   baseCurrency: string;
   isLast: boolean;
+  /** Owned by the panel (#538), so Expand all / Collapse all can speak for the whole list. */
+  open: boolean;
+  onToggle: () => void;
   selection: CopySelection;
   /** The member rows' own `⋮` menu (#125/#516) — the very actions the ungrouped list offers.
    * Grouping is a way of *reading* the stock, not a mode with fewer things one may do to a copy. */
   rowActions?: CopyRowActions;
 }) {
-  const [open, setOpen] = useState(false);
-
   const memberFilters = issueGroupMemberFilters(group, baseFilters);
   const {
     members,
@@ -84,7 +86,11 @@ export function IssueGroupRow({
     memberFilters,
     selection,
     wanted: open,
-    onWant: () => setOpen(true),
+    // A select-all wants the copies on screen; with the row already open there is nothing to do, and
+    // toggling would shut it.
+    onWant: () => {
+      if (!open) onToggle();
+    },
   });
 
   const named = group.issueId !== null;
@@ -92,7 +98,7 @@ export function IssueGroupRow({
   return (
     <CopyGroupShell
       open={open}
-      onToggle={() => setOpen((o) => !o)}
+      onToggle={onToggle}
       isLast={isLast}
       selectAll={{
         checked: allSelected,

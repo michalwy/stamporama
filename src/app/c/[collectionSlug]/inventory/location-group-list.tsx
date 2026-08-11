@@ -8,6 +8,7 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { LocationGroupRow } from "./location-group-row";
 import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
+import type { GroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
 
 /**
  * The Copies list grouped by where its copies are filed (#421) — one row per location, or per
@@ -25,6 +26,7 @@ export function LocationGroupList({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  expansion,
   selection,
   rowActions,
 }: {
@@ -38,6 +40,8 @@ export function LocationGroupList({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
+  /** Which group rows are open (#538) — panel state, so one control operates the whole list. */
+  expansion: GroupExpansion;
   selection: CopySelection;
   /** The member rows' own `⋮` menu (#125/#516), threaded down to every group's copies: a
    * grouping decides what a row is listed *under*, never what may be done to it. */
@@ -56,6 +60,8 @@ export function LocationGroupList({
           locations={locations}
           baseCurrency={baseCurrency}
           isLast={idx === groups.length - 1 && !hasNextPage}
+          open={expansion.isExpanded(group.key)}
+          onToggle={() => expansion.toggle(group.key)}
           selection={selection}
           rowActions={rowActions}
         />

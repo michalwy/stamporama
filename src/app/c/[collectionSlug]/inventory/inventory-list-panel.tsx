@@ -28,7 +28,12 @@ import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { IssueFilterAutocomplete } from "@/app/c/[collectionSlug]/stamps/issue-filter-autocomplete";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
-import { useStampConditionCollisions } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import {
+  useStampConditionCollisions,
+  useInvalidateOffers,
+} from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
+import { QuickOfferBar } from "./quick-offer-bar";
 import {
   useInventoryItemsInfinite,
   useCopyGroupsInfinite,
@@ -42,6 +47,7 @@ import {
   type InventoryYearFacetFilters,
 } from "./use-inventory-query";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
+import { useGroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
 import { InventoryCopyList, type CopyRowActions } from "./inventory-copy-list";
@@ -499,6 +505,24 @@ export function InventoryListPanel({
     [issueGroupsQuery.data]
   );
 
+  // Which group rows are open (#538). One state for all three groupings — exactly one is ever on
+  // screen, and keying it on `groupMode` is what drops it when the list becomes a different list.
+  // Held at the panel so the Expand all / Collapse all control can speak for the whole list, the
+  // call `useCardExpansion` (#382) makes for the lot / set cards on the detail screens.
+  const groupKeys = useMemo(
+    () =>
+      (groupDuplicates
+        ? allGroups
+        : locationGroupBy
+          ? allLocationGroups
+          : groupIssues
+            ? allIssueGroups
+            : []
+      ).map((g) => g.key),
+    [groupDuplicates, locationGroupBy, groupIssues, allGroups, allLocationGroups, allIssueGroups]
+  );
+  const groupExpansion = useGroupExpansion(groupKeys, groupMode);
+
   // Multi-select (#373). Restricted to copies that can actually be listed — for sale and in hand,
   // the offer composition picker's own eligibility. The selection is keyed on the filter set and
   // reset when it changes (adjusted during render, never a `setState` in an effect): a selection
@@ -566,6 +590,70 @@ export function InventoryListPanel({
     },
     [collectionId, invalidateList, clearSelection]
   );
+  /* ── Quick offer mode (#537) ───────────────────────────────────────────────────────────────────
+   * A listing pass over many near-identical copies: the platform and the starting status are set
+   * once in the bar, and every "Add to new offer" from then on creates the offer without the create
+   * dialog. Not persisted, deliberately — see `QuickOfferBar`: a mode that skips a confirmation must
+   * never be in force on a screen the collector has just opened.
+   */
+  const [quickOffer, setQuickOffer] = useState(false);
+  const [quickPlatformId, setQuickPlatformId] = useState("");
+  const [quickState, setQuickState] = useState<OfferState>("preparing");
+  const [quickCreated, setQuickCreated] = useState(0);
+  const [quickError, setQuickError] = useState<string | undefined>();
+  const { invalidateAll: invalidateOffers } = useInvalidateOffers();
+  const quickPlatform = useMemo(
+    () => offerPlatforms.find((p) => p.id === quickPlatformId) ?? null,
+    [offerPlatforms, quickPlatformId]
+  );
+  // Armed only once the bar carries a platform that can actually take an offer: its currency is
+  // fixed at the platform (#196) and choosing one belongs in the create form, so a platform without
+  // one falls back to the ordinary dialog rather than failing per click.
+  const quickOfferActive = quickOffer && !!quickPlatform?.platformCurrency;
+
+  /** Create one offer from `items`, seeded with them, using the bar's platform and status (#537).
+   * `perCopy` splits several copies into one single-copy set each — the same packaging choice the
+   * dialog's footer carries, made here by which button was pressed (#497). No price and no URL: the
+   * pass is about getting the listings *made*, and both land on the offer's own screen afterwards. */
+  const createQuickOffer = useCallback(
+    (items: ItemListItem[], perCopy: boolean) => {
+      if (!quickPlatform) return;
+      setQuickError(undefined);
+      startTransition(async () => {
+        const formData = new FormData();
+        formData.set("platformId", quickPlatform.id);
+        formData.set("state", quickState);
+        const { createOfferAction } = await import("@/app/actions/offers");
+        const created = await createOfferAction(
+          collectionId,
+          formData,
+          items.map((i) => i.id),
+          perCopy && items.length > 1
+        );
+        if (created.status !== "success") {
+          setQuickError(created.message);
+          return;
+        }
+        rememberPlatform(quickPlatform.id);
+        setQuickCreated((n) => n + 1);
+        invalidateOffers(collectionId);
+        invalidateList(collectionId);
+        // Same rule as every other bulk act on this list: what has been dealt with is unticked, so
+        // the next press of the same button cannot list it twice.
+        clearSelection();
+      });
+    },
+    [
+      quickPlatform,
+      quickState,
+      collectionId,
+      rememberPlatform,
+      invalidateOffers,
+      invalidateList,
+      clearSelection,
+    ]
+  );
+
   // The stamp × condition conflict for the selection (#513): live offers on the platform in scope
   // that already list one of these stamps in this condition — which Colnect refuses a second time.
   // Only asked while a platform *is* in scope (#506's shared reading of the platform filter): a
@@ -667,7 +755,17 @@ export function InventoryListPanel({
       onViewHistory: (it) => setDialog({ kind: "history", item: it }),
       onDelete: (it) => setDialog({ kind: "delete", item: it }),
       onAddToOffer: (it) => setDialog({ kind: "addToOffer", items: [it] }),
-      onAddToNewOffer: (it) => setDialog({ kind: "addToNewOffer", items: [it] }),
+      // In quick offer mode (#537) this is the whole act: one click, one offer, no dialog.
+      onAddToNewOffer: (it) =>
+        quickOfferActive
+          ? createQuickOffer([it], false)
+          : setDialog({ kind: "addToNewOffer", items: [it] }),
+      // …and the entry says so, since a menu that reads the same in both modes would be the only
+      // thing on screen not admitting which one is in force.
+      quickOffer:
+        quickOfferActive && quickPlatform
+          ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
+          : undefined,
       onViewOffers: (it) => setDialog({ kind: "viewOffers", item: it }),
       onViewPurchase: (it) =>
         it.purchase &&
@@ -679,7 +777,16 @@ export function InventoryListPanel({
         applyPlatformExclusion([it], platformId, excluded, false),
       onSetCatalogPrice: (it) => setDialog({ kind: "quickPrice", item: it }),
     }),
-    [router, collectionSlug, scopedPlatform, applyPlatformExclusion]
+    [
+      router,
+      collectionSlug,
+      scopedPlatform,
+      applyPlatformExclusion,
+      quickOfferActive,
+      quickPlatform,
+      quickState,
+      createQuickOffer,
+    ]
   );
 
   const hasActiveFilters =
@@ -711,23 +818,74 @@ export function InventoryListPanel({
         }}
       >
         <HoldingsSummaryBar total={holdingsTotal} />
-        <button
-          type="button"
-          onClick={() => setDialog({ kind: "add" })}
+        {/* The header's actions, as **one** right-aligned group. Two siblings each carrying their
+            own `marginLeft: auto` is not that — auto margins consume the free space *before*
+            `space-between` does and share it equally, which left Quick offer mode adrift in the
+            middle of the header instead of beside Add copy. */}
+        <div
           style={{
-            ...CONTROL_STYLE,
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "#fff",
-            background: "var(--color-action-primary)",
-            border: "none",
-            padding: "0.375rem 0.875rem",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "0.5rem",
             marginLeft: "auto",
             flexShrink: 0,
           }}
         >
-          Add copy
-        </button>
+          {/* Quick offer mode (#537). Offered only where there is a platform to list on, and armed
+              from here rather than from the filter toolbar: it is a way of *working through* the
+              list, not a way of narrowing it — so it belongs beside Add copy, with the screen's
+              other actions. Switching it on seeds the platform from the same signal the create
+              dialog uses: the worklist filter, else the last platform listed on. */}
+          {offerPlatforms.length > 0 && (
+            <Tooltip content="Set the platform and status once, then every “Add to new offer” creates the offer on the spot — for listing many copies in one pass.">
+              <button
+                type="button"
+                onClick={() => {
+                  if (quickOffer) {
+                    setQuickOffer(false);
+                    return;
+                  }
+                  setQuickPlatformId(
+                    (prev) => prev || preferredPlatform?.id || offerPlatforms[0]?.id || ""
+                  );
+                  setQuickCreated(0);
+                  setQuickError(undefined);
+                  setQuickOffer(true);
+                }}
+                style={{
+                  ...CONTROL_STYLE,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  // Weight and border width are held constant across the two states: this is a
+                  // button one presses and unpresses, and a label that thickens on click re-lays the
+                  // whole header out under the cursor. Only the colours say which state it is in.
+                  fontWeight: 600,
+                  color: quickOffer ? "var(--color-accent)" : "var(--color-text-secondary)",
+                  borderColor: quickOffer ? "var(--color-accent)" : "var(--color-border-strong)",
+                  background: quickOffer ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                }}
+              >
+                <Icon name="newOffer" size="sm" /> Quick offer mode
+              </button>
+            </Tooltip>
+          )}
+          <button
+            type="button"
+            onClick={() => setDialog({ kind: "add" })}
+            style={{
+              ...CONTROL_STYLE,
+              cursor: "pointer",
+              fontWeight: 600,
+              color: "#fff",
+              background: "var(--color-action-primary)",
+              border: "none",
+              padding: "0.375rem 0.875rem",
+              flexShrink: 0,
+            }}
+          >
+            Add copy
+          </button>
+        </div>
       </div>
 
       {/* Sidebar + list, mirroring the stamps list layout (#106) */}
@@ -920,11 +1078,24 @@ export function InventoryListPanel({
                       </Tooltip>
                     )}
                     {newOfferShortcuts(selectedCopies.length).map(({ packaging, label, hint }) => (
-                      <Tooltip key={packaging} content={hint}>
+                      <Tooltip
+                        key={packaging}
+                        content={
+                          quickOfferActive && quickPlatform
+                            ? `${hint} Created straight away on ${quickPlatform.name} as ${OFFER_STATE_LABEL[quickState]}, with no dialog.`
+                            : hint
+                        }
+                      >
                         <button
                           type="button"
                           onClick={() =>
-                            setDialog({ kind: "addToNewOffer", items: selectedCopies, packaging })
+                            quickOfferActive
+                              ? createQuickOffer(selectedCopies, packaging === "per-copy")
+                              : setDialog({
+                                  kind: "addToNewOffer",
+                                  items: selectedCopies,
+                                  packaging,
+                                })
                           }
                           style={{
                             ...CONTROL_STYLE,
@@ -1334,6 +1505,22 @@ export function InventoryListPanel({
             </div>
           </ListToolbar>
 
+          {/* The mode's parameters, and the only thing on screen that says a click will now list
+              something without asking (#537). Directly above the rows it acts on. */}
+          {quickOffer && (
+            <QuickOfferBar
+              platforms={offerPlatforms}
+              platformId={quickPlatformId}
+              onPlatformIdChange={setQuickPlatformId}
+              state={quickState}
+              onStateChange={setQuickState}
+              created={quickCreated}
+              error={quickError}
+              isPending={isPending}
+              onExit={() => setQuickOffer(false)}
+            />
+          )}
+
           {/* A platform-exclusion write that failed (#506) has no dialog to report into, so it
               reports here, directly above the rows it did not change. */}
           {exclusionError && (
@@ -1383,6 +1570,47 @@ export function InventoryListPanel({
             </div>
           )}
 
+          {/* Expand all / Collapse all (#538), mirroring the control the detail screens' lot and
+              set cards carry (#202/#382) — and placed as they place it: on its own line directly
+              above the rows it operates, right-aligned. It is not a filter and does not belong among
+              them; in the toolbar it read as one more way of narrowing the list. Absent without
+              grouping, the flat list having nothing to open. Opening a group fetches its copies, so
+              this is a real request rather than a display toggle, and the label says which way it
+              goes next. */}
+          {!flatList && groupKeys.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                padding: "0.5rem 1.25rem 0.25rem",
+              }}
+            >
+              <Tooltip
+                content={
+                  groupExpansion.allExpanded
+                    ? "Close every group, back to one line each."
+                    : "Open every group and load the copies under it."
+                }
+              >
+                <button
+                  type="button"
+                  onClick={groupExpansion.toggleAll}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  {groupExpansion.allExpanded ? "Collapse all" : "Expand all"}
+                </button>
+              </Tooltip>
+            </div>
+          )}
+
           {groupDuplicates && allGroups.length > 0 && (
             <div style={{ flex: 1 }}>
               <DuplicateGroupList
@@ -1396,6 +1624,7 @@ export function InventoryListPanel({
                 hasNextPage={!!groupsQuery.hasNextPage}
                 isFetchingNextPage={groupsQuery.isFetchingNextPage}
                 onLoadMore={groupsQuery.fetchNextPage}
+                expansion={groupExpansion}
                 selection={copySelection}
                 rowActions={rowActions}
               />
@@ -1415,6 +1644,7 @@ export function InventoryListPanel({
                 hasNextPage={!!locationGroupsQuery.hasNextPage}
                 isFetchingNextPage={locationGroupsQuery.isFetchingNextPage}
                 onLoadMore={locationGroupsQuery.fetchNextPage}
+                expansion={groupExpansion}
                 selection={copySelection}
                 rowActions={rowActions}
               />
@@ -1433,6 +1663,7 @@ export function InventoryListPanel({
                 hasNextPage={!!issueGroupsQuery.hasNextPage}
                 isFetchingNextPage={issueGroupsQuery.isFetchingNextPage}
                 onLoadMore={issueGroupsQuery.fetchNextPage}
+                expansion={groupExpansion}
                 selection={copySelection}
                 rowActions={rowActions}
               />

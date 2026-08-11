@@ -9,6 +9,7 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { DuplicateGroupRow } from "./duplicate-group-row";
 import type { CopyRowActions, CopySelection } from "./inventory-copy-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
+import type { GroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
 
 
 /**
@@ -27,6 +28,7 @@ export function DuplicateGroupList({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  expansion,
   selection,
   rowActions,
 }: {
@@ -40,6 +42,8 @@ export function DuplicateGroupList({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
+  /** Which group rows are open (#538) — panel state, so one control operates the whole list. */
+  expansion: GroupExpansion;
   /** The panel's multi-select (#373), threaded down to every group's member rows (#398). */
   selection: CopySelection;
   /** The member rows' own `⋮` menu (#125/#516), threaded down to every group's copies: a
@@ -65,6 +69,8 @@ export function DuplicateGroupList({
             primaryVendorId={areaId ? (primaryVendorByArea.get(areaId) ?? null) : null}
             vendorMap={vendorMapFor(areaId, group.issueId)}
             isLast={idx === groups.length - 1 && !hasNextPage}
+            open={expansion.isExpanded(group.key)}
+            onToggle={() => expansion.toggle(group.key)}
             selection={selection}
             rowActions={rowActions}
           />

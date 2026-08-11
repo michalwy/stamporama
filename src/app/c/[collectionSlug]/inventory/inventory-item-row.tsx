@@ -352,6 +352,9 @@ interface InventoryItemRowProps {
   /** When provided, adds an "Add to new offer" menu entry beside "Add to offer" (same eligibility),
    * jumping straight into offer creation seeded with this copy, skipping the picker (#277). */
   onAddToNewOffer?: (item: ItemListItem) => void;
+  /** Set while quick offer mode is armed (#537): the entry above creates the offer outright rather
+   * than opening the create dialog, so it names the platform and status it will use. */
+  quickOffer?: { platformName: string; stateLabel: string };
   /** When provided, adds a "Go to purchase" menu entry on a copy that came from a purchase order
    * (#387). Shown **only** when the copy has one: a copy entered by hand was never bought through
    * an order, so there is no precondition to explain — nothing on the row promises otherwise. */
@@ -399,6 +402,7 @@ export function InventoryItemRow({
   onDelete,
   onAddToOffer,
   onAddToNewOffer,
+  quickOffer,
   onViewOffers,
   onViewPurchase,
   onDispose,
@@ -492,10 +496,16 @@ export function InventoryItemRow({
     ...(onAddToNewOffer && item.forSale
       ? [{
           key: "add-to-new-offer",
-          label: "Add to new offer",
+          label: quickOffer ? `New offer on ${quickOffer.platformName}` : "Add to new offer",
           icon: "newOffer",
           disabled: !listable,
-          hint: offerHint,
+          // The blocked reason still wins: a copy that cannot be listed is why the entry is dead,
+          // and the mode is beside the point on it.
+          hint: !listable
+            ? offerHint
+            : quickOffer
+              ? `Created straight away as ${quickOffer.stateLabel}, with no dialog.`
+              : offerHint,
           onSelect: () => onAddToNewOffer(item),
         } as RowAction]
       : []),
