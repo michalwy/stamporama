@@ -132,6 +132,31 @@ export function PlatformSaleChip({
   );
 }
 
+/**
+ * The live listing no longer says what this record says (#542).
+ *
+ * Raised on an offer that is **up** — active or paused — whose composition, stated price or texts
+ * have changed since it went there, and cleared when the change is pushed back (an Assistant update,
+ * #462) or the collector says it has been. It is the answer to the question #513 created: a set was
+ * added to an offer that already existed, and the entry on the marketplace still sells the old one.
+ *
+ * `warning`-tinted, not `error`, and that is the whole grading. Nothing here is committed to a buyer
+ * and nothing is at risk of a double sale — the three error-tinted chips are all stock promised in a
+ * place the app cannot see. This is a listing that is merely *wrong*, which costs a sale rather than
+ * a rating, and which the collector fixes when they next sit down to their marketplace tabs. Tinting
+ * it like a double sale would teach them to stop reading the colour.
+ */
+export function ListingOutOfDateChip({ since }: { since: Date | string | null }) {
+  const day = since ? new Date(since) : null;
+  return tinted(
+    "warning",
+    "Changed since listed",
+    `This offer has changed${
+      day && !Number.isNaN(day.getTime()) ? ` since ${day.toLocaleDateString()}` : ""
+    } and the live listing has not been updated — re-post it, or mark it up to date`
+  );
+}
+
 /** "In active bidding" (#215): an auction bid has been placed on this offer, committing the
  * collector before the sale is actually recorded. */
 export function InActiveBiddingChip() {

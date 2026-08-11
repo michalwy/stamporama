@@ -2,6 +2,7 @@ import "server-only";
 import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
 import {
   offersNeedingAction,
+  offersWithChangedListing,
   offersWithEndedAuction,
   offersWithObservedBidding,
   offersWithPlatformSale,
@@ -65,7 +66,8 @@ export type ActionItemGroupId =
   | "offer-bid-withdrawn"
   | "offer-auction-ended"
   | "offer-platform-sale"
-  | "offer-platform-sale-conflict";
+  | "offer-platform-sale-conflict"
+  | "offer-listing-changed";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -416,6 +418,50 @@ const platformSaleProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * Live listings changed since they were posted (#542).
+ *
+ * The other half of *Needs action*: `offer-sold-elsewhere` is a listing selling something that has
+ * gone, this is a listing selling something that has changed. Both are a marketplace entry that no
+ * longer describes the goods, and both are only ever put right by the collector going back to the
+ * platform — which is exactly why the offers list gave them one chip rather than two.
+ *
+ * `warning`, one grade below that pair, and the line is the same one drawn everywhere else here: no
+ * double sale is possible. A wrong listing costs a sale, or sells at a figure you have since moved —
+ * real money, and it can still be put right, which is how a lot closing tonight is graded too. What
+ * makes it worth a row at all is that **nothing else will ever mention it**: no marketplace tells
+ * this app its listing is stale, and the flag has no expiry, so a listing left wrong stays wrong
+ * until somebody looks.
+ *
+ * A **backlog rather than news**, so unlike the notice groups it is read oldest-divergence-first and
+ * the row's instant is when it started diverging, not when it was last touched.
+ */
+const listingChangedProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const changed = await offersWithChangedListing(ownerId, collectionId, limit);
+    return [
+      {
+        id: "offer-listing-changed" as const,
+        title: "Changed since listed",
+        severity: "warning" as const,
+        count: changed.total,
+        items: changed.offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          // A paused listing is still on the platform — which is why it is flagged at all — but it
+          // is not in front of buyers this minute, and that changes how urgent the row is.
+          detail: `${offer.platformName}${offer.state === "paused" ? " · paused" : ""}`,
+          at: offer.changedAt.toISOString(),
+          href: `offers/${offer.offerId}`,
+        })),
+        // Its own narrowing rather than `needsAction=1`: the chip on the list selects both problems
+        // (#542), and "see all" landing on a mixed list would not be the set this row counted.
+        href: "offers?listingOutOfDate=1",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
 const PROVIDERS: ActionItemProvider[] = [
@@ -425,6 +471,7 @@ const PROVIDERS: ActionItemProvider[] = [
   biddingProviders,
   endedAuctionProvider,
   platformSaleProvider,
+  listingChangedProvider,
 ];
 
 /**

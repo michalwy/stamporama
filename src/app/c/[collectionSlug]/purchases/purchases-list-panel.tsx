@@ -14,6 +14,7 @@ import {
 } from "./use-purchases-query";
 import { PurchaseFormDialog } from "./purchase-form-dialog";
 import { PurchaseRow } from "./purchase-row";
+import { useToast } from "@/app/toast-provider";
 
 type DialogState =
   | { kind: "none" }
@@ -108,6 +109,11 @@ export function PurchasesListPanel({
     // A save may have created a supplier / platform on the fly; refresh the pickers' cache.
     invalidateContacts(collectionId);
   }
+
+  // Confirmation toasts (#541). Creation is *not* one of them: it navigates straight to the new
+  // purchase (#139), and arriving on the thing you made is a better confirmation than a note saying
+  // you made it. What gets a toast is the edit and the delete, both of which leave you on the list.
+  const { toast } = useToast();
 
   const hasActiveFilters = !!status;
 
@@ -265,9 +271,16 @@ export function PurchasesListPanel({
                 } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updatePurchaseAction } = await import("@/app/actions/purchases");
-                const result = await updatePurchaseAction(dialog.purchase.id, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                const purchaseId = dialog.purchase.id;
+                const result = await updatePurchaseAction(purchaseId, fd);
+                if (result.status === "success") {
+                  handleSuccess();
+                  toast({
+                    message: "Purchase saved",
+                    href: `/c/${collectionSlug}/purchases/${purchaseId}`,
+                    linkLabel: "Open purchase",
+                  });
+                } else if (result.status === "error") setActionError(result.message);
               }
             });
           }}
@@ -289,8 +302,10 @@ export function PurchasesListPanel({
             startTransition(async () => {
               const { deletePurchaseAction } = await import("@/app/actions/purchases");
               const result = await deletePurchaseAction(dialog.purchase.id);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: "Purchase deleted" });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />

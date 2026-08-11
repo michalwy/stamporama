@@ -25,6 +25,7 @@ import {
 import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
 import { AddStampRangeDialog } from "./add-stamp-range-dialog";
 import { MergeIssueDialog } from "./merge-issue-dialog";
+import { useToast } from "@/app/toast-provider";
 import { RangeExtendedDialog } from "./range-extended-dialog";
 import type { IssueListItem, IssueSortBy, StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -388,6 +389,14 @@ export function IssuesListPanel({
     router.push(`/c/${collectionSlug}/issues${qs ? `?${qs}` : ""}`);
   }
 
+  // Confirmation toasts (#541). This screen is a tree scoped to one area, and its three most
+  // consequential actions — move to another area, merge into another issue, delete — take the issue
+  // out of the branch the collector is looking at. The link matters most there: the issue still
+  // exists, it is simply somewhere else, and the toast is the way back to it.
+  const { toast } = useToast();
+
+  const issueHref = (issueId: string) => `/c/${collectionSlug}/issues/${issueId}`;
+
   function handleCreateIssueSubmit(areaId: string, fd: FormData) {
     startTransition(async () => {
       const result = await createIssueAction(collectionId, areaId, fd);
@@ -395,6 +404,12 @@ export function IssuesListPanel({
       if (result.status === "success") {
         if (result.issueId) setAutoExpandIssueId(result.issueId);
         handleSuccess();
+        toast({
+          message: `${(fd.get("name") as string) || "Issue"} created`,
+          ...(result.issueId
+            ? { href: issueHref(result.issueId), linkLabel: "Open issue" }
+            : {}),
+        });
       }
     });
   }
@@ -592,9 +607,17 @@ export function IssuesListPanel({
           onClose={closeDialog}
           onSubmit={(fd) => {
             startTransition(async () => {
-              const result = await updateIssueAction(collectionId, dialog.issue.id, fd);
+              const issueId = dialog.issue.id;
+              const result = await updateIssueAction(collectionId, issueId, fd);
               setActionState(result);
-              if (result.status === "success") handleSuccess();
+              if (result.status === "success") {
+                handleSuccess();
+                toast({
+                  message: `${(fd.get("name") as string) || "Issue"} saved`,
+                  href: issueHref(issueId),
+                  linkLabel: "Open issue",
+                });
+              }
             });
           }}
         />
@@ -610,12 +633,16 @@ export function IssuesListPanel({
           onClose={closeDialog}
           onConfirm={() => {
             startTransition(async () => {
+              const name = dialog.issue.name ?? "Issue";
               const result = await deleteIssueAction(
                 collectionId,
                 dialog.issue.id
               );
               setActionState(result);
-              if (result.status === "success") handleSuccess();
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: `${name} deleted` });
+              }
             });
           }}
         />
@@ -745,7 +772,16 @@ export function IssuesListPanel({
               );
               setActionState(result);
               if (result.status === "success") {
-                handleStampSuccess(dialog.issue.id);
+                const issueId = dialog.issue.id;
+                handleStampSuccess(issueId);
+                // The one toast on this screen that is genuinely load-bearing: the issue has just
+                // left the area branch on screen, so without the link there is no way back to it
+                // short of finding it again.
+                toast({
+                  message: `${dialog.issue.name ?? "Issue"} moved to another area`,
+                  href: issueHref(issueId),
+                  linkLabel: "Open issue",
+                });
               }
             })
           }
@@ -816,7 +852,13 @@ export function IssuesListPanel({
                     invalidateMembers(collectionId, source.id);
                     const targetLabel =
                       targets.find((t) => t.id === result.issueId)?.label ?? "the issue";
-                    await finishWithRangeCheck(result.issueId, targetLabel);
+                    const targetId = result.issueId;
+                    await finishWithRangeCheck(targetId, targetLabel);
+                    toast({
+                      message: `${sourceLabel} merged into ${targetLabel}`,
+                      href: issueHref(targetId),
+                      linkLabel: "Open issue",
+                    });
                   }
                 })
               }

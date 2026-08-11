@@ -88,6 +88,17 @@ they are in, where they can sell a second time. Longest-closed first, and clicki
 the offers list's **Ended auctions** chip. An auction that ended with nobody bidding is never here —
 which is also why a marketplace that relists unsold auctions by itself cannot fill this list up.
 
+**Changed since listed** — amber, and this one does **not** go away on its own either. A listing of
+yours that is up on the platform — Active or Paused — whose contents, stated price or text have
+changed since it went there, with nothing pushed back to the marketplace. It is the same kind of
+problem as *Listing a copy sold elsewhere* above, one grade milder: that one is a listing selling
+something that has gone, this is a listing selling something that has changed. No marketplace tells
+Stamporama its entry is stale, so if this row does not mention it, nothing will. Oldest divergence
+first — the longest-wrong listing is the one that has been costing the longest — and the row ages
+from when it started diverging, not from the last thing you touched. Clicking through lands on the
+offers list narrowed to exactly these. Full rules in
+[Listings that no longer match](offers.md#listings-that-no-longer-match).
+
 **Bid withdrawn, still marked in bidding** — amber, and this one does **not** go away on its own. The
 offer is still marked in active bidding while Allegro now reports nobody bidding on it — a bid was
 cancelled. That matters because the marker is holding those copies out of every other listing for a
@@ -95,11 +106,13 @@ bid that no longer exists. Stamporama never clears the marker by itself, so this
 open the offer and either leave it (the auction may yet be bid on again) or **Clear active
 bidding**.
 
-The three red groups are the same **needs action** flag the offers list shows, split by *why* it
-fired, because each asks for something different: a sold copy has to come out of the listing, a copy
-under the hammer is waiting on someone else's clock, and one sold on a marketplace is waiting on you
-to record it before the listing beside it takes an order too. Clicking through to see the rest lands
-on the offers list's **Needs action** filter, which holds all three.
+The three red groups, and *Changed since listed*, are the same **needs action** flag the offers list
+shows, split by *why* it fired, because each asks for something different: a sold copy has to come
+out of the listing, a copy under the hammer is waiting on someone else's clock, one sold on a
+marketplace is waiting on you to record it before the listing beside it takes an order too, and a
+changed listing is waiting to be re-posted. The offers list's **Needs action** filter holds all four
+— it is one question, "which of my live listings is wrong?", so it is one chip. Each group's own
+link narrows to just its own rows.
 
 ## Reading the panel
 

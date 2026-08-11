@@ -29,6 +29,7 @@ import {
 import { WantIssueGroupRow } from "./want-issue-group-row";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { WantFormDialog } from "./want-form-dialog";
+import { useToast } from "@/app/toast-provider";
 import { WantRow, type WantDictionaries } from "./want-row";
 
 type DialogState =
@@ -201,21 +202,40 @@ export function WantsListPanel({
     !!filterAreaId ||
     !!year;
 
+  // Confirmation toasts (#541), on exactly the three actions that make the row **disappear** from
+  // the list the collector is looking at: the panel opens on `status: open`, so closing a want, and
+  // deleting one, both take it out of view with nothing left to confirm against. Reopening does the
+  // reverse from the closed list. Adding and editing are deliberately left alone — the row is right
+  // there afterwards, and a fan-out already reports itself in the notice strip above the list.
+  const { toast } = useToast();
+
+  /** How a want is named in a one-line message: the stamp it is for, or a plain "Want" where the
+   * stamp has no name of its own — which a catalogue-number-only entry routinely does not. */
+  function wantLabel(want: WantListItem): string {
+    return want.stampName ?? "Want";
+  }
+
   const editing = dialog.kind === "edit" ? dialog.want : null;
 
   /** One set of row actions for both views — see the note at the render site. */
   const rowActions = {
     onEdit: (want: WantListItem) => setDialog({ kind: "edit", want }),
     onClose: (want: WantListItem) =>
-      run(async () => {
-        const { closeWantAction } = await import("@/app/actions/wants");
-        return closeWantAction(want.id);
-      }),
+      run(
+        async () => {
+          const { closeWantAction } = await import("@/app/actions/wants");
+          return closeWantAction(want.id);
+        },
+        () => toast({ message: `${wantLabel(want)} closed` })
+      ),
     onReopen: (want: WantListItem) =>
-      run(async () => {
-        const { reopenWantAction } = await import("@/app/actions/wants");
-        return reopenWantAction(want.id);
-      }),
+      run(
+        async () => {
+          const { reopenWantAction } = await import("@/app/actions/wants");
+          return reopenWantAction(want.id);
+        },
+        () => toast({ message: `${wantLabel(want)} reopened` })
+      ),
     onDelete: (want: WantListItem) => setDialog({ kind: "delete", want }),
   };
 
@@ -501,10 +521,13 @@ export function WantsListPanel({
           error={actionError}
           onClose={closeDialog}
           onConfirm={() =>
-            run(async () => {
-              const { deleteWantAction } = await import("@/app/actions/wants");
-              return deleteWantAction(dialog.want.id);
-            })
+            run(
+              async () => {
+                const { deleteWantAction } = await import("@/app/actions/wants");
+                return deleteWantAction(dialog.want.id);
+              },
+              () => toast({ message: `${wantLabel(dialog.want)} deleted` })
+            )
           }
         />
       )}

@@ -36,6 +36,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { Icon } from "@/app/icons";
+import { useToast } from "@/app/toast-provider";
 
 type DialogState =
   | { kind: "none" }
@@ -80,6 +81,10 @@ export function OffersListPanel({
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
+  // Confirmation toasts (#541). Every action on this screen closes its dialog or menu and changes a
+  // row that may well have just left the filter — the withdrawn offer under a "not closed" list, the
+  // one just marked ready under a "preparing" chip — so the list itself cannot be the confirmation.
+  const { toast } = useToast();
   // A first offer for a platform sets that platform's currency (#196); the platform picker reads the
   // currency from the cached contact search, so it must be invalidated too or the next create still
   // sees the platform as currency-less (#212).
@@ -163,6 +168,11 @@ export function OffersListPanel({
   // same reason: it is a list that empties as it is worked through.
   const platformSale = searchParams.get("platformSale") === "1";
 
+  // Live listings changed since they went up (#542). URL-only like the three above, and for exactly
+  // their reason: it is a sitting of work — the offers to go and re-post — that empties as it is
+  // done, not the shape the list should still have tomorrow.
+  const listingOutOfDate = searchParams.get("listingOutOfDate") === "1";
+
   const filters: OfferFilters = useMemo(
     () => ({
       platformId,
@@ -171,10 +181,21 @@ export function OffersListPanel({
       bidding,
       endedAuction,
       platformSale,
+      listingOutOfDate,
       includeClosed,
       search: search || undefined,
     }),
-    [platformId, states, needsAction, bidding, endedAuction, platformSale, includeClosed, search]
+    [
+      platformId,
+      states,
+      needsAction,
+      bidding,
+      endedAuction,
+      platformSale,
+      listingOutOfDate,
+      includeClosed,
+      search,
+    ]
   );
 
   // What every row hands to the offer it opens (#429): the filters this list is showing, so the
@@ -248,8 +269,16 @@ export function OffersListPanel({
     startTransition(async () => {
       const { setOfferInActiveBiddingAction } = await import("@/app/actions/offers");
       const result = await setOfferInActiveBiddingAction(offer.id, value);
-      if (result.status === "success") invalidateAll(collectionId);
-      else setActionError(result.message);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        toast({
+          message: value
+            ? `Offer #${offer.offerNo} marked in active bidding — take its copies off other platforms`
+            : `Offer #${offer.offerNo} is no longer in active bidding`,
+          href: `/c/${collectionSlug}/offers/${offer.id}`,
+          linkLabel: "Open offer",
+        });
+      } else setActionError(result.message);
     });
   }
 
@@ -262,8 +291,14 @@ export function OffersListPanel({
     startTransition(async () => {
       const { setOfferStateAction } = await import("@/app/actions/offers");
       const result = await setOfferStateAction(offer.id, next);
-      if (result.status === "success") invalidateAll(collectionId);
-      else setActionError(result.message);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        toast({
+          message: `Offer #${offer.offerNo} is now ${OFFER_STATE_LABEL[next].toLowerCase()}`,
+          href: `/c/${collectionSlug}/offers/${offer.id}`,
+          linkLabel: "Open offer",
+        });
+      } else setActionError(result.message);
     });
   }
 
@@ -274,6 +309,7 @@ export function OffersListPanel({
     bidding ||
     endedAuction ||
     platformSale ||
+    listingOutOfDate ||
     !!search;
 
   return (
@@ -382,19 +418,24 @@ export function OffersListPanel({
             );
           })}
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
-          {/* Derived overlay (ADR-0013 §4): active offers holding a set sold elsewhere. */}
-          <FilterChip
-            label="Needs action"
-            count={counts?.needsAction}
-            // Anything needing action is a problem on a live platform, so the chip alarms in the
-            // same error tint as the row badge until the count is back to zero.
-            alarm={!!counts && counts.needsAction > 0}
-            active={needsAction}
-            onClick={() => {
-              rememberStatusFilter(needsAction ? "" : NEEDS_ACTION);
-              updateParams({ needsAction: needsAction ? "" : "1", state: "" });
-            }}
-          />
+          {/* The overlay for **a live listing that is wrong** — both ways it can be (ADR-0013 §4,
+              #542): it holds a set that sold elsewhere, or it has changed since it was posted and
+              nothing has been pushed back to the platform. One chip, because it is one question. */}
+          <Tooltip content="Live listings that need putting right — holding a set that sold elsewhere, or changed since they were posted">
+            <FilterChip
+              label="Needs action"
+              count={counts?.needsAction}
+              // Anything needing action is a problem on a live platform, so the chip alarms until
+              // the count is back to zero. The badge is the *union*, so it alarms for a changed
+              // listing too — which is the point of folding the two together: one number to clear.
+              alarm={!!counts && counts.needsAction > 0}
+              active={needsAction}
+              onClick={() => {
+                rememberStatusFilter(needsAction ? "" : NEEDS_ACTION);
+                updateParams({ needsAction: needsAction ? "" : "1", state: "" });
+              }}
+            />
+          </Tooltip>
           {/* Auctions whose moment has passed with a bid on them and nothing recorded (#490).
               Beside "Needs action" because it is the same kind of thing — an overlay across states,
               and stock committed where the app cannot see it — and it alarms on the same terms:
@@ -426,6 +467,19 @@ export function OffersListPanel({
               off it is a list quietly lying about what it holds. */}
           {bidding && (
             <FilterChip label="In bidding" active onClick={() => updateParams({ bidding: "" })} />
+          )}
+          {/* Likewise for the changed-since-listed narrowing (#542). It has **no chip of its own**:
+              a listing changed after it was posted is the same category of problem as one holding a
+              set that sold elsewhere — a live marketplace entry that is wrong and only the collector
+              can put right — so *Needs action* selects both, and a second permanent control would
+              have split one question across two. This one exists only while a link (the notification
+              centre's own group) has narrowed the list to it, so the way back off it is visible. */}
+          {listingOutOfDate && (
+            <FilterChip
+              label="Changed since listed"
+              active
+              onClick={() => updateParams({ listingOutOfDate: "" })}
+            />
           )}
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
           {/* Remembered toggle (#245): closed (sold / withdrawn) offers are hidden by default. */}
@@ -522,7 +576,7 @@ export function OffersListPanel({
             {search
               ? "No offers match your search."
               : needsAction
-                ? "Nothing needs action — no active offer holds a set that has sold elsewhere."
+                ? "Nothing needs action — no live listing holds a set that sold elsewhere, and none has changed since it was posted."
                 : hasActiveFilters
                 ? "No offers match this filter."
                 : "No offers yet. Create one and compose its sets from your inventory."}
@@ -581,9 +635,17 @@ export function OffersListPanel({
                 } else setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateOfferAction } = await import("@/app/actions/offers");
-                const result = await updateOfferAction(collectionId, dialog.offer.id, fd);
-                if (result.status === "success") handleSuccess();
-                else setActionError(result.message);
+                const offerId = dialog.offer.id;
+                const offerNo = dialog.offer.offerNo;
+                const result = await updateOfferAction(collectionId, offerId, fd);
+                if (result.status === "success") {
+                  handleSuccess();
+                  toast({
+                    message: `Offer #${offerNo} saved`,
+                    href: `/c/${collectionSlug}/offers/${offerId}`,
+                    linkLabel: "Open offer",
+                  });
+                } else setActionError(result.message);
               }
             });
           }}
@@ -627,9 +689,14 @@ export function OffersListPanel({
           onConfirm={() => {
             startTransition(async () => {
               const { setOfferStateAction } = await import("@/app/actions/offers");
+              const offerNo = dialog.offer.offerNo;
               const result = await setOfferStateAction(dialog.offer.id, "withdrawn");
-              if (result.status === "success") handleSuccess();
-              else setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                // No link: a withdrawn offer is not somewhere the collector is being sent, and the
+                // row is still in the list under "Show sold/withdrawn".
+                toast({ message: `Offer #${offerNo} withdrawn` });
+              } else setActionError(result.message);
             });
           }}
         />
@@ -649,9 +716,14 @@ export function OffersListPanel({
           onConfirm={() => {
             startTransition(async () => {
               const { deleteOfferAction } = await import("@/app/actions/offers");
+              const offerNo = dialog.offer.offerNo;
               const result = await deleteOfferAction(dialog.offer.id);
-              if (result.status === "success") handleSuccess();
-              else setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                // Nothing to link to — the record is gone. The copies staying put is the part worth
+                // saying, because deleting a *listing* sounds like it might not be.
+                toast({ message: `Offer #${offerNo} deleted — its copies are still in inventory` });
+              } else setActionError(result.message);
             });
           }}
         />

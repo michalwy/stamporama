@@ -41,6 +41,11 @@ import {
   type LabelSetItemRow,
   type OfferLabeller,
 } from "./offer-labels";
+import {
+  headerChangeIsDrift,
+  isListedState,
+  LISTED_OFFER_STATES,
+} from "./offer-listing-drift";
 import { claimCovers, type AllegroPaymentStatus } from "./allegro-sync-rules";
 import { parseOfferAddressSearch } from "./offer-search";
 import { urlNamesPlatformOffer } from "./platform-offer-url";
@@ -906,6 +911,98 @@ export async function offersNeedingAction(
   };
 }
 
+/**
+ * The `where` for an offer whose live listing no longer matches this record (#542).
+ *
+ * **Both** halves, always: the flag is set *and* the offer is still up. Written once and read by the
+ * filter, the id resolution and the notification centre, so no surface can decide for itself whether
+ * a withdrawn listing still counts (it does not — what a closed listing said is history).
+ */
+const LISTING_DRIFT_WHERE: Prisma.OfferWhereInput = {
+  listingContentChangedAt: { not: null },
+  state: { in: [...LISTED_OFFER_STATES] },
+};
+
+/** One live listing that no longer matches its offer (#542), as the notification centre lists it. */
+export interface ChangedListingOffer {
+  offerId: string;
+  label: string;
+  platformName: string;
+  /** When it started diverging — the first change since the listing was last in step. */
+  changedAt: Date;
+  /** `active` or `paused`, so the row can say a paused listing is not in front of buyers right now. */
+  state: OfferState;
+}
+
+/**
+ * Live listings changed since they were posted (#542), oldest divergence first.
+ *
+ * Oldest first, unlike the notice groups beside it: this is not news, it is a backlog, and the one
+ * that has been wrong longest is the one that has been costing the longest. It never expires of its
+ * own accord either — nothing in the app can observe a marketplace being corrected — so it leaves
+ * only when the update is pushed, the offer is republished, or the collector says it is in step.
+ */
+export async function offersWithChangedListing(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: ChangedListingOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const where: Prisma.OfferWhereInput = { collectionId, ...LISTING_DRIFT_WHERE };
+  const [total, rows] = await Promise.all([
+    prisma.offer.count({ where }),
+    prisma.offer.findMany({
+      where,
+      orderBy: [{ listingContentChangedAt: "asc" }, { offerNo: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        state: true,
+        listingContentChangedAt: true,
+        platform: { select: { name: true } },
+        sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+      },
+    }),
+  ]);
+
+  const labeller = rows.some((row) => !row.name) ? await makeOfferLabeller(collectionId) : null;
+
+  return {
+    total,
+    offers: rows.map((row) => ({
+      offerId: row.id,
+      label: row.name ?? labeller?.offer(row.sets) ?? "Untitled listing",
+      platformName: row.platform.name,
+      // Non-null by the `where`.
+      changedAt: row.listingContentChangedAt!,
+      state: (isOfferState(row.state) ? row.state : "active") as OfferState,
+    })),
+  };
+}
+
+/** The flagged offers as the overlays want them: one row per offer, with the platform the facet
+ * counts group by. Deliberately the same shape `needsActionRows` hands back for its own flagged set,
+ * since #542 folded the two into one selection. */
+async function listingDriftRows(
+  collectionId: string,
+  /** The search's own resolved ids, where one is active (#465) — narrowing the *reported* offers,
+   * exactly as `needsActionRows` takes it. An empty list is an empty answer, not an open one. */
+  offerIds?: string[]
+): Promise<{ offerId: string; platformId: string }[]> {
+  if (offerIds && offerIds.length === 0) return [];
+  const rows = await prisma.offer.findMany({
+    where: {
+      collectionId,
+      ...LISTING_DRIFT_WHERE,
+      ...(offerIds ? { id: { in: offerIds } } : {}),
+    },
+    select: { id: true, platformId: true },
+  });
+  return rows.map((r) => ({ offerId: r.id, platformId: r.platformId }));
+}
+
 /** One auction a connected platform reported on (#481), as the notification centre lists it. */
 export interface OfferWithObservedBid {
   offerId: string;
@@ -1433,6 +1530,11 @@ export interface OfferListItem {
   needsResolution: boolean;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
+  /** Derived (#542): the offer is **up on the platform** and something about what it lists — its
+   * composition, its stated price, one of its texts — has changed since it went up, with nothing
+   * pushed back to the marketplace. The instant is when it started diverging, so the row can say how
+   * long the live listing has been wrong; null is a listing this record believes is in step. */
+  listingOutOfDate: Date | null;
   createdAt: Date;
 }
 
@@ -1451,6 +1553,7 @@ const OFFER_SELECT = {
   bidderCount: true,
   endsAt: true,
   listingDate: true,
+  listingContentChangedAt: true,
   createdAt: true,
   platform: { select: { name: true } },
   sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
@@ -1471,6 +1574,7 @@ type OfferRow = {
   bidderCount: number | null;
   endsAt: Date | null;
   listingDate: Date | null;
+  listingContentChangedAt: Date | null;
   createdAt: Date;
   platform: { name: string };
   sets: OfferSetRow[];
@@ -1535,6 +1639,11 @@ function toListItem(
     ),
     platformSale,
     listingDate: row.listingDate,
+    // The stored instant, but only where the offer is still up (#542). Reading the state here rather
+    // than clearing the column on the way out means a listing that sold or was withdrawn while
+    // flagged simply stops reporting it — what a closed listing said is history, and it is one rule
+    // in one place instead of a clean-up on every terminal transition.
+    listingOutOfDate: isListedState(state) ? row.listingContentChangedAt : null,
     createdAt: row.createdAt,
   };
 }
@@ -1624,6 +1733,11 @@ export interface OfferListFilters {
    * (#499). Derived like `needsAction` — what counts as recorded is a comparison between an order
    * and a sale — so it is resolved to ids rather than expressed as a `where`. */
   platformSale?: boolean;
+  /** Only offers that are **up on the platform and no longer match this record** (#542): the flag
+   * is set and the offer is `active` or `paused`. Two columns and no comparison, so it narrows,
+   * counts and paginates like any other column-backed filter rather than resolving to ids — which
+   * is exactly why the signal is a stored instant and not a recomputed diff. */
+  listingOutOfDate?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
    * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
@@ -1752,7 +1866,13 @@ function offerListWhere(
   collectionId: string,
   filters: Pick<
     OfferListFilters,
-    "platformId" | "states" | "includeClosed" | "search" | "bidding" | "endedAuction"
+    | "platformId"
+    | "states"
+    | "includeClosed"
+    | "search"
+    | "bidding"
+    | "endedAuction"
+    | "listingOutOfDate"
   >,
   needsActionIds?: string[],
   platformSoldIds?: string[]
@@ -1763,6 +1883,10 @@ function offerListWhere(
   // alongside it (the `lotListWhere` rule).
   const and: Prisma.OfferWhereInput[] = [];
   if (filters.endedAuction) and.push(...endedAuctionWhere(new Date()));
+  // Both halves of the flag (#542): the stamp is set *and* the offer is still up. The state half is
+  // what the list item's own derivation reads, and asking it here is what stops a listing that sold
+  // while flagged from being counted as work waiting to be done.
+  if (filters.listingOutOfDate) and.push(LISTING_DRIFT_WHERE);
   if (filters.search?.trim()) and.push(offerSearchWhere(filters.search));
   if (needsActionIds) and.push({ id: { in: needsActionIds } });
   // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the user
@@ -1873,11 +1997,26 @@ async function resolveOfferOverlays(
   const counts = filters.needsAction
     ? await needsActionCounts(collectionId, undefined, platformSoldIds)
     : null;
+  // **Needs action selects both problems** (#542): a live listing holding a set that sold elsewhere,
+  // and a live listing whose contents no longer match the record. They are one category — a listing
+  // on a marketplace that is wrong and only the collector can put right — and a second chip beside
+  // the first would have split one question across two controls.
+  //
+  // Unioned as *ids* rather than ORed into the `where`, so everything downstream is untouched: the
+  // selection still intersects with a platform-sale selection the way it always did, and an empty
+  // result is still an empty result. It stays out of `needsActionCounts`, which is the *dead-copy*
+  // count the rows read — drift is not a dead copy, and the row says which problem it has by which
+  // badge it carries.
+  const driftIds = filters.needsAction ? await listingDriftRows(collectionId) : null;
+  const needsActionIds = counts
+    ? [...new Set([...counts.keys(), ...(driftIds ?? []).map((r) => r.offerId)])]
+    : null;
   // Only a *selected* overlay narrows the page. A state selection reads the same set, but as a
   // reclassification rather than a filter, so it must not turn into an `id: { in: … }` here.
-  const lists = [counts, filters.platformSale ? platformSales : null].flatMap((m) =>
-    m ? [[...m.keys()]] : []
-  );
+  const lists = [
+    needsActionIds,
+    filters.platformSale && platformSales ? [...platformSales.keys()] : null,
+  ].filter((l): l is string[] => l !== null);
   const ids =
     lists.length === 0
       ? undefined
@@ -1928,6 +2067,7 @@ export async function offerListNeighbours(
     | "bidding"
     | "endedAuction"
     | "platformSale"
+    | "listingOutOfDate"
   > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -2201,7 +2341,8 @@ export async function listOfferPlatforms(
 export interface OfferFilterCounts {
   /** Offers per state, within the selected platform. States with no offers are absent. */
   states: Partial<Record<OfferState, number>>;
-  /** Flagged offers within the selected platform. */
+  /** Flagged offers within the selected platform — **both** problems the chip selects (#542): a set
+   * that sold elsewhere (ADR-0013 §4) and a live listing changed since it was posted. */
   needsAction: number;
   /** Ended auctions with a bid on them, waiting to be resolved (#490), within the selected
    * platform. Like `needsAction` it is an overlay rather than a state, so it ignores the state
@@ -2262,8 +2403,11 @@ export async function offerFilterCounts(
   // The needs-action facet comes back already grouped by platform, so both the chip's own count
   // (within the selected platform) and the platform facet under a needs-action selection are read
   // off the same few flagged rows — no id list travels back into a `where`.
-  const [flagged, byState, byPlatform, endedAuction, platformSales] = await Promise.all([
+  const [flagged, drifted, byState, byPlatform, endedAuction, platformSales] = await Promise.all([
     needsActionRows(collectionId, searchIds),
+    // The other half of what *Needs action* selects (#542). Read as its own small set rather than
+    // folded into the SQL above: that query is about dead copies, and drift is not one.
+    listingDriftRows(collectionId, searchIds),
     prisma.offer.groupBy({
       by: ["state"],
       where: {
@@ -2339,6 +2483,13 @@ export async function offerFilterCounts(
     states.sold = (states.sold ?? 0) + row._count._all;
   }
 
+  // What the *Needs action* chip selects, as one set (#542): a listing holding a set that sold
+  // elsewhere, or a listing changed since it was posted. Deduplicated by offer, because an offer can
+  // easily be both — removing the set that sold elsewhere is itself a change to a live listing — and
+  // counting it twice would make the badge disagree with the list it opens.
+  const needingAction = new Map<string, string>();
+  for (const row of [...flagged, ...drifted]) needingAction.set(row.offerId, row.platformId);
+
   const platforms: Record<string, number> = {};
   let total = 0;
   if (byPlatform) {
@@ -2347,8 +2498,8 @@ export async function offerFilterCounts(
       total += row._count._all;
     }
   } else {
-    for (const row of flagged) {
-      platforms[row.platformId] = (platforms[row.platformId] ?? 0) + 1;
+    for (const platformId of needingAction.values()) {
+      platforms[platformId] = (platforms[platformId] ?? 0) + 1;
       total += 1;
     }
   }
@@ -2356,8 +2507,8 @@ export async function offerFilterCounts(
   return {
     states,
     needsAction: filters.platformId
-      ? flagged.filter((r) => r.platformId === filters.platformId).length
-      : flagged.length,
+      ? [...needingAction.values()].filter((p) => p === filters.platformId).length
+      : needingAction.size,
     endedAuction,
     platformSale,
     platforms,
@@ -2408,6 +2559,7 @@ export async function offersSummary(
     | "bidding"
     | "endedAuction"
     | "platformSale"
+    | "listingOutOfDate"
   > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
@@ -2972,6 +3124,10 @@ export interface OfferDetail {
   setsTotals: OfferSetsTotals;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
+  /** Derived (#542): the offer is up on the platform and something about what it lists has changed
+   * since it went there, with nothing pushed back. The instant is when it started diverging; null is
+   * a listing this record believes is in step. What the header's **Mark as up to date** clears. */
+  listingOutOfDate: Date | null;
   /** This listing's own photo configuration (#308) — sides, tile label template and the collage
    * numbers copied from a template. Seeded at creation, edited from the photo-settings dialog. */
   photoConfig: OfferPhotoConfigInput;
@@ -3090,6 +3246,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       state: true,
       inActiveBidding: true,
       listingDate: true,
+      listingContentChangedAt: true,
       createdAt: true,
       // What publishing through Allegro's API left behind (#477), which is what decides whether the
       // header offers **Publish to Allegro** or **Activate on Allegro**.
@@ -3378,6 +3535,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     sets,
     setsTotals,
     listingDate: offer.listingDate,
+    // The same derivation the list row makes (#542): the stored instant, but only while the offer is
+    // still up. One rule, read in both places, so the row and the screen it opens cannot disagree.
+    listingOutOfDate: isListedState(state) ? offer.listingContentChangedAt : null,
     photoConfig: {
       photoSides: normalizePhotoSides(offer.photoSides),
       preferSingles: offer.photoPreferSingles,
@@ -4090,6 +4250,17 @@ export async function updateOffer(
   // observation, so it keeps the date the figure was actually last checked instead of pretending it
   // was looked at again.
   const priceMoved = pricing.price !== ref.price;
+  // What this save changes about the *live* listing (#542). Read before the write and only while the
+  // offer is actually up, so a form saved on a draft costs nothing extra. The platform and the URL
+  // are not asked about: moving a listing to another marketplace or correcting its address is a
+  // change to the record of where it is, not to what it says.
+  const listedBefore = isListedState(ref.state);
+  const before = listedBefore
+    ? await prisma.offer.findUnique({
+        where: { id: offerId },
+        select: { startingPrice: true },
+      })
+    : null;
   await prisma.offer.update({
     where: { id: offerId },
     data: {
@@ -4112,6 +4283,24 @@ export async function updateOffer(
       listingDate: input.listingDate,
     },
   });
+
+  // The header form writes no texts, so the only question is the price — and on an auction, only the
+  // *starting* one (#542): the current figure is where the bidding stands, and noting a bid is not a
+  // change to the listing. A listing type switched between the two formats counts as well, since the
+  // figure the entry states changes with it.
+  if (
+    listedBefore &&
+    headerChangeIsDrift({
+      listingType: pricing.listingType,
+      priceChanged: priceMoved || pricing.listingType !== ref.listingType,
+      startingPriceChanged:
+        pricing.startingPrice !== (before?.startingPrice?.toFixed(2) ?? null) ||
+        pricing.listingType !== ref.listingType,
+      textChanged: false,
+    })
+  ) {
+    await markListingContentChanged(offerId);
+  }
 }
 
 export interface OfferPatch {
@@ -4178,6 +4367,26 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   // buy never carries the stamp: its price is the seller's own and nothing moves it behind their back.
   const refreshesBid =
     patch.price !== undefined && isAuctionListing(ref.listingType) && patch.price !== ref.price;
+  // What this patch changes about the *live* listing (#542). The previous values are read only while
+  // the offer is up and only for the fields the patch actually touches, so the common in-place edits
+  // — a URL, a description format — pay nothing for the question. `url`, `platformId` and
+  // `descriptionFormat` are deliberately absent: the first two record *where* the listing is, and the
+  // third is how this app reads the description it already holds, not what goes to the platform.
+  const listedBefore = isListedState(ref.state);
+  const touchesText =
+    patch.name !== undefined || patch.description !== undefined || patch.privateNote !== undefined;
+  const before =
+    listedBefore && (touchesText || patch.startingPrice !== undefined)
+      ? await prisma.offer.findUnique({
+          where: { id: offerId },
+          select: { name: true, description: true, privateNote: true, startingPrice: true },
+        })
+      : null;
+  const textChanged =
+    !!before &&
+    ((patch.name !== undefined && patch.name !== before.name) ||
+      (patch.description !== undefined && patch.description !== before.description) ||
+      (patch.privateNote !== undefined && patch.privateNote !== before.privateNote));
   await prisma.offer.update({
     where: { id: offerId },
     data: {
@@ -4203,6 +4412,20 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
         : {}),
     },
   });
+
+  if (
+    listedBefore &&
+    headerChangeIsDrift({
+      listingType: ref.listingType,
+      priceChanged: patch.price !== undefined && patch.price !== ref.price,
+      startingPriceChanged:
+        patch.startingPrice !== undefined &&
+        patch.startingPrice !== (before?.startingPrice?.toFixed(2) ?? null),
+      textChanged,
+    })
+  ) {
+    await markListingContentChanged(offerId);
+  }
 }
 
 /**
@@ -4278,10 +4501,22 @@ export async function regenerateOfferText(
     offerId
   );
   const value = texts[field];
+  // What the field said before, so a ↻ that reproduces the text already there is not reported as a
+  // change to the live listing (#542) — which is exactly what it is on an unedited field following
+  // the template. Read only while the offer is up.
+  const before = isListedState(ref.state)
+    ? await prisma.offer.findUnique({
+        where: { id: offerId },
+        select: { name: true, description: true, privateNote: true },
+      })
+    : null;
   await prisma.offer.update({
     where: { id: offerId },
     data: { [field]: value, [EDITED_FLAG[field]]: false },
   });
+  if (before && before[field] !== value) {
+    await markListingContentChanged(offerId);
+  }
   return value;
 }
 
@@ -4291,6 +4526,56 @@ const EDITED_FLAG: Record<OfferTextField, "nameEdited" | "descriptionEdited" | "
   description: "descriptionEdited",
   privateNote: "privateNoteEdited",
 };
+
+/**
+ * Record that a **live** listing no longer says what this offer says (#542).
+ *
+ * Called from every mutation that changes what the platform would show — the composition mutations
+ * below, the header where {@link headerChangeIsDrift} says the change counts, and a regenerated text.
+ * Silently does nothing on an offer that is not up: a change to something never posted is just
+ * composing, which is what `preparing` and `ready` are for.
+ *
+ * `updateMany` with `listingContentChangedAt: null` in the filter, so it stamps the **first** change
+ * and leaves it alone thereafter. Two things follow from that, both wanted: the flag reads as
+ * "diverging since…" rather than "last touched", which is the figure a collector triages by; and an
+ * offer being worked on for ten minutes is one write, not ten.
+ */
+async function markListingContentChanged(offerId: string): Promise<void> {
+  await prisma.offer.updateMany({
+    where: {
+      id: offerId,
+      state: { in: [...LISTED_OFFER_STATES] },
+      listingContentChangedAt: null,
+    },
+    data: { listingContentChangedAt: new Date() },
+  });
+}
+
+/** The live listing is back in step (#542) — see {@link markOfferListingSynced} for what counts. */
+async function clearListingContentChanged(offerId: string): Promise<void> {
+  await prisma.offer.updateMany({
+    // Filtered on the flag being set, so clearing an offer that carries none is a no-op rather than a
+    // write — this runs on every publication, and most of those have nothing to clear.
+    where: { id: offerId, listingContentChangedAt: { not: null } },
+    data: { listingContentChangedAt: null },
+  });
+}
+
+/**
+ * The live listing has been brought back into step with this record (#542).
+ *
+ * Three callers, and they are the only three things that can honestly claim it: the Assistant's
+ * update run reporting a saved edit (#462), the publication paths below, and the collector pressing
+ * **Mark as up to date** — which exists because most platforms have no update flow at all, and a flag
+ * with no way off it is a flag that stops being read.
+ *
+ * Deliberately *not* called by resuming a paused offer. A resume puts the same live entry back in
+ * front of buyers; nothing about it says the entry was rewritten.
+ */
+export async function markOfferListingSynced(ownerId: string, offerId: string): Promise<void> {
+  await assertOfferOwner(ownerId, offerId);
+  await clearListingContentChanged(offerId);
+}
 
 /**
  * Bring the offer's generated listing texts back in step with what it actually lists (#380).
@@ -4426,7 +4711,15 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   const publishing = ref.state === "ready" && to === "active";
   await prisma.offer.update({
     where: { id: offerId },
-    data: { state: to, ...(publishing ? { listingDate: todayUtcDate() } : {}) },
+    data: {
+      state: to,
+      ...(publishing ? { listingDate: todayUtcDate() } : {}),
+      // Publication is the live listing and the record agreeing by definition (#542), so an offer
+      // goes up unflagged whatever it carried while being prepared. It is the **only** transition
+      // that clears the flag: resuming a paused listing puts the same entry back in front of buyers
+      // and rewrites nothing, so a change made during the pause is still a change nobody pushed.
+      ...(publishing ? { listingContentChangedAt: null } : {}),
+    },
   });
 
   // What the Allegro category register learns from is an offer **finished being prepared** (#494),
@@ -4606,6 +4899,9 @@ export async function addOfferSet(
   // The composition changed — re-render the texts still following the platform's templates (#380),
   // which is also what gives an offer created empty the title it could not be generated with (#365).
   await syncGeneratedTexts(ownerId, offerId);
+  // A live listing now sells something its entry does not mention (#542) — this is the case #513 is
+  // the trigger for, and the one the flag was added to catch.
+  await markListingContentChanged(offerId);
   // …and, on an Allegro offer, work out what it is being listed as (#494). A backfill, never a
   // refresh: it writes only while the offer has no category, so a correction is never undone by
   // adding a set. It cannot fail this mutation — see `backfillAllegroCategory`.
@@ -4654,6 +4950,7 @@ export async function addOfferSetsPerCopy(
     }
   });
   await syncGeneratedTexts(ownerId, offerId); // #380/#365, as in addOfferSet
+  await markListingContentChanged(offerId); // #542, as in addOfferSet
   await backfillAllegroCategory(ownerId, offerId); // #494, as in addOfferSet
   return ids;
 }
@@ -4697,6 +4994,7 @@ export async function addItemsToOfferSet(
     )
   );
   await syncGeneratedTexts(ownerId, ref.offerId); // #380/#365, as in addOfferSet
+  await markListingContentChanged(ref.offerId); // #542, as in addOfferSet
   await backfillAllegroCategory(ownerId, ref.offerId); // #494, as in addOfferSet
   return addable.length;
 }
@@ -4727,6 +5025,8 @@ export async function reorderOfferSets(
   // Order is part of the composition the texts are rendered over (#380) — a description enumerating
   // the listing lists it in this order.
   await syncGeneratedTexts(ownerId, offerId);
+  // …and for the same reason it is drift (#542): the live entry enumerates the old order.
+  await markListingContentChanged(offerId);
 }
 
 /** Reorder the copies inside one set (#306), hand-correcting it away from derived catalog order.
@@ -4759,6 +5059,7 @@ export async function reorderOfferSetItems(
     )
   );
   await syncGeneratedTexts(ownerId, ref.offerId); // #380, as in reorderOfferSets
+  await markListingContentChanged(ref.offerId); // #542, as in reorderOfferSets
 }
 
 /** Drop a set's hand-corrected copy order (#306): every position back to null, so the set derives
@@ -4770,6 +5071,7 @@ export async function resetOfferSetItemOrder(ownerId: string, setId: string): Pr
   }
   await prisma.offerSetItem.updateMany({ where: { offerSetId: setId }, data: { sortOrder: null } });
   await syncGeneratedTexts(ownerId, ref.offerId); // #380, as in reorderOfferSets
+  await markListingContentChanged(ref.offerId); // #542, as in reorderOfferSets
 }
 
 /** Guard for the reorder mutations: `next` must contain exactly the ids in `current`, once each. */
@@ -4788,8 +5090,9 @@ export async function updateOfferSet(ownerId: string, setId: string, title: stri
   const ref = await assertOfferSetOwner(ownerId, setId);
   await prisma.offerSet.update({ where: { id: setId }, data: { title: title?.trim() || null } });
   // A set's title is what `{setTitle}` renders (#266), so it is composition as far as the texts are
-  // concerned (#380).
+  // concerned (#380), and drift as far as the live listing is (#542).
   await syncGeneratedTexts(ownerId, ref.offerId);
+  await markListingContentChanged(ref.offerId);
 }
 
 /** Remove a set from its offer (its copies stay in inventory). This is the coordination action —
@@ -4805,6 +5108,8 @@ export async function removeOfferSet(ownerId: string, setId: string): Promise<vo
     );
   }
   await prisma.offerSet.delete({ where: { id: setId } });
-  // The listing lists one set fewer — the texts still following the template say so (#380).
+  // The listing lists one set fewer — the texts still following the template say so (#380), and the
+  // live entry still offers it until somebody goes and takes it down (#542).
   await syncGeneratedTexts(ownerId, ref.offerId);
+  await markListingContentChanged(ref.offerId);
 }

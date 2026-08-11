@@ -27,6 +27,7 @@ import {
   type StampYearFacetFilters,
 } from "./use-stamps-query";
 import { StampRow } from "./stamp-row";
+import { useToast } from "@/app/toast-provider";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 
@@ -218,6 +219,11 @@ export function StampsListPanel({
     invalidateList(collectionId);
   }
 
+  // Confirmation toasts (#541). Both actions here are taken from a dialog over a long, virtualised
+  // list, and both can move the row out of the current filter — an edited catalog number lands under
+  // a different year, a deleted stamp leaves nothing behind at all.
+  const { toast } = useToast();
+
   const hasActiveFilters = !!(search || catalogNumber || issueId || year);
 
   return (
@@ -369,9 +375,16 @@ export function StampsListPanel({
           onSubmit={(fd) => {
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const result = await updateStampWithCatalogAction(dialog.stamp.id, fd);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              const stamp = dialog.stamp;
+              const result = await updateStampWithCatalogAction(stamp.id, fd);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({
+                  message: `${stamp.name ?? "Stamp"} saved`,
+                  href: `/c/${collectionSlug}/stamps/${stamp.id}`,
+                  linkLabel: "Open stamp",
+                });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />
@@ -387,9 +400,12 @@ export function StampsListPanel({
           onConfirm={(mode) => {
             startTransition(async () => {
               const { deleteStampAction } = await import("@/app/actions/stamps");
+              const name = dialog.stamp.name ?? "Stamp";
               const result = await deleteStampAction(dialog.stamp.id, mode);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: `${name} deleted` });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />

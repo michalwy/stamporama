@@ -161,6 +161,31 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 }
 
+/* Confirmation toasts (#541). The card slides a little way in from the edge it sits against and
+   fades up, so a stack that gains an entry reads as one arriving rather than as the whole column
+   jumping. Short and eased-out: this is feedback on something already done, not an event. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-card {
+  animation: toast-in 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The toast still appears — it is the message, not the motion — it simply does not travel. */
+  .toast-card {
+    animation: none;
+  }
+}
+
 /* Print support (#330). The packing list is the one screen meant for paper, but the rules are
    generic: anything that is app chrome rather than content opts out with `.no-print`, and the
    colour tokens are forced to an ink-friendly light palette so a dark theme doesn't print as a

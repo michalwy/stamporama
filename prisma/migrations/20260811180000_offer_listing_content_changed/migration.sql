@@ -1,0 +1,22 @@
+-- Offers modified after they were listed (#542).
+--
+-- One nullable timestamp: when an offer that is **up on the platform** — `active` or `paused`, both
+-- of which a buyer can still see — last had its composition, its stated price or one of its texts
+-- changed. Null is "as far as this record knows, the live listing matches", which is every offer
+-- that has never been touched since it went up, every offer that is not up at all, and every offer
+-- whose update has since been pushed.
+--
+-- It is a timestamp of the change and **not** a snapshot of what was posted. #462 declined to store
+-- what went out, on the grounds that an update reloads every field anyway and a stored copy of the
+-- offer is a second thing to keep honest; that reasoning is untouched. What it also concluded was
+-- that there could be no drift signal at all, and that part was wrong — "something here changed
+-- since it went up" needs only to know *that* it changed.
+--
+-- Backfilled to NULL for every existing row, deliberately. Nothing in the record says which live
+-- listings are already out of step, and inventing a flag for offers the collector has not touched
+-- since this shipped would fill the new filter with rows that need nothing — the exact opposite of
+-- what it is for. The signal starts from here.
+-- No index of its own, matching every other flag on this table (`inActiveBidding`,
+-- `biddingNoticeAt`): the filter always narrows by `collectionId` first, which is indexed, and a
+-- collection's offers are counted in thousands at the outside.
+ALTER TABLE "offer" ADD COLUMN "listingContentChangedAt" TIMESTAMP(3);

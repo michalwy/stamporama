@@ -26,6 +26,7 @@ import {
   NeedsActionChip,
   PlatformSaleChip,
   InActiveBiddingChip,
+  ListingOutOfDateChip,
   ListingTypeChip,
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
@@ -277,6 +278,10 @@ export function OfferRow({
               platformName={offer.platformName}
             />
           )}
+          {/* The live listing does not match this record any more (#542). After the committed-stock
+              chips and before the plain descriptive ones: it is a problem, but the mildest of them —
+              a listing that is wrong rather than stock promised twice. */}
+          {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
           {offer.setCount > 1 && (
             <Tooltip content="Sets in this offer">
               <span style={CHIP}>{offer.setCount}×</span>

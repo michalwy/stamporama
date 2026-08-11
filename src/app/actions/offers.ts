@@ -9,6 +9,7 @@ import {
   updateOffer,
   setOfferState,
   acknowledgeOfferBiddingNotice,
+  markOfferListingSynced,
   setOfferInActiveBidding,
   publishOffer,
   deleteOffer,
@@ -710,6 +711,29 @@ export async function acknowledgeOfferBiddingNoticeAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to acknowledge the bidding notice.");
+  }
+}
+
+/**
+ * The live listing has been brought back into step with this record (#542).
+ *
+ * Two callers, and they are the same act reached two ways: the Assistant reporting a saved update
+ * (#462), which is the flow this signal was added to feed, and the collector pressing **Mark as up
+ * to date** — which every platform without an update flow needs, and which is also the answer when
+ * the change turns out not to have been worth re-posting.
+ *
+ * Idempotent: an offer carrying no flag is left alone rather than refused, so the Assistant's report
+ * arriving twice, or after the collector has already cleared it by hand, is a no-op.
+ */
+export async function markOfferListingSyncedAction(
+  offerId: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await markOfferListingSynced(session.user.id, offerId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to mark the listing as up to date.");
   }
 }
 

@@ -1795,6 +1795,37 @@ model Offer {
   // The date the listing went live on the platform (#257), captured at offer creation and remembered
   // across creations. Distinct from `createdAt` (when the record was made); null when not recorded.
   listingDate  DateTime? @db.Date
+  // The listing on the platform no longer says what this record says (#542): stamped the moment an
+  // offer that is **up** — `active` or `paused`, both of which are listings a buyer can see — has its
+  // composition, its stated price or one of its texts changed, and cleared the moment the live entry
+  // is brought back into step. That is the collector's whole question after #513's "add it to the
+  // offer that already exists": which of my live listings did I change, and therefore have to go and
+  // re-post?
+  //
+  // A **timestamp of the change, not a snapshot of what was posted**. #462 declined to store what
+  // went out, and that reasoning still holds — an update reloads every field precisely so that no
+  // second copy of the offer has to be kept honest — but it concluded there could be no drift signal
+  // at all, and that was the wrong conclusion: "something changed here since it went up" needs only
+  // to know *that* it changed, which is one column and can never disagree with the offer itself.
+  //
+  // Null is "as far as this record knows, the live listing matches" — which is every offer that has
+  // never been touched since it went up, every offer that is not up at all, and every offer whose
+  // update has been pushed. It is cleared only by the acts that genuinely put the current content in
+  // front of buyers: a first publication (`ready → active`), a listing URL captured by the Assistant,
+  // an Assistant **update** that saved (#462), or the collector saying so by hand. Pausing and
+  // **resuming** leave it exactly where it was — a resume puts the same live entry back up, which is
+  // no more a re-post than the pause was.
+  //
+  // It dates the **first** change since the listing was last in step, not the latest, so the flag
+  // reads as "diverging since…" — the number a collector triages by is how long the live listing has
+  // been wrong, and a field retyped this morning would otherwise hide a set added a fortnight ago.
+  //
+  // Two changes are deliberately **outside** it. An auction's *current* price is an observation of
+  // the bidding rather than a change to the listing, so recording a bid — by hand or by the sync
+  // (#481) — raises nothing; its **starting** price is the seller's own statement and does. And the
+  // generated photos have their own out-of-date signal (#311), which says the same thing about the
+  // images and says it where the images are.
+  listingContentChangedAt DateTime?
   createdAt    DateTime @default(now())
   // "In active bidding" (#215): an auction-platform offer that has received a bid, committing the
   // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely

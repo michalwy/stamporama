@@ -28,6 +28,9 @@ export interface OfferListContext {
   /** Only listings sold on a connected platform with no sale recorded here (#499) — a plain
    * narrowing, like the two above. */
   platformSale?: boolean;
+  /** Only live listings changed since they went up (#542) — a plain narrowing, like the three
+   * above, and the one a re-listing session is walked along. */
+  listingOutOfDate?: boolean;
   /** The list's remembered show-closed toggle (#245) — not a list URL param, but part of what the
    * list was showing, so the walk has to carry it. */
   includeClosed?: boolean;
@@ -45,6 +48,7 @@ export function offerListContextQuery(context: OfferListContext): string {
   if (context.platformId) params.set("platform", context.platformId);
   if (context.bidding) params.set("bidding", "1");
   if (context.endedAuction) params.set("endedAuction", "1");
+  if (context.listingOutOfDate) params.set("listingOutOfDate", "1");
   if (context.platformSale) params.set("platformSale", "1");
   if (context.needsAction) params.set("needsAction", "1");
   else if (context.states?.length) params.set("state", context.states.join(","));
@@ -70,6 +74,7 @@ export function parseOfferListContext(
     needsAction,
     bidding: get("bidding") === "1",
     endedAuction: get("endedAuction") === "1",
+    listingOutOfDate: get("listingOutOfDate") === "1",
     platformSale: get("platformSale") === "1",
     includeClosed: get("closed") === "1",
     search: get("search") || undefined,
@@ -86,6 +91,7 @@ export function offerListHref(collectionSlug: string, context: OfferListContext 
   if (context.platformId) params.set("platform", context.platformId);
   if (context.bidding) params.set("bidding", "1");
   if (context.endedAuction) params.set("endedAuction", "1");
+  if (context.listingOutOfDate) params.set("listingOutOfDate", "1");
   if (context.platformSale) params.set("platformSale", "1");
   if (context.needsAction) params.set("needsAction", "1");
   else if (context.states?.length) params.set("state", context.states.join(","));

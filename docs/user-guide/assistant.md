@@ -236,7 +236,10 @@ something you learn there rather than after posting.
 An **Active** offer's header carries **⟳ Update via Assistant** instead, which opens the *edit* form of
 the listing the offer is already posted as and re-fills it the same way. Everything is reloaded from
 the offer whether or not it changed, and the listing's pictures are **replaced** with the offer's
-current set rather than added to. Saving changes nothing in Stamporama — the offer was already live.
+current set rather than added to. Saving changes almost nothing in Stamporama — the offer was already
+live — except that it clears the offer's **Changed since listed** flag, since the live listing has just
+been reloaded from the offer. That flag is how you find the listings worth coming back to in the first
+place; see [Listings that no longer match](offers.md#listings-that-no-longer-match).
 
 Colnect serves the same form at an edit address, so its listings can be updated this way; Allegro's
 cannot, and is corrected on Allegro's own screen. The details are in the

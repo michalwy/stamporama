@@ -972,8 +972,9 @@ the offer as it now stands: the price, the number of sets, both texts, each copy
 pictures.
 
 It **reloads everything**, whether or not anything changed. Stamporama does not keep a copy of what
-was last posted, so it makes no claim about what has drifted — leaving a field out because it looked
-unchanged is how a listing quietly keeps an older value.
+was last posted, so it makes no claim about which *fields* have drifted — leaving a field out because
+it looked unchanged is how a listing quietly keeps an older value. (What it does track is the coarser
+fact that *something* changed; see [Listings that no longer match](#listings-that-no-longer-match).)
 
 The **pictures are replaced, not added to**: every picture already on the listing is deleted first and
 the offer's current upload set goes up in its place, in the offer's own order. If one of the old
@@ -983,7 +984,8 @@ everything is worse than one you finish by hand.
 Everything else works as the first listing does. Nothing is submitted; you look the form over and
 press the platform's own Save. Saving changes nothing in Stamporama — the offer was Active before the
 update and is Active after it, still carrying the same listing URL — so the report simply says the
-listing was updated.
+listing was updated — and it clears the offer's **Changed since listed** flag, the update having just
+put the current contents in front of buyers.
 
 It is offered only where the platform's module can reach a live listing at all. **Colnect** can, since
 it serves the same form at an edit address. Allegro's Assistant form is entered on the way to a *new*
@@ -1006,6 +1008,58 @@ A published offer leaves the batch immediately: it is Active now, and the worksp
 still waiting. **The next offer opens by itself**, so your hands go straight back to copying instead of
 hunting for where you were. Publish the last one of a group and the first of what remains opens
 instead.
+
+## Listings that no longer match
+
+A live listing is a copy of your offer sitting on somebody else's website, and it does not follow the
+offer around. Add a set to an offer that is already up — which is exactly what happens when a new
+arrival turns out to belong on a listing you already have — and the entry on the platform goes on
+selling the old contents until you go back and change it.
+
+Stamporama flags that. An **Active** or **Paused** offer whose contents, stated price or listing text
+change after it went up carries a **Changed since listed** badge on the offer row, on the offer's own
+page and anywhere else the offer is shown. The badge says when it started diverging, not when it was
+last touched, so the ones that have been wrong longest read as such.
+
+It has **no filter chip of its own**. A listing changed after it was posted is the same category of
+problem as one holding a set that sold elsewhere — a live marketplace entry that is wrong, which only
+you can put right — so the toolbar's **Needs action** chip selects both, and its count is the two
+together. One question, one control, one number to get back to zero.
+
+The bell reports it as its own group, **Changed since listed**, oldest divergence first; following
+that group's link narrows the offers list to just these, and the chip that appears while it is on is
+how you come back off it.
+
+What raises it:
+
+- a set added or removed, copies added to a set, a set renamed, sets or copies reordered;
+- the asking price of a quick buy, or the **starting** price of an auction;
+- the listing title, description or private note — edited by hand or regenerated.
+
+What does **not**:
+
+- anything on an offer that is not up. **Preparing** and **Ready** offers are being composed, and
+  there is nothing on a platform to be out of step with;
+- an **auction's current price**. That figure is where the bidding stands — an observation, not
+  something you changed — so noting a bid never raises the flag, and neither does a platform sync;
+- the **listing URL**, the platform, or the description format. Those say where the listing is and how
+  Stamporama reads the text, not what the listing says;
+- the **photos**. They have their own *Out of date* signal on the Photos card, which says the same kind
+  of thing about the images and says it where the images are.
+
+**Pausing does not clear it, and neither does resuming.** A pause is not a re-post; the entry that
+goes back up is the same one.
+
+Three things clear it:
+
+- **⟳ Update via Assistant** saving an edit of the live listing — the flag exists to feed exactly this;
+- publishing the offer, which is the listing and the record agreeing by definition;
+- **Mark listing up to date** in the offer's own actions menu. Every platform Stamporama cannot reach
+  needs this — you go and edit the listing yourself, then say so — and it is also the honest answer
+  when the change turned out not to be worth going back for.
+
+The flag is not carried by sold or withdrawn offers. What a closed listing said is a record, not a
+claim.
 
 ## One active offer per copy, per platform
 

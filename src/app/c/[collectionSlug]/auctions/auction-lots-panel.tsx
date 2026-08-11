@@ -33,6 +33,7 @@ import {
 import { AuctionExposureBar } from "./auction-exposure-bar";
 import { AuctionLotRow } from "./auction-lot-row";
 import { AuctionLotFormDialog } from "./auction-lot-form-dialog";
+import { useToast } from "@/app/toast-provider";
 import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
 import { CONTROL_STYLE, FilterChip, SIGNALS } from "./auction-controls";
 
@@ -238,6 +239,17 @@ export function AuctionLotsPanel({
     setDialog({ kind: "none" });
     setActionError(undefined);
     invalidateAll(collectionId);
+  }
+
+  // Confirmation toasts (#541). A lot has no page of its own — the row *is* the lot — so none of
+  // these carries a link. What they add is the confirmation for a dialog that closed over a list
+  // grouped by sale and filtered by outcome, where a saved lot may be nowhere in view.
+  const { toast } = useToast();
+
+  /** How a lot is named in a one-line message: its number on the platform where it has one, its
+   * title otherwise, and "Lot" when it has neither — a lot being assembled routinely has neither. */
+  function lotLabel(lot: { lotNo: string | null; title: string | null }): string {
+    return lot.lotNo ? `Lot ${lot.lotNo}` : (lot.title ?? "Lot");
   }
 
   /** Every inline edit takes the same path: run it, refresh the list (and the sale totals two
@@ -635,7 +647,12 @@ export function AuctionLotsPanel({
           lot={dialog.kind === "edit" ? dialog.lot : undefined}
           areas={areas}
           onClose={closeDialog}
-          onSaved={handleSuccess}
+          onSaved={() => {
+            const adding = dialog.kind === "add";
+            const label = dialog.kind === "edit" ? lotLabel(dialog.lot) : "Lot";
+            handleSuccess();
+            toast({ message: adding ? `${label} added` : `${label} saved` });
+          }}
         />
       )}
 
@@ -666,9 +683,12 @@ export function AuctionLotsPanel({
             setActionError(undefined);
             startTransition(async () => {
               const { deleteAuctionLotAction } = await import("@/app/actions/auctions");
+              const label = lotLabel(dialog.lot);
               const result = await deleteAuctionLotAction(dialog.lot.id);
-              if (result.status === "success") handleSuccess();
-              else setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: `${label} deleted — the sale it belonged to stays` });
+              } else setActionError(result.message);
             });
           }}
         />

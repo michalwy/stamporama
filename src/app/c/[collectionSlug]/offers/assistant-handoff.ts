@@ -168,12 +168,16 @@ export function useAssistantHandoff(
     /** The offer went live off the back of its own listing (#412) — the caller's cue to refresh what
      *  it shows, exactly as it does after its own Publish. */
     onActivated?: (offerId: string) => void;
+    /** A live listing was updated in place (#462) and its "changed since listed" flag cleared
+     *  (#542) — the same cue, for the run that changes the record without changing its state. */
+    onUpdated?: (offerId: string) => void;
   } = {}
 ) {
   const [handoff, setHandoff] = useState<AssistantHandoff | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const requestId = handoff?.payload ? handoff.requestId : null;
   const onActivated = options.onActivated;
+  const onUpdated = options.onUpdated;
 
   useEffect(() => {
     const el = nodeRef.current;
@@ -229,6 +233,36 @@ export function useAssistantHandoff(
    * the extension posts it to the instance instead, and that endpoint is idempotent for this very
    * reason.
    */
+  /**
+   * The other half of the same rule (#542): a saved **update** is the live listing and this record
+   * agreeing again, so it clears the "changed since listed" flag.
+   *
+   * #462 said an update writes nothing, and that was right while there was nothing to write — the
+   * offer was Active before the run and is Active after it. What there is to write now is the one
+   * fact the run establishes: the entry on the platform has just been reloaded from this offer. It
+   * goes through the instance and not the extension, on the rule the handoff has had from the start
+   * (#407) — the extension reports, the instance decides.
+   *
+   * Guarded by the request id like the publish below, so an answer written twice clears once; the
+   * action is idempotent anyway, and an offer carrying no flag is left alone rather than refused.
+   *
+   * Where no page is following the answer at all, nothing clears the flag and the offer keeps it.
+   * That is the safe way round: a flag that outlives its fix costs one click on **Mark listing up to
+   * date**, where one cleared by a run that never happened costs a listing nobody goes back to.
+   */
+  const synced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!handoff || handoff.state !== "updated") return;
+    if (synced.current === handoff.requestId) return;
+    synced.current = handoff.requestId;
+    const { offerId } = handoff;
+    void (async () => {
+      const { markOfferListingSyncedAction } = await import("@/app/actions/offers");
+      await markOfferListingSyncedAction(offerId);
+      onUpdated?.(offerId);
+    })();
+  }, [handoff, onUpdated]);
+
   const published = useRef<string | null>(null);
   useEffect(() => {
     // `listed` is the only state that publishes, and an update never reaches it (#462): its answer is

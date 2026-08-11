@@ -22,6 +22,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -35,6 +36,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -48,6 +50,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: "Mi 865",
@@ -61,6 +64,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: true,
       search: undefined,
@@ -74,6 +78,7 @@ describe("offer list context", () => {
       needsAction: true,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -87,6 +92,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -100,6 +106,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: true,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -114,6 +121,7 @@ describe("offer list context", () => {
       needsAction: false,
       bidding: false,
       endedAuction: true,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,
@@ -121,6 +129,24 @@ describe("offer list context", () => {
     assert.equal(
       offerListHref("mine", { endedAuction: true }),
       "/c/mine/offers?endedAuction=1"
+    );
+  });
+
+  it("carries the changed-since-listed narrowing a re-listing session walks (#542)", () => {
+    assert.deepEqual(roundTrip({ listingOutOfDate: true }), {
+      platformId: undefined,
+      states: [],
+      needsAction: false,
+      bidding: false,
+      endedAuction: false,
+      listingOutOfDate: true,
+      platformSale: false,
+      includeClosed: false,
+      search: undefined,
+    });
+    assert.equal(
+      offerListHref("mine", { listingOutOfDate: true }),
+      "/c/mine/offers?listingOutOfDate=1"
     );
   });
 
@@ -147,6 +173,7 @@ describe("offer list context", () => {
       needsAction: true,
       bidding: false,
       endedAuction: false,
+      listingOutOfDate: false,
       platformSale: false,
       includeClosed: false,
       search: undefined,

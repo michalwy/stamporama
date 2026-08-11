@@ -33,6 +33,7 @@ export async function GET(
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",
+      listingOutOfDate: sp.get("listingOutOfDate") === "1",
       platformSale: sp.get("platformSale") === "1",
       includeClosed: sp.get("includeClosed") === "1",
     });

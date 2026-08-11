@@ -8,6 +8,7 @@ import { useContacts, useInvalidateContacts } from "./use-contacts-query";
 import { ContactFormDialog } from "./contact-form-dialog";
 import { ContactRow } from "./contact-row";
 import { CONTACT_ROLES } from "./contact-roles";
+import { useToast } from "@/app/toast-provider";
 
 type DialogState =
   | { kind: "none" }
@@ -81,6 +82,12 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
     setActionError(undefined);
     invalidate(collectionId);
   }
+
+  // Confirmation toasts (#541). Contacts have no detail page of their own, so none of these carries
+  // a link — the row *is* the entity, and it is right there behind the dialog that just closed. What
+  // the toast adds is the confirmation for a save that landed a contact outside the current role
+  // filter, and for the delete, which leaves nothing to look at.
+  const { toast } = useToast();
 
   const hasActiveFilters = !!role || query.trim().length > 0;
 
@@ -188,13 +195,17 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
               if (dialog.kind === "add") {
                 const { createContactAction } = await import("@/app/actions/contacts");
                 const result = await createContactAction(collectionId, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                if (result.status === "success") {
+                  handleSuccess();
+                  toast({ message: `${(fd.get("name") as string) || "Contact"} added` });
+                } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateContactAction } = await import("@/app/actions/contacts");
                 const result = await updateContactAction(dialog.contact.id, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                if (result.status === "success") {
+                  handleSuccess();
+                  toast({ message: `${(fd.get("name") as string) || "Contact"} saved` });
+                } else if (result.status === "error") setActionError(result.message);
               }
             });
           }}
@@ -215,9 +226,12 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
           onConfirm={() => {
             startTransition(async () => {
               const { deleteContactAction } = await import("@/app/actions/contacts");
+              const name = dialog.contact.name;
               const result = await deleteContactAction(dialog.contact.id);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: `${name} deleted` });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />

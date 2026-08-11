@@ -6,7 +6,12 @@ import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
 import { isTerminalState } from "@/lib/offer-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
-import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
+import {
+  OfferStateChip,
+  NeedsActionChip,
+  InActiveBiddingChip,
+  ListingOutOfDateChip,
+} from "./offer-badges";
 import { useOffersForTarget } from "./use-offers-query";
 import { Icon } from "@/app/icons";
 
@@ -101,6 +106,10 @@ export function OfferTargetRow({
         <OfferStateChip state={offer.state} />
         {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
         {offer.inActiveBidding && <InActiveBiddingChip />}
+        {/* …and whether the live listing still matches what this offer says (#542) — the same flag
+            the list row and the offer's own screen carry, so a related listing does not read as
+            fine here and out of date one click away. */}
+        {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
         {offer.setCount > 1 && (
           <Tooltip content="Sets in this offer">
             <span style={CHIP}>{offer.setCount}×</span>

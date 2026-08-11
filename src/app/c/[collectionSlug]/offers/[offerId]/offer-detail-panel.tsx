@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { useToast } from "@/app/toast-provider";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   OfferStateChip,
   NeedsActionChip,
   InActiveBiddingChip,
+  ListingOutOfDateChip,
   ListingTypeChip,
   PlatformSaleChip,
 } from "../offer-badges";
@@ -44,6 +46,7 @@ import {
   isAuctionListing,
   isTerminalState,
   manualTransitions,
+  OFFER_STATE_LABEL,
   quickAdvanceTarget,
   priceLabel,
   pricingReadyFor,
@@ -169,6 +172,10 @@ export function OfferDetailPanel({
   const { data: offer, isLoading } = useOfferDetail(collectionId, offerId);
   const { data: copies = [], isLoading: copiesLoading } = useOfferCopies(collectionId, offerId, true);
   const { invalidateAll } = useInvalidateOffers();
+  // Confirmation toasts (#541) — used sparingly here. Most of this screen *is* the result: an edited
+  // title redraws in place, a set added appears in the list below. What gets one is the act whose
+  // effect is a chip disappearing or a state word changing at the top of a long page.
+  const { toast } = useToast();
   const [composing, setComposing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   // Quick-sell (#390): the Offer list's own flow (#225), opened from here so recording a sale does
@@ -214,7 +221,10 @@ export function OfferDetailPanel({
   const onListingActivated = useCallback(() => invalidateAll(collectionId), [collectionId, invalidateAll]);
   const { handoff, start: startHandoff, dismiss: dismissHandoff, nodeRef } = useAssistantHandoff(
     collectionId,
-    { onActivated: onListingActivated }
+    // Both cues are the same act on this screen — re-read the offer. They stay two callbacks
+    // because the workspace only ever sees the first: a batch is scoped to Ready offers, so an
+    // update run cannot happen there (#462).
+    { onActivated: onListingActivated, onUpdated: onListingActivated }
   );
   const handoffRunning = handoff?.state === "loading" || handoff?.state === "running";
 
@@ -308,6 +318,26 @@ export function OfferDetailPanel({
     });
   }
 
+  /**
+   * The live listing has been brought back into step (#542) — the collector saying so by hand.
+   *
+   * A control rather than something inferred, because nothing this app can see proves a listing was
+   * re-posted on a platform it has no connection to. On a platform it *can* reach, the Assistant's
+   * update run clears the flag itself; this is the same act for everywhere else, and for the change
+   * that turned out not to be worth going back for.
+   */
+  function markListingSynced() {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { markOfferListingSyncedAction } = await import("@/app/actions/offers");
+      const result = await markOfferListingSyncedAction(offerId);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        toast({ message: "Marked as up to date — the live listing matches this offer again" });
+      } else setActionError(result.message);
+    });
+  }
+
   function setState(next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setConfirm("withdraw");
@@ -321,8 +351,12 @@ export function OfferDetailPanel({
     startTransition(async () => {
       const { setOfferStateAction } = await import("@/app/actions/offers");
       const result = await setOfferStateAction(offerId, next);
-      if (result.status === "success") invalidateAll(collectionId);
-      else setActionError(result.message);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        // No link — this is the offer's own screen. The state word is at the top of a page the
+        // collector may have scrolled a long way down.
+        toast({ message: `This offer is now ${OFFER_STATE_LABEL[next].toLowerCase()}` });
+      } else setActionError(result.message);
     });
   }
 
@@ -380,6 +414,18 @@ export function OfferDetailPanel({
     // offer holding no set has nothing to put on a sale line.
     ...(editable && offer.sets.length > 0
       ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => setSelling(true) } as RowAction]
+      : []),
+    // Only while the flag is up (#542): an entry offering to clear something that is not set is an
+    // entry that says the flag exists on every offer that has never carried one.
+    ...(offer.listingOutOfDate
+      ? [
+          {
+            key: "mark-listing-synced",
+            label: "Mark listing up to date",
+            icon: "check",
+            onSelect: markListingSynced,
+          } as RowAction,
+        ]
       : []),
     { key: "duplicate", label: "List on another platform", icon: "duplicate", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "delete", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
@@ -561,6 +607,11 @@ export function OfferDetailPanel({
                 platformName={offer.platformName}
               />
             )}
+            {/* The live listing no longer matches this record (#542). Below the committed-stock
+                flags above and above the descriptive chips below, which is where it grades: a
+                listing that is wrong costs a sale, not a double one. The menu carries the way off
+                it, so the chip states the problem and nothing more. */}
+            {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
             {/* An auction says how to read the price beside it (#449); "in bidding" (#215) says
                 somebody has actually bid. Two different facts, so two chips. */}
             <ListingTypeChip listingType={offer.listingType} />

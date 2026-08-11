@@ -20,6 +20,7 @@ import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
 import { Icon } from "@/app/icons";
+import { useToast } from "@/app/toast-provider";
 
 type DialogState =
   | { kind: "none" }
@@ -40,6 +41,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateSales();
+  const { toast } = useToast();
   const { data: platforms = [] } = useSalePlatforms(collectionId);
 
   const platformId = searchParams.get("platform") || undefined;
@@ -314,6 +316,12 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
               if (result.status === "success") {
                 setDialog({ kind: "none" });
                 invalidateAll(collectionId);
+                // Confirmation toast (#541). Worth saying because deleting a sale does more than
+                // remove a row — it puts stock and listings back — and none of that is visible from
+                // the sales list. Creation gets none: it navigates to the new sale.
+                toast({
+                  message: "Sale deleted — its copies are available again and its offers are active",
+                });
               } else {
                 setActionError(result.message);
               }

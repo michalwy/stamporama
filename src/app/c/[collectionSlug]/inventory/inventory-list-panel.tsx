@@ -55,6 +55,7 @@ import { DuplicateGroupList } from "./duplicate-group-list";
 import { LocationGroupList } from "./location-group-list";
 import { IssueGroupList } from "./issue-group-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
+import { useToast } from "@/app/toast-provider";
 import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
@@ -712,6 +713,11 @@ export function InventoryListPanel({
     // What was picked has been dealt with; leaving it ticked invites doing it twice.
     clearSelection();
   }
+
+  // Confirmation toasts (#541). This list groups, filters and hides in more ways than any other —
+  // by area, by location, by duplicate group, by delivery state — so a saved copy routinely lands
+  // somewhere the collector is not looking, and a disposed one leaves the view entirely.
+  const { toast } = useToast();
 
   const listLoading = groupDuplicates
     ? groupsQuery.isLoading
@@ -1709,13 +1715,32 @@ export function InventoryListPanel({
                 const result = await createItemAction(collectionId, fd);
                 if (result.status === "success") {
                   handleSuccess();
+                  // The copy's own number is only known where it has *arrived* (#532) — an ordered
+                  // one is not enriched — so the link is offered where there is one to offer and the
+                  // confirmation stands alone otherwise.
+                  toast(
+                    result.copy
+                      ? {
+                          message: `Copy #${result.copy.itemNo} added`,
+                          href: `/c/${collectionSlug}/inventory/${result.copy.itemId}`,
+                          linkLabel: "Open copy",
+                        }
+                      : { message: "Copy added" }
+                  );
                   await raiseWantReview(result.copy);
                 } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateItemAction } = await import("@/app/actions/items");
-                const result = await updateItemAction(dialog.item.id, fd);
+                const itemId = dialog.item.id;
+                const itemNo = dialog.item.itemNo;
+                const result = await updateItemAction(itemId, fd);
                 if (result.status === "success") {
                   handleSuccess();
+                  toast({
+                    message: `Copy #${itemNo} saved`,
+                    href: `/c/${collectionSlug}/inventory/${itemId}`,
+                    linkLabel: "Open copy",
+                  });
                   // An edit raises the review too, but only the one that turned the copy
                   // `delivered` — which is how a copy bought at auction and settled into a purchase
                   // finally reaches this question (#532; ADR-0032 §7).
@@ -1868,9 +1893,16 @@ export function InventoryListPanel({
             setActionError(undefined);
             startTransition(async () => {
               const { disposeItemAction } = await import("@/app/actions/items");
+              const itemNo = dialog.item.itemNo;
               const result = await disposeItemAction(id, fd);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({
+                  message: `Copy #${itemNo} marked as no longer held`,
+                  href: `/c/${collectionSlug}/inventory/${id}`,
+                  linkLabel: "Open copy",
+                });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />
@@ -1891,9 +1923,16 @@ export function InventoryListPanel({
             const id = dialog.item.id;
             startTransition(async () => {
               const { restoreItemAction } = await import("@/app/actions/items");
+              const itemNo = dialog.item.itemNo;
               const result = await restoreItemAction(id);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({
+                  message: `Copy #${itemNo} is held again`,
+                  href: `/c/${collectionSlug}/inventory/${id}`,
+                  linkLabel: "Open copy",
+                });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />
@@ -1913,9 +1952,12 @@ export function InventoryListPanel({
           onConfirm={() => {
             startTransition(async () => {
               const { deleteItemAction } = await import("@/app/actions/items");
+              const itemNo = dialog.item.itemNo;
               const result = await deleteItemAction(dialog.item.id);
-              if (result.status === "success") handleSuccess();
-              else if (result.status === "error") setActionError(result.message);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({ message: `Copy #${itemNo} deleted` });
+              } else if (result.status === "error") setActionError(result.message);
             });
           }}
         />
