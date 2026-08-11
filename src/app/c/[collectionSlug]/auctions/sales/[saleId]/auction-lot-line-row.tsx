@@ -18,6 +18,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
@@ -325,6 +326,19 @@ export function AuctionLotLineRow({
               searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
             />
             <SubtypeChip subtype={line.subtype} />
+            {/* Whether this is on the want list, and whether **this line** would satisfy one (#532).
+                The line names a concrete condition, certificate and format, so the chip can answer
+                the sharper question rather than only "the stamp is wanted" — which is the one worth
+                answering ninety seconds before a lot closes. */}
+            <WantChip
+              wants={line.wants}
+              copy={{
+                stampId: line.stampId,
+                conditionId: line.conditionId,
+                certificateStatusId: line.certificateStatusId,
+                formatId: line.formatId,
+              }}
+            />
             {!hasCatalog && !line.stampName && (
               <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
             )}

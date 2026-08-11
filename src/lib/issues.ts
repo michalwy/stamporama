@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
 import {
@@ -147,6 +148,9 @@ export interface StampNodeData {
   /** Copies held under this stamp's variant-kind descendants (#528), at any depth — the second
    *  number beside {@link copies}. Zero when the caller loaded no counts. */
   variantCopies: number;
+  /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
+   *  is still being looked for* marker. Null too when the caller loaded no summaries. */
+  wants: StampWantSummary | null;
 }
 
 export interface IssueCatalogNumberData {
@@ -310,7 +314,9 @@ function toStampNode(
   copyCounts?: StampCopyCountMaps,
   /** The issue's own checklist ids (#531), used to narrow the stamp's memberships to this issue.
    *  Absent means the caller loaded no checklists, and every node reports none. */
-  issueChecklistIds?: ReadonlySet<string>
+  issueChecklistIds?: ReadonlySet<string>,
+  /** Open wants per stamp (#532). Absent stamps, and an absent map, read as none. */
+  wantsByStamp?: Map<string, StampWantSummary>
 ): StampNodeData {
   const headline = pricing
     ? pickHeadlineCatalogPrice({
@@ -366,6 +372,7 @@ function toStampNode(
     photos: toPhotoSummaries(m.stamp.photos),
     copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,
     variantCopies: copyCounts?.variant.get(m.stampId) ?? 0,
+    wants: wantsByStamp?.get(m.stampId) ?? null,
   };
 }
 
@@ -1284,9 +1291,10 @@ export async function listIssueMembers(
     ...members.flatMap((m) => m.stamp.catalogPrices.map((p) => p.currency)),
     ...variantCurrencies,
   ];
-  const [rates, copyCounts] = await Promise.all([
+  const [rates, copyCounts, wantsByStamp] = await Promise.all([
     safeRateMap(collectionId, baseCurrency, currencies),
     loadStampCopyCounts(collectionId, members.map((m) => m.stampId)),
+    loadStampWantSummaries(collectionId, members.map((m) => m.stampId)),
   ]);
 
   return members.map((m) =>
@@ -1299,7 +1307,7 @@ export async function listIssueMembers(
       formatFactor,
       rates,
       variantPricesByStamp,
-    }, copyCounts, issueChecklistIds)
+    }, copyCounts, issueChecklistIds, wantsByStamp)
   );
 }
 

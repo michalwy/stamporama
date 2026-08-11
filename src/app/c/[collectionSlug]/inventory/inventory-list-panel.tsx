@@ -59,6 +59,9 @@ import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-quer
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
+import type { ArrivingCopy } from "@/lib/want-rules";
+import type { WantMatchForCopy } from "@/lib/wants";
 
 type DialogState =
   | { kind: "none" }
@@ -418,6 +421,13 @@ export function InventoryListPanel({
     [locations, locationId]
   );
 
+  // The open wants a freshly added copy could satisfy (#532; ADR-0032 §7). Raised after the add
+  // dialog has closed, and never on an edit — an edit is not a copy arriving.
+  const [wantReview, setWantReview] = useState<{
+    copies: ArrivingCopy[];
+    matches: WantMatchForCopy[];
+  } | null>(null);
+
   // Per-area vendor maps + area names for the quick-price dialog (#228), resolved once here so the
   // dialog can format catalog numbers identically to the rows (mirrors the purchase intake view).
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -583,6 +593,22 @@ export function InventoryListPanel({
     !!scopedPlatform &&
     selectedCopies.length > 0 &&
     selectedCopies.every((c) => c.excludedPlatformIds.includes(scopedPlatform.id));
+
+  /**
+   * Ask the want list what a copy that has just **arrived** could satisfy, and put the review up if
+   * anything does (#532; ADR-0032 §7).
+   *
+   * The action only hands a copy over when it reached the collector's hands — added already
+   * delivered, or edited into `delivered` from a state that was not — so this needs no test of its
+   * own for *when*. Only raised when something matches: a review with nothing in it is a dialog
+   * that says "no news".
+   */
+  async function raiseWantReview(copy: ArrivingCopy | undefined) {
+    if (!copy) return;
+    const { findWantsSatisfiedByAction } = await import("@/app/actions/wants");
+    const matches = await findWantsSatisfiedByAction(collectionId, [copy]);
+    if (matches.length > 0) setWantReview({ copies: [copy], matches });
+  }
 
   function closeDialog() {
     if (!isPending) {
@@ -1450,13 +1476,20 @@ export function InventoryListPanel({
               if (dialog.kind === "add") {
                 const { createItemAction } = await import("@/app/actions/items");
                 const result = await createItemAction(collectionId, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                if (result.status === "success") {
+                  handleSuccess();
+                  await raiseWantReview(result.copy);
+                } else if (result.status === "error") setActionError(result.message);
               } else if (dialog.kind === "edit") {
                 const { updateItemAction } = await import("@/app/actions/items");
                 const result = await updateItemAction(dialog.item.id, fd);
-                if (result.status === "success") handleSuccess();
-                else if (result.status === "error") setActionError(result.message);
+                if (result.status === "success") {
+                  handleSuccess();
+                  // An edit raises the review too, but only the one that turned the copy
+                  // `delivered` — which is how a copy bought at auction and settled into a purchase
+                  // finally reaches this question (#532; ADR-0032 §7).
+                  await raiseWantReview(result.copy);
+                } else if (result.status === "error") setActionError(result.message);
               }
             });
           }}
@@ -1654,6 +1687,16 @@ export function InventoryListPanel({
               else if (result.status === "error") setActionError(result.message);
             });
           }}
+        />
+      )}
+
+      {/* The open wants the copy just added could satisfy (#532). Closes nothing on its own. */}
+      {wantReview && (
+        <WantReviewDialog
+          collectionId={collectionId}
+          copies={wantReview.copies}
+          matches={wantReview.matches}
+          onClose={() => setWantReview(null)}
         />
       )}
     </div>

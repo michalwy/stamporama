@@ -27,12 +27,17 @@ import {
   type LotBulkChanges,
   type LotBulkScope,
 } from "@/lib/lots";
+import type { ArrivingCopy } from "@/lib/want-rules";
 import { parsePhotoChangeSet } from "@/lib/photos";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type PurchaseActionState =
   | { status: "idle" }
-  | { status: "success"; id?: string }
+  /** `copies` names the copies this action moved **into the collector's hands** — marked sorted, or
+   *  set to `delivered` (#532) — so the caller can ask which open wants they could satisfy
+   *  (ADR-0032 §7). Deliberately **not** set by intake: a copy created as `ordered`, or as
+   *  `to_sort` because the order has already landed, is not yet a copy to judge a want against. */
+  | { status: "success"; id?: string; copies?: ArrivingCopy[] }
   | { status: "error"; message: string };
 
 /** Create returns the new purchase's id so the caller can navigate straight to its
@@ -228,6 +233,7 @@ export async function createLotWithStampsAction(
     return { status: "error", message: "Select a stamp or a checklist to add." };
   }
   try {
+    // Same as above: a lot's copies start out ordered, so the review waits for delivery.
     const { lotId } = await createLotWithStamps(session.user.id, purchaseId, {
       price,
       title: optionalStr(formData, "title"),
@@ -340,6 +346,9 @@ export async function intakeStampsAction(
     return { status: "error", message: "Select a stamp or a checklist to add." };
   }
   try {
+    // Deliberately **not** raising the want review here (ADR-0032 §7): intake creates copies as
+    // `ordered`, or `to_sort` when the order has already arrived, and neither is a copy in the
+    // collector's hands. The review comes when one is marked `delivered`.
     await intakeStamps(session.user.id, lotId, {
       stampId,
       checklistId,
@@ -446,8 +455,12 @@ export async function bulkUpdateLotItemsAction(
     return { status: "error", message: "No copies selected." };
   }
   try {
-    await bulkUpdateLotItems(session.user.id, itemIds, parseBulkChanges(formData));
-    return { status: "success" };
+    const { delivered } = await bulkUpdateLotItems(
+      session.user.id,
+      itemIds,
+      parseBulkChanges(formData)
+    );
+    return { status: "success", copies: delivered.length > 0 ? delivered : undefined };
   } catch (e) {
     return {
       status: "error",
@@ -481,8 +494,13 @@ export async function bulkUpdateLotItemsScopedAction(
     return { status: "error", message: "No lot selected." };
   }
   try {
-    await bulkUpdateLotItemsScoped(session.user.id, collectionId, scope, parseBulkChanges(formData));
-    return { status: "success" };
+    const { delivered } = await bulkUpdateLotItemsScoped(
+      session.user.id,
+      collectionId,
+      scope,
+      parseBulkChanges(formData)
+    );
+    return { status: "success", copies: delivered.length > 0 ? delivered : undefined };
   } catch (e) {
     return {
       status: "error",

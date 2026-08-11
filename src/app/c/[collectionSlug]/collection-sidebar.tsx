@@ -324,6 +324,15 @@ export function CollectionSidebar({
         />
 
         <p style={sectionLabelStyle}>Buying</p>
+        {/* Leads the section (#532): what is being looked for comes before what has been ordered.
+            It is the screen opened *before* a fair or a dealer's list, whereas Purchases is what is
+            written up afterwards. */}
+        <NavItem
+          href={`${base}/wants`}
+          icon={<Icon name="wants" />}
+          label="Want list"
+          active={isActive(`${base}/wants`)}
+        />
         <NavItem
           href={`${base}/purchases`}
           icon={<Icon name="purchases" />}

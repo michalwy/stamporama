@@ -15,11 +15,17 @@ import {
 } from "@/lib/items";
 import type { ItemListItem } from "@/lib/items";
 import { isDisposalReason } from "@/lib/disposal";
+import { isDelivered } from "@/lib/delivery-state";
+import type { ArrivingCopy } from "@/lib/want-rules";
 import { applyPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 
 export type ItemActionState =
   | { status: "idle" }
-  | { status: "success" }
+  /** `copy` is set when a copy has **arrived** (#532) — added already delivered, or edited into
+   *  `delivered` from a state that was not — so the caller can ask which open wants it could
+   *  satisfy (ADR-0032 §7). Absent otherwise: a copy still ordered or in the post is a question
+   *  asked too early, and an edit to something already here is not an arrival. */
+  | { status: "success"; copy?: ArrivingCopy }
   | { status: "error"; message: string };
 
 /** Result of the quick-offer create path (#241): the freshly created copy, enriched as an
@@ -114,10 +120,31 @@ export async function createItemAction(
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, item.id, changeSet);
     }
-    return { status: "success" };
+    // A copy added by hand defaults to `delivered` and is in the collector's hands, so the review
+    // belongs here; one entered as ordered or in transit waits for the state that says it arrived.
+    return { status: "success", copy: isDelivered(item.deliveryState) ? toArriving(item) : undefined };
   } catch {
     return { status: "error", message: "Failed to add copy. Please try again." };
   }
+}
+
+/** A copy in the shape the want review reads it. */
+function toArriving(item: {
+  id: string;
+  itemNo: number;
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+  formatId: string | null;
+}): ArrivingCopy {
+  return {
+    itemId: item.id,
+    itemNo: item.itemNo,
+    stampId: item.stampId,
+    conditionId: item.conditionId,
+    certificateStatusId: item.certificateStatusId,
+    formatId: item.formatId,
+  };
 }
 
 /** Create a copy and return it enriched, for the end-to-end quick-offer flow (#241). Same
@@ -153,14 +180,17 @@ export async function updateItemAction(
   const changeSet = parsePhotoChangeSet(formData);
   try {
     // Re-pointing stampId is handled by the domain (appends ItemVariantHistory).
-    await updateItem(session.user.id, itemId, {
+    const { item, becameDelivered } = await updateItem(session.user.id, itemId, {
       ...data,
       variantChangeNote: str(formData, "variantChangeNote") || null,
     });
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, itemId, changeSet);
     }
-    return { status: "success" };
+    // Turning a copy to `delivered` is the moment it reaches the collector's hands, whichever route
+    // it took to get here — bought at auction, settled into a purchase, sorted out of a box. That
+    // is the arrival the want review belongs to, and this is the edit that performs it.
+    return { status: "success", copy: becameDelivered ? toArriving(item) : undefined };
   } catch {
     return { status: "error", message: "Failed to update copy. Please try again." };
   }

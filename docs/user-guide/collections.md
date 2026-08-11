@@ -323,6 +323,14 @@ The **Add stamp** and **Edit stamp** dialogs carry a **Counts towards** list wit
 
 Leave every box clear for an extra the issue holds but no set counts.
 
+### Turning a checklist's gaps into wants
+
+A checklist says what belongs to a set; it does not say what you would buy or on what terms. The
+issue detail page's **Completeness** card carries **Add missing to want list**, which creates one
+open entry on your [want list](wants.md) per checklist stamp you do not hold. It is a one-shot
+action, not a live link: changing the checklist afterwards leaves the want list alone. See
+[Filling the list from a checklist](wants.md#filling-the-list-from-a-checklist).
+
 ### Showing one checklist at a time
 
 When an issue carries **more than one** checklist, expanding its row puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. Tick one or more checklists and the tree narrows to the stamps on them.

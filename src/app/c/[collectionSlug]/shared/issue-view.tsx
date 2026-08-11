@@ -27,6 +27,7 @@ import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
 import { CopyCountBadge } from "./copy-count-badge";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { MultiSelectFilter } from "./multi-select-filter";
 import { filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
 
@@ -345,6 +346,9 @@ export function StampDetailLine({
       />
       <SubtypeChip subtype={node.subtype} />
       <CopyCountBadge copies={node.copies} variantCopies={node.variantCopies} />
+      {/* Beside the copies held: what the collection has of this stamp, and what it is still
+          after (#532). */}
+      <WantChip wants={node.wants} />
       {!node.mainCatalogPrice && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip

@@ -20,6 +20,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
+import { useAddWantAction } from "@/app/c/[collectionSlug]/wants/use-add-want-action";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import {
   RowQuickActions,
@@ -35,6 +37,7 @@ import {
 import {
   issueLabel,
   orderedCatalogLabels,
+  type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -84,32 +87,26 @@ export function StampRow({
     stamp.catalogNumbers[0]?.number ??
     "(stamp)";
 
+  /** This row's stamp, shaped for a picker summary. Built once and handed to every dialog opened
+   *  from the row, so the add-copy form and the want form cannot summarise one stamp two ways. */
+  const pickedStamp: PickedStamp = {
+    stampId: stamp.id,
+    catalogLabels: orderedCatalogLabels(stamp.catalogNumbers, vendorMap, primaryVendorId),
+    name: stamp.name,
+    secondary:
+      [
+        firstIssue ? issueLabel(firstIssue.issueName, firstIssue.issueYear) : null,
+        areaPath,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null,
+    unknownVariant: false,
+  };
+
   const addCopy = useInventoryAddAction({
     collectionId,
     areas,
-    target: {
-      kind: "stamp",
-      stampId: stamp.id,
-      initial: {
-        stampId: stamp.id,
-        catalogLabels: orderedCatalogLabels(
-          stamp.catalogNumbers,
-          vendorMap,
-          primaryVendorId
-        ),
-        name: stamp.name,
-        secondary:
-          [
-            firstIssue
-              ? issueLabel(firstIssue.issueName, firstIssue.issueYear)
-              : null,
-            areaPath,
-          ]
-            .filter(Boolean)
-            .join(" · ") || null,
-        unknownVariant: false,
-      },
-    },
+    target: { kind: "stamp", stampId: stamp.id, initial: pickedStamp },
   });
   const copies = useInventoryPopupAction({
     collectionId,
@@ -125,10 +122,14 @@ export function StampRow({
   });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: stamp.id });
   const detailPage = useDetailPageAction("stamp", stamp.id);
+  // The same stamp the add-copy dialog is opened on — one shape, so the want form and the copy form
+  // cannot summarise one stamp two ways.
+  const addWant = useAddWantAction({ collectionId, areas, stamp: pickedStamp });
 
   const actions: RowAction[] = [
     detailPage,
     addCopy.action,
+    addWant.action,
     copies.action,
     offers.action,
     ...(stamp.mainCatalogPrice ? [prices.action] : []),
@@ -145,15 +146,18 @@ export function StampRow({
 
   const actionsMenu = (
     <>
-      {/* Edit · add a copy of this stamp — the two a collector repeats on the flat list, on
-          hover beside the menu (#454). There is no "add child stamp" here: variants are added
-          from the issue tree, where the parent is on screen. */}
+      {/* Edit · add a copy of this stamp · put it on the want list — what a collector repeats on
+          the flat list, on hover beside the menu (#454). Wanting sits beside adding a copy because
+          the two are the same reflex pointed opposite ways: this one I have, that one I am after.
+          There is no "add child stamp" here: variants are added from the issue tree, where the
+          parent is on screen. */}
       <RowQuickActions
-        actions={pickRowActions(actions, ["detail-page", "edit", "add-copy"])}
+        actions={pickRowActions(actions, ["detail-page", "edit", "add-copy", "add-want"])}
         visible={hovered}
       />
       <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
       {addCopy.dialog}
+      {addWant.dialog}
       {copies.dialog}
       {offers.dialog}
       {prices.dialog}
@@ -301,6 +305,9 @@ export function StampRow({
             variantCopies={stamp.variantCopies}
             size="medium"
           />
+          {/* Beside the copies held, because the two answer one question between them: what the
+              collection has of this stamp, and what it is still after (#532). */}
+          <WantChip wants={stamp.wants} />
           {stamp.mainCatalogPrice && (
             <span
               style={{

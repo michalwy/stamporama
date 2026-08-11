@@ -58,7 +58,8 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 
 ## The stamp page
 
-*Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Copies, Offers.
+*Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Wants (when there
+are any), Copies, Offers.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
@@ -75,6 +76,12 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
   link to its own page.
 - **Copies** — the copies you hold of exactly this stamp (a variant's copies are its own, never
   rolled up into its parent).
+- **Wants** — everything recorded on your [want list](wants.md) for this stamp: the acceptance
+  chips and the priority, exactly as the want list draws them. Open wants lead; closed ones follow,
+  faded — on a single stamp a closed want is the useful record that you were looking for it and
+  found it. Read-only; the form lives on the want list. **The card only appears when the stamp is
+  on the want list at all** — unlike Copies and Offers, which say "none yet", wanting a stamp is
+  the exception, so its absence is the answer.
 - **Offers** — every offer holding a copy of this stamp.
 
 ## The issue page
@@ -121,3 +128,10 @@ There is **one card per [checklist](collections.md#checklists)** the issue carri
 after it — an issue collected basic and specialized shows both, side by side. An issue with no
 checklist at all has no set to be complete against, and the card says so; add one from the issue's
 **⋮ → Checklists…**.
+
+Each card also carries **Add missing to want list**. It creates one open entry on your
+[want list](wants.md) for every stamp on that checklist you do not hold and do not already have
+an open want for. The entries it creates accept **anything** — a gap says only that the stamp is
+missing, not on what terms you would buy it — so edit them afterwards to say what you would take.
+It runs once, when you press it: changing the checklist later does not touch the want list, and
+pressing it again adds nothing that is already there.

@@ -53,6 +53,7 @@ import {
   CopyPlus,
   CornerDownRight,
   CornerRightUp,
+  Crosshair,
   Dices,
   Diamond,
   Ellipsis,
@@ -129,6 +130,10 @@ const GLYPHS = {
   offers: Tag,
   sales: Banknote,
   purchases: ShoppingBag,
+  /** What the collection is looking for but does not have (#532) — the want list. A crosshair, not
+   *  a magnifier: `search` is the act of finding something already recorded, while this marks a
+   *  thing being *aimed at*. */
+  wants: Crosshair,
   auctions: Gavel,
   contacts: Users,
   settings: Settings,

@@ -5,7 +5,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { StampPickerAutocomplete } from "./stamp-picker-autocomplete";
-import { StampPickerBrowser } from "./stamp-picker-browser";
+import { StampPickerBrowser, type PickedIssue } from "./stamp-picker-browser";
 import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
 import {
   IssueStampPickerDialog,
@@ -13,6 +13,7 @@ import {
 } from "./issue-stamp-picker-dialog";
 
 export type { PickedStamp } from "./stamp-picker-shared";
+export type { PickedIssue } from "./stamp-picker-browser";
 export { stampNodeLabel } from "./stamp-picker-shared";
 
 const BROWSE_BUTTON_STYLE: React.CSSProperties = {
@@ -47,6 +48,7 @@ export function StampSelect({
   onSelectedStampIdChange,
   initial,
   scopeIssue,
+  checklist,
   disabled,
   onPickerOpenChange,
 }: {
@@ -56,6 +58,16 @@ export function StampSelect({
   onSelectedStampIdChange: (id: string) => void;
   initial?: PickedStamp;
   scopeIssue?: IssuePickerContext;
+  /**
+   * Whole-set picking (#532), the same offer lot intake makes: when given, the Browse popup adds
+   * one *add this whole set* button per checklist an issue carries, and a picked set is summarised
+   * in place of a stamp. Opt-in per caller — the copy form creates **one** copy, so turning a pick
+   * into twelve there would be a different act wearing the same control.
+   */
+  checklist?: {
+    selected: PickedIssue | null;
+    onChange: (picked: PickedIssue | null) => void;
+  };
   disabled?: boolean;
   /** Raised while one of the picker popups is open, so the enclosing dialog can stop dismissing
    * itself on Esc / backdrop click — otherwise one Esc closes the picker *and* the copy form. */
@@ -82,18 +94,74 @@ export function StampSelect({
   function pick(picked: PickedStamp) {
     setSelected(picked);
     onSelectedStampIdChange(picked.stampId);
+    // A stamp and a whole set are two answers to one question, so picking either clears the other.
+    checklist?.onChange(null);
     setBrowsing(false);
     setPickingScoped(false);
+  }
+
+  function pickChecklist(picked: PickedIssue) {
+    setSelected(null);
+    onSelectedStampIdChange("");
+    checklist?.onChange(picked);
+    setBrowsing(false);
   }
 
   function clear() {
     setSelected(null);
     onSelectedStampIdChange("");
+    checklist?.onChange(null);
   }
+
+  const pickedChecklist = checklist?.selected ?? null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-      {selected ? (
+      {pickedChecklist ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.5rem 0.625rem",
+            background: "var(--color-bg-page)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.375rem",
+          }}
+        >
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            Whole set: {pickedChecklist.label}
+            <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
+              {" "}
+              — {pickedChecklist.requiredCount} stamp
+              {pickedChecklist.requiredCount === 1 ? "" : "s"}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={clear}
+            disabled={disabled}
+            style={{
+              flexShrink: 0,
+              background: "none",
+              border: "none",
+              cursor: disabled ? "not-allowed" : "pointer",
+              color: "var(--color-accent)",
+              fontSize: "0.75rem",
+            }}
+          >
+            Change
+          </button>
+        </div>
+      ) : selected ? (
         <div
           style={{
             display: "flex",
@@ -203,6 +271,7 @@ export function StampSelect({
           collectionId={collectionId}
           areas={areas}
           onPick={pick}
+          onPickIssue={checklist ? pickChecklist : undefined}
           onClose={() => setBrowsing(false)}
         />
       )}

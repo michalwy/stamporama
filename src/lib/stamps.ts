@@ -31,6 +31,7 @@ import { loadIssuePrefixMap } from "./issue-prefix";
 import { deletePhotoBytesForStamp, sortPhotos, type PhotoSummary } from "./photos";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorResolver } from "./format-pricing";
+import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import {
   loadStampCopyCounts,
   NO_COPIES,
@@ -358,6 +359,9 @@ export interface StampListItem {
   /** Copies held under this stamp's variant-kind descendants (#528), at any depth — reported
    *  beside {@link copies}, never added to it. */
   variantCopies: number;
+  /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
+   *  is still being looked for* marker. */
+  wants: StampWantSummary | null;
 }
 
 export interface PaginatedStampsResult {
@@ -441,7 +445,8 @@ function toStampListItem(
   displayConditionId: string | null,
   displayFormatId: string | null,
   factorFor: (areaId: string | null, issueId: string | null) => number | null,
-  copyCounts: StampCopyCountMaps
+  copyCounts: StampCopyCountMaps,
+  wantsByStamp: Map<string, StampWantSummary>
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
@@ -502,6 +507,7 @@ function toStampListItem(
       .sort(sortPhotos),
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
     variantCopies: copyCounts.variant.get(stamp.id) ?? 0,
+    wants: wantsByStamp.get(stamp.id) ?? null,
   };
 }
 
@@ -514,11 +520,12 @@ async function buildStampListItems(
   displayConditionId: string | null,
   displayFormatId: string | null
 ): Promise<StampListItem[]> {
-  const [latestYearByName, factorFor, copyCounts] = await Promise.all([
+  const [latestYearByName, factorFor, copyCounts, wantsByStamp] = await Promise.all([
     getLatestEditionYearByName(collectionId),
     makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
     // Only the page's stamps (#348) — this funnel is reached with the rows already sliced.
     loadStampCopyCounts(collectionId, stamps.map((s) => s.id)),
+    loadStampWantSummaries(collectionId, stamps.map((s) => s.id)),
   ]);
   const items = stamps.map((s) =>
     toStampListItem(
@@ -529,7 +536,8 @@ async function buildStampListItems(
       displayConditionId,
       displayFormatId,
       factorFor,
-      copyCounts
+      copyCounts,
+      wantsByStamp
     )
   );
   const currencies = items

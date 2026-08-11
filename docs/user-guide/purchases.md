@@ -178,6 +178,18 @@ linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
 become part of your collection later, once received.)
 
+**The want marker.** A copy whose stamp is on your [want list](wants.md) carries a **crosshair
+chip**, ringed when *this* copy — its condition, certificate and format — would satisfy one of the
+wants. Click it for the terms. It is the same judgement the intake review below makes, so a ringed
+copy is one the review will greet you with.
+
+**Wants these copies could satisfy.** If any of the copies you just took in matches an open
+entry on your [want list](wants.md), Stamporama shows it right after the intake and lets you
+**close** the want, **narrow** it (the common case: the want was "anything", a used copy
+arrived, so it becomes "any mint"), or **leave it open**. Nothing is closed automatically —
+holding a copy is not the same as having what you wanted. Dismissing the dialog changes
+nothing.
+
 While the lot is **open**, each copy shows a **live estimated cost-basis** (prefixed with
 `~`) — the share of the lot's pool it would receive if you closed the lot right now, computed
 from the current copies and their catalog prices. It updates as you add, remove, or price

@@ -581,6 +581,17 @@ ahead overnight — the **Duplicate** chip on the lots screen holds the same set
 the same rule, so they cannot disagree; only the amber-strength collisions reach the chip and the
 panel, since a standing filter cannot afford the quieter kind.
 
+### Lines you are looking for
+
+A line whose stamp is on your [want list](wants.md) carries a **crosshair chip**. Click it for every
+open want on that stamp.
+
+When the line's own **condition, certificate and format** would satisfy one of those wants, the chip
+is **ringed** and the popover marks which want — the sharper question, and the one worth answering
+ninety seconds before a lot closes: not "I collect this stamp" but "this is the one I am after".
+The judgement is the same one Stamporama makes when the copy actually arrives, so a lot marked as
+matching will greet you with that want at intake.
+
 ### What each line is worth
 
 Every line is valued from the catalog exactly the way a copy in your [inventory](inventory.md) is —

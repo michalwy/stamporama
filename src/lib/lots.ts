@@ -9,6 +9,7 @@ import {
 } from "./items";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
+import type { ArrivingCopy } from "./want-rules";
 import {
   computeLotPool,
   allocateLot,
@@ -283,10 +284,10 @@ export async function createLotWithStamps(
     forSale?: boolean;
     forTrade?: boolean;
   }
-): Promise<{ lotId: string; count: number }> {
+): Promise<{ lotId: string; count: number; copies: ArrivingCopy[] }> {
   const lotId = await createLot(ownerId, purchaseId, input.price, input.title);
   try {
-    const count = await intakeStamps(ownerId, lotId, {
+    const copies = await intakeStamps(ownerId, lotId, {
       stampId: input.stampId,
       checklistId: input.checklistId,
       conditionId: input.conditionId,
@@ -298,7 +299,7 @@ export async function createLotWithStamps(
       forSale: input.forSale,
       forTrade: input.forTrade,
     });
-    return { lotId, count };
+    return { lotId, count: copies.length, copies };
   } catch (err) {
     // Compensate: drop the empty lot we created so a failed intake doesn't strand it.
     await prisma.purchaseLot.delete({ where: { id: lotId } }).catch(() => {});
@@ -472,7 +473,11 @@ export async function attachItemsToLot(
  * shares the given condition, certificate, and storage
  * location, is linked to the lot, and is **not** in the collection — a purchased copy is not a
  * holding until it is sorted. New copies enter as `ordered`, or `to_sort` when the order has
- * already arrived (they were identified during the sort pass). Returns how many were created. */
+ * already arrived (they were identified during the sort pass).
+ *
+ * Returns the copies it created, not a count (#532): taking a copy in is the moment the want list
+ * is consulted (ADR-0032 §7), and the review that follows has to name each copy and read its
+ * condition. The count callers used to get is the array's length. */
 export async function intakeStamps(
   ownerId: string,
   lotId: string,
@@ -492,7 +497,7 @@ export async function intakeStamps(
     forSale?: boolean;
     forTrade?: boolean;
   }
-): Promise<number> {
+): Promise<ArrivingCopy[]> {
   const { collectionId, purchaseId, status } = await assertLotOwner(ownerId, lotId);
   if (status !== "open") {
     throw new Error("This lot is closed. Reopen it before identifying more copies.");
@@ -585,18 +590,34 @@ export async function intakeStamps(
   // whole-issue expansion numbers its copies in the order the stamps were resolved.
   const itemNos = await allocateItemNumbers(prisma, collectionId, stampIds.length);
   const singleStamp = !!input.stampId && !input.checklistId;
+  // `createManyAndReturn` rather than `createMany`: the want review that follows needs each copy's
+  // id and number, and re-reading the lot to find "the ones just added" would be a guess.
+  const created: { id: string; itemNo: number; stampId: string }[] = [];
   if (singleStamp && input.photoChangeSet) {
     const item = await prisma.item.create({
       data: copyData(stampIds[0], itemNos[0]),
-      select: { id: true },
+      select: { id: true, itemNo: true, stampId: true },
     });
     await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
+    created.push(item);
   } else {
-    await prisma.item.createMany({
+    const rows = await prisma.item.createManyAndReturn({
       data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
+      select: { id: true, itemNo: true, stampId: true },
     });
+    created.push(...rows);
   }
-  return stampIds.length;
+  // Intake records no format, so every copy it makes is a single (a null `formatId` *is* "single",
+  // see `StampFormat`) — stated here rather than left implicit, since the want's format axis reads
+  // it as a value.
+  return created.map((row) => ({
+    itemId: row.id,
+    itemNo: row.itemNo,
+    stampId: row.stampId,
+    conditionId,
+    certificateStatusId,
+    formatId: null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -837,12 +858,26 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
 async function applyLotBulkChanges(
   baseWhere: Prisma.ItemWhereInput,
   changes: LotBulkChanges
-): Promise<void> {
+): Promise<ArrivingCopy[]> {
   const hasDisposition =
     changes.inCollection !== undefined ||
     changes.forSale !== undefined ||
     changes.forTrade !== undefined;
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    // Which copies this change could move **into** `delivered` — read before the write, because
+    // afterwards there is no telling a copy that has just arrived from one that was already here.
+    // That transition is the moment the want review belongs to (ADR-0032 §7): a copy that is
+    // ordered, in transit or waiting to be sorted is not yet in the collector's hands, and asking
+    // "does this close a want?" about something still in the post is asking too early.
+    const candidateIds = movesToDelivered(changes)
+      ? (
+          await tx.item.findMany({
+            where: { AND: [baseWhere, { deliveryState: { not: "delivered" } }] },
+            select: { id: true },
+          })
+        ).map((r) => r.id)
+      : [];
+
     if (changes.locationId !== undefined) {
       await tx.item.updateMany({
         where: baseWhere,
@@ -883,7 +918,35 @@ async function applyLotBulkChanges(
     } else if (hasDisposition) {
       await tx.item.updateMany({ where: baseWhere, data: dispositionData });
     }
+
+    if (candidateIds.length === 0) return [];
+    const delivered = await tx.item.findMany({
+      where: { id: { in: candidateIds }, deliveryState: "delivered" },
+      select: {
+        id: true,
+        itemNo: true,
+        stampId: true,
+        conditionId: true,
+        certificateStatusId: true,
+        formatId: true,
+      },
+    });
+    return delivered.map((row) => ({
+      itemId: row.id,
+      itemNo: row.itemNo,
+      stampId: row.stampId,
+      conditionId: row.conditionId,
+      certificateStatusId: row.certificateStatusId,
+      formatId: row.formatId,
+    }));
   });
+}
+
+/** Whether a bulk change can land a copy in `delivered` — the only transition the want review
+ *  hangs off. `markSorted` is that move by definition; an explicit state is only that move when
+ *  it names `delivered` itself. */
+function movesToDelivered(changes: LotBulkChanges): boolean {
+  return !!changes.markSorted || changes.deliveryState === "delivered";
 }
 
 /** Apply a bulk change to a set of lot copies during sorting (#121). `itemIds` is assembled
@@ -902,13 +965,13 @@ export async function bulkUpdateLotItems(
   ownerId: string,
   itemIds: string[],
   changes: LotBulkChanges
-): Promise<number> {
+): Promise<BulkUpdateResult> {
   const ids = [...new Set(itemIds.filter((id) => id))];
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return { count: 0, delivered: [] };
   if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
-  if (isNoopBulk(changes)) return 0;
+  if (isNoopBulk(changes)) return { count: 0, delivered: [] };
 
   const rows = await prisma.item.findMany({
     where: { id: { in: ids } },
@@ -925,14 +988,21 @@ export async function bulkUpdateLotItems(
 
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
 
-  await applyLotBulkChanges({ id: { in: ids } }, changes);
-  return ids.length;
+  const delivered = await applyLotBulkChanges({ id: { in: ids } }, changes);
+  return { count: ids.length, delivered };
 }
 
 /** A server-resolved bulk target — every copy matching the scope is updated, so "mark all
  * copies sorted" / "move all copies to a location" cover an entire lot (or an issue group
  * within it, or an issue across a purchase's open lots) without the client enumerating ids.
  * This is what makes bulk actions correct for lots larger than one loaded page (#172). */
+/** What a bulk change did: how many copies it targeted, and which of them **became delivered** —
+ *  the transition the want review hangs off (ADR-0032 §7). */
+export interface BulkUpdateResult {
+  count: number;
+  delivered: ArrivingCopy[];
+}
+
 export interface LotBulkScope {
   /** All copies identified into this purchase lot. */
   lotId?: string;
@@ -970,7 +1040,7 @@ export async function bulkUpdateLotItemsScoped(
   collectionId: string,
   scope: LotBulkScope,
   changes: LotBulkChanges
-): Promise<number> {
+): Promise<BulkUpdateResult> {
   await assertCollectionOwner(ownerId, collectionId);
   if (!scope.lotId && !scope.purchaseId) {
     throw new Error("A lot or purchase must be given for a scoped bulk update.");
@@ -978,12 +1048,12 @@ export async function bulkUpdateLotItemsScoped(
   if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
-  if (isNoopBulk(changes)) return 0;
+  if (isNoopBulk(changes)) return { count: 0, delivered: [] };
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
 
   const where = lotBulkScopeWhere(collectionId, scope);
   const count = await prisma.item.count({ where });
-  if (count === 0) return 0;
-  await applyLotBulkChanges(where, changes);
-  return count;
+  if (count === 0) return { count: 0, delivered: [] };
+  const delivered = await applyLotBulkChanges(where, changes);
+  return { count, delivered };
 }

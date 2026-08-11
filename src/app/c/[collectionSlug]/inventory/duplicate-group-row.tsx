@@ -17,6 +17,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import {
   InventoryCopyList,
@@ -252,6 +253,17 @@ export function DuplicateGroupRow({
               searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
             />
             <SubtypeChip subtype={group.subtype} />
+            {/* A group is one stamp at one condition, so the marker answers for every copy in it at
+                once (#532) — including whether they would satisfy a want. */}
+            <WantChip
+              wants={group.wants}
+              copy={{
+                stampId: group.stampId,
+                conditionId: group.conditionId,
+                certificateStatusId: group.certificateStatusId,
+                formatId: group.formatId,
+              }}
+            />
             {group.unknownVariant && (
               <Tooltip content="These copies link to the base stamp; the specific variant is unknown.">
                 <span

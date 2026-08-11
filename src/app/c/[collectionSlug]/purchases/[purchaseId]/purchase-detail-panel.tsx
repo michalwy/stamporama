@@ -48,6 +48,9 @@ import {
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { PhotoEditor, type PhotoEditorValue } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { IdentifyVariantDialog } from "@/app/c/[collectionSlug]/inventory/identify-variant-dialog";
+import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
+import type { ArrivingCopy } from "@/lib/want-rules";
+import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -249,8 +252,20 @@ export function PurchaseDetailPanel({
     setError(undefined);
   }
 
+  // The want review (#532; ADR-0032 §7), raised when copies reach the collector's **hands** —
+  // marked sorted, or set to `delivered` — and not when they were merely recorded. Intake creates
+  // them `ordered`, so nothing is asked then; a parcel won at auction and settled into this order
+  // gets its question here, at the point every route through the app converges on.
+  //
+  // Held here rather than in the lot card because `run` below is the one place every mutation's
+  // result passes through, so no caller has to remember to raise it.
+  const [wantReview, setWantReview] = useState<{
+    copies: ArrivingCopy[];
+    matches: WantMatchForCopy[];
+  } | null>(null);
+
   function run(
-    fn: () => Promise<{ status: string; message?: string; id?: string }>,
+    fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
   ) {
     setError(undefined);
@@ -263,6 +278,14 @@ export function PurchaseDetailPanel({
         invalidateLotCopies(collectionId);
         invalidatePurchaseList(collectionId);
         onDone?.(result);
+        // Asked *after* the intake dialog has closed and only when something matches: a review with
+        // nothing in it is a dialog that says "no news", which is not worth a click.
+        if (result.copies?.length) {
+          const copies = result.copies;
+          const { findWantsSatisfiedByAction } = await import("@/app/actions/wants");
+          const matches = await findWantsSatisfiedByAction(collectionId, copies);
+          if (matches.length > 0) setWantReview({ copies, matches });
+        }
       } else if (result.status === "error") {
         setError(result.message);
       }
@@ -783,6 +806,17 @@ export function PurchaseDetailPanel({
           }}
         />
       )}
+
+      {/* The open wants the copies just taken in could satisfy (#532; ADR-0032 §7). Raised by both
+          intake paths through `run`, and closing nothing on its own. */}
+      {wantReview && (
+        <WantReviewDialog
+          collectionId={collectionId}
+          copies={wantReview.copies}
+          matches={wantReview.matches}
+          onClose={() => setWantReview(null)}
+        />
+      )}
     </div>
   );
 }
@@ -827,7 +861,8 @@ type PendingSelection =
   | { kind: "checklist"; checklistId: string; label: string; requiredCount: number };
 
 type RunFn = (
-  fn: () => Promise<{ status: string; message?: string; id?: string }>,
+  /** `copies` is what an intake returns (#532) — the panel's `run` takes the want review from it. */
+  fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
   onDone?: (result: { status: string; message?: string; id?: string }) => void
 ) => void;
 

@@ -45,7 +45,11 @@ import {
   useInventoryPopupAction,
   useInventoryAddAction,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
-import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import {
+  orderedCatalogLabels,
+  type PickedStamp,
+} from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { useAddWantAction } from "@/app/c/[collectionSlug]/wants/use-add-want-action";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { Icon } from "@/app/icons";
 
@@ -151,23 +155,24 @@ function StampTreeNode({
     node.catalogNumbers[0]?.number ??
     "(stamp)";
 
+  /** This node's stamp, shaped for a picker summary. Built once and handed to every dialog opened
+   *  from the row, so the add-copy form and the want form cannot summarise one stamp two ways. */
+  const pickedStamp: PickedStamp = {
+    stampId: node.stampId,
+    catalogLabels: orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId),
+    name: node.name,
+    secondary: null,
+    // Umbrella only when a child acts as a variant (ADR-0010 §3), not for a base stamp whose
+    // children are all distinct entries.
+    unknownVariant: children.some((c) => c.node.actsAsVariant),
+  };
+
   const addCopy = useInventoryAddAction({
     collectionId,
     areas,
-    target: {
-      kind: "stamp",
-      stampId: node.stampId,
-      initial: {
-        stampId: node.stampId,
-        catalogLabels: orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId),
-        name: node.name,
-        secondary: null,
-        // Umbrella only when a child acts as a variant (ADR-0010 §3), not for a base
-        // stamp whose children are all distinct entries.
-        unknownVariant: children.some((c) => c.node.actsAsVariant),
-      },
-    },
+    target: { kind: "stamp", stampId: node.stampId, initial: pickedStamp },
   });
+  const addWant = useAddWantAction({ collectionId, areas, stamp: pickedStamp });
   const copies = useInventoryPopupAction({
     collectionId,
     areas,
@@ -218,6 +223,7 @@ function StampTreeNode({
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
     { key: "move", label: "Move to another issue…", icon: "move", onSelect: () => onMove(node.stampId) },
     addCopy.action,
+    addWant.action,
     copies.action,
     offers.action,
     ...(node.mainCatalogPrice ? [prices.action] : []),
@@ -292,14 +298,23 @@ function StampTreeNode({
                 <StampTitle node={node} />
               </span>
 
-              {/* Edit · add a variant under this stamp · add a copy of it — the three a
-                  collector repeats while filling an issue in, on hover beside the menu. */}
+              {/* Edit · add a variant under this stamp · add a copy of it · put it on the want
+                  list — what a collector repeats while working through an issue, on hover beside
+                  the menu. Wanting sits beside adding a copy because the two are the same reflex
+                  pointed opposite ways: this one I have, that one I am after. */}
               <RowQuickActions
-                actions={pickRowActions(actions, ["detail-page", "edit", "add-child", "add-copy"])}
+                actions={pickRowActions(actions, [
+                  "detail-page",
+                  "edit",
+                  "add-child",
+                  "add-copy",
+                  "add-want",
+                ])}
                 visible={hovered}
               />
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
               {addCopy.dialog}
+              {addWant.dialog}
               {copies.dialog}
               {offers.dialog}
               {prices.dialog}

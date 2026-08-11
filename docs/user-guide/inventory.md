@@ -146,6 +146,16 @@ Stamps, Copies, Offers, Sales and Purchases.
 The holdings summary totals follow whatever the filters are showing, so a filtered view
 tells you the catalog value and purchase cost of just those copies.
 
+## The want marker
+
+A copy whose stamp is on your [want list](wants.md) carries a **crosshair chip**. Click it for
+every open want on that stamp; the chip is **ringed** when this copy's own condition, certificate
+and format would satisfy one.
+
+Holding a copy never closes a want, so on this list the chip is usually the **upgrade** signal: you
+have one, and you are still after a better one. A grouped row carries it too — a group is one stamp
+at one condition, so the answer covers every copy in it.
+
 ## Copy value and holdings total
 
 Each copy is valued from your **catalog prices** — this is independent of what you paid
@@ -413,6 +423,10 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 6. Optionally add free-form **notes** (e.g. postmark type or a condition detail).
 7. Optionally attach **photos** — front, back, and titled extras. See [Photos](#photos).
 8. Click **Add copy**. Everything is saved together in one step.
+
+If the copy matches an open entry on your [want list](wants.md), Stamporama shows the
+matching wants right afterwards and lets you **close** each one, **narrow** it, or **leave it
+open**. Nothing is closed automatically — see [Taking a copy in](wants.md#taking-a-copy-in).
 
 > **Remembered defaults** — your last-used **condition**, **location**, and **disposition**
 > are remembered per collection and pre-filled the next time you add a copy — anywhere, whether

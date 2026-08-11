@@ -194,13 +194,15 @@ describe("updateItem", () => {
       stampId: f.baseStamp.id,
       conditionId: f.condition.id,
     });
-    const updated = await updateItem(f.userId, item.id, {
+    const { item: updated, becameDelivered } = await updateItem(f.userId, item.id, {
       forSale: true,
       notes: "updated note",
     });
     assert.equal(updated.forSale, true);
     assert.equal(updated.notes, "updated note");
     assert.equal(updated.stampId, f.baseStamp.id);
+    // The copy was already delivered, so retyping a note is not a copy arriving (#532).
+    assert.equal(becameDelivered, false);
     const history = await getItemVariantHistory(f.userId, item.id);
     assert.equal(history.length, 0);
   });
@@ -210,7 +212,7 @@ describe("updateItem", () => {
       stampId: f.baseStamp.id,
       conditionId: f.condition.id,
     });
-    const updated = await updateItem(f.userId, item.id, {
+    const { item: updated } = await updateItem(f.userId, item.id, {
       stampId: f.variant.id,
       variantChangeNote: "identified as 2a",
     });

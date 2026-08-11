@@ -196,7 +196,7 @@ model ChecklistStamp {
   construction, which is why this landed first.
 - Offer composition (#31, #199) gains a natural source for "build me this set", and the want list
   (#532) gains a gap **generator** — an action that materialises editable rows once, never a live
-  feed, since a want carries acceptance criteria and a maximum price a checklist knows nothing of.
+  feed, since a want carries acceptance criteria and a priority a checklist knows nothing of.
 
 ## Still open
 

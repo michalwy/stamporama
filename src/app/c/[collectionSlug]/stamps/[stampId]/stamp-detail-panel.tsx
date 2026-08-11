@@ -28,6 +28,7 @@ import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
+import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
 import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chip-styles";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
@@ -181,6 +182,12 @@ export function StampDetailPanel({
 
           {/* Right: what the collection holds and does with it. */}
           <DetailColumn>
+            {/* Leads the column, and renders **only when this stamp is wanted** (#532). It is the
+                exception among these cards — most stamps are not on the want list — so it earns the
+                top spot by being absent the rest of the time, where Copies and Offers are about
+                every stamp and print "none yet" as a real answer. */}
+            <RelatedWantsCard collectionId={collectionId} stampId={stamp.id} />
+
             <RelatedCopiesCard
               collectionId={collectionId}
               areas={areas}

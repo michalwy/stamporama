@@ -24,6 +24,11 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import { deletePhotoBytesForItem, sortPhotos, type PhotoSummary } from "./photos";
+import {
+  loadItemWantSummaries,
+  loadStampWantSummaries,
+  type StampWantSummary,
+} from "./wants";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
@@ -595,14 +600,22 @@ export async function listItems(
   return items.map(toItemData);
 }
 
+/** What an edit did: the copy, and whether this edit is what brought it **into the collector's
+ *  hands**. Only that transition raises the want review (ADR-0032 §7) — an edit that merely retypes
+ *  a note on a copy already delivered is not a copy arriving. */
+export interface UpdateItemResult {
+  item: ItemData;
+  becameDelivered: boolean;
+}
+
 export async function updateItem(
   ownerId: string,
   itemId: string,
   data: ItemUpdateInput
-): Promise<ItemData> {
+): Promise<UpdateItemResult> {
   const current = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { collectionId: true, stampId: true },
+    select: { collectionId: true, stampId: true, deliveryState: true },
   });
   if (!current) throw new Error("Item not found.");
   const collectionId = current.collectionId;
@@ -689,7 +702,11 @@ export async function updateItem(
     }
     return updated;
   });
-  return toItemData(item);
+  // The copy has just come **into the collector's hands** — not merely been recorded (ADR-0032 §7).
+  // That, and not the moment the row was created, is when "does this close a want?" can be
+  // answered: a copy still ordered or in the post is a question asked too early.
+  const becameDelivered = !isDelivered(current.deliveryState) && isDelivered(item.deliveryState);
+  return { item: toItemData(item), becameDelivered };
 }
 
 /**
@@ -1265,6 +1282,10 @@ export interface ItemListItem {
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
+  /** The open wants recorded for this copy's stamp (#532), or null for none. Holding a copy does
+   *  not close a want, so this is also the upgrade signal: *you have one, and are still after a
+   *  better one*. */
+  wants: StampWantSummary | null;
   conditionId: string;
   conditionName: string;
   conditionAbbreviation: string;
@@ -1397,7 +1418,11 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
 }
 
 /** Map an enriched copy row plus its resolved catalog valuation into the list-item shape. */
-function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListItem {
+function toItemListItem(
+  row: ItemListRow,
+  valuation: CopyValuation,
+  wants: StampWantSummary | null = null
+): ItemListItem {
   const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
   const primaryLink = row.stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId =
@@ -1421,6 +1446,7 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
     issueId: firstIssue?.id ?? null,
     issueName: firstIssue?.name ?? null,
     issueYear: firstIssue?.year ?? null,
+    wants,
     conditionId: row.condition.id,
     conditionName: row.condition.name,
     conditionAbbreviation: row.condition.abbreviation,
@@ -1462,13 +1488,32 @@ function toItemListItem(row: ItemListRow, valuation: CopyValuation): ItemListIte
   };
 }
 
-/** Valuate a set of enriched copy rows and map them to list items, preserving row order. */
+/**
+ * Valuate a set of enriched copy rows and map them to list items, preserving row order.
+ *
+ * The one funnel every copies view goes through — the Copies list, a purchase order's intake, the
+ * lot and group readers — which is why the want marker (#532) is loaded here rather than at each of
+ * them: a copy names a concrete `(condition, certificate, format)`, so wherever a copy is listed the
+ * chip can say not merely *this stamp is wanted* but *this one would satisfy a want*. Scoped to the
+ * rows handed in, like the valuation beside it.
+ */
 async function enrichItemRows(
   collectionId: string,
   rows: ItemListRow[]
 ): Promise<ItemListItem[]> {
-  const valuations = await valuateItemRows(collectionId, rows.map(valuationInputFromRow));
-  return rows.map((row) => toItemListItem(row, valuations.get(row.id)!));
+  const [valuations, wantsByItem] = await Promise.all([
+    valuateItemRows(collectionId, rows.map(valuationInputFromRow)),
+    // Keyed **per copy**, each leaving itself out: the marker is drawn beside the very copy whose
+    // delivery state it would otherwise count, and a purchase order that reported "1 in transit"
+    // about the row you were reading was answering the wrong question.
+    loadItemWantSummaries(
+      collectionId,
+      rows.map((r) => ({ itemId: r.id, stampId: r.stampId }))
+    ),
+  ]);
+  return rows.map((row) =>
+    toItemListItem(row, valuations.get(row.id)!, wantsByItem.get(row.id) ?? null)
+  );
 }
 
 /** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
@@ -1540,6 +1585,9 @@ export interface CopyGroupRow {
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
+  /** The open wants recorded for the group's stamp (#532), or null for none. A group is one stamp
+   *  at one condition, so the marker answers for every copy in it at once. */
+  wants: StampWantSummary | null;
   conditionId: string;
   conditionName: string;
   conditionAbbreviation: string;
@@ -1740,6 +1788,7 @@ export async function listItemDuplicateGroups(
   const conditionById = new Map(conditions.map((c) => [c.id, c]));
   const formatById = new Map(formats.map((f) => [f.id, f]));
   const certificateById = new Map(certificates.map((c) => [c.id, c]));
+  const wantsByStamp = await loadStampWantSummaries(collectionId, keys.map((k) => k.stampId));
 
   const groups: CopyGroupRow[] = [];
   for (const key of keys) {
@@ -1774,6 +1823,7 @@ export async function listItemDuplicateGroups(
       issueId: firstIssue?.id ?? null,
       issueName: firstIssue?.name ?? null,
       issueYear: firstIssue?.year ?? null,
+      wants: wantsByStamp.get(key.stampId) ?? null,
       conditionId: condition.id,
       conditionName: condition.name,
       conditionAbbreviation: condition.abbreviation,
@@ -2412,7 +2462,7 @@ export async function resolveItemVariant(
 ): Promise<ItemData> {
   const current = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { collectionId: true, stampId: true },
+    select: { collectionId: true, stampId: true, deliveryState: true },
   });
   if (!current) throw new Error("Item not found.");
   await assertCollectionOwner(ownerId, current.collectionId);

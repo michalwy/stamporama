@@ -90,6 +90,7 @@ model Collection {
   stampFormatFactors StampFormatFactor[]
   stampSubtypes   StampSubtype[]
   checklists      Checklist[]
+  wants           Want[]
   collageTemplates CollageTemplate[]
   items           Item[]
   contacts        Contact[]
@@ -132,6 +133,7 @@ model StampCondition {
   auctionLotLines AuctionLotLine[]
   colnectMapping ColnectConditionMapping?
   allegroCategoryLessons AllegroCategoryLesson[]
+  wantAcceptance WantCondition[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -168,6 +170,7 @@ model StampFormat {
   factors       StampFormatFactor[]
   translations  StampFormatTranslation[]
   auctionLotLines AuctionLotLine[]
+  wantAcceptance WantFormat[]
 
   @@index([collectionId])
   @@map("stamp_format")
@@ -266,6 +269,7 @@ model CertificateStatus {
   items         Item[]
   auctionLotLines AuctionLotLine[]
   translations  CertificateStatusTranslation[]
+  wantAcceptance WantCertificateStatus[]
 
   @@index([collectionId])
   @@map("certificate_status")
@@ -1123,6 +1127,7 @@ model Stamp {
   catalogPrices     StampCatalogPrice[]
   issueMemberships  IssueMember[]         @relation("IssueMemberStamp")
   checklistEntries  ChecklistStamp[]      @relation("ChecklistStampStamp")
+  wants             Want[]                @relation("WantStamp")
   items              Item[]               @relation("ItemStamp")
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
@@ -2757,6 +2762,133 @@ model ChecklistStamp {
   @@id([checklistId, stampId])
   @@index([stampId])
   @@map("checklist_stamp")
+}
+
+// What the collector is **looking for** (#532; ADR-0032) — for a stamp not owned yet, and for one
+// owned but wanted in better shape.
+//
+// Deliberately **not** a fourth disposition. `inCollection` / `forSale` / `forTrade` live on `Item`,
+// and an `Item` is one physical copy (ADR-0007, no quantity field). A wanted stamp has no copy, so a
+// fourth flag would force phantom `Item` rows and poison every count that reads inventory — holdings
+// totals, valuation, cost-basis, completeness. Disposition answers "what am I doing with what I
+// have"; wanting is outside its domain.
+//
+// A want is an **acceptance criterion**, not a (stamp, condition, format) tuple. Nothing owned yet
+// means anything from used to MNH will do; a used copy owned turns the same want into "any mint";
+// certificates matter for a few stamps and not at all for the rest. So each axis carries a *set* of
+// acceptable values in its own join table below, where **zero rows means "any"**.
+//
+// "At least X" is deliberately inexpressible. `StampCondition.sortOrder` is display order, not
+// quality: `U` and `MNG` are cancellation and gum, two different axes, and `CTO` / `FDC` are on no
+// scale at all. Any minimum-quality rule would invent an ordering the dictionary does not guarantee
+// and the collector can destroy by dragging a row.
+//
+// Upgrades fall out for free and need no concept of their own: with a used copy held and the
+// acceptance set narrowed to the mint conditions, the held copy does not satisfy the want, so it
+// stays open.
+model Want {
+  id           String @id @default(cuid())
+  collectionId String
+  stampId      String
+  // Open/closed as one column, the `Item.disposedAt` idiom: null is open, a timestamp is the moment
+  // the collector decided the want was met. Flag and date in one, so every filter stays a plain
+  // `where` and no second column can disagree with the first.
+  //
+  // Nothing sets this automatically. A copy arriving surfaces the wants it *could* satisfy and the
+  // collector closes, narrows or leaves each one — auto-closing would silently discard a record of
+  // intent, and narrowing (the common case) is a judgement the app cannot make.
+  closedAt     DateTime?
+  // There is deliberately **no maximum price** here. A want is a standing intention with no date, so
+  // a figure on it would be a price opinion frozen the day it was typed and then silently wrong —
+  // and on a whole-series add it would be one number stamped onto twelve stamps worth wildly
+  // different amounts. What a stamp is worth *at the moment of buying* is what the recommendation
+  // engine answers from recorded results (ADR-0029/ADR-0022), against the copy actually in front of
+  // the collector. Two mechanisms for one question is how they drift.
+  // What to chase first when a dealer's list is long, not a queue position — several wants share a
+  // priority and nothing orders within one.
+  //
+  // Stored as the **rank** (0 = high, 1 = normal, 2 = low), not as the word: the list is ordered by
+  // priority and paged on the server, so the database has to sort it, and the only order Postgres
+  // can put a `text` column in is its spelling — `high < low < normal`, which is not what anybody
+  // means. Ascending rank is descending urgency, so a plain `ORDER BY` reads right. The vocabulary
+  // lives in `want-rules.ts`; the word never reaches this column, and nothing has to agree with
+  // anything.
+  priority     Int @default(1)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  collection          Collection             @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamp               Stamp                  @relation("WantStamp", fields: [stampId], references: [id], onDelete: Cascade)
+  conditions          WantCondition[]
+  certificateStatuses WantCertificateStatus[]
+  formats             WantFormat[]
+
+  @@index([collectionId])
+  // Every list read narrows to the wants still open, so the flag is indexed with the scope rather
+  // than on its own — `Item`'s `[collectionId, disposedAt]` for the same reason.
+  @@index([collectionId, closedAt])
+  // The list's whole ordering, in order: open before closed, then urgency. `createdAt` is the last
+  // tiebreak and is left off — it varies per row, so it would only lengthen the index.
+  @@index([collectionId, closedAt, priority])
+  @@index([stampId])
+  @@map("want")
+}
+
+// One acceptable condition. **Zero rows means "any"** — the want is satisfied by a copy in any
+// condition — and that is the whole reason this is a table rather than a nullable column.
+//
+// The only axis of the three needing no nullable FK: `Item.conditionId` is required, so there is no
+// "none" value to express and a plain composite primary key is enough.
+model WantCondition {
+  wantId      String
+  conditionId String
+
+  want      Want           @relation(fields: [wantId], references: [id], onDelete: Cascade)
+  condition StampCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+
+  @@id([wantId, conditionId])
+  @@index([conditionId])
+  @@map("want_condition")
+}
+
+// One acceptable certificate status, **nullable on purpose**. On `Item` and `StampCatalogPrice` a
+// null `certificateStatusId` *is* a value — "no certificate" (ADR-0006 §2) — so "only without a
+// certificate" is a real want and must be expressible, while "don't care" is zero rows. Both
+// meanings therefore have to fit, which a non-null column cannot do.
+//
+// Uniqueness on `(wantId, certificateStatusId)` is a raw `UNIQUE ... NULLS NOT DISTINCT` index (see
+// the migration), the idiom `stamp_catalog_price_unique` and `stamp_format_factor_unique` already
+// use: without it Postgres treats every null row as distinct and the "no certificate" member could
+// be added over and over. Requires PostgreSQL 15+.
+model WantCertificateStatus {
+  id                  String  @id @default(cuid())
+  wantId              String
+  /** Null = the "no certificate" value, not "any". Any is zero rows. */
+  certificateStatusId String?
+
+  want              Want               @relation(fields: [wantId], references: [id], onDelete: Cascade)
+  certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Cascade)
+
+  @@index([wantId])
+  @@index([certificateStatusId])
+  @@map("want_certificate_status")
+}
+
+// One acceptable format, nullable for the same reason one table up: a null `Item.formatId` **means
+// single** (see `StampFormat`), so "only singles" is a real want, while "any format" is zero rows.
+// Same `NULLS NOT DISTINCT` index in the migration.
+model WantFormat {
+  id       String  @id @default(cuid())
+  wantId   String
+  /** Null = the "single" value, not "any". Any is zero rows. */
+  formatId String?
+
+  want   Want         @relation(fields: [wantId], references: [id], onDelete: Cascade)
+  format StampFormat? @relation(fields: [formatId], references: [id], onDelete: Cascade)
+
+  @@index([wantId])
+  @@index([formatId])
+  @@map("want_format")
 }
 
 model ExchangeRate {

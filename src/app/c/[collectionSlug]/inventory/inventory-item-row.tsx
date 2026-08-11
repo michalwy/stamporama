@@ -35,6 +35,7 @@ import {
   colnectSearchQueryFor,
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
@@ -699,6 +700,18 @@ export function InventoryItemRow({
             searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
           />
           <SubtypeChip subtype={item.subtype} />
+          {/* Whether this stamp is wanted, and whether **this copy** would satisfy one (#532). On a
+              purchase order being sorted that is the question the row exists to answer; on the
+              Copies list it is the upgrade signal, since holding a copy never closes a want. */}
+          <WantChip
+            wants={item.wants}
+            copy={{
+              stampId: item.stampId,
+              conditionId: item.conditionId,
+              certificateStatusId: item.certificateStatusId,
+              formatId: item.formatId,
+            }}
+          />
           {!hasCatalog && !item.stampName && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
           )}

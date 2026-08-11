@@ -8,6 +8,7 @@ import type { PhotoSummary } from "./photos";
 import { getCollectionBaseCurrency } from "./pricing";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
+import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 
@@ -104,6 +105,9 @@ export interface AuctionLotLineItem {
   unconvertible: boolean;
   /** The figure is a lowest-variant estimate (#238) — *inferred, not recorded*. */
   uncertain: boolean;
+  /** The open wants recorded for this stamp (#532), or null for none. On a lot being bid on this
+   *  is the point of the whole record: what is in front of you, and whether you are after it. */
+  wants: StampWantSummary | null;
 }
 
 /** A lot's composition: its lines and what they add up to, in the sale's currency. */
@@ -215,7 +219,7 @@ export async function valuateAuctionLotLines(
   if (rows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [valuations, rates, areas, issuePrefixes] = await Promise.all([
+  const [valuations, rates, areas, issuePrefixes, wantsByStamp] = await Promise.all([
     // One batched valuation over every line of every lot — the point of the whole module.
     valuateItemRows(
       collectionId,
@@ -239,6 +243,9 @@ export async function valuateAuctionLotLines(
     readCollectionAreas(collectionId),
     // …and the per-issue prefix overrides (#377), likewise once for the page.
     loadIssuePrefixMap(collectionId),
+    // The want marker (#532), for every stamp on the page's lines — one read, the same call the
+    // catalogue lists make.
+    loadStampWantSummaries(collectionId, rows.map((r) => r.stampId)),
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
 
@@ -291,6 +298,7 @@ export async function valuateAuctionLotLines(
       subtype: subtypeLabel(row.stamp),
       photos: row.stamp.photos.map(toPhotoSummary).sort((a, b) => a.sortOrder - b.sortOrder),
       unknownVariant: isUnknownVariantStamp(row.stamp),
+      wants: wantsByStamp.get(row.stampId) ?? null,
       conditionId: row.conditionId,
       conditionName: row.condition.name,
       conditionAbbreviation: row.condition.abbreviation,

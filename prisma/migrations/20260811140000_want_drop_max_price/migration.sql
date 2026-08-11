@@ -1,0 +1,21 @@
+-- A want carries no maximum price (#532; ADR-0032 §5).
+--
+-- The column was added one migration ago and is dropped before it ever meant anything, because the
+-- shape was wrong on two counts.
+--
+-- A want is a **standing intention with no date**. A figure on it is a price opinion frozen the day
+-- it was typed, and nothing ever comes back to correct it: the catalogue moves, the market moves,
+-- and the number on the row keeps looking authoritative. That is the same failure ADR-0029 §2 names
+-- for a *configured* realization ratio — "a market opinion stated once and wrong nearly everywhere".
+--
+-- And on a whole-series add (§5b) there is one field over twelve stamps worth wildly different
+-- amounts. Every way out is worse than the problem: copying it stamps one ceiling onto all twelve;
+-- splitting it by catalogue value invents per-stamp limits the collector never stated *and* freezes
+-- them at today's catalogue; splitting it evenly prices a key value the same as a common one.
+--
+-- What a stamp is worth **at the moment of buying** is already answered, against the copy actually
+-- in front of the collector, by the recommendation engine reading recorded results (ADR-0022,
+-- ADR-0029). Two mechanisms answering one question is how they drift, and this is the one with no
+-- evidence behind it.
+
+ALTER TABLE "want" DROP COLUMN "maxPrice";
