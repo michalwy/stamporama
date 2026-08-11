@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 import { sortPhotos, type PhotoSummary } from "./photos";
@@ -1004,13 +1005,10 @@ export async function getWant(ownerId: string, wantId: string): Promise<WantList
 
 // ── Writes ─────────────────────────────────────────────────────────────────
 
-/** The acceptance a create or an edit submits. Each field is the **whole** set for its axis: the
- *  form owns all three, so a diff computed here could not match what was on screen. */
-export interface WantAcceptanceInput {
-  conditionIds: string[];
-  certificateStatusIds: (string | null)[];
-  formatIds: (string | null)[];
-}
+/** The acceptance a create or an edit submits — {@link AcceptanceInput} under the name this module
+ *  and its callers already use. It is stated in `acceptance.ts` rather than here because a named
+ *  profile (#533) is defined over the very same three axes and validated by the same rule. */
+export type WantAcceptanceInput = AcceptanceInput;
 
 export interface WantInput extends WantAcceptanceInput {
   stampId: string;
@@ -1039,49 +1037,6 @@ export interface WantCreateResult {
   skipped: number;
   /** The wants written, in the order their stamps came off the checklist. */
   ids: string[];
-}
-
-/** Reject an id that is not this collection's, and collapse a set's duplicates — including the
- *  `null` member, which the unique index would refuse and the UI should never send twice. */
-async function validateAcceptance(
-  collectionId: string,
-  input: WantAcceptanceInput
-): Promise<WantAcceptanceInput> {
-  const conditionIds = [...new Set(input.conditionIds)];
-  const certificateStatusIds = [...new Set(input.certificateStatusIds)];
-  const formatIds = [...new Set(input.formatIds)];
-
-  const [conditions, certs, formats] = await Promise.all([
-    conditionIds.length
-      ? prisma.stampCondition.findMany({
-          where: { collectionId, id: { in: conditionIds } },
-          select: { id: true },
-        })
-      : [],
-    certificateStatusIds.some((id) => id !== null)
-      ? prisma.certificateStatus.findMany({
-          where: { collectionId, id: { in: certificateStatusIds.filter((id): id is string => !!id) } },
-          select: { id: true },
-        })
-      : [],
-    formatIds.some((id) => id !== null)
-      ? prisma.stampFormat.findMany({
-          where: { collectionId, id: { in: formatIds.filter((id): id is string => !!id) } },
-          select: { id: true },
-        })
-      : [],
-  ]);
-
-  if (conditions.length !== conditionIds.length) {
-    throw new Error("A condition is not in this collection.");
-  }
-  if (certs.length !== certificateStatusIds.filter((id) => id !== null).length) {
-    throw new Error("A certificate status is not in this collection.");
-  }
-  if (formats.length !== formatIds.filter((id) => id !== null).length) {
-    throw new Error("A format is not in this collection.");
-  }
-  return { conditionIds, certificateStatusIds, formatIds };
 }
 
 /** The three acceptance tables, written as one replacement — see {@link WantAcceptanceInput}. */

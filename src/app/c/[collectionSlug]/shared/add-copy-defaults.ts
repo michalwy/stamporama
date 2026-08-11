@@ -20,6 +20,12 @@ export const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
 // the two flows are reached from different screens.
 export const LS_LAST_SUBTYPE = "stamporama:stamp:subtypeId";
 
+// The last acceptance profile a want was saved on (#533), remembered per collection so a run of
+// wants entered at a fair is picked once and repeated. Its own `want` namespace for the reason the
+// subtype has one: this is a property of what is being *looked for*, not of a copy or a catalog
+// entry, and the screens have nothing else in common.
+export const LS_LAST_ACCEPTANCE_PROFILE = "stamporama:want:acceptanceProfileId";
+
 export function readLast(key: string, collectionId: string): string {
   return lsGet(`${key}:${collectionId}`) ?? "";
 }

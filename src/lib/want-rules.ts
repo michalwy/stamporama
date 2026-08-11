@@ -86,6 +86,34 @@ export interface WantAcceptance {
   formatIds: (string | null)[];
 }
 
+/** The three sets on their own — a want's acceptance minus the stamp, which is what a **named
+ *  profile** (#533) holds and what the shared editor edits. */
+export type AcceptanceSets = Omit<WantAcceptance, "stampId">;
+
+/** One axis compared as a set: order is display order and carries no meaning here, and `null` is a
+ *  member like any other. */
+function axisEqual<T extends string | null>(a: T[], b: T[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((v) => right.has(v));
+}
+
+/**
+ * Whether two acceptances say the same thing (#533; ADR-0032 §9).
+ *
+ * What the profile picker reads to name the terms currently on screen. It is a **derivation, never
+ * a stored link**: applying a profile seeds and walks away, so the only honest way to say "these are
+ * the *any mint* terms" is to compare the sets each time. Edit one box and the picker stops claiming
+ * a profile, which is exactly right — the want no longer carries those terms.
+ */
+export function acceptanceSetsEqual(a: AcceptanceSets, b: AcceptanceSets): boolean {
+  return (
+    axisEqual(a.conditionIds, b.conditionIds) &&
+    axisEqual(a.certificateStatusIds, b.certificateStatusIds) &&
+    axisEqual(a.formatIds, b.formatIds)
+  );
+}
+
 /** The four facts about a copy that a want is answered against. */
 export interface WantCandidateCopy {
   stampId: string;

@@ -384,6 +384,25 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 
 Certificate statuses translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button on each of **Name** and **Abbreviation**, feeding the `{certificate}` and `{certificateAbbr}` title tokens.
 
+## Acceptance profiles
+
+A [want](wants.md) records what you would accept — which conditions, which certificate statuses, which formats — and in practice you use the same two or three answers over and over. An **acceptance profile** is one of those answers with a name on it: *Any mint*, *Anything*, *A copy for the collection*. Manage them in the **Acceptance profiles** section of the **Settings → Conditions & formats** tab, beside the three lists a profile is written in.
+
+- **Add** a profile with a name and the same three acceptance fields the want form uses. Leaving an axis untouched means **any** — an empty selection is not a missing answer.
+- **Reorder** profiles by dragging rows; the order is the order they are offered in.
+- **Delete** one you no longer use.
+
+Each row shows the profile's terms in full (`MNG, MH, MNH · Any certificate · Any format`), so you can check what *Any mint* actually says without opening it.
+
+**Applying a profile copies its terms** onto the want. It does not link the two. That means:
+
+- Editing or deleting a profile **never changes wants you have already saved** — including closed ones, whose terms are a record of a decision you made at the time, not a setting.
+- If you change your mind about what *Any mint* should mean, new wants pick up the new terms and old ones keep theirs. There is deliberately no switch that rewrites a hundred saved wants at once.
+
+The profile you last saved a want on is remembered per collection and leads the next **Add want**, so a run through a dealer's list is picked once — see [picking the terms in one go](wants.md#picking-the-terms-in-one-go).
+
+Nothing here is required. Until you add a profile, the **Profile** field does not appear on the want form at all and you pick the terms directly, exactly as before.
+
 ## Stamp subtypes
 
 Stamps can be nested: a base stamp (for example catalog number **2**) can have child stamps under it. Those children come in two philatelic flavours, and the difference matters for how the base stamp is valued and counted:

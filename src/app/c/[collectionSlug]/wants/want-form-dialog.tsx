@@ -21,6 +21,11 @@ import {
   type WantPriority,
 } from "@/lib/want-rules";
 import { WantAcceptanceFields } from "./want-acceptance-fields";
+import {
+  useAcceptanceProfiles,
+  readRememberedProfile,
+  rememberProfileFor,
+} from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -158,6 +163,39 @@ export function WantFormDialog({
   const [priority, setPriority] = useState(want?.priority ?? "normal");
   const [notes, setNotes] = useState(want?.notes ?? "");
 
+  // The same query the acceptance fields' picker reads, so this costs no second request.
+  const { data: profiles } = useAcceptanceProfiles(collectionId);
+
+  // **Add only**: open on the profile the last want was saved on (#533), the way the stamp form
+  // opens on the last subtype. An edit shows the want's own terms — that is what it is for — and
+  // the intake review's narrow step has a seed of its own (ADR-0032 §7) that this must not
+  // overwrite.
+  //
+  // Applied during **render**, the "adjust state when something arrives" pattern the settings
+  // panels use — not in an effect, which would commit the empty form first and then re-render it
+  // filled in.
+  //
+  // It fires **once**, tracked by a flag rather than by the sets being empty: a background refetch
+  // must not re-seed a form whose boxes the collector has since cleared on purpose. It is skipped
+  // outright if anything was ticked while the dictionary was still in flight — that is an answer,
+  // and a late-arriving default must not take it back.
+  const [profileSeeded, setProfileSeeded] = useState(mode !== "add");
+  if (!profileSeeded && profiles) {
+    setProfileSeeded(true);
+    const untouched =
+      acceptance.conditionIds.length === 0 &&
+      acceptance.certificateStatusIds.length === 0 &&
+      acceptance.formatIds.length === 0;
+    const remembered = untouched ? readRememberedProfile(collectionId, profiles) : null;
+    if (remembered) {
+      setAcceptance({
+        conditionIds: [...remembered.conditionIds],
+        certificateStatusIds: [...remembered.certificateStatusIds],
+        formatIds: [...remembered.formatIds],
+      });
+    }
+  }
+
   // Prefill the picker summary on an edit, exactly as the copy form does: the want's catalog
   // numbers are raw (vendor id + number), so they are prefix-formatted here against the stamp's own
   // area — the same labels a fresh pick produces (#357).
@@ -199,6 +237,9 @@ export function WantFormDialog({
         onSubmit={(e) => {
           e.preventDefault();
           if (!stampId && !checklist) return;
+          // What the next add opens on. Written from an **edit** too: the terms a want ended up
+          // with are the answer the collector settled on, whichever dialog they settled it in.
+          rememberProfileFor(collectionId, profiles ?? [], acceptance);
           onSubmit({
             stampId: stampId || null,
             checklistId: checklist?.checklistId ?? null,

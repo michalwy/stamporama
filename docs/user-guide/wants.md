@@ -91,6 +91,30 @@ Then tick what you would accept. You can also record:
   list row uses, for what to chase first when a dealer's list is long;
 - a **note**.
 
+### Picking the terms in one go
+
+If the same acceptance keeps coming up — *any mint*, *anything*, *a copy for the
+collection* — save it once as an
+[acceptance profile](collections.md#acceptance-profiles) and pick it from the **Profile**
+dropdown at the top of the terms. The three fields below fill in, and stay editable: a
+profile is a starting point, not a lock.
+
+The dropdown names the profile whose terms match what is currently ticked, so opening an
+old want tells you which one it was entered on. Change one box and it reads **Custom** —
+the terms are no longer that profile's.
+
+Applying a profile **copies** its terms. Editing the profile later leaves this want, and
+every other want already saved, exactly as it is. The field is absent entirely until you
+have saved at least one profile.
+
+**The last profile you saved a want on comes back next time.** Working through a dealer's
+list is usually a run on one set of terms, so **Add want** opens on the profile you used
+last, per collection — the same way the stamp form opens on the last subtype and the copy
+form on the last condition. Save a want on terms that match no profile and the memory
+clears: you have said the run moved on. Editing a want never re-applies it — an edit shows
+that want's own terms — and neither does the narrow step below, which has a suggestion of
+its own.
+
 ### There is no price on a want
 
 Deliberately. A want has no date on it, so any figure you typed would be a price opinion
@@ -241,7 +265,9 @@ for each one:
 - **Narrow it…** — it is only *partly* met. This is the common case: the want was
   "anything", a used copy arrived, and now you are looking for a mint one. The editor
   opens with a suggestion — everything except the condition that just arrived — and you
-  adjust it before saving. The want stays open.
+  adjust it before saving. The want stays open. An
+  [acceptance profile](collections.md#acceptance-profiles) can be applied here too, since
+  narrowing is the same question the want form asks.
 - **Leave open** — nothing changes.
 
 **Nothing is ever closed automatically.** Holding a copy is not the same as having what

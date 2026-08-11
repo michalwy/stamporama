@@ -271,6 +271,69 @@ axis satisfied when its set is empty **or** contains the copy's value — null i
 No Prisma, no I/O, so the intake review and any later consumer cannot disagree about what "could
 satisfy" means.
 
+### 9. A named acceptance profile is **seeded**, never referenced
+
+(#533, added after the plain form had been used.)
+
+A collector uses the same two or three acceptance sets over and over — "any mint", "anything", "a
+copy for the collection". Ticking `MNG`, `MH`, `MNH` on every want is the kind of repetition that
+stops a want list from being maintained, so an `AcceptanceProfile` is a **named, reusable acceptance
+set**, collection-scoped, carrying exactly the three axes a want carries and nothing else. Nullable
+members included, so "no certificate" and "single" stay expressible on a profile as they are on a
+want; empty is still "any". It is edited under **Settings → Conditions & formats**, beside the three
+dictionaries it is written in.
+
+The decision that mattered was what applying one *means*, and the two candidates behave differently
+the moment a profile is edited:
+
+- **Reference** — the want points at the profile, and editing the profile changes every want using
+  it.
+- **Seed** — choosing a profile copies its sets onto the want, and later edits to the profile do not
+  reach it.
+
+**Seed.** Three reasons, in order:
+
+1. It is the precedent already set here. `CollageTemplate` (#308) seeds its numbers onto an offer
+   and `Contact.descriptionTemplate` seeds its text; neither is pointed at, for the same reason.
+2. A reference makes editing a profile a **silent rewrite of what every existing want accepts** —
+   including closed ones, whose acceptance is not a setting but a record of a decision already
+   taken. Narrowing "Any mint" to MNH-only three months in would quietly restate what a hundred
+   wants had asked for, and nothing on screen would have said so.
+3. It leaves no in-use check to get wrong. There is no `onDelete: Restrict` to reason about, no
+   orphan, and deleting a profile cannot affect a want.
+
+The cost is named rather than argued away: changing a profile's terms **and** the wants already
+carrying them is then two acts, not one. The answer to that, if it is ever actually wanted, is a
+**bulk edit over a chosen set of wants** — which is the thing a reference gets wrong by doing it to
+all of them without being asked. It is deliberately not built here.
+
+The schema cannot record this choice — a seed leaves no column behind, and the absence of a
+`profileId` on `Want` *is* the decision. That is exactly why it is written down here.
+
+Two consequences follow in the UI:
+
+- The picker lives inside the shared acceptance editor, so the want form and the intake review's
+  *narrow* step both get it from one place, and the Settings editor that **defines** profiles turns
+  it off — seeding a profile from a profile is a question that answers itself.
+- Which profile the picker shows is **derived by comparing the sets** (`acceptanceSetsEqual` in
+  `want-rules.ts`), never stored. Applying one seeds and walks away, so comparing is the only honest
+  way to name what is on screen; edit one box and the picker drops to *Custom*, because the terms
+  are no longer that profile's.
+
+The profile a want was **saved** on leads the next add, remembered per collection in `localStorage`
+beside the last subtype (#342) and the last condition (#121) — wants are entered in runs, and a run
+is almost always on one set of terms. Four things about it are decisions rather than details:
+
+- **Saved, not picked.** A profile chosen, looked at and then cancelled is not what the collector
+  went with.
+- **Derived on submit**, not tracked as a selection. The form has no other notion of "the current
+  profile" — §9's whole point — and a second one would be a thing to keep in step.
+- **Custom terms clear it.** A want deliberately entered off-profile says the run has moved on, and
+  leaving the old id behind would seed the next want with terms just chosen against.
+- **Read on add only.** An edit shows the want's own terms, which is what an edit is for; the
+  narrow step at intake has §7's own seed and must not have it overwritten. A remembered profile
+  since deleted falls back to no profile rather than to a guess.
+
 ## Schema
 
 ```prisma
@@ -288,6 +351,13 @@ model Want {
 model WantCondition          { wantId String; conditionId String }            // @@id, no nulls
 model WantCertificateStatus  { id String @id; wantId String; certificateStatusId String? }
 model WantFormat             { id String @id; wantId String; formatId String? }
+
+// §9. The same three axes under a name. No `profileId` on `Want`: a profile is copied, not
+// pointed at, and that absence is the decision.
+model AcceptanceProfile { id String @id; collectionId String; name String; sortOrder Int }
+model AcceptanceProfileCondition          { profileId String; conditionId String }
+model AcceptanceProfileCertificateStatus  { id String @id; profileId String; certificateStatusId String? }
+model AcceptanceProfileFormat             { id String @id; profileId String; formatId String? }
 ```
 
 Every FK cascades. A want records nothing that *happened* — unlike a purchase or a sale — so
@@ -317,6 +387,7 @@ on it.
 
 ## Still open
 
-- **Named acceptance profiles** ("any mint", "anything") are #533, deliberately separate. Whether
-  they are needed depends on how the plain form feels once wants are being entered in bulk.
+- **Editing a profile's terms across the wants already carrying them** — a bulk edit over a chosen
+  set of wants, deliberately not the automatic rewrite a reference would have been (§9). Unbuilt
+  until the two-act version proves tedious, on the same trigger #533 itself waited on.
 - Highlighting a want while browsing a marketplace (#253/#250) is not built here.

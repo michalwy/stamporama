@@ -2,10 +2,12 @@
 
 import { LabelWithError } from "@/app/dialog-shell";
 import type { WantAcceptanceInput } from "@/lib/wants";
+import { acceptanceSetsEqual } from "@/lib/want-rules";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
+import { useAcceptanceProfiles } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 
 // The three acceptance axes of a want (#532; ADR-0032 §1/§3), as one editor shared by the want form
 // and the intake review's *narrow* step — the two places the same question is asked, which must not
@@ -24,6 +26,21 @@ import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/share
 
 /** The `null` member's key inside the control. Never leaves this module. */
 const NONE = "__none__";
+
+/** The picker's "no profile" key. `""` so a blank `<select>` needs no sentinel of its own. */
+const CUSTOM = "";
+
+const SELECT_STYLE: React.CSSProperties = {
+  width: "100%",
+  padding: "0.375rem 0.5rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.875rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  boxSizing: "border-box",
+  minHeight: "2rem",
+};
 
 const toKey = (id: string | null): string => id ?? NONE;
 const fromKey = (key: string): string | null => (key === NONE ? null : key);
@@ -66,6 +83,7 @@ export function WantAcceptanceFields({
   extra,
   menuZIndex,
   onPopoverOpenChange,
+  profiles: profilesEnabled = true,
 }: {
   collectionId: string;
   value: WantAcceptanceInput;
@@ -73,6 +91,9 @@ export function WantAcceptanceFields({
   disabled?: boolean;
   /** Rendered as the grid's fourth cell. */
   extra?: React.ReactNode;
+  /** Offer the named-profile picker (#533). False in the Settings editor that *defines* profiles —
+   *  seeding a profile from a profile is a question that answers itself. */
+  profiles?: boolean;
   /** Raised above the enclosing dialog's panel — see `MultiSelectFilter`'s own note. */
   menuZIndex?: number;
   /** True while any of the three menus is open, so the enclosing dialog can stop dismissing itself
@@ -82,6 +103,16 @@ export function WantAcceptanceFields({
   const { data: conditions } = useCollectionConditions(collectionId);
   const { data: certificateStatuses } = useCollectionCertificateStatuses(collectionId);
   const { data: formats } = useCollectionFormats(collectionId);
+  const { data: profiles } = useAcceptanceProfiles(collectionId, { enabled: profilesEnabled });
+
+  // Which profile — if any — the boxes below currently say. **Derived, never stored**: applying a
+  // profile seeds the sets and the link ends there (ADR-0032 §9), so comparing is the only honest
+  // way to name what is on screen. Tick one more condition and the picker drops back to *Custom*,
+  // which is right — the terms are no longer that profile's.
+  const activeProfileId =
+    profiles?.find((p) => acceptanceSetsEqual(p, value))?.id ?? CUSTOM;
+
+  const showProfiles = profilesEnabled && (profiles?.length ?? 0) > 0;
 
   // One report for three menus: the dialog only cares whether *something* is stacked above it, and
   // only one can be open at a time (opening one closes the last on the outside-click listener).
@@ -96,60 +127,106 @@ export function WantAcceptanceFields({
   };
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: "1rem",
-        alignItems: "start",
-      }}
-    >
-      <Axis label="Acceptable conditions">
-        <MultiSelectFilter
-          // The one axis with no "none" row: a copy always has a condition.
-          options={(conditions ?? []).map((c) => ({ id: c.id, label: c.abbreviation || c.name }))}
-          selected={value.conditionIds}
-          onChange={(next) => onChange({ ...value, conditionIds: next })}
-          allLabel="Any condition"
-          itemNoun="conditions"
-          ariaLabel="Acceptable conditions"
-          {...shared}
-        />
-      </Axis>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* The picker leads the block, because on the common want it is the *only* control touched:
+          pick "any mint" and the three sets below are answered. It is absent entirely until the
+          collection has a profile — an empty dropdown labelled *Profile* is a setup step disguised
+          as a field, and nothing here is required. */}
+      {showProfiles && (
+        <div style={{ maxWidth: "calc(50% - 0.5rem)" }}>
+          <LabelWithError htmlFor="want-acceptance-profile">Profile</LabelWithError>
+          <select
+            id="want-acceptance-profile"
+            value={activeProfileId}
+            disabled={disabled}
+            onChange={(e) => {
+              const picked = (profiles ?? []).find((p) => p.id === e.target.value);
+              // Choosing *Custom* changes nothing: it is what the boxes already say whenever no
+              // profile matches, not an instruction to clear them.
+              if (!picked) return;
+              onChange({
+                conditionIds: [...picked.conditionIds],
+                certificateStatusIds: [...picked.certificateStatusIds],
+                formatIds: [...picked.formatIds],
+              });
+            }}
+            style={SELECT_STYLE}
+          >
+            <option value={CUSTOM}>Custom</option>
+            {(profiles ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p
+            style={{
+              margin: "0.375rem 0 0",
+              fontSize: "0.75rem",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Fills the terms below. They stay editable, and later changes to the profile leave wants
+            already saved alone.
+          </p>
+        </div>
+      )}
 
-      <Axis label="Acceptable certificate">
-        <MultiSelectFilter
-          options={[
-            { id: NONE, label: "No certificate" },
-            ...(certificateStatuses ?? []).map((c) => ({ id: c.id, label: c.name })),
-          ]}
-          selected={value.certificateStatusIds.map(toKey)}
-          onChange={(next) =>
-            onChange({ ...value, certificateStatusIds: next.map(fromKey) })
-          }
-          allLabel="Any certificate"
-          itemNoun="certificate options"
-          ariaLabel="Acceptable certificate"
-          {...shared}
-        />
-      </Axis>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "1rem",
+          alignItems: "start",
+        }}
+      >
+        <Axis label="Acceptable conditions">
+          <MultiSelectFilter
+            // The one axis with no "none" row: a copy always has a condition.
+            options={(conditions ?? []).map((c) => ({ id: c.id, label: c.abbreviation || c.name }))}
+            selected={value.conditionIds}
+            onChange={(next) => onChange({ ...value, conditionIds: next })}
+            allLabel="Any condition"
+            itemNoun="conditions"
+            ariaLabel="Acceptable conditions"
+            {...shared}
+          />
+        </Axis>
 
-      <Axis label="Acceptable format">
-        <MultiSelectFilter
-          options={[
-            { id: NONE, label: "Single" },
-            ...(formats ?? []).map((f) => ({ id: f.id, label: f.name })),
-          ]}
-          selected={value.formatIds.map(toKey)}
-          onChange={(next) => onChange({ ...value, formatIds: next.map(fromKey) })}
-          allLabel="Any format"
-          itemNoun="formats"
-          ariaLabel="Acceptable format"
-          {...shared}
-        />
-      </Axis>
+        <Axis label="Acceptable certificate">
+          <MultiSelectFilter
+            options={[
+              { id: NONE, label: "No certificate" },
+              ...(certificateStatuses ?? []).map((c) => ({ id: c.id, label: c.name })),
+            ]}
+            selected={value.certificateStatusIds.map(toKey)}
+            onChange={(next) =>
+              onChange({ ...value, certificateStatusIds: next.map(fromKey) })
+            }
+            allLabel="Any certificate"
+            itemNoun="certificate options"
+            ariaLabel="Acceptable certificate"
+            {...shared}
+          />
+        </Axis>
 
-      {extra}
+        <Axis label="Acceptable format">
+          <MultiSelectFilter
+            options={[
+              { id: NONE, label: "Single" },
+              ...(formats ?? []).map((f) => ({ id: f.id, label: f.name })),
+            ]}
+            selected={value.formatIds.map(toKey)}
+            onChange={(next) => onChange({ ...value, formatIds: next.map(fromKey) })}
+            allLabel="Any format"
+            itemNoun="formats"
+            ariaLabel="Acceptable format"
+            {...shared}
+          />
+        </Axis>
+
+        {extra}
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { FormatsPanel } from "./formats-panel";
 import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
+import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectPanel } from "./colnect-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
@@ -274,6 +275,14 @@ export function SettingsTabs({
               conditions={initialConditions}
               areas={initialAreas}
             />
+          </section>
+          {/* Acceptance profiles (#533) sit here rather than under Wants: a profile is written
+              entirely in this tab's three vocabularies — condition, certificate, format — and is
+              set up in the same sitting they are. It reads its own list client-side, being the same
+              query the want form's picker reads. */}
+          <section>
+            <h2 style={sectionHeadingStyle}>Acceptance profiles</h2>
+            <AcceptanceProfilesPanel collectionId={collectionId} />
           </section>
         </div>
       )}

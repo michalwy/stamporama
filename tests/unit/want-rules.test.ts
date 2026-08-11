@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   wantMatchesCopy,
   narrowConditionSeed,
+  acceptanceSetsEqual,
+  type AcceptanceSets,
   type WantAcceptance,
   type WantCandidateCopy,
 } from "../../src/lib/want-rules";
@@ -123,5 +125,62 @@ describe("narrowConditionSeed", () => {
     const seeded = narrowConditionSeed(ALL_CONDITIONS, U, current);
     seeded.push(MH);
     assert.deepEqual(current, [MNH]);
+  });
+});
+
+describe("acceptanceSetsEqual", () => {
+  const sets = (over: Partial<AcceptanceSets> = {}): AcceptanceSets => ({
+    conditionIds: [],
+    certificateStatusIds: [],
+    formatIds: [],
+    ...over,
+  });
+
+  it("is true for two empty acceptances — both say 'anything'", () => {
+    assert.equal(acceptanceSetsEqual(sets(), sets()), true);
+  });
+
+  it("ignores order, which is display order and carries no meaning", () => {
+    assert.equal(
+      acceptanceSetsEqual(
+        sets({ conditionIds: [MNG, MH, MNH] }),
+        sets({ conditionIds: [MNH, MNG, MH] })
+      ),
+      true
+    );
+  });
+
+  it("keeps 'any' apart from a set that happens to list everything", () => {
+    assert.equal(
+      acceptanceSetsEqual(sets(), sets({ conditionIds: ALL_CONDITIONS })),
+      false
+    );
+  });
+
+  it("treats null as the member it is, not as an absent answer", () => {
+    assert.equal(
+      acceptanceSetsEqual(
+        sets({ certificateStatusIds: [null] }),
+        sets({ certificateStatusIds: [] })
+      ),
+      false
+    );
+    assert.equal(
+      acceptanceSetsEqual(
+        sets({ formatIds: [null, BLOCK4] }),
+        sets({ formatIds: [BLOCK4, null] })
+      ),
+      true
+    );
+  });
+
+  it("compares every axis, not just the first", () => {
+    assert.equal(
+      acceptanceSetsEqual(
+        sets({ conditionIds: [MNH], formatIds: [BLOCK4] }),
+        sets({ conditionIds: [MNH], formatIds: [] })
+      ),
+      false
+    );
   });
 });
