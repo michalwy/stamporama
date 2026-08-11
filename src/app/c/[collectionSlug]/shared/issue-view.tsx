@@ -258,22 +258,27 @@ export function ChecklistsBadge({
   );
 }
 
-/** Stamp title inline: "12 Mar 1960, Eagle" — date muted, name emphasised. */
+/**
+ * Stamp title inline: "12 Mar 1960, Eagle" — date muted, name emphasised.
+ *
+ * A stamp with no name prints **nothing** in the name's place (#535): a stamp is read by its
+ * catalog number, which the detail line under this one already carries, and a column of
+ * "(unnamed)" repeated the same non-fact down every row of a tree. The date then stands on its
+ * own, without the comma that was separating it from a name that is not there.
+ */
 export function StampTitle({ node }: { node: StampNodeData }) {
   const dateStr = formatIssuedDate(node.issuedDay, node.issuedMonth, node.issuedYear);
+  if (!node.name) {
+    return dateStr ? (
+      <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>{dateStr}</span>
+    ) : null;
+  }
   return (
     <>
       {dateStr && (
         <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>{dateStr}, </span>
       )}
-      <span
-        style={{
-          color: node.name ? "var(--color-text-primary)" : "var(--color-text-muted)",
-          fontStyle: node.name ? undefined : "italic",
-        }}
-      >
-        {node.name ?? "(unnamed)"}
-      </span>
+      <span style={{ color: "var(--color-text-primary)" }}>{node.name}</span>
     </>
   );
 }
