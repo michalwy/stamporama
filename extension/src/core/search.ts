@@ -19,13 +19,35 @@ export interface SubtypeLabel {
 
 export type WantPriority = "high" | "normal" | "low";
 
-/** One open want, in the want list's own wording per axis (#532) — *which* condition is wanted is
- *  most of the answer at an auction. `here` and `coming` are **this want's** own copies, not the
- *  stamp's: a mint-only want reads zero while a used copy sits in the drawer, and both are true. */
+/**
+ * One value of an axis — a condition, a certificate status, a format — said twice.
+ *
+ * `abbr` is what the chip reads and `name` what its hover says. A want accepting four conditions is
+ * four chips on one row, and four spelled-out names is a paragraph; but an abbreviation is only a
+ * handle for someone who already knows the dictionary, and this window is read against a listing
+ * written in somebody else's words.
+ */
+export interface SearchAxisValue {
+  abbr: string;
+  name: string;
+}
+
+/** One catalog number as a chip, the area's primary catalog marked — the number the collector
+ *  thinks in leads the row and is drawn louder than the rest (#357/#181). */
+export interface SearchCatalogLabel {
+  label: string;
+  isPrimary: boolean;
+}
+
+/** One open want, per axis (#532) — *which* condition is wanted is most of the answer at an
+ *  auction. An **empty** axis is not an omission: it means the want takes anything on that axis
+ *  (ADR-0032 §1), which is why the row draws an *Any …* chip rather than nothing.
+ *  `here` and `coming` are **this want's** own copies, not the stamp's: a mint-only want reads zero
+ *  while a used copy sits in the drawer, and both are true. */
 export interface SearchWant {
-  conditions: string;
-  certificate: string;
-  format: string;
+  conditions: SearchAxisValue[];
+  certificates: SearchAxisValue[];
+  formats: SearchAxisValue[];
   priority: WantPriority;
   here: number;
   coming: number;
@@ -44,7 +66,10 @@ export interface SearchStamp {
   areaName: string | null;
   issueName: string | null;
   issueYear: number | null;
-  catalogNumbers: string[];
+  catalogNumbers: SearchCatalogLabel[];
+  /** The stamp's lead catalog photo (#137), or null. The bytes are fetched with the profile's own
+   *  token from the collection-scoped thumb route — an `<img src>` cannot carry that header. */
+  photoId: string | null;
   subtype: SubtypeLabel | null;
   hasVariants: boolean;
   isVariant: boolean;
@@ -71,10 +96,17 @@ export interface SearchCopy {
   itemId: string;
   itemNo: number;
   stampName: string | null;
+  areaName: string | null;
   issueName: string | null;
-  catalogNumbers: string[];
-  conditionName: string;
-  formatName: string | null;
+  issueYear: number | null;
+  catalogNumbers: SearchCatalogLabel[];
+  /** The copy's own lead photo, or its stamp's catalog photo when it has none. */
+  photoId: string | null;
+  condition: SearchAxisValue;
+  /** Null is "no certificate", which the row leaves unsaid rather than chipping. */
+  certificate: SearchAxisValue | null;
+  /** Null is *single* — the format nothing is stored for, so there is nothing to draw. */
+  format: SearchAxisValue | null;
   locationRef: string | null;
   /** What the copy is *for* (#99/#550): three independent flags, never one state — a duplicate kept
    *  in the collection until it sells is both in the collection and for sale. */
@@ -119,14 +151,40 @@ export function wantedRows(stamps: readonly SearchStamp[]): WantedRow[] {
     .sort((a, b) => rank[a.want.priority] - rank[b.want.priority]);
 }
 
+/** One chip of a want's acceptance, and which axis it belongs to — the row tints the three
+ *  differently, so a run of six chips still reads as three answers rather than one list. */
+export interface WantAxisChip extends SearchAxisValue {
+  axis: "condition" | "certificate" | "format";
+}
+
 /**
- * What is actually being looked for, in the want list's own wording per axis.
+ * What is actually being looked for, as the chips the row draws.
  *
  * Stated rather than counted, because *which* condition is wanted is the answer at an auction:
- * `Mint never hinged · Single` is a decision, `1 want` is a prompt to go and look it up.
+ * `MNH · Single` is a decision, `1 want` is a prompt to go and look it up. Chips rather than a
+ * sentence for the reason the app's own want row uses them — a want accepting three conditions and
+ * two certificates reads as five values, not as one string with commas inside commas.
+ *
+ * Every axis contributes **something**, an empty one an *Any …* chip: a blank axis and an
+ * unanswered one look identical and mean opposite things (ADR-0032 §1), and at an auction "takes
+ * any certificate" is the fact that decides the bid.
  */
-export function wantAxesLabel(want: SearchWant): string {
-  return [want.conditions, want.certificate, want.format].filter(Boolean).join(" · ");
+export function wantAxisChips(want: SearchWant): WantAxisChip[] {
+  return [
+    ...axisChips(want.conditions, "condition", "Any cond.", "Any condition"),
+    ...axisChips(want.certificates, "certificate", "Any cert.", "Any certificate"),
+    ...axisChips(want.formats, "format", "Any format", "Any format"),
+  ];
+}
+
+function axisChips(
+  values: readonly SearchAxisValue[],
+  axis: WantAxisChip["axis"],
+  anyAbbr: string,
+  anyName: string
+): WantAxisChip[] {
+  if (values.length === 0) return [{ abbr: anyAbbr, name: anyName, axis }];
+  return values.map((v) => ({ ...v, axis }));
 }
 
 /**

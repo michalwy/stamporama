@@ -9,6 +9,8 @@ import type { WantPriority } from "./want-rules";
 import { formatCatalogNumber, parseCatalogSearch } from "./catalog-number";
 import { buildAreaPrefixNodes, effectivePrefixFor } from "./area-prefix";
 import { loadIssuePrefixMap } from "./issue-prefix";
+import { buildPrimaryVendorByAreaMap } from "./pricing";
+import { sortPhotos } from "./photos";
 import type { SubtypeLabel } from "./variant-classification";
 
 // One text, three answers: "have I got this?" asked from outside the app (#529).
@@ -42,12 +44,41 @@ import type { SubtypeLabel } from "./variant-classification";
  * buckets — a copy arrived but unsorted counts as here, since it is in hand however unfiled.
  */
 export interface CollectionSearchWant {
-  conditions: string;
-  certificate: string;
-  format: string;
+  conditions: CollectionSearchAxisValue[];
+  certificates: CollectionSearchAxisValue[];
+  formats: CollectionSearchAxisValue[];
   priority: WantPriority;
   here: number;
   coming: number;
+}
+
+/**
+ * One value an acceptance axis (or a copy's own axis) takes, said **twice**.
+ *
+ * `abbr` is what a chip reads — `MNH`, `PC`, `Pair` — because a want accepting four conditions and
+ * two certificates is six chips on one row, and six spelled-out names is a paragraph. `name` is what
+ * the chip's hover says, since an abbreviation is only a handle for a collector who already knows
+ * the dictionary, and this window is read at an auction by someone comparing it against a listing
+ * written in somebody else's words. A dictionary row with no abbreviation falls back to its name in
+ * both, exactly as `loadStampWantSummaries` does.
+ */
+export interface CollectionSearchAxisValue {
+  abbr: string;
+  name: string;
+}
+
+/**
+ * One catalog number as a row's chip draws it, the **primary** catalog's marked.
+ *
+ * A label alone cannot say which of three numbers is the one the collector thinks in (#181/#357):
+ * `Fi·PL 45I`, `Mi·PL 43` and `Yt·PL 89` are one stamp read out of three catalogues, and which one
+ * leads depends on the area's primary catalog rather than on the order they happen to be stored in.
+ * So the ordering is done here — primary first — and the flag travels with it, because the window
+ * draws the leading chip differently rather than merely putting it first.
+ */
+export interface CollectionSearchCatalogLabel {
+  label: string;
+  isPrimary: boolean;
 }
 
 /** What a stamp's open wants say, or null when none are open. */
@@ -66,8 +97,12 @@ export interface CollectionSearchStamp {
   areaName: string | null;
   issueName: string | null;
   issueYear: number | null;
-  /** Formatted catalog labels, e.g. `["Mi·PL 200"]`. */
-  catalogNumbers: string[];
+  /** Formatted catalog labels, primary catalog first (`[{ label: "Mi·PL 200", isPrimary: true }]`). */
+  catalogNumbers: CollectionSearchCatalogLabel[];
+  /** The stamp's lead **catalog** photo (#137), or null — front → back → extras, the ordering every
+   *  other list row's thumbnail takes. Metadata is not sent: the id is what the collection-scoped
+   *  serving route addresses the bytes by, and the caller is the one holding the token. */
+  photoId: string | null;
   subtype: SubtypeLabel | null;
   /** True for a base stamp that has variants — the copies below may be filed on a child. */
   hasVariants: boolean;
@@ -105,10 +140,21 @@ export interface CollectionSearchCopy {
   itemId: string;
   itemNo: number;
   stampName: string | null;
+  /** Where the stamp sits in the collection's areas, and which set it is from — the same three
+   *  facts a stamp row states, because a copy row is asked the same "which stamp is this?" first. */
+  areaName: string | null;
   issueName: string | null;
-  catalogNumbers: string[];
-  conditionName: string;
-  formatName: string | null;
+  issueYear: number | null;
+  catalogNumbers: CollectionSearchCatalogLabel[];
+  /** The copy's own lead photo (#112), falling back to its stamp's catalog photo (#137) when it has
+   *  none. The window is opened to recognise a stamp rather than to audit which copies have been
+   *  photographed, and a thumbnail column empty on most rows is worse than the catalogue picture. */
+  photoId: string | null;
+  condition: CollectionSearchAxisValue;
+  /** Null is "no certificate" (ADR-0006 §2), which the row leaves unsaid rather than chipping. */
+  certificate: CollectionSearchAxisValue | null;
+  /** Null is *single* (ADR-0020) — no such dictionary row exists, so there is nothing to draw. */
+  format: CollectionSearchAxisValue | null;
   /** The shelf reference it is filed under (#303), or null. */
   locationRef: string | null;
   /**
@@ -189,12 +235,31 @@ export async function searchCollection(
   ]);
 
   const stampIds = stampHits.map((s) => s.stampId);
-  const [counts, wants] = await Promise.all([
+  // Every stamp a row on this page is about — the matched catalogue rows *and* the stamps the copies
+  // are of, which are not the same set: a copy is found by its shelf reference or its own notes
+  // while its stamp matched nothing, and its row still wants the catalogue's picture.
+  const photoStampIds = [...new Set([...stampIds, ...copyPage.items.map((i) => i.stampId)])];
+
+  const [counts, wants, catalog, axes, stampPhotos, stampNumbers] = await Promise.all([
     loadStampCopyCounts(collectionId, stampIds),
     loadStampWantSummaries(collectionId, stampIds),
+    makeCatalogLabeller(collectionId, vendors),
+    loadAxisDictionaries(collectionId),
+    loadStampLeadPhotos(photoStampIds),
+    // The matched stamps' numbers as **pairs**, which the picker's own answer has already resolved
+    // to strings — and a string cannot be ordered by vendor. Read again rather than widening the
+    // picker's row: what leads a chip row is this window's question, not the picker's.
+    stampIds.length > 0
+      ? prisma.stamp.findMany({
+          where: { id: { in: stampIds } },
+          select: {
+            id: true,
+            catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
-
-  const labelFor = await makeCopyCatalogLabeller(collectionId, vendors);
+  const numbersByStamp = new Map(stampNumbers.map((s) => [s.id, s.catalogNumbers]));
 
   return {
     query: text,
@@ -205,13 +270,18 @@ export async function searchCollection(
       areaName: s.areaName,
       issueName: s.issueName,
       issueYear: s.issueYear,
-      catalogNumbers: s.catalogNumbers,
+      catalogNumbers: catalog.labelFor(
+        s.areaId,
+        s.issueId,
+        numbersByStamp.get(s.stampId) ?? []
+      ),
+      photoId: stampPhotos.get(s.stampId) ?? null,
       subtype: s.subtype,
       hasVariants: s.hasVariants,
       isVariant: s.isVariant,
       copies: counts.direct.get(s.stampId)?.total ?? 0,
       variantCopies: counts.variant.get(s.stampId) ?? 0,
-      wants: toSearchWants(wants.get(s.stampId)),
+      wants: toSearchWants(wants.get(s.stampId), axes),
       path: `${base}/stamps/${s.stampId}`,
     })),
     issues: issueHits.map((i) => ({
@@ -224,16 +294,100 @@ export async function searchCollection(
       itemId: item.id,
       itemNo: item.itemNo,
       stampName: item.stampName,
+      areaName: item.areaId ? (catalog.areaName.get(item.areaId) ?? null) : null,
       issueName: item.issueName,
-      catalogNumbers: labelFor(item.areaId, item.issueId, item.catalogNumbers),
-      conditionName: item.conditionName,
-      formatName: item.formatName,
+      issueYear: item.issueYear,
+      catalogNumbers: catalog.labelFor(item.areaId, item.issueId, item.catalogNumbers),
+      photoId: item.photos[0]?.id ?? stampPhotos.get(item.stampId) ?? null,
+      condition: {
+        abbr: item.conditionAbbreviation || item.conditionName,
+        name: item.conditionName,
+      },
+      certificate: item.certificateStatusId
+        ? (axes.certificate.get(item.certificateStatusId) ?? null)
+        : null,
+      format: item.formatId
+        ? {
+            abbr: item.formatAbbreviation || item.formatName || "?",
+            name: item.formatName ?? "?",
+          }
+        : null,
       locationRef: item.locationRef,
       inCollection: item.inCollection,
       forSale: item.forSale,
       forTrade: item.forTrade,
       path: `${base}/inventory/${item.id}`,
     })),
+  };
+}
+
+/**
+ * The **lead** photo of each of `stampIds`, front → back → extras (#137).
+ *
+ * One read for the page rather than a relation on each of three searches: two of them (the picker's,
+ * the Copies list's) are shared with screens that do not draw this window's thumbnail, and the third
+ * is looked up by stamp id anyway.
+ */
+async function loadStampLeadPhotos(stampIds: string[]): Promise<Map<string, string>> {
+  const lead = new Map<string, string>();
+  if (stampIds.length === 0) return lead;
+  const photos = await prisma.photo.findMany({
+    where: { stampId: { in: stampIds } },
+    select: { id: true, stampId: true, role: true, sortOrder: true },
+  });
+  const byStamp = new Map<string, typeof photos>();
+  for (const p of photos) {
+    if (!p.stampId) continue; // the column is nullable in general; the filter above cannot return one
+    const list = byStamp.get(p.stampId);
+    if (list) list.push(p);
+    else byStamp.set(p.stampId, [p]);
+  }
+  for (const [stampId, list] of byStamp) {
+    const first = [...list].sort((a, b) =>
+      sortPhotos(
+        { role: normalizePhotoRole(a.role), sortOrder: a.sortOrder },
+        { role: normalizePhotoRole(b.role), sortOrder: b.sortOrder }
+      )
+    )[0];
+    if (first) lead.set(stampId, first.id);
+  }
+  return lead;
+}
+
+/** The three roles `sortPhotos` ranks; anything else sorts with the extras. */
+function normalizePhotoRole(role: string | null): "front" | "back" | "main" | null {
+  return role === "front" || role === "back" || role === "main" ? role : null;
+}
+
+/** What a copy's and a want's axis chips read, by id. Loaded whole — these are dictionaries of a
+ *  handful of rows each, and a page of ten copies would otherwise be ten joins for two words. */
+interface AxisDictionaries {
+  condition: Map<string, CollectionSearchAxisValue>;
+  certificate: Map<string, CollectionSearchAxisValue>;
+  format: Map<string, CollectionSearchAxisValue>;
+}
+
+async function loadAxisDictionaries(collectionId: string): Promise<AxisDictionaries> {
+  const [conditions, certificates, formats] = await Promise.all([
+    prisma.stampCondition.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+    prisma.certificateStatus.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+    prisma.stampFormat.findMany({
+      where: { collectionId },
+      select: { id: true, name: true, abbreviation: true },
+    }),
+  ]);
+  const index = (rows: { id: string; name: string; abbreviation: string | null }[]) =>
+    new Map(rows.map((r) => [r.id, { abbr: r.abbreviation || r.name, name: r.name }]));
+  return {
+    condition: index(conditions),
+    certificate: index(certificates),
+    format: index(formats),
   };
 }
 
@@ -245,15 +399,36 @@ export async function searchCollection(
  * else's listing — so the words are kept and the ids are dropped rather than sent to a window that
  * could only mis-use them.
  */
-function toSearchWants(summary: StampWantSummary | undefined): CollectionSearchWants | null {
+function toSearchWants(
+  summary: StampWantSummary | undefined,
+  axes: AxisDictionaries
+): CollectionSearchWants | null {
   if (!summary || summary.openCount === 0) return null;
+  // The summary states each axis as prose (`"MNH, MH, MNG"`, `"Certificate: any"`) for the app's own
+  // popover; a row of chips needs the values apart, so they are rebuilt from the **ids** the same
+  // summary carries. An empty acceptance set stays an empty list rather than becoming an "any"
+  // label here: a blank axis and an unanswered one mean opposite things (ADR-0032 §1), and which
+  // words say so is the window's business.
+  const values = <T extends string | null>(
+    ids: readonly T[],
+    dictionary: Map<string, CollectionSearchAxisValue>,
+    noneLabel: string
+  ): CollectionSearchAxisValue[] =>
+    ids.map((id) =>
+      id === null
+        ? { abbr: noneLabel, name: noneLabel }
+        : (dictionary.get(id) ?? { abbr: "?", name: "?" })
+    );
+
   return {
     openCount: summary.openCount,
     topPriority: summary.topPriority,
     wants: summary.entries.map((entry) => ({
-      conditions: entry.conditions,
-      certificate: entry.certificate,
-      format: entry.format,
+      conditions: values(entry.acceptance.conditionIds, axes.condition, "None"),
+      // `null` is a member of these two rather than the absence of one (ADR-0032 §3): "no
+      // certificate" (ADR-0006 §2) and "single" (ADR-0020), neither of which is a dictionary row.
+      certificates: values(entry.acceptance.certificateStatusIds, axes.certificate, "No cert."),
+      formats: values(entry.acceptance.formatIds, axes.format, "Single"),
       priority: entry.priority,
       // `toSort` folds into *here*: a copy arrived but unfiled is one in hand, and the distinction
       // the want list draws — sorted vs. on the desk — decides nothing while standing at an auction.
@@ -263,26 +438,37 @@ function toSearchWants(summary: StampWantSummary | undefined): CollectionSearchW
   };
 }
 
-/**
- * Build the labeller that turns a copy's stored catalog numbers into the labels the collector reads
- * (`"Mi·PL 200"`).
- *
- * The Copies list read model carries the raw `{ vendorId, number }` pairs and resolves the display
- * on the client; a copy row here has to be recognisable from the number that was searched for, so
- * the same resolution — vendor abbreviation + effective area prefix, with the issue's override
- * (#377) winning — happens once for the page rather than per row.
- */
-async function makeCopyCatalogLabeller(
-  collectionId: string,
-  vendors: readonly { id: string; abbreviation: string }[]
-): Promise<
-  (
+/** What the page needs to draw a row's catalog chips and name its area. */
+interface CatalogLabelling {
+  labelFor: (
     areaId: string | null,
     issueId: string | null,
-    numbers: { catalogVendorId: string; number: string }[]
-  ) => string[]
-> {
-  const [areaRows, issuePrefixes] = await Promise.all([
+    numbers: readonly { catalogVendorId: string; number: string }[]
+  ) => CollectionSearchCatalogLabel[];
+  /** Area names by id — the copies' read model carries only the id, and a copy row says where its
+   *  stamp sits exactly as a stamp row does. */
+  areaName: Map<string, string>;
+}
+
+/**
+ * Build the labeller that turns stored catalog numbers into the labels the collector reads
+ * (`"Mi·PL 200"`), the area's primary catalog first.
+ *
+ * The Copies list read model carries the raw `{ vendorId, number }` pairs and resolves the display
+ * on the client; a row here has to be recognisable from the number that was searched for, so the
+ * same resolution — vendor abbreviation + effective area prefix, with the issue's override (#377)
+ * winning — happens once for the page rather than per row.
+ *
+ * The **ordering** is the same question the pickers' `orderedCatalogLabels` answers (#357/#181): a
+ * stamp read out of three catalogues has one number its collector thinks in, and it is the one the
+ * area's primary catalog names. It is resolved server-side here because the window is a plain page
+ * with no area tree of its own to resolve it against.
+ */
+async function makeCatalogLabeller(
+  collectionId: string,
+  vendors: readonly { id: string; abbreviation: string }[]
+): Promise<CatalogLabelling> {
+  const [areaRows, issuePrefixes, primaryVendorByArea] = await Promise.all([
     prisma.collectionArea.findMany({
       where: { collectionId },
       select: {
@@ -293,16 +479,31 @@ async function makeCopyCatalogLabeller(
       },
     }),
     loadIssuePrefixMap(collectionId),
+    buildPrimaryVendorByAreaMap(collectionId),
   ]);
   const abbrOf = new Map(vendors.map((v) => [v.id, v.abbreviation]));
   const nodes = buildAreaPrefixNodes(areaRows);
 
-  return (areaId, issueId, numbers) =>
-    numbers.map((cn) =>
-      formatCatalogNumber(
-        abbrOf.get(cn.catalogVendorId) ?? "",
-        effectivePrefixFor(areaId, cn.catalogVendorId, nodes, issueId, issuePrefixes),
-        cn.number
-      )
-    );
+  return {
+    areaName: new Map(areaRows.map((a) => [a.id, a.name])),
+    labelFor: (areaId, issueId, numbers) => {
+      const primaryVendorId = areaId ? (primaryVendorByArea.get(areaId) ?? null) : null;
+      const ordered = primaryVendorId
+        ? [
+            ...numbers.filter((cn) => cn.catalogVendorId === primaryVendorId),
+            ...numbers.filter((cn) => cn.catalogVendorId !== primaryVendorId),
+          ]
+        : [...numbers];
+      return ordered.map((cn) => ({
+        label: formatCatalogNumber(
+          abbrOf.get(cn.catalogVendorId) ?? "",
+          effectivePrefixFor(areaId, cn.catalogVendorId, nodes, issueId, issuePrefixes),
+          cn.number
+        ),
+        // An area with no primary catalog marks none of them: pretending the first stored number is
+        // the leading one would put a stamp's identity in the order rows happen to come back in.
+        isPrimary: primaryVendorId !== null && cn.catalogVendorId === primaryVendorId,
+      }));
+    },
+  };
 }

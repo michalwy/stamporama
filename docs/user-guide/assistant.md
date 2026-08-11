@@ -103,17 +103,41 @@ and choose **Find "…" in Stamporama**.
 A small window opens with what your collection holds, in four groups:
 
 - **On your want list** — first, always.
+- **Copies** — the pieces in hand it matches, by condition and shelf reference.
 - **Stamps** — the catalogue entries the text matches that you are *not* looking for.
 - **Issues** — the sets the text names.
-- **Copies** — the pieces in hand it matches, by condition and shelf reference.
+
+Wants lead because they are what the window is for; copies come next because "have I got this?" is
+the question you clicked with and a copy is the only row that answers it outright.
+
+### What a row shows
+
+Every row is built the same way, so you can compare one section against another without re-reading
+the layout: the stamp's **picture** on the left, then its **catalog numbers as chips** — your area's
+primary catalogue first and drawn louder, the others beside it — then the stamp's name **where it
+has one**, and under it where it sits: area, the issue it belongs to with its year, the year it was
+issued. A stamp nobody has named draws no name line; the chips are the identity, and a column of
+*Unnamed stamp* would say nothing. A copy row never falls back to its own number either — that
+number is already the first mark on the right of the row.
+
+Below that, each kind of row says its own thing. A **want** shows what it accepts; a **copy** shows
+what that copy is. Both use short chips — `MNH`, `PC`, `Pair` — with the full name on hover, because
+a want that takes four conditions and two certificates is six values, and six spelled-out names is a
+paragraph. The three axes are told apart by their shape rather than their colour: condition is
+filled, certificate outlined, format dashed. Colour is already spoken for on these rows — a want's
+priority and a copy's disposition — and a third meaning on it would leave none of them readable.
+
+A copy with no picture of its own falls back to its stamp's catalogue photo. You opened the window
+to recognise a stamp, not to check which copies you have photographed.
 
 ### On your want list
 
 The [want list](wants.md) is what the window is for, so it is a section of its own at the top rather
-than a mark on a row you would have to scroll to. Each row leads with **what you are looking for** —
-*Mint never hinged · Single* — with the stamp underneath it. That is the opposite of every other row
-here, and deliberately: at an auction the decision is made on the condition, and a chip reading *1
-want* would only send you back to the app.
+than a mark on a row you would have to scroll to. Each row states **what you are looking for** as
+chips under the stamp — `MNH` `MH` `Any cert.` `Single` — rather than counting your wants: at an
+auction the decision is made on the condition, and a chip reading *1 want* would only send you back
+to the app. An axis you left open says so out loud (*Any certificate*); blank and unanswered look
+identical otherwise, and "takes any certificate" is often the fact that decides the bid.
 
 **One row per want.** A stamp wanted mint and wanted used is two decisions, not one stamp with a
 count, and the rows are ordered most urgent first across the whole result — amber for high priority,
@@ -139,6 +163,9 @@ Every stamp row carries what you hold. **Not held** is spelled out rather than l
 is half of what you clicked for. A stamp whose pieces are filed on its variants says so separately
 (*2 copies · 3 under variants*): copies of a specific variant are not copies of the umbrella, so the
 two are never added together.
+
+A **stamp** row also names its subtype where it has one, and says when copies of it may be filed on
+its variants, so two siblings sharing a number are still told apart.
 
 Each **copy** row carries what that copy is *for* — **In collection**, **For sale**, **For trade** —
 in the same chips and the same colours the inventory list uses. Knowing you hold one is half the

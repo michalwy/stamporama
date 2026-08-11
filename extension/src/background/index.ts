@@ -327,10 +327,14 @@ const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 980;
 const CAPTURE_WINDOW_WIDTH = 560;
 const CAPTURE_WINDOW_HEIGHT = 760;
-// The search window (#529) sits between them: a list of rows, each one line of catalogue identity
-// wide, and no side-by-side comparison to make room for.
-const SEARCH_WINDOW_WIDTH = 720;
-const SEARCH_WINDOW_HEIGHT = 860;
+// The search window (#529) sits between them: a list of rows, no side-by-side comparison to make
+// room for — but a row is a Stamporama list row rather than a line of text, carrying a thumbnail, a
+// wrapping row of catalog chips and a second one of condition chips. At the 720px it opened at
+// those wrapped onto three lines each and a copy row stood taller than its own picture, so it is
+// nearer the match window's width than the capture window's. `centredBounds` clamps to the parent
+// window, so a smaller screen still gets only as much as it has.
+const SEARCH_WINDOW_WIDTH = 1040;
+const SEARCH_WINDOW_HEIGHT = 940;
 
 let assistantWindowId: number | null = null;
 

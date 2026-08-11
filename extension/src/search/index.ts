@@ -1,6 +1,7 @@
 import {
   assignProfileColors,
   getProfileStore,
+  normalizeBaseUrl,
   profileSubtitle,
   setActiveProfileId,
   type Profile,
@@ -10,11 +11,12 @@ import {
   copyDispositions,
   holdingLabel,
   isEmptyAnswer,
-  wantAxesLabel,
+  wantAxisChips,
   wantedRows,
   wantProgressLabel,
   WANT_PRIORITY_LABEL,
   type SearchAnswer,
+  type SearchCatalogLabel,
   type SearchCopy,
   type SearchIssue,
   type SearchStamp,
@@ -109,6 +111,7 @@ profileSelect.addEventListener("change", () => {
     await refreshProfile();
     // The results on screen are another collection's. Ask the one just chosen the same question.
     clearResults();
+    forgetPhotos();
     void search();
   })();
 });
@@ -171,13 +174,13 @@ function render(answer: SearchAnswer): void {
   // than an answer. The link is the same either way, so nothing is lost by moving it.
   const wanted = wantedRows(answer.stamps);
   fill(sections.wants, wanted, wantRow);
+  fill(sections.copies, answer.copies, copyRow);
   fill(
     sections.stamps,
     answer.stamps.filter((s) => !s.wants),
     stampRow
   );
   fill(sections.issues, answer.issues, issueRow);
-  fill(sections.copies, answer.copies, copyRow);
 
   setStatus(
     isEmptyAnswer(answer)
@@ -185,6 +188,8 @@ function render(answer: SearchAnswer): void {
       : `${countLabel(answer, wanted.length)} for “${answer.query}”.`
   );
   showWantLede(answer.stamps, wanted.length);
+  // Last, and never awaited: a picture is worth waiting for only once the answer is on screen.
+  hydrateThumbs();
 }
 
 /**
@@ -203,13 +208,14 @@ function showWantLede(stamps: SearchStamp[], wantedCount: number): void {
 
 function countLabel(answer: SearchAnswer, wantedCount: number): string {
   const parts: string[] = [];
-  // Wants lead the count as they lead the window, and the stamp count is the rest — the two must add
-  // up to what is actually on screen, or the line describes a different search.
+  // In the sections' own order, so the line reads as a table of contents for what is below it. The
+  // stamp count is the rest — wants and stamps must add up to what is actually on screen, or the
+  // line describes a different search.
   const otherStamps = answer.stamps.filter((s) => !s.wants).length;
   if (wantedCount) parts.push(plural(wantedCount, "want"));
+  if (answer.copies.length) parts.push(plural(answer.copies.length, "copy", "copies"));
   if (otherStamps) parts.push(plural(otherStamps, "stamp"));
   if (answer.issues.length) parts.push(plural(answer.issues.length, "issue"));
-  if (answer.copies.length) parts.push(plural(answer.copies.length, "copy", "copies"));
   return parts.join(", ");
 }
 
@@ -226,8 +232,27 @@ function fill<T>(
   target.section.hidden = items.length === 0;
 }
 
-/** The shell every row shares: a link into the app, opened in a tab of its own. */
-function rowLink(url: string, title: string, sub: string): HTMLAnchorElement {
+/**
+ * The shell every row shares: a link into the app, opened in a tab of its own.
+ *
+ * Three parts in a fixed order, so a want, a copy and a stamp are read the same way: the **picture**
+ * on the left, then the **identity** — catalog chips over the name over where it sits in the
+ * collection — and last whatever is specific to this kind of row. A row that reordered them would be
+ * a row the eye has to parse before it can compare.
+ */
+function rowLink(
+  url: string,
+  parts: {
+    photoId?: string | null;
+    catalogNumbers?: readonly SearchCatalogLabel[];
+    /** Null where the thing has no name of its own, and then the line is **left out**: a great many
+     *  stamps are never named, and *Unnamed stamp* on every one of them is a column of words that
+     *  says nothing. The catalog chips above are the identity; the name is what is added when there
+     *  is one. */
+    title: string | null;
+    sub: string;
+  }
+): HTMLAnchorElement {
   const a = document.createElement("a");
   a.className = "row";
   a.href = url;
@@ -235,42 +260,177 @@ function rowLink(url: string, title: string, sub: string): HTMLAnchorElement {
   a.rel = "noreferrer noopener";
   a.title = url;
 
+  if (parts.photoId !== undefined) a.appendChild(thumb(parts.photoId));
+
   const main = document.createElement("div");
   main.className = "main";
-  const titleEl = document.createElement("div");
-  titleEl.className = "title";
-  titleEl.textContent = title;
+  if (parts.catalogNumbers?.length) main.appendChild(catalogChips(parts.catalogNumbers));
+  if (parts.title) {
+    const titleEl = document.createElement("div");
+    titleEl.className = "title";
+    titleEl.textContent = parts.title;
+    main.appendChild(titleEl);
+  }
   const subEl = document.createElement("div");
   subEl.className = "sub";
-  subEl.textContent = sub;
-  main.append(titleEl, subEl);
+  subEl.textContent = parts.sub;
+  main.appendChild(subEl);
   a.appendChild(main);
   return a;
 }
 
+/** The picture's placeholder. The bytes need an `Authorization` header, which an `<img src>` cannot
+ *  carry, so `hydrateThumbs` fills it in afterwards; a row with no picture keeps the column, so the
+ *  text of every row still lines up. */
+function thumb(photoId: string | null): HTMLElement {
+  const img = document.createElement("img");
+  img.className = "thumb";
+  img.alt = "";
+  if (photoId) img.dataset.photo = photoId;
+  return img;
+}
+
+/** A row's catalog numbers, the area's primary catalog leading and drawn louder. */
+function catalogChips(numbers: readonly SearchCatalogLabel[]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "cats";
+  for (const n of numbers) {
+    const chip = document.createElement("span");
+    chip.className = `cat${n.isPrimary ? " primary" : ""}`;
+    chip.textContent = n.label;
+    wrap.appendChild(chip);
+  }
+  return wrap;
+}
+
+/** The row's own facts, as chips under its identity — a want's acceptance, a copy's condition. */
+function factChips(chips: { label: string; title: string; kind: string }[]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "facts";
+  for (const c of chips) {
+    const chip = document.createElement("span");
+    chip.className = `axis ${c.kind}`;
+    chip.textContent = c.label;
+    // The full name on hover: an abbreviation is a handle for a collector who already knows the
+    // dictionary, and this window is read against a listing written in somebody else's words.
+    if (c.title && c.title !== c.label) chip.title = c.title;
+    wrap.appendChild(chip);
+  }
+  return wrap;
+}
+
+/** One copy's axes as chips, leaving unsaid what the app leaves unsaid: a null certificate is *no
+ *  certificate* (ADR-0006 §2) and a null format is a *single* (ADR-0020), neither of which the app's
+ *  own copy row draws. */
+function axisChipsFor(copy: SearchCopy): { label: string; title: string; kind: string }[] {
+  const chips = [
+    { label: copy.condition.abbr, title: copy.condition.name, kind: "condition" },
+  ];
+  if (copy.certificate) {
+    chips.push({ label: copy.certificate.abbr, title: copy.certificate.name, kind: "certificate" });
+  }
+  if (copy.format) {
+    chips.push({ label: copy.format.abbr, title: copy.format.name, kind: "format" });
+  }
+  return chips;
+}
+
+/** Where a stamp sits in the collection: its area, the set it belongs to, the year it was issued. */
+function placeLine(place: {
+  areaName: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  issuedYear?: number | null;
+}): string {
+  return detail([
+    place.areaName,
+    place.issueName
+      ? `${place.issueName}${place.issueYear ? ` (${place.issueYear})` : ""}`
+      : null,
+    place.issuedYear ? String(place.issuedYear) : null,
+  ]);
+}
+
+// ── Thumbnails ───────────────────────────────────────────────────────────────
+// The serving route is collection-scoped and token-authorized, and an `<img src>` cannot carry an
+// `Authorization` header (and a token does not belong in a URL). So the bytes are fetched here with
+// the header and handed to the `<img>` as an object URL, once per photo — the popup's own pattern.
+
+// Keyed by photo id and holding the **promise**, not the URL: one stamp is routinely a want row and
+// a copy row in the same answer, and caching only the finished value would fetch its picture twice
+// and leak one of the two object URLs.
+const photoUrls = new Map<string, Promise<string | null>>();
+
+function loadPhoto(photoId: string): Promise<string | null> {
+  const cached = photoUrls.get(photoId);
+  if (cached) return cached;
+  if (!profile) return Promise.resolve(null);
+  const base = normalizeBaseUrl(profile.apiBaseUrl);
+  const url = `${base}/api/collections/${profile.collectionId}/photos/${photoId}/thumb`;
+  const token = profile.token;
+  const pending = fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    .then(async (res) => (res.ok ? URL.createObjectURL(await res.blob()) : null))
+    .catch(() => null);
+  photoUrls.set(photoId, pending);
+  return pending;
+}
+
+/** Fill in the thumbnails the last render left as empty boxes. A picture that will not come stays
+ *  an empty box rather than disappearing — the column is what lines the rows up. */
+function hydrateThumbs(): void {
+  document.querySelectorAll<HTMLImageElement>("img.thumb[data-photo]").forEach((img) => {
+    const photoId = img.dataset.photo;
+    if (!photoId) return;
+    void loadPhoto(photoId).then((url) => {
+      if (url) img.src = url;
+    });
+  });
+}
+
+/** Drop every picture fetched for the collection just switched away from. They are another
+ *  instance's bytes behind ids this one may well reuse, and an object URL outlives the row. */
+function forgetPhotos(): void {
+  for (const pending of photoUrls.values()) {
+    void pending.then((url) => {
+      if (url) URL.revokeObjectURL(url);
+    });
+  }
+  photoUrls.clear();
+}
+
 /**
- * A row of the **Wants** section: one open want, led by what is being looked for.
+ * A row of the **Wants** section: one open want.
  *
- * The want is the headline and the stamp is underneath it, which is the opposite of every other row
- * here and is the point — this section answers *what am I still after*, and the stamp is which one.
- * One row per want, never a stamp with a count: a stamp wanted mint and wanted used is two decisions.
+ * It is read like every other row — picture, catalog numbers, name, where it sits — and then says
+ * what is specific to a want: the **acceptance**, as chips, because *which* condition is wanted is
+ * the answer at an auction. One row per want, never a stamp with a count: a stamp wanted mint and
+ * wanted used is two decisions.
  */
 function wantRow({ stamp, want }: WantedRow): HTMLElement {
-  const numbers = stamp.catalogNumbers.join(" · ");
-  const a = rowLink(
-    stamp.url,
-    wantAxesLabel(want) || "Wanted",
-    detail([
-      numbers || stamp.name || "Unnamed stamp",
-      numbers ? stamp.name : null,
-      stamp.areaName,
-      // How far along this want already is — the figure that stops a second purchase of something
-      // already ordered, said on the row rather than in the chip.
-      wantProgressLabel(want),
-    ])
-  );
+  const a = rowLink(stamp.url, {
+    photoId: stamp.photoId,
+    catalogNumbers: stamp.catalogNumbers,
+    title: stamp.name,
+    sub: placeLine(stamp),
+  });
   a.classList.add("want-row", want.priority);
-  a.querySelector(".title")?.classList.add("sought");
+
+  const chips = wantAxisChips(want).map((c) => ({
+    label: c.abbr,
+    title: c.name,
+    kind: c.axis,
+  }));
+  a.querySelector(".main")?.appendChild(factChips(chips));
+
+  // How far along this want already is — the figure that stops a second purchase of something
+  // already ordered, said on the row rather than in the chip.
+  const progress = wantProgressLabel(want);
+  if (progress) {
+    const line = document.createElement("div");
+    line.className = "sub";
+    line.textContent = progress;
+    a.querySelector(".main")?.appendChild(line);
+  }
 
   const marks = document.createElement("div");
   marks.className = "marks";
@@ -287,19 +447,27 @@ function wantRow({ stamp, want }: WantedRow): HTMLElement {
 
 /** A stamp that is on no want list — everything the catalogue knows, and what is held of it. */
 function stampRow(stamp: SearchStamp): HTMLElement {
-  const numbers = stamp.catalogNumbers.join(" · ");
-  const a = rowLink(
-    stamp.url,
-    numbers || stamp.name || "Unnamed stamp",
-    detail([
-      numbers ? stamp.name : null,
-      stamp.subtype && !stamp.subtype.isDefault ? stamp.subtype.name : null,
-      stamp.hasVariants ? "has variants" : null,
-      stamp.areaName,
-      stamp.issueName ? `${stamp.issueName}${stamp.issueYear ? ` (${stamp.issueYear})` : ""}` : null,
-      stamp.issuedYear ? String(stamp.issuedYear) : null,
-    ])
-  );
+  const a = rowLink(stamp.url, {
+    photoId: stamp.photoId,
+    catalogNumbers: stamp.catalogNumbers,
+    title: stamp.name,
+    sub: placeLine(stamp),
+  });
+
+  // What separates this stamp from the sibling above it: its subtype (the collection default says
+  // nothing and is left off, #340) and whether the copies of it may be filed one level down (#528).
+  const subtype = stamp.subtype && !stamp.subtype.isDefault ? stamp.subtype.name : null;
+  if (subtype || stamp.hasVariants) {
+    a.querySelector(".main")?.appendChild(
+      factChips(
+        [
+          subtype ? { label: subtype, title: subtype, kind: "condition" } : null,
+          stamp.hasVariants ? { label: "has variants", title: "", kind: "format" } : null,
+        ].filter((c): c is { label: string; title: string; kind: string } => c !== null)
+      )
+    );
+  }
+
   a.appendChild(heldChip(stamp));
   return a;
 }
@@ -314,23 +482,33 @@ function heldChip(stamp: SearchStamp): HTMLElement {
   return held;
 }
 
+/** An issue has no picture of its own — the gallery on its screen is its stamps' (#137) — so this
+ *  is the one row without the thumbnail column, rather than one with an empty box on every line. */
 function issueRow(issue: SearchIssue): HTMLElement {
-  return rowLink(issue.url, issue.name || "Unnamed issue", issue.year ? String(issue.year) : "");
+  return rowLink(issue.url, {
+    title: issue.name,
+    sub: issue.year ? String(issue.year) : "",
+  });
 }
 
 function copyRow(copy: SearchCopy): HTMLElement {
-  const numbers = copy.catalogNumbers.join(" · ");
-  const a = rowLink(
-    copy.url,
-    numbers || copy.stampName || `Copy #${copy.itemNo}`,
-    detail([
-      numbers ? copy.stampName : null,
-      copy.issueName,
-      copy.conditionName,
-      copy.formatName,
+  const a = rowLink(copy.url, {
+    photoId: copy.photoId,
+    catalogNumbers: copy.catalogNumbers,
+    // The **stamp's** name, never the copy's number as a fallback: the number is already the first
+    // chip in the marks column, and a row whose headline repeats it says one thing twice and the
+    // stamp's own identity not at all.
+    title: copy.stampName,
+    sub: detail([
+      placeLine(copy),
       copy.locationRef ? `filed ${copy.locationRef}` : null,
-    ])
-  );
+    ]),
+  });
+  // What this piece *is* — the axes that decide whether the lot in front of the collector would be
+  // an upgrade on it, in the same chips a want states its acceptance in, so the two can be compared
+  // across the window rather than translated.
+  a.querySelector(".main")?.appendChild(factChips(axisChipsFor(copy)));
+
   const marks = document.createElement("div");
   marks.className = "marks";
 
