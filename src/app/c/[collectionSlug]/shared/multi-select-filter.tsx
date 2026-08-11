@@ -17,8 +17,9 @@ const DEFAULT_MENU_Z_INDEX = 200;
  * Deliberately a **popover, not a layer** — the same call the notification centre makes: it owns its
  * own Escape and outside-click rather than joining the escape stack (#361), because it is not a
  * surface one navigates into. It is portaled to `<body>` with fixed positioning so the toolbar's own
- * `overflow` can never clip it, and it closes on scroll for the same reason a row menu does: a fixed
- * box does not follow the trigger.
+ * `overflow` can never clip it, and it closes when the page scrolls for the same reason a row menu
+ * does: a fixed box does not follow the trigger. Scrolling *within* the menu is exempt — a list of
+ * options longer than the menu's own height has to stay reachable.
  *
  * Selection is **applied as it is made**, with no Apply button: the list behind it is what says what
  * a tick did, and a staged selection would make the collector confirm something they can already see.
@@ -107,18 +108,25 @@ export function MultiSelectFilter({
         setOpen(false);
       }
     }
-    function onScrollOrResize() {
+    // A list longer than `maxHeight` scrolls **inside** the menu, and that scroll must not be read
+    // as the page moving under a fixed box: closing on it made a long checklist list unreachable.
+    function onScroll(e: Event) {
+      const t = e.target;
+      if (t instanceof Node && menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onResize() {
       setOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open, disabled]);
 
