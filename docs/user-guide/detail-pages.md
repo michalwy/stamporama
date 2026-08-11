@@ -10,6 +10,11 @@ column is what the record *is*, the **right** is what your collection does with 
 hold, the offers it is on, the purchase and sale behind it. On a narrow window the two run one after
 the other, left column first.
 
+A card **only appears when it has something on it**. A copy with no photos has no Photos card, a
+stamp on no want list has no Wants card, a stamp nobody has priced has no Catalog prices card. So
+what you see on one of these pages is what that record actually has — the page never spends a
+heading, and the scrolling under it, on telling you that something is not there.
+
 These pages are **read-only**. Everything on them is still edited where it always was: the copy
 form, the stamp dialog, the issue dialog. The popups you already use (**View copies**, **View
 offers**, **Show catalog prices**) also stay exactly where they are — they answer one question
@@ -38,7 +43,8 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 
 ## The copy page
 
-*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers.
+*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Purchase, Sale, Offers. Only
+Details is always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
   page), and its catalog numbers.
@@ -50,7 +56,7 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
   full-size.
 - **Catalog prices** — the cross-catalog averages for the copy's stamp, with **Full breakdown**
   opening the same per-edition dialog the row menu opens.
-- **Notes** — shown only when the copy has any.
+- **Notes** — the copy's own text.
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
   the line price, the offer it went out through, and whether it has been packed.
@@ -58,8 +64,8 @@ The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 
 ## The stamp page
 
-*Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Wants (when there
-are any), Copies, Offers.
+*Left column:* Details, Issues, Photos, Catalog prices, Variants. *Right column:* Wants, Copies,
+Offers. Only Details is always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
@@ -79,14 +85,13 @@ are any), Copies, Offers.
 - **Wants** — everything recorded on your [want list](wants.md) for this stamp: the acceptance
   chips and the priority, exactly as the want list draws them. Open wants lead; closed ones follow,
   faded — on a single stamp a closed want is the useful record that you were looking for it and
-  found it. Read-only; the form lives on the want list. **The card only appears when the stamp is
-  on the want list at all** — unlike Copies and Offers, which say "none yet", wanting a stamp is
-  the exception, so its absence is the answer.
+  found it. Read-only; the form lives on the want list.
 - **Offers** — every offer holding a copy of this stamp.
 
 ## The issue page
 
-*Left column:* Details, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers.
+*Left column:* Details, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers. Only
+Details is always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
   required/total stamp count.
@@ -126,8 +131,8 @@ on the catalog lists.
 
 There is **one card per [checklist](collections.md#checklists)** the issue carries, each titled
 after it — an issue collected basic and specialized shows both, side by side. An issue with no
-checklist at all has no set to be complete against, and the card says so; add one from the issue's
-**⋮ → Checklists…**.
+checklist at all has no set to be complete against, so it has no Completeness card either; add a
+checklist from the issue's **⋮ → Checklists…** and the card appears.
 
 Each card also carries **Add missing to want list**. It creates one open entry on your
 [want list](wants.md) for every stamp on that checklist you do not hold and do not already have

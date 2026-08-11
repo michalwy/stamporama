@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
 import { isTerminalState } from "@/lib/offer-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { DetailCard, EmptyNote } from "@/app/c/[collectionSlug]/shared/detail-page";
+import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { OfferStateChip, NeedsActionChip, InActiveBiddingChip } from "./offer-badges";
 import { useOffersForTarget } from "./use-offers-query";
 import { Icon } from "@/app/icons";
@@ -29,7 +29,8 @@ const CHIP: React.CSSProperties = {
 };
 
 /** Empty-state wording per target — the sentence a collector reads is about the thing they opened,
- * not about "the target". */
+ * not about "the target". Read by the **popup** only: a popup was opened to ask this question and
+ * owes an answer, whereas the detail card is simply absent when there is nothing on it (#536). */
 export const OFFERS_EMPTY_TEXT: Record<OfferLookupTarget["kind"], string> = {
   item: "This copy is not listed in any offer yet.",
   stamp: "No copy of this stamp is listed in any offer yet.",
@@ -167,28 +168,28 @@ export function RelatedOffersCard({
   const { data: offers = [], isLoading } = useOffersForTarget(collectionId, target, true);
 
   return (
-    <DetailCard title="Offers" count={isLoading ? null : offers.length || null}>
-      {isLoading && <EmptyNote>Loading offers…</EmptyNote>}
-      {!isLoading && offers.length === 0 && <EmptyNote>{OFFERS_EMPTY_TEXT[target.kind]}</EmptyNote>}
-      {offers.length > 0 && (
-        <div
-          style={{
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            overflow: "clip",
-            background: "var(--color-bg-elevated)",
-          }}
-        >
-          {offers.map((offer, i) => (
-            <OfferTargetRow
-              key={offer.id}
-              offer={offer}
-              collectionSlug={collectionSlug}
-              isLast={i === offers.length - 1}
-            />
-          ))}
-        </div>
-      )}
+    <DetailCard
+      title="Offers"
+      count={offers.length || null}
+      empty={isLoading || offers.length === 0}
+    >
+      <div
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.5rem",
+          overflow: "clip",
+          background: "var(--color-bg-elevated)",
+        }}
+      >
+        {offers.map((offer, i) => (
+          <OfferTargetRow
+            key={offer.id}
+            offer={offer}
+            collectionSlug={collectionSlug}
+            isLast={i === offers.length - 1}
+          />
+        ))}
+      </div>
     </DetailCard>
   );
 }

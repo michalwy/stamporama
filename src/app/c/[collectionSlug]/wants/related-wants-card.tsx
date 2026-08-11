@@ -108,10 +108,9 @@ function WantCardRow({
  * record that this was looked for and found, which is exactly the sort of thing a catalogue page is
  * opened to check.
  *
- * The card is **absent when there is nothing on it**, unlike its neighbours. Copies and Offers are
- * about every stamp — "none yet" is an answer worth printing for them — whereas wanting one is the
- * exception, and a card saying "you are not looking for this" on every stamp in the catalogue is a
- * line of furniture that answers a question nobody asked. It stays hidden while loading too, so it
+ * The card is **absent when there is nothing on it** — the exception when it was written (#532),
+ * and since #536 the rule every card on these screens follows: a heading saying "you are not
+ * looking for this" answers a question nobody asked. It stays hidden while loading too, so it
  * appears once rather than flashing an empty state first.
  */
 export function RelatedWantsCard({
@@ -142,12 +141,10 @@ export function RelatedWantsCard({
       id === null ? "Single" : ((formats ?? []).find((f) => f.id === id)?.name ?? "?"),
   };
 
-  if (isLoading || wants.length === 0) return null;
-
   const openCount = wants.filter((w) => w.closedAt === null).length;
 
   return (
-    <DetailCard title="Wants" count={openCount || null}>
+    <DetailCard title="Wants" count={openCount || null} empty={isLoading || wants.length === 0}>
       <div
         style={{
           border: "1px solid var(--color-border)",

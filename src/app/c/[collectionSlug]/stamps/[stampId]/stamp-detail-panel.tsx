@@ -12,7 +12,6 @@ import {
   DetailLayout,
   DetailColumn,
   DetailColumns,
-  EmptyNote,
   Field,
   FieldGrid,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
@@ -120,72 +119,66 @@ export function StampDetailPanel({
               </FieldGrid>
             </DetailCard>
 
-            <DetailCard title="Issues" count={stamp.issues.length || null}>
-              {stamp.issues.length === 0 ? (
-                <EmptyNote>This stamp does not belong to an issue.</EmptyNote>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                  {stamp.issues.map((m) => (
-                    <IssueMembershipRow
-                      key={m.issueId}
-                      membership={m}
-                      collectionSlug={collectionSlug}
-                    />
-                  ))}
-                </div>
-              )}
+            <DetailCard
+              title="Issues"
+              count={stamp.issues.length}
+              empty={stamp.issues.length === 0}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                {stamp.issues.map((m) => (
+                  <IssueMembershipRow
+                    key={m.issueId}
+                    membership={m}
+                    collectionSlug={collectionSlug}
+                  />
+                ))}
+              </div>
             </DetailCard>
 
-            <DetailCard title="Photos" count={stamp.photos.length || null}>
-              {stamp.photos.length === 0 ? (
-                <EmptyNote>No catalog photos of this stamp yet.</EmptyNote>
-              ) : (
-                <PhotoStrip collectionId={collectionId} photos={stamp.photos} size="7rem" />
-              )}
+            <DetailCard
+              title="Photos"
+              count={stamp.photos.length}
+              empty={stamp.photos.length === 0}
+            >
+              <PhotoStrip collectionId={collectionId} photos={stamp.photos} size="7rem" />
             </DetailCard>
 
-            <CatalogPricesCard
-              target={{ kind: "stamp", stampId: stamp.id }}
-              emptyText="No catalog price is recorded for this stamp yet."
-            />
+            <CatalogPricesCard target={{ kind: "stamp", stampId: stamp.id }} />
 
-            <DetailCard title="Variants" count={relatives.children.length || null}>
-              {!relatives.parent && relatives.children.length === 0 ? (
-                <EmptyNote>
-                  This stamp has no variants and hangs under no base stamp — it stands on its own.
-                </EmptyNote>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {relatives.parent && (
-                    <RelativeRow
-                      role="Base stamp"
-                      stamp={relatives.parent}
-                      collectionSlug={collectionSlug}
-                      maps={maps}
-                    />
-                  )}
-                  {relatives.children.map((child) => (
-                    <RelativeRow
-                      key={child.id}
-                      role="Variant"
-                      stamp={child}
-                      collectionSlug={collectionSlug}
-                      maps={maps}
-                      indented={!!relatives.parent}
-                      showCopies
-                    />
-                  ))}
-                </div>
-              )}
+            <DetailCard
+              title="Variants"
+              count={relatives.children.length || null}
+              empty={!relatives.parent && relatives.children.length === 0}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {relatives.parent && (
+                  <RelativeRow
+                    role="Base stamp"
+                    stamp={relatives.parent}
+                    collectionSlug={collectionSlug}
+                    maps={maps}
+                  />
+                )}
+                {relatives.children.map((child) => (
+                  <RelativeRow
+                    key={child.id}
+                    role="Variant"
+                    stamp={child}
+                    collectionSlug={collectionSlug}
+                    maps={maps}
+                    indented={!!relatives.parent}
+                    showCopies
+                  />
+                ))}
+              </div>
             </DetailCard>
           </DetailColumn>
 
           {/* Right: what the collection holds and does with it. */}
           <DetailColumn>
-            {/* Leads the column, and renders **only when this stamp is wanted** (#532). It is the
-                exception among these cards — most stamps are not on the want list — so it earns the
-                top spot by being absent the rest of the time, where Copies and Offers are about
-                every stamp and print "none yet" as a real answer. */}
+            {/* Leads the column, and renders **only when this stamp is wanted** (#532) — as every
+                card here now does when it has nothing on it (#536), so the column is what this
+                stamp actually has, in order, and nothing else. */}
             <RelatedWantsCard collectionId={collectionId} stampId={stamp.id} />
 
             <RelatedCopiesCard
@@ -193,7 +186,6 @@ export function StampDetailPanel({
               areas={areas}
               baseCurrency={baseCurrency}
               target={{ kind: "stamp", stampId: stamp.id }}
-              emptyText="No copy of this stamp is recorded yet."
             />
 
             <RelatedOffersCard collectionId={collectionId} target={{ kind: "stamp", stampId: stamp.id }} />

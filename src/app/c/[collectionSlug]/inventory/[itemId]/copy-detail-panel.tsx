@@ -17,7 +17,6 @@ import {
   DetailColumn,
   DetailColumns,
   DETAIL_BUTTON,
-  EmptyNote,
   Field,
   FieldGrid,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
@@ -195,45 +194,32 @@ export function CopyDetailPanel({
               </FieldGrid>
             </DetailCard>
 
-            {/* Only when there is something to read: an empty Notes card would push the rest of
-                the column down to say that a free-text field was left blank. */}
-            {item.notes && (
-              <DetailCard title="Notes">
-                <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>
-              </DetailCard>
-            )}
-
-            <DetailCard title="Photos" count={item.photos.length || null}>
-              {item.photos.length === 0 ? (
-                <EmptyNote>No photos of this copy yet.</EmptyNote>
-              ) : (
-                <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />
-              )}
+            <DetailCard title="Notes" empty={!item.notes}>
+              <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>
             </DetailCard>
 
-            <CatalogPricesCard
-              target={{ kind: "stamp", stampId: item.stampId }}
-              emptyText="No catalog price is recorded for this copy's stamp yet."
-            />
+            <DetailCard title="Photos" count={item.photos.length} empty={item.photos.length === 0}>
+              <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />
+            </DetailCard>
+
+            <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />
           </DetailColumn>
 
           {/* Right: its trade history, in the order it happens — bought, sold, listed. */}
           <DetailColumn>
-            <DetailCard title="Purchase">
-              {item.purchase ? (
+            <DetailCard title="Purchase" empty={!item.purchase}>
+              {item.purchase && (
                 <Link
                   href={`/c/${collectionSlug}/purchases/${item.purchase.id}`}
                   style={{ ...DETAIL_BUTTON, color: "var(--color-accent)" }}
                 >
                   <Icon name="receipt" size="sm" /> {item.purchase.label}
                 </Link>
-              ) : (
-                <EmptyNote>This copy is not linked to a purchase order.</EmptyNote>
               )}
             </DetailCard>
 
-            <DetailCard title="Sale">
-              {sale ? (
+            <DetailCard title="Sale" empty={!sale}>
+              {sale && (
                 <FieldGrid>
                   <Field label="Sale">
                     <Link
@@ -253,8 +239,6 @@ export function CopyDetailPanel({
                   <Field label="Through offer">{sale.offerNo != null ? `#${sale.offerNo}` : null}</Field>
                   <Field label="Packed">{sale.packed ? "Yes" : "Not yet"}</Field>
                 </FieldGrid>
-              ) : (
-                <EmptyNote>This copy has not been sold.</EmptyNote>
               )}
             </DetailCard>
 

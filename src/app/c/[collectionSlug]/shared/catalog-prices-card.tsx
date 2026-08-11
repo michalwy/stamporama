@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { StampPriceDetails } from "@/lib/stamps";
 import type { ChecklistPriceDetails } from "@/lib/issues";
-import { DetailCard, EmptyNote, DETAIL_BUTTON } from "./detail-page";
+import { DetailCard, DETAIL_BUTTON } from "./detail-page";
 import { PriceDetailsDialog, type PriceDetailsTarget } from "./price-details-dialog";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -50,12 +50,9 @@ const HEAD: React.CSSProperties = {
 export function CatalogPricesCard({
   target,
   title = "Catalog prices",
-  /** Sentence for a subject with nothing recorded, in that subject's own words. */
-  emptyText,
 }: {
   target: PriceDetailsTarget;
   title?: string;
-  emptyText: string;
 }) {
   const [dialog, setDialog] = useState(false);
 
@@ -113,16 +110,17 @@ export function CatalogPricesCard({
 
   return (
     <>
+      {/* Absent with nothing priced (#536): the breakdown behind the button is read-only, so an
+          empty card offered no way to record the first price — only a heading over a blank. */}
       <DetailCard
         title={title}
+        empty={isLoading || priced.length === 0}
         actions={
           <button type="button" style={DETAIL_BUTTON} onClick={() => setDialog(true)}>
             <Icon name="prices" size="sm" /> Full breakdown
           </button>
         }
       >
-        {isLoading && <EmptyNote>Loading prices…</EmptyNote>}
-        {!isLoading && priced.length === 0 && <EmptyNote>{emptyText}</EmptyNote>}
         {priced.length > 0 && (
           <>
             <div style={{ overflowX: "auto" }}>

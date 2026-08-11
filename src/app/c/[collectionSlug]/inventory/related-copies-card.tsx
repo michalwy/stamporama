@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
-import { DetailCard, EmptyNote } from "@/app/c/[collectionSlug]/shared/detail-page";
+import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import {
   useInventoryItemsInfinite,
   useCollectionLocations,
@@ -23,13 +23,11 @@ export function RelatedCopiesCard({
   areas,
   baseCurrency,
   target,
-  emptyText,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
   baseCurrency: string;
   target: RelatedCopiesTarget;
-  emptyText: string;
 }) {
   const filters: InventoryItemFilters = useMemo(
     () => (target.kind === "stamp" ? { stampId: target.stampId } : { issueId: target.issueId }),
@@ -43,32 +41,29 @@ export function RelatedCopiesCard({
   return (
     <DetailCard
       title="Copies"
-      count={isLoading ? null : copies.length + (hasNextPage ? "+" : "")}
+      count={copies.length + (hasNextPage ? "+" : "")}
+      empty={isLoading || copies.length === 0}
     >
-      {isLoading && <EmptyNote>Loading copies…</EmptyNote>}
-      {!isLoading && copies.length === 0 && <EmptyNote>{emptyText}</EmptyNote>}
-      {copies.length > 0 && (
-        <div
-          style={{
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            overflow: "clip",
-            background: "var(--color-bg-elevated)",
-          }}
-        >
-          <InventoryCopyList
-            collectionId={collectionId}
-            copies={copies}
-            areas={areas}
-            locations={locations}
-            baseCurrency={baseCurrency}
-            hasNextPage={!!hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            onLoadMore={fetchNextPage}
-            readOnly
-          />
-        </div>
-      )}
+      <div
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.5rem",
+          overflow: "clip",
+          background: "var(--color-bg-elevated)",
+        }}
+      >
+        <InventoryCopyList
+          collectionId={collectionId}
+          copies={copies}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          hasNextPage={!!hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={fetchNextPage}
+          readOnly
+        />
+      </div>
     </DetailCard>
   );
 }

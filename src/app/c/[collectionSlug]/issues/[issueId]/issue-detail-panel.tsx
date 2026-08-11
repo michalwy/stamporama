@@ -153,6 +153,9 @@ export function IssueDetailPanel({
             <DetailCard
               title="Stamps"
               count={members.length || null}
+              // Absent when the issue holds nothing (#536). A tree the *filter* narrowed to nothing
+              // is a different thing and stays: the control that emptied it lives in this header.
+              empty={members.length === 0}
               actions={
                 issue.checklists.length > 1 ? (
                   <ChecklistTreeFilter
@@ -163,9 +166,7 @@ export function IssueDetailPanel({
                 ) : undefined
               }
             >
-              {members.length === 0 ? (
-                <EmptyNote>This issue has no stamps yet.</EmptyNote>
-              ) : tree.length === 0 ? (
+              {tree.length === 0 ? (
                 <EmptyNote>No stamp is on the checklists you picked.</EmptyNote>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column" }}>
@@ -193,49 +194,42 @@ export function IssueDetailPanel({
                 title={
                   issue.checklists.length === 1 ? "Catalog value" : `Catalog value — ${c.name}`
                 }
-                emptyText={`No catalog price is recorded for the stamps on “${c.name}” yet.`}
               />
             ))}
           </DetailColumn>
 
           {/* Right: how the collection stands against it. */}
           <DetailColumn>
-            {completeness.checklists.length === 0 ? (
-              <DetailCard title="Completeness">
-                <EmptyNote>
-                  This issue has no checklist, so there is no set to be complete against. Add one
-                  from the issue&apos;s row.
-                </EmptyNote>
+            {/* One card per checklist — and none at all for an issue that carries no checklist
+                (#536): there is then no set to be complete against, and a card saying so was a
+                heading over a sentence. The way to add one is the issue's own ⋮ menu, which is
+                where checklists are managed from anyway. */}
+            {completeness.checklists.map((checklist) => (
+              <DetailCard
+                key={checklist.checklistId}
+                title={
+                  completeness.checklists.length === 1
+                    ? "Completeness"
+                    : `Completeness — ${checklist.name}`
+                }
+              >
+                <ChecklistCompletenessGrid
+                  checklist={checklist}
+                  conditions={completeness.conditions}
+                />
+                <AddMissingToWantList
+                  collectionId={collectionId}
+                  checklistId={checklist.checklistId}
+                  requiredCount={checklist.requiredCount}
+                />
               </DetailCard>
-            ) : (
-              completeness.checklists.map((checklist) => (
-                <DetailCard
-                  key={checklist.checklistId}
-                  title={
-                    completeness.checklists.length === 1
-                      ? "Completeness"
-                      : `Completeness — ${checklist.name}`
-                  }
-                >
-                  <ChecklistCompletenessGrid
-                    checklist={checklist}
-                    conditions={completeness.conditions}
-                  />
-                  <AddMissingToWantList
-                    collectionId={collectionId}
-                    checklistId={checklist.checklistId}
-                    requiredCount={checklist.requiredCount}
-                  />
-                </DetailCard>
-              ))
-            )}
+            ))}
 
             <RelatedCopiesCard
               collectionId={collectionId}
               areas={areas}
               baseCurrency={baseCurrency}
               target={{ kind: "issue", issueId: issue.id }}
-              emptyText="No copy from this issue is recorded yet."
             />
 
             <RelatedOffersCard collectionId={collectionId} target={{ kind: "issue", issueId: issue.id }} />

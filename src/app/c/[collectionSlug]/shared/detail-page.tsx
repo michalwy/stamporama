@@ -43,14 +43,33 @@ export function DetailCard({
   title,
   count,
   actions,
+  empty,
   children,
 }: {
   title: string;
   /** Shown beside the title as a muted figure, for a card that holds a list. */
   count?: number | string | null;
   actions?: ReactNode;
+  /**
+   * `true` when the card has nothing in it — the whole card is then **omitted** (#536).
+   *
+   * A detail screen states what there is. A heading over "none yet" is furniture: it answers a
+   * question nobody asked and pushes the answers that do exist further down a column, which is
+   * what these screens are trying to avoid in the first place. So emptiness is the card's own
+   * business, decided here rather than by each page remembering to wrap itself in a `&&`.
+   *
+   * Pass a query's loading flag into this too. A card that appears once, with its contents, reads
+   * better than one that flashes an empty shell and then fills — and better than one that fills
+   * and then vanishes.
+   *
+   * **The exception** is a section whose empty state carries the only way to create the first
+   * entry ("No lots yet. Add a priced lot…"). That is not clutter, it is the way in; such a
+   * section stays visible and does not pass this.
+   */
+  empty?: boolean;
   children: ReactNode;
 }) {
+  if (empty) return null;
   return (
     <section style={{ ...CARD, breakInside: "avoid" }}>
       <div
@@ -131,7 +150,13 @@ export function Field({ label, children }: { label: string; children?: ReactNode
   );
 }
 
-/** The sentence a card shows in place of its contents when there are none. */
+/**
+ * The sentence a card shows in place of its contents.
+ *
+ * Not for "this card has no entries" — such a card is absent entirely (`empty` on
+ * {@link DetailCard}, #536). This is for a card that *does* hold something and has nothing to draw
+ * right now: a filter that matched none of it, a set that has yet to be defined.
+ */
 export function EmptyNote({ children }: { children: ReactNode }) {
   return (
     <div style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>{children}</div>
