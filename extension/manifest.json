@@ -3,7 +3,7 @@
   "name": "Stamporama Assistant",
   "version": "0.1.0",
   "description": "Connect stamp marketplace and catalog pages (Colnect first) to your self-hosted Stamporama collection.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
   "background": {
     "service_worker": "background.js"
   },

@@ -398,6 +398,46 @@ names none, the id is unknown here, the module only reads — are three differen
   nowhere to go here. That is what a platform locking its currency (#196) is for: the two are agreed
   once, in settings, rather than checked on every listing.
 
+## Find in Stamporama (#529)
+
+The one gesture that is **not** a toolbar click: a selection on any page, right-clicked →
+**Find "…" in Stamporama** (`contextMenus`, `contexts: ["selection"]`). The icon already means three
+things decided by what the page *is*; this is decided by what was **pointed at**, which is a
+different question and gets its own affordance.
+
+It needs **no content script and no `activeTab`**: the selected text arrives inside the click
+(`info.selectionText`), so it works on sites the extension otherwise never touches — which is the
+whole point, since the marketplaces a collector browses mostly have no module here.
+
+The click opens `search.html` in the shared Assistant window slot, carrying the selection as `?q=`.
+The window is a read: `GET …/api/collections/<id>/search?q=` through the worker
+(`background/search-client.ts`), bearer-token as every other instance call, and the instance answers
+three groups — stamps, issues, copies — each row a **relative path** that the client turns into an
+address against the origin the profile authenticated against, exactly as the offer lookup does
+(#466). Nothing is written from this window.
+
+The window then renders **four** sections, wants first: the stamps carrying open wants (#532) are
+split out of the stamps group into a section of their own, and the *Stamps* section is what is left.
+Split rather than highlighted — a row repeated in both would make the first section a decoration —
+and a section rather than a chip, because a want found by scrolling past twenty stamps is a want
+found too late.
+
+A want row is **one row per want**, led by the axes in the want list's own wording (a stamp wanted
+mint and wanted used is two decisions, not a stamp with a count) and ordered most urgent first across
+the whole result, edged in the priority colour. The stamp sits underneath, which is the inverse of
+every other row here: at an auction the decision is made on the condition. `here` / `coming` are
+**that want's own** figures, not the stamp's — a mint-only want reads zero beside a used copy in the
+drawer — and `coming` is what stops a second purchase of something already ordered. The held-copy
+count (#348 and #528's variant descendants, never summed) rides on want rows too, holding a copy not
+closing a want: that pair *is* the upgrade case. The acceptance **ids** the app's own summary carries
+are dropped at the boundary — nothing in this window holds a copy to test them against — and the
+negative answer is a sentence, since a missing section and a window that never asked look identical.
+
+The query is re-runnable in the box, because a selection is a proposal: it catches whatever the
+mouse caught. The menu creation is `removeAll` + `create` on both `onInstalled` and `onStartup` —
+Chrome persists context menus and refuses a duplicate id, so a plain `create` would make an update
+the one event that breaks the entry.
+
 ## Layout
 
 - `src/platform/` — the `PlatformModule` interface + registry; `colnect/` is the first module (#249),
@@ -419,6 +459,10 @@ names none, the id is unknown here, the module only reads — are three differen
   on a registered instance's own origin and carries listing handoffs, nothing else.
 - `src/popup/`, `src/options/` — the generic flow UI (with the target badge + profile selector) and
   the profile manager.
+- `src/capture/`, `src/search/` — the two windows that are not the match window: one auction lot read
+  off the page in front (#355), and "have I got this?" asked about selected text (#529). Each is its
+  own entrypoint and its own HTML, sharing the match window's palette and profile badge and nothing
+  else — three different questions, one window slot.
 
 ## Boundaries
 

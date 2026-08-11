@@ -12,10 +12,12 @@ import type {
   OfferLookupResponse,
   OpenMatchResponse,
   OverwriteNumberResponse,
+  SearchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
 import { callConfirm, callMatch, callOverwriteNumber } from "./matching-client";
 import { callCapture } from "./capture-client";
+import { callSearch } from "./search-client";
 import { callOfferLookup } from "./offer-lookup-client";
 import { findCaptureModuleForUrl } from "../platform/modules";
 import { instancePatterns, syncInstanceContentScripts } from "./instance-scripts";
@@ -135,6 +137,22 @@ async function captureLot(
 }
 
 /**
+ * Answer the search window's "what does the collection hold matching this?" (#529).
+ *
+ * The active profile decides which collection is asked, as the capture does and for the same reason:
+ * the text came off a page that says nothing about where it should be looked for. No profile is a
+ * refusal naming the fix, not an empty result — an empty answer here would read as *"you don't have
+ * this"*, which is the one wrong thing this window could say.
+ */
+async function runSearch(query: string): Promise<SearchResponse> {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return { ok: false, error: "No active profile. Set one in the extension options." };
+  }
+  return callSearch(profile, query);
+}
+
+/**
  * Answer a marketplace page's "which of these listings are mine?" (#466).
  *
  * No active profile is an **empty answer** rather than an error: an extension installed but not yet
@@ -222,6 +240,20 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
     return true;
   }
 
+  // The search window asking what the collection holds (#529). Answered here for the capture's
+  // reason: it needs the active profile, and the token that goes with it lives only in the worker.
+  if (msg?.type === "search") {
+    runSearch(msg.query)
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } satisfies SearchResponse)
+      );
+    return true;
+  }
+
   if (msg?.type === "list") {
     runListingTask(msg.task, msg.requestId, sender.tab)
       .then(sendResponse)
@@ -295,6 +327,10 @@ const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 980;
 const CAPTURE_WINDOW_WIDTH = 560;
 const CAPTURE_WINDOW_HEIGHT = 760;
+// The search window (#529) sits between them: a list of rows, each one line of catalogue identity
+// wide, and no side-by-side comparison to make room for.
+const SEARCH_WINDOW_WIDTH = 720;
+const SEARCH_WINDOW_HEIGHT = 860;
 
 let assistantWindowId: number | null = null;
 
@@ -315,21 +351,49 @@ function centredBounds(
 
 /** The match window (#253) — the default meaning of the toolbar click. */
 async function openAssistant(sourceTab: chrome.tabs.Tab): Promise<void> {
-  await openAssistantWindow(sourceTab, "popup.html", WINDOW_WIDTH, WINDOW_HEIGHT);
+  await openAssistantWindow(sourceTab, "popup.html", WINDOW_WIDTH, WINDOW_HEIGHT, sourceTabParam(sourceTab));
 }
 
 /** The capture window (#355), for a page that holds one auction rather than a page of stamps. */
 async function openCapture(sourceTab: chrome.tabs.Tab): Promise<void> {
-  await openAssistantWindow(sourceTab, "capture.html", CAPTURE_WINDOW_WIDTH, CAPTURE_WINDOW_HEIGHT);
+  await openAssistantWindow(
+    sourceTab,
+    "capture.html",
+    CAPTURE_WINDOW_WIDTH,
+    CAPTURE_WINDOW_HEIGHT,
+    sourceTabParam(sourceTab)
+  );
+}
+
+/**
+ * The search window (#529), for text selected on a page nothing here has a module for.
+ *
+ * It carries the **selection**, not the tab: nothing is read back off the page, which is exactly why
+ * this works on any site. The window shares the Assistant window slot with the other two — it is
+ * opened about the page in front of the collector, and two Assistant windows over one browser window
+ * would compete for their attention.
+ */
+async function openSearch(sourceTab: chrome.tabs.Tab, query: string): Promise<void> {
+  await openAssistantWindow(sourceTab, "search.html", SEARCH_WINDOW_WIDTH, SEARCH_WINDOW_HEIGHT, {
+    q: query,
+  });
+}
+
+/** Which tab a window was opened from — a separate window is its own "current window", so the two
+ *  windows that read a page are told which one rather than querying for it. */
+function sourceTabParam(sourceTab: chrome.tabs.Tab): Record<string, string> {
+  return sourceTab.id ? { tabId: String(sourceTab.id) } : {};
 }
 
 async function openAssistantWindow(
   sourceTab: chrome.tabs.Tab,
   page: string,
   maxWidth: number,
-  maxHeight: number
+  maxHeight: number,
+  params: Record<string, string>
 ): Promise<void> {
-  const url = chrome.runtime.getURL(`${page}${sourceTab.id ? `?tabId=${sourceTab.id}` : ""}`);
+  const query = new URLSearchParams(params).toString();
+  const url = chrome.runtime.getURL(`${page}${query ? `?${query}` : ""}`);
 
   // Reuse an open Assistant window: point it at the new source tab and focus it, so clicking the
   // icon on another page refreshes rather than stacking windows. Clicking the icon is the *only*
@@ -460,8 +524,56 @@ chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === assistantWindowId) assistantWindowId = null;
 });
 
-// Registered scripts persist across sessions, so these two are a reconcile and not a setup: they
-// catch a store edited while the extension was disabled, and an update that changed what the script
-// is called. Both are idempotent.
-chrome.runtime.onInstalled.addListener(() => void syncInstanceContentScripts());
-chrome.runtime.onStartup.addListener(() => void syncInstanceContentScripts());
+// ── Find in Stamporama (#529) ────────────────────────────────────────────────
+//
+// The fourth gesture, and the only one that is not a toolbar click: a **selection** on any page at
+// all, right-clicked. A collector reading an auction on a marketplace we have no module for — or a
+// dealer's list, or an email — selects the catalog number in the title and asks whether they already
+// have it.
+//
+// A context menu rather than a toolbar meaning, because the icon already means three things decided
+// by what the page in front *is*, and this is decided by what the collector **pointed at**. It also
+// needs no `activeTab` and no injected script: the selected text travels in the click itself, which
+// is what lets this work on a site the extension otherwise never touches.
+
+const SEARCH_MENU_ID = "find-in-stamporama";
+
+/** (Re)create the menu entry. `removeAll` first, so this is idempotent — Chrome persists context
+ *  menus across sessions and refuses a duplicate id, which would otherwise make an update the one
+ *  event that breaks the entry. */
+async function installContextMenus(): Promise<void> {
+  await chrome.contextMenus.removeAll();
+  chrome.contextMenus.create({
+    id: SEARCH_MENU_ID,
+    // `%s` is Chrome's own placeholder for the selection, so the entry names what it will look for.
+    title: 'Find "%s" in Stamporama',
+    contexts: ["selection"],
+  });
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== SEARCH_MENU_ID) return;
+  const query = (info.selectionText ?? "").trim();
+  // A selection of pure whitespace is a slipped drag, not a question.
+  if (!query) return;
+  void (async () => {
+    // The window is centred on the one holding the page it was asked from. Where the click carries
+    // no tab, the focused window's active tab stands in; with neither there is nothing to centre on
+    // and nothing to go back to, so the click is simply dropped.
+    const source = tab ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    if (!source) return;
+    await openSearch(source, query);
+  })();
+});
+
+// Registered scripts and context menus both persist across sessions, so these two are a reconcile
+// and not a setup: they catch a store edited while the extension was disabled, and an update that
+// changed what the script is called. Both are idempotent.
+chrome.runtime.onInstalled.addListener(() => {
+  void syncInstanceContentScripts();
+  void installContextMenus();
+});
+chrome.runtime.onStartup.addListener(() => {
+  void syncInstanceContentScripts();
+  void installContextMenus();
+});

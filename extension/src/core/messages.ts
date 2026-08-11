@@ -4,6 +4,7 @@ import type { CapturedLot, CaptureRefusal } from "../platform/capture";
 import type { BackfillProposal, MatchResult } from "./decisions";
 import type { CaptureOutcome } from "./capture";
 import type { OfferMarkerTarget } from "./offer-marker";
+import type { SearchAnswer } from "./search";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -99,6 +100,19 @@ export interface OfferLookupRequest {
 export type OfferLookupResponse =
   | { ok: true; matches: Record<string, OfferMarkerTarget> }
   | { ok: false; error: string };
+
+// search window → background service worker: "what does the collection hold matching this text?"
+// (#529). Through the worker like every other instance call — a cross-site fetch is only exempt from
+// CORS there, and the profile's token must never reach a page that is not ours.
+//
+// The query is **the collector's**, not the page's: it arrives as whatever they selected and is
+// re-sent whenever they edit it, so a selection that caught a stray word is fixed in the window
+// rather than by selecting again on the page.
+export interface SearchRequest {
+  type: "search";
+  query: string;
+}
+export type SearchResponse = { ok: true; answer: SearchAnswer } | { ok: false; error: string };
 
 // popup → background service worker
 export interface MatchRequest {
@@ -262,6 +276,7 @@ export interface MatchedNotice {
 
 export type BackgroundMessage =
   | BackgroundRequest
+  | SearchRequest
   | CaptureSaveRequest
   | OfferLookupRequest
   | ListRequest

@@ -5,6 +5,10 @@ browse. On a Colnect list page it tells you which stamps you already have, which
 writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
 bidding on into your [watchlist](auctions.md).
 
+On **any page whatsoever**, selecting a catalog number and right-clicking answers the two questions
+you opened the listing with — [do I still want this, and have I already got
+it?](#find-in-stamporama--asking-about-anything-you-can-select)
+
 It reads three kinds of Colnect page: a catalog **list** page, a single **stamp** page (its minor
 variants), and the site-wide **search results** page — so a stamp you found by searching can be
 matched without opening it first.
@@ -90,9 +94,67 @@ That select is about a marketplace you *buy* on, and it is all the capture needs
 Allegro account you *sell* from is a separate, optional step on the same tab — see
 [Allegro](allegro.md).
 
+## Find in Stamporama — asking about anything you can select
+
+The other three gestures start from a page the Assistant recognises. This one starts from **any page
+at all**: select a catalog number — in an auction title, a dealer's list, an email — right-click it,
+and choose **Find "…" in Stamporama**.
+
+A small window opens with what your collection holds, in four groups:
+
+- **On your want list** — first, always.
+- **Stamps** — the catalogue entries the text matches that you are *not* looking for.
+- **Issues** — the sets the text names.
+- **Copies** — the pieces in hand it matches, by condition and shelf reference.
+
+### On your want list
+
+The [want list](wants.md) is what the window is for, so it is a section of its own at the top rather
+than a mark on a row you would have to scroll to. Each row leads with **what you are looking for** —
+*Mint never hinged · Single* — with the stamp underneath it. That is the opposite of every other row
+here, and deliberately: at an auction the decision is made on the condition, and a chip reading *1
+want* would only send you back to the app.
+
+**One row per want.** A stamp wanted mint and wanted used is two decisions, not one stamp with a
+count, and the rows are ordered most urgent first across the whole result — amber for high priority,
+blue for normal — so what to chase is the first thing on screen.
+
+Under each, the row says what is already answering that want — *1 already answers it*, *2 on the
+way* — which is what stops a second purchase of something you have already ordered. Both figures are
+that **want's own**: a mint-only want reads zero while a used copy sits in the drawer, and both are
+true. The held count sits beside it for the same reason: holding a copy does not close a want, so a
+stamp you already have can still be exactly the one you are after — that is the upgrade case, shown
+side by side.
+
+When nothing matched is wanted, the window says so in as many words. A missing section and a window
+that never asked look identical otherwise.
+
+### The rest
+
+A stamp on the want list appears **only** in the section above — it is not repeated under *Stamps*,
+which would turn the first section into a highlight rather than an answer. The link is the same
+either way.
+
+Every stamp row carries what you hold. **Not held** is spelled out rather than left blank, because it
+is half of what you clicked for. A stamp whose pieces are filed on its variants says so separately
+(*2 copies · 3 under variants*): copies of a specific variant are not copies of the umbrella, so the
+two are never added together.
+
+Every row is a link into Stamporama and opens in a tab of its own, so the page you were reading stays
+where it is.
+
+The text in the box is **yours to fix**. A selection catches what your mouse caught — a stray word, a
+seller's own prefix glued to the number — so edit it and press **Search** again rather than going back
+to the page to select more carefully. It searches exactly as the app's own boxes do: a full catalog
+identity (`Mi PL 200`, `MiPL200`, `200`), a stamp or issue name, or a shelf reference.
+
+It reads and never writes, and it answers for the **active connection** — the coloured badge at the
+top says which, and the selector beside it re-asks another collection the same question.
+
 ## Closing the window
 
-The Assistant opens in its own small window — the matching one and the capture one alike. **Escape**
+The Assistant opens in its own small window — the matching one, the capture one and the search one
+alike, and always one at a time: opening any of them re-points the window you already have. **Escape**
 closes it, or, while a confirmation is on screen, cancels that first and leaves the window open.
 Nothing is lost either way: a confirmed write reached your collection the moment you confirmed it,
 and the page is read afresh the next time you click the toolbar icon.

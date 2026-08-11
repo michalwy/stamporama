@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Find in Stamporama</title>
+    <style>
+      /* Deliberately the match and capture windows' own palette and controls: the three windows are
+         one tool wearing three faces, and this one is reached from a fourth gesture again. */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --panel: #f9fafb;
+        --sunk: #f3f4f6;
+        --primary: #2563eb;
+        --primary-fg: #ffffff;
+        --danger: #dc2626;
+        --warn: #b45309;
+        --ok: #15803d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1e1e1e;
+          --fg: #ececec;
+          --muted: #9ca3af;
+          --border: #3a3a3a;
+          --panel: #262626;
+          --sunk: #1a1a1a;
+          --primary: #3b82f6;
+        }
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      body {
+        margin: 0;
+        min-width: 380px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .pad { padding: 20px 24px 32px; max-width: 760px; margin: 0 auto; }
+      h1 { font-size: 17px; margin: 0 0 12px; }
+      .badge {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 8px 10px; border-radius: 8px;
+        background: var(--panel); border: 1px solid var(--border);
+        border-left: 5px solid var(--accent, var(--border));
+        margin-bottom: 12px;
+      }
+      .badge .top { display: flex; align-items: center; gap: 8px; }
+      .badge .dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--accent, var(--muted)); }
+      .badge .name { font-weight: 600; flex: 1; min-width: 0; }
+      .badge .url { color: var(--muted); font-size: 12px; word-break: break-all; }
+      .badge.none { color: var(--warn); }
+      .badge.none .dot { display: none; }
+      .badge select {
+        font: inherit; font-size: 12px; max-width: 260px;
+        padding: 3px 6px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      }
+      /* The query, always editable: what came off the page is a proposal, and refining it here is
+         the whole difference between this and a search that has to be started again. */
+      .ask { display: flex; gap: 8px; margin-bottom: 10px; }
+      .ask input {
+        font: inherit; flex: 1; min-width: 0; padding: 7px 9px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      }
+      button {
+        font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+      }
+      button.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { color: var(--muted); min-height: 16px; margin: 4px 0 10px; }
+      .status.err { color: var(--danger); }
+      section { margin-bottom: 18px; }
+      section h2 {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+        color: var(--muted); margin: 0 0 6px; font-weight: 600;
+      }
+      .rows { display: flex; flex-direction: column; gap: 6px; }
+      a.row {
+        display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: inherit;
+        padding: 8px 10px; border-radius: 8px;
+        border: 1px solid var(--border); background: var(--panel);
+      }
+      a.row:hover { border-color: var(--primary); }
+      .row .main { flex: 1; min-width: 0; }
+      .row .title { font-weight: 600; word-break: break-word; }
+      .row .sub { font-size: 12px; color: var(--muted); word-break: break-word; }
+      .row .nums { font-variant-numeric: tabular-nums; }
+      /* How many are held — the answer the menu entry was clicked for, so it sits at the end of the
+         row where the eye lands after the name, and says "Not held" rather than going quiet. */
+      .held {
+        flex: 0 0 auto; font-size: 12px; font-weight: 600;
+        padding: 2px 8px; border-radius: 999px;
+        background: var(--sunk); color: var(--muted); border: 1px solid var(--border);
+      }
+      .held.yes { color: var(--ok); border-color: currentColor; }
+      /* The marks column: on a want row, the priority above what is already held. Two facts stacked
+         rather than run together, because holding a copy does not close a want. */
+      .marks { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+      /* The priority chip, coloured by the want's own rank: amber for high (chasing this first is an
+         intention, not a fault), blue for normal, muted for low. */
+      .want {
+        font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+        border: 1px solid currentColor; color: var(--muted); background: var(--sunk);
+        white-space: nowrap;
+      }
+      .want.high { color: var(--warn); }
+      .want.normal { color: var(--primary); }
+      /* A want row is edged in its priority, so the section reads as a list of decisions rather than
+         a list of rows that happen to be first. */
+      a.row.want-row { border-left: 4px solid var(--warn); }
+      a.row.want-row.normal { border-left-color: var(--primary); }
+      a.row.want-row.low { border-left-color: var(--border); }
+      /* What is being looked for — the row's headline, above the stamp it is a want for. */
+      .row .sought { font-weight: 600; }
+      .lede { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="pad">
+      <h1>Find in Stamporama</h1>
+
+      <div class="badge none" id="badge">
+        <div class="top">
+          <span class="dot"></span>
+          <span class="name" id="badgeName">No active profile</span>
+          <select id="profileSelect" hidden></select>
+        </div>
+        <div class="url" id="badgeUrl"></div>
+      </div>
+
+      <form class="ask" id="ask">
+        <input
+          id="query"
+          type="search"
+          autocomplete="off"
+          placeholder="A catalog number, a name, a shelf reference…"
+          aria-label="What to look for"
+        />
+        <button class="primary" id="run" type="submit">Search</button>
+      </form>
+
+      <div class="status" id="status"></div>
+      <!-- Said before any row is read: whether anything here is on the want list. It is the reason
+           the window was opened, and it must not need scrolling to find. -->
+      <div class="status lede" id="lede" hidden></div>
+
+      <!-- First, always: what is still being looked for. It is the reason the window is opened, and
+           a want found by scrolling past the stamps is a want found too late. -->
+      <section id="wantsSection" hidden>
+        <h2>On your want list</h2>
+        <div class="rows" id="wants"></div>
+      </section>
+
+      <section id="stampsSection" hidden>
+        <h2>Stamps</h2>
+        <div class="rows" id="stamps"></div>
+      </section>
+
+      <section id="issuesSection" hidden>
+        <h2>Issues</h2>
+        <div class="rows" id="issues"></div>
+      </section>
+
+      <section id="copiesSection" hidden>
+        <h2>Copies</h2>
+        <div class="rows" id="copies"></div>
+      </section>
+    </div>
+    <script src="search.js"></script>
+  </body>
+</html>

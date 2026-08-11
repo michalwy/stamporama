@@ -30,6 +30,8 @@ const entryPoints = {
   // The capture window (#355) — a page of its own rather than a mode of the match window: a
   // marketplace listing and a catalogue page are different questions about different pages.
   capture: resolve(root, "src/capture/index.ts"),
+  // The search window (#529) — "have I got this?", asked about text selected on any page at all.
+  search: resolve(root, "src/search/index.ts"),
   options: resolve(root, "src/options/index.ts"),
 };
 
@@ -52,6 +54,7 @@ async function copyStatic() {
 
   await cp(resolve(root, "src/popup/index.html"), resolve(outdir, "popup.html"));
   await cp(resolve(root, "src/capture/index.html"), resolve(outdir, "capture.html"));
+  await cp(resolve(root, "src/search/index.html"), resolve(outdir, "search.html"));
   await cp(resolve(root, "src/options/index.html"), resolve(outdir, "options.html"));
   await cp(resolve(root, "icons"), resolve(outdir, "icons"), {
     recursive: true,
