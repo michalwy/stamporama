@@ -433,6 +433,13 @@ closing a want: that pair *is* the upgrade case. The acceptance **ids** the app'
 are dropped at the boundary — nothing in this window holds a copy to test them against — and the
 negative answer is a sentence, since a missing section and a window that never asked look identical.
 
+A **copy** row carries the inventory row's own disposition chips (#99/#550) — *In collection*, *For
+sale*, *For trade*, in the app's order, wording and hues — because which piece this is answers only
+half the question at an auction: whether it is a keeper, a duplicate already for sale or trade
+material is the half that decides the bid, and reading it otherwise means opening the copy. All three
+are independent flags and any number can show at once; none showing is a copy whose disposition was
+never decided, which is what the app's row says too, so no *No disposition* chip is invented here.
+
 The query is re-runnable in the box, because a selection is a proposal: it catches whatever the
 mouse caught. The menu creation is `removeAll` + `create` on both `onInstalled` and `onStartup` —
 Chrome persists context menus and refuses a duplicate id, so a plain `create` would make an update

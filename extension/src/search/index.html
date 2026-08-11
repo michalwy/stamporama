@@ -20,6 +20,7 @@
         --danger: #dc2626;
         --warn: #b45309;
         --ok: #15803d;
+        --trade: #7c3aed;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -30,6 +31,9 @@
           --panel: #262626;
           --sunk: #1a1a1a;
           --primary: #3b82f6;
+          /* The one hue that needs lifting on a dark panel: the app's trade purple is a text colour
+             on white and reads as near-black here. */
+          --trade: #a78bfa;
         }
       }
       * { box-sizing: border-box; }
@@ -101,9 +105,22 @@
         background: var(--sunk); color: var(--muted); border: 1px solid var(--border);
       }
       .held.yes { color: var(--ok); border-color: currentColor; }
-      /* The marks column: on a want row, the priority above what is already held. Two facts stacked
-         rather than run together, because holding a copy does not close a want. */
+      /* The marks column: on a want row, the priority above what is already held; on a copy row, the
+         copy number above what the copy is for. Facts stacked rather than run together, because
+         holding a copy does not close a want, and a copy's number is not its disposition. */
       .marks { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+      /* Disposition chips wrap rather than stack: a copy is routinely both kept and for sale, and
+         three stacked chips would make a copy row twice the height of a stamp row. */
+      .marks .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+      /* The inventory row's own three hues (#99), so a copy reads the same here as it does in the
+         app: green for kept, blue for sale, purple for trade. */
+      .disp {
+        font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+        border: 1px solid currentColor; background: var(--sunk); white-space: nowrap;
+      }
+      .disp.collection { color: var(--ok); }
+      .disp.sale { color: var(--primary); }
+      .disp.trade { color: var(--trade); }
       /* The priority chip, coloured by the want's own rank: amber for high (chasing this first is an
          intention, not a fault), blue for normal, muted for low. */
       .want {

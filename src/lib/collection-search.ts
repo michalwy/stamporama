@@ -111,6 +111,18 @@ export interface CollectionSearchCopy {
   formatName: string | null;
   /** The shelf reference it is filed under (#303), or null. */
   locationRef: string | null;
+  /**
+   * What the copy is *for* (#99/#550) — the same three flags the inventory row wears as chips.
+   *
+   * A copy found from outside the app answers "have I got this?" only halfway: whether the one in
+   * hand is a keeper, a duplicate already offered for sale, or trade material decides whether the
+   * lot in front of the collector is worth bidding on at all. They are three independent flags and
+   * not one state, exactly as they are on the copy itself — a duplicate kept in the collection until
+   * it sells is both.
+   */
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
   path: string;
 }
 
@@ -217,6 +229,9 @@ export async function searchCollection(
       conditionName: item.conditionName,
       formatName: item.formatName,
       locationRef: item.locationRef,
+      inCollection: item.inCollection,
+      forSale: item.forSale,
+      forTrade: item.forTrade,
       path: `${base}/inventory/${item.id}`,
     })),
   };

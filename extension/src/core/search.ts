@@ -76,6 +76,11 @@ export interface SearchCopy {
   conditionName: string;
   formatName: string | null;
   locationRef: string | null;
+  /** What the copy is *for* (#99/#550): three independent flags, never one state — a duplicate kept
+   *  in the collection until it sells is both in the collection and for sale. */
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
   url: string;
 }
 
@@ -145,6 +150,35 @@ export const WANT_PRIORITY_LABEL: Record<WantPriority, string> = {
   normal: "Wanted",
   low: "Low priority",
 };
+
+/** One disposition chip: the app's own label, and the token its colour is keyed off. */
+export interface CopyDisposition {
+  key: "inCollection" | "forSale" | "forTrade";
+  label: string;
+  token: "collection" | "sale" | "trade";
+}
+
+const COPY_DISPOSITIONS: readonly CopyDisposition[] = [
+  { key: "inCollection", label: "In collection", token: "collection" },
+  { key: "forSale", label: "For sale", token: "sale" },
+  { key: "forTrade", label: "For trade", token: "trade" },
+];
+
+/**
+ * What a copy is *for*, as chips (#550).
+ *
+ * The inventory row's own three flags, in the app's own order and wording (#99): a copy row here is
+ * that row seen from an auction, and a second vocabulary for the same three ticks would make the two
+ * screens disagree about what the collector already decided. All three can be true at once — they
+ * are independent flags, not a state — so this returns a list rather than picking one.
+ *
+ * A copy with **none** of them set is silent, exactly as it is in the app. That is a copy whose
+ * disposition has not been decided, and inventing a *No disposition* chip here would state something
+ * the collector never said.
+ */
+export function copyDispositions(copy: SearchCopy): CopyDisposition[] {
+  return COPY_DISPOSITIONS.filter((d) => copy[d.key]);
+}
 
 /**
  * How a stamp's holding reads. Two figures rather than one sum (#528): what is held *of this stamp*

@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  copyDispositions,
   holdingLabel,
   isEmptyAnswer,
   wantAxesLabel,
   wantedRows,
   wantProgressLabel,
   type SearchAnswer,
+  type SearchCopy,
   type SearchStamp,
   type SearchWant,
   type SearchWants,
@@ -112,4 +114,38 @@ test("an answer is empty only when every group is", () => {
     }),
     false
   );
+});
+
+const copy = (dispositions: Partial<SearchCopy> = {}): SearchCopy => ({
+  itemId: "c1",
+  itemNo: 12,
+  stampName: "Eagle",
+  issueName: null,
+  catalogNumbers: ["Mi·PL 200"],
+  conditionName: "Used",
+  formatName: null,
+  locationRef: null,
+  inCollection: false,
+  forSale: false,
+  forTrade: false,
+  url: "https://stamps.example/c/main/inventory/c1",
+  ...dispositions,
+});
+
+test("a copy wears every disposition it carries, in the app's own order", () => {
+  assert.deepEqual(
+    copyDispositions(copy({ inCollection: true, forSale: true, forTrade: true })).map((d) => d.label),
+    ["In collection", "For sale", "For trade"]
+  );
+});
+
+test("a duplicate kept until it sells is both kept and for sale", () => {
+  assert.deepEqual(
+    copyDispositions(copy({ inCollection: true, forSale: true })).map((d) => d.token),
+    ["collection", "sale"]
+  );
+});
+
+test("a copy with no disposition decided says nothing, as the app's row does", () => {
+  assert.deepEqual(copyDispositions(copy()), []);
 });

@@ -7,6 +7,7 @@ import {
 } from "../core/profile";
 import type { SearchRequest, SearchResponse } from "../core/messages";
 import {
+  copyDispositions,
   holdingLabel,
   isEmptyAnswer,
   wantAxesLabel,
@@ -330,10 +331,31 @@ function copyRow(copy: SearchCopy): HTMLElement {
       copy.locationRef ? `filed ${copy.locationRef}` : null,
     ])
   );
+  const marks = document.createElement("div");
+  marks.className = "marks";
+
   const no = document.createElement("span");
   no.className = "held nums";
   no.textContent = `#${String(copy.itemNo).padStart(5, "0")}`;
-  a.appendChild(no);
+  marks.appendChild(no);
+
+  // What the copy is *for* (#550), in the inventory row's own chips: which piece this is answers half
+  // the question at an auction, and whether it is a keeper, already for sale or trade material
+  // answers the other half — without which the collector opens the copy to find out.
+  const dispositions = copyDispositions(copy);
+  if (dispositions.length > 0) {
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    for (const d of dispositions) {
+      const chip = document.createElement("span");
+      chip.className = `disp ${d.token}`;
+      chip.textContent = d.label;
+      chips.appendChild(chip);
+    }
+    marks.appendChild(chips);
+  }
+
+  a.appendChild(marks);
   return a;
 }
 

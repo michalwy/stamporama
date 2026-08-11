@@ -140,6 +140,13 @@ is half of what you clicked for. A stamp whose pieces are filed on its variants 
 (*2 copies · 3 under variants*): copies of a specific variant are not copies of the umbrella, so the
 two are never added together.
 
+Each **copy** row carries what that copy is *for* — **In collection**, **For sale**, **For trade** —
+in the same chips and the same colours the inventory list uses. Knowing you hold one is half the
+answer; whether the one in hand is a keeper, a duplicate already on sale somewhere, or trade material
+is what decides whether the lot in front of you is worth bidding on. A copy can wear more than one:
+they are three independent marks, not one state. A copy you have never given a disposition to shows
+none of them, exactly as it does in the app.
+
 Every row is a link into Stamporama and opens in a tab of its own, so the page you were reading stays
 where it is.
 
