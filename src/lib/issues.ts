@@ -147,8 +147,9 @@ export interface StampNodeData {
    *  belong to the child's own badge. Zero for every stamp when the caller loaded no counts. */
   copies: StampCopyCounts;
   /** Copies held under this stamp's variant-kind descendants (#528), at any depth — the second
-   *  number beside {@link copies}. Zero when the caller loaded no counts. */
-  variantCopies: number;
+   *  number beside {@link copies}, broken down by disposition the same way. Zero when the caller
+   *  loaded no counts. */
+  variantCopies: StampCopyCounts;
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. Null too when the caller loaded no summaries. */
   wants: StampWantSummary | null;
@@ -384,7 +385,7 @@ function toStampNode(
     subtype: subtypeLabel(m.stamp),
     photos: toPhotoSummaries(m.stamp.photos),
     copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,
-    variantCopies: copyCounts?.variant.get(m.stampId) ?? 0,
+    variantCopies: copyCounts?.variant.get(m.stampId) ?? NO_COPIES,
     wants: wantsByStamp?.get(m.stampId) ?? null,
   };
 }

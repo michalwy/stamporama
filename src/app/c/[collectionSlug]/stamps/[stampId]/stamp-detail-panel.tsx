@@ -17,7 +17,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
-import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
+import { CopyCountBadge, dispositionParts } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
@@ -102,15 +102,15 @@ export function StampDetailPanel({
                   {stamp.subtype ? stamp.subtype.name : stamp.parentId ? null : "Base stamp"}
                 </Field>
                 <Field label="Copies held">
-                  {stamp.copies.total > 0 || stamp.variantCopies > 0
+                  {stamp.copies.total > 0 || stamp.variantCopies.total > 0
                     ? [
                         stamp.copies.total > 0 ? `${stamp.copies.total} held` : null,
-                        stamp.copies.inCollection ? `${stamp.copies.inCollection} in collection` : null,
-                        stamp.copies.forSale ? `${stamp.copies.forSale} for sale` : null,
-                        stamp.copies.forTrade ? `${stamp.copies.forTrade} for trade` : null,
+                        // Markers, not slices: they overlap, so they are listed after the total
+                        // rather than presented as its parts.
+                        ...dispositionParts(stamp.copies),
                         // The variants' copies (#528) are held of something else and are stated as
                         // their own figure, never folded into the number before them.
-                        stamp.variantCopies > 0 ? `${stamp.variantCopies} in variants` : null,
+                        stamp.variantCopies.total > 0 ? `${stamp.variantCopies.total} in variants` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")

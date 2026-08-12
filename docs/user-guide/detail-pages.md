@@ -69,7 +69,8 @@ Offers. Only Details is always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
-  stamp's variants when there are any — and the headline catalog price.
+  stamp's variants when there are any, and opening its disposition breakdown on click — and the
+  headline catalog price.
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).

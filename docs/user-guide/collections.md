@@ -48,10 +48,20 @@ All filtering and sorting happens on the server, and the active area, year, sear
 ## Copies held, on the catalog lists
 
 Wherever a stamp is listed — the **Issues** list stamp tree, the **Stamps** list, and the stamp
-pickers — a green **“2 copies”** badge sits beside its catalog numbers when you hold copies of it,
-so you can see what you already own without opening anything. Hover it for the breakdown:
-*2 copies held · 1 in collection · 1 for sale*. The disposition figures are markers, not slices —
-one copy can be both in the collection and for sale — so they are listed rather than added up.
+pickers — a green badge sits beside its catalog numbers when you hold copies of it, so you can see
+what you already own without opening anything.
+
+The badge itself is one number — *“2 copies”* — followed by a **dot for each disposition present**,
+in the same vocabulary the copy rows use: green *in collection*, blue *for sale*, violet *for
+trade*. The dots say only *that* a disposition is there, never how many copies carry it. Copies with
+no disposition at all get no dot.
+
+**Click the badge for the breakdown.** It opens a small panel listing each disposition with its
+figure, and the variants' share of it in a column of its own. The dispositions are markers, not
+slices — one copy can be both in the collection and for sale — so they are listed under the total
+rather than dividing it, and they will often add up to more (or, for copies carrying none, less)
+than the number of copies. That is exactly why they are not printed next to the total on the row:
+side by side they read as parts of it, and they are not.
 
 Three rules worth knowing:
 

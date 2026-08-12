@@ -148,6 +148,9 @@ describe("stamp copy counts", () => {
       inCollection: 2,
       forSale: 1,
       forTrade: 0,
+      // Every copy carries a marker here, so nothing is left unmarked — the figure that lets the
+      // badge's breakdown account for the whole total without stating it.
+      unmarked: 0,
     });
   });
 
@@ -159,6 +162,26 @@ describe("stamp copy counts", () => {
       inCollection: 0,
       forSale: 0,
       forTrade: 1,
+      unmarked: 0,
+    });
+  });
+
+  // The badge's chip states the markers and no total, so a copy carrying no marker at all has to
+  // be counted somewhere or it would silently vanish from a stamp you do hold.
+  it("counts copies carrying no marker at all", async () => {
+    const bare = (await prisma.stamp.create({ data: { collectionId, name: "Bare" } })).id;
+    await createItem(userId, collectionId, {
+      stampId: bare,
+      conditionId,
+      inCollection: false,
+    });
+    const counts = await countCopiesByStamp(collectionId, [bare]);
+    assert.deepEqual(counts.get(bare), {
+      total: 1,
+      inCollection: 0,
+      forSale: 0,
+      forTrade: 0,
+      unmarked: 1,
     });
   });
 
@@ -283,14 +306,22 @@ describe("variant-descendant copy counts", () => {
     const counts = await countVariantDescendantCopies(collectionId, [baseId]);
     // 2 under the variant (the disposed third is not held), 1 under the deep variant, 1 under the
     // variant filed below the error, 1 under the overridden child. The error's own 3 do not count.
-    assert.equal(counts.get(baseId), 5);
+    // The markers are summed across those descendants the same way the total is (every copy here
+    // is in the collection by default), so the badge can say what the variants' copies are for.
+    assert.deepEqual(counts.get(baseId), {
+      total: 5,
+      inCollection: 5,
+      forSale: 0,
+      forTrade: 0,
+      unmarked: 0,
+    });
   });
 
   it("counts an intermediate node's own variant descendants", async () => {
     const counts = await countVariantDescendantCopies(collectionId, [midVariantId, errorId]);
-    assert.equal(counts.get(midVariantId), 1);
+    assert.equal(counts.get(midVariantId)?.total, 1);
     // The error is a distinct entry, but the variant *of* it is still a variant of the error.
-    assert.equal(counts.get(errorId), 1);
+    assert.equal(counts.get(errorId)?.total, 1);
   });
 
   it("omits stamps with no variant copies below them", async () => {

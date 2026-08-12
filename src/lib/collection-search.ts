@@ -280,7 +280,7 @@ export async function searchCollection(
       hasVariants: s.hasVariants,
       isVariant: s.isVariant,
       copies: counts.direct.get(s.stampId)?.total ?? 0,
-      variantCopies: counts.variant.get(s.stampId) ?? 0,
+      variantCopies: counts.variant.get(s.stampId)?.total ?? 0,
       wants: toSearchWants(wants.get(s.stampId), axes),
       path: `${base}/stamps/${s.stampId}`,
     })),

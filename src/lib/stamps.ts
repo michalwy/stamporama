@@ -357,8 +357,9 @@ export interface StampListItem {
    *  its own, never rolled into its parent's badge. */
   copies: StampCopyCounts;
   /** Copies held under this stamp's variant-kind descendants (#528), at any depth — reported
-   *  beside {@link copies}, never added to it. */
-  variantCopies: number;
+   *  beside {@link copies}, never added to it. Broken down by disposition the same way, so the
+   *  badge can say what those copies are held for and not only how many there are. */
+  variantCopies: StampCopyCounts;
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. */
   wants: StampWantSummary | null;
@@ -506,7 +507,7 @@ function toStampListItem(
       }))
       .sort(sortPhotos),
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
-    variantCopies: copyCounts.variant.get(stamp.id) ?? 0,
+    variantCopies: copyCounts.variant.get(stamp.id) ?? NO_COPIES,
     wants: wantsByStamp.get(stamp.id) ?? null,
   };
 }

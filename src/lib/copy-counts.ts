@@ -16,6 +16,11 @@ export interface StampCopyCounts {
   inCollection: number;
   forSale: number;
   forTrade: number;
+  /** Copies carrying **no** marker at all. Not derivable from the three figures above, precisely
+   * because they overlap — 3 copies with 2 in the collection and 2 for sale is either 0 or 1
+   * unmarked depending on how they pair up — so it is counted rather than subtracted. It is what
+   * lets a breakdown stand on its own without the total beside it. */
+  unmarked: number;
 }
 
 export const NO_COPIES: StampCopyCounts = {
@@ -23,6 +28,7 @@ export const NO_COPIES: StampCopyCounts = {
   inCollection: 0,
   forSale: 0,
   forTrade: 0,
+  unmarked: 0,
 };
 
 /**
@@ -71,6 +77,7 @@ export async function countCopiesByStamp(
     if (row.inCollection) entry.inCollection += n;
     if (row.forSale) entry.forSale += n;
     if (row.forTrade) entry.forTrade += n;
+    if (!row.inCollection && !row.forSale && !row.forTrade) entry.unmarked += n;
     counts.set(row.stampId, entry);
   }
   return counts;
@@ -94,13 +101,16 @@ export async function countCopiesByStamp(
  * same.
  *
  * The totals come from {@link countCopiesByStamp} rather than a second `groupBy`, so "a copy you
- * hold" cannot come to mean one thing in the first number and another in the second.
+ * hold" cannot come to mean one thing in the first number and another in the second — including
+ * the **disposition markers**, which are summed across the counting descendants the same way the
+ * total is, so the badge can say what the variant copies are held *for* and not only how many
+ * there are.
  */
 export async function countVariantDescendantCopies(
   collectionId: string,
   stampIds: string[]
-): Promise<Map<string, number>> {
-  const totals = new Map<string, number>();
+): Promise<Map<string, StampCopyCounts>> {
+  const totals = new Map<string, StampCopyCounts>();
   const ids = new Set(stampIds);
   if (ids.size === 0) return totals;
 
@@ -124,20 +134,27 @@ export async function countVariantDescendantCopies(
   );
 
   for (const [stampId, set] of descendantsByStamp) {
-    let total = 0;
+    const summed: StampCopyCounts = { ...NO_COPIES };
     for (const id of set) {
-      if (isVariant.get(id)) total += counts.get(id)?.total ?? 0;
+      if (!isVariant.get(id)) continue;
+      const c = counts.get(id);
+      if (!c) continue;
+      summed.total += c.total;
+      summed.inCollection += c.inCollection;
+      summed.forSale += c.forSale;
+      summed.forTrade += c.forTrade;
+      summed.unmarked += c.unmarked;
     }
-    if (total > 0) totals.set(stampId, total);
+    if (summed.total > 0) totals.set(stampId, summed);
   }
   return totals;
 }
 
 /** The two copy figures a catalog row shows for one stamp: its own copies (#348) and the copies
- * under its variant descendants (#528). Absent ids read as {@link NO_COPIES} and zero. */
+ * under its variant descendants (#528). Absent ids read as {@link NO_COPIES} on both sides. */
 export interface StampCopyCountMaps {
   direct: Map<string, StampCopyCounts>;
-  variant: Map<string, number>;
+  variant: Map<string, StampCopyCounts>;
 }
 
 /** Both figures for a page of stamps, loaded together — every surface that shows one shows the

@@ -314,7 +314,7 @@ export function StampDetailLine({
     !node.colnectId &&
     !showsSubtype &&
     node.copies.total === 0 &&
-    node.variantCopies === 0 &&
+    node.variantCopies.total === 0 &&
     !node.mainCatalogPrice &&
     !onSetPrice
   )
