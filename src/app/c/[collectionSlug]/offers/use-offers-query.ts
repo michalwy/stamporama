@@ -273,6 +273,10 @@ export function useOfferPlatforms(collectionId: string) {
       id: string;
       name: string;
       platformCurrency: string | null;
+      /** What a new offer here starts as (#449/#362) — the format, and an auction platform's own
+       * opening figure, which outranks a suggestion read off the goods (#553). */
+      defaultStartingPrice: string | null;
+      defaultListingType: string | null;
       platformModule: string | null;
     }[]
   >({

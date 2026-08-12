@@ -94,9 +94,12 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    required **Starting price** appears beside it (see
    [Auction or quick buy](#auction-or-quick-buy)); if the platform carries a
    [default starting price](contacts.md), that field starts filled in, so a house you always open at
-   the same figure needs no price typed at all. Anything that suggests a price from the goods
-   themselves — a lot's suggested price, or the copies' catalog value — wins over it, and every
-   figure is editable on the offer either way.
+   the same figure needs no price typed at all — and it **wins** over anything suggested by the goods
+   themselves (a lot's suggested price, the copies' catalog value), because an auction is opened
+   deliberately below what the goods are worth, to attract bids. Those suggestions fill the starting
+   price only when the platform states no opening figure of its own. On a **quick buy** the order is
+   the other way round and unchanged: the goods decide the price. Every figure is editable on the
+   offer either way.
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The

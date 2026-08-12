@@ -110,8 +110,9 @@ export interface ContactData extends ContactRoles {
    * tokens resolve. */
   titleLanguage: string | null;
   /** Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), a 2-dp
-   * string in the platform's own currency, or null. The lowest-priority suggestion — read at offer
-   * creation only, never seeded onto anything. Kept only while {@link defaultListingType} is
+   * string in the platform's own currency, or null. It outranks the suggestions read off the goods
+   * (#553) — a lot is opened below its worth to attract bids — and is read at offer creation only,
+   * never seeded onto anything. Kept only while {@link defaultListingType} is
    * `auction`; a quick buy has no such figure. Only meaningful for the `platform` role. */
   defaultStartingPrice: string | null;
   /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when

@@ -26,8 +26,15 @@ export interface QuickOfferFlowProps {
   certificateStatuses: CertificateStatusData[];
   baseCurrency: string;
   /** Pre-fills the platform when creating a new offer in the offer step — the list filter's
-   * platform, falling back to the last one used (#241). */
-  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
+   * platform, falling back to the last one used (#241). Carries the platform's listing defaults
+   * (#449/#362) through to the offer form, an auction's opening figure included (#553). */
+  initialPlatform?: {
+    id: string;
+    name: string;
+    platformCurrency?: string | null;
+    defaultStartingPrice?: string | null;
+    defaultListingType?: string | null;
+  };
   /** Fires with the platform id when a brand-new offer is created, so the caller can remember it. */
   onPlatformUsed?: (platformId: string) => void;
   /** Close the whole flow. */

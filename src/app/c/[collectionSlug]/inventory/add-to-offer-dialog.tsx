@@ -134,8 +134,16 @@ export interface AddToOfferDialogProps {
   locations: LocationData[];
   baseCurrency: string;
   /** Pre-fills the platform in the "create new offer" sub-flow (#241) — the list filter's platform,
-   * falling back to the last one used. */
-  initialPlatform?: { id: string; name: string; platformCurrency?: string | null };
+   * falling back to the last one used. Its listing defaults ride along (#449/#362): the format the
+   * form pre-selects, and an auction platform's own opening figure, which outranks this dialog's
+   * catalog-value suggestion (#553). */
+  initialPlatform?: {
+    id: string;
+    name: string;
+    platformCurrency?: string | null;
+    defaultStartingPrice?: string | null;
+    defaultListingType?: string | null;
+  };
   /** Fires with the platform id when a brand-new offer is created here, so callers can remember it
    * as the last-used platform (#241). */
   onPlatformUsed?: (platformId: string) => void;

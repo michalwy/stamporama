@@ -302,8 +302,9 @@ async function assertPlatform(
     PlatformDescriptionFormat & {
       platformCurrency: string | null;
       /** The platform's fallback **starting price** for a new auction (#362, narrowed in #449),
-       * already a 2-dp string, or null. Read at creation only — the lowest-priority price
-       * suggestion, and stored only while the platform's default type is `auction`. */
+       * already a 2-dp string, or null. Read at creation only — it outranks the price suggestions
+       * read off the goods (#553), and is stored only while the platform's default type is
+       * `auction`. */
       defaultStartingPrice: string | null;
       /** How a new offer here is sold by default (#449), or null for "no preference" — read at
        * creation exactly as the price above is, and outranked by anything the form states. */

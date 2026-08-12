@@ -4,8 +4,11 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer } from "../../src/lib/offers";
 
-// A platform's default starting price (#362, narrowed to auctions in #449) is the *last* fallback:
-// a new auction takes it only when nothing was submitted, and it is resolved before the live-status
+// A platform's default starting price (#362, narrowed to auctions in #449) is the server's *last*
+// fallback: a new auction takes it only when nothing was submitted (which is the whole rule here —
+// #553 reordered the *dialog's* pre-fill, where the default now outranks the suggestions read off
+// the goods, and so the form submits it rather than leaving it to this fallback). It is resolved
+// before the live-status
 // checks — so an auction created straight as `ready` on a house that always opens at the same figure
 // is not rejected as unpriced. An auction's current price then follows from its opening one, so the
 // default reaches `price` too, without any of it applying to a quick buy.

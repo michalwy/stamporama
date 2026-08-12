@@ -61,11 +61,12 @@ the new-offer dialog and is changeable per listing; leave it at **no preference*
 starts as a quick buy.
 
 Choosing **Auction** reveals a **Default starting price** beside it — the figure a house you always
-open at the same price starts at, in the platform's own currency. It is the **last resort**: a new
-auction takes it only when nothing about the goods themselves suggests a price — the lot's suggested
-price and the copies' catalog value both win over it, and those fill the same field. It never touches
-the offer's current price, which stays empty until somebody bids. Leave it empty for houses you open
-individually.
+open at the same price starts at, in the platform's own currency. On an auction it **wins**: a new
+auction opens at it even when the goods themselves suggest a price — the lot's suggested price and
+the copies' catalog value fill the same field, but only when the platform states no opening figure,
+because an auction is opened deliberately below what the goods are worth, to attract bids. It never
+touches the offer's current price, which stays empty until somebody bids, and whatever it fills in is
+yours to edit on the offer. Leave it empty for houses you open individually.
 
 There is deliberately no default price for a **quick buy**: its price follows from the goods, which
 is exactly what those two suggestions already answer.

@@ -73,7 +73,7 @@ export interface OfferFormDialogProps {
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
    * show a misleading editable picker, its `defaultListingType` (#449) pre-selects how the listing
    * is sold, and its `defaultStartingPrice` (#362, narrowed in #449) seeds an auction's opening
-   * figure when nothing better suggests one. */
+   * figure — ahead of any suggestion read off the goods (#553). */
   initialPlatform?: {
     id: string;
     name: string;
@@ -173,13 +173,18 @@ export function OfferFormDialog({
   );
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
   const isAuction = isAuctionListing(listingType);
-  // An auction's opening figure, seeded from the platform's own default on exactly the price
-  // fallback's rule (#362): lowest priority, re-seeded on a platform change, and left alone the
-  // moment the collector types one.
+  // An auction's opening figure, seeded from the platform's own default (#362): re-seeded on a
+  // platform change and left alone the moment the collector types one.
   const [startingPrice, setStartingPrice] = useState(
     offer?.startingPrice ?? (isEdit ? "" : (initialPlatform?.defaultStartingPrice ?? ""))
   );
   const [startingPriceTyped, setStartingPriceTyped] = useState(false);
+  // Whether the platform now picked states an opening figure at all (#553) — tracked apart from the
+  // field's value, because what decides the priority below is that a default *exists*, not what the
+  // field currently holds. Null while editing: an existing listing is never re-described.
+  const [platformStartingPrice, setPlatformStartingPrice] = useState<string | null>(
+    isEdit ? null : (initialPlatform?.defaultStartingPrice ?? null)
+  );
   // When the auction closes (#490), held as the field's local-time value and converted to an instant
   // on submit. Never seeded from the last offer: a closing time belongs to one listing.
   const [endsAt, setEndsAt] = useState(toLocalInputValue(offer?.endsAt));
@@ -187,7 +192,13 @@ export function OfferFormDialog({
   // an auction is what one would open at — so it fills the starting price there and leaves the
   // current one blank, rather than recording a bid nobody placed.
   const suggestionFillsPrice = priceControlled && !isAuction;
-  const suggestionFillsStartingPrice = priceControlled && isAuction;
+  // …except on an auction whose platform states an opening figure of its own (#553). An auction is
+  // opened deliberately **below** what the goods are worth, to attract bids, so a house that always
+  // opens at the same price outranks a suggestion describing the goods (a lot's price, the copies'
+  // catalog value) — the reverse of the quick-buy order, which #362 leaves untouched. A figure the
+  // collector has typed themselves counts the same way: nothing may replace it with a suggestion.
+  const platformOpensAuction = !isEdit && (!!platformStartingPrice || startingPriceTyped);
+  const suggestionFillsStartingPrice = priceControlled && isAuction && !platformOpensAuction;
   const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
@@ -287,6 +298,7 @@ export function OfferFormDialog({
                 }
                 // …and the opening figure that goes with it (#362/#449), on the same rule: switching
                 // platforms mid-form must not leave the previous house's starting price behind.
+                if (!isEdit) setPlatformStartingPrice((id && platform?.defaultStartingPrice) || null);
                 if (!isEdit && !startingPriceTyped) {
                   setStartingPrice((id && platform?.defaultStartingPrice) || "");
                 }
