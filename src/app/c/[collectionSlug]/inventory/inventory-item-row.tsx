@@ -25,6 +25,7 @@ import {
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import {
   RowQuickActions,
   pickRowActions,
@@ -464,6 +465,13 @@ export function InventoryItemRow({
     !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);
 
   const detailPage = useDetailPageAction("copy", item.id);
+  // The Valuation window for the stamp behind this copy (#114) — the same entry the stamps and
+  // issues rows carry, and the last list of stamps that could not open it. Deliberately **not**
+  // gated on the stamp having a catalog price, as those two rows are: the window answers three
+  // questions now, and two of them — what the market paid (#457) and what this collector paid
+  // (#560) — stand on their own, the second of them always having something to say about a row
+  // that *is* a copy.
+  const prices = usePriceDetailsAction({ kind: "stamp", stampId: item.stampId });
 
   const menuActions: RowAction[] = [
     detailPage,
@@ -478,6 +486,7 @@ export function InventoryItemRow({
       // "open a read-only list of related records".
       ? [{ key: "offers", label: "View offers", icon: "list", onSelect: () => onViewOffers(item) } as RowAction]
       : []),
+    prices.action,
     ...(purchaseHref?.(item) && item.purchase
       ? [{
           key: "purchase",
@@ -599,6 +608,9 @@ export function InventoryItemRow({
         visible={hovered}
       />
       <RowActionsMenu actions={rowActions} ariaLabel="Copy actions" />
+      {/* Rendered at the row level so it survives the menu closing, the rule every dialog-opening
+          row action follows. */}
+      {prices.dialog}
     </>
   );
 

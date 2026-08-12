@@ -897,6 +897,17 @@ A stamp can belong to more than one issue. A copy is counted under **one** of th
 its stamp was added to — so the counts add up to the list exactly rather than reporting one copy
 under two series.
 
+## Seeing what a stamp is worth
+
+Every copy row's **⋮** menu has a **Show valuation** action. It opens the read-only **Valuation**
+dialog for the stamp this copy is of — what the market has paid for it, what you have paid for the
+copies you hold, and what the catalogs list it at. It is the same window the **Stamps** and
+**Issues** lists open, and it changes nothing: close it and you are back on the list, in the same
+place. See [The Valuation dialog](collections.md#the-valuation-dialog).
+
+This is not **Edit stamp**, which is on the same menu and opens the stamp *editor* — use that one
+when you want to record a catalog value rather than read one.
+
 ## Seeing which offers something is in
 
 Every copy row's **⋮** menu has a **View offers** action. It opens a read-only popup listing
