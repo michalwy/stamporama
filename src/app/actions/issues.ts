@@ -31,6 +31,8 @@ import type {
   IssueReferencedVendor,
   IssueRangeSuggestion,
 } from "@/lib/issues";
+import { getChecklistMarketValue } from "@/lib/market-values";
+import type { ChecklistMarketValue } from "@/lib/market-values";
 import { applyStampPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { parseTranslationValues } from "@/lib/translations";
 import { STAMP_TRANSLATION_FIELDS } from "@/lib/stamps";
@@ -47,6 +49,17 @@ export async function getChecklistPriceDetailsAction(
 ): Promise<ChecklistPriceDetails> {
   const session = await getSession();
   return getChecklistPriceDetails(session.user.id, collectionId, checklistId);
+}
+
+/** What the market paid for the whole set (#457; ADR-0022 §8) — the members' medians summed per
+ * `condition × certificate × format` key, with the count of members behind each figure. Read on
+ * demand beside the catalogue totals in the Valuation dialog. */
+export async function getChecklistMarketValueAction(
+  collectionId: string,
+  checklistId: string
+): Promise<ChecklistMarketValue> {
+  const session = await getSession();
+  return getChecklistMarketValue(session.user.id, collectionId, checklistId);
 }
 
 /** Coverage suggestions for an issue: vendors whose members extend the declared range. */

@@ -17,7 +17,7 @@ heading, and the scrolling under it, on telling you that something is not there.
 
 These pages are **read-only**. Everything on them is still edited where it always was: the copy
 form, the stamp dialog, the issue dialog. The popups you already use (**View copies**, **View
-offers**, **Show catalog prices**) also stay exactly where they are — they answer one question
+offers**, **Show valuation**) also stay exactly where they are — they answer one question
 without leaving the list, and these pages are for when you want the whole picture instead.
 
 ## Opening one

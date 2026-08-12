@@ -140,16 +140,41 @@ export interface HoldingsTotal {
   uncertainBaseAmount: string;
 }
 
+/** What the **market** paid for the same held copies (#458; ADR-0022 §8), each valued at the median
+ * for its own `condition × certificate × format` key.
+ *
+ * A third answer beside catalogue value and cost basis, and deliberately not a replacement for
+ * either: the catalogue is a list price, the cost is what was paid for these copies, and this is
+ * what copies like them fetched at auction.
+ *
+ * The coverage counts are **not** decoration. Market value exists only where lots have been
+ * recorded, which on a self-built base is a fraction of a collection — so a total is stated with
+ * the number of copies behind it and the number it could say nothing about. A total built from 12%
+ * of the collection must never read as the collection's worth. */
+export interface MarketHoldingsTotal {
+  baseCurrency: string;
+  /** Sum of the per-copy medians, 2-dp string. */
+  totalBaseAmount: string;
+  /** Copies whose key had evidence and so contributed to the total. */
+  valuedCount: number;
+  /** Copies whose key had no datapoints. They contribute **nothing** — no catalogue-derived
+   * substitute is used, since a key with no results has no market value at all (ADR-0022 §6). */
+  noEvidenceCount: number;
+}
+
 /** The holdings summary bar's full figure (#134): the catalog {@link HoldingsTotal} plus
  * the actual purchase {@link CostBasisTotal} aggregated over the same filtered copy set,
- * so a collector can compare paid-vs-catalog value at a glance.
+ * so a collector can compare paid-vs-catalog value at a glance. The {@link MarketHoldingsTotal}
+ * (#458) is the third reading of the same copies.
  *
- * Both figures cover the copies **actually held** (`isHeld`, #396). What the predicate excludes is
- * not dropped, it is moved: {@link writeOff} carries the cost of the copies in the same scope that
- * are gone, so the two halves partition the scope instead of some of it silently vanishing. */
+ * All three figures cover the copies **actually held** (`isHeld`, #396). What the predicate
+ * excludes is not dropped, it is moved: {@link writeOff} carries the cost of the copies in the same
+ * scope that are gone, so the two halves partition the scope instead of some of it silently
+ * vanishing. */
 export interface HoldingsSummary extends HoldingsTotal {
   cost: CostBasisTotal;
   writeOff: WriteOffTotal;
+  market: MarketHoldingsTotal;
 }
 
 /** What the copies in scope that are no longer held cost (#396) — disposed after delivery (#394),
@@ -208,5 +233,39 @@ export function aggregateHoldings(
     unconvertibleCount,
     uncertainCount,
     uncertainBaseAmount: uncertainTotal.toFixed(2),
+  };
+}
+
+/**
+ * Aggregate per-copy **market** medians into a holdings total (#458). Pure.
+ *
+ * One entry per copy in scope, already resolved to that copy's own key: the median in the base
+ * currency, or `null` where the key has no datapoints. A `null` is counted, never valued — it is
+ * the difference between "worth nothing" and "nothing recorded", and only the second is true here.
+ *
+ * There is no conversion to do: a market median is aggregated in the base currency to begin with
+ * (ADR-0022 §2 converts at the rate frozen on the lot), so there is no `unconvertible` third state
+ * the way catalogue valuation has one.
+ */
+export function aggregateMarketHoldings(
+  medians: (number | null)[],
+  baseCurrency: string
+): MarketHoldingsTotal {
+  let total = 0;
+  let valuedCount = 0;
+  let noEvidenceCount = 0;
+  for (const median of medians) {
+    if (median === null) {
+      noEvidenceCount++;
+      continue;
+    }
+    valuedCount++;
+    total += median;
+  }
+  return {
+    baseCurrency,
+    totalBaseAmount: total.toFixed(2),
+    valuedCount,
+    noEvidenceCount,
   };
 }

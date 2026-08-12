@@ -4,10 +4,12 @@ import { useState } from "react";
 import type { RowAction } from "./row-actions-menu";
 import { PriceDetailsDialog, type PriceDetailsTarget } from "./price-details-dialog";
 
-/** Row-actions-menu entry that opens the catalog price-details dialog (averages +
- * per-catalog breakdown) for a stamp or issue, fetched lazily. Replaces the old
- * inline `⋯` price buttons — see #125. Returns the menu action plus the dialog
- * element to render at the row level so it survives the menu closing. */
+/** Row-actions-menu entry that opens the **Valuation** dialog for a stamp or checklist, fetched
+ * lazily: catalog averages, the per-catalog breakdown, and what the market has actually paid
+ * (#457). Replaces the old inline `⋯` price buttons — see #125. Named for the question it answers
+ * rather than for one of its two answers, so the menu does not promise less than the window holds.
+ * Returns the menu action plus the dialog element to render at the row level so it survives the
+ * menu closing. */
 export function usePriceDetailsAction(
   target: PriceDetailsTarget,
   opts?: { key?: string; label?: string }
@@ -16,7 +18,7 @@ export function usePriceDetailsAction(
 
   const action: RowAction = {
     key: opts?.key ?? "prices",
-    label: opts?.label ?? "Show catalog prices",
+    label: opts?.label ?? "Show valuation",
     icon: "prices",
     onSelect: () => setOpen(true),
   };
@@ -50,7 +52,7 @@ export function useChecklistPriceActions({
     .filter((c) => c.priceTotal)
     .map((c) => ({
       key: `prices-${c.id}`,
-      label: checklists.length === 1 ? "Show catalog prices" : `Show catalog prices — ${c.name}`,
+      label: checklists.length === 1 ? "Show valuation" : `Show valuation — ${c.name}`,
       icon: "prices",
       onSelect: () => setOpenId(c.id),
     }));

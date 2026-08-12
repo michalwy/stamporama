@@ -815,11 +815,13 @@ would be tuning against evidence the app is showing you on the same screen. If a
 looks wrong, the answer is another recorded result — which is the strongest reason there is to file
 the lots you merely **watched** as well as the ones you won.
 
+Recorded results are also what a stamp's own **market value** is worked out from — open any stamp
+or issue row's **⋮ → Show valuation**, or look at the **Market value** line on the holdings summary
+bar. See [Market value](collections.md#market-value).
+
 ## What is not here yet
 
 - Winning **part** of a lot, when a multi-stamp lot is split.
-- A screen of its own for what the market has paid. Recorded results feed the
-  [recommendation](#what-a-lot-is-worth-bidding), but there is nowhere yet to browse them per stamp.
 - Capturing a listing from anywhere but Allegro. Other marketplaces are still typed in by hand.
 - Any automatic refreshing of bids. Capturing an Allegro listing again re-reads its price, but only
   when you ask it to — nothing polls a marketplace on your behalf.

@@ -29,6 +29,8 @@ import {
   type PhotoRole,
   type PhotoSummary,
 } from "@/lib/photos";
+import { getStampMarketValueByStamp } from "@/lib/market-values";
+import type { StampMarketValue } from "@/lib/market-values";
 import type {
   CatalogPriceInput,
   StampCatalogPriceDisplay,
@@ -441,4 +443,13 @@ export async function getStampPriceDetailsAction(
 ): Promise<StampPriceDetails> {
   const session = await getSession();
   return getStampPriceDetails(session.user.id, stampId);
+}
+
+/** What the market paid for this stamp, per `condition × certificate × format` key with evidence
+ * (#457; ADR-0022 §8). Read on demand beside the catalogue prices in the Valuation dialog —
+ * nothing is stored, so a lot's final price edited on the auctions screen changes the next answer.
+ * Empty for a stamp with no closed lots behind it. */
+export async function getStampMarketValueAction(stampId: string): Promise<StampMarketValue[]> {
+  const session = await getSession();
+  return getStampMarketValueByStamp(session.user.id, stampId);
 }

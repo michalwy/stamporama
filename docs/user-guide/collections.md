@@ -89,7 +89,7 @@ To see the copies themselves, use **View copies** in the row's **⋮** menu.
 
 ## Row actions
 
-Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show catalog prices**), with the destructive **Delete** set apart in red at the bottom. On the **Issues**, **Stamps** and **Copies** lists the first entry opens the row's own full-page view — see [Detail pages](detail-pages.md). Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
+Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show valuation**), with the destructive **Delete** set apart in red at the bottom. On the **Issues**, **Stamps** and **Copies** lists the first entry opens the row's own full-page view — see [Detail pages](detail-pages.md). Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
 
 A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. Each list promotes the actions it is most worked with:
 
@@ -582,18 +582,19 @@ The item list and the issues list each show a **single price column**. Because a
 
 Expand an issue and a member stamp that has **no price for the condition the list is currently showing** gets a **+ catalog value** link where its price would be — the same affordance an unpriced copy has on the [Inventory list](inventory.md#adding-a-catalog-value). It opens the same dialog — the stamp, its catalog numbers, its issue and area, any prices already recorded, and one input per catalog active on the stamp's area with the primary catalog focused — but pre-set to the condition in the **"Price for …"** selector (certificate status = None), so what you type is exactly what the row then shows. Switch the selector first if you want to price a different condition. Save and the list refreshes: the price replaces the link, and the issue total takes it in.
 
-### The price details dialog
+### The Valuation dialog
 
-Each stamp and issue row's **⋮** actions menu has a **Show catalog prices** action that opens the **price details** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has two kinds of section:
+Each stamp and issue row's **⋮** actions menu has a **Show valuation** action that opens the **Valuation** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has three kinds of section, each in the same collapsible box and each on the same grid — **conditions as rows, certificate statuses as columns**:
 
+- **Market value** (open by default, first) — what these have actually fetched at auction, rather than what a catalog lists them at. Same grid as the sections below it, so a median and a list price can be read against each other cell for cell. See [Market value](#market-value) below.
 - **Average across all catalogs** (open by default) — a grid with **conditions as rows and certificate statuses as columns** (plus a **No cert.** column for prices recorded without a certificate). For a stamp, each cell is the mean price for that condition/certificate, taking each catalog's newest edition and converting to the collection currency. For an issue, each cell is the average of the catalogs' required-stamps totals for that condition/certificate. Only catalogs that price **every** required stamp (for that cell) are averaged; a catalog that prices some but not all is excluded — hover the **⚠** to see which catalogs and how many they price. If no catalog prices all required stamps for a cell, it reads **incomplete** (hover for details). Averages are always shown in the **collection currency**.
 - **Catalog breakdown** (collapsed by default, one expandable section each) — for a stamp, one section per **catalog edition**; for an issue, one section per catalog. Each shows the same conditions × certificate-status grid: the recorded price for a stamp, or the required-stamps total for an issue (with a **⚠** when the catalog does not price every required stamp).
 
-Certificate columns are shared across all the grids, so a certificate that appears in even one catalog gets a column everywhere and the columns line up.
+Certificate columns are shared across all the grids — the market grid included, so a certificate that appears only in an auction result still gets a column everywhere and the columns line up.
 
 The dialog opens at a fixed size: the toolbar stays pinned at the top and the sections scroll beneath it, so expanding or collapsing a section never resizes the window.
 
-Two toggles control the catalog sections (they never change the averages):
+Two toggles control the catalog sections (they never change the averages, nor the market value section — a hammer price has no catalog edition, and it is worked out in the collection currency to begin with):
 
 - **Editions** — *Latest only* (default) shows just each catalog's newest edition; *All editions* shows every recorded edition.
 - **Currency** — *Catalog* (default) shows prices in each catalog's own currency; *Collection* converts them to the collection currency.
@@ -612,6 +613,45 @@ Because prices are edition-specific, a recorded price becomes **stale** when a n
 - **In the Prices tab**, a price cell on an older edition is highlighted with a small **⚠** button when the same condition/certificate cell on the newest edition is still empty. Clicking it copies the price into the newest edition's matching cell as a starting point — adjust the value if needed and save. The older edition's price is kept as history; nothing is deleted.
 
 The warning clears once the newest edition has its own price.
+
+## Market value
+
+The catalog says what a stamp is *listed* at. **Market value** says what one has actually fetched — worked out from the closed auction lots you have recorded (see [Auctions](auctions.md)). It is the first section of the [Valuation dialog](#the-valuation-dialog), above the cross-catalog average, and it is entirely read-only: nothing here is edited, and nothing is stored. Change a lot's final price and the next time you open the dialog the figures follow.
+
+Neither of the dialog's toggles touches it. There are no editions to choose between — a hammer price belongs to the day it was struck, not to a published book — and every figure is already in the collection currency, converted at the rate frozen on each lot when it closed.
+
+### For a single stamp
+
+The grid is the dialog's own: **conditions as rows, certificate statuses as columns**, each cell the **median** of what that condition and certificate has fetched.
+
+**The figure's colour is its confidence** — green for high, amber for medium, grey for low — worked out from how many results there are, how recent they are, how closely they agree, and how many had to be carved out of a mixed lot. It rides on the amount rather than as a badge beside it so that every price in a column starts and ends in the same place and the column can be read down at a glance. It is a note about the evidence, never a rule: nothing in the app refuses to show a figure because its confidence is low.
+
+**Hover a figure** and a small panel gives the rest of it, one fact per line: the confidence spelled out with its score out of 100, the median, the mean, the range, how many results (and how many of those came out of a mixed lot), the span of dates they cover, and the catalog price for the same cell with what fraction of it the market paid. Hovering a set's total gives the same panel, with its coverage on it.
+
+**Click a figure** and the lots behind it open under the table — the lot, the sale it was in, the day it closed, and what it contributed, each linking straight to itself on its sale's screen. One cell at a time; clicking it again closes it. Where a lot held several of something, or held other stamps too, the list says so: a mixed lot's hammer price is divided between its stamps in proportion to their catalog values, and the number of results arrived at that way is stated at the bottom.
+
+**Multiples get their own grid.** A market value hangs off the physical format as well — a pair does not fetch what a single does — so each format that has results is a separate table under its own heading, the single first. Where you have only ever recorded singles, there is just the one table and no heading.
+
+### For a checklist
+
+Opened from an issue row, the same grid totals the **set**: each cell is the medians of the checklist's stamps added together. A set's worth is the sum of its members' worth, so these are the same figures you would see opening each stamp on its own.
+
+Under each total is its **coverage** — *"7 of 40"*, in amber whenever it is not all of them — which is what a set gets instead of a confidence badge. Averaging forty confidence scores would describe nothing in particular; how much of the set is actually behind the number is the thing you need to know, and only a count can say it. Stamps with no results contribute nothing and nothing is estimated for them. Hover for the wording in full.
+
+Set totals do not expand: a set's evidence is every lot of every member, which is a list to read one stamp at a time.
+
+### What this deliberately does not do
+
+- **A cell with no results is empty**, showing the same **—** an unpriced catalog cell shows. Nothing is estimated from a neighbouring condition or from a similar stamp. An empty cell means nothing has been recorded, which is not the same as the stamp being worth nothing.
+- **Won, lost and merely observed lots all count.** A price someone else paid is as real as one you paid, and a lot added purely to watch what it fetched is a first-class way of building this up.
+
+A stamp — or a set — with no results at all shows a short note saying where the figures would come from, rather than an empty section.
+
+### The market total on the summary bar
+
+Wherever the [holdings summary bar](inventory.md) appears, a **Market value** line sits between catalog value and purchase cost. Each copy you still hold is valued at the median for its own condition, certificate and format, in the collection currency.
+
+Its coverage is always stated: *"from 14 of 112 copies · 98 with no auction results"*. This matters more than the figure. Market value only exists where lots have been recorded, so on most collections it covers a small slice — and a total built from a slice must never read as what the collection is worth. Copies whose key has no results contribute nothing at all; no catalog-derived stand-in is used. Copies you no longer hold are excluded, exactly as they are from the other two figures.
 
 ## URL structure
 

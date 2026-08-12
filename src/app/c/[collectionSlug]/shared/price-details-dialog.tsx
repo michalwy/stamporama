@@ -1,13 +1,31 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DialogShell } from "@/app/dialog-shell";
 import { Tooltip } from "./tooltip";
 import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
 import type { ChecklistPriceDetails } from "@/lib/issues";
-import { Icon } from "@/app/icons";
+import { CollapsibleSection } from "./collapsible-section";
+import {
+  collectCertColumns,
+  MatrixTable,
+  Money,
+  Dash,
+  Warn,
+  ValueWithTip,
+  Muted,
+  Empty,
+  numStyle,
+} from "./price-matrix";
+import {
+  StampMarketValueSection,
+  ChecklistMarketValueSection,
+  useStampMarketValue,
+  useChecklistMarketValue,
+  marketCertCells,
+} from "./market-value-sections";
 
 /** What the dialog describes: a single stamp, or one checklist's stamps (#531 — an issue may carry
  *  several goals, so "the set" is named by a checklist rather than by the publication). */
@@ -19,15 +37,24 @@ type Scope = "latest" | "all";
 type CurrencyMode = "catalog" | "collection";
 
 /**
- * Modal showing all recorded catalog prices for a stamp or issue. Sections: the
- * cross-catalog average (always in collection currency, expanded by default) and
- * one collapsible section per catalog edition (collapsed by default). Stamp tables
- * are laid out as a conditions-as-rows × certificates-as-columns matrix. A scope
- * toggle picks latest-only vs all editions; a currency toggle switches the catalog
- * sections between catalog and collection currency. Both toggles leave the averages
- * untouched. The dialog height is fixed: the toolbar is pinned and the sections
- * scroll internally, so expanding a section never resizes the window. See
- * price-details dialog.
+ * Modal answering **what is this worth** for a stamp or a checklist — which is why it is titled
+ * *Valuation* rather than *Catalog prices* (#457; ADR-0022 §8): the catalog is one of the two
+ * answers it now carries, and a window named after one of them would hide the other.
+ *
+ * Sections, each the same collapsible box on the same conditions-as-rows × certificates-as-columns
+ * matrix: the read-only **Market value** grid first (what closed auction lots actually paid), then
+ * the cross-catalog average (always in collection currency), both open by default, then one section
+ * per catalog edition (collapsed). A scope toggle picks latest-only vs all editions; a currency
+ * toggle switches the catalog sections between catalog and collection currency. Both toggles leave
+ * the averages **and the market grid** untouched — a hammer price has no catalog edition and is
+ * aggregated in the collection's currency to begin with. They stay pinned above it all the same:
+ * they are the window's controls, and a control that scrolls away is one a reader goes looking for.
+ *
+ * Market value leads because it is the answer the catalog sections are evidence for, and because it
+ * is the one figure here that comes from transactions rather than from a published list.
+ *
+ * The dialog height is fixed: the toolbar is pinned and the sections scroll internally, so
+ * expanding a section never resizes the window.
  */
 export function PriceDetailsDialog({
   target,
@@ -67,7 +94,7 @@ export function PriceDetailsDialog({
 
   return (
     <DialogShell
-      title="Catalog prices"
+      title="Valuation"
       onClose={onClose}
       maxWidth="min(98vw, 92rem)"
       height="min(96vh, 66rem)"
@@ -107,110 +134,25 @@ export function PriceDetailsDialog({
         {isLoading && <div style={{ color: "var(--color-text-muted)" }}>Loading prices…</div>}
 
         {!isLoading && target.kind === "stamp" && stampQuery.data && (
-          <StampSections data={stampQuery.data} scope={scope} currencyMode={currencyMode} />
+          <StampSections
+            data={stampQuery.data}
+            stampId={target.stampId}
+            scope={scope}
+            currencyMode={currencyMode}
+          />
         )}
 
         {!isLoading && target.kind === "checklist" && checklistQuery.data && (
-          <ChecklistSections data={checklistQuery.data} scope={scope} currencyMode={currencyMode} />
+          <ChecklistSections
+            data={checklistQuery.data}
+            collectionId={target.collectionId}
+            checklistId={target.checklistId}
+            scope={scope}
+            currencyMode={currencyMode}
+          />
         )}
       </div>
     </DialogShell>
-  );
-}
-
-// ── Matrix helper (conditions as rows, certificates as columns) ─────────────────
-
-type CellAxes = {
-  conditionId: string;
-  conditionName: string;
-  conditionAbbreviation: string;
-  conditionSortOrder: number;
-  certificateStatusId: string | null;
-  certificateStatusAbbreviation: string | null;
-  certificateSortOrder: number;
-};
-
-type CertColumn = { key: string; abbreviation: string; sort: number };
-
-/**
- * Union of certificate columns across the given cell sets, ordered by sort. Shared
- * by every stamp table so a certificate that appears in any edition gets a column
- * in all of them — keeping the columns aligned across sections.
- */
-function collectCertColumns(cellSets: CellAxes[][]): CertColumn[] {
-  const map = new Map<string, CertColumn>();
-  for (const cells of cellSets) {
-    for (const c of cells) {
-      const key = c.certificateStatusId ?? "";
-      map.set(key, {
-        key,
-        abbreviation: c.certificateStatusAbbreviation ?? "No cert.",
-        sort: c.certificateSortOrder,
-      });
-    }
-  }
-  return [...map.values()].sort((a, b) => a.sort - b.sort);
-}
-
-function MatrixTable<C extends CellAxes>({
-  cells,
-  certificates,
-  renderCell,
-}: {
-  cells: C[];
-  /** Full certificate column set (shared across tables), so columns stay aligned. */
-  certificates: CertColumn[];
-  renderCell: (cell: C | undefined) => ReactNode;
-}) {
-  const conditions = new Map<string, { id: string; abbreviation: string; name: string; sort: number }>();
-  const byKey = new Map<string, C>();
-  for (const c of cells) {
-    conditions.set(c.conditionId, {
-      id: c.conditionId,
-      abbreviation: c.conditionAbbreviation,
-      name: c.conditionName,
-      sort: c.conditionSortOrder,
-    });
-    byKey.set(`${c.conditionId}~${c.certificateStatusId ?? ""}`, c);
-  }
-  const rows = [...conditions.values()].sort((a, b) => a.sort - b.sort);
-
-  return (
-    <table style={{ ...tableStyle, tableLayout: "fixed" }}>
-      <colgroup>
-        <col style={{ width: "16rem" }} />
-        {certificates.map((cert) => (
-          <col key={cert.key} />
-        ))}
-      </colgroup>
-      <thead>
-        <tr>
-          <th style={thStyle}>Condition</th>
-          {certificates.map((cert) => (
-            <th key={cert.key} style={{ ...thStyle, textAlign: "right" }}>
-              {cert.abbreviation}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((cond) => (
-          <tr key={cond.id}>
-            <td style={{ ...tdStyle, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              <span style={{ fontWeight: 500 }}>{cond.abbreviation}</span>
-              <span style={{ color: "var(--color-text-muted)", marginLeft: "0.4rem" }}>
-                {cond.name}
-              </span>
-            </td>
-            {certificates.map((cert) => (
-              <td key={cert.key} style={numTdStyle}>
-                {renderCell(byKey.get(`${cond.id}~${cert.key}`))}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 
@@ -218,27 +160,44 @@ function MatrixTable<C extends CellAxes>({
 
 function StampSections({
   data,
+  stampId,
   scope,
   currencyMode,
 }: {
   data: StampPriceDetails;
+  stampId: string;
   scope: Scope;
   currencyMode: CurrencyMode;
 }) {
+  const market = useStampMarketValue(stampId);
   const editions = data.editions.filter((e) => scope === "all" || e.isNewest);
-  if (data.averageCells.length === 0 && editions.length === 0) {
-    return <Empty>No prices recorded.</Empty>;
-  }
 
-  // One shared certificate column set across the average and every edition table,
-  // built from all editions (not just the visible ones) so the columns never shift.
+  // One shared certificate column set across the market grid, the average and every edition table,
+  // built from all editions (not just the visible ones) so the columns never shift. The market
+  // figures are in the union too: a certificate that appears only in an auction result still earns
+  // a column everywhere, which is what keeps the grids readable against each other.
   const certColumns = collectCertColumns([
     data.averageCells,
     ...data.editions.map((e) => e.cells),
+    marketCertCells(market.data, undefined),
   ]);
+
+  // No catalog prices is **not** an empty dialog: a stamp can have auction results and no catalog
+  // price at all — a single-line lot needs none to yield one (ADR-0022 §3) — so the market section
+  // still stands, and only the catalog half is empty.
+  if (data.averageCells.length === 0 && editions.length === 0) {
+    return (
+      <>
+        <StampMarketValueSection query={market} certificates={certColumns} />
+        <Empty>No catalog prices recorded.</Empty>
+      </>
+    );
+  }
 
   return (
     <>
+      <StampMarketValueSection query={market} certificates={certColumns} />
+
       <CollapsibleSection title="Average across all catalogs" defaultOpen>
         {data.averageCells.length === 0 ? (
           <Muted>No averageable prices.</Muted>
@@ -296,28 +255,42 @@ function StampSections({
 
 function ChecklistSections({
   data,
+  collectionId,
+  checklistId,
   scope,
   currencyMode,
 }: {
   data: ChecklistPriceDetails;
+  collectionId: string;
+  checklistId: string;
   scope: Scope;
   currencyMode: CurrencyMode;
 }) {
+  const market = useChecklistMarketValue(collectionId, checklistId);
   const catalogs = scope === "all" ? data.catalogsAll : data.catalogsLatest;
-  if (data.averageCells.length === 0 && catalogs.length === 0) {
-    return <Empty>No prices recorded for the stamps on “{data.checklistName}”.</Empty>;
-  }
 
-  // Shared certificate columns across the average and every catalog table (both
+  // Shared certificate columns across the market grid, the average and every catalog table (both
   // variants), so the columns never shift when toggling latest/all.
   const certColumns = collectCertColumns([
     data.averageCells,
     ...data.catalogsLatest.map((c) => c.cells),
     ...data.catalogsAll.map((c) => c.cells),
+    marketCertCells(undefined, market.data),
   ]);
+
+  if (data.averageCells.length === 0 && catalogs.length === 0) {
+    return (
+      <>
+        <ChecklistMarketValueSection query={market} certificates={certColumns} />
+        <Empty>No catalog prices recorded for the stamps on “{data.checklistName}”.</Empty>
+      </>
+    );
+  }
 
   return (
     <>
+      <ChecklistMarketValueSection query={market} certificates={certColumns} />
+
       <CollapsibleSection title="Average across all catalogs" defaultOpen>
         {data.averageCells.length === 0 ? (
           <Muted>No averageable prices.</Muted>
@@ -412,164 +385,3 @@ function priceForMode(
   if (base) return { primary: `${base} ${baseCurrency}`, secondary: null };
   return { primary: `${amount} ${currency}`, secondary: "no rate" };
 }
-
-function Money({
-  primary,
-  secondary,
-  badge,
-}: {
-  primary: string;
-  secondary: string | null;
-  badge?: ReactNode;
-}) {
-  return (
-    <>
-      <div style={numStyle}>
-        {primary}
-        {badge}
-      </div>
-      {secondary && (
-        <div style={{ color: "var(--color-text-muted)", fontSize: "0.75rem", fontVariantNumeric: "tabular-nums" }}>
-          {secondary}
-        </div>
-      )}
-    </>
-  );
-}
-
-function Dash() {
-  return <span style={{ color: "var(--color-text-muted)" }}>—</span>;
-}
-
-function Warn({ content }: { content: ReactNode }) {
-  return (
-    <Tooltip content={content} placement="top" align="end">
-      <span
-        style={{
-          display: "inline-flex",
-          color: "var(--color-warning)",
-          marginLeft: "0.3rem",
-          cursor: "default",
-        }}
-      >
-        <Icon name="warning" size="sm" />
-      </span>
-    </Tooltip>
-  );
-}
-
-/** A value with a hover tooltip, right-anchored so it stays inside the table. */
-function ValueWithTip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
-  return (
-    <Tooltip content={tip} placement="top" align="end">
-      <span style={numStyle}>{children}</span>
-    </Tooltip>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>{children}</div>;
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return <div style={{ color: "var(--color-text-muted)" }}>{children}</div>;
-}
-
-function CollapsibleSection({
-  title,
-  subtitle,
-  badge,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  badge?: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.5rem",
-        marginBottom: "0.75rem",
-        overflow: "hidden",
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          width: "100%",
-          padding: "0.6rem 0.75rem",
-          border: "none",
-          background: "var(--color-bg-page)",
-          cursor: "pointer",
-          textAlign: "left",
-          color: "var(--color-text-primary)",
-          fontSize: "0.875rem",
-          fontWeight: 600,
-        }}
-        aria-expanded={open}
-      >
-        <span style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
-          <Icon name={open ? "collapse" : "expand"} size="sm" />
-        </span>
-        <span>{title}</span>
-        {subtitle && (
-          <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem" }}>
-            {subtitle}
-          </span>
-        )}
-        {badge && <span style={latestBadge}>{badge}</span>}
-      </button>
-      {open && <div style={{ padding: "0.75rem" }}>{children}</div>}
-    </div>
-  );
-}
-
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  border: "1px solid var(--color-border)",
-  fontSize: "0.8125rem",
-};
-
-const thStyle: React.CSSProperties = {
-  textAlign: "left",
-  padding: "0.3rem 0.6rem",
-  borderBottom: "1px solid var(--color-border)",
-  color: "var(--color-text-muted)",
-  fontWeight: 500,
-  fontSize: "0.75rem",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "0.3rem 0.6rem",
-  borderBottom: "1px solid var(--color-border)",
-  color: "var(--color-text-primary)",
-  verticalAlign: "top",
-};
-
-const numTdStyle: React.CSSProperties = {
-  ...tdStyle,
-  textAlign: "right",
-  whiteSpace: "nowrap",
-};
-
-const numStyle: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
-
-const latestBadge: React.CSSProperties = {
-  fontSize: "0.6875rem",
-  fontWeight: 500,
-  color: "var(--color-text-muted)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.25rem",
-  padding: "0 0.3rem",
-};

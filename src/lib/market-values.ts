@@ -9,7 +9,7 @@ import {
   type MarketLotInput,
   type MarketValueKey,
 } from "./market-value";
-import { valuateItemRows, type ValuationRow } from "./items";
+import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 
@@ -72,6 +72,13 @@ export interface StampMarketValue extends MarketValueKey {
   certificateStatusAbbreviation: string | null;
   formatName: string | null;
   formatAbbreviation: string | null;
+  /** Where the collector put these axes in their own lists — carried so the Valuation dialog can
+   * lay market value out on the same conditions × certificates grid the catalogue tables use, with
+   * the columns lining up across all of them. `-1` for a null certificate and a null format: both
+   * are the unmarked default and both lead, which is the order every other read here sorts by. */
+  conditionSortOrder: number;
+  certificateSortOrder: number;
+  formatSortOrder: number;
   /** Every figure below is in this currency. */
   baseCurrency: string;
   /** The headline (ADR-0022 §4). */
@@ -257,6 +264,9 @@ export async function readStampMarketValues(
       certificateStatusAbbreviation: line.certificateStatus?.abbreviation ?? null,
       formatName: line.format?.name ?? null,
       formatAbbreviation: line.format?.abbreviation ?? null,
+      conditionSortOrder: line.condition.sortOrder,
+      certificateSortOrder: line.certificateStatus?.sortOrder ?? -1,
+      formatSortOrder: line.format?.sortOrder ?? -1,
       baseCurrency,
       median: value.median.toFixed(2),
       mean: value.mean.toFixed(2),
@@ -308,6 +318,32 @@ export async function readStampMarketValues(
   return byStamp;
 }
 
+/**
+ * The medians alone, keyed by {@link marketKeyOf} — what a **total** over a copy set is built from
+ * (#458), where each held copy is valued at the median for its own key.
+ *
+ * A thin projection of {@link readStampMarketValues} rather than a query of its own, deliberately:
+ * the figure a collection total is summed from and the figure the stamp's own Valuation tab prints
+ * have to be the same number, and two reads of one thing is how they stop being.
+ *
+ * Ownership is the caller's to assert, exactly as {@link readStampMarketValues} has it. A key with
+ * no datapoints is simply absent — the caller counts that as coverage it did not have, never as a
+ * zero (ADR-0022 §6).
+ */
+export async function readMarketMedians(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, number>> {
+  const byStamp = await readStampMarketValues(collectionId, stampIds);
+  const medians = new Map<string, number>();
+  for (const values of byStamp.values()) {
+    for (const value of values) {
+      medians.set(marketKeyOf(value), Number(value.median));
+    }
+  }
+  return medians;
+}
+
 /** {@link getStampMarketValues} for one stamp. Empty when it has no evidence. */
 export async function getStampMarketValue(
   ownerId: string,
@@ -316,4 +352,139 @@ export async function getStampMarketValue(
 ): Promise<StampMarketValue[]> {
   const byStamp = await getStampMarketValues(ownerId, collectionId, [stampId]);
   return byStamp.get(stampId) ?? [];
+}
+
+/**
+ * {@link getStampMarketValue} for a caller that holds only the stamp (#457).
+ *
+ * The Valuation dialog opens off a row's `⋮` menu and is handed a stamp id and nothing else — the
+ * same shape `getStampPriceDetails` is called in. The collection is resolved from the stamp and
+ * then owner-checked, so the authorization is identical; what differs is only which of the two the
+ * caller happened to have.
+ */
+export async function getStampMarketValueByStamp(
+  ownerId: string,
+  stampId: string
+): Promise<StampMarketValue[]> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { collectionId: true },
+  });
+  if (!stamp) throw new Error("Stamp not found");
+  return getStampMarketValue(ownerId, stamp.collectionId, stampId);
+}
+
+// ── One checklist's market value (#457) ─────────────────────────────────────
+
+/** What the market paid for a whole set, at one `condition × certificate × format` key. */
+export interface ChecklistMarketCell extends Omit<MarketValueKey, "stampId"> {
+  conditionName: string;
+  conditionAbbreviation: string;
+  certificateStatusAbbreviation: string | null;
+  formatAbbreviation: string | null;
+  /** As on {@link StampMarketValue} — the dialog's grid is laid out on these. */
+  conditionSortOrder: number;
+  certificateSortOrder: number;
+  formatSortOrder: number;
+  /** Σ of the contributing stamps' medians, in the base currency. */
+  totalBaseAmount: string;
+  /** How many of the checklist's required stamps have evidence at this key. Never implied: a total
+   * over 3 of 40 stamps is not the set's worth, and only this number says which it is. */
+  stampCount: number;
+  /** Results behind the whole figure, and the span they were struck over. */
+  n: number;
+  latestAt: Date;
+  earliestAt: Date;
+}
+
+/**
+ * The set's own market value, beside its catalogue totals (#457).
+ *
+ * Built out of the **same** per-stamp figures the stamp half of the dialog prints — one read over
+ * every required stamp, then the medians summed per key. A set's worth is the sum of its members'
+ * worth, so nothing new is computed here and nothing can disagree with a member opened on its own.
+ *
+ * There is deliberately **no** confidence badge on a set. The score answers "how good is the
+ * evidence behind this one figure" (ADR-0022 §5), and averaging forty of them would produce a badge
+ * that describes nothing in particular. What a set needs instead is **coverage**, which is
+ * `stampCount` against `requiredCount`: a total standing on three stamps out of forty is the thing
+ * a reader has to know, and no single badge can say it.
+ */
+export interface ChecklistMarketValue {
+  baseCurrency: string;
+  checklistName: string;
+  requiredCount: number;
+  /** Only keys some required stamp has evidence at; the collector's own axis order. */
+  cells: ChecklistMarketCell[];
+}
+
+export async function getChecklistMarketValue(
+  ownerId: string,
+  collectionId: string,
+  checklistId: string
+): Promise<ChecklistMarketValue> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const checklist = await prisma.checklist.findFirst({
+    where: { id: checklistId, collectionId },
+    select: { name: true },
+  });
+  if (!checklist) throw new Error("Checklist not found.");
+
+  const members = await prisma.checklistStamp.findMany({
+    where: { checklistId },
+    select: { stampId: true },
+  });
+  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const byStamp = await readStampMarketValues(
+    collectionId,
+    members.map((m) => m.stampId)
+  );
+
+  // Accumulated per key across the members. A stamp contributes at most once to a key — it has one
+  // median there — so this is a sum of member worths and never a sum of results.
+  const cells = new Map<string, ChecklistMarketCell>();
+  for (const values of byStamp.values()) {
+    for (const value of values) {
+      const id = `${value.conditionId}~${value.certificateStatusId ?? ""}~${value.formatId ?? ""}`;
+      const cell = cells.get(id);
+      if (!cell) {
+        cells.set(id, {
+          conditionId: value.conditionId,
+          certificateStatusId: value.certificateStatusId,
+          formatId: value.formatId,
+          conditionName: value.conditionName,
+          conditionAbbreviation: value.conditionAbbreviation,
+          certificateStatusAbbreviation: value.certificateStatusAbbreviation,
+          formatAbbreviation: value.formatAbbreviation,
+          conditionSortOrder: value.conditionSortOrder,
+          certificateSortOrder: value.certificateSortOrder,
+          formatSortOrder: value.formatSortOrder,
+          totalBaseAmount: value.median,
+          stampCount: 1,
+          n: value.n,
+          latestAt: value.latestAt,
+          earliestAt: value.earliestAt,
+        });
+        continue;
+      }
+      cell.totalBaseAmount = (Number(cell.totalBaseAmount) + Number(value.median)).toFixed(2);
+      cell.stampCount += 1;
+      cell.n += value.n;
+      if (value.latestAt > cell.latestAt) cell.latestAt = value.latestAt;
+      if (value.earliestAt < cell.earliestAt) cell.earliestAt = value.earliestAt;
+    }
+  }
+
+  return {
+    baseCurrency,
+    checklistName: checklist.name,
+    requiredCount: members.length,
+    // The collector's own axis order, the one the catalogue tables are already laid out in.
+    cells: [...cells.values()].sort(
+      (a, b) =>
+        a.conditionSortOrder - b.conditionSortOrder ||
+        a.certificateSortOrder - b.certificateSortOrder ||
+        a.formatSortOrder - b.formatSortOrder
+    ),
+  };
 }

@@ -1,7 +1,13 @@
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { getStampMarketValue, getStampMarketValues } from "../../src/lib/market-values";
+import {
+  getStampMarketValue,
+  getStampMarketValues,
+  getStampMarketValueByStamp,
+  getChecklistMarketValue,
+} from "../../src/lib/market-values";
+import { createItem, getHoldingsValuation } from "../../src/lib/items";
 
 // Market valuation from recorded auction results (#456; ADR-0022 §7).
 //
@@ -462,5 +468,172 @@ describe("market valuation (#456)", () => {
     assert.equal(value.catalogueValue, "20.00");
     assert.equal(value.realizationRatio, 5);
 
+  });
+  // ── The market total on the holdings summary (#458; ADR-0022 §8) ──────────
+  //
+  // The arithmetic is unit-tested in `valuation.test.ts`; what earns a database here is the part
+  // that can only be wrong against real rows — that a copy is valued at the median for its **own**
+  // key, that a copy no longer held is out of the total exactly as #396 has it, and that a key with
+  // no results contributes nothing rather than a catalogue-derived stand-in.
+
+  it("values each held copy at the median for its own key, and counts the ones with no evidence", async () => {
+    const saleId = await sale();
+    // MNH fetches 60; the Used copy of the same stamp has no results at all.
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(20), lines: [{ stampId: plainStampId }] });
+
+    const mnhCopy = await createItem(userId, collectionId, {
+      stampId: plainStampId,
+      conditionId,
+      deliveryState: "delivered",
+    });
+    const usedCopy = await createItem(userId, collectionId, {
+      stampId: plainStampId,
+      conditionId: usedConditionId,
+      deliveryState: "delivered",
+    });
+
+    try {
+      const total = await getHoldingsValuation(userId, collectionId, {});
+      assert.equal(total.market.totalBaseAmount, "60.00");
+      assert.equal(total.market.valuedCount, 1);
+      // Nothing recorded at Used — counted, never valued at zero and never filled in from the
+      // catalogue price the same stamp carries.
+      assert.equal(total.market.noEvidenceCount, 1);
+      assert.equal(total.market.baseCurrency, "EUR");
+    } finally {
+      await prisma.item.deleteMany({ where: { id: { in: [mnhCopy.id, usedCopy.id] } } });
+    }
+  });
+
+  it("leaves a copy that is no longer held out of the total, exactly as the other two figures do", async () => {
+    const saleId = await sale();
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(20), lines: [{ stampId: plainStampId }] });
+
+    const held = await createItem(userId, collectionId, {
+      stampId: plainStampId,
+      conditionId,
+      deliveryState: "delivered",
+    });
+    const gone = await createItem(userId, collectionId, {
+      stampId: plainStampId,
+      conditionId,
+      deliveryState: "delivered",
+    });
+    await prisma.item.update({
+      where: { id: gone.id },
+      data: { disposedAt: new Date(), disposalReason: "lost" },
+    });
+
+    try {
+      const total = await getHoldingsValuation(userId, collectionId, {});
+      // One copy in the total, not two — and the disposed one is not counted as uncovered either,
+      // since it is out of scope rather than unpriced.
+      assert.equal(total.market.totalBaseAmount, "60.00");
+      assert.equal(total.market.valuedCount, 1);
+      assert.equal(total.market.noEvidenceCount, 0);
+    } finally {
+      await prisma.item.deleteMany({ where: { id: { in: [held.id, gone.id] } } });
+    }
+  });
+
+  it("totals the same medians the stamp's own read returns", async () => {
+    const saleId = await sale();
+    // Two results for one key: the median is 50, which is what both copies must be valued at.
+    await lot({ saleId, finalPrice: "40.00", endsAt: daysAgo(20), lines: [{ stampId: plainStampId }] });
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(10), lines: [{ stampId: plainStampId }] });
+
+    const copies = await Promise.all([
+      createItem(userId, collectionId, { stampId: plainStampId, conditionId, deliveryState: "delivered" }),
+      createItem(userId, collectionId, { stampId: plainStampId, conditionId, deliveryState: "delivered" }),
+    ]);
+
+    try {
+      const [value] = await getStampMarketValue(userId, collectionId, plainStampId);
+      assert.equal(value.median, "50.00");
+      const total = await getHoldingsValuation(userId, collectionId, {});
+      // The figure a collection total is summed from and the figure the Valuation tab prints are
+      // one number, read once (#458).
+      assert.equal(total.market.totalBaseAmount, "100.00");
+      assert.equal(total.market.valuedCount, 2);
+    } finally {
+      await prisma.item.deleteMany({ where: { id: { in: copies.map((c) => c.id) } } });
+    }
+  });
+  // ── The Valuation dialog's two reads (#457) ───────────────────────────────
+
+  it("answers for a stamp whose collection the caller did not name", async () => {
+    const saleId = await sale();
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(20), lines: [{ stampId: plainStampId }] });
+
+    // The dialog opens off a row menu holding a stamp id and nothing else; the collection is
+    // resolved from the stamp and then owner-checked, so the answer is the named read's own.
+    const [byStamp] = await getStampMarketValueByStamp(userId, plainStampId);
+    const [named] = await getStampMarketValue(userId, collectionId, plainStampId);
+    assert.equal(byStamp.median, named.median);
+    assert.equal(byStamp.median, "60.00");
+  });
+
+  it("refuses a stamp in someone else's collection", async () => {
+    await assert.rejects(() => getStampMarketValueByStamp("nobody", plainStampId));
+  });
+
+  it("sums a checklist's members per key, and says how many stand behind each total", async () => {
+    const saleId = await sale();
+    // 60 for the plain stamp, 20 for the common one; the third member has never been in a lot.
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(30), lines: [{ stampId: plainStampId }] });
+    await lot({ saleId, finalPrice: "20.00", endsAt: daysAgo(10), lines: [{ stampId: commonStampId }] });
+
+    const checklist = await prisma.checklist.create({
+      data: {
+        collectionId,
+        issueId,
+        name: "Complete set",
+        stamps: {
+          create: [
+            { stampId: plainStampId },
+            { stampId: commonStampId },
+            { stampId: unpricedStampId },
+          ],
+        },
+      },
+    });
+
+    try {
+      const set = await getChecklistMarketValue(userId, collectionId, checklist.id);
+      assert.equal(set.checklistName, "Complete set");
+      assert.equal(set.requiredCount, 3);
+      assert.equal(set.cells.length, 1);
+      const [cell] = set.cells;
+      // A set's worth is the sum of its members' worth — and only of the members that have any.
+      assert.equal(cell.totalBaseAmount, "80.00");
+      // The member with no results contributes nothing and is *not* counted as standing behind it.
+      assert.equal(cell.stampCount, 2);
+      assert.equal(cell.n, 2);
+      assert.equal(cell.conditionAbbreviation, "MNH");
+      // The span reaches across both members' results, oldest to newest.
+      assert.ok(cell.earliestAt < cell.latestAt);
+      assert.equal(set.baseCurrency, "EUR");
+    } finally {
+      await prisma.checklist.delete({ where: { id: checklist.id } });
+    }
+  });
+
+  it("gives a checklist with no results at all an empty answer, not a zero", async () => {
+    const checklist = await prisma.checklist.create({
+      data: {
+        collectionId,
+        issueId,
+        name: "Nothing recorded",
+        stamps: { create: [{ stampId: plainStampId }] },
+      },
+    });
+    try {
+      const set = await getChecklistMarketValue(userId, collectionId, checklist.id);
+      // No cells rather than a 0.00 row: nothing recorded is not "the set is worth nothing".
+      assert.deepEqual(set.cells, []);
+      assert.equal(set.requiredCount, 1);
+    } finally {
+      await prisma.checklist.delete({ where: { id: checklist.id } });
+    }
   });
 });

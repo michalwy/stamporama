@@ -1,23 +1,18 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { getCollectionBaseCurrency } from "./pricing";
 import {
-  buildDescendantMap,
-  buildEffectivePrimaryCatalogMap,
-  getCollectionBaseCurrency,
-  safeRateMap,
-} from "./pricing";
-import type { RawCatalogPrice } from "./catalog-price";
-import { makeFormatFactorLookup } from "./format-pricing";
-import {
-  valuateCopy,
   aggregateHoldings,
+  aggregateMarketHoldings,
   type CopyValuation,
   type HoldingsSummary,
 } from "./valuation";
+import { valuateItemRows, type ValuationRow } from "./item-valuation";
+import { marketKeyOf } from "./market-value";
+import { readMarketMedians } from "./market-values";
 import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
 import {
-  childIsVariant,
   isUnknownVariantStamp,
   subtypeLabel,
   VARIANT_FLAG_SELECT,
@@ -2228,11 +2223,32 @@ export interface LotIssueGroupSummary {
   openCount: number;
 }
 
+/** The market medians every copy in a set might be valued at (#458), read once for the whole set.
+ *
+ * Only **held** copies are valued, so only their stamps are asked about: a market read is a query
+ * over closed lots, and widening it to copies that are gone would buy figures nothing ever prints.
+ * Deduplicated, since a set of copies routinely holds several of one stamp. */
+async function marketMediansFor(
+  collectionId: string,
+  items: { stampId: string; disposedAt: Date | string | null; deliveryState: string }[]
+): Promise<Map<string, number>> {
+  const stampIds = [...new Set(items.filter(isHeld).map((i) => i.stampId))];
+  return readMarketMedians(collectionId, stampIds);
+}
+
 /** Bundle catalog value + actual purchase cost over a set of already-enriched copies into a
  * `HoldingsSummary` (#179), reusing the same pure aggregators as the holdings bar (#134) so the
  * lot/PO summaries compare paid-vs-catalog exactly the way the Copies screen does. No extra
- * query — every enriched copy already carries its `value`, `costBasis`, and `lotStatus`. */
-function summarizeHoldings(items: ItemListItem[], baseCurrency: string): HoldingsSummary {
+ * query — every enriched copy already carries its `value`, `costBasis`, and `lotStatus`.
+ *
+ * The market medians (#458) are the one thing that cannot be read off an enriched copy, so they
+ * arrive as `readMarketMedians`' own map: this stays sync, and the caller — which has the
+ * `collectionId` — does the one read. */
+function summarizeHoldings(
+  items: ItemListItem[],
+  baseCurrency: string,
+  marketMedians: Map<string, number>
+): HoldingsSummary {
   // Same held/gone partition as `makeHoldingsSummarizer` (#396) — a purchase's own screens value
   // what arrived, and report what did not as a write-off rather than as a hole in the total.
   const held = items.filter(isHeld);
@@ -2252,6 +2268,10 @@ function summarizeHoldings(items: ItemListItem[], baseCurrency: string): Holding
       cost: aggregateCostBasis(gone.map(costOf), baseCurrency),
       count: gone.length,
     },
+    market: aggregateMarketHoldings(
+      held.map((i) => marketMedians.get(marketKeyOf(i)) ?? null),
+      baseCurrency
+    ),
   };
 }
 
@@ -2336,7 +2356,7 @@ export async function getLotIntakeSummary(
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
     issueGroups: order.map((k) => byKey.get(k)!),
-    holdings: summarizeHoldings(all, baseCurrency),
+    holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
 
@@ -2403,7 +2423,7 @@ export async function getPurchaseIntakeSummary(
     totalCount: all.length,
     lotWeightBase,
     issueGroups: order.map((k) => byKey.get(k)!),
-    holdings: summarizeHoldings(all, baseCurrency),
+    holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
   };
 }
 
@@ -2514,145 +2534,10 @@ async function isDescendantStamp(
   return false;
 }
 
-// ── Copy valuation (ADR-0007 §7) ────────────────────────────────────────────
-// Assembles the inputs the pure `valuateCopy` needs (area primary catalog, own +
-// descendant-variant prices, currency rates) and delegates the rule to `valuation.ts`.
-
-/**
- * Minimal projection needed to value one thing from the catalog.
- *
- * Nothing here is copy-specific: it is a **stamp × condition × certificate × format**, of which a
- * physical copy is one instance and an auction lot's composition line (#353) is another. `id` is
- * only the key the result map is returned under, so a caller may key by whatever it holds.
- */
-export interface ValuationRow {
-  id: string;
-  stampId: string;
-  conditionId: string;
-  certificateStatusId: string | null;
-  /** The copy's physical format (#343); null is the single. */
-  formatId: string | null;
-  /** True when the copy links to a base stamp that has variants (variant unknown). */
-  unknownVariant: boolean;
-}
-
-const VALUATION_PRICE_SELECT = {
-  price: true,
-  currency: true,
-  conditionId: true,
-  certificateStatusId: true,
-  // Required by `RawCatalogPrice` (ADR-0020): a copy is valued against prices of *its own*
-  // format, and omitting the column here would let a block's price stand in for a single's.
-  formatId: true,
-  catalogEdition: { select: { year: true, catalogNameId: true } },
-} as const;
-
-/** Value a set of {@link ValuationRow}s. Loads the stamp prices, area primary catalogs, descendant
- * variant prices, format factors and currency rates **once** for the whole set, then applies the
- * pure `valuateCopy` rule — which is why every caller batches rather than valuing row by row.
- * Caller must have already asserted collection ownership. Returns id → valuation.
- *
- * Exported for the auction lot composition (#353), whose lines are the same shape at a null
- * certificate: re-deriving the unknown-variant rollup and the format factors there would be two
- * copies of ADR-0020 and #238 to keep in step. */
-export async function valuateItemRows(
-  collectionId: string,
-  rows: ValuationRow[]
-): Promise<Map<string, CopyValuation>> {
-  if (rows.length === 0) return new Map();
-
-  const [primaryCatalogByArea, baseCurrency] = await Promise.all([
-    buildEffectivePrimaryCatalogMap(collectionId),
-    getCollectionBaseCurrency(collectionId),
-  ]);
-
-  const unknownStampIds = new Set(
-    rows.filter((r) => r.unknownVariant).map((r) => r.stampId)
-  );
-  const descendantsByStamp = await buildDescendantMap(collectionId, unknownStampIds);
-
-  // Every stamp whose prices/area we must load: the copies' own stamps plus the
-  // descendant variants of any unknown-variant copy.
-  const stampIds = new Set<string>();
-  for (const r of rows) stampIds.add(r.stampId);
-  for (const set of descendantsByStamp.values()) {
-    for (const id of set) stampIds.add(id);
-  }
-
-  const [stamps, factorLookup] = await Promise.all([
-    prisma.stamp.findMany({
-      where: { id: { in: [...stampIds] } },
-      select: {
-        id: true,
-        catalogPrices: { select: VALUATION_PRICE_SELECT },
-        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-        // The issue anchors a format multiplier (#343) — the narrowest anchor a catalog prints one
-        // against. A stamp belongs to at most one issue in practice.
-        issueMemberships: { select: { issueId: true }, take: 1 },
-        ...VARIANT_FLAG_SELECT,
-      },
-    }),
-    makeFormatFactorLookup(collectionId),
-  ]);
-
-  const pricesByStamp = new Map<string, RawCatalogPrice[]>();
-  const primaryCatalogByStamp = new Map<string, string | null>();
-  const areaByStamp = new Map<string, string | null>();
-  const issueByStamp = new Map<string, string | null>();
-  // Which descendants count as variants (ADR-0010 §3): only variant-kind children
-  // feed the lowest-child price; distinct-entry descendants are excluded.
-  const isVariantByStamp = new Map<string, boolean>();
-  const currencies: string[] = [];
-  for (const s of stamps) {
-    pricesByStamp.set(s.id, s.catalogPrices);
-    isVariantByStamp.set(s.id, childIsVariant(s));
-    for (const p of s.catalogPrices) currencies.push(p.currency);
-    const link = s.stampAreaLinks.find((l) => l.isPrimary) ?? s.stampAreaLinks[0];
-    const areaId = link?.collectionAreaId ?? null;
-    primaryCatalogByStamp.set(
-      s.id,
-      areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null
-    );
-    areaByStamp.set(s.id, areaId);
-    issueByStamp.set(s.id, s.issueMemberships[0]?.issueId ?? null);
-  }
-
-  const rates = await safeRateMap(collectionId, baseCurrency, currencies);
-
-  const result = new Map<string, CopyValuation>();
-  for (const r of rows) {
-    const descendants = r.unknownVariant
-      ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())].filter(
-          (id) => isVariantByStamp.get(id) ?? false
-        )
-      : null;
-    result.set(
-      r.id,
-      valuateCopy({
-        conditionId: r.conditionId,
-        certificateStatusId: r.certificateStatusId,
-        formatId: r.formatId,
-        // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
-        // one, is scaled by the same rule, since it shares the umbrella's issue and area.
-        formatFactor: factorLookup(
-          r.formatId,
-          areaByStamp.get(r.stampId) ?? null,
-          issueByStamp.get(r.stampId) ?? null,
-          r.conditionId
-        ),
-        unknownVariant: r.unknownVariant,
-        primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
-        ownPrices: pricesByStamp.get(r.stampId) ?? [],
-        variantPrices: descendants
-          ? descendants.map((id) => pricesByStamp.get(id) ?? [])
-          : undefined,
-        baseCurrency,
-        rates,
-      })
-    );
-  }
-  return result;
-}
+// Copy valuation (ADR-0007 §7) lives in `item-valuation.ts`, below both this module and
+// `market-values.ts` so the two can share it without importing each other. Re-exported here
+// because every existing caller reaches it through `items.ts`.
+export { valuateItemRows, type ValuationRow } from "./item-valuation";
 
 /** Value a set of copies by id, resolving each copy's condition, certificate, and
  * unknown-variant flag from the database, then applying the same primary-catalog
@@ -2755,6 +2640,8 @@ async function makeHoldingsSummarizer(
   // write-off side rather than dropped: a copy that is gone is worth nothing to its owner whatever
   // the catalog says, but it did cost what it cost.
   const heldIds = new Set(rows.filter(isHeld).map((r) => r.id));
+  // The market total is keyed on the copy's own axes, so a slice needs the row back, not just its id.
+  const rowById = new Map<string, HoldingsRow>(rows.map((row) => [row.id, row]));
   const valuationRows: ValuationRow[] = rows.map((row) => ({
     id: row.id,
     stampId: row.stampId,
@@ -2779,6 +2666,9 @@ async function makeHoldingsSummarizer(
 
   const valuations = await valuateItemRows(collectionId, valuationRows);
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  // What the market paid for the same keys (#458), read once for the whole row set for the same
+  // reason the catalogue valuation is: a per-slice read would repeat one query per platform.
+  const marketMedians = await marketMediansFor(collectionId, rows);
 
   return (itemIds) => {
     const ids = itemIds ?? rows.map((r) => r.id);
@@ -2798,6 +2688,13 @@ async function makeHoldingsSummarizer(
         baseCurrency
       ),
       writeOff: { cost: writeOffCost, count: gone.length },
+      market: aggregateMarketHoldings(
+        held
+          .map((id) => rowById.get(id))
+          .filter((row) => row !== undefined)
+          .map((row) => marketMedians.get(marketKeyOf(row)) ?? null),
+        baseCurrency
+      ),
     };
   };
 }

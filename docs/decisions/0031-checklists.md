@@ -184,7 +184,8 @@ model ChecklistStamp {
 - `src/lib/checklists.ts` owns storage and reads; `src/lib/checklist-completeness*.ts` owns the
   grid, renamed from `issue-completeness*` because the subject changed.
 - `getIssuePriceDetails` became `getChecklistPriceDetails`, keyed on a checklist. The row menu
-  offers one *Show catalog prices* entry per checklist that has a total.
+  offers one *Show valuation* entry per checklist that has a total (renamed from *Show catalog
+  prices* by #457, when the dialog gained market value beside the catalogue figures).
 - `intakeStamps` and `resolveAuctionLineStamps` take a `checklistId` where they took an `issueId`.
   The picker draws one *+ whole set* button per checklist instead of one *+ Whole issue*, which
   removes the chooser a multi-goal issue would otherwise have needed.

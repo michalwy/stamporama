@@ -5,6 +5,7 @@ import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import {
   valuateCopy,
   aggregateHoldings,
+  aggregateMarketHoldings,
   type CopyValuation,
 } from "../../src/lib/valuation";
 
@@ -298,6 +299,51 @@ describe("aggregateHoldings", () => {
     assert.equal(total.pricedCount, 0);
     assert.equal(total.uncertainBaseAmount, "0.00");
     assert.equal(total.baseCurrency, "USD");
+  });
+});
+
+// The market total over the same held copies (#458; ADR-0022 §8). The one thing it must never do
+// is let a partial total read as a complete one, which is what the coverage counts are for.
+describe("aggregateMarketHoldings", () => {
+  it("sums the medians and counts what had no evidence", () => {
+    const total = aggregateMarketHoldings([40, null, 12.5, null, null], "EUR");
+    assert.equal(total.totalBaseAmount, "52.50");
+    assert.equal(total.valuedCount, 2);
+    assert.equal(total.noEvidenceCount, 3);
+    assert.equal(total.baseCurrency, "EUR");
+  });
+
+  it("counts a copy with no evidence rather than valuing it at zero", () => {
+    const total = aggregateMarketHoldings([null, null], "EUR");
+    assert.equal(total.totalBaseAmount, "0.00");
+    assert.equal(total.valuedCount, 0);
+    // The distinction the whole figure rests on: nothing recorded is not "worth nothing", and a
+    // reader has to be able to tell the two apart from the counts alone.
+    assert.equal(total.noEvidenceCount, 2);
+  });
+
+  it("reports full coverage when every copy's key had results", () => {
+    const total = aggregateMarketHoldings([10, 20, 30], "PLN");
+    assert.equal(total.totalBaseAmount, "60.00");
+    assert.equal(total.valuedCount, 3);
+    assert.equal(total.noEvidenceCount, 0);
+    assert.equal(total.baseCurrency, "PLN");
+  });
+
+  it("returns zeros for an empty copy set", () => {
+    const total = aggregateMarketHoldings([], "USD");
+    assert.equal(total.totalBaseAmount, "0.00");
+    assert.equal(total.valuedCount, 0);
+    assert.equal(total.noEvidenceCount, 0);
+    assert.equal(total.baseCurrency, "USD");
+  });
+
+  it("carries a zero median as evidence, not as an absence", () => {
+    // A lot really can close at nothing, and that result is as much a datapoint as any other.
+    const total = aggregateMarketHoldings([0, 15], "EUR");
+    assert.equal(total.totalBaseAmount, "15.00");
+    assert.equal(total.valuedCount, 2);
+    assert.equal(total.noEvidenceCount, 0);
   });
 });
 

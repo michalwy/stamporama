@@ -139,15 +139,50 @@ millions) and a list resolves its valuations in one grouped query per page. A ma
 is a straightforward later optimization if a screen is ever measurably slow; it is not worth a
 cache-staleness class of bug before then.
 
-### 8. The stamp dialog's "Prices" tab becomes "Valuation"
+### 8. The "Catalog prices" dialog becomes "Valuation"
 
-The tab that today edits catalogue prices is where a collector already goes to ask what a stamp is
-worth, so market value belongs there rather than on a screen of its own. The editable
-edition × condition × certificate grid is untouched; a read-only **Market value** section sits
-below it, one row per key with evidence, expandable to the lots the figures came from.
+Market value belongs where a collector already goes to ask what a stamp is worth, rather than on a
+screen of its own. That place is the **read-only** dialog behind a row's ⋮ → *Show valuation*
+(formerly *Show catalog prices*), which already answers that question across every catalogue at
+once: its title becomes **Valuation**, and a **Market value** section **leads** it, above the
+cross-catalogue average — one row per key with evidence, expandable to the lots the figures came
+from. It is the same collapsible box every other section of that dialog is, open by default like
+the average, because a section drawing a heading of its own would read as a caption on the page
+rather than as one more thing to open. It leads because it is the answer the catalogue sections are
+evidence for, and because it is the only figure in the window that comes from transactions rather
+than from a published list.
 
-The market figures are not laid into the grid's cells: the grid's rows are catalogue editions and
-market value has none (§1), so a market row would sit in the table pretending to be an edition.
+Not the *edit* dialog's Prices tab, which is where this decision originally put it and where #457
+was implemented first. The distinction is what the two windows are for: the tab is where catalogue
+prices are **typed in**, and a read-only figure that cannot be edited sitting under a grid of
+inputs invites the reading that it is one more thing to fill in. The Valuation dialog is already
+the read-only one, already covers a checklist as well as a stamp, and is already reached from every
+list a stamp appears on. Revised rather than quietly contradicted: the reasoning about *where a
+collector asks the question* held, and only the identification of which window that is was wrong.
+
+It is laid out on that dialog's **own grid** — conditions as rows, certificate statuses as columns —
+sharing the certificate column union with every other table there, so a median and a list price are
+read against each other cell for cell and a reader learns the window once. The cell is a **button**:
+a grid holds a number but not an argument, and the argument — the lots the median came from, each a
+link out — opens under the table, where there is room, one key at a time. The confidence badge (§5)
+is carried as the **colour of the figure** rather than as a chip beside it: a chip made every column
+ragged, and a column of prices that does not line up cannot be scanned, which is most of what a grid
+is for. It is still said in words on hover — colour alone is not something every reader can act
+on — where a **panel of labelled lines** carries everything that does not fit in a cell: the score,
+the median, the mean, the range, the sample and its span, and the catalogue comparison. A sentence
+of the same facts strung together with separators had to be picked apart word by word, which is the
+opposite of what a figure's backing should cost to read.
+
+It is still not laid *into* the catalogue tables: those are per edition, and market value has none
+(§1), so a market row would sit in one pretending to be an edition. The **format** is the axis those
+tables have nowhere to put, so each format gets its own matrix under its own caption rather than
+being folded into the grid, which would put a block's median in a single's cell.
+
+A **checklist** gets the same grid, its members' medians summed per cell. What replaces the
+per-stamp confidence badge there is coverage, on the cell's second line: how many of the required
+stamps stand behind that total. Averaging forty scores would produce a badge describing nothing in
+particular, while a total resting on 7 of 40 members is exactly what a reader has to be told. No set
+cell expands — a set's evidence is every lot of every member, which is read one stamp at a time.
 
 Collection totals (#396) gain a market total alongside catalogue value and cost basis, counting
 only copies whose key has evidence and reporting how many copies that is — a total over 12% of the

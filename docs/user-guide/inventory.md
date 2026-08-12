@@ -181,24 +181,31 @@ your collection's **base currency** alongside it — matching how prices read on
 list. Totals are summed in the base currency. A price in a currency with no available
 exchange rate is shown in its own currency only and left out of the total.
 
-Above the list, the holdings summary bar sums two figures over every copy that matches your
-current filters (change the filters and both totals follow):
+Above the list, the holdings summary bar sums three figures over every copy that matches your
+current filters (change the filters and all of them follow):
 
 - **Catalog value** — what your holdings are worth, as described above. It also tells you
   how much of the total is uncertain (unknown-variant estimates) and how many copies are
   unpriced or could not be converted.
+- **Market value** — what the same copies have actually fetched, each valued at the median of the
+  closed auction lots recorded for its own condition, certificate and format (see
+  [Market value](collections.md#market-value)). The line always says **how many copies are behind
+  the figure** — *"from 14 of 112 copies · 98 with no auction results"* — because market value only
+  exists where lots have been recorded, and a total covering a slice of the collection must not
+  read as the whole of it. Copies with no results contribute nothing; nothing is substituted from
+  the catalog.
 - **Purchase cost** — what you actually paid, summed from the frozen
   [cost-basis](#cost-basis) of the same copies (in your base currency). It calls out copies
   whose cost is still **pending** (on an open purchase lot) or has **no cost recorded** (added
   by hand, or dropped from a lot) — those contribute nothing to the total, the same way the
   per-copy cost-basis distinguishes them.
 
-Comparing the two lines shows paid-versus-catalog value at a glance.
+Comparing the lines shows list price, what the market pays and what you paid, side by side.
 
-Both lines cover the copies you **actually hold**. A copy you have marked as
+All three lines cover the copies you **actually hold**. A copy you have marked as
 [no longer held](#copies-you-no-longer-hold), and one whose delivery state is *Not delivered /
 missing* or *Damaged*, is worth nothing to you however the catalog prices it, so it counts towards
-neither figure. It is not simply dropped, though — a third line appears when there are any:
+none of them. It is not simply dropped, though — a further line appears when there are any:
 
 - **Written off** — what those copies cost you, in red. You really spent it, and leaving it out
   would make your purchases look better than they went. Only a cost is shown here, never a catalog

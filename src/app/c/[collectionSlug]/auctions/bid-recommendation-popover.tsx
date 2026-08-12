@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { MarketConfidenceChip } from "@/app/c/[collectionSlug]/shared/market-confidence-chip";
 import { Icon } from "@/app/icons";
-import type { MarketConfidenceBadge } from "@/lib/market-value";
 import { formatDay } from "./auction-format";
 import {
   useAuctionLotBidEvidence,
@@ -76,39 +76,6 @@ const RULE: React.CSSProperties = {
   height: 1,
   background: "var(--color-border)",
 };
-
-/** The confidence badge's colours (ADR-0022 §5). Shown **next to the facts that produced it** and
- * never keyed off by any rule — a `low` badge is a note about the evidence, not a verdict on the
- * lot, so it takes the same muted chip shape a fact does rather than an alarm. */
-const BADGE_COLOR: Record<MarketConfidenceBadge, { fg: string; bg: string }> = {
-  low: { fg: "var(--color-text-muted)", bg: "var(--color-bg-page)" },
-  medium: { fg: "var(--color-warning)", bg: "var(--color-warning-soft)" },
-  high: { fg: "var(--color-success)", bg: "var(--color-success-soft)" },
-};
-
-function ConfidenceChip({ badge, score }: { badge: MarketConfidenceBadge; score: number }) {
-  const colors = BADGE_COLOR[badge];
-  return (
-    <Tooltip content={`Confidence ${score}/100 — from sample, recency, agreement and how much of the evidence was taken whole`}>
-      <span
-        style={{
-          fontSize: "0.625rem",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.03em",
-          padding: "0.05rem 0.35rem",
-          borderRadius: "0.25rem",
-          border: "1px solid var(--color-border)",
-          color: colors.fg,
-          background: colors.bg,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {badge}
-      </span>
-    </Tooltip>
-  );
-}
 
 /** A percentage as it is read aloud — `55%`, not `0.55`. Rounded to a whole number: the ratio is a
  * median of a handful of results, and a second decimal would state a precision it does not have. */
@@ -217,7 +184,7 @@ function LineEvidence({
           market {line.market.median} {baseCurrency} · {line.market.n} result
           {line.market.n === 1 ? "" : "s"} · {span}
         </span>
-        <ConfidenceChip badge={line.market.confidence.badge} score={line.market.confidence.score} />
+        <MarketConfidenceChip badge={line.market.confidence.badge} score={line.market.confidence.score} />
       </span>
     );
   }

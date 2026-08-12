@@ -40,6 +40,16 @@ interface TooltipProps {
    * hands that to the wrapper here — otherwise the surrounding row shifts.
    */
   style?: CSSProperties;
+  /**
+   * How wide the bubble may grow. The default suits a **sentence**, which is what a hint usually
+   * is; raise it where the content is a small **panel** of labelled figures (#457's market medians),
+   * which at sentence width wraps into a block nobody can read.
+   *
+   * A prop rather than a second component: the placement, the viewport clamping and the nesting
+   * rules are the hard part and are already right here, and a hover panel that positioned itself
+   * would be a second mechanism to keep in step with this one.
+   */
+  maxWidth?: string;
 }
 
 /** Gap between the trigger and the tooltip, in pixels (~0.4rem). */
@@ -73,6 +83,7 @@ export function Tooltip({
   placement = "top",
   align = "center",
   style,
+  maxWidth = "16rem",
 }: TooltipProps) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -108,7 +119,7 @@ export function Tooltip({
   const bubble =
     hasContent && innerCount === 0 && rect && typeof document !== "undefined"
       ? createPortal(
-          <TooltipBubble rect={rect} placement={placement} align={align}>
+          <TooltipBubble rect={rect} placement={placement} align={align} maxWidth={maxWidth}>
             {content}
           </TooltipBubble>,
           document.body
@@ -152,11 +163,13 @@ function TooltipBubble({
   rect,
   placement,
   align,
+  maxWidth,
   children,
 }: {
   rect: DOMRect;
   placement: "top" | "bottom";
   align: "center" | "start" | "end";
+  maxWidth: string;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -222,7 +235,7 @@ function TooltipBubble({
         color: "var(--color-text-primary)",
         whiteSpace: "normal",
         width: "max-content",
-        maxWidth: "16rem",
+        maxWidth,
         textAlign: "left",
         pointerEvents: "none",
       }}

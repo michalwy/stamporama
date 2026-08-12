@@ -64,22 +64,21 @@ function SkeletonBlock({ style }: { style: React.CSSProperties }) {
   );
 }
 
-/** Loading placeholder for {@link HoldingsSummaryBar}. Mirrors the loaded two-row structure —
- * same frame, same per-span font sizes — so the bar reserves its final height and surrounding
- * content does not shift when the figures arrive (#151). */
+/** Loading placeholder for {@link HoldingsSummaryBar}. Mirrors the loaded structure — same frame,
+ * same per-span font sizes — so the bar reserves its final height and surrounding content does not
+ * shift when the figures arrive (#151). Three rows: catalogue value, market value and purchase
+ * cost, the ones a loaded bar all but always draws. The write-off row is not among them, being the
+ * exception rather than the shape. */
 function HoldingsSummaryBarSkeleton() {
   return (
     <div style={FRAME_STYLE} aria-hidden>
-      <div style={ROW_STYLE}>
-        <SkeletonBlock style={LABEL_STYLE} />
-        <SkeletonBlock style={AMOUNT_STYLE} />
-        <SkeletonBlock style={{ ...NOTE_STYLE, width: "5rem" }} />
-      </div>
-      <div style={ROW_STYLE}>
-        <SkeletonBlock style={LABEL_STYLE} />
-        <SkeletonBlock style={AMOUNT_STYLE} />
-        <SkeletonBlock style={{ ...NOTE_STYLE, width: "5rem" }} />
-      </div>
+      {[0, 1, 2].map((row) => (
+        <div key={row} style={ROW_STYLE}>
+          <SkeletonBlock style={LABEL_STYLE} />
+          <SkeletonBlock style={AMOUNT_STYLE} />
+          <SkeletonBlock style={{ ...NOTE_STYLE, width: "5rem" }} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -105,6 +104,12 @@ export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefin
   if (total.unconvertibleCount > 0) {
     valuationNotes.push(`${total.unconvertibleCount} not convertible to ${total.baseCurrency}`);
   }
+
+  // What the market paid for copies like these (#458; ADR-0022 §8). Coverage is stated, never
+  // implied: market value exists only where lots have been recorded, so the count of copies behind
+  // the figure — and the count it could say nothing about — is part of the figure.
+  const market = total.market;
+  const marketCovered = market.valuedCount + market.noEvidenceCount;
 
   const cost = total.cost;
   const costNotes: string[] = [];
@@ -139,6 +144,24 @@ export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefin
           {valuationNotes.length > 0 ? ` · ${valuationNotes.join(" · ")}` : ""}
         </span>
       </div>
+      {/* Market value (#458). Only drawn when there are copies to have covered at all — an empty
+          scope's 0.00 would state a market answer about nothing. A scope with copies but no
+          evidence still draws, saying so: "0 of 84 copies" is the answer, and hiding the row would
+          leave the collector to guess whether the figure is missing or the evidence is. */}
+      {marketCovered > 0 && (
+        <div style={ROW_STYLE}>
+          <span style={LABEL_STYLE}>Market value</span>
+          <span style={AMOUNT_STYLE}>
+            {market.totalBaseAmount} {market.baseCurrency}
+          </span>
+          <span style={NOTE_STYLE}>
+            from {market.valuedCount} of {marketCovered} cop{marketCovered === 1 ? "y" : "ies"}
+            {market.noEvidenceCount > 0
+              ? ` · ${market.noEvidenceCount} with no auction results`
+              : ""}
+          </span>
+        </div>
+      )}
       <div style={ROW_STYLE}>
         <span style={LABEL_STYLE}>Purchase cost</span>
         <span style={AMOUNT_STYLE}>
