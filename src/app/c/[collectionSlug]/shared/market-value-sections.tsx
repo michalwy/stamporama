@@ -7,10 +7,11 @@ import { Tooltip } from "./tooltip";
 import { MarketConfidenceChip, marketConfidenceColor } from "./market-confidence-chip";
 import { CollapsibleSection } from "./collapsible-section";
 import {
-  MatrixTable,
+  FormatTables,
   Dash,
   Muted,
   numStyle,
+  mutedSmallStyle,
   type CellAxes,
   type CertColumn,
 } from "./price-matrix";
@@ -36,25 +37,12 @@ import type {
 // control that scrolls away is one a reader has to go looking for.
 //
 // **The format is a table, not a column.** A market key carries a third axis the catalogue grid has
-// no room for, so each format gets its own matrix under its own caption, the single first. Folding
-// them into one grid would put a block's price in the same cell as a single's.
+// no room for, so each format gets its own matrix under its own caption, the single first (shared
+// `FormatTables`, in `price-matrix.tsx` since the purchase-cost section, #560, is laid out on the
+// same axes). Folding them into one grid would put a block's price in the same cell as a single's.
 //
 // A key with no datapoints is **absent** — no cell, and never a zero: nothing is estimated from a
 // neighbouring key, and a zero reads as "worth nothing" where the truth is "nothing recorded".
-
-const MUTED_SMALL: React.CSSProperties = {
-  fontSize: "0.75rem",
-  color: "var(--color-text-muted)",
-};
-
-const FORMAT_CAPTION: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  color: "var(--color-text-muted)",
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  margin: "0.75rem 0 0.35rem",
-};
 
 /** A percentage as it is read aloud — `24%`, not `0.24`. Whole numbers only: the ratio is a median
  * over a handful of results, and a decimal would state a precision it does not have. */
@@ -107,50 +95,6 @@ export function marketCertCells(
   return [...(stamp ?? []), ...(checklist?.cells ?? [])].map(axesOf);
 }
 
-type FormatAxis = { formatId: string | null; formatAbbreviation: string | null; formatSortOrder: number };
-
-/** One matrix per format, the single leading; captioned only when there is more than one to tell
- * apart, since naming *Single* on a collection that has never recorded a multiple is noise. */
-function FormatTables<T extends FormatAxis & CellAxes>({
-  values,
-  certificates,
-  renderCell,
-}: {
-  values: T[];
-  certificates: CertColumn[];
-  renderCell: (cell: T | undefined) => React.ReactNode;
-}) {
-  const groups = new Map<string, { formatId: string | null; label: string | null; sort: number; cells: T[] }>();
-  for (const value of values) {
-    const key = value.formatId ?? "";
-    const group = groups.get(key);
-    if (group) group.cells.push(value);
-    else
-      groups.set(key, {
-        formatId: value.formatId,
-        label: value.formatAbbreviation,
-        sort: value.formatSortOrder,
-        cells: [value],
-      });
-  }
-  const ordered = [...groups.values()].sort((a, b) => a.sort - b.sort);
-
-  return (
-    <>
-      {ordered.map((group, index) => (
-        <div key={group.formatId ?? ""}>
-          {ordered.length > 1 && (
-            <div style={{ ...FORMAT_CAPTION, marginTop: index === 0 ? 0 : undefined }}>
-              {group.label ?? "Single"}
-            </div>
-          )}
-          <MatrixTable cells={group.cells} certificates={certificates} renderCell={renderCell} />
-        </div>
-      ))}
-    </>
-  );
-}
-
 // ── One stamp ─────────────────────────────────────────────────────────────────
 
 /** The lots a figure was computed from — the evidence, one row each, each a link to the lot on its
@@ -173,7 +117,7 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
     >
       {/* The panel names the cell it belongs to: it opens below the table, and an unlabelled list of
           lots under a grid says nothing about which figure it explains. */}
-      <div style={{ ...MUTED_SMALL, fontWeight: 600 }}>
+      <div style={{ ...mutedSmallStyle, fontWeight: 600 }}>
         {[value.conditionAbbreviation, value.certificateStatusAbbreviation, value.formatAbbreviation]
           .filter(Boolean)
           .join(" · ")}{" "}
@@ -190,9 +134,9 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
           >
             {lot.lotNo ? `Lot ${lot.lotNo}` : `Lot #${lot.auctionLotNo}`}
           </a>
-          <span style={MUTED_SMALL}>{lot.saleName}</span>
-          <span style={MUTED_SMALL}>{day(lot.endsAt)}</span>
-          <span style={{ ...MUTED_SMALL, marginLeft: "auto", whiteSpace: "nowrap" }}>
+          <span style={mutedSmallStyle}>{lot.saleName}</span>
+          <span style={mutedSmallStyle}>{day(lot.endsAt)}</span>
+          <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
             {lot.amount} {value.baseCurrency}
             {(lot.split || lot.quantity > 1) && (
               <span style={{ opacity: 0.8 }}>
@@ -208,7 +152,7 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
       {/* Said once under the lots rather than as a note on each split row: the pro-rata rule is one
           fact about how this figure was arrived at, not a warning repeated per line. */}
       {value.splitCount > 0 && (
-        <span style={{ ...MUTED_SMALL, fontStyle: "italic" }}>
+        <span style={{ ...mutedSmallStyle, fontStyle: "italic" }}>
           {value.splitCount} of {value.n} came out of a lot holding other stamps too, split by
           catalogue value.
         </span>
@@ -464,7 +408,7 @@ function ChecklistCell({ cell, data }: { cell: ChecklistMarketCell; data: Checkl
             the set. A partial total that does not say so is the one thing this must never draw. */}
         <div
           style={{
-            ...MUTED_SMALL,
+            ...mutedSmallStyle,
             color: complete ? "var(--color-text-muted)" : "var(--color-warning)",
           }}
         >

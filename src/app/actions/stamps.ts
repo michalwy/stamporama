@@ -31,6 +31,8 @@ import {
 } from "@/lib/photos";
 import { getStampMarketValueByStamp } from "@/lib/market-values";
 import type { StampMarketValue } from "@/lib/market-values";
+import { getStampPurchaseCosts } from "@/lib/purchase-costs";
+import type { StampPurchaseCosts } from "@/lib/purchase-costs";
 import type {
   CatalogPriceInput,
   StampCatalogPriceDisplay,
@@ -452,4 +454,15 @@ export async function getStampPriceDetailsAction(
 export async function getStampMarketValueAction(stampId: string): Promise<StampMarketValue[]> {
   const session = await getSession();
   return getStampMarketValueByStamp(session.user.id, stampId);
+}
+
+/** What the collector has paid for this stamp, per `condition × certificate × format` key over the
+ * copies still held (#560). The third answer in the Valuation dialog, and the only one that is a
+ * fact about this collection rather than about the stamp. Read on demand like the two beside it:
+ * a lot closing freezes a cost basis, and the next read shows it. */
+export async function getStampPurchaseCostsAction(
+  stampId: string
+): Promise<StampPurchaseCosts> {
+  const session = await getSession();
+  return getStampPurchaseCosts(session.user.id, stampId);
 }

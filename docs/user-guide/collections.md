@@ -584,17 +584,23 @@ Expand an issue and a member stamp that has **no price for the condition the lis
 
 ### The Valuation dialog
 
-Each stamp and issue row's **⋮** actions menu has a **Show valuation** action that opens the **Valuation** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. The data is loaded on demand when you open the dialog. It has three kinds of section, each in the same collapsible box and each on the same grid — **conditions as rows, certificate statuses as columns**:
+Each stamp, issue and **copy** row's **⋮** actions menu has a **Show valuation** action that opens the **Valuation** dialog — for a single stamp, or, on an issue row, for the whole issue's required stamps. From a row on the **Copies** list it opens for the stamp that copy is of, read-only: close it and you are back on the list where you were. The data is loaded on demand when you open the dialog. It has four kinds of section, each in the same collapsible box and each on the same grid — **conditions as rows, certificate statuses as columns**:
 
 - **Market value** (open by default, first) — what these have actually fetched at auction, rather than what a catalog lists them at. Same grid as the sections below it, so a median and a list price can be read against each other cell for cell. See [Market value](#market-value) below.
+- **What I paid** (open by default, second) — what the copies of this stamp you **still hold** cost you, in the collection currency. Each cell is the **average** cost of the copies at that condition and certificate status; hover it for the range, the counts, and when the most recent of them was bought. Copies are counted three ways under the figure, and the difference matters:
+  - **priced** — the copies whose cost is settled. These are the only ones the average is over.
+  - **pending** — copies sitting in a purchase lot that is still **open**, so their share of what the order cost has not been worked out yet (see [Closing a lot](purchases.md#closing-a-lot)). They are never averaged in at a guess, and never at zero. Close the lot and they become priced.
+  - **no cost** — copies with nothing recorded: added by hand, or dropped from a closed lot.
+
+  A cell can show a **—** with counts under it: that means you hold copies at that condition but none of them has a settled cost yet. Sold copies and ones you no longer hold are not counted — this answers *what did what I have cost me*. Copies are counted for **that stamp exactly**: an unknown-variant umbrella does not borrow its variants' copies, the same rule the copies-held badge follows. This section appears for a stamp, not for an issue's checklist.
 - **Average across all catalogs** (open by default) — a grid with **conditions as rows and certificate statuses as columns** (plus a **No cert.** column for prices recorded without a certificate). For a stamp, each cell is the mean price for that condition/certificate, taking each catalog's newest edition and converting to the collection currency. For an issue, each cell is the average of the catalogs' required-stamps totals for that condition/certificate. Only catalogs that price **every** required stamp (for that cell) are averaged; a catalog that prices some but not all is excluded — hover the **⚠** to see which catalogs and how many they price. If no catalog prices all required stamps for a cell, it reads **incomplete** (hover for details). Averages are always shown in the **collection currency**.
 - **Catalog breakdown** (collapsed by default, one expandable section each) — for a stamp, one section per **catalog edition**; for an issue, one section per catalog. Each shows the same conditions × certificate-status grid: the recorded price for a stamp, or the required-stamps total for an issue (with a **⚠** when the catalog does not price every required stamp).
 
-Certificate columns are shared across all the grids — the market grid included, so a certificate that appears only in an auction result still gets a column everywhere and the columns line up.
+Certificate columns are shared across all the grids — the market and what-I-paid grids included, so a certificate that appears only in an auction result, or only on a copy you own, still gets a column everywhere and the columns line up.
 
 The dialog opens at a fixed size: the toolbar stays pinned at the top and the sections scroll beneath it, so expanding or collapsing a section never resizes the window.
 
-Two toggles control the catalog sections (they never change the averages, nor the market value section — a hammer price has no catalog edition, and it is worked out in the collection currency to begin with):
+Two toggles control the catalog sections (they never change the averages, the market value section, nor what you paid — neither a hammer price nor a purchase cost has a catalog edition, and both are worked out in the collection currency to begin with):
 
 - **Editions** — *Latest only* (default) shows just each catalog's newest edition; *All editions* shows every recorded edition.
 - **Currency** — *Catalog* (default) shows prices in each catalog's own currency; *Collection* converts them to the collection currency.

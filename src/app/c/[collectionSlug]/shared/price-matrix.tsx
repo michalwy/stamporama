@@ -130,6 +130,65 @@ export function Money({
   );
 }
 
+/** The third axis a copy-level figure carries, which the conditions × certificates grid has no room
+ * for. Null is the single, and it leads. */
+export type FormatAxis = {
+  formatId: string | null;
+  formatAbbreviation: string | null;
+  formatSortOrder: number;
+};
+
+/**
+ * One {@link MatrixTable} per format, the single leading; captioned only when there is more than one
+ * to tell apart, since naming *Single* on a collection that has never recorded a multiple is noise.
+ *
+ * **A table, not a column.** Folding the formats into one grid would put a block's figure in the
+ * same cell as a single's. Shared by the market-value section (#457) and the purchase-cost one
+ * (#560), which are laid out on the same grid precisely so they can be read against each other.
+ */
+export function FormatTables<C extends FormatAxis & CellAxes>({
+  values,
+  certificates,
+  renderCell,
+}: {
+  values: C[];
+  certificates: CertColumn[];
+  renderCell: (cell: C | undefined) => ReactNode;
+}) {
+  const groups = new Map<
+    string,
+    { formatId: string | null; label: string | null; sort: number; cells: C[] }
+  >();
+  for (const value of values) {
+    const key = value.formatId ?? "";
+    const group = groups.get(key);
+    if (group) group.cells.push(value);
+    else
+      groups.set(key, {
+        formatId: value.formatId,
+        label: value.formatAbbreviation,
+        sort: value.formatSortOrder,
+        cells: [value],
+      });
+  }
+  const ordered = [...groups.values()].sort((a, b) => a.sort - b.sort);
+
+  return (
+    <>
+      {ordered.map((group, index) => (
+        <div key={group.formatId ?? ""}>
+          {ordered.length > 1 && (
+            <div style={{ ...formatCaptionStyle, marginTop: index === 0 ? 0 : undefined }}>
+              {group.label ?? "Single"}
+            </div>
+          )}
+          <MatrixTable cells={group.cells} certificates={certificates} renderCell={renderCell} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function Dash() {
   return <span style={{ color: "var(--color-text-muted)" }}>—</span>;
 }
@@ -199,3 +258,18 @@ const numTdStyle: React.CSSProperties = {
 };
 
 export const numStyle: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
+
+const formatCaptionStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  margin: "0.75rem 0 0.35rem",
+};
+
+/** Small muted text — the counts under a figure, the labels in a hover panel. */
+export const mutedSmallStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+};
