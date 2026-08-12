@@ -93,3 +93,83 @@ describe("searchStampsForPicker catalog recall", () => {
     assert.deepEqual(await ids("IIIB"), [], "a near-miss numeral is not a match");
   });
 });
+
+// A **variant** number in a collection large enough to drown it. `7c`, `7cI` and `7cII` are
+// three different stamps, and a net woven on the digit run alone catches every number carrying a
+// "7" — thousands of them here, more than the candidate cap — so the one asked for never reached
+// the precision pass and the search answered "nothing", in the app's picker and in the Assistant's
+// search window alike.
+describe("searchStampsForPicker recall in a crowded collection", () => {
+  let userId: string;
+  let collectionId: string;
+  let variantStampId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = `test-user-crowded-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User crowded-${ts}`,
+        email: `test-crowded-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: {
+          slug: `col-crowded-${ts}`,
+          name: `Collection crowded-${ts}`,
+          baseCurrency: "EUR",
+          ownerId: userId,
+        },
+      })
+    ).id;
+    const fi = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Fischer", abbreviation: "Fi" },
+    });
+    const area = await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } });
+    await prisma.collectionAreaVendor.create({
+      data: { collectionAreaId: area.id, catalogVendorId: fi.id, areaPrefix: "PL" },
+    });
+
+    async function fileStamps(numbers: string[]): Promise<string[]> {
+      const stamps = await prisma.stamp.createManyAndReturn({
+        data: numbers.map(() => ({ collectionId, issuedYear: 1918 })),
+        select: { id: true },
+      });
+      await prisma.stampCollectionArea.createMany({
+        data: stamps.map((s) => ({ stampId: s.id, collectionAreaId: area.id, isPrimary: true })),
+      });
+      await prisma.stampCatalogNumber.createMany({
+        data: stamps.map((s, i) => ({
+          stampId: s.id,
+          catalogVendorId: fi.id,
+          number: numbers[i],
+        })),
+      });
+      return stamps.map((s) => s.id);
+    }
+
+    // Every one of these carries a "7", and there are more of them than the recall cap. Filed
+    // *before* the variant, so the cap cuts exactly where the collector's stamp is.
+    await fileStamps(Array.from({ length: 2000 }, (_, i) => `${700 + i}`));
+    [variantStampId] = await fileStamps(["7cII"]);
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  const ids = async (query: string) =>
+    (await searchStampsForPicker(userId, collectionId, query)).map((h) => h.stampId);
+
+  it("finds a variant number behind thousands sharing its digit run", async () => {
+    for (const query of ["7cII", "7cii", "Fi PL 7cII", "PL7cII", "FiPL7cII"]) {
+      assert.deepEqual(await ids(query), [variantStampId], `query: ${query}`);
+    }
+  });
+});

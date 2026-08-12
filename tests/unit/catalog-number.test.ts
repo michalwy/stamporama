@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeCatalogKey,
   catalogDigitRuns,
+  catalogNumberRuns,
   catalogIdentityKey,
   formatCatalogNumber,
   catalogMatchKey,
@@ -84,6 +85,25 @@ describe("catalogDigitRuns", () => {
     // "304" appears nowhere in a stored "BL30 B4", which is what used to lose the stamp.
     assert.deepEqual(catalogDigitRuns("PL BL30 B4"), ["30", "4"]);
     assert.deepEqual(catalogDigitRuns("3706 - 3711"), ["3706", "3711"]);
+  });
+});
+
+describe("catalogNumberRuns", () => {
+  it("keeps the suffix written straight after a run", () => {
+    // The whole difference between the base stamp "7" and the variant "7cII".
+    assert.deepEqual(catalogNumberRuns("7cII"), ["7cII"]);
+    assert.deepEqual(catalogNumberRuns("Fi PL 7cII"), ["7cII"]);
+    assert.deepEqual(catalogNumberRuns("Mi PL200a"), ["200a"]);
+  });
+
+  it("ends a run at whitespace or punctuation", () => {
+    assert.deepEqual(catalogNumberRuns("200 MNH"), ["200"]);
+    assert.deepEqual(catalogNumberRuns("3706 - 3711"), ["3706", "3711"]);
+    assert.deepEqual(catalogNumberRuns("PL BL30 B4"), ["30", "4"]);
+  });
+
+  it("returns nothing for a digit-free query", () => {
+    assert.deepEqual(catalogNumberRuns("Mi RU-BW IIIA"), []);
   });
 });
 

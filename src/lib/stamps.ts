@@ -2,9 +2,9 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import {
-  catalogDigitRuns,
   catalogKeyMatches,
   catalogMatchKey,
+  catalogNumberRuns,
   formatCatalogNumber,
 } from "./catalog-number";
 import {
@@ -888,10 +888,15 @@ const PICKER_LIMIT = 20;
  * `number` — which has to contain **all** of them.
  *
  * Digits are the sharpest handle and the common case, taken one **run** at a time: `"Mi PL 200"` →
- * `["200"]`, `"Mi PL BL30 B4"` → `["30", "4"]`, matched case-sensitively. Per run rather than all
- * the digits at once because a number carrying two of them concatenates to something no stored value
- * contains (`"304"` against a filed `"BL30 B4"`), so the stamp was never recalled however it was
- * typed (#435).
+ * `["200"]`, `"Mi PL BL30 B4"` → `["30", "4"]`. Per run rather than all the digits at once because a
+ * number carrying two of them concatenates to something no stored value contains (`"304"` against a
+ * filed `"BL30 B4"`), so the stamp was never recalled however it was typed (#435).
+ *
+ * A run keeps the letters written straight after it ({@link catalogNumberRuns}), which is what makes
+ * a **variant** reachable: `"Fi PL 7cII"` → `["7cII"]` rather than `["7"]`. The candidate net is
+ * capped, and a low bare digit run is shared by thousands of numbers in a real collection — so a net
+ * woven on `"7"` alone comes back full of other stamps and the one asked for is never in it.
+ * Matched case-insensitively, so a stamp filed as `7cii` answers to the `7cII` a collector types.
  *
  * A query with **no digits at all** would otherwise never reach the catalog branch, which loses
  * digit-free numbering — Michel's Roman local issues, e.g. `Mi·RU-BW IIIA`. For those the handle is
@@ -906,8 +911,8 @@ const PICKER_LIMIT = 20;
  * query is built. Typing the parts apart, or the bare number, finds the stamp.
  */
 function catalogRecallToken(text: string): { values: string[]; insensitive: boolean } | null {
-  const runs = catalogDigitRuns(text);
-  if (runs.length > 0) return { values: runs, insensitive: false };
+  const runs = catalogNumberRuns(text);
+  if (runs.length > 0) return { values: runs, insensitive: true };
   const last = text.trim().split(/\s+/).at(-1) ?? "";
   return last ? { values: [last], insensitive: true } : null;
 }
