@@ -251,7 +251,10 @@ export function OfferDetailPanel({
     );
   }
 
-  const editable = !isTerminalState(offer.state);
+  // Read out once so the hoisted handlers below can see it — a function declaration does not keep
+  // the narrowing the early return above gave `offer`.
+  const state = offer.state;
+  const editable = !isTerminalState(state);
 
   // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
   // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
@@ -268,6 +271,14 @@ export function OfferDetailPanel({
     advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0) && pricedForAdvance;
   const readyBlockers = advanceReady && advanceTo === "ready" ? offer.readyBlockers : [];
   const canAdvance = advanceReady && readyBlockers.length === 0;
+  // Listing straight out of **Preparing** (#554): the collector who has just finished assembling an
+  // offer wants to post it, and making them press **Mark ready** first is a click that decides
+  // nothing. Offered under exactly the conditions that quick-advance is — the handoff marks the offer
+  // ready on its way out, so a step the server would refuse must not be offered — and judged by the
+  // *same* blockers, `readyBlockers` being the listing preconditions (#406) asked at Ready plus the
+  // photos (#311). `listingBlockers` would report `not-ready` here, which is the very thing this
+  // click undoes.
+  const listingFromPreparing = offer.state === "preparing" && advanceTo === "ready" && advanceReady;
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button. On an auction what is missing is the
   // **starting** price (#449) — the current one follows from it while nobody has bid — so the line
@@ -357,6 +368,36 @@ export function OfferDetailPanel({
         // collector may have scrolled a long way down.
         toast({ message: `This offer is now ${OFFER_STATE_LABEL[next].toLowerCase()}` });
       } else setActionError(result.message);
+    });
+  }
+
+  /**
+   * Hand this offer to the Assistant to post (#414), from **Preparing** as well as from Ready
+   * (#554).
+   *
+   * From Preparing the state goes first and the handoff follows: the listing kit is served only for a
+   * Ready offer (#405/#406), and the two steps are one act as far as the collector is concerned. A
+   * refused transition therefore stops the whole thing with its own message rather than leaving the
+   * Assistant to refuse it a second time in different words.
+   *
+   * No toast on the way through, unlike **Mark ready** itself: the state chip is right beside the
+   * button that was pressed, and what the collector is waiting on is the report strip below.
+   */
+  function listViaAssistant() {
+    setActionError(undefined);
+    if (state === "ready") {
+      void startHandoff(offerId);
+      return;
+    }
+    startTransition(async () => {
+      const { setOfferStateAction } = await import("@/app/actions/offers");
+      const result = await setOfferStateAction(offerId, "ready");
+      if (result.status !== "success") {
+        setActionError(result.message);
+        return;
+      }
+      invalidateAll(collectionId);
+      void startHandoff(offerId);
     });
   }
 
@@ -539,21 +580,24 @@ export function OfferDetailPanel({
             {/* The same handoff the bulk workspace offers (#407/#414). A single listing is routinely
                 posted from here rather than from a batch, and a step offered on one screen only is
                 the step that gets skipped on the other — the same reasoning that made activation ask
-                for the URL in both places (#399). Only on a Ready offer: anything else has nothing
-                to post, and the preconditions say so themselves. */}
-            {offer.state === "ready" && (
+                for the URL in both places (#399). Offered from **Preparing** too (#554), where the
+                click marks the offer ready on its way to the form: an offer that passes every check
+                is one the collector is finished with, and pressing Mark ready first only to press
+                this next decides nothing. Nowhere else — anything past Ready has nothing to post,
+                and the preconditions say so themselves. */}
+            {(offer.state === "ready" || listingFromPreparing) && (
               <ListViaAssistantButton
                 platformModule={offer.platformModule}
                 present={assistantPresent}
-                blockerCount={offer.listingBlockers.length}
+                blockerCount={
+                  offer.state === "ready" ? offer.listingBlockers.length : readyBlockers.length
+                }
                 busy={false}
                 running={handoffRunning}
                 disabled={isPending}
+                marksReady={listingFromPreparing}
                 style={ASSISTANT_BTN}
-                onStart={() => {
-                  setActionError(undefined);
-                  void startHandoff(offerId);
-                }}
+                onStart={listViaAssistant}
               />
             )}
             {/* The other half of the same handoff (#462): once the listing exists, the way to change

@@ -986,6 +986,14 @@ listing is often posted from there rather than from a batch, and it behaves iden
 and self-activation included. That header's own **▲ Activate** stays there for everything posted by
 hand.
 
+It is there while the offer is still **Preparing**, too, as soon as everything **Mark ready** asks
+for is satisfied — the same three checks and the same listing photos. Pressing it marks the offer
+ready and goes straight on to the form, because an offer that passes every check is one you have
+finished assembling, and pressing **Mark ready** first only to press this next decides nothing. The
+hover hint says so. While something is still missing, the button is disabled exactly as **Mark
+ready** is beside it, and that button's hint is where the reasons are listed. The bulk listing
+workspace is unchanged: it is a batch of Ready offers, which is what a batch is for.
+
 ### Update via Assistant
 
 Once a listing is live, the way to change what it says is to go back to it — and an **Active** offer's

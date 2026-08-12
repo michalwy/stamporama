@@ -51,6 +51,7 @@ export function ListViaAssistantButton({
   busy,
   running,
   disabled,
+  marksReady,
   style,
   onStart,
 }: {
@@ -62,6 +63,10 @@ export function ListViaAssistantButton({
   /** *This* offer's handoff is in flight. */
   running: boolean;
   disabled?: boolean;
+  /** The offer is still **Preparing** and this click marks it Ready on the way out (#554). Said in
+   *  the hint, because a button that changes the offer's state as a side effect has to say so —
+   *  everything else about the control is identical. */
+  marksReady?: boolean;
   style: React.CSSProperties;
   onStart: () => void;
 }) {
@@ -76,7 +81,9 @@ export function ListViaAssistantButton({
     <Tooltip
       content={
         hint ??
-        "Open this platform's sale form in a new tab, filled in from this offer. Nothing is posted — you check it and submit it yourself."
+        (marksReady
+          ? "Mark this offer ready and open the platform's sale form in a new tab, filled in from it. Nothing is posted — you check it and submit it yourself."
+          : "Open this platform's sale form in a new tab, filled in from this offer. Nothing is posted — you check it and submit it yourself.")
       }
     >
       <button
