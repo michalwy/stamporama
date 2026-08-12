@@ -110,7 +110,18 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
           background: "var(--color-bg-page)",
         }}
       >
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+        {/* The filter half **grows into the row** (#558). Without `flex: 1 1 auto` it sat at its
+            content width while the actions beside it took every spare pixel as an auto margin — so
+            the filters wrapped onto a second line with a visible gap of unused space to their
+            right, which reads as a toolbar breaking for no reason. Growing hands that space to the
+            controls that can use it, and `minWidth: 0` lets the half shrink below its content when
+            the row really is full, which is when wrapping is the honest answer. */}
+        {/* This half additionally does not wrap **internally**: it holds one search box and one
+            three-chip axis, so there is nothing here worth breaking a line for. Flexbox breaks on
+            an item's *base* size rather than on how small it could get, so the box's 16rem basis
+            pushed the chips down before the box had given up any width; `nowrap` puts the
+            shrinking where it belongs, the box having an 11rem floor of its own to stop at. */}
+        <div style={{ display: "flex", flex: "1 1 auto", minWidth: 0, gap: "0.375rem", alignItems: "center", flexWrap: "nowrap" }}>
           {/* Find one settlement by what it is called or who it is with (#484). A sale's identifier
               is part of its name, so `Köhler 385` is found by either half of it. */}
           <ListSearchBox
@@ -124,24 +135,41 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
             style={{
               width: "1px",
               height: "1.25rem",
+              flexShrink: 0,
               background: "var(--color-border)",
               margin: "0 0.25rem",
             }}
           />
-          {AUCTION_SALE_STATUSES.map((value) => (
-            <FilterChip
-              key={value}
-              label={AUCTION_SALE_STATUS_LABEL[value]}
-              active={status === value}
-              onClick={() => {
-                const next = status === value ? "" : value;
-                rememberStatus(next);
-                updateParams({ status: next });
-              }}
-            />
-          ))}
+          {/* The three statuses are **one axis** and lay out as one (#558): loose in the row beside
+              the search box they were three independent flex items, so the toolbar broke wherever
+              it happened to run out of width and dropped *Closed* alone onto a second line, reading
+              as a control of its own rather than the third of three. Grouped and `nowrap`, so they
+              either sit on the row or move off it whole — and `flexShrink: 0`, so the shrinking is
+              done by the search box, which has a floor of its own to stop at. */}
+          <span
+            style={{
+              display: "inline-flex",
+              gap: "0.375rem",
+              alignItems: "center",
+              flexWrap: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {AUCTION_SALE_STATUSES.map((value) => (
+              <FilterChip
+                key={value}
+                label={AUCTION_SALE_STATUS_LABEL[value]}
+                active={status === value}
+                onClick={() => {
+                  const next = status === value ? "" : value;
+                  rememberStatus(next);
+                  updateParams({ status: next });
+                }}
+              />
+            ))}
+          </span>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {actionError && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
           )}

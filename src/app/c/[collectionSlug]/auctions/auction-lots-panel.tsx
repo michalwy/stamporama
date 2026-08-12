@@ -293,7 +293,13 @@ export function AuctionLotsPanel({
           background: "var(--color-bg-page)",
         }}
       >
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+        {/* The filter half **grows into the row** (#558). Without `flex: 1 1 auto` it sat at its
+            content width while the actions beside it took every spare pixel as an auto margin — so
+            the filters wrapped onto a second line with a visible gap of unused space to their
+            right, which reads as a toolbar breaking for no reason. Growing hands that space to the
+            controls that can use it, and `minWidth: 0` lets the half shrink below its content when
+            the row really is full, which is when wrapping is the honest answer. */}
+        <div style={{ display: "flex", flex: "1 1 auto", minWidth: 0, gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           {/* Find one lot among the whole watchlist by what is known about it (#484): what it is
               called, what was noted about it, the house's number for it or ours, or the sale it is
               in. Server-side — the list is paginated, so it cannot be a client facet. */}
@@ -466,7 +472,7 @@ export function AuctionLotsPanel({
           />
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {actionError && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
           )}

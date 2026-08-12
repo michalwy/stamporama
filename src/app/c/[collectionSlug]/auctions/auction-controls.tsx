@@ -62,6 +62,11 @@ export function FilterChip({
         display: "inline-flex",
         alignItems: "center",
         gap: "0.375rem",
+        // A chip is one word for one filter: it may leave the row, but it must not break in half
+        // (#558). Its label is what it is, so there is nothing to gain by letting a squeezed
+        // toolbar reflow it into two lines of a control two lines tall.
+        whiteSpace: "nowrap",
+        flexShrink: 0,
         fontWeight: active ? 600 : 400,
         color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
         borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",

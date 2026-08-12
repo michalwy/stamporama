@@ -331,7 +331,13 @@ export function OffersListPanel({
           background: "var(--color-bg-page)",
         }}
       >
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+        {/* The filter half **grows into the row** (#558). Without `flex: 1 1 auto` it sat at its
+            content width while the actions beside it took every spare pixel as an auto margin — so
+            the filters wrapped onto a second line with a visible gap of unused space to their
+            right, which reads as a toolbar breaking for no reason. Growing hands that space to the
+            controls that can use it, and `minWidth: 0` lets the half shrink below its content when
+            the row really is full, which is when wrapping is the honest answer. */}
+        <div style={{ display: "flex", flex: "1 1 auto", minWidth: 0, gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           {/* Find one offer among hundreds by what is known about it (#465): its title, its own
               number, a catalog number or filing ref of a copy in it, or the marketplace link a sale
               notification carried. Server-side — the list is cursor-paginated, so it cannot be a
@@ -490,7 +496,7 @@ export function OffersListPanel({
           />
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+        <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem" }}>
           {/* Post a prepared batch (#322). Carries the platform filter across: the workspace posts to
               one platform, and the one being looked at here is the one meant. */}
           <Link
