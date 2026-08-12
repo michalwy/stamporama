@@ -4713,6 +4713,9 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     where: { id: offerId },
     data: {
       state: to,
+      // When the listing closed (#512). Only `withdrawn` is reachable by hand — `sold` is the sale
+      // flow's (#166) — and only the sweep that purges a closed offer's generated images reads it.
+      ...(isTerminalState(to) ? { closedAt: new Date() } : {}),
       ...(publishing ? { listingDate: todayUtcDate() } : {}),
       // Publication is the live listing and the record agreeing by definition (#542), so an offer
       // goes up unflagged whatever it carried while being prepared. It is the **only** transition

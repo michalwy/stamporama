@@ -800,7 +800,9 @@ export async function addSaleLines(
         if (await isOfferFullySold(tx, offerId)) {
           await tx.offer.update({
             where: { id: offerId },
-            data: { state: "sold", inActiveBidding: false },
+            // `closedAt` (#512) is stamped with the state, as it is on a withdrawal: it is what the
+            // generated-photo purge measures the grace period from.
+            data: { state: "sold", inActiveBidding: false, closedAt: new Date() },
           });
         }
       }
@@ -1357,7 +1359,9 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
     if (offerIds.length > 0) {
       await tx.offer.updateMany({
         where: { id: { in: offerIds }, state: "sold" },
-        data: { state: "active" },
+        // The listing is open again, so it is no longer closed: clearing `closedAt` (#512) takes it
+        // back out of the generated-photo purge's reach.
+        data: { state: "active", closedAt: null },
       });
     }
   });

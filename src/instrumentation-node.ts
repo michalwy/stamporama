@@ -12,6 +12,10 @@
 //     `DELETE ... WHERE createdAt < cutoff` plus best-effort byte deletion;
 //   - the offer photo generation worker (#311) — drains the render queue one job at a time and
 //     requeues anything a previous process left mid-render;
+//   - the closed-offer photo purge (#512) — an hourly pass deleting the generated images of listings
+//     that have been sold or withdrawn longer than the grace period. Its own timer rather than a
+//     branch of the sweep above: they answer to different TTLs, and either can be switched off
+//     without the other noticing;
 //   - the Allegro sold-listing sync (#467) — a quarter-hourly pass over every connected collection,
 //     which is what makes the worklist a list that fills itself rather than one that has to be
 //     asked for;
@@ -21,6 +25,12 @@
 //     when nothing did, where a sync re-reads the whole account.
 
 import { gcStaleUploads } from "@/lib/photos";
+import { formatBytes } from "@/lib/format-bytes";
+import {
+  closedOfferPhotoTtlMs,
+  describeClosedOfferPhotoTtl,
+} from "@/lib/offer-photo-cleanup-rules";
+import { purgeClosedOfferPhotos } from "@/lib/offer-photo-generation";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { logStorageStartup } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
@@ -55,6 +65,34 @@ export async function start(): Promise<void> {
   const interval = setInterval(sweep, SWEEP_INTERVAL_MS);
   initial.unref?.();
   interval.unref?.();
+
+  // The closed-offer photo purge (#512). Same shape and the same hourly cadence as the sweep above,
+  // offset from it so a boot does not run both at once. A generated image is the one photo the app
+  // can always make again, so a listing that has been over for a week keeps its plan and loses only
+  // its bytes; Regenerate brings them back.
+  const purge = async () => {
+    try {
+      const freed = await purgeClosedOfferPhotos();
+      if (freed.offers > 0) {
+        console.log(
+          `[offer-photos] purged ${freed.photos} generated image(s) from ${freed.offers} closed ` +
+            `offer(s), freeing ${formatBytes(freed.bytes)}`
+        );
+      }
+    } catch (err) {
+      console.error("[offer-photos] closed-offer purge failed", err);
+    }
+  };
+
+  // Said once at boot, whatever the setting is — including `off`, which is the one an operator most
+  // wants confirmed. A scheduled deletion that only announces itself the first time it deletes
+  // something is a scheduled deletion nobody knew was configured.
+  console.log(`[offer-photos] closed-offer purge: ${describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs())}`);
+
+  const purgeInitial = setTimeout(purge, 45_000);
+  const purgeInterval = setInterval(purge, SWEEP_INTERVAL_MS);
+  purgeInitial.unref?.();
+  purgeInterval.unref?.();
 
   // The Allegro sold-listing sync (#467). Same shape as the sweep above: once shortly after boot,
   // then on its own interval, `unref`'d so it never holds the process up. A pass that throws is

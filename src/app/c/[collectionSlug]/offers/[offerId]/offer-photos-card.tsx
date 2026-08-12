@@ -141,6 +141,14 @@ function StatusChip({ plan }: { plan: OfferPhotoPlanView }) {
       return tinted("success", "Ready", "Every planned image was rendered and stored");
     case "failed":
       return tinted("error", "Failed", "The last run did not finish");
+    case "purged":
+      return tinted(
+        // No tint of its own: a purge is housekeeping that went right, so the chip states it in the
+        // card's own muted voice rather than colouring it like a warning.
+        "text-muted",
+        "Cleaned up",
+        "This listing has been closed a while, so its generated images were deleted to save space. Regenerate to make them again."
+      );
     default:
       return null;
   }
@@ -1073,7 +1081,11 @@ export function OfferPhotosCard({
           <p style={NOTE}>
             {stored > 0
               ? `${stored} image${stored === 1 ? "" : "s"} stored (${formatBytes(storedBytes)}).`
-              : "No generated images yet."}{" "}
+              : plan.status === "purged"
+                ? // #512: the images existed and were deleted, which is a different sentence from
+                  // never having generated any — and the only place the collector is told why.
+                  "The generated images were deleted: this listing has been closed a while, and generated images can always be made again."
+                : "No generated images yet."}{" "}
             {planNote(plan)}
           </p>
 

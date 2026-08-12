@@ -144,6 +144,9 @@ function photoSummary(offer: ListingWorkspaceOffer): { label: string; warn: bool
     return { label: "Photos rendering…", warn: false };
   }
   if (offer.photoStatus === "failed") return { label: "Photos failed", warn: true };
+  // A closed listing whose images the sweep deleted (#512). No warning: the workspace only ever
+  // holds offers still to be posted, so this is a listing that came back rather than one at fault.
+  if (offer.photoStatus === "purged") return { label: "Photos cleaned up", warn: false };
   if (offer.photoCount === 0) return { label: "No photos yet", warn: true };
   return { label: offer.photoCount === 1 ? "1 photo" : `${offer.photoCount} photos`, warn: false };
 }

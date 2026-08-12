@@ -552,6 +552,8 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 **Settings → General** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
 
+It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
+
 ## Catalog prices
 
 Catalog prices are recorded per stamp, per **catalog edition** (a specific year of a catalog), and — because the same stamp is worth different amounts depending on its physical grade and whether it carries an expert certificate — per **condition** and **certificate status** (the two dimensions from **Settings → Conditions**).

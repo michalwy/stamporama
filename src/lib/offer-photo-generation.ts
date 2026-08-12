@@ -10,7 +10,8 @@ import {
   type PhotoVariant,
 } from "./storage";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
-import { isOfferState, isTerminalState } from "./offer-rules";
+import { CLOSED_OFFER_STATES, isOfferState, isTerminalState } from "./offer-rules";
+import { closedOfferPhotoCutoff, closedOfferPhotoTtlMs } from "./offer-photo-cleanup-rules";
 import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
@@ -84,8 +85,20 @@ import type { PlanCopy, PlanSet } from "./offer-photo-plan";
  */
 export type AttachmentSource = "copy_photo" | "upload" | "manual_collage";
 
-/** Lifecycle of one offer's generation. `none` is the synthetic state of an offer never generated. */
-export type OfferPhotoGenerationStatus = "none" | "queued" | "running" | "ready" | "failed";
+/**
+ * Lifecycle of one offer's generation. `none` is the synthetic state of an offer never generated;
+ * `purged` is the one it reaches from `ready` without a run — the sweep (#512) deleted the images of
+ * a listing that has been closed longer than the grace period. It is deliberately not `none`: the
+ * collector generated these images and uploaded them somewhere, and a card that read "never
+ * generated" would be telling them something untrue about their own listing.
+ */
+export type OfferPhotoGenerationStatus =
+  | "none"
+  | "queued"
+  | "running"
+  | "ready"
+  | "failed"
+  | "purged";
 
 const ACTIVE_STATUSES = ["queued", "running"] as const;
 
@@ -1297,6 +1310,99 @@ export async function deleteOfferPhotoBytes(offerId: string): Promise<void> {
     select: { storageBackend: true, storageKey: true, mime: true },
   });
   await Promise.all(rows.map((r) => deleteVariants(r.storageBackend, r.storageKey, r.mime)));
+}
+
+/** What one pass of {@link purgeClosedOfferPhotos} freed. */
+export interface ClosedOfferPhotoPurge {
+  /** Offers whose generated images were deleted. */
+  offers: number;
+  /** Images deleted across them. */
+  photos: number;
+  /** `sizeBytes` those images were carrying — what the collection's storage total (#144) drops by. */
+  bytes: number;
+}
+
+/**
+ * Purge the generated images of offers that have been **closed** longer than the grace period
+ * (#512). An hourly sweep started from `instrumentation.ts` `register()`, alongside the staging-upload
+ * orphan GC (#112) it is modelled on: idempotent, best-effort, and never anything but a delete.
+ *
+ * What goes is every `Photo` the offer owns with `kind: "generated"` — collage sides and rendered
+ * manual attachments alike, since both are output the plan can produce again from the same inputs.
+ * What stays is everything that is a **source**: the copies' scans, and the original uploaded
+ * straight to the offer for an attachment (#313), which no rule could recreate. The plan itself also
+ * stays — the offer's photo settings, its attachment rows and its manual plan order are untouched —
+ * so the only thing lost is the bytes, and Regenerate makes them again.
+ *
+ * Three things it refuses to touch:
+ *
+ *  - an offer with a `queued` or `running` job, which is the worker's row to write and about to hold
+ *    fresh images anyway;
+ *  - an offer whose `closedAt` is null — a listing closed before the column existed is backfilled by
+ *    the migration, so this only ever means "not closed";
+ *  - anything at all, when the TTL is switched off.
+ *
+ * `only` narrows the sweep to one offer, for the same test-isolation reason as
+ * {@link claimNextOfferPhotoGeneration}; the boot path passes nothing.
+ */
+export async function purgeClosedOfferPhotos(
+  now: Date = new Date(),
+  only?: { offerId: string }
+): Promise<ClosedOfferPhotoPurge> {
+  const empty: ClosedOfferPhotoPurge = { offers: 0, photos: 0, bytes: 0 };
+  const cutoff = closedOfferPhotoCutoff(now, closedOfferPhotoTtlMs());
+  if (!cutoff) return empty;
+
+  const candidates = await prisma.offer.findMany({
+    where: {
+      ...(only ? { id: only.offerId } : {}),
+      state: { in: [...CLOSED_OFFER_STATES] },
+      closedAt: { lt: cutoff },
+      photos: { some: { kind: "generated" } },
+    },
+    select: { id: true, photoGeneration: { select: { status: true } } },
+  });
+
+  const result = { ...empty };
+  for (const offer of candidates) {
+    const status = offer.photoGeneration?.status;
+    if (status && (ACTIVE_STATUSES as readonly string[]).includes(status)) continue;
+
+    const photos = await prisma.photo.findMany({
+      where: { offerId: offer.id, kind: "generated" },
+      select: { id: true, storageBackend: true, storageKey: true, mime: true, sizeBytes: true },
+    });
+    if (photos.length === 0) continue;
+
+    // Rows first, in one transaction — deleting a `Photo` cascades to its plan entry, exactly as a
+    // regeneration's swap does. The generation row moves to `purged` rather than being deleted, so
+    // the card can say what happened; `fingerprint` goes with the images it described.
+    await prisma.$transaction(async (tx) => {
+      await tx.photo.deleteMany({ where: { id: { in: photos.map((p) => p.id) } } });
+      const purged = {
+        status: "purged",
+        fingerprint: null,
+        plannedCount: 0,
+        renderedCount: 0,
+        error: null,
+        finishedAt: now,
+      };
+      await tx.offerPhotoGeneration.upsert({
+        where: { offerId: offer.id },
+        create: { offerId: offer.id, ...purged, queuedAt: now, startedAt: null },
+        update: purged,
+      });
+    });
+
+    // Post-commit: the files. Their rows are already gone, so a failure here leaves at worst an
+    // unreferenced object the way any other byte deletion does.
+    await Promise.all(photos.map((p) => deleteVariants(p.storageBackend, p.storageKey, p.mime)));
+
+    result.offers += 1;
+    result.photos += photos.length;
+    result.bytes += photos.reduce((sum, p) => sum + p.sizeBytes, 0);
+  }
+  return result;
 }
 
 // ── The run ──────────────────────────────────────────────────────────────────

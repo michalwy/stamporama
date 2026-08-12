@@ -699,6 +699,26 @@ title yet falls back to a short piece of its id, so two untitled offers still do
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.
 
+### When the listing is over
+
+A week after an offer is **Sold** or **Withdrawn**, Stamporama deletes its generated images and the
+card says **Cleaned up**. Nothing else about the offer changes: the sets, the photo settings, the
+plan order, your attachments and the copies' own scans all stay exactly where they are, and pressing
+**Regenerate** makes the images again from them. That is the whole reason this is safe to do —
+a generated image is the one photo in the app that can always be recreated, so a listing that is over
+has no reason to keep its collages sitting on disk. The images you [uploaded
+yourself](#attaching-your-own-images) are never deleted: those are originals, and nothing could make
+them again.
+
+The week is a grace period, in case you want to look at, download or re-post the images shortly
+after closing the listing. It is configurable per instance — see
+`STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` in the [architecture
+overview](../architecture/overview.md#environment-variables); setting it to `off` keeps every image
+forever. Deleting the sale that sold an offer puts the listing back to **Active**, and it stops
+being a candidate for cleanup at once.
+
+Storage freed this way shows up in the collection's [photo storage total](collections.md).
+
 ## What the market is asking
 
 Pricing a listing means two questions about each stamp in it: what it *is*, and what people are

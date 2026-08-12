@@ -1826,6 +1826,15 @@ model Offer {
   // generated photos have their own out-of-date signal (#311), which says the same thing about the
   // images and says it where the images are.
   listingContentChangedAt DateTime?
+  // When this listing was **closed** (#512) — stamped the moment the offer entered `sold` or
+  // `withdrawn`, cleared if it ever leaves one (deleting the sale that sold it reverts it to
+  // `active`). Null on every offer that is still open.
+  //
+  // It exists for one reader: the sweep that purges a closed offer's generated images once the
+  // grace period is up. `state` alone cannot answer "how long has this been over", and the offer's
+  // own `updatedAt` would be reset by anything at all — a note edited on a sold listing is not the
+  // listing closing again.
+  closedAt     DateTime?
   createdAt    DateTime @default(now())
   // "In active bidding" (#215): an auction-platform offer that has received a bid, committing the
   // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely
@@ -1975,6 +1984,8 @@ model Offer {
   @@index([collectionId])
   @@index([platformId])
   @@index([allegroListingProfileId])
+  // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
+  @@index([state, closedAt])
   @@map("offer")
 }
 
@@ -1995,7 +2006,9 @@ model Offer {
 model OfferPhotoGeneration {
   id       String @id @default(cuid())
   offerId  String @unique
-  /** `queued` | `running` | `ready` | `failed`. */
+  /** `queued` | `running` | `ready` | `failed` | `purged` — the last being a `ready` run whose images
+   * the closed-offer sweep deleted once the grace period was up (#512). The row outlives them so the
+   * card can say the images were cleaned up rather than never made. */
   status   String @default("queued")
   fingerprint String?
   /** Progress, for the panel: images the plan asked for, and images written so far. */
