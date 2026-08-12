@@ -735,7 +735,7 @@ export function InventoryItemRow({
           </span>
         </div>
 
-        {/* Line 4: condition, disposition, certificate, location, notes */}
+        {/* Line 4: condition, disposition, certificate, location */}
         <div
           style={{
             display: "flex",
@@ -857,13 +857,29 @@ export function InventoryItemRow({
               </span>
             ))}
           {showCostBasis && <CostBasisChip item={item} baseCurrency={baseCurrency} />}
-          {item.notes && (
-            <Tooltip content={item.notes}>
-              <span style={META}><Icon name="notes" size="sm" /> notes</span>
-            </Tooltip>
-          )}
           {trailingChips}
         </div>
+
+        {/* Notes, in full, on a line of their own (#116) — replacing the `notes` chip whose whole
+            content was a tooltip. A note is written *because* it says something the chips cannot
+            (a postmark type, why this copy was kept), so hiding it behind a hover made the one
+            field with no fixed vocabulary the only one that had to be hunted for. Rendered only
+            when there is a note, so a list of copies without them keeps its current height —
+            which is also why this is a line rather than a reserved area. Mirrors the auction lot
+            row: muted, `pre-wrap` so a note typed as two lines reads as two, and inside the text
+            column so it starts where the rest of the row's words do rather than under the photo. */}
+        {item.notes && (
+          <p
+            style={{
+              margin: "0.5rem 0 0",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-muted)",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {item.notes}
+          </p>
+        )}
         </div>
       </div>
     </div>

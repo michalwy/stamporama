@@ -30,7 +30,8 @@ Each row shows:
   *Ordered*, *In transit*, *To sort*, *Not delivered / missing*, or *Damaged*. A delivered copy shows no
   chip, since that is the normal state of everything you hold. See
   [Delivery state](#delivery-state).
-- A notes indicator when the copy has notes (hover to read them).
+- Its **notes**, printed in full on a line of their own directly under the row, when the
+  copy has any. A copy without notes gets no extra line, so the list keeps its usual height.
 - A **photo thumbnail** at the left of the row, when the copy has any — a single larger
   preview of the first photo. If the copy has more than one photo, a counter (e.g. **1/3**)
   appears and **‹ / ›** controls step through them in place. The **front** and **back** carry
