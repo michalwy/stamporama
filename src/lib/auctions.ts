@@ -37,6 +37,7 @@ import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import {
+  auctionLotName,
   deriveAuctionLotLabel,
   deriveAuctionSaleName,
   isAuctionLotStatus,
@@ -2745,6 +2746,10 @@ export interface AuctionSettlementInput {
 const SETTLEMENT_LOT_SELECT = {
   id: true,
   title: true,
+  // The house's own number for the lot (#556). It is what a lot bought sight-unseen — no title, no
+  // composition typed in yet — has instead of a name, and the only thing that ties the purchase
+  // line back to the catalogue the bid was made from.
+  lotNo: true,
   status: true,
   // The three the outcome is derived from — settlement acts on won lots, and won is no longer a
   // stored flag it could simply read (ADR-0021 §4).
@@ -2880,7 +2885,8 @@ export async function settleAuctionSale(
   // A lot the collector never named is titled after what it holds — the same derived label the
   // watchlist shows, resolved once here so the purchase line reads the same as the lot did. Stored
   // rather than derived on the purchase side, because from here on the line is a purchase's, and a
-  // purchase lot's title is a plain stored string (#121).
+  // purchase lot's title is a plain stored string (#121). A lot with neither, in turn, keeps the
+  // house's number (#556, `settlementLotTitle`).
   const labels = await lotTitlesFor(
     sale.collectionId,
     selected.map(({ lot }) => lot)
@@ -2921,7 +2927,7 @@ export async function settleAuctionSale(
       const purchaseLot = await tx.purchaseLot.create({
         data: {
           purchaseId: purchase.id,
-          title: lot.title ?? labels.get(lot.id) ?? null,
+          title: auctionLotName({ ...lot, derivedTitle: labels.get(lot.id) ?? null }),
           price: new Prisma.Decimal(price.toFixed(2)),
           status: "open",
         },

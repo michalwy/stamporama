@@ -706,6 +706,12 @@ closing each lot, freezing the cost basis.
 A lot with nothing described becomes a priced line with no copies, which you can identify on the
 purchase in the usual way.
 
+Each line is **named the way the lot was**: the title you gave it, or the name derived from what it
+holds, or — for a lot you bid on sight-unseen, with neither — the house's own **lot number**, as
+`Lot 42`. That last case is the common one when you buy an unopened stockbook: the number is all
+there is to go on, and it is what ties the line on the order back to the lot in the catalogue you
+were bidding from.
+
 Lost and cancelled lots are skipped and stay exactly where they are: a lost lot is a price
 observation, and that is the other half of what this feature is for. A sale where **nothing** was
 won has no purchase to make, so the button reads **Close sale** instead.

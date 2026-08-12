@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { settlementLinePrice } from "@/lib/auction-lot";
+import { auctionLotName } from "@/lib/auction-rules";
 import type { AuctionLotDetailView, AuctionSaleDetailView } from "../../use-auctions-query";
 import { formatDay } from "../../auction-format";
 
@@ -49,7 +50,7 @@ const NOTE: React.CSSProperties = {
 /** What a lot is called on the line it becomes. Mirrors the watchlist's own fallback order, so the
  * purchase line reads as the lot the collector was bidding on. */
 function lotLabel(lot: AuctionLotDetailView): string {
-  return lot.title ?? lot.derivedTitle ?? (lot.lotNo ? `Lot ${lot.lotNo}` : "Untitled lot");
+  return auctionLotName(lot) ?? "Untitled lot";
 }
 
 /** How many copies a lot's composition will produce — a line of quantity N is N copies. */

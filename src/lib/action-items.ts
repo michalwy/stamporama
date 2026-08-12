@@ -1,5 +1,6 @@
 import "server-only";
 import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
+import { auctionLotName } from "./auction-rules";
 import {
   offersNeedingAction,
   offersWithChangedListing,
@@ -145,7 +146,7 @@ interface ActionItemProvider {
 /** What a lot is called when the collector never titled it — the same fallback chain the lot list
  * makes, derived name included (#353). */
 function lotLabel(lot: AuctionLotListItem): string {
-  return lot.title ?? lot.derivedTitle ?? (lot.lotNo ? `Lot ${lot.lotNo}` : lot.saleName);
+  return auctionLotName(lot) ?? lot.saleName;
 }
 
 /** A lot row: named, attributed to its seller, and pointing at the parcel it settles in with the

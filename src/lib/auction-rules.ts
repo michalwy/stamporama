@@ -304,6 +304,27 @@ export interface AuctionLotLabelLine {
   quantity: number;
 }
 
+/**
+ * What a lot is called, in the one order every surface reads it in: the name the collector gave it,
+ * then the name derived from what it holds (#353), then the house's own number for it.
+ *
+ * The derived name outranks the number deliberately — `Mi·PL 1-12 · Definitives (1950)` says what
+ * the lot *is*, while `Lot 385` only says where it sits in someone else's catalogue. But a lot bid
+ * on sight-unseen has neither of the first two, and there the number is the only thing that
+ * identifies it at all: that is the case #556 was about, where settlement dropped it and the
+ * purchase line came out generically numbered, unattributable to the lot it was won as.
+ *
+ * Returns null when the lot answers to none of the three. Callers supply their own last resort,
+ * which differs by surface — a watchlist row says "Untitled lot", an action item names the sale.
+ */
+export function auctionLotName(lot: {
+  title: string | null;
+  derivedTitle?: string | null;
+  lotNo: string | null;
+}): string | null {
+  return lot.title || lot.derivedTitle || (lot.lotNo ? `Lot ${lot.lotNo}` : null);
+}
+
 /** Past this, a collapsed number list has stopped identifying the lot and started being a wall of
  * digits — the count says more. Truncating mid-range would print a span the lot does not hold. */
 const MAX_LABEL_NUMBERS = 48;

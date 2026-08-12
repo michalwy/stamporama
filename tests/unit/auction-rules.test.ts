@@ -15,6 +15,7 @@ import {
   normalizeAuctionUrl,
   parseAuctionAmount,
   parseAuctionInstant,
+  auctionLotName,
   deriveAuctionLotLabel,
   parseLotQuantity,
   parsePremiumPercent,
@@ -346,5 +347,36 @@ describe("deriveAuctionLotLabel", () => {
 
   it("has nothing to derive from an empty composition", () => {
     assert.equal(deriveAuctionLotLabel([]), null);
+  });
+});
+
+// auctionLotName -------------------------------------------------------------
+
+describe("auctionLotName", () => {
+  it("prefers the name the collector gave the lot", () => {
+    assert.equal(
+      auctionLotName({ title: "Box lot", derivedTitle: "Mi·PL 1-12", lotNo: "385" }),
+      "Box lot"
+    );
+  });
+
+  it("falls back to what the lot holds before the house's number", () => {
+    assert.equal(
+      auctionLotName({ title: null, derivedTitle: "Mi·PL 1-12", lotNo: "385" }),
+      "Mi·PL 1-12"
+    );
+  });
+
+  it("keeps the house's number for a lot bought sight-unseen (#556)", () => {
+    assert.equal(auctionLotName({ title: null, derivedTitle: null, lotNo: "42" }), "Lot 42");
+  });
+
+  it("answers to none of the three", () => {
+    assert.equal(auctionLotName({ title: null, derivedTitle: null, lotNo: null }), null);
+    assert.equal(auctionLotName({ title: "", lotNo: "" }), null);
+  });
+
+  it("reads a lot with no derived name at all", () => {
+    assert.equal(auctionLotName({ title: null, lotNo: "7" }), "Lot 7");
   });
 });

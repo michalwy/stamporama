@@ -276,6 +276,23 @@ describe("auction settlement (#28)", () => {
     assert.equal(purchase!.lots[0].title, "Alpha");
   });
 
+  it("keeps the house's lot number for a lot bought sight-unseen (#556)", async () => {
+    // The case the whole fallback exists for: no title, nothing described — an unopened stockbook
+    // bid on blind. Before #556 this line came out with no name at all, positionally numbered by
+    // the purchase screen and unattributable to the lot it was won as.
+    const saleId = await newSale("Blind parcel");
+    const lotId = await newLot(saleId, null);
+    await closeWon(userId, lotId, "10.00");
+
+    const { purchaseId } = await settleAuctionSale(userId, saleId, {
+      purchasedAt: "2026-03-06",
+      shippingCost: null,
+      lots: [{ lotId, price: 13 }],
+    });
+    const purchase = await getPurchaseDetail(userId, purchaseId);
+    assert.equal(purchase!.lots[0].title, "Lot 1");
+  });
+
   it("leaves out the won lots the collector excluded, and refuses a second settlement", async () => {
     const saleId = await newSale("Two wins, one parcel");
     const takenId = await newLot(saleId, "Taken");
