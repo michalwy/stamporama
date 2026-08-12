@@ -15,6 +15,7 @@ import {
 } from "@/lib/offer-rules";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import {
   RowQuickActions,
   pickRowActions,
@@ -134,7 +135,7 @@ export function OfferRow({
     });
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open", icon: "open", href: detailHref },
     ...(offer.url
       ? [{ key: "listing", label: "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
       : []),
@@ -186,12 +187,8 @@ export function OfferRow({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => router.push(detailHref)}
-        role="link"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(detailHref);
-        }}
         style={{
+          position: "relative",
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
@@ -199,6 +196,12 @@ export function OfferRow({
           opacity: terminal ? 0.7 : 1,
         }}
       >
+        <RowLink
+          href={detailHref}
+          label={offer.name ?? offer.label}
+          title={offer.name ?? offer.label}
+        />
+
         {/* Line 1: offer label + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
@@ -211,7 +214,6 @@ export function OfferRow({
               whiteSpace: "nowrap",
               maxWidth: "70%",
             }}
-            title={offer.name ?? offer.label}
           >
             {offer.name ?? offer.label}
           </span>
@@ -223,15 +225,18 @@ export function OfferRow({
               promotion is a shortcut past the menu, not a second copy of a control on the row. */}
           <span
             onClick={(e) => e.stopPropagation()}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+            style={{ ...ROW_LINK_ABOVE, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
           >
             <RowQuickActions actions={pickRowActions(menuActions, ["edit", "sell"])} visible={hovered} />
             <RowActionsMenu actions={menuActions} ariaLabel="Offer actions" />
           </span>
         </div>
 
-        {/* Line 2: number / platform / state / quantity / price */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+        {/* Line 2: number / platform / state / quantity / price. Lifted above the row's link
+            overlay (#557): nearly every chip on it carries a tooltip and one carries a button, and
+            an anchor drawn over them swallows both. A plain click here still opens the offer,
+            through the row's own handler. */}
+        <div style={{ ...ROW_LINK_ABOVE, display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
           {/* The offer's own short number (#416/#470), leading the line as it does on a purchase or
               a sale row: it identifies the row rather than describing it, and it is what the
               quick-jump box (#431) and the `/o/<slug>/<no>` address are typed from. */}

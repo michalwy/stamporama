@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import type { RowAction } from "./row-actions-menu";
 
 /** Which detail screen a row menu opens, and the route segment it lives under. */
@@ -24,14 +24,16 @@ const LABEL = {
  * The collection slug comes from the route rather than a prop, for the reason the offers popup
  * reads it there: these rows are rendered from a dozen screens and only ever under
  * `/c/[collectionSlug]`.
+ *
+ * It carries an `href` rather than a `router.push` (#557): this is *the* entry that goes
+ * somewhere, so it is the one that most has to answer a cmd-click and a right-click.
  */
 export function useDetailPageAction(kind: keyof typeof SEGMENT, id: string): RowAction {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
-  const router = useRouter();
   return {
     key: "detail-page",
     label: LABEL[kind],
     icon: "open",
-    onSelect: () => router.push(`/c/${collectionSlug}/${SEGMENT[kind]}/${id}`),
+    href: `/c/${collectionSlug}/${SEGMENT[kind]}/${id}`,
   };
 }

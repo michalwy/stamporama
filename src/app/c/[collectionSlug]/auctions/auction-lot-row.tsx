@@ -10,7 +10,12 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
-import { closingUrgency, isTerminalLotStatus, type ClosingUrgency } from "@/lib/auction-rules";
+import {
+  auctionLotName,
+  closingUrgency,
+  isTerminalLotStatus,
+  type ClosingUrgency,
+} from "@/lib/auction-rules";
 import {
   allIn,
   bidCosting,
@@ -243,10 +248,7 @@ function catalogHint(lot: AuctionLotView): string {
  * three, and an empty line reads as a bug.
  */
 function lotLabel(lot: AuctionLotView): string {
-  if (lot.title) return lot.title;
-  if (lot.derivedTitle) return lot.derivedTitle;
-  if (lot.lotNo) return `Lot ${lot.lotNo}`;
-  return "Untitled lot";
+  return auctionLotName(lot) ?? "Untitled lot";
 }
 
 /**
@@ -721,7 +723,7 @@ export function AuctionLotRow({
             key: "sale",
             label: "Open sale",
             icon: "open",
-            onSelect: () => router.push(highlightHref),
+            href: highlightHref,
           } as RowAction,
         ]
       : []),
@@ -832,6 +834,13 @@ export function AuctionLotRow({
           transition: "background 0.1s ease",
           // Only where the click goes somewhere. The pointer is the whole affordance — the row is
           // not a link element, so the keyboard route stays the ⋮ menu's *Open sale* entry.
+          //
+          // Deliberately **not** given `RowLink` (#557), unlike the offer, purchase, sale and
+          // auction-sale rows. Those are stacked cards of text with a control or two; this one is
+          // an amounts grid of inline-editable figures, quick-fill controls and popovers, so an
+          // overlay would have to be lifted off nearly every part of the row and would end up
+          // covering the gaps between them. `handleRowClick` already answers a modified click with
+          // a new tab, and *Open sale* in the menu is the real link.
           cursor: linkToSale ? "pointer" : undefined,
           // Anything finished recedes: a settled outcome, and a lot whose moment has gone by. The
           // list is a watchlist, and what is over should not compete with what is running.

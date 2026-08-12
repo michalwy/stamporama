@@ -38,6 +38,20 @@ Each page carries a back link to the list it came from. The three pages also lin
 copy links to its stamp, a stamp links to its issues and its variants, an issue links to every
 stamp in it.
 
+## Opening things in a new tab
+
+Anything in the app that goes somewhere is a **real link**, so your browser's own habits work on it:
+**cmd/ctrl+click** or the **middle mouse button** opens it in a new tab, and **right-clicking** it
+offers *Open link in new tab*, *Copy link address* and the rest of that menu.
+
+That covers the arrow icons and the ⋮ entries above, and the list rows themselves — an offer, a
+purchase, a sale and an auction sale all open from anywhere on the row, which means anywhere on the
+row can be middle-clicked or right-clicked too. The exception is the **chip line** under a row's
+name: those chips have hover explanations and controls of their own, so a plain click there still
+opens the row, but the new-tab shortcuts want the row's **name**. On the busy **Auction lots** rows,
+where the row is a grid of editable figures, use the row's **⋮ → Open sale**, or hold cmd/ctrl while
+clicking the row.
+
 The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 `/c/[slug]/issues/[issueId]`, so a page can be bookmarked or kept open in a second tab.
 

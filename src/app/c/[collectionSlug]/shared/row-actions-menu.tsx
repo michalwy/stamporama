@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { Icon, type IconName } from "@/app/icons";
 import { Tooltip } from "./tooltip";
 
@@ -13,7 +14,21 @@ export interface RowAction {
   /** Leading icon for discoverability, named from the app's vocabulary (#459). The menu sizes and
    * colours it, so every row menu in the app looks alike. */
   icon?: IconName;
-  onSelect: () => void;
+  /**
+   * Where the entry **goes**, for the entries that go somewhere in the app (#557). An entry with
+   * one is drawn as a real `<a href>` — here and, when it is promoted onto the row, as the icon
+   * button too — so cmd/ctrl+click, the middle button and the browser's own *Open link in new tab*
+   * all work, which an `onSelect` calling `router.push` gives none of.
+   *
+   * Give this **instead of** `onSelect` for a navigation: the two together would navigate twice.
+   * `onSelect` stays what every other kind of entry uses — opening a dialog, running a mutation,
+   * opening a marketplace page in a new window — since none of those is a place with an address.
+   *
+   * A `disabled` entry falls back to the plain button: an anchor cannot be disabled, and a link
+   * that is styled dead but still followed is worse than no link.
+   */
+  href?: string;
+  onSelect?: () => void;
   /** Renders in the error color (used for delete). */
   danger?: boolean;
   disabled?: boolean;
@@ -207,43 +222,26 @@ export function RowActionsMenu({
             style={{ ...menuStyle, zIndex, top: pos.top, right: pos.right }}
             onClick={(e) => e.stopPropagation()}
           >
-            {actions.map((a) => (
-              <Fragment key={a.key}>
-                {a.separatorBefore && (
-                  <div
-                    role="separator"
-                    style={{
-                      height: 1,
-                      background: "var(--color-border)",
-                      margin: "0.2rem 0.15rem",
-                    }}
-                  />
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={a.disabled}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    a.onSelect();
-                  }}
-                  style={{
-                    ...itemBaseStyle,
-                    color: a.danger ? "var(--color-error)" : "var(--color-text-primary)",
-                    opacity: a.disabled ? 0.5 : 1,
-                    cursor: a.disabled ? "not-allowed" : "pointer",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!a.disabled)
-                      e.currentTarget.style.background = a.danger
-                        ? "var(--color-error-soft)"
-                        : "var(--color-bg-row-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                  }}
-                >
+            {actions.map((a) => {
+              const itemStyle: React.CSSProperties = {
+                ...itemBaseStyle,
+                color: a.danger ? "var(--color-error)" : "var(--color-text-primary)",
+                opacity: a.disabled ? 0.5 : 1,
+                cursor: a.disabled ? "not-allowed" : "pointer",
+              };
+              const hover = {
+                onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+                  if (!a.disabled)
+                    e.currentTarget.style.background = a.danger
+                      ? "var(--color-error-soft)"
+                      : "var(--color-bg-row-hover)";
+                },
+                onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+                  e.currentTarget.style.background = "transparent";
+                },
+              };
+              const body = (
+                <>
                   {a.icon != null && (
                     <span style={iconStyle}>
                       <Icon name={a.icon} size="sm" />
@@ -267,9 +265,57 @@ export function RowActionsMenu({
                       </span>
                     )}
                   </span>
-                </button>
-              </Fragment>
-            ))}
+                </>
+              );
+              return (
+                <Fragment key={a.key}>
+                  {a.separatorBefore && (
+                    <div
+                      role="separator"
+                      style={{
+                        height: 1,
+                        background: "var(--color-border)",
+                        margin: "0.2rem 0.15rem",
+                      }}
+                    />
+                  )}
+                  {/* An entry that goes somewhere is a real link (#557), so the browser's own
+                      new-tab affordances work on it. The click still closes the menu — a
+                      cmd-click leaves the menu open over a page that did not move otherwise —
+                      but it is not stopped, or the anchor would never be followed. */}
+                  {a.href && !a.disabled ? (
+                    <Link
+                      href={a.href}
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(false);
+                        a.onSelect?.();
+                      }}
+                      style={{ ...itemStyle, textDecoration: "none" }}
+                      {...hover}
+                    >
+                      {body}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={a.disabled}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(false);
+                        a.onSelect?.();
+                      }}
+                      style={itemStyle}
+                      {...hover}
+                    >
+                      {body}
+                    </button>
+                  )}
+                </Fragment>
+              );
+            })}
           </div>,
           document.body
         )}

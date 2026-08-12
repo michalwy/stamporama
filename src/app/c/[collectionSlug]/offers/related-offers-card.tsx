@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
 import { isTerminalState } from "@/lib/offer-rules";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import {
@@ -63,12 +64,8 @@ export function OfferTargetRow({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={() => router.push(detailHref)}
-      role="link"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") router.push(detailHref);
-      }}
       style={{
+        position: "relative",
         padding: "0.75rem 1.25rem",
         borderBottom: isLast ? undefined : "1px solid var(--color-border)",
         background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
@@ -77,6 +74,12 @@ export function OfferTargetRow({
         opacity: isTerminalState(offer.state) ? 0.7 : 1,
       }}
     >
+      <RowLink
+        href={detailHref}
+        label={offer.name ?? offer.label}
+        title={offer.name ?? offer.label}
+      />
+
       <div
         style={{
           fontSize: "0.9375rem",
@@ -86,13 +89,15 @@ export function OfferTargetRow({
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}
-        title={offer.name ?? offer.label}
       >
         {offer.name ?? offer.label}
       </div>
 
+      {/* Above the row's link overlay (#557): every chip here carries a tooltip and one is a
+          marketplace link. A plain click still opens the offer, through the row's handler. */}
       <div
         style={{
+          ...ROW_LINK_ABOVE,
           display: "flex",
           alignItems: "center",
           gap: "0.375rem",

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { RenderedDescription } from "@/app/c/[collectionSlug]/shared/rendered-description";
@@ -192,7 +191,6 @@ export function ListingOfferCard({
   isPublishing: boolean;
   isPending: boolean;
 }) {
-  const router = useRouter();
   const title = offer.name ?? offer.label;
   const photos = photoSummary(offer);
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
@@ -201,7 +199,7 @@ export function ListingOfferCard({
   // Publish is the quick action, everything else lives in the ⋮ — the same division the Offers row
   // makes between its quick-advance button and its menu.
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open offer", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open offer", icon: "open", href: detailHref },
     {
       key: "preparing",
       label: "Back to preparing",

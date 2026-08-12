@@ -773,9 +773,8 @@ export function InventoryListPanel({
           ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
           : undefined,
       onViewOffers: (it) => setDialog({ kind: "viewOffers", item: it }),
-      onViewPurchase: (it) =>
-        it.purchase &&
-        router.push(`/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}`),
+      purchaseHref: (it) =>
+        it.purchase ? `/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}` : null,
       onDispose: (it) => setDialog({ kind: "dispose", item: it }),
       onRestore: (it) => setDialog({ kind: "restore", item: it }),
       exclusionPlatform: scopedPlatform,
@@ -784,7 +783,6 @@ export function InventoryListPanel({
       onSetCatalogPrice: (it) => setDialog({ kind: "quickPrice", item: it }),
     }),
     [
-      router,
       collectionSlug,
       scopedPlatform,
       applyPlatformExclusion,

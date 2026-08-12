@@ -6,6 +6,7 @@ import type { SaleListItem } from "@/lib/sales";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 import { Icon } from "@/app/icons";
 
@@ -45,7 +46,7 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
   // destructive. A promotion with nothing left to promote is two dimmed icons duplicating controls
   // the collector can already see, which is the sprawl the pattern exists to avoid.
   const menuActions: RowAction[] = [
-    { key: "view", label: "View", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "view", label: "View", icon: "open", href: detailHref },
     ...(sale.transactionUrl
       ? [
           {
@@ -76,18 +77,16 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => router.push(detailHref)}
-        role="link"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(detailHref);
-        }}
         style={{
+          position: "relative",
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           cursor: "pointer",
         }}
       >
+        <RowLink href={detailHref} label={`Sale ${formatSaleDate(sale.soldAt)}`} />
+
         {/* Line 1: date + platform + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
@@ -115,14 +114,17 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
             {sale.externalRef ? ` · #${sale.externalRef}` : ""}
           </span>
           <span style={{ flex: 1 }} />
-          <span onClick={(e) => e.stopPropagation()}>
+          <span onClick={(e) => e.stopPropagation()} style={ROW_LINK_ABOVE}>
             <RowActionsMenu actions={menuActions} ariaLabel="Sale actions" />
           </span>
         </div>
 
-        {/* Line 2: counts + proceeds */}
+        {/* Line 2: counts + proceeds. Lifted above the row's link overlay (#557) — every chip on
+            it carries a tooltip, and an anchor drawn over one swallows the hover it exists for.
+            A plain click here still opens the sale through the row's own handler. */}
         <div
           style={{
+            ...ROW_LINK_ABOVE,
             display: "flex",
             alignItems: "center",
             gap: "0.375rem",

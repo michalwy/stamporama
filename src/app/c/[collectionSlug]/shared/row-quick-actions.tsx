@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "./tooltip";
 import type { RowAction } from "./row-actions-menu";
@@ -68,44 +69,68 @@ export function RowQuickActions({
         transition: "opacity 0.1s ease",
       }}
     >
-      {actions.map((a) => (
-        // The menu draws an action's `hint` as a muted second line, and a blocked action is
-        // disabled *with* its reason rather than hidden (#273). An icon has no second line, so
-        // the hint joins the tooltip — otherwise a promoted action greys out saying nothing.
-        <Tooltip
-          key={a.key}
-          content={a.hint ? `${a.label} — ${a.hint}` : a.label}
-        >
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={a.label}
-            disabled={a.disabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              a.onSelect();
-            }}
-            onMouseEnter={(e) => {
-              if (a.disabled) return;
-              e.currentTarget.style.background = "var(--color-bg-page)";
-              e.currentTarget.style.borderColor = "var(--color-border-strong)";
-              e.currentTarget.style.color = "var(--color-text-primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "transparent";
-              e.currentTarget.style.color = "var(--color-text-secondary)";
-            }}
-            style={{
-              ...buttonStyle,
-              opacity: a.disabled ? 0.4 : 1,
-              cursor: a.disabled ? "not-allowed" : "pointer",
-            }}
-          >
-            {a.icon != null && <Icon name={a.icon} />}
-          </button>
-        </Tooltip>
-      ))}
+      {actions.map((a) => {
+        const style: CSSProperties = {
+          ...buttonStyle,
+          opacity: a.disabled ? 0.4 : 1,
+          cursor: a.disabled ? "not-allowed" : "pointer",
+        };
+        const hover = {
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+            if (a.disabled) return;
+            e.currentTarget.style.background = "var(--color-bg-page)";
+            e.currentTarget.style.borderColor = "var(--color-border-strong)";
+            e.currentTarget.style.color = "var(--color-text-primary)";
+          },
+          onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.borderColor = "transparent";
+            e.currentTarget.style.color = "var(--color-text-secondary)";
+          },
+        };
+        const icon = a.icon != null && <Icon name={a.icon} />;
+        return (
+          // The menu draws an action's `hint` as a muted second line, and a blocked action is
+          // disabled *with* its reason rather than hidden (#273). An icon has no second line, so
+          // the hint joins the tooltip — otherwise a promoted action greys out saying nothing.
+          <Tooltip key={a.key} content={a.hint ? `${a.label} — ${a.hint}` : a.label}>
+            {/* A promoted navigation is the same real link its menu entry is (#557): the icon is
+                the shortcut a collector reaches for most, so it is the *last* place that should
+                refuse a cmd-click. Still out of the tab order, for #445/#446's reason — the menu
+                entry behind it is the keyboard route. */}
+            {a.href && !a.disabled ? (
+              <Link
+                href={a.href}
+                tabIndex={-1}
+                aria-label={a.label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  a.onSelect?.();
+                }}
+                style={style}
+                {...hover}
+              >
+                {icon}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={a.label}
+                disabled={a.disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  a.onSelect?.();
+                }}
+                style={style}
+                {...hover}
+              >
+                {icon}
+              </button>
+            )}
+          </Tooltip>
+        );
+      })}
     </span>
   );
 }

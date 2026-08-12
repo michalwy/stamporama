@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { AuctionSaleView } from "../use-auctions-query";
 import { SaleStatusChip } from "../auction-badges";
@@ -32,7 +33,7 @@ export function AuctionSaleRow({
   const detailHref = `/c/${collectionSlug}/auctions/sales/${sale.id}`;
 
   const actions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open", icon: "open", href: detailHref },
     ...(sale.url
       ? [
           {
@@ -51,7 +52,7 @@ export function AuctionSaleRow({
             key: "purchase",
             label: "Open purchase",
             icon: "receipt",
-            onSelect: () => router.push(`/c/${collectionSlug}/purchases/${sale.purchaseId}`),
+            href: `/c/${collectionSlug}/purchases/${sale.purchaseId}`,
           } as RowAction,
         ]
       : []),
@@ -81,18 +82,16 @@ export function AuctionSaleRow({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => router.push(detailHref)}
-        role="link"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(detailHref);
-        }}
         style={{
+          position: "relative",
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           cursor: "pointer",
         }}
       >
+        <RowLink href={detailHref} label={sale.name} title={sale.name} />
+
         {/* Line 1: what the parcel is, and what it will cost */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
@@ -105,11 +104,14 @@ export function AuctionSaleRow({
               whiteSpace: "nowrap",
               maxWidth: "50%",
             }}
-            title={sale.name}
           >
             {sale.name}
           </span>
-          <SaleStatusChip status={sale.status} />
+          {/* The chips and figures on line 1 carry tooltips of their own, so they sit above the
+              row's link overlay (#557) — the name to their left is the link's own surface. */}
+          <span style={ROW_LINK_ABOVE}>
+            <SaleStatusChip status={sale.status} />
+          </span>
           {sale.endsAt && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               closes {formatDay(sale.endsAt)}
@@ -119,33 +121,37 @@ export function AuctionSaleRow({
           {/* The parcel's one headline figure, and what it comes to in the collection's own
               currency (#498) — the whole row exists to be scanned for "what is this costing me",
               which is a question asked in the money the collector counts in. */}
-          <AmountWithBase
-            amount={sale.summary.allInTotal}
-            rate={sale.baseRate}
-            baseCurrency={sale.baseCurrency}
-          >
-            <Tooltip content="Bids, premium and shipping over the lots you would pay for">
-              <span
-                style={{
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                  fontVariantNumeric: "tabular-nums",
-                  color: "var(--color-text-primary)",
-                }}
-              >
-                {sale.summary.allInTotal} {sale.currency}
-              </span>
-            </Tooltip>
-          </AmountWithBase>
+          <span style={{ ...ROW_LINK_ABOVE, display: "inline-flex" }}>
+            <AmountWithBase
+              amount={sale.summary.allInTotal}
+              rate={sale.baseRate}
+              baseCurrency={sale.baseCurrency}
+            >
+              <Tooltip content="Bids, premium and shipping over the lots you would pay for">
+                <span
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  {sale.summary.allInTotal} {sale.currency}
+                </span>
+              </Tooltip>
+            </AmountWithBase>
+          </span>
           {/* The menu is inside the clickable row, so its own clicks must not open the sale too. */}
-          <span onClick={(e) => e.stopPropagation()}>
+          <span onClick={(e) => e.stopPropagation()} style={ROW_LINK_ABOVE}>
             <RowActionsMenu actions={actions} ariaLabel="Sale actions" />
           </span>
         </div>
 
-        {/* Line 2: who it is with, and how its lots stand */}
+        {/* Line 2: who it is with, and how its lots stand. Above the link overlay (#557), for the
+            tooltips on the counts. */}
         <div
           style={{
+            ...ROW_LINK_ABOVE,
             marginTop: "0.375rem",
             fontSize: "0.8125rem",
             color: "var(--color-text-secondary)",

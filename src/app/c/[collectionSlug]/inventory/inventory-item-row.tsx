@@ -357,8 +357,12 @@ interface InventoryItemRowProps {
   quickOffer?: { platformName: string; stateLabel: string };
   /** When provided, adds a "Go to purchase" menu entry on a copy that came from a purchase order
    * (#387). Shown **only** when the copy has one: a copy entered by hand was never bought through
-   * an order, so there is no precondition to explain — nothing on the row promises otherwise. */
-  onViewPurchase?: (item: ItemListItem) => void;
+   * an order, so there is no precondition to explain — nothing on the row promises otherwise.
+   *
+   * It hands back the **address** rather than performing the navigation (#557), so the entry — and
+   * the icon it is promoted to — is a real link the browser can open in a new tab. The copy row is
+   * rendered from eight screens and none of them knows this route; each simply builds it. */
+  purchaseHref?: (item: ItemListItem) => string | null;
   /** When provided, adds a "View offers" menu entry opening the read-only popup of every offer
    * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
    * question as a live one's, and the row carries no offer count to hide it by. */
@@ -404,7 +408,7 @@ export function InventoryItemRow({
   onAddToNewOffer,
   quickOffer,
   onViewOffers,
-  onViewPurchase,
+  purchaseHref,
   onDispose,
   onRestore,
   exclusionPlatform,
@@ -474,13 +478,13 @@ export function InventoryItemRow({
       // "open a read-only list of related records".
       ? [{ key: "offers", label: "View offers", icon: "list", onSelect: () => onViewOffers(item) } as RowAction]
       : []),
-    ...(onViewPurchase && item.purchase
+    ...(purchaseHref?.(item) && item.purchase
       ? [{
           key: "purchase",
           label: "Go to purchase",
           icon: "receipt",
           hint: item.purchase.label,
-          onSelect: () => onViewPurchase(item),
+          href: purchaseHref(item)!,
         } as RowAction]
       : []),
     ...(onAddToOffer && item.forSale

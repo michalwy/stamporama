@@ -10,6 +10,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -71,7 +72,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
   const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", onSelect: () => router.push(detailHref) },
+    { key: "open", label: "Open", icon: "open", href: detailHref },
     { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(p) },
     {
       key: "delete",
@@ -89,18 +90,16 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => router.push(detailHref)}
-        role="link"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(detailHref);
-        }}
         style={{
+          position: "relative",
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           cursor: "pointer",
         }}
       >
+        <RowLink href={detailHref} label={p.contactName ?? "No supplier"} />
+
         {/* Line 1: supplier (· via platform) + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
           <span
@@ -119,7 +118,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             {p.contactName ?? "No supplier"}
           </span>
           {p.platformName && (
-            <Tooltip content={`Bought via ${p.platformName}`}>
+            <Tooltip content={`Bought via ${p.platformName}`} style={ROW_LINK_ABOVE}>
               <span style={META_INLINE}>via {p.platformName}</span>
             </Tooltip>
           )}
@@ -130,15 +129,16 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
               this list repeats without opening the purchase. */}
           <span
             onClick={(e) => e.stopPropagation()}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+            style={{ ...ROW_LINK_ABOVE, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
           >
             <RowQuickActions actions={pickRowActions(menuActions, ["edit"])} visible={hovered} />
             <RowActionsMenu actions={menuActions} ariaLabel="Purchase actions" />
           </span>
         </div>
 
-        {/* Line 2: number + date + status */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem" }}>
+        {/* Line 2: number + date + status. Lifted above the row's link overlay (#557), as line 3
+            is, so the chips on it keep the tooltips that say what they are. */}
+        <div style={{ ...ROW_LINK_ABOVE, display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem" }}>
           <EntityNoChip entity="purchase" no={p.purchaseNo} prefix="p" />
           <span style={META_INLINE}>{p.purchasedAt}</span>
           <Tooltip content="Delivery status">
@@ -149,6 +149,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
         {/* Line 3: line-count / shipping chips + total */}
         <div
           style={{
+            ...ROW_LINK_ABOVE,
             display: "flex",
             alignItems: "center",
             gap: "0.375rem",
