@@ -147,6 +147,29 @@ copies (no catalog price for their condition) and *pending* cost (a copy whose l
 open, so its cost-basis is not frozen yet). The order-level bar totals every copy across all
 lots; each lot's bar totals just that lot.
 
+**Spent vs. realized.** Once a copy in view has been **sold** ([Sales](sales.md)), three more rows
+appear on that same bar — under a rule, because the rows above are what these copies are *worth* and
+the rows below what they have *made*. Both levels answer it for their own copies: the order-level
+bar for the whole parcel, each lot's bar for that lot alone.
+
+- **Realized** — the sale proceeds of the sold copies, *net*: after the platform's commission, plus
+  what the buyer paid towards postage, minus what the shipping actually cost you, all in your base
+  currency. Beside it, how many copies in scope have sold — *3 of 10 copies sold*.
+- **Net return** — realized minus everything spent on those copies, with a percentage. The spend is
+  named on the row, since it is the purchase cost *and* any write-offs together: money spent on a
+  copy you have since lost was still spent. (Copies that never arrived are left out of every figure
+  here — they cost nothing and can never sell.) This is the *has this parcel paid for itself yet*
+  figure, so it stays negative until enough has sold.
+- **On sold** — realized minus what those *sold* copies cost, with a percentage. The other question:
+  how the sales themselves went, regardless of how much is still unsold. Both are shown because
+  neither answers the other.
+
+The figures are live, not final: they move as more sells. Where a sale's copies came from several
+different purchases — or from two different lots of one purchase — each copy's share of that sale is
+worked out from its catalog price, the same split the sale itself uses. If a copy on such a shared
+sale has no catalog price, its share cannot be worked out at all: it is still counted as sold, and
+the bar says so (*1 not attributable here*) rather than quietly counting it as nothing.
+
 ### Identifying stamps (intake)
 
 A large lot is rarely sorted in one sitting — you identify stamps into it as you work through

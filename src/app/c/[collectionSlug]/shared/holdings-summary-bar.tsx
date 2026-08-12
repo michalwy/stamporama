@@ -1,6 +1,7 @@
 "use client";
 
 import type { HoldingsSummary } from "@/lib/valuation";
+import type { PurchaseReturn } from "@/lib/purchase-return";
 
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: "0.6875rem",
@@ -83,13 +84,105 @@ function HoldingsSummaryBarSkeleton() {
   );
 }
 
+/** A gain is stated in the accent-positive hue and a loss in the error one (#559). A bare figure in
+ * the same colour as everything above it is one a collector has to read twice to tell which way it
+ * went. */
+function signedStyle(amount: string): React.CSSProperties {
+  return {
+    ...AMOUNT_STYLE,
+    color:
+      Number(amount) < 0 ? "var(--color-error)" : "var(--color-success, var(--color-text-primary))",
+  };
+}
+
+/** `+120.00` / `−12.00` — the sign is always printed, the minus being the typographic one the
+ * write-off row already uses. */
+function signed(amount: string): string {
+  const value = Number(amount);
+  return value < 0 ? `−${Math.abs(value).toFixed(2)}` : `+${value.toFixed(2)}`;
+}
+
+function percentNote(percent: number | null): string {
+  return percent == null ? "" : ` · ${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
+}
+
+function copiesWord(n: number): string {
+  return `cop${n === 1 ? "y" : "ies"}`;
+}
+
+/**
+ * What this scope has earned back so far (#559), as further rows of the bar rather than a frame of
+ * its own: cost and return are the two halves of one question about the very same copies, and two
+ * stacked boxes would make them look like two subjects.
+ *
+ * **Only once something has sold.** A scope with nothing sold has no return to state, and a
+ * standing `+0.00 / −100%` on every purchase and every lot would be noise wearing a figure's
+ * clothes — the cost side above already says what was spent.
+ */
+function ReturnRows({ ret }: { ret: PurchaseReturn }) {
+  return (
+    <>
+      <div style={ROW_STYLE}>
+        <span style={LABEL_STYLE}>Realized</span>
+        <span style={AMOUNT_STYLE}>
+          {ret.realized} {ret.baseCurrency}
+        </span>
+        <span style={NOTE_STYLE}>
+          {ret.soldCount} of {ret.copyCount} {copiesWord(ret.copyCount)} sold
+          {/* A sold copy whose sale line mixed several purchases and could not be split (ADR-0012
+              §6.3) is stated rather than silently counted as nothing: the figure is short, and by
+              how many copies is the only honest thing to say about it. */}
+          {ret.unattributedCount > 0 ? ` · ${ret.unattributedCount} not attributable here` : ""}
+        </span>
+      </div>
+      <div style={ROW_STYLE}>
+        <span style={LABEL_STYLE}>Net return</span>
+        <span style={signedStyle(ret.netReturn)}>
+          {signed(ret.netReturn)} {ret.baseCurrency}
+        </span>
+        {/* The spend is named rather than left to be read off the rows above: those split what was
+            paid into what is still held and what was written off (#396), and this figure is both. */}
+        <span style={NOTE_STYLE}>
+          against {ret.spent.totalCostBasis} {ret.spent.baseCurrency} spent on all {ret.copyCount}{" "}
+          {copiesWord(ret.copyCount)}
+          {percentNote(ret.netReturnPercent)}
+        </span>
+      </div>
+      {/* The figure above reads deeply negative until most of a purchase has sold, which says
+          nothing about how the sales went. This one does: realized against the cost of the copies
+          that actually left. Both, because neither answers the other. */}
+      <div style={ROW_STYLE}>
+        <span style={LABEL_STYLE}>On sold</span>
+        <span style={signedStyle(ret.soldMargin)}>
+          {signed(ret.soldMargin)} {ret.baseCurrency}
+        </span>
+        <span style={NOTE_STYLE}>
+          against {ret.soldCost.totalCostBasis} {ret.soldCost.baseCurrency} spent on the{" "}
+          {ret.soldCount} sold {copiesWord(ret.soldCount)}
+          {percentNote(ret.soldMarginPercent)}
+        </span>
+      </div>
+    </>
+  );
+}
+
 /** Holdings summary for the current filter set (ADR-0007 §7, #101; ADR-0009, #134). Shows
  * two lines over the same copy set: the summed **catalog value** in the base currency (with
  * the uncertain/unpriced/unconvertible breakdown), and the total **actual purchase cost** —
  * the frozen cost-basis snapshots — calling out copies whose cost is still pending (open
  * lot) or has no cost recorded. Renders a fixed-height skeleton until the figures have loaded
- * so no layout shift occurs (#151). */
-export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefined }) {
+ * so no layout shift occurs (#151).
+ *
+ * `ret` (#559) adds the return rows beneath, on the surfaces that know what the same copies have
+ * since fetched — a purchase order and each of its lots. Omitted everywhere else, and drawn only
+ * once something in scope has sold. */
+export function HoldingsSummaryBar({
+  total,
+  ret,
+}: {
+  total: HoldingsSummary | undefined;
+  ret?: PurchaseReturn;
+}) {
   if (!total) return <HoldingsSummaryBarSkeleton />;
 
   const valuationNotes: string[] = [];
@@ -188,6 +281,20 @@ export function HoldingsSummaryBar({ total }: { total: HoldingsSummary | undefin
             {writeOffNotes.length > 0 ? ` · ${writeOffNotes.join(" · ")}` : ""}
           </span>
         </div>
+      )}
+      {/* What the same copies have since fetched (#559) — a rule under them, because the rows above
+          are what this scope *is worth* and the rows below what it has *made*. */}
+      {ret && ret.soldCount > 0 && (
+        <>
+          <hr
+            style={{
+              margin: "0.25rem 0",
+              border: 0,
+              borderTop: "1px solid var(--color-border)",
+            }}
+          />
+          <ReturnRows ret={ret} />
+        </>
       )}
     </div>
   );

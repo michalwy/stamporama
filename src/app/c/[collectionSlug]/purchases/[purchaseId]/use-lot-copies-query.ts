@@ -8,6 +8,7 @@ import type {
   LotIntakeSummary,
   PurchaseIntakeSummary,
 } from "@/lib/items";
+import type { PurchaseReturn } from "@/lib/purchase-return";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -34,6 +35,10 @@ export const lotCopiesKeys = {
     ["lot-copies", collectionId, "purchase", purchaseId, "list", params] as const,
   purchaseSummary: (collectionId: string, purchaseId: string) =>
     ["lot-copies", collectionId, "purchase", purchaseId, "summary"] as const,
+  purchaseReturn: (collectionId: string, purchaseId: string) =>
+    ["lot-copies", collectionId, "purchase", purchaseId, "return"] as const,
+  lotReturn: (collectionId: string, lotId: string) =>
+    ["lot-copies", collectionId, lotId, "return"] as const,
 };
 
 function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchParams {
@@ -122,6 +127,37 @@ export function usePurchaseSummary(collectionId: string, purchaseId: string, ena
         `/api/collections/${collectionId}/purchases/${purchaseId}/copies/summary`
       );
       if (!res.ok) throw new Error("Failed to fetch purchase summary");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
+/** What the order cost against what selling its copies has brought back (#559). Keyed under the
+ * purchase's copies, since attaching, removing or closing copies moves the figure exactly as a sale
+ * does — one invalidation covers both. */
+export function usePurchaseReturn(collectionId: string, purchaseId: string, enabled = true) {
+  return useQuery<PurchaseReturn>({
+    queryKey: lotCopiesKeys.purchaseReturn(collectionId, purchaseId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/purchases/${purchaseId}/return`);
+      if (!res.ok) throw new Error("Failed to fetch purchase return");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
+/** The same figure for one lot (#559). Loaded beside the lot's own summary, and only while the lot
+ * card is expanded — a collapsed lot draws no bar to put it in. */
+export function useLotReturn(collectionId: string, lotId: string, enabled = true) {
+  return useQuery<PurchaseReturn>({
+    queryKey: lotCopiesKeys.lotReturn(collectionId, lotId),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/lots/${lotId}/return`
+      );
+      if (!res.ok) throw new Error("Failed to fetch lot return");
       return res.json();
     },
     enabled,

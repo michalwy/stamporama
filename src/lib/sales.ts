@@ -7,7 +7,13 @@ import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { isSellableOfferState } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
 import { sortSetItems } from "./offer-set-order";
-import { allocateEntityNumber, listItemsPaginated, type ItemListItem } from "./items";
+import {
+  allocateEntityNumber,
+  listItemsPaginated,
+  valuateItemsByIds,
+  type ItemListItem,
+} from "./items";
+import { attributeLineToPurchase } from "./purchase-return";
 import { resolveShippingMethodForPlatform } from "./shipping-methods";
 import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
@@ -1457,6 +1463,111 @@ export async function listSaleCopies(
     pageSize: ids.length,
   });
   return withPacked(items);
+}
+
+// ── Realized proceeds, per copy ───────────────────────────────────────────────
+
+/** What a set of copies has fetched, net, in the base currency (#559). */
+export interface RealizedProceeds {
+  /** Σ base-currency net proceeds attributed to the asked-about copies, 2 dp. May be negative — a
+   * sale whose fees exceeded its price. */
+  total: number;
+  /** The asked-about copies that have sold and whose proceeds are inside {@link total}. It is a
+   * figure over the group, not per copy: a line carried whole (see below) never says what each of
+   * its copies fetched, and inventing a per-copy share would be a number nothing computed. */
+  resolved: Set<string>;
+  /** Copies that have sold but whose share of a mixed sale line could not be resolved (ADR-0012
+   * §6.3 blocked the split). They sold; what they fetched is unknown, which is not zero. */
+  unresolved: Set<string>;
+}
+
+/**
+ * Net proceeds attributed to specific copies, across every sale they left on (#559).
+ *
+ * The allocation is the sale's own (`distributeSaleShared` → `allocateSaleLine`, ADR-0012 §6), run
+ * over the **whole** sale rather than the asked-about copies: the shared amounts are distributed
+ * across every line by price, so a figure derived from a subset of a sale's lines would not be the
+ * one the sale screen shows. A line whose copies are *all* in the asked-about set takes its net
+ * whole, without a per-copy split — see `attributeLineToPurchase`, which owns that rule.
+ *
+ * Ownership is the caller's to assert: this is a read model over ids it is handed.
+ */
+export async function realizedProceedsForItems(
+  collectionId: string,
+  itemIds: string[]
+): Promise<RealizedProceeds> {
+  const empty: RealizedProceeds = { total: 0, resolved: new Set(), unresolved: new Set() };
+  if (itemIds.length === 0) return empty;
+
+  const asked = new Set(itemIds);
+  const sales = await prisma.sale.findMany({
+    where: { collectionId, lines: { some: { items: { some: { itemId: { in: itemIds } } } } } },
+    select: {
+      currency: true,
+      fxRateToBase: true,
+      buyerHandling: true,
+      buyerPaidTotal: true,
+      commission: true,
+      shippingCost: true,
+      shippingCurrency: true,
+      shippingFxRateToBase: true,
+      collection: { select: { baseCurrency: true } },
+      lines: { select: { id: true, price: true, items: { select: { itemId: true } } } },
+    },
+  });
+  if (sales.length === 0) return empty;
+
+  // Only a mixed line needs catalogue weights, but resolving them once for every copy on every
+  // touched sale is one query against N — the weights are the same rule the sale screen uses.
+  const valuations = await valuateItemsByIds(
+    collectionId,
+    [...new Set(sales.flatMap((s) => s.lines.flatMap((l) => l.items.map((i) => i.itemId))))]
+  );
+
+  // Accumulated in whole cents: a sum of 2-dp shares is exact there and drifts in floats.
+  let totalCents = 0;
+  const resolved = new Set<string>();
+  const unresolved = new Set<string>();
+  for (const sale of sales) {
+    const gross = sale.lines.reduce((sum, l) => sum + Number(l.price), 0);
+    const { handling } = resolveBuyerHandling(sale.buyerHandling, sale.buyerPaidTotal, gross);
+    const shippingBase = shippingToBase(
+      sale.shippingCost,
+      sale.shippingCurrency,
+      sale.shippingFxRateToBase,
+      sale.collection.baseCurrency
+    );
+    const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({
+      id: l.id,
+      price: Number(l.price),
+    }));
+    // Same guard the detail screen applies (#163): the shared amounts are distributed by line
+    // price, so a sale with nothing but zero-priced lines cannot be allocated and each line stands
+    // at its own price — which is zero, and brings the order nothing until it is priced.
+    const canDistribute = gross > 0;
+    const nets = canDistribute ? distributeSaleShared({
+      buyerHandling: handling,
+      shippingBase,
+      commission: num(sale.commission),
+      fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
+    }, lineInputs) : [];
+    const netById = new Map(nets.map((n) => [n.id, n.netBase]));
+
+    for (const line of sale.lines) {
+      const attributed = attributeLineToPurchase(
+        netById.get(line.id) ?? Number(line.price),
+        line.items.map((i) => ({
+          id: i.itemId,
+          catalogPrice: valuations.get(i.itemId)?.baseAmount ?? null,
+        })),
+        (itemId) => asked.has(itemId)
+      );
+      for (const id of attributed.unresolvedItemIds) unresolved.add(id);
+      for (const id of attributed.resolvedItemIds) resolved.add(id);
+      totalCents += Math.round(attributed.proceeds * 100);
+    }
+  }
+  return { total: totalCents / 100, resolved, unresolved };
 }
 
 /** How one copy left the collection — the sale it went out on, from the copy's own side (#517). */

@@ -4,6 +4,8 @@ import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
+import { realizedProceedsForItems } from "./sales";
+import { summarizePurchaseReturn, type PurchaseReturn } from "./purchase-return";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -421,6 +423,82 @@ export async function setPurchaseStatus(
     where: { id: purchaseId },
     data: { status: normalizeStatus(status) },
   });
+}
+
+/**
+ * What one purchase order has cost and earned back so far (#559) — the cost side of #179 read
+ * against the sale side of ADR-0012, over the same copies.
+ *
+ * **Copies that never arrived are left out entirely.** A `not_delivered` copy carries no
+ * cost-basis (ADR-0009 §5) and can never sell, so counting it would only make the order look
+ * emptier than it is. Everything else that arrived counts, **including copies since disposed**
+ * (#394): that money really was spent, and dropping it would flatter what the order achieved —
+ * the same call the holdings bar's write-off row makes.
+ */
+export async function getPurchaseReturn(
+  ownerId: string,
+  purchaseId: string
+): Promise<PurchaseReturn> {
+  const { collectionId, baseCurrency } = await assertPurchaseOwner(ownerId, purchaseId);
+  return returnOverCopies(collectionId, baseCurrency, { lot: { purchaseId } });
+}
+
+/**
+ * The same figure for **one lot** (#559) — the level a purchase is actually read at, since a lot is
+ * what was bought as a unit and what a cost-basis was allocated over (ADR-0009 §3).
+ *
+ * It is the order's figure narrowed, never a different calculation: the same copies, the same
+ * frozen snapshots, the same sale-side attribution. A sale line mixing two *lots of one order* is
+ * therefore split exactly as one mixing two orders is — for this scope they are two purchases'
+ * worth of copies, and a whole-line shortcut that ignored the boundary would credit one lot with
+ * the other's proceeds.
+ */
+export async function getLotReturn(ownerId: string, lotId: string): Promise<PurchaseReturn> {
+  const lot = await prisma.purchaseLot.findUnique({
+    where: { id: lotId },
+    select: {
+      purchase: { select: { collection: { select: { id: true, ownerId: true, baseCurrency: true } } } },
+    },
+  });
+  if (!lot || lot.purchase.collection.ownerId !== ownerId) {
+    throw new Error("Lot not found or access denied.");
+  }
+  const { id, baseCurrency } = lot.purchase.collection;
+  return returnOverCopies(id, baseCurrency, { lotId });
+}
+
+/** Shared body of the two scopes above: cost-basis and realized proceeds over whichever copies the
+ * `where` selects, minus the ones that never arrived. */
+async function returnOverCopies(
+  collectionId: string,
+  baseCurrency: string,
+  where: Prisma.ItemWhereInput
+): Promise<PurchaseReturn> {
+  const rows = await prisma.item.findMany({
+    where: { ...where, collectionId, deliveryState: { not: "not_delivered" } },
+    select: {
+      id: true,
+      costBasis: true,
+      lotId: true,
+      lot: { select: { status: true } },
+    },
+  });
+  const realized = await realizedProceedsForItems(
+    collectionId,
+    rows.map((r) => r.id)
+  );
+  return summarizePurchaseReturn(
+    rows.map((r) => ({
+      id: r.id,
+      costBasis: r.costBasis == null ? null : r.costBasis.toFixed(2),
+      lotId: r.lotId,
+      lotStatus: r.lot?.status ?? null,
+      sold: realized.resolved.has(r.id) || realized.unresolved.has(r.id),
+      proceedsResolved: realized.resolved.has(r.id),
+    })),
+    realized.total,
+    baseCurrency
+  );
 }
 
 /** Delete a purchase and its lines (cascade). Blocked by the DB if any lot still has

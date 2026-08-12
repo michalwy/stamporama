@@ -35,6 +35,8 @@ import {
   usePurchaseCopiesInfinite,
   useLotSummary,
   usePurchaseSummary,
+  usePurchaseReturn,
+  useLotReturn,
   useInvalidateLotCopies,
   type LotCopiesParams,
 } from "./use-lot-copies-query";
@@ -225,6 +227,10 @@ export function PurchaseDetailPanel({
   // screen (#134), aggregated over every copy in the purchase. Undefined until it loads (the
   // bar renders a fixed-height skeleton so nothing shifts).
   const purchaseHoldings = usePurchaseSummary(collectionId, purchase.id).data?.holdings;
+
+  // What the order has earned back so far (#559): the cost side above read against the sale side.
+  // The bar draws itself away until a copy of this order has actually sold.
+  const purchaseReturn = usePurchaseReturn(collectionId, purchase.id).data;
 
   // "Add lot with stamps" flow (#121): pick a stamp/issue → set condition/certificate/location
   // → set the lot's title/price, then create the lot with its copies in one step. The lot is
@@ -462,8 +468,9 @@ export function PurchaseDetailPanel({
         )}
       </div>
 
-      {/* Catalog value vs. actual purchase cost across the whole order (#179) */}
-      <HoldingsSummaryBar total={purchaseHoldings} />
+      {/* Catalog value vs. actual purchase cost across the whole order (#179), and what selling
+          the order's copies has realized (#559) — one bar over the one set of copies */}
+      <HoldingsSummaryBar total={purchaseHoldings} ret={purchaseReturn} />
 
       {/* Lots */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1596,6 +1603,9 @@ function LotCard({
   // the paginated copy list can no longer compute client-side (#172). Fetched once per lot.
   const summaryQuery = useLotSummary(collectionId, lot.id);
   const summary = summaryQuery.data;
+  // What this lot has earned back (#559), on the same bar as its cost. Only while the card is
+  // open: a collapsed lot draws no bar, so the query would answer nobody.
+  const lotReturn = useLotReturn(collectionId, lot.id, expanded).data;
   const totalCount = summary?.totalCount ?? lot.itemCount;
   // Copies actually in the `to sort` state — the header chip and its filter (#375). Copies still
   // `ordered` or `in transit` have not arrived, so nothing about them is waiting on the collector.
@@ -1971,9 +1981,10 @@ function LotCard({
             <div style={COPIES_MUTED_STYLE}>Loading copies…</div>
           ) : (
             <>
-              {/* Catalog value vs. actual purchase cost for this lot (#179) */}
+              {/* Catalog value vs. actual purchase cost for this lot (#179), and what selling its
+                  copies has brought back (#559) — one bar, since both are about these copies */}
               <div style={{ padding: "0.75rem 1.25rem" }}>
-                <HoldingsSummaryBar total={summary?.holdings} />
+                <HoldingsSummaryBar total={summary?.holdings} ret={lotReturn} />
               </div>
 
               {/* Active-filter toolbar (grouping is now controlled at the order level) */}
