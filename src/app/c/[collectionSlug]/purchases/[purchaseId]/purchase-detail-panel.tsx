@@ -29,6 +29,7 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { ItemListItem, LotCopyFilter, LotCopySort } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
+import type { ChecklistSetCompleteness } from "@/lib/lot-set-completeness";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import {
   useLotCopiesInfinite,
@@ -37,6 +38,8 @@ import {
   usePurchaseSummary,
   usePurchaseReturn,
   useLotReturn,
+  useLotSetCompleteness,
+  usePurchaseSetCompleteness,
   useInvalidateLotCopies,
   useLocationRefUsage,
   type LotCopiesParams,
@@ -1524,6 +1527,7 @@ function IssueGroupSection({
   onToggle,
   onMove,
   onMarkSorted,
+  completeness,
   children,
 }: {
   group: { key: string; label: string; count: number };
@@ -1537,6 +1541,8 @@ function IssueGroupSection({
   onToggle: () => void;
   onMove?: () => void;
   onMarkSorted?: () => void;
+  /** This issue's per-checklist for-sale completeness (#563), absent while it loads. */
+  completeness?: ChecklistSetCompleteness[];
   children: React.ReactNode;
 }) {
   const { sentinelRef, stuck } = useStuck(stickyTop);
@@ -1562,6 +1568,7 @@ function IssueGroupSection({
           onToggle={onToggle}
           onMove={onMove}
           onMarkSorted={onMarkSorted}
+          completeness={completeness}
         />
       </div>
       {!collapsed && (
@@ -1681,6 +1688,14 @@ function LotCard({
   // What this lot has earned back (#559), on the same bar as its cost. Only while the card is
   // open: a collapsed lot draws no bar, so the query would answer nobody.
   const lotReturn = useLotReturn(collectionId, lot.id, expanded).data;
+  // How close the for-sale stock is to a complete set, per checklist (#563). One read for every
+  // issue group on the card — the copies are paged, the groups are not — and only while the card is
+  // open *and* grouped by issue, which is the only place the figure is drawn.
+  const setCompleteness = useLotSetCompleteness(
+    collectionId,
+    lot.id,
+    expanded && groupByIssue
+  ).data;
   const totalCount = summary?.totalCount ?? lot.itemCount;
   // Copies actually in the `to sort` state — the header chip and its filter (#375). Copies still
   // `ordered` or `in transit` have not arrived, so nothing about them is waiting on the collector.
@@ -2238,6 +2253,7 @@ function LotCard({
                       }
                       collapsed={collapsed}
                       stickyTop={headerHeight}
+                      completeness={setCompleteness?.[group.key]}
                       onToggle={() =>
                         setCollapsedGroups((prev) => {
                           const next = new Set(prev);
@@ -2578,6 +2594,9 @@ function OrderCopiesView({
   const lotStatusByLot = useMemo(() => new Map(lots.map((l) => [l.id, l.status])), [lots]);
   const summary = usePurchaseSummary(collectionId, purchaseId).data;
   const issueGroups = summary?.issueGroups ?? [];
+  // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
+  // these groups are merged across every lot of the order, which is what this view is for.
+  const setCompleteness = usePurchaseSetCompleteness(collectionId, purchaseId, byIssue).data;
 
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
@@ -2643,6 +2662,7 @@ function OrderCopiesView({
               vendorMap={vendorMapFor(areaId, group.key === "__none__" ? null : group.key)}
               collapsed={collapsed}
               stickyTop={0}
+              completeness={setCompleteness?.[group.key]}
               onToggle={() =>
                 setCollapsedGroups((prev) => {
                   const next = new Set(prev);

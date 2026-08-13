@@ -223,20 +223,46 @@ export function buildAreaVendorMaps(
 
 const EMPTY_VENDOR_MAP: Map<string, AreaCatalogEntry> = new Map();
 
-/** The catalog-number label shown for a copy: its primary-vendor number (with vendor prefix)
- * when the area has one, else the first recorded number; the stamp name when it carries none.
- * Mirrors the inventory/lot row so a derived lot label reads like its copies. */
-export function copyCatalogLabel(item: ItemListItem, maps: AreaVendorMaps): string {
-  const primaryVendorId = item.areaId
-    ? (maps.primaryVendorByArea.get(item.areaId) ?? null)
+/** What {@link catalogLabel} needs of a stamp: where it sits (for the vendor lookup) and what it is
+ * numbered and called. A copy satisfies it through its own stamp's fields, a bare stamp directly. */
+export interface CatalogLabelSubject {
+  areaId: string | null;
+  issueId: string | null;
+  catalogNumbers: readonly { catalogVendorId: string; number: string }[];
+  name: string | null;
+}
+
+/** How a stamp is *called by its number*: the primary-vendor number (with vendor prefix) when its
+ * area declares one, else the first recorded number; the stamp's name when it carries none.
+ *
+ * One rule, because the surfaces that print it sit beside each other — a copy row, the label derived
+ * from a lot's copies (#121/#172), and the stamps a for-sale set is still missing (#563), which is
+ * read off the very header whose catalog chips are formatted this way. */
+export function catalogLabel(subject: CatalogLabelSubject, maps: AreaVendorMaps): string {
+  const primaryVendorId = subject.areaId
+    ? (maps.primaryVendorByArea.get(subject.areaId) ?? null)
     : null;
-  const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
+  const vendorMap = maps.vendorMapFor(subject.areaId, subject.issueId);
   const cn =
-    item.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
-    item.catalogNumbers[0] ??
+    subject.catalogNumbers.find((c) => c.catalogVendorId === primaryVendorId) ??
+    subject.catalogNumbers[0] ??
     null;
   if (cn) return formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId));
-  return item.stampName || "(stamp)";
+  return subject.name || "(stamp)";
+}
+
+/** {@link catalogLabel} for a copy — the inventory/lot row's own label, so a derived lot label
+ * reads like the copies it was derived from. */
+export function copyCatalogLabel(item: ItemListItem, maps: AreaVendorMaps): string {
+  return catalogLabel(
+    {
+      areaId: item.areaId,
+      issueId: item.issueId,
+      catalogNumbers: item.catalogNumbers,
+      name: item.stampName,
+    },
+    maps
+  );
 }
 
 /** Derive a lot's display label from its copies' catalog numbers (with vendor prefixes),

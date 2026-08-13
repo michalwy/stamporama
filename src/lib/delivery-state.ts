@@ -97,6 +97,30 @@ export const COPY_BUCKETS = [
 
 export type CopyDeliveryBucket = (typeof COPY_BUCKETS)[number]["key"];
 
+/**
+ * The buckets holding a copy that is **in hand** — physically with the collector, whether or not it
+ * has been filed (#563).
+ *
+ * A third reading of the same declaration, beside the headline/in-flight split below: *you hold N*
+ * counts `held` alone because a copy on the desk is not yet filed, but a figure claiming *this set
+ * can go out* counts it, since the stamp is there to put in the envelope. What both readings refuse
+ * is a copy still `ordered` or `in_transit` — bought, rightly counted by every other figure in the
+ * app (ADR-0032 §7), and not something that can be listed.
+ *
+ * Named off the buckets rather than by restating two delivery states, so the one place that decides
+ * what `to_sort` means stays the one place.
+ */
+export const IN_HAND_COPY_BUCKETS = COPY_BUCKETS.filter(
+  (b) => b.key === "held" || b.key === "toSort"
+);
+
+/** The delivery states {@link IN_HAND_COPY_BUCKETS} covers, for a query's `where`. An **`in`**
+ *  rather than `copy-counts.ts`'s `notIn` of the two unavailable outcomes: this is the narrower
+ *  claim, and listing what counts is what keeps a future delivery state from silently joining it. */
+export const IN_HAND_DELIVERY_STATES: readonly DeliveryState[] = IN_HAND_COPY_BUCKETS.map(
+  (b) => b.state
+);
+
 /** The buckets a copy that has **not** arrived and been filed falls in — everything the headline
  *  *you hold N* does not cover, in the order above. */
 export const IN_FLIGHT_COPY_BUCKETS = COPY_BUCKETS.filter((b) => b.key !== "held") as readonly {

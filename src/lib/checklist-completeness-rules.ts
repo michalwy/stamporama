@@ -55,6 +55,70 @@ export interface ChecklistCompletenessGrid {
   rows: CompletenessRow[];
 }
 
+/**
+ * How close one checklist's **for-sale** stock is to a complete set (#563), and which of its stamps
+ * are missing.
+ *
+ * The narrow slice of the grid above, on a different surface and with one thing the grid cannot
+ * say: `owned` is the same figure `for_sale × any condition` reports, but a fraction alone does not
+ * tell a collector working through a stockbook what to look for on the next card. So this names the
+ * gap, and the grid does not — id lists in every cell of a disposition × condition matrix would be
+ * a payload nobody reads them out of.
+ *
+ * **Two sets in, two figures out.** `stockStampIds` is what the collection holds for sale *anywhere*
+ * and leads, because it answers the question that provokes an action — *can I list this?* A figure
+ * scoped to the lot alone reads `5/6` about a series whose sixth copy has been in the box for six
+ * months, and sends the collector looking for a stamp they already own; the **missing** stamps are
+ * named against the same set, for the same reason. `fromLotStampIds` is the quiet second figure —
+ * how much of this arrived just now — which is what separates a series being built out of this
+ * parcel, where the sixth may yet surface from the copies not sorted yet, from one assembled months
+ * ago, where there is nothing to wait for.
+ *
+ * Which copies are in either set is the caller's: this decides nothing about delivery or disposition,
+ * so a query and a test cannot disagree about what "in hand and for sale" means.
+ *
+ * `fromHere` is intersected with the stock rather than counted on its own. The lot's copies *are*
+ * part of the collection's stock, so the two agree by construction — but a figure whose second half
+ * can exceed its first is one nobody can read, and one line of arithmetic is cheaper than trusting
+ * two queries to stay in step.
+ *
+ * An empty checklist is nothing to be complete against: `0/0` with nothing missing, never "complete".
+ */
+export function computeForSaleSetCompleteness(
+  checklistStampIds: readonly string[],
+  stockStampIds: Iterable<string>,
+  fromLotStampIds: Iterable<string>
+): ForSaleSetCompleteness {
+  const required = [...new Set(checklistStampIds)];
+  const stock = new Set(stockStampIds);
+  const fromLot = new Set(fromLotStampIds);
+
+  let owned = 0;
+  let fromHere = 0;
+  const missingStampIds: string[] = [];
+  for (const stampId of required) {
+    if (stock.has(stampId)) {
+      owned += 1;
+      if (fromLot.has(stampId)) fromHere += 1;
+    } else {
+      missingStampIds.push(stampId);
+    }
+  }
+  return { requiredCount: required.length, owned, fromHere, missingStampIds };
+}
+
+/** One checklist's for-sale reading, counted over the copies the caller decided are in hand. */
+export interface ForSaleSetCompleteness {
+  /** Stamps on the checklist — the denominator, and `requiredCount` on the grid above. */
+  requiredCount: number;
+  /** Of those, the ones the collection holds a for-sale copy of. */
+  owned: number;
+  /** Of the owned ones, the ones this lot contributed a for-sale copy of. */
+  fromHere: number;
+  /** The rest, in the checklist's own order — what the header names as still to look for. */
+  missingStampIds: string[];
+}
+
 function matches(c: CompletenessCount, disposition: CompletenessDisposition): boolean {
   switch (disposition) {
     case "any":

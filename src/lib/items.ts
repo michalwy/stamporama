@@ -2450,6 +2450,41 @@ export async function getPurchaseIntakeSummary(
   };
 }
 
+/**
+ * The issues a lot's (or a whole order's) copies are grouped under — the same one-issue-per-copy
+ * answer the intake summaries' `issueGroups` give, without enriching a copy to get it (#563).
+ *
+ * A stamp's issue membership is many-to-many, but a copy reports under **one** issue: its stamp's
+ * first membership, which is what `ItemListItem.issueId` says and what the grouped-by-issue view
+ * already draws headers for. `FIRST_ISSUE_MEMBERSHIP` is that rule, read here rather than restated,
+ * so a group can never appear on screen with no completeness read behind it or the other way round.
+ *
+ * Copies whose stamp is in no issue simply contribute nothing — the `No issue` group is not a set.
+ */
+export async function getIntakeIssueIds(
+  ownerId: string,
+  collectionId: string,
+  scope: { lotId: string } | { purchaseId: string }
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.item.findMany({
+    where: {
+      collectionId,
+      ...("lotId" in scope ? { lotId: scope.lotId } : { lot: { purchaseId: scope.purchaseId } }),
+    },
+    select: {
+      stamp: {
+        select: { issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issueId: true } } },
+      },
+    },
+  });
+  return [
+    ...new Set(
+      rows.map((r) => r.stamp.issueMemberships[0]?.issueId).filter((id) => id != null)
+    ),
+  ];
+}
+
 export async function deleteItem(ownerId: string, itemId: string): Promise<void> {
   const collectionId = await resolveItemCollection(itemId);
   await assertCollectionOwner(ownerId, collectionId);

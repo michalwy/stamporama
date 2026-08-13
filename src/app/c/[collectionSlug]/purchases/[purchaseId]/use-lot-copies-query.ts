@@ -9,6 +9,7 @@ import type {
   PurchaseIntakeSummary,
 } from "@/lib/items";
 import type { LocationRefUsage } from "@/lib/locations";
+import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 
 interface LotCopiesPage {
@@ -40,6 +41,10 @@ export const lotCopiesKeys = {
     ["lot-copies", collectionId, "purchase", purchaseId, "return"] as const,
   lotReturn: (collectionId: string, lotId: string) =>
     ["lot-copies", collectionId, lotId, "return"] as const,
+  completeness: (collectionId: string, lotId: string) =>
+    ["lot-copies", collectionId, lotId, "completeness"] as const,
+  purchaseCompleteness: (collectionId: string, purchaseId: string) =>
+    ["lot-copies", collectionId, "purchase", purchaseId, "completeness"] as const,
 };
 
 function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchParams {
@@ -159,6 +164,52 @@ export function useLotReturn(collectionId: string, lotId: string, enabled = true
         `/api/collections/${collectionId}/purchases/lots/${lotId}/return`
       );
       if (!res.ok) throw new Error("Failed to fetch lot return");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
+/**
+ * Per-checklist for-sale completeness for a lot's issue groups (#563), keyed by issue id.
+ *
+ * One read for **every** group on screen rather than one per header: the copies are cursor-paged but
+ * the groups are not, so this costs the same whether the collector scrolls to the end of the lot or
+ * not. Loaded only while the card is open *and* grouped by issue — there is nowhere else to draw it,
+ * and the collection-wide half is the expensive one.
+ *
+ * Keyed under the lot's copies, so filing, sorting or re-identifying a copy refetches it along with
+ * everything else: moving a copy to *For sale*, or out of `ordered`, is exactly what moves this
+ * figure.
+ */
+export function useLotSetCompleteness(collectionId: string, lotId: string, enabled = true) {
+  return useQuery<SetCompletenessByIssue>({
+    queryKey: lotCopiesKeys.completeness(collectionId, lotId),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/lots/${lotId}/copies/completeness`
+      );
+      if (!res.ok) throw new Error("Failed to fetch lot completeness");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
+/** The same for the order-level *by issue* view, whose groups span every lot of the purchase — so
+ * *from here* reads as "arrived in this parcel". */
+export function usePurchaseSetCompleteness(
+  collectionId: string,
+  purchaseId: string,
+  enabled = true
+) {
+  return useQuery<SetCompletenessByIssue>({
+    queryKey: lotCopiesKeys.purchaseCompleteness(collectionId, purchaseId),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/${purchaseId}/copies/completeness`
+      );
+      if (!res.ok) throw new Error("Failed to fetch purchase completeness");
       return res.json();
     },
     enabled,

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeChecklistCompleteness,
+  computeForSaleSetCompleteness,
   type CompletenessCount,
   type CompletenessDisposition,
 } from "../../src/lib/checklist-completeness-rules";
@@ -118,5 +119,58 @@ describe("computeChecklistCompleteness", () => {
       CONDITIONS
     );
     assert.equal(cell(grid, "in_collection", null).completeSets, 1);
+  });
+});
+
+describe("computeForSaleSetCompleteness", () => {
+  it("names what is missing, in the checklist's own order", () => {
+    const r = computeForSaleSetCompleteness(["a", "b", "c", "d"], ["a", "c"], []);
+    assert.equal(r.requiredCount, 4);
+    assert.equal(r.owned, 2);
+    // A bare 2/4 does not say what to look for on the next card; this is the point of the figure.
+    assert.deepEqual(r.missingStampIds, ["b", "d"]);
+  });
+
+  it("reports a complete set with nothing missing", () => {
+    const r = computeForSaleSetCompleteness(["a", "b"], ["a", "b", "z"], ["a"]);
+    assert.equal(r.owned, 2);
+    assert.deepEqual(r.missingStampIds, []);
+  });
+
+  it("counts the lot's contribution as a subset of the stock, never beside it", () => {
+    // `fromHere` is what separates a series being built out of this parcel from one assembled
+    // months ago — so it is only ever *part* of the leading figure.
+    const r = computeForSaleSetCompleteness(["a", "b", "c"], ["a", "b", "c"], ["a", "b"]);
+    assert.equal(r.owned, 3);
+    assert.equal(r.fromHere, 2);
+  });
+
+  it("never counts a lot copy the collection-wide read did not see", () => {
+    // The two sets come off one `where` plus a scope clause, so this cannot happen — but a second
+    // figure able to exceed the first is unreadable, and the arithmetic is cheaper than the trust.
+    const r = computeForSaleSetCompleteness(["a", "b"], ["a"], ["a", "b"]);
+    assert.equal(r.owned, 1);
+    assert.equal(r.fromHere, 1);
+  });
+
+  it("counts stock outside the checklist for nothing", () => {
+    const r = computeForSaleSetCompleteness(["a"], ["a", "y", "z"], ["y"]);
+    assert.equal(r.owned, 1);
+    assert.equal(r.fromHere, 0);
+  });
+
+  it("an empty checklist is 0/0 with nothing missing, never complete", () => {
+    const r = computeForSaleSetCompleteness([], ["a"], ["a"]);
+    assert.equal(r.requiredCount, 0);
+    assert.equal(r.owned, 0);
+    assert.deepEqual(r.missingStampIds, []);
+  });
+
+  it("counts a stamp listed twice on one checklist once", () => {
+    const r = computeForSaleSetCompleteness(["a", "a", "b"], ["a"], ["a"]);
+    assert.equal(r.requiredCount, 2);
+    assert.equal(r.owned, 1);
+    assert.equal(r.fromHere, 1);
+    assert.deepEqual(r.missingStampIds, ["b"]);
   });
 });

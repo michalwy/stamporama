@@ -289,6 +289,41 @@ all are). A lot you add while the screen is open opens by itself. **Lot manageme
 edit price, close/reopen, delete, whole-lot move/mark-sorted) lives only in a **by-lot** view —
 the issue-only and flat views are for sweeping through copies and sorting them.
 
+**How close a series is to a complete set for sale.** In a grouped-by-issue view, each issue
+header also carries one figure per [checklist](collections.md#checklists) the issue has — the
+answer to *can I list this series as one set yet?*:
+
+- **6/6 — complete** — you hold a for-sale copy of every stamp on that checklist.
+- **4/6 — missing 2: Mi 3,7** — you do not, and those are the ones to look for on the next card.
+  The numbers are collapsed into runs the way a lot's derived label collapses them, so a gap
+  reads *Mi 3-6* rather than as four separate numbers.
+
+How many are missing is **always** printed, because *12/30* and a few numbers still leaves you
+counting. And the chip names at most **three** runs before *+N more* — the same three a lot's
+derived label shows, and for the same reason: a thirty-stamp series missing eighteen would turn
+the header into a paragraph. The **whole** list is in the hover, so a short gap is read in place
+while you sort and a long one is one hover away.
+
+The fraction and the missing stamps both range over your **whole for-sale stock** — every
+for-sale copy in hand, wherever it is filed, not just the ones in this lot. That is deliberate:
+a figure scoped to the lot would report *5/6* about a series whose sixth copy has been in a box
+for six months and send you looking for a stamp you already own. Beside it, in muted text,
+**· 4 from here** says how many of those came out of *this* lot (or, in the issue-only view,
+this order) — which is what tells a series being built out of this parcel, where the last one
+may still surface from the copies you have not sorted, from one that was finished months ago.
+Hovering the figure spells the range out.
+
+Two things do **not** count towards it. A copy still **ordered** or **in transit** is bought,
+and every other count in the app includes it — but a set one copy of which is in the post
+cannot go out, so this figure waits for it to arrive (**to sort** already counts: the stamp is
+on the desk). And a copy that is not marked **For sale** does not count either, however many of
+them you hold: a keeper is not stock. Copies that have sold, or that you have written off, are
+out for the same reason.
+
+An issue with several checklists reports each one **separately**, named — a stamp that two sets
+share is counted for both, because *is the basic set complete?* and *is the specialized set
+complete?* are two questions and one merged figure would answer neither.
+
 Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
 disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
 **Prices** tab) — so you can correct a copy or fill in a missing price without leaving the
