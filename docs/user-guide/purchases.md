@@ -199,7 +199,11 @@ photos** to that copy right here (front/back plus extra images); a whole-issue i
 several distinct copies, so photos are offered only for single-stamp intake. The copies are
 linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
-become part of your collection later, once received.)
+become part of your collection later, once received.) If the order is already **Arrived**
+— the usual case when you identify a parcel piece by piece on your desk — the copies start
+at **To sort** instead: they are in hand, just not filed yet, so they land beside the
+siblings that **Mark arrived** already moved there. Either way they are not *in collection*
+until sorted.
 
 **The want marker.** A copy whose stamp is on your [want list](wants.md) carries a **crosshair
 chip**, ringed when *this* copy — its condition, certificate and format — would satisfy one of the
@@ -288,10 +292,10 @@ dialog names the order it would be taken off and asks you to confirm the move be
 Each copy carries a **delivery status** shown as a chip on its row, separate from its
 disposition (in collection / for sale / for trade). A purchased copy moves through:
 
-- **Ordered** — added during intake; bought but not yet in hand, so it is **not** in your
-  collection yet.
+- **Ordered** — added during intake to an order that has not arrived yet; bought but not yet
+  in hand, so it is **not** in your collection yet.
 - **To sort** — the order arrived but this copy still needs sorting; still **not** in the
-  collection.
+  collection. Intake into an **Arrived** order starts its copies here.
 - **Delivered** — sorted and filed; now counted **in your collection**.
 
 with **Not delivered / missing** and **Damaged** as outcomes you may discover while sorting.
