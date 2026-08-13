@@ -465,7 +465,7 @@ function toIssueData(issue: {
   }[];
   checklists: ChecklistRow[];
   catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-}, copyCounts?: StampCopyCountMaps): IssueData {
+}, copyCounts?: StampCopyCountMaps, wantsByStamp?: Map<string, StampWantSummary>): IssueData {
   const checklistIds = new Set(issue.checklists.map((c) => c.id));
   return {
     id: issue.id,
@@ -478,7 +478,7 @@ function toIssueData(issue: {
     isAutoCreated: issue.isAutoCreated,
     createdAt: issue.createdAt,
     members: orderIssueMembers(issue.members).map((m) =>
-      toStampNode(m, undefined, copyCounts, checklistIds)
+      toStampNode(m, undefined, copyCounts, checklistIds, wantsByStamp)
     ),
     catalogNumbers: issue.catalogNumbers,
     checklists: orderChecklists(issue.checklists).map((c) => ({
@@ -553,11 +553,16 @@ export async function listAllIssues(
     orderBy: [{ collectionAreaId: "asc" }, { year: "asc" }, { name: "asc" }, { createdAt: "asc" }],
     select: ISSUE_SELECT,
   });
-  const copyCounts = await loadStampCopyCounts(
-    collectionId,
-    issues.flatMap((i) => i.members.map((m) => m.stampId))
-  );
-  return issues.map((i) => toIssueData(i, copyCounts));
+  // Both catalogue markers, together: the popup's rows are `StampDetailLine`s, the very line the
+  // Stamps and Issues lists draw, so a stamp picked here should read there as it reads anywhere else
+  // (#562). Wants are what was missing — the copy counts have always been loaded — and picking a
+  // stamp for a purchase lot is exactly the moment "you are looking for this" is worth knowing.
+  const stampIds = issues.flatMap((i) => i.members.map((m) => m.stampId));
+  const [copyCounts, wants] = await Promise.all([
+    loadStampCopyCounts(collectionId, stampIds),
+    loadStampWantSummaries(collectionId, stampIds),
+  ]);
+  return issues.map((i) => toIssueData(i, copyCounts, wants));
 }
 
 /** Just the fields needed to render an issue header (title, catalog chips, counts) —

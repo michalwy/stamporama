@@ -185,7 +185,9 @@ app: navigate areas and issues, and either
 
 Expanding an issue whose stamps you want to pick one by one gives you the same **Checklist**
 filter the issues list has, so a series collected two ways can be narrowed to the set you are
-actually buying.
+actually buying. The stamp rows read exactly as they do on the Stamps and Issues lists, the
+**copies-held badge** and the **want marker** included, so you can see what you already have
+before you even pick.
 
 You are then asked once for the **condition**, an optional **certificate**, an optional
 **storage location** — with an optional **in-location ref** (e.g. a page or pocket like
@@ -205,10 +207,41 @@ at **To sort** instead: they are in hand, just not filed yet, so they land besid
 siblings that **Mark arrived** already moved there. Either way they are not *in collection*
 until sorted.
 
-**The want marker.** A copy whose stamp is on your [want list](wants.md) carries a **crosshair
-chip**, ringed when *this* copy — its condition, certificate and format — would satisfy one of the
-wants. Click it for the terms. It is the same judgement the intake review below makes, so a ringed
-copy is one the review will greet you with.
+**What you already hold.** When you pick a **single stamp**, the dialog names it and adds one line
+underneath saying what the collection already has of it — for example
+*You hold 2: 1 in collection (MNH) · 1 for sale (U)* — or *You hold none of this yet.* Working
+through a stockbook bought sight-unseen raises the same question on every piece (is this needed for
+the collection, or is it stock?), and the line answers it without a trip to Inventory and back. The
+**conditions** are listed because the count alone settles nothing: two copies mean something quite
+different if they are both used. They are *listed*, never ranked — Stamporama nowhere decides that
+one condition is better than another (`U` and `MNG` are cancellation and gum, not two points on one
+scale) — so the judgement stays yours, and the disposition chips are not touched by any of it: your
+remembered choice still stands, because only you know that this whole stockbook is stock. A **whole
+set** intake has no single stamp to report on, so the line is offered for single-stamp intake only —
+the same rule photos follow.
+
+*You hold* means **copies that have arrived and been sorted**. Copies you have bought but not yet
+received are counted too — they are bought, and forgetting them is how you buy the same stamp twice
+— but they are said **separately**, after the headline and with their own conditions:
+
+- *You hold none · 1 on its way (MNH)* — a stamp won at auction and still in the post. This is the
+  case worth spelling out: the copy is recorded, so a plain count would say *you hold 1* while you
+  stand there with the only physical copy of it in your tweezers.
+- *You hold 1: 1 in collection (MNH) · 1 being sorted (U)* — *being sorted* is a copy that has
+  arrived and is not filed yet, which is both the other parcel on your desk and the piece you
+  entered from this very stockbook ten minutes ago. Neither *held* nor *coming*, so it is neither.
+
+Those clauses carry no disposition, because a copy that has not arrived has not been filed anywhere
+yet, and they do not say which order a copy belongs to — the useful fact is where it is. The line
+counts the **same copies** as the copies-held badge on the catalogue lists (sold copies, copies you
+no longer hold and copies that never arrived are left out of both); what differs is that the badge
+gives one number and this line splits it, because *hold* is a claim and the badge is a count.
+
+**The want marker.** The same line carries the **crosshair chip** when the stamp is on your
+[want list](wants.md), ringed once the condition and certificate you have picked would satisfy one
+of the wants — so it moves as you fill the form. Click it for the terms. The chip is on a lot's copy
+rows too, and it is the same judgement the intake review below makes, so a ringed pick is one the
+review will greet you with.
 
 **Wants these copies could satisfy.** If any of the copies you just took in matches an open
 entry on your [want list](wants.md), Stamporama shows it right after the intake and lets you

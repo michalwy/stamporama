@@ -16,6 +16,7 @@ import type { HoldingsSummary } from "@/lib/valuation";
 import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData, IssueData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
+import type { StampHoldings } from "@/lib/stamp-holdings";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
@@ -521,6 +522,31 @@ export function useIssuesByArea(collectionId: string, areaIds: string[] | null) 
       const data = await res.json();
       return data.items;
     },
+  });
+}
+
+/**
+ * What the collection already holds of one stamp, and what it is still after (#562) — the intake
+ * step's *what you already hold* line.
+ *
+ * Keyed under the inventory prefix so `invalidateList` covers it; nothing invalidates it after an
+ * intake, and nothing needs to: the dialog mounts afresh on each pick and the query is stale by
+ * then, so the line is re-read for the stamp being looked at rather than kept in step for the
+ * hundreds that are not.
+ */
+export function useStampHoldings(collectionId: string, stampId: string | null) {
+  return useQuery<StampHoldings | null>({
+    queryKey: ["inventory", collectionId, "stampHoldings", stampId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ stampId: stampId! });
+      const res = await fetch(
+        `/api/collections/${collectionId}/stamps/holdings?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch what you hold of this stamp");
+      const data = await res.json();
+      return data.holdings;
+    },
+    enabled: !!stampId,
   });
 }
 

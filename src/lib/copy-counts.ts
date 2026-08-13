@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
@@ -21,6 +22,25 @@ export interface StampCopyCounts {
    * unmarked depending on how they pair up — so it is counted rather than subtracted. It is what
    * lets a breakdown stand on its own without the total beside it. */
   unmarked: number;
+}
+
+/**
+ * What "held" means, in one place: not sold, not disposed of (#396), and not one of the two
+ * exception outcomes that mean it never usably arrived. The in-flight states pass — a copy in
+ * transit is bought.
+ *
+ * Shared by every count in this module rather than restated per query. Three `groupBy` calls
+ * answering "how many of this do I have" along three different axes must not be able to disagree
+ * about which copies they are counting.
+ */
+function heldCopiesWhere(collectionId: string, stampIds: string[]) {
+  return {
+    collectionId,
+    stampId: { in: stampIds },
+    saleLineItems: { none: {} },
+    disposedAt: null,
+    deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
+  };
 }
 
 export const NO_COPIES: StampCopyCounts = {
@@ -60,13 +80,7 @@ export async function countCopiesByStamp(
 
   const rows = await prisma.item.groupBy({
     by: ["stampId", "inCollection", "forSale", "forTrade"],
-    where: {
-      collectionId,
-      stampId: { in: ids },
-      saleLineItems: { none: {} },
-      disposedAt: null,
-      deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
-    },
+    where: heldCopiesWhere(collectionId, ids),
     _count: { _all: true },
   });
 
@@ -170,6 +184,51 @@ export async function loadStampCopyCounts(
   return { direct, variant };
 }
 
+/**
+ * Counted copies per stamp, split by **condition, delivery state and disposition at once** (#562),
+ * for the intake step's *what you already hold* line. Stamps with no copies are absent from the map.
+ *
+ * The axes come off one `groupBy` rather than three reads, because the line states them together —
+ * *1 in collection (MNH) · 1 on its way (U)* — and a disposition figure taken over one set beside a
+ * condition figure taken over another is a sentence whose halves describe different copies.
+ *
+ * The counting set is {@link countCopiesByStamp}'s exactly, through the same filter, so the line and
+ * the catalogue badge cannot disagree about which copies exist. What differs is the **sentence**:
+ * the badge says *2 copies* about a set that includes copies still in the post, which is right for a
+ * badge and wrong as a claim about what is in hand, so `summarizeHeldCopies` puts the delivery axis
+ * to work and states those separately. The rows are handed on raw for exactly that reason — the
+ * rolling up is pure, and shared with the client component that draws the line.
+ */
+export async function countHeldCopyRowsByStamp(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, HeldCopyRow[]>> {
+  const byStamp = new Map<string, HeldCopyRow[]>();
+  const ids = [...new Set(stampIds)];
+  if (ids.length === 0) return byStamp;
+
+  const rows = await prisma.item.groupBy({
+    by: ["stampId", "conditionId", "deliveryState", "inCollection", "forSale", "forTrade"],
+    where: heldCopiesWhere(collectionId, ids),
+    _count: { _all: true },
+  });
+
+  for (const row of rows) {
+    const entry: HeldCopyRow = {
+      conditionId: row.conditionId,
+      deliveryState: row.deliveryState,
+      inCollection: row.inCollection,
+      forSale: row.forSale,
+      forTrade: row.forTrade,
+      count: row._count._all,
+    };
+    const list = byStamp.get(row.stampId);
+    if (list) list.push(entry);
+    else byStamp.set(row.stampId, [entry]);
+  }
+  return byStamp;
+}
+
 /** How a `stamp × condition` count is keyed. The separator cannot occur in a cuid, so the two
  * segments are unambiguous — the same trick `marketKeyOf` uses. */
 export function stampConditionKey(stampId: string, conditionId: string): string {
@@ -198,13 +257,7 @@ export async function countCopiesByStampAndCondition(
 
   const rows = await prisma.item.groupBy({
     by: ["stampId", "conditionId"],
-    where: {
-      collectionId,
-      stampId: { in: ids },
-      saleLineItems: { none: {} },
-      disposedAt: null,
-      deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
-    },
+    where: heldCopiesWhere(collectionId, ids),
     _count: { _all: true },
   });
 

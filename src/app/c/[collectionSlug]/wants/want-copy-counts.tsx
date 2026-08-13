@@ -1,7 +1,7 @@
 "use client";
 
 import type { WantCopyCounts } from "@/lib/wants";
-import type { DeliveryState } from "@/lib/delivery-state";
+import { COPY_BUCKETS, type DeliveryState } from "@/lib/delivery-state";
 
 /**
  * What the collection already has of a wanted stamp, **split by where it is** (#532) — held, on
@@ -46,22 +46,23 @@ import type { DeliveryState } from "@/lib/delivery-state";
  */
 
 /** The buckets in lifecycle order — furthest away last, so the eye meets what you *have* first.
- *  Each names the delivery state it stands for, which is where its colour comes from. `to sort`
- *  stands apart from `held`: a copy in an unsorted parcel has arrived but is not yet in the
- *  collection, and the two are different answers to "have I got this". */
+ *  Order, wording and which delivery state each stands for all come from `COPY_BUCKETS`, the one
+ *  place the axis is declared (#562): the intake step's holdings line reads the same list, and two
+ *  surfaces answering "have I got this" must not be able to disagree about it. */
 function buckets(
   copies: WantCopyCounts
-): { label: string; count: number; state: DeliveryState; incoming: boolean }[] {
-  return [
-    { label: "held", count: copies.held, state: "delivered" as const, incoming: false },
-    { label: "to sort", count: copies.toSort, state: "to_sort" as const, incoming: false },
-    { label: "in transit", count: copies.inTransit, state: "in_transit" as const, incoming: true },
-    { label: "ordered", count: copies.ordered, state: "ordered" as const, incoming: true },
-  ].filter((b) => b.count > 0);
+): { label: string; count: number; state: DeliveryState }[] {
+  return COPY_BUCKETS.map((b) => ({
+    label: b.tally,
+    count: copies[b.key],
+    state: b.state,
+  })).filter((b) => b.count > 0);
 }
 
-/** A bucket's colour — see the note above for why these are not the chip's tokens. */
-const BUCKET_COLOR: Record<DeliveryState, string> = {
+/** A bucket's colour — see the note above for why these are not the chip's tokens. Exported because
+ *  the intake step's holdings line tints its own clauses with them: the hues are what tell the
+ *  buckets apart as bare text, and one surface picking its own would be a second vocabulary. */
+export const COPY_BUCKET_COLOR: Record<DeliveryState, string> = {
   delivered: "var(--color-text-secondary)",
   to_sort: "var(--color-warning)",
   in_transit: "var(--color-info)",
@@ -107,7 +108,7 @@ export function WantCopyCountsLine({
       {shown.map((b, i) => (
         <span key={b.label}>
           {i > 0 && " · "}
-          <span style={{ color: BUCKET_COLOR[b.state], fontWeight: 500 }}>
+          <span style={{ color: COPY_BUCKET_COLOR[b.state], fontWeight: 500 }}>
             {b.count} {b.label}
           </span>
         </span>

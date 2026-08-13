@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
-import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import { buildEffectivePrimaryCatalogMap, getCollectionBaseCurrency, safeRateMap } from "./pricing";
@@ -227,15 +227,6 @@ export interface WantCopyCounts {
 
 const NO_COPIES: WantCopyCounts = { held: 0, toSort: 0, ordered: 0, inTransit: 0 };
 
-/** Which bucket a copy's delivery state falls in. Anything outside the vocabulary counts as held
- *  rather than being dropped: the copy exists whatever a future migration called its state. */
-function copyBucket(deliveryState: string): keyof WantCopyCounts {
-  if (deliveryState === "ordered") return "ordered";
-  if (deliveryState === "in_transit") return "inTransit";
-  if (deliveryState === "to_sort") return "toSort";
-  return "held";
-}
-
 /** The four facts a copy is matched on, plus its id and where it is — what a per-want count needs.
  *  The id is carried so a surface **rendered on one copy** can leave that copy out of its own
  *  figures. */
@@ -270,7 +261,7 @@ async function loadCountedCopies(
 /** Tally a set of copies into the three buckets. */
 function tally(copies: CountedCopy[]): WantCopyCounts {
   const counts: WantCopyCounts = { ...NO_COPIES };
-  for (const c of copies) counts[copyBucket(c.deliveryState)] += 1;
+  for (const c of copies) counts[copyDeliveryBucket(c.deliveryState)] += 1;
   return counts;
 }
 
@@ -303,7 +294,7 @@ export async function loadWantCopyCounts(
   const copies = await loadCountedCopies(collectionId, stampIds);
   for (const copy of copies) {
     const current = result.get(copy.stampId) ?? { ...NO_COPIES };
-    current[copyBucket(copy.deliveryState)] += 1;
+    current[copyDeliveryBucket(copy.deliveryState)] += 1;
     result.set(copy.stampId, current);
   }
   return result;

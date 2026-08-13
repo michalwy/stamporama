@@ -54,6 +54,7 @@ import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dia
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
+import { IntakeHoldingsLine } from "./intake-holdings-line";
 import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -3110,6 +3111,20 @@ function IntakeConditionDialog({
             }}
           >
             {summary}
+            {/* What the collection already holds of this stamp, and what it is still after (#562)
+                — inside the box that already names the pick, so the line reads as a fact about it
+                rather than as a second heading. Single-stamp intake only: a whole-checklist intake
+                fans out across many stamps and has no one stamp to report on, exactly as photos
+                below are single-stamp only (#148). */}
+            {selection.kind === "stamp" && (
+              <IntakeHoldingsLine
+                collectionId={collectionId}
+                stampId={selection.stampId}
+                conditions={conditions}
+                conditionId={conditionId}
+                certificateStatusId={certId}
+              />
+            )}
           </div>
 
           <div style={{ display: "flex", gap: "0.75rem" }}>
