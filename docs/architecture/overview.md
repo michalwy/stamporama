@@ -383,6 +383,18 @@ A collection-level, named render preset for offer photo collages (#307) — `nam
 - No rows are seeded into a new collection: sizing conventions depend on the material a collector actually sells.
 - Validation is a pure module (`src/lib/collage-template-rules.ts`, unit-tested), reused by the offer-side photo-settings form through `src/lib/offer-photo-config.ts` (#308); the server module (`src/lib/collage-templates.ts`) is owner-authorized like every other config entity.
 
+### Ref card templates (`RefCardTemplate`)
+
+A collection-level, named dictionary of **paper card sizes** (#569) — `name`, `cardWidthMm`, `cardHeightMm`, `fontSizeMm`, `paddingTopMm`, cascade-deleted with its collection, edited under **Settings → Ref cards** (`ref-card-templates-panel.tsx`, mirroring `collage-templates-panel.tsx`), read by the blank ref-card sheet (`locations/ref-cards/`, #565). It exists because a ref card is slipped into a transport card's pocket, so its size is a property of the collector's **stationery** — the sheet shipped with those numbers hardcoded, and a sheet in the wrong format is not a worse sheet, it is one that never gets printed.
+
+- **Read live, seeded nowhere** — the deliberate inverse of `CollageTemplate` above. Nothing about a printed sheet is recorded, so there is nothing for a copy to protect and nothing an edit could contradict retroactively: no column anywhere points at the table, delete is unguarded, and editing a template changes only the next print. The seeding pattern exists for a problem this does not have.
+- **Millimetres throughout, fractional.** The sheet previously mixed `cm` and `rem`; for something whose purpose is fitting a physical pocket, one print unit beats the convenience, and whole millimetres cannot state 62.5 mm stock.
+- **Layout is derived, never configured.** No rows/columns columns exist: the sheet lays cards out with `grid-template-columns: repeat(auto-fill, <cardWidthMm>mm)`, so the browser fits as many per row as the paper allows and A4 and Letter both work without the page knowing the paper size. How many cards there are is the strip's own answer (`start` + `count`); `break-inside: avoid` keeps a card off a page break.
+- **One rule between two cards.** Each card draws its border **right and bottom** only and the grid closes **top and left**. `gap: 0` alone is not enough — two neighbours each keeping their own border print a double rule, and a cut down the middle of it leaves ink on both halves.
+- **The card carries the ref and nothing else**, pinned to the top by `paddingTopMm`: the rest of it is hidden inside the pocket. There are deliberately no fields for what is printed.
+- **Last used is remembered per collection** in localStorage (`LS_LAST_REF_CARD_TEMPLATE`, `add-copy-defaults.ts`' idiom) and carried into the URL, so the sheet stays a plain server render (#330) and a reprinted address states what it was printed on. With no template at all, the built-in `DEFAULT_REF_CARD_GEOMETRY` prints — a constant, not a seeded row.
+- Validation is a pure module (`src/lib/ref-card-template-rules.ts`, unit-tested); the server module (`src/lib/ref-card-templates.ts`) is owner-authorized, and a duplicate name is `RefCardTemplateNameTakenError` off `P2002` rather than a generic failed save (`AcceptanceProfile`'s rule, #533).
+
 ### Offer photo configuration (#308)
 
 Photo configuration sits on **two levels**, following the `titleTemplate` / `descriptionTemplate` pattern: the platform holds defaults, the offer holds the values it was seeded with.

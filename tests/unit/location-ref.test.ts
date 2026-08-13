@@ -6,6 +6,9 @@ import {
   locationRefStrip,
   nextLocationRef,
   parseLocationRef,
+  parseRefCardCount,
+  DEFAULT_REF_CARDS,
+  MAX_REF_CARDS,
 } from "../../src/lib/location-ref";
 
 function sorted(refs: (string | null)[]): (string | null)[] {
@@ -125,5 +128,41 @@ describe("locationRefStrip", () => {
   it("is empty when the start ref cannot be counted from", () => {
     assert.deepEqual(locationRefStrip("Album", 5), []);
     assert.deepEqual(locationRefStrip("", 5), []);
+  });
+
+  // The count reaches the strip from a URL, so a count that is not a number has to be caught before
+  // it gets here: the loop runs `i < count`, and `NaN` silently produces a strip of one — which is
+  // how a sheet asked for twenty cards printed a single one (#565, found on #569).
+  it("prints a strip of one for a count that is not a number", () => {
+    assert.deepEqual(locationRefStrip("A147", Number.NaN), ["A147"]);
+  });
+});
+
+describe("parseRefCardCount", () => {
+  it("reads the number the address asks for", () => {
+    assert.equal(parseRefCardCount("20"), 20);
+    assert.equal(parseRefCardCount("1"), 1);
+  });
+
+  it("falls back to the default when the address names no count", () => {
+    assert.equal(parseRefCardCount(undefined), DEFAULT_REF_CARDS);
+    assert.equal(parseRefCardCount(""), DEFAULT_REF_CARDS);
+  });
+
+  it("falls back to the default rather than to nothing on nonsense", () => {
+    assert.equal(parseRefCardCount("plenty"), DEFAULT_REF_CARDS);
+  });
+
+  it("clamps to a printable strip in both directions", () => {
+    assert.equal(parseRefCardCount("0"), 1);
+    assert.equal(parseRefCardCount("-5"), 1);
+    assert.equal(parseRefCardCount("100000"), MAX_REF_CARDS);
+  });
+
+  it("never returns a count a strip cannot count with", () => {
+    for (const raw of [undefined, "", "  ", "plenty", "20", "0", "1e9"]) {
+      const count = parseRefCardCount(raw);
+      assert.ok(Number.isFinite(count) && count >= 1, `count for ${JSON.stringify(raw)}`);
+    }
   });
 });

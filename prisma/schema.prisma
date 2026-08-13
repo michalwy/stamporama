@@ -93,6 +93,7 @@ model Collection {
   wants           Want[]
   acceptanceProfiles AcceptanceProfile[]
   collageTemplates CollageTemplate[]
+  refCardTemplates RefCardTemplate[]
   items           Item[]
   contacts        Contact[]
   locations       Location[]
@@ -388,6 +389,39 @@ model CollageTemplate {
 
   @@index([collectionId])
   @@map("collage_template")
+}
+
+/// A blank ref-card format (#569) — the paper stationery the ref-card sheet
+/// (`locations/ref-cards`) prints, named so a collection can keep several: a ref card is slipped
+/// into a transport card's pocket alongside the stamps, so its size is set by that pocket and its
+/// type size by how much of the card stays visible above them.
+///
+/// Read **live** at print time and never copied anywhere, which is the opposite of
+/// {@link CollageTemplate}'s seeding (#308) and deliberately so: nothing about a printed sheet is
+/// recorded, so an edit has no past act to change retroactively. Hence no in-use check, no
+/// `templateId` on anything, and no snapshot.
+model RefCardTemplate {
+  id           String @id @default(cuid())
+  collectionId String
+  name         String
+  // Millimetres throughout — the whole purpose is matching a physical card, and one print unit is
+  // worth more here than the convenience of `rem`. Fractional: index-card stock is sold at sizes
+  // like 62.5 mm, and rounding a card to the millimetre is what makes it not fit.
+  cardWidthMm  Float
+  cardHeightMm Float
+  // Type size of the ref, and how far down the card it sits. The ref is printed at the top rather
+  // than centred because the rest of the card is hidden inside the pocket.
+  fontSizeMm   Float
+  paddingTopMm Float
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  // The sheet's picker names them, so two formats called "Postcard" is a dictionary nobody can
+  // read — `AcceptanceProfile`'s rule (#533), reported as its own error rather than as a failed save.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("ref_card_template")
 }
 
 model CatalogVendor {

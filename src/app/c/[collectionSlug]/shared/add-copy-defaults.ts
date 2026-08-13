@@ -26,6 +26,12 @@ export const LS_LAST_SUBTYPE = "stamporama:stamp:subtypeId";
 // entry, and the screens have nothing else in common.
 export const LS_LAST_ACCEPTANCE_PROFILE = "stamporama:want:acceptanceProfileId";
 
+// The ref-card format last printed (#569), remembered per collection so the collector's stationery
+// leads the next strip instead of being re-picked every time a box needs cards. Its own `refCards`
+// namespace for the reason the two above have one: this is a property of the *paper*, and the sheet
+// shares no screen with adding a copy or entering a want.
+export const LS_LAST_REF_CARD_TEMPLATE = "stamporama:refCards:templateId";
+
 export function readLast(key: string, collectionId: string): string {
   return lsGet(`${key}:${collectionId}`) ?? "";
 }

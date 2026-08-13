@@ -79,6 +79,32 @@ next free ref in that location and prints as many cards as you ask for; change t
 if your strip is somewhere else, and use **Print** for the browser's print dialog. Cutting
 guides are dashed and the cards carry the ref and nothing else.
 
+Cards sit **flush against each other**, so one cut separates two of them — the sheet never prints a
+double line for you to cut down the middle of.
+
+### Card formats
+
+The size of a ref card is set by the pocket it has to fit, so it is yours to state rather than ours
+to guess. Keep your sizes as named **ref card templates** under **Settings → Ref cards**, and pick
+one from the **Card format** control above the sheet. A template holds four measurements, all in
+millimetres:
+
+- **Card width** and **Card height** — the card you actually cut, measured against the transport
+  card it slips into.
+- **Ref size** — how big the number is printed.
+- **Top padding** — how far down the card the number starts. The ref sits at the **top** rather than
+  in the middle, because once the stamps are packed onto the transport card the rest of the ref card
+  is hidden inside the pocket.
+
+There are no rows or columns to set: the sheet fits as many cards across the page as your paper
+allows and flows the rest below, so the same template prints correctly on A4 and on Letter. How many
+cards you get is the length of the strip you asked for.
+
+The format you last printed on is remembered per collection and leads the next sheet. The sheet reads
+the template as it prints and keeps no copy of it, so editing a template changes the **next** sheet —
+cards already printed are paper and are unaffected. Until you add a template of your own, the sheet
+prints a built-in card of 45 × 24 mm.
+
 Nothing is reserved by printing — a ref becomes real only when copies are filed under it. Since
 refs allocated in packing order land as contiguous runs, a transport card ends up covering a
 range, and finding `A148` is scrolling the box to the card whose range covers it.

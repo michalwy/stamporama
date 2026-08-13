@@ -19,6 +19,7 @@ import { AllegroConnectionPanel } from "./allegro-connection-panel";
 import { AllegroProfilesPanel } from "./allegro-profiles-panel";
 import { AllegroCategoriesPanel } from "./allegro-categories-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
+import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
@@ -32,6 +33,7 @@ import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CollageTemplateData } from "@/lib/collage-templates";
+import type { RefCardTemplateData } from "@/lib/ref-card-templates";
 import type { CarrierData } from "@/lib/carriers";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
@@ -56,6 +58,8 @@ interface SettingsTabsProps {
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
   initialCollageTemplates: CollageTemplateData[];
+  /** The collection's ref-card formats (#569) — what the blank ref-card sheet prints. */
+  initialRefCardTemplates: RefCardTemplateData[];
   /** The collection's carriers (#491) — the tracking-address side of shipping. */
   initialCarriers: CarrierData[];
   initialColnectMappings: ColnectMappingData[];
@@ -99,6 +103,11 @@ const TABS = [
   { key: "subtypes", label: "Subtypes" },
   { key: "areas", label: "Areas" },
   { key: "collages", label: "Collage templates" },
+  // Beside the collage templates (#569): the collection's other named dictionary of render numbers,
+  // one for the images a listing carries and one for the paper cards a box is filed onto. Its own
+  // tab rather than a section under Collages — a screen photo and a printed card share a shape, not
+  // a subject, and nothing about one is set up in the same sitting as the other.
+  { key: "refcards", label: "Ref cards" },
   { key: "shipping", label: "Shipping" },
   { key: "duplicates", label: "Duplicates" },
   { key: "colnect", label: "Colnect" },
@@ -131,6 +140,7 @@ export function SettingsTabs({
   initialCertificateStatuses,
   initialSubtypes,
   initialCollageTemplates,
+  initialRefCardTemplates,
   initialCarriers,
   initialColnectMappings,
   initialColnectConditionMappings,
@@ -161,6 +171,7 @@ export function SettingsTabs({
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "collages" ||
+    rawTab === "refcards" ||
     rawTab === "shipping" ||
     rawTab === "duplicates" ||
     rawTab === "colnect" ||
@@ -313,6 +324,15 @@ export function SettingsTabs({
           <CollageTemplatesPanel
             collectionId={collectionId}
             initialTemplates={initialCollageTemplates}
+          />
+        </section>
+      )}
+      {activeTab === "refcards" && (
+        <section>
+          <h2 style={sectionHeadingStyle}>Ref card templates</h2>
+          <RefCardTemplatesPanel
+            collectionId={collectionId}
+            initialTemplates={initialRefCardTemplates}
           />
         </section>
       )}

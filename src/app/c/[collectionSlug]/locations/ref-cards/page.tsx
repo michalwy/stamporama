@@ -5,27 +5,30 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getLocations, getLocationRefUsage } from "@/lib/locations";
+import { getRefCardTemplates } from "@/lib/ref-card-templates";
+import { DEFAULT_REF_CARD_GEOMETRY, type RefCardGeometry } from "@/lib/ref-card-template-rules";
 import { buildLocationPath } from "@/lib/location-path";
-import { locationRefStrip } from "@/lib/location-ref";
+import { locationRefStrip, parseRefCardCount } from "@/lib/location-ref";
 import { getAppVersionLabel } from "@/lib/version";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
-import { RefCardsControls, MAX_CARDS } from "./ref-cards-controls";
+import { RefCardsControls } from "./ref-cards-controls";
 
 export const metadata: Metadata = { title: "Blank ref cards" };
 
 interface RefCardsPageProps {
   params: Promise<{ collectionSlug: string }>;
-  searchParams: Promise<{ locationId?: string; start?: string; count?: string }>;
+  searchParams: Promise<{
+    locationId?: string;
+    start?: string;
+    count?: string;
+    templateId?: string;
+  }>;
 }
 
-const DEFAULT_COUNT = 20;
-
-function parseCount(raw: string | undefined): number {
-  const n = raw ? parseInt(raw, 10) : NaN;
-  if (!Number.isFinite(n)) return DEFAULT_COUNT;
-  return Math.min(MAX_CARDS, Math.max(1, n));
-}
+/** One line, shared by the cards' right/bottom edges and the container's top/left, so every rule on
+ *  the sheet is the same weight whichever of the two drew it. */
+const CUT_RULE = "1px dashed var(--color-border-strong)";
 
 /**
  * A printable strip of **blank ref cards** (#565) — the index cards a collector calls *fiszki*,
@@ -41,6 +44,11 @@ function parseCount(raw: string | undefined): number {
  * Built on the packing list's pattern (#330): a plain server render, `.no-print` chrome, a
  * `.print-footer` naming the sheet's provenance. What the collector can change lives in the URL, so
  * a strip is reprintable exactly as it came out.
+ *
+ * The card's **format is a template** (#569), read live from the collection's dictionary at print
+ * time and copied nowhere — a sheet is paper, so an edit has no past act to contradict. The layout
+ * is derived from it and never configured: `repeat(auto-fill, <cardWidth>)` fits as many cards per
+ * row as the paper allows, so nothing here knows the page size and A4 and Letter both work.
  */
 export default async function RefCardsPage({ params, searchParams }: RefCardsPageProps) {
   const { collectionSlug } = await params;
@@ -63,8 +71,17 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
     ? await getLocationRefUsage(session.user.id, collection.id, locationId)
     : null;
   const start = (sp.start ?? usage?.suggestion ?? "").trim();
-  const count = parseCount(sp.count);
+  const count = parseRefCardCount(sp.count);
   const strip = locationRefStrip(start, count);
+
+  // The format is read *now*, not remembered from when the strip was described: the sheet keeps no
+  // copy of it, so a template edited in Settings takes effect on the next print and on nothing else.
+  // With no template at all the built-in card prints — a collector who has never opened Settings
+  // still gets a usable sheet, and no row is written on their behalf to say so.
+  const templates = await getRefCardTemplates(session.user.id, collection.id);
+  const chosen =
+    (sp.templateId ? templates.find((t) => t.id === sp.templateId) : undefined) ?? templates[0];
+  const card: RefCardGeometry = chosen ?? DEFAULT_REF_CARD_GEOMETRY;
 
   return (
     <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
@@ -85,10 +102,13 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
       <div className="no-print" style={{ marginBottom: "1.25rem" }}>
         <RefCardsControls
           collectionSlug={collectionSlug}
+          collectionId={collection.id}
           locations={locations}
           locationId={locationId}
           start={start}
           count={count}
+          templates={templates}
+          templateId={chosen?.id ?? ""}
         />
       </div>
 
@@ -103,6 +123,10 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
               {" · "}
               {strip[0]}–{strip[strip.length - 1]} · {strip.length}{" "}
               {strip.length === 1 ? "card" : "cards"}
+              {/* Which stationery this sheet is cut for — the one thing about a printed strip that
+                  cannot be read off the paper once it is cut apart. */}
+              {" · "}
+              {chosen?.name ?? "Default card"} ({card.cardWidthMm} × {card.cardHeightMm} mm)
             </>
           )}
         </p>
@@ -121,20 +145,44 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
           style={{
             marginTop: "1.25rem",
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "0.25rem",
+            // No column count anywhere: the browser fits as many cards per row as the paper takes
+            // and flows the rest below, so this sheet needs to know neither the page size nor the
+            // margins, and A4 and Letter both come out right.
+            gridTemplateColumns: `repeat(auto-fill, ${card.cardWidthMm}mm)`,
+            justifyContent: "start",
+            // A strip can never need more columns than it has cards; without this the closing rules
+            // below would run the width of the page for a strip of three.
+            //
+            // `content-box` against the app's global `border-box` (globals.css), and it is load
+            // bearing: the closing rules below are 1px of border, so under `border-box` the cap
+            // would leave a content box of `n × cardWidth − 1px` while every track is exactly
+            // `cardWidth` — `auto-fill` then fits one column fewer and a run of four that has room
+            // for four prints 3 + 1. The same 1px is what would cost a column on any printable
+            // width that is an exact multiple of the card.
+            boxSizing: "content-box",
+            maxWidth: `${card.cardWidthMm * strip.length}mm`,
+            // Zero gap is not `gap: 0` alone. Each card draws its **right and bottom** only and the
+            // container closes the **top and left**, so every interior line is exactly one line —
+            // two neighbours keeping their own borders would print a double rule, and a cut down
+            // the middle of it leaves ink on both halves. One cut separates two cards.
+            borderTop: CUT_RULE,
+            borderLeft: CUT_RULE,
           }}
         >
           {strip.map((ref) => (
             <div
               key={ref}
               style={{
-                // Dashed, because the border is a cut guide rather than part of the card.
-                border: "1px dashed var(--color-border-strong)",
-                borderRadius: "0.125rem",
-                height: "2.4cm",
+                // Dashed, because the rule is a cut guide rather than part of the card.
+                borderRight: CUT_RULE,
+                borderBottom: CUT_RULE,
+                boxSizing: "border-box",
+                height: `${card.cardHeightMm}mm`,
+                // The ref is pinned to the top, not centred: the rest of the card disappears into
+                // the transport card's pocket once the stamps are packed onto it.
+                paddingTop: `${card.paddingTopMm}mm`,
                 display: "flex",
-                alignItems: "center",
+                alignItems: "flex-start",
                 justifyContent: "center",
                 // Cards never straddle a page break — half a card is waste paper.
                 breakInside: "avoid",
@@ -142,7 +190,8 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
             >
               <span
                 style={{
-                  fontSize: "1.5rem",
+                  fontSize: `${card.fontSizeMm}mm`,
+                  lineHeight: 1,
                   fontWeight: 700,
                   letterSpacing: "0.05em",
                   fontVariantNumeric: "tabular-nums",

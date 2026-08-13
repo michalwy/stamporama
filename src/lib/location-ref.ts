@@ -109,6 +109,25 @@ export function nextLocationRef(refs: Iterable<string | null | undefined>): stri
   return best == null ? null : incrementLocationRef(best);
 }
 
+/** How long a printed strip may be, and how long it is when the address does not say (#565).
+ *
+ * These live here, beside {@link locationRefStrip}, rather than in the sheet's `"use client"`
+ * controls where they started. The **server** page clamps with the maximum, and a client module's
+ * exports reach a server component as *client references* rather than as values — `Math.min(<client
+ * reference>, n)` is `NaN`, and a `NaN` count printed exactly one card for every number the
+ * collector typed. A constant both halves read belongs in a module neither half owns. */
+export const MAX_REF_CARDS = 200;
+export const DEFAULT_REF_CARDS = 20;
+
+/** How many cards an address asks for: the URL's number clamped to a printable strip, falling back
+ * to {@link DEFAULT_REF_CARDS} when it names none or names nonsense. A mistyped count must not be
+ * able to render a book, and must not be able to render nothing either. */
+export function parseRefCardCount(raw: string | undefined): number {
+  const n = raw ? parseInt(raw, 10) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_REF_CARDS;
+  return Math.min(MAX_REF_CARDS, Math.max(1, n));
+}
+
 /** A run of `count` consecutive refs starting at `start` — what a strip of blank ref cards carries
  * (#565). Empty when `start` has no trailing number to count from, which is the caller's cue that
  * there is nothing to print rather than a strip of one. */

@@ -536,6 +536,18 @@ Set one of these as a platform's **collage template** and every new offer on tha
 
 New collections start with no templates — add the ones that match the material you actually sell.
 
+## Ref card templates
+
+The other named dictionary of render numbers, and the only thing it has in common with collage
+templates is the shape: **Settings → Ref cards** holds the sizes of the blank ref cards printed from
+the Locations screen, in millimetres. See
+[Printing blank ref cards → Card formats](locations.md#card-formats) for what each measurement means
+and how the sheet uses it.
+
+The difference worth knowing here: a collage template is **copied** onto an offer when you pick it,
+while a ref card template is read as the sheet prints and copied nowhere. Nothing about a printed
+sheet is recorded, so editing or deleting one of these changes only what you print next.
+
 ## Stamp photos
 
 Alongside the photos you attach to an individual owned **copy** (see [Inventory → Photos](inventory.md#photos)), you can attach photos to the **stamp itself** — a representative or reference image of the catalog stamp (or variant). Stamp photos live at the catalog level, so they are shared context for every copy of that stamp rather than a record of one physical piece.
